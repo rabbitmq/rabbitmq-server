@@ -1,0 +1,22 @@
+load(":rabbitmqctl.bzl", "rabbitmqctl")
+
+# Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
+rabbitmqctl(
+    name = "rabbitmqctl",
+    command = "make_all",
+    srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex"]),
+    deps = [
+        "//deps/rabbit_common:rabbit_common",
+        "@goldrush//:goldrush",
+        "@lager//:lager",
+        "//deps/amqp_client:amqp_client",
+    ],
+    # outs = [
+    #     # "escript/rabbitmq-diagnostics",
+    #     # "escript/rabbitmq-plugins",
+    #     # "escript/rabbitmq-queues",
+    #     # "escript/rabbitmq-streams",
+    #     # "escript/rabbitmq-upgrade",
+    #     "escript/rabbitmqctl",
+    # ],
+)

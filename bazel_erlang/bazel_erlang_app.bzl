@@ -5,12 +5,17 @@ def _impl(ctx):
 
     app_file = ctx.actions.declare_file("{}/{}.app".format(erlang_lib_info0.beam_path, ctx.attr.app_name))
 
+    # TODO: have different version of this rule that work with
+    #       src/app_name.app.src if present OR rebar OR erlang.mk
     ctx.actions.write(
         output = app_file,
-        content = "{{application, '{}', []}}".format(ctx.attr.app_name)
+        content = """{{application,{name},[
+            {{vsn, "{version}"}}
+        ]}}.""".format(name=ctx.attr.app_name, version=ctx.attr.app_version)
     )
 
     erlang_lib_info1 = ErlangLibInfo(
+        name = ctx.attr.app_name,
         hdrs = erlang_lib_info0.hdrs,
         beam_files = depset(direct = [app_file] + erlang_lib_info0.beam_files.to_list()),
         beam_path = erlang_lib_info0.beam_path,
@@ -26,6 +31,7 @@ bazel_erlang_app = rule(
     implementation = _impl,
     attrs = {
         "app_name": attr.string(mandatory=True),
+        "app_version": attr.string(mandatory=True),
         "hdrs": attr.label_list(allow_files=[".hrl"]),
         "srcs": attr.label_list(allow_files=[".erl"]),
         "deps": attr.label_list(providers=[ErlangLibInfo]),

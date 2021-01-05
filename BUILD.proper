@@ -7,7 +7,7 @@ bazel_erlang_lib(
 )
 
 bazel_erlang_lib(
-    name = "bazel_erlang_lib",
+    name = "proper",
     hdrs = glob(["include/*.hrl"]),
     srcs = glob(["src/*.erl"], exclude = ["src/vararg.erl"]),
     deps = [":erl_first_files"],

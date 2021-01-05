@@ -3,6 +3,7 @@ load(":erlang_home.bzl", "ErlangHomeProvider")
 ErlangLibInfo = provider(
     doc = "Compiled Erlang sources",
     fields = {
+        'name': 'Name of the erlang project',
         'hdrs': 'Public Headers of the library',
         'beam_files': 'Compiled sources',
         'beam_path': 'the relative add path of the beam files'
@@ -82,8 +83,13 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[]):
     #     },
     # )
 
+    # Note: currently we don't present the result of the compilation plus the
+    #       headers in a single directly, as erlang tools seem to expect. It
+    #       might be worth copying or symlinking the headers so that they
+    #       present in a single directory.
     return ErlangLibInfo(
-        hdrs = depset(direct = hdrs, transitive = [dep_hdrs]),
+        name = ctx.attr.name,
+        hdrs = depset(direct = hdrs),
         beam_files = depset(direct = outs),
         beam_path = beam_path,
     )

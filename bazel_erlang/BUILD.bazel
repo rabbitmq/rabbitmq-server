@@ -1,4 +1,5 @@
 load("erlang_home.bzl", "erlang_home")
+load("elixir_home.bzl", "elixir_home", "mix_archives")
 
 # This allows us to
 # `bazel build //my/target \
@@ -6,5 +7,20 @@ load("erlang_home.bzl", "erlang_home")
 erlang_home(
     name = "erlang_home",
     build_setting_default = "~/kerl/23.1",
+    visibility = ["//visibility:public"],
+)
+
+# This allows us to
+# `bazel build //my/target \
+#    --//bazel_erlang:elixir_home=/path/to/elixir/installation`
+elixir_home(
+    name = "elixir_home",
+    build_setting_default = "~/.kiex/elixirs/elixir-1.10.4",
+    visibility = ["//visibility:public"],
+)
+
+mix_archives(
+    name = "mix_archives",
+    build_setting_default = "~/.kiex/mix/archives/elixir-1.10.4",
     visibility = ["//visibility:public"],
 )

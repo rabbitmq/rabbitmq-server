@@ -10,6 +10,14 @@ http_archive(
 )
 
 http_archive(
+    name = "goldrush",
+    urls = ["https://github.com/DeadZen/goldrush/archive/0.1.9.zip"],
+    sha256 = "c04fc2f1f66abc167db8589640500da06cda9f0b92f1481bff59d41edbc45fe2",
+    strip_prefix = "goldrush-0.1.9",
+    build_file = "@//:BUILD.goldrush",
+)
+
+http_archive(
     name = "lager",
     urls = ["https://github.com/erlang-lager/lager/archive/3.8.0.tar.gz"],
     sha256 = "5e54a0fc60884f864b9ed30ff62a75de1e8f9edc5c448d5140115aa16c59cc57",

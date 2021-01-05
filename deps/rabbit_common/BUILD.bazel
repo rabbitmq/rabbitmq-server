@@ -25,16 +25,20 @@ genrule(
     cmd = "$(location :codegen) --ignore-conflicts header $(SRCS) $@",
 )
 
-bazel_erlang_lib(
-    name = "bazel_erlang_lib",
+bazel_erlang_app(
+    name = "rabbit_common",
+    app_name = "rabbit_common",
+    # TODO: how do we inject the correct app_version? another build setting? a data file?
+    app_version = "3.9.0",
     srcs = glob(["src/*.erl"]),
     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
     visibility = ["//visibility:public"],
 )
 
 bazel_erlang_app(
-    name = "bazel_erlang_app_test",
+    name = "rabbit_common_test",
     app_name = "rabbit_common",
+    app_version = "3.9.0",
     srcs = glob(["src/*.erl"]),
     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
     erlc_opts = [
@@ -42,7 +46,7 @@ bazel_erlang_app(
         "+{lager_extra_sinks,[rabbit_log,rabbit_log_channel,rabbit_log_connection,rabbit_log_feature_flags,rabbit_log_federation,rabbit_log_ldap,rabbit_log_mirroring,rabbit_log_osiris,rabbit_log_prelaunch,rabbit_log_queue,rabbit_log_ra,rabbit_log_shovel,rabbit_log_upgrade]}",
     ],
     deps = [
-        "@lager//:bazel_erlang_lib",
+        "@lager//:lager",
     ],
     visibility = ["//visibility:public"],
     testonly = True,
@@ -54,10 +58,10 @@ ct_test(
     suites = ["test/rabbit_env_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
-        ":bazel_erlang_app_test",
-        "//deps/rabbit:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
-        "@proper//:bazel_erlang_lib",
+        ":rabbit_common_test",
+        "//deps/rabbit:rabbit",
+        "@lager//:lager",
+        "@proper//:proper",
     ],
     size = "small",
 )
@@ -67,8 +71,8 @@ ct_test(
     suites = ["test/supervisor2_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
-        ":bazel_erlang_app_test",
-        "@proper//:bazel_erlang_lib",
+        ":rabbit_common_test",
+        "@proper//:proper",
     ],
     size = "small",
 )
@@ -78,8 +82,8 @@ ct_test(
     suites = ["test/unit_priority_queue_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
-        ":bazel_erlang_app_test",
-        "@proper//:bazel_erlang_lib",
+        ":rabbit_common_test",
+        "@proper//:proper",
     ],
     size = "small",
 )
@@ -89,10 +93,10 @@ ct_test(
     suites = ["test/unit_SUITE.erl", "test/gen_server2_test_server.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
-        ":bazel_erlang_app_test",
-        "@proper//:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
-        "@credentials_obfuscation//:bazel_erlang_lib",
+        ":rabbit_common_test",
+        "@proper//:proper",
+        "@lager//:lager",
+        "@credentials_obfuscation//:credentials_obfuscation",
     ],
     size = "small",
 )
@@ -102,9 +106,9 @@ ct_test(
     suites = ["test/worker_pool_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
-        ":bazel_erlang_app_test",
-        "@proper//:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
+        ":rabbit_common_test",
+        "@proper//:proper",
+        "@lager//:lager",
     ],
     size = "small",
 )

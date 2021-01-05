@@ -1,12 +1,12 @@
 load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 
 bazel_erlang_lib(
-    name = "bazel_erlang_lib",
+    name = "rabbitmq_ct_helpers",
     hdrs = glob(["include/*.hrl"]),
     srcs = glob(["src/*.erl"]),
     deps = [
-        "@//deps/rabbit_common:bazel_erlang_lib",
-        "@proper//:bazel_erlang_lib",
+        "@//deps/rabbit_common:rabbit_common",
+        "@proper//:proper",
     ],
     visibility = ["//visibility:public"],
 )

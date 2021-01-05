@@ -26,7 +26,7 @@ genrule(
 )
 
 bazel_erlang_lib(
-    name = "bazel_erlang_lib",
+    name = "amqp10_common",
     srcs = glob(["src/*.erl"]),
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     # deps = ["//deps/rabbit_common:bazel_erlang_lib"]

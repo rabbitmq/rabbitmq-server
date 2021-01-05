@@ -1,9 +1,9 @@
 load("@//bazel_erlang:bazel_erlang_app.bzl", "bazel_erlang_app")
 
 bazel_erlang_app(
-    name = "lager",
-    app_name = "lager",
-    app_version = "3.8.0",
+    name = "goldrush",
+    app_name = "goldrush",
+    app_version = "0.1.9",
     hdrs = glob(["include/*.hrl"]),
     srcs = glob(["src/*.erl"]),
     visibility = ["//visibility:public"],

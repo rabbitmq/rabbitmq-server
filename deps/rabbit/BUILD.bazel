@@ -1,17 +1,17 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 
 bazel_erlang_lib(
-    name = "bazel_erlang_lib",
+    name = "rabbit",
     srcs = glob(["src/*.erl"]),
     hdrs = glob(["include/*.hrl", "src/*.hrl"]),
     erlc_opts = [
         "-DINSTR_MOD=gm",
     ],
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "//deps/amqp10_common:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
-        "@stdout_formatter//:bazel_erlang_lib",
+        "//deps/rabbit_common:rabbit_common",
+        "//deps/amqp10_common:amqp10_common",
+        "@lager//:lager",
+        "@stdout_formatter//:stdout_formatter",
     ],
     visibility = ["//visibility:public"],
 )

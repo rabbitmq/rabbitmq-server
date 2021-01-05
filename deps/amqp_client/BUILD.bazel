@@ -2,10 +2,11 @@ load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
 
 bazel_erlang_lib(
-    name = "bazel_erlang_lib",
+    name = "amqp_client",
     srcs = glob(["src/*.erl"]),
     hdrs = glob(["include/*.hrl"]),
-    deps = ["//deps/rabbit_common:bazel_erlang_lib"],
+    deps = ["//deps/rabbit_common:rabbit_common"],
+    visibility = ["//visibility:public"],
 )
 
 ct_test(
@@ -13,9 +14,9 @@ ct_test(
     suites = ["test/system_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
-        ":bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+        ":amqp_client",
+        "//deps/rabbit_common:rabbit_common",
+        "@rabbitmq_ct_helpers//:rabbitmq_ct_helpers",
     ],
 )
 
@@ -24,8 +25,8 @@ ct_test(
     suites = ["test/unit_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
-        ":bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "//deps/rabbit:bazel_erlang_lib",
+        ":amqp_client",
+        "//deps/rabbit_common:rabbit_common",
+        "//deps/rabbit:rabbit",
     ],
 )
