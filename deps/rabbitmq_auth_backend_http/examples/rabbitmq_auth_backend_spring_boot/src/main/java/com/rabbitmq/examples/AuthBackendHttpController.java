@@ -22,7 +22,7 @@ import static java.util.Arrays.asList;
 import static org.springframework.util.StringUtils.collectionToDelimitedString;
 
 /**
- *
+ * A basic controller that implements all RabbitMQ authN/authZ interface operations.
  */
 @RestController
 @RequestMapping(path = "/auth", method = { RequestMethod.GET, RequestMethod.POST })
