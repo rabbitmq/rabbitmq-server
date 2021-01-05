@@ -120,15 +120,16 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
             {noreply, State#state{config = Config1}}
     end.
 
-terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
+terminate({shutdown, autodelete}, State = #state{name = Name,
                                                  type = dynamic}) ->
+    {VHost, ShovelName} = Name,
     rabbit_log_shovel:info("Shovel '~s' is stopping (it was configured to autodelete and transfer is completed)",
-                           [human_readable_name({VHost, Name})]),
+                           [human_readable_name(Name)]),
     close_connections(State),
     %% See rabbit_shovel_dyn_worker_sup_sup:stop_child/1
-    put(shovel_worker_autodelete, true),
-    _ = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ?SHOVEL_USER),
-    rabbit_shovel_status:remove({VHost, Name}),
+    put({shovel_worker_autodelete, Name}, true),
+    _ = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, ?SHOVEL_USER),
+    rabbit_shovel_status:remove(Name),
     ok;
 terminate(shutdown, State) ->
     close_connections(State),

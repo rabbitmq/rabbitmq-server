@@ -49,9 +49,15 @@ child_exists(Name) ->
               mirrored_supervisor:which_children(?SUPERVISOR)).
 
 stop_child(Name) ->
-    case get(shovel_worker_autodelete) of
-        true -> ok; %% [1]
-        _    ->
+    case get({shovel_worker_autodelete, Name}) of
+        true ->
+            %% TODO rabbit_log_shovel:debug("@@@@@@@@ ~p:stop_child Name: ~p SKIPPING TERMINATE/DELETE", [?MODULE, Name]),
+            rabbit_log_shovel:debug("@@@@@@@@ ~p:stop_child Name: ~p DOING TERMINATE/DELETE", [?MODULE, Name]),
+            ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Name),
+            ok = mirrored_supervisor:delete_child(?SUPERVISOR, Name),
+            ok; %% [1]
+        _ ->
+            rabbit_log_shovel:debug("@@@@@@@@ ~p:stop_child Name: ~p DOING TERMINATE/DELETE", [?MODULE, Name]),
             ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Name),
             ok = mirrored_supervisor:delete_child(?SUPERVISOR, Name),
             rabbit_shovel_status:remove(Name)
@@ -63,7 +69,7 @@ stop_child(Name) ->
 %% supervisor to stop us - and as usual if we call into our own
 %% supervisor we risk deadlock.
 %%
-%% See rabbit_shovel_worker:maybe_autodelete/1
+%% See rabbit_shovel_worker:terminate/2
 
 %%----------------------------------------------------------------------------
 

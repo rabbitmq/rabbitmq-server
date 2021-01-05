@@ -166,7 +166,7 @@ decr_remaining(N, State = #{source := #{remaining := M} = Src,
     case M > N of
         true  -> State#{source => Src#{remaining => M - N}};
         false ->
-            error_logger:info_msg("shutting down shovel ~s, none remaining ~p~n",
-                                  [Name, State]),
+            rabbit_log_shovel:info("shutting down Shovel '~s', no messages left to transfer~n", [Name]),
+            rabbit_log_shovel:debug("shutting down Shovel '~s', no messages left to transfer. Shovel state: ~p~n", [Name, State]),
             exit({shutdown, autodelete})
     end.
