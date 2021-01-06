@@ -43,8 +43,14 @@ init([]) ->
         type => worker,
         start => {rabbit_stream_manager, start_link, [OsirisConf]}},
 
+    MetricsGc = #{
+        id => rabbit_stream_metrics_gc_sup,
+        type => worker,
+        start => {rabbit_stream_metrics_gc, start_link, []}
+    },
+
     {ok, {{one_for_all, 10, 10},
-            [StreamManager] ++
+            [StreamManager, MetricsGc] ++
             listener_specs(fun tcp_listener_spec/1,
                 [SocketOpts, ServerConfiguration, NumTcpAcceptors], Listeners)}}.
 

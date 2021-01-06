@@ -15,6 +15,7 @@
          is_authorized_user/4,
          is_authorized_monitor/2, is_authorized_policies/2,
          is_authorized_vhost_visible/2,
+         is_authorized_vhost_visible_for_monitoring/2,
          is_authorized_global_parameters/2]).
 
 -export([bad_request/3, bad_request_exception/4, internal_server_error/4,
@@ -116,6 +117,15 @@ is_authorized_vhost_visible(ReqData, Context) ->
                   fun(#user{tags = Tags} = User) ->
                           is_admin(Tags) orelse user_matches_vhost_visible(ReqData, User)
                   end).
+
+is_authorized_vhost_visible_for_monitoring(ReqData, Context) ->
+  is_authorized(ReqData, Context,
+    <<"User not authorised to access virtual host">>,
+    fun(#user{tags = Tags} = User) ->
+      is_admin(Tags)
+          orelse is_monitor(Tags)
+          orelse user_matches_vhost_visible(ReqData, User)
+    end).
 
 disable_stats(ReqData) ->
     MgmtOnly = case qs_val(<<"disable_stats">>, ReqData) of

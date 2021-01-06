@@ -32,6 +32,7 @@ PLUGINS := rabbitmq_amqp1_0 \
 	   rabbitmq_shovel_management \
 	   rabbitmq_stomp \
 	   rabbitmq_stream \
+	   rabbitmq_stream_management \
 	   rabbitmq_top \
 	   rabbitmq_tracing \
 	   rabbitmq_trust_store \

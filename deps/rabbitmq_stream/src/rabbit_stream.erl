@@ -26,6 +26,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 start(_Type, _Args) ->
+    rabbit_stream_metrics:init(),
     rabbit_stream_sup:start_link().
 
 host() ->
@@ -43,7 +44,8 @@ hostname_from_node() ->
         [_, Hostname] ->
             Hostname;
         [_] ->
-            rabbit_data_coercion:to_binary(inet:gethostname())
+            {ok, H} = inet:gethostname(),
+            rabbit_data_coercion:to_binary(H)
     end.
 
 port() ->

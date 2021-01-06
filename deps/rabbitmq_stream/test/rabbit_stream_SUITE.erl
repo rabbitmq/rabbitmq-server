@@ -17,7 +17,9 @@
 -module(rabbit_stream_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_stream.hrl").
+-include("rabbit_stream_metrics.hrl").
 
 -compile(export_all).
 
@@ -29,7 +31,7 @@ all() ->
 
 groups() ->
     [
-        {single_node, [], [test_stream]},
+        {single_node, [], [test_stream, test_gc_consumers, test_gc_publishers]},
         {cluster, [], [test_stream, java]}
     ].
 
@@ -43,6 +45,10 @@ end_per_suite(Config) ->
 init_per_group(single_node, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]),
     rabbit_ct_helpers:run_setup_steps(Config1,
+        [fun(StepConfig) ->
+            rabbit_ct_helpers:merge_app_env(StepConfig,
+                {rabbit, [{core_metrics_gc_interval, 1000}]})
+         end] ++
         rabbit_ct_broker_helpers:setup_steps());
 init_per_group(cluster = Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]),
@@ -75,6 +81,55 @@ test_stream(Config) ->
     Port = get_stream_port(Config),
     test_server(Port),
     ok.
+
+test_gc_consumers(Config) ->
+    Pid = spawn(fun() -> ok end),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stream_metrics, consumer_created,
+       [Pid, #resource{name = <<"test">>, kind = queue, virtual_host = <<"/">>}, 0, 10, 0, 0]
+    ),
+    ok = wait_until(fun() -> consumer_count(Config) == 0 end),
+    ok.
+
+test_gc_publishers(Config) ->
+    Pid = spawn(fun() -> ok end),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_stream_metrics, publisher_created,
+        [Pid, #resource{name = <<"test">>, kind = queue, virtual_host = <<"/">>}, 0, <<"ref">>]
+    ),
+    ok = wait_until(fun() -> publisher_count(Config) == 0 end),
+    ok.
+
+wait_until(Predicate) ->
+    Fun = fun(Pid, Fun) ->
+            case Predicate() of
+                true ->
+                    Pid ! done,
+                    ok;
+                _ ->
+                    timer:sleep(100),
+                    Fun(Pid, Fun)
+            end
+        end,
+    CurrentPid = self(),
+    Pid = spawn(fun() -> Fun(CurrentPid, Fun) end),
+    Result = receive
+        done ->
+            ok
+        after
+            5000 ->
+                failed
+    end,
+    exit(Pid, kill),
+    Result.
+
+consumer_count(Config) ->
+    ets_count(Config, ?TABLE_CONSUMER).
+
+publisher_count(Config) ->
+    ets_count(Config, ?TABLE_PUBLISHER).
+
+ets_count(Config, Table) ->
+    Info = rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [Table]),
+    rabbit_misc:pget(size, Info).
 
 java(Config) ->
     StreamPortNode1 = get_stream_port(Config, 0),

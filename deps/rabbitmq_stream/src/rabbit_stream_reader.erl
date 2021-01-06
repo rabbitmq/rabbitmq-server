@@ -28,7 +28,8 @@
     publisher_id :: publisher_id(),
     stream :: stream(),
     reference :: 'undefined' | publisher_reference(),
-    leader :: pid()
+    leader :: pid(),
+    message_counters :: atomics:atomics_ref()
 }).
 
 -record(consumer, {
@@ -38,7 +39,8 @@
     subscription_id :: subscription_id(),
     segment :: osiris_log:state(),
     credit :: integer(),
-    stream :: stream()
+    stream :: stream(),
+    counters :: atomics:atomics_ref()
 }).
 
 -record(stream_connection_state, {
@@ -48,7 +50,7 @@
 }).
 
 -record(stream_connection, {
-    name :: string(),
+    name :: binary(),
     %% server host
     host,
     %% client host
@@ -71,12 +73,12 @@
     virtual_host :: 'undefined' | binary(),
     connection_step :: atom(), % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
     frame_max :: integer(),
-    heartbeat :: integer(),
+    heartbeat :: undefined | integer(),
     heartbeater :: any(),
     client_properties = #{} :: #{binary() => binary()},
     monitors = #{} :: #{reference() => stream()},
-    stats_timer :: reference(),
-    send_file_oct :: atomics:atomics_ref()
+    stats_timer :: undefined | reference(),
+    send_file_oct :: atomics:atomics_ref() % number of bytes sent with send_file (for metrics)
 }).
 
 -record(configuration, {
@@ -92,6 +94,7 @@
         peer_host, ssl, peer_cert_subject, peer_cert_issuer,
         peer_cert_validity, auth_mechanism, ssl_protocol,
         ssl_key_exchange, ssl_cipher, ssl_hash, protocol, user, vhost,
+        protocol,
         timeout, frame_max, channel_max, client_properties, connected_at,
         node, user_who_performed_action]).
 -define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
@@ -187,6 +190,36 @@ has_credits(CreditReference) ->
 has_enough_credits_to_unblock(CreditReference, CreditsRequiredForUnblocking) ->
     atomics:get(CreditReference, 1) > CreditsRequiredForUnblocking.
 
+increase_messages_consumed(Counters, Count) ->
+    atomics:add(Counters, 1, Count).
+
+set_consumer_offset(Counters, Offset) ->
+    atomics:put(Counters, 2, Offset).
+
+increase_messages_published(Counters, Count) ->
+    atomics:add(Counters, 1, Count).
+
+increase_messages_confirmed(Counters, Count) ->
+    atomics:add(Counters, 2, Count).
+
+increase_messages_errored(Counters, Count) ->
+    atomics:add(Counters, 3, Count).
+
+messages_consumed(Counters) ->
+    atomics:get(Counters, 1).
+
+consumer_offset(Counters) ->
+    atomics:get(Counters, 2).
+
+messages_published(Counters) ->
+    atomics:get(Counters, 1).
+
+messages_confirmed(Counters) ->
+    atomics:get(Counters, 2).
+
+messages_errored(Counters) ->
+    atomics:get(Counters, 3).
+
 listen_loop_pre_auth(Transport, #stream_connection{socket = S} = Connection, State,
     #configuration{frame_max = FrameMax, heartbeat = Heartbeat} = Configuration) ->
     {OK, Closed, Error} = Transport:messages(),
@@ -248,7 +281,7 @@ close(Transport, S) ->
 listen_loop_post_auth(Transport, #stream_connection{socket = S,
     stream_subscriptions = StreamSubscriptions, credits = Credits,
     heartbeater = Heartbeater, monitors = Monitors, client_properties = ClientProperties,
-    publisher_to_ids = PublisherRefToIds,
+    publishers = Publishers, publisher_to_ids = PublisherRefToIds,
     send_file_oct = SendFileOct} = Connection0,
     #stream_connection_state{consumers = Consumers, blocked = Blocked} = State,
     #configuration{credits_required_for_unblocking = CreditsRequiredForUnblocking} = Configuration) ->
@@ -322,6 +355,8 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
                         Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16>>,
                             <<CurrentPublisherId:8>>,
                             <<Count:32>>, PublishingIds]),
+                        #{CurrentPublisherId := #publisher{message_counters = Counters}} = Publishers,
+                        increase_messages_confirmed(Counters, Count),
                         {OtherPublisherId, <<PublishingId:64>>, 1}
                 end
                                                                           end, {FirstPublisherId, <<>>, 0}, CorrelationList),
@@ -329,6 +364,8 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
             Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16>>,
                 <<LastPublisherId:8>>,
                 <<LastCount:32>>, LastPublishingIds]),
+            #{LastPublisherId := #publisher{message_counters = Counters}} = Publishers,
+            increase_messages_confirmed(Counters, LastCount),
             CorrelationIdCount = length(CorrelationList),
             add_credits(Credits, CorrelationIdCount),
             State1 = case Blocked of
@@ -356,6 +393,8 @@ listen_loop_post_auth(Transport, #stream_connection{socket = S,
             Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_CONFIRM:16, ?VERSION_0:16>>,
                 <<PublisherId:8>>,
                 <<PublishingIdCount:32>>, PubIds]),
+            #{PublisherId := #publisher{message_counters = Counters}} = Publishers,
+            increase_messages_confirmed(Counters, PublishingIdCount),
             add_credits(Credits, PublishingIdCount),
             State1 = case Blocked of
                          true ->
@@ -726,14 +765,13 @@ notify_auth_result(Username, AuthResult, ExtraProps, Connection, ConnectionState
     rabbit_event:notify(AuthResult, [P || {_, V} = P <- EventProps, V =/= '']).
 
 handle_frame_post_auth(Transport, #stream_connection{
-                virtual_host = VirtualHost, user = User,
+                user = User,
                 publishers = Publishers0, publisher_to_ids = RefIds0} = Connection0, State,
     <<?COMMAND_DECLARE_PUBLISHER:16, ?VERSION_0:16, CorrelationId:32,
         PublisherId:8,
         ReferenceSize:16, Reference:ReferenceSize/binary,
         StreamSize:16, Stream:StreamSize/binary>>, Rest) ->
-    case rabbit_stream_utils:check_write_permitted(
-        #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
+    case rabbit_stream_utils:check_write_permitted(stream_r(Stream, Connection0),
         User,
         #{}) of
         ok ->
@@ -751,8 +789,11 @@ handle_frame_post_auth(Transport, #stream_connection{
                             Publisher = #publisher{publisher_id = PublisherId,
                                 stream = Stream,
                                 reference = PublisherReference,
-                                leader = ClusterLeader},
+                                leader = ClusterLeader,
+                                message_counters = atomics:new(3, [{signed, false}])},
                             response(Transport, Connection0, ?COMMAND_DECLARE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_OK),
+                            rabbit_stream_metrics:publisher_created(
+                                self(), stream_r(Stream, Connection1), PublisherId, PublisherReference),
                             {Connection1#stream_connection{publishers = Publishers0#{PublisherId => Publisher},
                                 publisher_to_ids = RefIds1}, State, Rest}
                     end;
@@ -775,6 +816,7 @@ handle_frame_post_auth(Transport, #stream_connection{publishers = Publishers,
                     publisher_to_ids = maps:remove({Stream, Ref}, PubToIds)},
                 Connection2 = maybe_clean_connection_from_stream(Stream, Connection1),
                 response(Transport, Connection1, ?COMMAND_DELETE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_OK),
+                rabbit_stream_metrics:publisher_deleted(self(), stream_r(Stream, Connection2), PublisherId),
                 {Connection2, State, Rest};
             _ ->
                 response(Transport, Connection0, ?COMMAND_DELETE_PUBLISHER, CorrelationId, ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST),
@@ -788,7 +830,9 @@ handle_frame_post_auth(Transport, #stream_connection{
             MessageCount:32, Messages/binary>>, Rest) ->
     case Publishers of
         #{PublisherId := Publisher} ->
-            #publisher{stream = Stream, reference = Reference, leader = Leader} = Publisher,
+            #publisher{stream = Stream, reference = Reference, leader = Leader,
+                message_counters = Counters} = Publisher,
+            increase_messages_published(Counters, MessageCount),
             case rabbit_stream_utils:check_write_permitted(
                 #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
                 User,
@@ -803,6 +847,7 @@ handle_frame_post_auth(Transport, #stream_connection{
                     Transport:send(S, [<<FrameSize:32, ?COMMAND_PUBLISH_ERROR:16, ?VERSION_0:16,
                         PublisherId:8,
                         MessageCount:32, Details/binary>>]),
+                    increase_messages_errored(Counters, MessageCount),
                     {Connection, State, Rest}
             end;
         _ ->
@@ -856,11 +901,13 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
                                                            {{timestamp, Timestamp}, Crdt}
                                                    end,
                             {ok, Segment} = osiris:init_reader(LocalMemberPid, OffsetSpec),
+                            ConsumerCounters = atomics:new(2, [{signed, false}]),
                             ConsumerState = #consumer{
                                 member_pid = LocalMemberPid, offset = OffsetSpec, subscription_id = SubscriptionId, socket = Socket,
                                 segment = Segment,
                                 credit = Credit,
-                                stream = Stream
+                                stream = Stream,
+                                counters = ConsumerCounters
                             },
 
                             Connection1 = maybe_monitor_stream(LocalMemberPid, Stream, Connection),
@@ -881,6 +928,10 @@ handle_frame_post_auth(Transport, #stream_connection{socket = Socket,
                                     _ ->
                                         StreamSubscriptions#{Stream => [SubscriptionId]}
                                 end,
+                            rabbit_stream_metrics:consumer_created(
+                                self(), stream_r(Stream, Connection1), SubscriptionId, Credit1,
+                                messages_consumed(ConsumerCounters),
+                                consumer_offset(ConsumerCounters)),
                             {Connection1#stream_connection{stream_subscriptions = StreamSubscriptions1}, State#stream_connection_state{consumers = Consumers1}, Rest}
                     end
             end;
@@ -911,6 +962,7 @@ handle_frame_post_auth(Transport, #stream_connection{stream_subscriptions = Stre
             Connection1 = Connection#stream_connection{stream_subscriptions = StreamSubscriptions1},
             Consumers1 = maps:remove(SubscriptionId, Consumers),
             Connection2 = maybe_clean_connection_from_stream(Stream, Connection1),
+            rabbit_stream_metrics:consumer_cancelled(self(), stream_r(Stream, Connection2), SubscriptionId),
             response_ok(Transport, Connection, ?COMMAND_SUBSCRIBE, CorrelationId),
             {Connection2, State#stream_connection_state{consumers = Consumers1}, Rest}
     end;
@@ -1177,8 +1229,17 @@ handle_frame_post_auth(Transport, Connection, State, Frame, Rest) ->
     frame(Transport, Connection, CloseFrame),
     {Connection#stream_connection{connection_step = close_sent}, State, Rest}.
 
-notify_connection_closed(#stream_connection{name = Name} = Connection, ConnectionState) ->
+notify_connection_closed(#stream_connection{
+                            name = Name,
+                            publishers = Publishers} = Connection,
+        #stream_connection_state{consumers = Consumers} = ConnectionState) ->
     rabbit_core_metrics:connection_closed(self()),
+    [rabbit_stream_metrics:consumer_cancelled(
+        self(), stream_r(S, Connection), SubId) || #consumer{stream = S, subscription_id = SubId}
+        <- maps:values(Consumers)],
+    [rabbit_stream_metrics:publisher_deleted(self(), stream_r(S, Connection), PubId)
+        || #publisher{stream = S, publisher_id = PubId} <- maps:values(Publishers)
+    ],
     ClientProperties = i(client_properties, Connection, ConnectionState),
     EventProperties = [{name, Name},
         {pid, self()},
@@ -1198,6 +1259,9 @@ handle_frame_post_close(_Transport, Connection, State, Frame, Rest) ->
     rabbit_log:warning("ignored frame on close ~p ~p.~n", [Frame, Rest]),
     {Connection, State, Rest}.
 
+stream_r(Stream, #stream_connection{virtual_host = VHost}) ->
+    #resource{name = Stream, kind = queue, virtual_host = VHost}.
+
 clean_state_after_stream_deletion_or_failure(Stream,
         #stream_connection{stream_subscriptions = StreamSubscriptions,
                            publishers = Publishers,
@@ -1207,6 +1271,9 @@ clean_state_after_stream_deletion_or_failure(Stream,
     {SubscriptionsCleaned, C1, S1} = case stream_has_subscriptions(Stream, C0) of
         true ->
             #{Stream := SubscriptionIds} = StreamSubscriptions,
+            [rabbit_stream_metrics:consumer_cancelled(
+                self(), stream_r(Stream, C0), SubId)
+                || SubId <- SubscriptionIds],
             {true, C0#stream_connection{
                 stream_subscriptions = maps:remove(Stream, StreamSubscriptions)
             }, S0#stream_connection_state{consumers = maps:without(SubscriptionIds, Consumers)}};
@@ -1219,6 +1286,7 @@ clean_state_after_stream_deletion_or_failure(Stream,
                 fun(PubId, #publisher{stream = S, reference = Ref}, {Pubs, PubToIds}) ->
                     case S of
                         Stream ->
+                            rabbit_stream_metrics:publisher_deleted(self(), stream_r(S, C1), PubId),
                             {maps:remove(PubId, Pubs), maps:remove({Stream, Ref}, PubToIds)};
                         _ ->
                             {Pubs, PubToIds}
@@ -1325,12 +1393,15 @@ subscription_exists(StreamSubscriptions, SubscriptionId) ->
     SubscriptionIds = lists:flatten(maps:values(StreamSubscriptions)),
     lists:any(fun(Id) -> Id =:= SubscriptionId end, SubscriptionIds).
 
-send_file_callback(Transport, #consumer{socket = S, subscription_id = SubscriptionId}, Counter) ->
-    fun(_Header, Size) ->
+send_file_callback(Transport, #consumer{socket = S, subscription_id = SubscriptionId, counters = Counters}, Counter) ->
+    fun(#{chunk_id := FirstOffsetInChunk,
+          num_entries := NumEntries}, Size) ->
         FrameSize = 2 + 2 + 1 + Size,
         FrameBeginning = <<FrameSize:32, ?COMMAND_DELIVER:16, ?VERSION_0:16, SubscriptionId:8/unsigned>>,
         Transport:send(S, FrameBeginning),
-        atomics:add(Counter, 1, Size)
+        atomics:add(Counter, 1, Size),
+        increase_messages_consumed(Counters, NumEntries),
+        set_consumer_offset(Counters, FirstOffsetInChunk)
     end.
 
 send_chunks(Transport, #consumer{credit = Credit} = State, Counter) ->
@@ -1366,13 +1437,24 @@ send_chunks(Transport, #consumer{socket = S} = State, Segment, Credit, Retry, Co
             end
     end.
 
-emit_stats(Connection, ConnectionState) ->
+emit_stats(#stream_connection{publishers = Publishers} = Connection,
+           #stream_connection_state{consumers = Consumers} = ConnectionState) ->
     [{_, Pid}, {_, Recv_oct}, {_, Send_oct}, {_, Reductions}] = I
         = infos(?SIMPLE_METRICS, Connection, ConnectionState),
     Infos = infos(?OTHER_METRICS, Connection, ConnectionState),
     rabbit_core_metrics:connection_stats(Pid, Infos),
     rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
     rabbit_event:notify(connection_stats, Infos ++ I),
+    [rabbit_stream_metrics:consumer_updated(
+        self(), stream_r(S, Connection), Id, Credit,
+        messages_consumed(Counters), consumer_offset(Counters))
+     || #consumer{stream = S, subscription_id = Id,
+                  credit = Credit, counters = Counters} <- maps:values(Consumers)],
+    [rabbit_stream_metrics:publisher_updated(
+        self(), stream_r(S, Connection), Id, PubReference,
+        messages_published(Counters), messages_confirmed(Counters), messages_errored(Counters))
+        || #publisher{stream = S, publisher_id = Id, reference = PubReference,
+                      message_counters = Counters} <- maps:values(Publishers)],
     Connection1 = rabbit_event:reset_stats_timer(Connection, #stream_connection.stats_timer),
     ensure_stats_timer(Connection1).
 
@@ -1427,7 +1509,7 @@ i(ssl_key_exchange, _, _) -> '';
 i(ssl_cipher, _, _) -> '';
 i(ssl_hash, _, _) -> '';
 i(channels,           _, _) -> 0;
-i(protocol, _, _) -> {<<"stream">>, ""};
+i(protocol, _, _) -> <<"stream">>;
 i(user_who_performed_action, Connection, ConnectionState) -> i(user, Connection, ConnectionState);
 i(user,              #stream_connection{user = U}, _) -> U#user.username;
 i(vhost,             #stream_connection{virtual_host = VirtualHost}, _) -> VirtualHost;

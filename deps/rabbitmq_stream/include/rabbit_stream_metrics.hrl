@@ -1,0 +1,2 @@
+-define(TABLE_CONSUMER, rabbit_stream_consumer_created).
+-define(TABLE_PUBLISHER, rabbit_stream_publisher_created).

@@ -30,6 +30,8 @@
          code_change/3, handle_pre_hibernate/1,
          format_message_queue/2]).
 
+-export([submit/1, get_data_from_nodes/1]).
+
 -import(rabbit_misc, [pget/3]).
 
 -type maybe_slide() :: exometer_slide:slide() | not_found.

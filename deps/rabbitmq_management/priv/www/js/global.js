@@ -166,6 +166,8 @@ var DISABLED_STATS_COLUMNS =
 
 var COLUMNS;
 
+var RENDER_CALLBACKS = {};
+
 // All help ? popups
 var HELP = {
     'delivery-limit':
