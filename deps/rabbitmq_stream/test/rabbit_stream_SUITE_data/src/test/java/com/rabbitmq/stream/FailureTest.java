@@ -31,9 +31,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @ExtendWith(TestUtils.StreamTestInfrastructureExtension.class)
 public class FailureTest {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(FailureTest.class);
 
   TestUtils.ClientFactory cf;
   String stream;
@@ -128,7 +132,9 @@ public class FailureTest {
     TestUtils.waitAtMost(
         Duration.ofSeconds(10),
         () -> {
+          LOGGER.info("Getting metadata for {}", stream);
           Client.StreamMetadata m = publisher.metadata(stream).get(stream);
+          LOGGER.info("Metadata for {} (expecting 2 replicas): {}", stream, m);
           return m.getReplicas().size() == 2;
         });
 
@@ -162,9 +168,7 @@ public class FailureTest {
           return response.isOk();
         });
     assertThat(consumeLatch.await(10, TimeUnit.SECONDS)).isTrue();
-    assertThat(bodies)
-        .hasSameSizeAs(messages)
-        .containsAll(messages);
+    assertThat(bodies).hasSameSizeAs(messages).containsAll(messages);
   }
 
   @Test

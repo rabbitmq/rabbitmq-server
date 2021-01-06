@@ -11,7 +11,7 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
@@ -24,11 +24,13 @@ import com.rabbitmq.stream.impl.Client;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
+import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.extension.*;
 
 public class TestUtils {
@@ -92,7 +94,7 @@ public class TestUtils {
       try {
         Field streamField = context.getTestInstance().get().getClass().getDeclaredField("stream");
         streamField.setAccessible(true);
-        String stream = UUID.randomUUID().toString();
+        String stream = streamName(context);
         streamField.set(context.getTestInstance().get(), stream);
         Client client =
             new Client(
@@ -148,6 +150,21 @@ public class TestUtils {
       EventLoopGroup eventLoopGroup = eventLoopGroup(context);
       eventLoopGroup.shutdownGracefully(1, 10, SECONDS).get(10, SECONDS);
     }
+  }
+
+  static String streamName(TestInfo info) {
+    return streamName(info.getTestClass().get(), info.getTestMethod().get());
+  }
+
+  private static String streamName(ExtensionContext context) {
+    return streamName(context.getTestInstance().get().getClass(), context.getTestMethod().get());
+  }
+
+  private static String streamName(Class<?> testClass, Method testMethod) {
+    String uuid = UUID.randomUUID().toString();
+    return String.format(
+        "%s_%s%s",
+        testClass.getSimpleName(), testMethod.getName(), uuid.substring(uuid.length() / 2));
   }
 
   static class ClientFactory {
