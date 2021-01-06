@@ -11,28 +11,30 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_metrics_gc).
 
 -include_lib("rabbitmq_stream/include/rabbit_stream_metrics.hrl").
 
--record(state, {timer,
-                interval
-               }).
+-record(state, {timer, interval}).
 
 -export([start_link/0]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
          code_change/3]).
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
-
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init(_) ->
-    Interval = rabbit_misc:get_env(rabbit, core_metrics_gc_interval, 120000),
+    Interval =
+        rabbit_misc:get_env(rabbit, core_metrics_gc_interval, 120000),
     {ok, start_timer(#state{interval = Interval})}.
 
 handle_call(which_children, _From, State) ->
@@ -42,7 +44,9 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info(start_gc, State) ->
-    GbSet = gb_sets:from_list(rabbit_amqqueue:list_names()),
+    GbSet =
+        gb_sets:from_list(
+            rabbit_amqqueue:list_names()),
     gc_process_and_entity(?TABLE_CONSUMER, GbSet),
     gc_process_and_entity(?TABLE_PUBLISHER, GbSet),
     {noreply, start_timer(State)}.
@@ -60,15 +64,17 @@ start_timer(#state{interval = Interval} = St) ->
 
 gc_process_and_entity(Table, GbSet) ->
     ets:foldl(fun({{Id, Pid, _} = Key, _}, none) ->
-                      gc_process_and_entity(Id, Pid, Table, Key, GbSet)
-              end, none, Table).
+                 gc_process_and_entity(Id, Pid, Table, Key, GbSet)
+              end,
+              none, Table).
 
 gc_process_and_entity(Id, Pid, Table, Key, GbSet) ->
-    case rabbit_misc:is_process_alive(Pid) andalso gb_sets:is_member(Id, GbSet) of
+    case rabbit_misc:is_process_alive(Pid)
+         andalso gb_sets:is_member(Id, GbSet)
+    of
         true ->
             none;
         false ->
             ets:delete(Table, Key),
             none
     end.
-

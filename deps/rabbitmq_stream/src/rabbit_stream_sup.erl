@@ -11,10 +11,11 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_sup).
+
 -behaviour(supervisor).
 
 -export([start_link/0]).
@@ -27,41 +28,59 @@ start_link() ->
 
 init([]) ->
     {ok, Listeners} = application:get_env(rabbitmq_stream, tcp_listeners),
-    NumTcpAcceptors = application:get_env(rabbitmq_stream, num_tcp_acceptors, 10),
-    {ok, SocketOpts} = application:get_env(rabbitmq_stream, tcp_listen_options),
+    NumTcpAcceptors =
+        application:get_env(rabbitmq_stream, num_tcp_acceptors, 10),
+    {ok, SocketOpts} =
+        application:get_env(rabbitmq_stream, tcp_listen_options),
     Nodes = rabbit_mnesia:cluster_nodes(all),
     OsirisConf = #{nodes => Nodes},
 
-    ServerConfiguration = #{
-        initial_credits => application:get_env(rabbitmq_stream, initial_credits, ?DEFAULT_INITIAL_CREDITS),
-        credits_required_for_unblocking => application:get_env(rabbitmq_stream, credits_required_for_unblocking, ?DEFAULT_CREDITS_REQUIRED_FOR_UNBLOCKING),
-        frame_max => application:get_env(rabbit_stream, frame_max, ?DEFAULT_FRAME_MAX),
-        heartbeat => application:get_env(rabbit_stream, heartbeat, ?DEFAULT_HEARTBEAT)
-    },
+    ServerConfiguration =
+        #{initial_credits =>
+              application:get_env(rabbitmq_stream, initial_credits,
+                                  ?DEFAULT_INITIAL_CREDITS),
+          credits_required_for_unblocking =>
+              application:get_env(rabbitmq_stream,
+                                  credits_required_for_unblocking,
+                                  ?DEFAULT_CREDITS_REQUIRED_FOR_UNBLOCKING),
+          frame_max =>
+              application:get_env(rabbit_stream, frame_max, ?DEFAULT_FRAME_MAX),
+          heartbeat =>
+              application:get_env(rabbit_stream, heartbeat,
+                                  ?DEFAULT_HEARTBEAT)},
 
-    StreamManager = #{id => rabbit_stream_manager,
-        type => worker,
-        start => {rabbit_stream_manager, start_link, [OsirisConf]}},
+    StreamManager =
+        #{id => rabbit_stream_manager,
+          type => worker,
+          start => {rabbit_stream_manager, start_link, [OsirisConf]}},
 
-    MetricsGc = #{
-        id => rabbit_stream_metrics_gc_sup,
-        type => worker,
-        start => {rabbit_stream_metrics_gc, start_link, []}
-    },
+    MetricsGc =
+        #{id => rabbit_stream_metrics_gc_sup,
+          type => worker,
+          start => {rabbit_stream_metrics_gc, start_link, []}},
 
-    {ok, {{one_for_all, 10, 10},
-            [StreamManager, MetricsGc] ++
-            listener_specs(fun tcp_listener_spec/1,
-                [SocketOpts, ServerConfiguration, NumTcpAcceptors], Listeners)}}.
+    {ok,
+     {{one_for_all, 10, 10},
+      [StreamManager, MetricsGc]
+      ++ listener_specs(fun tcp_listener_spec/1,
+                        [SocketOpts, ServerConfiguration, NumTcpAcceptors],
+                        Listeners)}}.
 
 listener_specs(Fun, Args, Listeners) ->
-    [Fun([Address | Args]) ||
-        Listener <- Listeners,
+    [Fun([Address | Args])
+     || Listener <- Listeners,
         Address <- rabbit_networking:tcp_listener_addresses(Listener)].
 
-tcp_listener_spec([Address, SocketOpts, Configuration, NumAcceptors]) ->
-    rabbit_networking:tcp_listener_spec(
-        rabbit_stream_listener_sup, Address, SocketOpts,
-        ranch_tcp, rabbit_stream_connection_sup, Configuration,
-        stream, NumAcceptors, "Stream TCP listener").
-
+tcp_listener_spec([Address,
+                   SocketOpts,
+                   Configuration,
+                   NumAcceptors]) ->
+    rabbit_networking:tcp_listener_spec(rabbit_stream_listener_sup,
+                                        Address,
+                                        SocketOpts,
+                                        ranch_tcp,
+                                        rabbit_stream_connection_sup,
+                                        Configuration,
+                                        stream,
+                                        NumAcceptors,
+                                        "Stream TCP listener").

@@ -7,26 +7,27 @@
 
 -module(rabbit_stream_management_utils).
 
-
--export([keep_stream_connections/1, keep_tracked_stream_connections/1, is_stream_connection/1]).
+-export([keep_stream_connections/1,
+         keep_tracked_stream_connections/1,
+         is_stream_connection/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
-
 keep_stream_connections(Connections) ->
-  lists:filter(fun is_stream_connection/1, Connections).
+    lists:filter(fun is_stream_connection/1, Connections).
 
 is_stream_connection(Connection) ->
-  case lists:keyfind(protocol, 1, Connection) of
-    {protocol, <<"stream">>} ->
-      true;
-    _ ->
-      false
-  end.
+    case lists:keyfind(protocol, 1, Connection) of
+        {protocol, <<"stream">>} ->
+            true;
+        _ ->
+            false
+    end.
 
 keep_tracked_stream_connections(Connections) ->
-  lists:filter(fun(#tracked_connection{protocol = <<"stream">>}) ->
-                  true;
-                  (_) ->
-                  false
-               end, Connections).
+    lists:filter(fun (#tracked_connection{protocol = <<"stream">>}) ->
+                         true;
+                     (_) ->
+                         false
+                 end,
+                 Connections).

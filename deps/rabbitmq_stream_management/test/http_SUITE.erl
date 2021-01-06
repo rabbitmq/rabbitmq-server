@@ -14,16 +14,10 @@
 -compile(export_all).
 
 all() ->
-    [
-      {group, non_parallel_tests}
-    ].
+    [{group, non_parallel_tests}].
 
 groups() ->
-    [
-     {non_parallel_tests, [], [
-                               stream_management
-                              ]}
-    ].
+    [{non_parallel_tests, [], [stream_management]}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -31,21 +25,23 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
-      ]),
+    Config1 =
+        rabbit_ct_helpers:set_config(Config,
+                                     [{rmq_nodename_suffix, ?MODULE}]),
     rabbit_ct_helpers:run_setup_steps(Config1,
-      [fun(StepConfig) ->
-        rabbit_ct_helpers:merge_app_env(StepConfig,
-          {rabbit, [{collect_statistics_interval, 500}]})
-       end] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+                                      [fun(StepConfig) ->
+                                          rabbit_ct_helpers:merge_app_env(StepConfig,
+                                                                          {rabbit,
+                                                                           [{collect_statistics_interval,
+                                                                             500}]})
+                                       end]
+                                      ++ rabbit_ct_broker_helpers:setup_steps()
+                                      ++ rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
-      rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()).
+                                         rabbit_ct_client_helpers:teardown_steps()
+                                         ++ rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
     Config.
@@ -69,28 +65,38 @@ stream_management(Config) ->
     Vhost1 = <<"vh1">>,
     Vhost2 = <<"vh2">>,
     rabbit_ct_broker_helpers:add_user(Config, UserManagement),
-    rabbit_ct_broker_helpers:set_user_tags(Config, 0, UserManagement, [management]),
+    rabbit_ct_broker_helpers:set_user_tags(Config,
+                                           0,
+                                           UserManagement,
+                                           [management]),
     rabbit_ct_broker_helpers:add_user(Config, UserMonitoring),
-    rabbit_ct_broker_helpers:set_user_tags(Config, 0, UserMonitoring, [monitoring]),
+    rabbit_ct_broker_helpers:set_user_tags(Config,
+                                           0,
+                                           UserMonitoring,
+                                           [monitoring]),
     rabbit_ct_broker_helpers:add_vhost(Config, Vhost1),
     rabbit_ct_broker_helpers:add_vhost(Config, Vhost2),
 
-    rabbit_ct_broker_helpers:set_full_permissions(Config, UserManagement, Vhost1),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, UserMonitoring, Vhost1),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost1),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, Vhost2),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, UserManagement,
+                                                  Vhost1),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, UserMonitoring,
+                                                  Vhost1),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>,
+                                                  Vhost1),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>,
+                                                  Vhost2),
 
     StreamPortNode = get_stream_port(Config),
     ManagementPortNode = get_management_port(Config),
     DataDir = rabbit_ct_helpers:get_config(Config, data_dir),
-    MakeResult = rabbit_ct_helpers:make(Config, DataDir, ["tests",
-      {"STREAM_PORT=~b", [StreamPortNode]},
-      {"MANAGEMENT_PORT=~b", [ManagementPortNode]}
-    ]),
+    MakeResult =
+        rabbit_ct_helpers:make(Config, DataDir,
+                               ["tests", {"STREAM_PORT=~b", [StreamPortNode]},
+                                {"MANAGEMENT_PORT=~b", [ManagementPortNode]}]),
     {ok, _} = MakeResult.
 
 get_stream_port(Config) ->
-  rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stream).
+    rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stream).
 
 get_management_port(Config) ->
-  rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt).
+    rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt).

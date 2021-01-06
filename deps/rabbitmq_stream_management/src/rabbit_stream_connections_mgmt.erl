@@ -9,47 +9,57 @@
 
 -behaviour(rabbit_mgmt_extension).
 
--export([dispatcher/0, web_ui/0]).
--export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
+-export([dispatcher/0,
+         web_ui/0]).
+-export([init/2,
+         to_json/2,
+         content_types_provided/2,
+         is_authorized/2]).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
-dispatcher() -> [{"/stream/connections", ?MODULE, []}].
+dispatcher() ->
+    [{"/stream/connections", ?MODULE, []}].
 
-web_ui()     -> [{javascript, <<"stream.js">>}].
+web_ui() ->
+    [{javascript, <<"stream.js">>}].
 
 %%--------------------------------------------------------------------
 
 init(Req, _Opts) ->
-  {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
+    {cowboy_rest, rabbit_mgmt_cors:set_headers(Req, ?MODULE), #context{}}.
 
 content_types_provided(ReqData, Context) ->
-  {[{<<"application/json">>, to_json}], ReqData, Context}.
+    {[{<<"application/json">>, to_json}], ReqData, Context}.
 
 to_json(ReqData, Context) ->
-  try
-    Connections = do_connections_query(ReqData, Context),
-    rabbit_mgmt_util:reply_list_or_paginate(Connections, ReqData, Context)
-  catch
-    {error, invalid_range_parameters, Reason} ->
-      rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData, Context)
-  end.
+    try
+        Connections = do_connections_query(ReqData, Context),
+        rabbit_mgmt_util:reply_list_or_paginate(Connections, ReqData, Context)
+    catch
+        {error, invalid_range_parameters, Reason} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(Reason), ReqData,
+                                         Context)
+    end.
 
 is_authorized(ReqData, Context) ->
-  rabbit_mgmt_util:is_authorized(ReqData, Context).
+    rabbit_mgmt_util:is_authorized(ReqData, Context).
 
 augmented(ReqData, Context) ->
-  rabbit_mgmt_util:filter_conn_ch_list(
-    rabbit_mgmt_db:get_all_connections(
-      rabbit_mgmt_util:range_ceil(ReqData)), ReqData, Context).
+    rabbit_mgmt_util:filter_conn_ch_list(
+        rabbit_mgmt_db:get_all_connections(
+            rabbit_mgmt_util:range_ceil(ReqData)),
+        ReqData, Context).
 
 do_connections_query(ReqData, Context) ->
-  case rabbit_mgmt_util:disable_stats(ReqData) of
-    false ->
-      rabbit_stream_management_utils:keep_stream_connections(augmented(ReqData, Context));
-    true ->
-      TrackedStreamConnections = rabbit_stream_management_utils:keep_tracked_stream_connections(
-        rabbit_connection_tracking:list()),
-      rabbit_mgmt_util:filter_tracked_conn_list(TrackedStreamConnections,
-        ReqData, Context)
-  end.
+    case rabbit_mgmt_util:disable_stats(ReqData) of
+        false ->
+            rabbit_stream_management_utils:keep_stream_connections(augmented(ReqData,
+                                                                             Context));
+        true ->
+            TrackedStreamConnections =
+                rabbit_stream_management_utils:keep_tracked_stream_connections(
+                    rabbit_connection_tracking:list()),
+            rabbit_mgmt_util:filter_tracked_conn_list(TrackedStreamConnections,
+                                                      ReqData, Context)
+    end.

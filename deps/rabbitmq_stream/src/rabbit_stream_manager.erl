@@ -11,21 +11,28 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_manager).
+
 -behaviour(gen_server).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %% API
--export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
--export([start_link/1, create/4, delete/3, lookup_leader/2, lookup_local_member/2, topology/2]).
+-export([init/1,
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2]).
+-export([start_link/1,
+         create/4,
+         delete/3,
+         lookup_leader/2,
+         lookup_local_member/2,
+         topology/2]).
 
--record(state, {
-    configuration
-}).
+-record(state, {configuration}).
 
 start_link(Conf) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Conf], []).
@@ -34,13 +41,16 @@ init([Conf]) ->
     {ok, #state{configuration = Conf}}.
 
 -spec create(binary(), binary(), #{binary() => binary()}, binary()) ->
-    {ok, map()} | {error, reference_already_exists} | {error, internal_error}
-     | {error, validation_failed}.
+                {ok, map()} |
+                {error, reference_already_exists} |
+                {error, internal_error} |
+                {error, validation_failed}.
 create(VirtualHost, Reference, Arguments, Username) ->
-    gen_server:call(?MODULE, {create, VirtualHost, Reference, Arguments, Username}).
+    gen_server:call(?MODULE,
+                    {create, VirtualHost, Reference, Arguments, Username}).
 
 -spec delete(binary(), binary(), binary()) ->
-    {ok, deleted} | {error, reference_not_found}.
+                {ok, deleted} | {error, reference_not_found}.
 delete(VirtualHost, Reference, Username) ->
     gen_server:call(?MODULE, {delete, VirtualHost, Reference, Username}).
 
@@ -48,59 +58,73 @@ delete(VirtualHost, Reference, Username) ->
 lookup_leader(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {lookup_leader, VirtualHost, Stream}).
 
--spec lookup_local_member(binary(), binary()) -> {ok, pid()}
-    | {error, not_found} | {error, not_available}.
+-spec lookup_local_member(binary(), binary()) ->
+                             {ok, pid()} | {error, not_found} |
+                             {error, not_available}.
 lookup_local_member(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {lookup_local_member, VirtualHost, Stream}).
 
 -spec topology(binary(), binary()) ->
-    {ok, #{leader_node => undefined | pid(), replica_nodes => [pid()]}}
-     | {error, stream_not_found} | {error, stream_not_available}.
+                  {ok,
+                   #{leader_node => undefined | pid(),
+                     replica_nodes => [pid()]}} |
+                  {error, stream_not_found} | {error, stream_not_available}.
 topology(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {topology, VirtualHost, Stream}).
 
 stream_queue_arguments(Arguments) ->
-    stream_queue_arguments([{<<"x-queue-type">>, longstr, <<"stream">>}], Arguments).
+    stream_queue_arguments([{<<"x-queue-type">>, longstr, <<"stream">>}],
+                           Arguments).
 
-stream_queue_arguments(ArgumentsAcc, Arguments) when map_size(Arguments) =:= 0 ->
+stream_queue_arguments(ArgumentsAcc, Arguments)
+    when map_size(Arguments) =:= 0 ->
     ArgumentsAcc;
-stream_queue_arguments(ArgumentsAcc, #{<<"max-length-bytes">> := Value} = Arguments) ->
-    stream_queue_arguments(
-        [{<<"x-max-length-bytes">>, long, binary_to_integer(Value)}] ++ ArgumentsAcc,
-        maps:remove(<<"max-length-bytes">>, Arguments)
-    );
-stream_queue_arguments(ArgumentsAcc, #{<<"max-age">> := Value} = Arguments) ->
-    stream_queue_arguments(
-        [{<<"x-max-age">>, longstr, Value}] ++ ArgumentsAcc,
-        maps:remove(<<"max-age">>, Arguments)
-    );
-stream_queue_arguments(ArgumentsAcc, #{<<"max-segment-size">> := Value} = Arguments) ->
-    stream_queue_arguments(
-        [{<<"x-max-segment-size">>, long, binary_to_integer(Value)}] ++ ArgumentsAcc,
-        maps:remove(<<"max-segment-size">>, Arguments)
-    );
-stream_queue_arguments(ArgumentsAcc, #{<<"initial-cluster-size">> := Value} = Arguments) ->
-    stream_queue_arguments(
-        [{<<"x-initial-cluster-size">>, long, binary_to_integer(Value)}] ++ ArgumentsAcc,
-        maps:remove(<<"initial-cluster-size">>, Arguments)
-    );
-stream_queue_arguments(ArgumentsAcc, #{<<"queue-leader-locator">> := Value} = Arguments) ->
-    stream_queue_arguments(
-        [{<<"x-queue-leader-locator">>, longstr, Value}] ++ ArgumentsAcc,
-        maps:remove(<<"queue-leader-locator">>, Arguments)
-    );
+stream_queue_arguments(ArgumentsAcc,
+                       #{<<"max-length-bytes">> := Value} = Arguments) ->
+    stream_queue_arguments([{<<"x-max-length-bytes">>, long,
+                             binary_to_integer(Value)}]
+                           ++ ArgumentsAcc,
+                           maps:remove(<<"max-length-bytes">>, Arguments));
+stream_queue_arguments(ArgumentsAcc,
+                       #{<<"max-age">> := Value} = Arguments) ->
+    stream_queue_arguments([{<<"x-max-age">>, longstr, Value}]
+                           ++ ArgumentsAcc,
+                           maps:remove(<<"max-age">>, Arguments));
+stream_queue_arguments(ArgumentsAcc,
+                       #{<<"max-segment-size">> := Value} = Arguments) ->
+    stream_queue_arguments([{<<"x-max-segment-size">>, long,
+                             binary_to_integer(Value)}]
+                           ++ ArgumentsAcc,
+                           maps:remove(<<"max-segment-size">>, Arguments));
+stream_queue_arguments(ArgumentsAcc,
+                       #{<<"initial-cluster-size">> := Value} = Arguments) ->
+    stream_queue_arguments([{<<"x-initial-cluster-size">>, long,
+                             binary_to_integer(Value)}]
+                           ++ ArgumentsAcc,
+                           maps:remove(<<"initial-cluster-size">>, Arguments));
+stream_queue_arguments(ArgumentsAcc,
+                       #{<<"queue-leader-locator">> := Value} = Arguments) ->
+    stream_queue_arguments([{<<"x-queue-leader-locator">>, longstr,
+                             Value}]
+                           ++ ArgumentsAcc,
+                           maps:remove(<<"queue-leader-locator">>, Arguments));
 stream_queue_arguments(ArgumentsAcc, _Arguments) ->
     ArgumentsAcc.
 
 validate_stream_queue_arguments([]) ->
     ok;
-validate_stream_queue_arguments([{<<"x-initial-cluster-size">>, long, ClusterSize} | _]) when ClusterSize =< 0 ->
+validate_stream_queue_arguments([{<<"x-initial-cluster-size">>, long,
+                                  ClusterSize}
+                                 | _])
+    when ClusterSize =< 0 ->
     error;
-validate_stream_queue_arguments([{<<"x-queue-leader-locator">>, longstr, Locator} | T]) ->
-    case lists:member(Locator, [<<"client-local">>,
-        <<"random">>,
-        <<"least-leaders">>]) of
-        true  ->
+validate_stream_queue_arguments([{<<"x-queue-leader-locator">>,
+                                  longstr, Locator}
+                                 | T]) ->
+    case lists:member(Locator,
+                      [<<"client-local">>, <<"random">>, <<"least-leaders">>])
+    of
+        true ->
             validate_stream_queue_arguments(T);
         false ->
             error
@@ -108,74 +132,105 @@ validate_stream_queue_arguments([{<<"x-queue-leader-locator">>, longstr, Locator
 validate_stream_queue_arguments([_ | T]) ->
     validate_stream_queue_arguments(T).
 
-
-handle_call({create, VirtualHost, Reference, Arguments, Username}, _From, State) ->
-    Name = #resource{virtual_host = VirtualHost, kind = queue, name = Reference},
+handle_call({create, VirtualHost, Reference, Arguments, Username},
+            _From, State) ->
+    Name =
+        #resource{virtual_host = VirtualHost,
+                  kind = queue,
+                  name = Reference},
     StreamQueueArguments = stream_queue_arguments(Arguments),
     case validate_stream_queue_arguments(StreamQueueArguments) of
         ok ->
-            Q0 = amqqueue:new(
-                Name,
-                none, true, false, none, StreamQueueArguments,
-                VirtualHost, #{user => Username}, rabbit_stream_queue
-            ),
-            case rabbit_amqqueue:with(
-                   Name,
-                   fun(Q) ->
-                           ok = rabbit_amqqueue:assert_equivalence(Q, true, false, StreamQueueArguments, none)
-                   end) of
+            Q0 = amqqueue:new(Name,
+                              none,
+                              true,
+                              false,
+                              none,
+                              StreamQueueArguments,
+                              VirtualHost,
+                              #{user => Username},
+                              rabbit_stream_queue),
+            case rabbit_amqqueue:with(Name,
+                                      fun(Q) ->
+                                         ok =
+                                             rabbit_amqqueue:assert_equivalence(Q,
+                                                                                true,
+                                                                                false,
+                                                                                StreamQueueArguments,
+                                                                                none)
+                                      end)
+            of
                 ok ->
                     {reply, {error, reference_already_exists}, State};
                 {error, not_found} ->
                     try
                         case rabbit_stream_queue:declare(Q0, node()) of
                             {new, Q} ->
-                                {reply, {ok, amqqueue:get_type_state(Q)}, State};
+                                {reply, {ok, amqqueue:get_type_state(Q)},
+                                 State};
                             {existing, _} ->
-                                {reply, {error, reference_already_exists}, State};
+                                {reply, {error, reference_already_exists},
+                                 State};
                             {error, Err} ->
-                                rabbit_log:warning("Error while creating ~p stream, ~p~n", [Reference, Err]),
+                                rabbit_log:warning("Error while creating ~p stream, ~p~n",
+                                                   [Reference, Err]),
                                 {reply, {error, internal_error}, State}
                         end
                     catch
                         exit:Error ->
-                            rabbit_log:info("Error while creating ~p stream, ~p~n", [Reference, Error]),
+                            rabbit_log:info("Error while creating ~p stream, ~p~n",
+                                            [Reference, Error]),
                             {reply, {error, internal_error}, State}
                     end;
                 {error, {absent, _, Reason}} ->
-                    rabbit_log:warning("Error while creating ~p stream, ~p~n", [Reference, Reason]),
+                    rabbit_log:warning("Error while creating ~p stream, ~p~n",
+                                       [Reference, Reason]),
                     {reply, {error, internal_error}, State}
             end;
         error ->
             {reply, {error, validation_failed}, State}
     end;
-handle_call({delete, VirtualHost, Reference, Username}, _From, State) ->
-    Name = #resource{virtual_host = VirtualHost, kind = queue, name = Reference},
+handle_call({delete, VirtualHost, Reference, Username}, _From,
+            State) ->
+    Name =
+        #resource{virtual_host = VirtualHost,
+                  kind = queue,
+                  name = Reference},
     rabbit_log:debug("Trying to delete stream ~p~n", [Reference]),
     case rabbit_amqqueue:lookup(Name) of
         {ok, Q} ->
-            rabbit_log:debug("Found queue record ~p, checking if it is a stream~n", [Reference]),
+            rabbit_log:debug("Found queue record ~p, checking if it is a stream~n",
+                             [Reference]),
             case is_stream_queue(Q) of
                 true ->
-                    rabbit_log:debug("Queue record ~p is a stream, trying to delete it~n", [Reference]),
-                    {ok, _} = rabbit_stream_queue:delete(Q, false, false, Username),
+                    rabbit_log:debug("Queue record ~p is a stream, trying to delete "
+                                     "it~n",
+                                     [Reference]),
+                    {ok, _} =
+                        rabbit_stream_queue:delete(Q, false, false, Username),
                     rabbit_log:debug("Stream ~p deleted~n", [Reference]),
                     {reply, {ok, deleted}, State};
                 _ ->
-                    rabbit_log:debug("Queue record ~p is NOT a stream, returning error~n", [Reference]),
+                    rabbit_log:debug("Queue record ~p is NOT a stream, returning error~n",
+                                     [Reference]),
                     {reply, {error, reference_not_found}, State}
             end;
         {error, not_found} ->
-            rabbit_log:debug("Stream ~p not found, cannot delete it~n", [Reference]),
+            rabbit_log:debug("Stream ~p not found, cannot delete it~n",
+                             [Reference]),
             {reply, {error, reference_not_found}, State}
     end;
 handle_call({lookup_leader, VirtualHost, Stream}, _From, State) ->
-    Name = #resource{virtual_host = VirtualHost, kind = queue, name = Stream},
+    Name =
+        #resource{virtual_host = VirtualHost,
+                  kind = queue,
+                  name = Stream},
     Res = case rabbit_amqqueue:lookup(Name) of
               {ok, Q} ->
                   case is_stream_queue(Q) of
                       true ->
-                          #{leader_pid := LeaderPid} = amqqueue:get_type_state(Q),
+                          #{leader_pid := LeaderPid} =
+                              amqqueue:get_type_state(Q),
                           % FIXME check if pid is alive in case of stale information
                           LeaderPid;
                       _ ->
@@ -185,21 +240,28 @@ handle_call({lookup_leader, VirtualHost, Stream}, _From, State) ->
                   cluster_not_found
           end,
     {reply, Res, State};
-handle_call({lookup_local_member, VirtualHost, Stream}, _From, State) ->
-    Name = #resource{virtual_host = VirtualHost, kind = queue, name = Stream},
+handle_call({lookup_local_member, VirtualHost, Stream}, _From,
+            State) ->
+    Name =
+        #resource{virtual_host = VirtualHost,
+                  kind = queue,
+                  name = Stream},
     Res = case rabbit_amqqueue:lookup(Name) of
               {ok, Q} ->
                   case is_stream_queue(Q) of
                       true ->
-                          #{leader_pid := LeaderPid, replica_pids := ReplicaPids} = amqqueue:get_type_state(Q),
-                          LocalMember = lists:foldl(fun(Pid, Acc) ->
-                              case node(Pid) =:= node() of
-                                  true ->
-                                      Pid;
-                                  false ->
-                                      Acc
-                              end
-                                                    end, undefined, [LeaderPid] ++ ReplicaPids),
+                          #{leader_pid := LeaderPid,
+                            replica_pids := ReplicaPids} =
+                              amqqueue:get_type_state(Q),
+                          LocalMember =
+                              lists:foldl(fun(Pid, Acc) ->
+                                             case node(Pid) =:= node() of
+                                                 true -> Pid;
+                                                 false -> Acc
+                                             end
+                                          end,
+                                          undefined,
+                                          [LeaderPid] ++ ReplicaPids),
                           % FIXME check if pid is alive in case of stale information
                           case LocalMember of
                               undefined ->
@@ -220,30 +282,42 @@ handle_call({lookup_local_member, VirtualHost, Stream}, _From, State) ->
           end,
     {reply, Res, State};
 handle_call({topology, VirtualHost, Stream}, _From, State) ->
-    Name = #resource{virtual_host = VirtualHost, kind = queue, name = Stream},
+    Name =
+        #resource{virtual_host = VirtualHost,
+                  kind = queue,
+                  name = Stream},
     Res = case rabbit_amqqueue:lookup(Name) of
               {ok, Q} ->
                   case is_stream_queue(Q) of
                       true ->
                           QState = amqqueue:get_type_state(Q),
-                          ProcessAliveFun = fun(Pid) ->
-                              rpc:call(node(Pid), erlang, is_process_alive, [Pid], 10000)
-                                            end,
-                          LeaderNode = case ProcessAliveFun(maps:get(leader_pid, QState)) of
-                                           true ->
-                                               maps:get(leader_node, QState);
-                                           _ ->
-                                               undefined
-                                       end,
-                          ReplicaNodes = lists:foldl(fun(Pid, Acc) ->
-                              case ProcessAliveFun(Pid) of
+                          ProcessAliveFun =
+                              fun(Pid) ->
+                                 rpc:call(node(Pid),
+                                          erlang,
+                                          is_process_alive,
+                                          [Pid],
+                                          10000)
+                              end,
+                          LeaderNode =
+                              case ProcessAliveFun(maps:get(leader_pid, QState))
+                              of
                                   true ->
-                                      Acc ++ [node(Pid)];
+                                      maps:get(leader_node, QState);
                                   _ ->
-                                      Acc
-                              end
-                                                     end, [], maps:get(replica_pids, QState)),
-                          {ok, #{leader_node => LeaderNode, replica_nodes => ReplicaNodes}};
+                                      undefined
+                              end,
+                          ReplicaNodes =
+                              lists:foldl(fun(Pid, Acc) ->
+                                             case ProcessAliveFun(Pid) of
+                                                 true -> Acc ++ [node(Pid)];
+                                                 _ -> Acc
+                                             end
+                                          end,
+                                          [], maps:get(replica_pids, QState)),
+                          {ok,
+                           #{leader_node => LeaderNode,
+                             replica_nodes => ReplicaNodes}};
                       _ ->
                           {error, stream_not_found}
                   end;
