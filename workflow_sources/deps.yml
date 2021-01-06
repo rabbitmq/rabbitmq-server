@@ -340,6 +340,11 @@ deps:
   - name: config_schema
   - name: rabbit_stream
 
+- name: rabbitmq_stream_management
+  skip_dialyzer: true
+  suites:
+  - name: http
+
 - name: rabbitmq_top
   suites: []
 
