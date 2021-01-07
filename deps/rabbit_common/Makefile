@@ -16,7 +16,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl
-DEPS = lager jsx ranch recon credentials_obfuscation
+DEPS = lager jsx recon credentials_obfuscation
 
 dep_credentials_obfuscation = hex 2.3.0
 
