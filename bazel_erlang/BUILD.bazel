@@ -1,6 +1,11 @@
 load("erlang_home.bzl", "erlang_home")
 load("elixir_home.bzl", "elixir_home", "mix_archives")
 
+exports_files([
+    "app_file.template",
+    "app_with_mod_file.template",
+])
+
 # This allows us to
 # `bazel build //my/target \
 #    --//bazel_erlang:erlang_home=/path/to/erlang/installation`

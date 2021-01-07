@@ -1,0 +1,32 @@
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@//bazel_erlang:ez.bzl", "ez")
+
+APP_ENV = """[
+	{data_dir, "/tmp/osiris"},
+	{port_range, {6000, 6500}}
+]"""
+
+bazel_erlang_lib(
+    name = "osiris",
+    app_name = "osiris",
+    app_version = "master",
+    app_description = "New project",
+    app_module = "osiris_app",
+    app_env = APP_ENV,
+    extra_apps = [
+        "sasl",
+        "crypto",
+    ],
+    hdrs = glob(["include/*.hrl", "src/*.hrl"]),
+    srcs = glob(["src/*.erl"]),
+    deps = [
+        "@gen-batch-server//:gen-batch-server",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+ez(
+    name = "osiris.ez",
+    lib = ":osiris",
+    visibility = ["//visibility:public"],
+)

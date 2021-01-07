@@ -1,0 +1,25 @@
+load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("//bazel_erlang:ez.bzl", "ez")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+
+bazel_erlang_lib(
+    name = "rabbitmq_prelaunch",
+    app_name = "rabbitmq_prelaunch",
+    app_version = APP_VERSION,
+    app_description = "RabbitMQ prelaunch setup",
+    app_module = "rabbit_prelaunch_app",
+    srcs = glob(["src/*.erl"]),
+    hdrs = glob(["include/*.hrl", "src/*.hrl"]),
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    deps = [
+        "//deps/rabbit_common:rabbit_common",
+        "@lager//:lager",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+ez(
+    name = "rabbitmq_prelaunch.ez",
+    lib = ":rabbitmq_prelaunch",
+    visibility = ["//visibility:public"],
+)

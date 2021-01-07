@@ -1,0 +1,52 @@
+load(":rabbitmq_sbin.bzl", "rabbitmq_sbin")
+load(":rabbitmq_node.bzl", "rabbitmq_node")
+
+rabbitmq_sbin(
+    name = "rabbitmq-server",
+    scripts = [
+        "//deps/rabbit:scripts/rabbitmq-env",
+        "//deps/rabbit:scripts/rabbitmq-defaults",
+        "//deps/rabbit:scripts/rabbitmq-server",
+    ],
+    escripts = [
+        "//deps/rabbitmq_cli:rabbitmqctl",
+    ],
+)
+
+# Allow us to bazel run :broker
+# for the equivalent of `make run-broker`
+rabbitmq_node(
+    name = "broker",
+)
+
+# This needs to:
+# - Have rabbitmqctl (from deps/rabbit/scripts) as a run file
+# - Have rabbitmqctl (built escript from deps/rabbitmq_cli) as a run file
+# - Have the broker beam files as run files
+# - Invoke rabbitmqctl correctly
+# genrule(
+#     name = "start-background-broker",
+#     srcs = [],
+#     outs = ["start_background_broker.sh"],
+#     executable = True,
+#     cmd = """cat << EOF > $@
+# #!/usr/bin/env bash
+
+# echo hi
+# exit 1
+# EOF""",
+#     visibility = ["//visibility:public"],
+# )
+
+# genrule(
+#     name = "stop-node",
+#     srcs = [],
+#     outs = ["stop_node.sh"],
+#     executable = True,
+#     cmd = """cat << EOF > $@
+# #!/usr/bin/env bash
+
+# echo hi
+# exit 1
+# EOF""",
+# )

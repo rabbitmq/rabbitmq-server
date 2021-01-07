@@ -2,12 +2,16 @@ load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 
 bazel_erlang_lib(
     name = "erl_first_files",
+    app_name = "proper",
+    app_version = "1.3",
     srcs = glob(["src/vararg.erl"]),
     hdrs = glob(["include/proper_internal.hrl", "include/proper_common.hrl"]),
 )
 
 bazel_erlang_lib(
     name = "proper",
+    app_name = "proper",
+    app_version = "1.3",
     hdrs = glob(["include/*.hrl"]),
     srcs = glob(["src/*.erl"], exclude = ["src/vararg.erl"]),
     deps = [":erl_first_files"],

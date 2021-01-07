@@ -1,6 +1,6 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("//bazel_erlang:bazel_erlang_app.bzl", "bazel_erlang_app")
 load("//bazel_erlang:ct.bzl", "ct_test")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
 
 py_binary(
     name = "codegen",
@@ -25,36 +25,81 @@ genrule(
     cmd = "$(location :codegen) --ignore-conflicts header $(SRCS) $@",
 )
 
-bazel_erlang_app(
+genrule(
+    name = "rabbit_framing_amqp_0_9_1.erl",
+    srcs = [
+        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
+    ],
+    outs = ["src/rabbit_framing_amqp_0_9_1.erl"],
+    tools = [":codegen"],
+    cmd = "$(location :codegen) body $(SRCS) $@",
+)
+
+genrule(
+    name = "rabbit_framing_amqp_0_8.erl",
+    srcs = [
+        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
+    ],
+    outs = ["src/rabbit_framing_amqp_0_8.erl"],
+    tools = [":codegen"],
+    cmd = "$(location :codegen) body $(SRCS) $@",
+)
+
+bazel_erlang_lib(
     name = "rabbit_common",
     app_name = "rabbit_common",
-    # TODO: how do we inject the correct app_version? another build setting? a data file?
-    app_version = "3.9.0",
-    srcs = glob(["src/*.erl"]),
+    app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
+    app_version = APP_VERSION,
+    extra_apps = [
+        "compiler",
+        "crypto",
+        "public_key",
+        "sasl",
+        "ssl",
+        "syntax_tools",
+        "tools",
+        "xmerl",
+    ],
     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
+    srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    deps = [
+        "@lager//:lager",
+        "@jsx//:jsx", #runtime
+        "@ranch//:ranch", #runtime
+        "@recon//:recon", #runtime
+        "@credentials-obfuscation//:credentials-obfuscation", #runtime
+    ],
     visibility = ["//visibility:public"],
 )
 
-bazel_erlang_app(
+bazel_erlang_lib(
     name = "rabbit_common_test",
     app_name = "rabbit_common",
-    app_version = "3.9.0",
-    srcs = glob(["src/*.erl"]),
-    hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-    erlc_opts = [
-        "+{parse_transform,lager_transform}",
-        "+{lager_extra_sinks,[rabbit_log,rabbit_log_channel,rabbit_log_connection,rabbit_log_feature_flags,rabbit_log_federation,rabbit_log_ldap,rabbit_log_mirroring,rabbit_log_osiris,rabbit_log_prelaunch,rabbit_log_queue,rabbit_log_ra,rabbit_log_shovel,rabbit_log_upgrade]}",
+    app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
+    app_version = APP_VERSION,
+    extra_apps = [
+        "compiler",
+        "crypto",
+        "public_key",
+        "sasl",
+        "ssl",
+        "syntax_tools",
+        "tools",
+        "xmerl",
     ],
+    hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
+    srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
+    erlc_opts = RABBITMQ_ERLC_OPTS,
     deps = [
         "@lager//:lager",
     ],
-    visibility = ["//visibility:public"],
     testonly = True,
 )
 
-# There are compile macros conditional for tests, so we can't just use the regular version of :bazel_erlang_lib
 ct_test(
     name = "rabbit_env_SUITE",
+    app_name = "rabbit_common",
     suites = ["test/rabbit_env_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
@@ -68,46 +113,47 @@ ct_test(
 
 ct_test(
     name = "supervisor2_SUITE",
+    app_name = "rabbit_common",
     suites = ["test/supervisor2_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
         ":rabbit_common_test",
-        "@proper//:proper",
     ],
     size = "small",
 )
 
 ct_test(
     name = "unit_priority_queue_SUITE",
+    app_name = "rabbit_common",
     suites = ["test/unit_priority_queue_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
         ":rabbit_common_test",
-        "@proper//:proper",
     ],
     size = "small",
 )
 
 ct_test(
     name = "unit_SUITE",
+    app_name = "rabbit_common",
     suites = ["test/unit_SUITE.erl", "test/gen_server2_test_server.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
         ":rabbit_common_test",
         "@proper//:proper",
         "@lager//:lager",
-        "@credentials_obfuscation//:credentials_obfuscation",
+        "@credentials-obfuscation//:credentials-obfuscation",
     ],
     size = "small",
 )
 
 ct_test(
     name = "worker_pool_SUITE",
+    app_name = "rabbit_common",
     suites = ["test/worker_pool_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [
         ":rabbit_common_test",
-        "@proper//:proper",
         "@lager//:lager",
     ],
     size = "small",

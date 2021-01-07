@@ -1,0 +1,40 @@
+load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("//bazel_erlang:ct.bzl", "ct_test")
+load("//bazel_erlang:ez.bzl", "ez")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+
+APP_ENV = """[
+	    {rates_mode,        basic},
+	    {sample_retention_policies,
+	     %% List of {MaxAgeInSeconds, SampleEveryNSeconds}
+	     [{global,   [{605, 5}, {3660, 60}, {29400, 600}, {86400, 1800}]},
+	      {basic,    [{605, 5}, {3600, 60}]},
+	      {detailed, [{605, 5}]}]}
+	  ]"""
+
+bazel_erlang_lib(
+    name = "rabbitmq_management_agent",
+    app_name = "rabbitmq_management_agent",
+    app_description = "RabbitMQ Management Agent",
+    app_version = APP_VERSION,
+    app_module = "rabbit_mgmt_agent_app",
+    app_env = APP_ENV,
+    extra_apps = [
+        "xmerl",
+        "mnesia",
+        "ranch",
+        "ssl",
+        "crypto",
+        "public_key",
+    ],
+    hdrs = glob(["include/*.hrl"]),
+    srcs = glob(["src/*.erl"]),
+    priv = glob(["priv/**/*"]),
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    deps = [
+        "//deps/rabbit_common:rabbit_common",
+        "//deps/rabbit:rabbit",
+        "@lager//:lager", # again this should probably come via rabbit_common
+    ],
+    visibility = ["//visibility:public"],
+)

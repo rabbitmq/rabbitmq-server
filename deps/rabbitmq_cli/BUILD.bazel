@@ -1,4 +1,5 @@
 load(":rabbitmqctl.bzl", "rabbitmqctl")
+load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
@@ -9,7 +10,7 @@ rabbitmqctl(
         "//deps/rabbit_common:rabbit_common",
         "@goldrush//:goldrush",
         "@lager//:lager",
-        "//deps/amqp_client:amqp_client",
+        # "//deps/amqp_client:amqp_client",
     ],
     # outs = [
     #     # "escript/rabbitmq-diagnostics",
@@ -19,4 +20,18 @@ rabbitmqctl(
     #     # "escript/rabbitmq-upgrade",
     #     "escript/rabbitmqctl",
     # ],
+    visibility = ["//visibility:public"],
 )
+
+# rabbitmqctl_test(
+#     name = "rabbitmqctl_tests",
+#     srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex", "test/**/*.exs"]),
+#     deps = [
+#         "//deps/rabbit_common:rabbit_common",
+#         "@goldrush//:goldrush",
+#         "@lager//:lager",
+#         "//deps/amqp_client:amqp_client",
+#         "//deps/rabbit:rabbit",
+#     ],
+#     start_background_broker_script = "//:start-background-broker",
+# )

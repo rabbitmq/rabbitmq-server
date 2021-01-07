@@ -1,28 +1,89 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
+load("//:workspace_helpers.bzl", "github_bazel_erlang_lib")
 
-http_archive(
-    name = "credentials_obfuscation",
-    urls = ["https://github.com/rabbitmq/credentials-obfuscation/archive/7618a6b7ab243466ea190b9e3a82be07956287cb.zip"],
-    sha256 = "e3e2331e81b5c6ceaea4ea0252f784b16e71185e9d8579d89cd8e82ddd3c86ee",
-    strip_prefix = "credentials-obfuscation-7618a6b7ab243466ea190b9e3a82be07956287cb",
-    build_file = "@//:BUILD.credentials_obfuscation",
+github_bazel_erlang_lib(
+    name = "aten",
+    org = "rabbitmq",
+    version = "0.5.6",
+    sha256 = "27f6b2ec2e78027ea852a8ac6bcf49df4a599d5506a86dc9f0cb6b5d6e45989e",
 )
 
-http_archive(
+github_bazel_erlang_lib(
+    name = "cowboy",
+    org = "ninenines",
+    version = "2.8.0",
+    sha256 = "c0248d7ab6e1f27f7fce2f6c52f7b418c76b970f5e3394333485b387d67f44cb",
+    tag = "2.8.0",
+    build_file = "@//:BUILD.cowboy"
+)
+
+github_bazel_erlang_lib(
+    name = "cowlib",
+    org = "ninenines",
+    version = "2.10.1",
+    sha256 = "5a4f579015481e72c87187a46cf7517dd451bc45445ba49c7b5e09c74bfd3f9c",
+    tag = "2.10.1",
+)
+
+github_bazel_erlang_lib(
+    name = "credentials-obfuscation",
+    org = "rabbitmq",
+    version = "2.3.0",
+    sha256 = "20890287379005d277465d9a705b3c79e906cb19825b422350c519bbc7c6c273",
+    app_name = "credentials_obfuscation",
+)
+
+github_bazel_erlang_lib(
+    name = "cuttlefish",
+    org = "Kyorai",
+    version = "2.5.0",
+    sha256 = "178d2284b369fe92312727e3a460916da76e452e4ea91257afd36d8265783a1e",
+    build_file = "@//:BUILD.cuttlefish",
+)
+
+github_bazel_erlang_lib(
+    name = "gen-batch-server",
+    org = "rabbitmq",
+    version = "0.8.4",
+    sha256 = "9e9f2aa6ee8e3354f03a3f78283fde93bbe5b1d6f6732caa05d3e43efe02e42c",
+    app_name = "gen_batch_server",
+)
+
+github_bazel_erlang_lib(
     name = "goldrush",
-    urls = ["https://github.com/DeadZen/goldrush/archive/0.1.9.zip"],
+    org = "DeadZen",
+    version = "0.1.9",
     sha256 = "c04fc2f1f66abc167db8589640500da06cda9f0b92f1481bff59d41edbc45fe2",
-    strip_prefix = "goldrush-0.1.9",
-    build_file = "@//:BUILD.goldrush",
 )
 
-http_archive(
+github_bazel_erlang_lib(
+    name = "jsx",
+    org = "talentdeficit",
+    version = "3.0.0",
+    sha256 = "7e9b051fcc6014b3e2dec45e61734fcea991f4043f1f4df4d806d39c4123ff6c",
+)
+
+github_bazel_erlang_lib(
     name = "lager",
-    urls = ["https://github.com/erlang-lager/lager/archive/3.8.0.tar.gz"],
-    sha256 = "5e54a0fc60884f864b9ed30ff62a75de1e8f9edc5c448d5140115aa16c59cc57",
-    strip_prefix = "lager-3.8.0",
-    build_file = "@//:BUILD.lager",
+    org = "erlang-lager",
+    version = "3.8.1",
+    tag = "3.8.1",
+    sha256 = "10da9c026c29b9d647353909a83b2ff769548de7308aa9e9138aa640527c83bc",
+)
+
+github_bazel_erlang_lib(
+    name = "observer_cli",
+    org = "zhongwencool",
+    version = "1.6.0",
+    sha256 = "b31d2fa5a9d6c3857180bee4a17d265945e0656ad66faf20594a3a8400b3a7e8",
+)
+
+new_git_repository(
+    name = "osiris",
+    branch = "master",
+    remote = "https://github.com/rabbitmq/osiris.git",
+    build_file = "@//:BUILD.osiris",
 )
 
 http_archive(
@@ -40,10 +101,37 @@ new_git_repository(
     build_file = "@//:BUILD.rabbitmq_ct_helpers",
 )
 
-http_archive(
+github_bazel_erlang_lib(
+    name = "ra",
+    version = "1.1.8",
+    sha256 = "867cf522f0e403edc2323a0cbef4ecad8dffee8ed987e0609eb81baa8faf3671",
+)
+
+github_bazel_erlang_lib(
+    name = "ranch",
+    org = "ninenines",
+    version = "1.7.1",
+    tag = "1.7.1",
+    sha256 = "5607ea3b61fe8e715a1e711c5ce9000c8f16d4c2401c11318b76f65d11bf22d4",
+    build_file = "@//:BUILD.ranch",
+)
+
+github_bazel_erlang_lib(
+    name = "recon",
+    org = "ferd",
+    version = "2.5.1",
+    sha256 = "299701100e0e9f3845cf9a02d51b7c554b40342e014df2b8de7a465f5599d3af",
+)
+
+github_bazel_erlang_lib(
     name = "stdout_formatter",
-    urls = ["https://github.com/rabbitmq/stdout_formatter/archive/v0.2.4.zip"],
+    version = "0.2.4",
     sha256 = "9eb27075c25006f86da0168597d7e4914ecc41e2493c0b3cba14c07f4be53267",
-    strip_prefix = "stdout_formatter-0.2.4",
-    build_file = "@//:BUILD.stdout_formatter",
+)
+
+github_bazel_erlang_lib(
+    name = "sysmon-handler",
+    version = "1.3.0",
+    sha256 = "0fd50afe194dd071e7afc31c4bdfdcc789652edc72c2defff1e5206f5d4f43ee",
+    app_name = "sysmon_handler",
 )

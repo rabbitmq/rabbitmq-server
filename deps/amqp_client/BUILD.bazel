@@ -1,27 +1,51 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
+load("//:rabbitmq.bzl", "APP_VERSION")
+load("//bazel_erlang:ez.bzl", "ez")
+
+APP_ENV = """[
+	    {prefer_ipv6, false},
+	    {ssl_options, []},
+	    {writer_gc_threshold, 1000000000}
+	  ]"""
 
 bazel_erlang_lib(
     name = "amqp_client",
+    app_name = "amqp_client",
+    app_version = APP_VERSION,
+    app_description = "RabbitMQ AMQP Client",
+    app_module = "amqp_client",
+    app_registered = [
+        "amqp_sup",
+    ],
+    app_env = APP_ENV,
+    extra_apps = [
+        "xmerl",
+    ],
     srcs = glob(["src/*.erl"]),
     hdrs = glob(["include/*.hrl"]),
-    deps = ["//deps/rabbit_common:rabbit_common"],
+    # erlc_opts = RABBITMQ_ERLC_OPTS,
+    deps = [
+        "//deps/rabbit_common:rabbit_common",
+    ],
     visibility = ["//visibility:public"],
 )
 
-ct_test(
-    name = "system_SUITE",
-    suites = ["test/system_SUITE.erl"],
-    hdrs = glob(["include/*.hrl"]),
-    deps = [
-        ":amqp_client",
-        "//deps/rabbit_common:rabbit_common",
-        "@rabbitmq_ct_helpers//:rabbitmq_ct_helpers",
-    ],
-)
+# ct_test(
+#     name = "system_SUITE",
+#     app_name = "amqp_client",
+#     suites = ["test/system_SUITE.erl"],
+#     hdrs = glob(["include/*.hrl"]),
+#     deps = [
+#         ":amqp_client",
+#         "//deps/rabbit_common:rabbit_common",
+#         "@rabbitmq_ct_helpers//:rabbitmq_ct_helpers",
+#     ],
+# )
 
 ct_test(
     name = "unit_SUITE",
+    app_name = "amqp_client",
     suites = ["test/unit_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
     deps = [

@@ -1,0 +1,47 @@
+load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("//bazel_erlang:ct.bzl", "ct_test")
+load("//bazel_erlang:ez.bzl", "ez")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+
+APP_ENV = """[
+	    {http_log_dir,      none},
+	    {load_definitions,  none},
+	    {management_db_cache_multiplier, 5},
+	    {process_stats_gc_timeout, 300000},
+	    {stats_event_max_backlog, 250},
+
+	    {cors_allow_origins, []},
+	    {cors_max_age, 1800},
+	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
+	  ]"""
+
+bazel_erlang_lib(
+    name = "rabbitmq_management",
+    app_name = "rabbitmq_management",
+    app_description = "RabbitMQ Management Console",
+    app_version = APP_VERSION,
+    app_module = "rabbit_mgmt_app",
+    app_env = APP_ENV,
+    extra_apps = [
+        "mnesia",
+        "ranch",
+        "ssl",
+        "crypto",
+        "public_key",
+    ],
+    hdrs = glob(["include/*.hrl"]),
+    srcs = glob(["src/*.erl"]),
+    priv = glob(["priv/**/*"]),
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    deps = [
+        "//deps/rabbit_common:rabbit_common",
+        "//deps/rabbit:rabbit",
+        "//deps/amqp_client:amqp_client",
+        "@cowboy//:cowboy",
+        "@cowlib//:cowlib",
+        "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch",
+        "//deps/rabbitmq_management_agent:rabbitmq_management_agent",
+        "@lager//:lager", # again this should probably come via rabbit_common
+    ],
+    visibility = ["//visibility:public"],
+)

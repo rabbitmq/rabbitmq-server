@@ -1,5 +1,7 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("//bazel_erlang:ez.bzl", "ez")
 # load("//bazel_erlang:ct.bzl", "ct_test")
+# load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS")
 
 py_binary(
     name = "codegen",
@@ -27,9 +29,22 @@ genrule(
 
 bazel_erlang_lib(
     name = "amqp10_common",
+    app_name = "amqp10_common",
+    app_version = "3.9.0",
+    app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",
     srcs = glob(["src/*.erl"]),
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
-    # deps = ["//deps/rabbit_common:bazel_erlang_lib"]
+    # erlc_opts = RABBITMQ_ERLC_OPTS,
+    # deps = [
+    #     "//deps/rabbit_common:rabbit_common", # "a BUILD_DEP in Erlang.mk speak
+    #     "@lager//:lager", # this is a transitive dep through rabbit_common (and maybe should be included automatically)
+    # ],
+    visibility = ["//visibility:public"],
+)
+
+ez(
+    name = "amqp10_common.ez",
+    lib = ":amqp10_common",
     visibility = ["//visibility:public"],
 )
 

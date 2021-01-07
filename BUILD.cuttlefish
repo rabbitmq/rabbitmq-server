@@ -1,0 +1,23 @@
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@//bazel_erlang:ez.bzl", "ez")
+
+bazel_erlang_lib(
+    name = "cuttlefish",
+    app_name = "cuttlefish",
+    app_version = "2.5.0",
+    hdrs = glob(["include/*.hrl", "src/*.hrl"]),
+    srcs = glob(["src/*.erl"]),
+    erlc_opts = [
+        "+{parse_transform,lager_transform}",
+    ],
+    deps = [
+        "@lager//:lager",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+ez(
+    name = "cuttlefish.ez",
+    lib = ":cuttlefish",
+    visibility = ["//visibility:public"],
+)
