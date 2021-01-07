@@ -27,8 +27,19 @@
 %% [2] Counts down until we stop publishing in on-confirm mode
 
 start_link(Type, Name, Config) ->
+    ShovelParameter = get_shovel_parameter(Name),
+    maybe_start_link(ShovelParameter, Type, Name, Config).
+
+maybe_start_link(not_found, _Type, Name, _Config) ->
+    {error, not_found};
+maybe_start_link(_, Type, Name, Config) ->
     ok = rabbit_shovel_status:report(Name, Type, starting),
     gen_server2:start_link(?MODULE, [Type, Name, Config], []).
+
+get_shovel_parameter({VHost, ShovelName}) ->
+    rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, ShovelName);
+get_shovel_parameter(ShovelName) ->
+    rabbit_runtime_parameters:lookup(<<"/">>, <<"shovel">>, ShovelName).
 
 %%---------------------------
 %% Gen Server Implementation
