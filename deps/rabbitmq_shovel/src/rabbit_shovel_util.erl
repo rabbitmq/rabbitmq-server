@@ -10,7 +10,8 @@
 -export([update_headers/5,
          add_timestamp_header/1,
          delete_shovel/3,
-         restart_shovel/2]).
+         restart_shovel/2,
+         get_shovel_parameter/1]).
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
@@ -52,3 +53,8 @@ restart_shovel(VHost, Name) ->
             {ok, _} = rabbit_shovel_dyn_worker_sup_sup:start_link(),
             ok
     end.
+
+get_shovel_parameter({VHost, ShovelName}) ->
+    rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, ShovelName);
+get_shovel_parameter(ShovelName) ->
+    rabbit_runtime_parameters:lookup(<<"/">>, <<"shovel">>, ShovelName).

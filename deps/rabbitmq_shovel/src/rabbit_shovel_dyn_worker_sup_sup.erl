@@ -8,7 +8,7 @@
 -module(rabbit_shovel_dyn_worker_sup_sup).
 -behaviour(mirrored_supervisor).
 
--export([start_link/0, init/1, adjust/2, stop_child/1]).
+-export([start_link/0, init/1, adjust/2, stop_child/1, cleanup_specs/0]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -36,6 +36,7 @@ adjust(Name, Def) ->
     start_child(Name, Def).
 
 start_child(Name, Def) ->
+    cleanup_specs(),
     case mirrored_supervisor:start_child(
            ?SUPERVISOR,
            {Name, {rabbit_shovel_dyn_worker_sup, start_link, [Name, Def]},
@@ -49,9 +50,9 @@ child_exists(Name) ->
               mirrored_supervisor:which_children(?SUPERVISOR)).
 
 stop_child(Name) ->
-    case get(shovel_worker_autodelete) of
+    case get({shovel_worker_autodelete, Name}) of
         true -> ok; %% [1]
-        _    ->
+        _ ->
             ok = mirrored_supervisor:terminate_child(?SUPERVISOR, Name),
             ok = mirrored_supervisor:delete_child(?SUPERVISOR, Name),
             rabbit_shovel_status:remove(Name)
@@ -63,7 +64,16 @@ stop_child(Name) ->
 %% supervisor to stop us - and as usual if we call into our own
 %% supervisor we risk deadlock.
 %%
-%% See rabbit_shovel_worker:maybe_autodelete/1
+%% See rabbit_shovel_worker:terminate/2
+
+cleanup_specs() ->
+    SpecsSet = sets:from_list([element(1, S) || S <- mirrored_supervisor:which_children(?SUPERVISOR)]),
+    ParamsSet = sets:from_list(rabbit_runtime_parameters:list_component(<<"shovel">>)),
+    F = fun(Spec, ok) ->
+            _ = mirrored_supervisor:delete_child(?SUPERVISOR, Spec),
+            ok
+        end,
+    ok = sets:fold(F, ok, sets:subtract(SpecsSet, ParamsSet)).
 
 %%----------------------------------------------------------------------------
 
