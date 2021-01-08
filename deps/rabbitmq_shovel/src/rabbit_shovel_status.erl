@@ -17,7 +17,7 @@
 
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
--define(CHECK_FREQUENCY, 5000). % TODO LRB
+-define(CHECK_FREQUENCY, 60000).
 
 -record(state, {timer}).
 -record(entry, {name, type, info, timestamp}).

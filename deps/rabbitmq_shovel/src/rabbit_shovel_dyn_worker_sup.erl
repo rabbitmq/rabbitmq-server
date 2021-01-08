@@ -20,7 +20,7 @@ start_link(Name, Config) ->
     ShovelParameter = rabbit_shovel_util:get_shovel_parameter(Name),
     maybe_start_link(ShovelParameter, Name, Config).
 
-maybe_start_link(not_found, Name, _Config) ->
+maybe_start_link(not_found, _Name, _Config) ->
     %% See rabbitmq/rabbitmq-server#2655.
     %% All dynamic shovels require that their associated parameter is present.
     %% If not, this shovel has been deleted and stale child spec information
