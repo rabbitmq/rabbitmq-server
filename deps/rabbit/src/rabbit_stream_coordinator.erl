@@ -366,9 +366,10 @@ apply(_Meta, {phase_finished, StreamId, Reply}, #?MODULE{streams = Streams0} = S
             Streams = Streams0#{StreamId => clear_stream_state(SState)},
             reply_and_run_pending(From, StreamId, ok, Reply, [], State#?MODULE{streams = Streams})
     end;
-apply(#{from := From}, {start_replica, #{stream_id := StreamId, node := Node,
+apply(Meta, {start_replica, #{stream_id := StreamId, node := Node,
                                          retries := Retries}} = Cmd,
       #?MODULE{streams = Streams0} = State) ->
+    From = maps:get(from, Meta, undefined),
     case maps:get(StreamId, Streams0, undefined) of
         undefined ->
             case From of
