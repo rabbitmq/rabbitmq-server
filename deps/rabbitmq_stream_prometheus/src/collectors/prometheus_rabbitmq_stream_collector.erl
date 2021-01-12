@@ -21,6 +21,7 @@
          collect_metrics/2]).
 
 -include_lib("prometheus/include/prometheus.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_stream/include/rabbit_stream_metrics.hrl").
 
 -behaviour(prometheus_collector).
@@ -31,24 +32,31 @@
          {?TABLE_PUBLISHER,
           [{2,
             undefined,
-            producers_messages_published_total,
+            publishers,
+            gauge,
+            "Number of publishers",
+            publishers},
+           {2,
+            undefined,
+            publishers_messages_published_total,
             counter,
             "Total number of messages published to streams",
             published},
            {2,
             undefined,
-            producers_messages_confirmed_total,
+            publishers_messages_confirmed_total,
             counter,
             "Total number of messages confirmed",
             confirmed},
            {2,
             undefined,
-            producers_messages_errored_total,
+            publishers_messages_errored_total,
             counter,
             "Total number of messages errored",
             errored}]},
          {?TABLE_CONSUMER,
-          [{2,
+          [{2, undefined, consumers, gauge, "Number of consumers", consumers},
+           {2,
             undefined,
             consumers_messages_consumed_total,
             counter,
@@ -77,22 +85,24 @@ collect(PerObjectMetrics, Callback) ->
     ok.
 
 get_data(?TABLE_PUBLISHER = Table, false) ->
-    {Table, A1, A2, A3} =
-        ets:foldl(fun({_, Props}, {T, A1, A2, A3}) ->
+    {Table, A1, A2, A3, A4} =
+        ets:foldl(fun({_, Props}, {T, A1, A2, A3, A4}) ->
                      {T,
-                      sum(proplists:get_value(published, Props), A1),
-                      sum(proplists:get_value(confirmed, Props), A2),
-                      sum(proplists:get_value(errored, Props), A3)}
+                      A1 + 1,
+                      sum(proplists:get_value(published, Props), A2),
+                      sum(proplists:get_value(confirmed, Props), A3),
+                      sum(proplists:get_value(errored, Props), A4)}
                   end,
                   empty(Table), Table),
-    [{Table, [{published, A1}, {confirmed, A2}, {errored, A3}]}];
+    [{Table,
+      [{publishers, A1}, {published, A2}, {confirmed, A3}, {errored, A4}]}];
 get_data(?TABLE_CONSUMER = Table, false) ->
-    {Table, A1} =
-        ets:foldl(fun({_, Props}, {T, A1}) ->
-                     {T, sum(proplists:get_value(consumed, Props), A1)}
+    {Table, A1, A2} =
+        ets:foldl(fun({_, Props}, {T, A1, A2}) ->
+                     {T, A1 + 1, sum(proplists:get_value(consumed, Props), A2)}
                   end,
                   empty(Table), Table),
-    [{Table, [{consumed, A1}]}];
+    [{Table, [{consumers, A1}, {consumed, A2}]}];
 get_data(Table, _) ->
     ets:tab2list(Table).
 
@@ -117,7 +127,23 @@ mf(Callback, Contents, Data) ->
      || {Index, Conversion, Name, Type, Help, Key} <- Contents].
 
 collect_metrics(_Name, {Type, Fun, Items}) ->
-    [metric(Type, [], Fun(Item)) || Item <- Items].
+    [metric(Type, labels(Item), Fun(Item)) || Item <- Items].
+
+labels(Item) ->
+    label(element(1, Item)).
+
+label(#resource{virtual_host = VHost,
+                kind = queue,
+                name = Name}) ->
+    [{vhost, VHost}, {queue, Name}];
+label({Resource, Connection, Id}) ->
+    label(Resource) ++ label(Connection) ++ label(Id);
+label(P) when is_pid(P) ->
+    [{connection, P}];
+label(Id) when is_integer(Id) ->
+    [{id, Id}];
+label(_) ->
+    [].
 
 metric(counter, Labels, Value) ->
     emit_counter_metric_if_defined(Labels, Value);
@@ -145,9 +171,9 @@ emit_gauge_metric_if_defined(Labels, Value) ->
     end.
 
 empty(T) when T == ?TABLE_CONSUMER ->
-    {T, 0};
+    {T, 0, 0};
 empty(T) when T == ?TABLE_PUBLISHER ->
-    {T, 0, 0, 0}.
+    {T, 0, 0, 0, 0}.
 
 sum(undefined, B) ->
     B;
