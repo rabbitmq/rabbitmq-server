@@ -30,7 +30,7 @@ publish(Msg, Reason, X, RK, QName) ->
                                   Delivery, stateless),
     ok.
 
-make_msg(Msg = #basic_message{content       = Content,
+make_msg(Msg = #basic_message{content       = Content = #content{properties = Props},
                               exchange_name = Exchange,
                               routing_keys  = RoutingKeys},
          Reason, DLX, RK, #resource{name = QName}) ->
@@ -41,7 +41,8 @@ make_msg(Msg = #basic_message{content       = Content,
         end,
     ReasonBin = list_to_binary(atom_to_list(Reason)),
     TimeSec = os:system_time(seconds),
-    PerMsgTTL = per_msg_ttl_header(Content#content.properties),
+    PerMsgTTL = per_msg_ttl_header(Props),
+    {Props1, PerMsgDA} = delivery_attempts_to_x_death_header(Props),
     HeadersFun2 =
         fun (Headers) ->
                 %% The first routing key is the one specified in the
@@ -52,13 +53,13 @@ make_msg(Msg = #basic_message{content       = Content,
                         {<<"queue">>,        longstr,   QName},
                         {<<"time">>,         timestamp, TimeSec},
                         {<<"exchange">>,     longstr,   Exchange#resource.name},
-                        {<<"routing-keys">>, array,     RKs1}] ++ PerMsgTTL,
+                        {<<"routing-keys">>, array,     RKs1}] ++ PerMsgTTL ++ PerMsgDA,
                 HeadersFun1(update_x_death_header(Info, Headers))
         end,
-    Content1 = #content{properties = Props} =
-        rabbit_basic:map_headers(HeadersFun2, Content),
+    Content1 = #content{properties = Props2} =
+        rabbit_basic:map_headers(HeadersFun2, Content#content{properties = Props1}),
     Content2 = Content1#content{properties =
-                                    Props#'P_basic'{expiration = undefined}},
+                                    Props2#'P_basic'{expiration = undefined}},
     Msg#basic_message{exchange_name = DLX,
                       id            = rabbit_guid:gen(),
                       routing_keys  = DeathRoutingKeys,
@@ -189,6 +190,17 @@ per_msg_ttl_header(#'P_basic'{expiration = Expiration}) ->
     [{<<"original-expiration">>, longstr, Expiration}];
 per_msg_ttl_header(_) ->
     [].
+
+delivery_attempts_to_x_death_header(Props = #'P_basic'{headers = undefined}) -> {Props, []};
+delivery_attempts_to_x_death_header(Props = #'P_basic'{headers = Headers}) ->
+    case rabbit_misc:table_lookup(Headers, <<"x-delivery-attempts">>) of
+        undefined ->
+            {Props, []};
+        {_Type, DeliveryCount} ->
+            Headers1 = rabbit_misc:table_delete(Headers, <<"x-delivery-attempts">>),
+            {Props#'P_basic'{headers = Headers1},
+                [{<<"delivery-attempts">>, long, DeliveryCount}]}
+    end.
 
 detect_cycles(rejected, _Msg, Queues) ->
     {Queues, []};

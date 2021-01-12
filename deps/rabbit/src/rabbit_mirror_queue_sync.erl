@@ -417,4 +417,4 @@ batch_publish_delivered(Batch, MA, BQ, BQS) ->
     {MA1, BQS1}.
 
 props(Props) ->
-    Props#message_properties{needs_confirming = false}.
+    message_properties:set_needs_confirming(Props, false).

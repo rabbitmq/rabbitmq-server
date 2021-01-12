@@ -12,11 +12,11 @@
          publish/6, publish_delivered/5,
          batch_publish/4, batch_publish_delivered/4,
          discard/4, drain_confirmed/1,
-         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
-         ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+         dropwhile/2, fetchwhile/4, fetch/2, fetch_delivery/2, drop/2, ack/2,
+         requeue/2, ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
-         info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
+         info/2, invoke/3, is_duplicate/2, set_queue_mode/2, transform/5,
          zip_msgs_and_acks/4,  multiple_routing_keys/0, handle_info/2]).
 
 -export([start/2, stop/1]).
@@ -670,7 +670,27 @@ fetchwhile(Pred, Fun, Acc, State) ->
          fetch_by_predicate(Pred, Fun, Acc, State),
     {MsgProps, Acc1, a(State1)}.
 
+%% Non-destructive fetch operation. Delivery counts are not incremented, hence
+%% any delivery-limit policies will never result in messages being dropped.
+%% Used for internal dead-lettering fetch operations.
 fetch(AckRequired, State) ->
+    process_fetch(AckRequired, State,
+        fun(Msg, MsgStatus) ->
+            {Msg, MsgStatus} %% no message manipulation
+        end).
+
+%% Delivery counts are incremented. Messages will be impacted delivery-limit
+%% policies and could be dropped of limits are exceeded. Ignore 'lazy' queues.
+fetch_delivery(AckRequired, State = #vqstate { mode = lazy }) ->
+    fetch(AckRequired, State);
+
+fetch_delivery(AckRequired, State) ->
+    process_fetch(AckRequired, State,
+        fun(Msg, MsgStatus) ->
+            inc_delivery_count(Msg, MsgStatus)
+        end).
+
+process_fetch(AckRequired, State, Fun) ->
     case queue_out(State) of
         {empty, State1} ->
             {empty, a(State1)};
@@ -678,9 +698,18 @@ fetch(AckRequired, State) ->
             %% it is possible that the message wasn't read from disk
             %% at this point, so read it in.
             {Msg, State2} = read_msg(MsgStatus, State1),
-            {AckTag, State3} = remove(AckRequired, MsgStatus, State2),
-            {{Msg, MsgStatus#msg_status.is_delivered, AckTag}, a(State3)}
+            {Msg1, MsgStatus1} = Fun(Msg, MsgStatus),
+            {AckTag, State3} = remove(AckRequired, MsgStatus1, State2),
+            {{Msg1, MsgStatus1#msg_status.is_delivered, AckTag}, a(State3)}
     end.
+
+inc_delivery_count(Msg, MsgStatus = #msg_status{msg = undefined, msg_props = Props}) ->
+    %% Message read from msg-store. Ensure delivery-count is '0'
+    {Msg2, Props1} = rabbit_basic:inc_delivery_count(Msg, Props),
+    {Msg2, MsgStatus#msg_status{msg_props = Props1}};
+inc_delivery_count(_Msg, MsgStatus = #msg_status{msg = Msg1, msg_props = Props}) ->
+    {Msg2, Props1} = rabbit_basic:inc_delivery_count(Msg1, Props),
+    {Msg2, MsgStatus#msg_status{msg = Msg2, msg_props = Props1}}.
 
 drop(AckRequired, State) ->
     case queue_out(State) of
@@ -1549,7 +1578,8 @@ stats0({DeltaReady, DeltaUnacked, ReadyMsgPaged},
                   persistent_bytes  = PersistentBytes + DeltaPersistent  * S,
                   delta_transient_bytes = DeltaBytes  + DeltaPaged * one_if(not MsgStatus#msg_status.is_persistent) * S}.
 
-msg_size(#msg_status{msg_props = #message_properties{size = Size}}) -> Size.
+msg_size(#msg_status{msg_props = MsgProps}) ->
+    message_properties:get_size(MsgProps).
 
 msg_in_ram(#msg_status{msg = Msg}) -> Msg =/= undefined.
 
@@ -1704,6 +1734,34 @@ collect_by_predicate(Pred, QAcc, State) ->
     end.
 
 %%----------------------------------------------------------------------------
+%% Queue Message Status Transform functions (executed on feature flags enable)
+%%----------------------------------------------------------------------------
+
+transform(message_properties, _Vsn = message_properties_v2, _Opts, Fun,
+          State = #vqstate{q1 = Q1, q2 = Q2, q3 = Q3, q4 = Q4}) ->
+    NQ1 = transform_internal_queue(Q1, Fun),
+    NQ2 = transform_internal_queue(Q2, Fun),
+    NQ3 = transform_internal_queue(Q3, Fun),
+    NQ4 = transform_internal_queue(Q4, Fun),
+    State#vqstate{q1 = NQ1, q2 = NQ2, q3 = NQ3, q4 = NQ4};
+
+transform(Transform, Vsn, _Opts, _Fun, _State) ->
+    throw({unsupported_transform, {Transform, Vsn}}).
+
+transform_internal_queue(Q, Fun) ->
+    transform_internal_queue(?QUEUE:is_empty(Q), Q, Fun).
+
+transform_internal_queue(true, Q, _Fun) -> Q;
+transform_internal_queue(false, Q, Fun) ->
+    ?QUEUE:foldr(fun (MsgStatus = #msg_status { msg_props = MsgProps }, QAcc) ->
+                         MsgProps1 = Fun(MsgProps),
+                         ?QUEUE:in_r(MsgStatus#msg_status{msg_props = MsgProps1}, QAcc);
+                     (MsgStatus, QAcc) ->
+                         ?QUEUE:in_r(MsgStatus, QAcc)
+                 end,
+                 ?QUEUE:new(), Q).
+
+%%----------------------------------------------------------------------------
 %% Helpers for Public API purge/1 function
 %%----------------------------------------------------------------------------
 
@@ -1810,8 +1868,7 @@ process_delivers_and_acks_fun(_) ->
 %%----------------------------------------------------------------------------
 
 publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
-         MsgProps = #message_properties { needs_confirming = NeedsConfirming },
-         IsDelivered, _ChPid, _Flow, PersistFun,
+         MsgProps, IsDelivered, _ChPid, _Flow, PersistFun,
          State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
                             mode                = default,
                             qi_embed_msgs_below = IndexMaxSize,
@@ -1820,6 +1877,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                             durable             = IsDurable,
                             unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
+    NeedsConfirming = message_properties:get_needs_confirming(MsgProps),
     MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = case ?QUEUE:is_empty(Q3) of
@@ -1833,7 +1891,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                           in_counter  = InCount1,
                           unconfirmed = UC1 });
 publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
-             MsgProps = #message_properties { needs_confirming = NeedsConfirming },
+             MsgProps,
              IsDelivered, _ChPid, _Flow, PersistFun,
              State = #vqstate { mode                = lazy,
                                 qi_embed_msgs_below = IndexMaxSize,
@@ -1843,6 +1901,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                                 unconfirmed         = UC,
                                 delta               = Delta}) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
+    NeedsConfirming = message_properties:get_needs_confirming(MsgProps),
     MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
     Delta1 = expand_delta(SeqId, Delta, IsPersistent),
@@ -1859,9 +1918,7 @@ batch_publish1({Msg, MsgProps, IsDelivered}, {ChPid, Flow, State}) ->
 
 publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                           id = MsgId },
-                   MsgProps = #message_properties {
-                                 needs_confirming = NeedsConfirming },
-                   _ChPid, _Flow, PersistFun,
+                   MsgProps, _ChPid, _Flow, PersistFun,
                    State = #vqstate { mode                = default,
                                       qi_embed_msgs_below = IndexMaxSize,
                                       next_seq_id         = SeqId,
@@ -1870,6 +1927,7 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                       durable             = IsDurable,
                                       unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
+    NeedsConfirming = message_properties:get_needs_confirming(MsgProps),
     MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
@@ -1882,9 +1940,7 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
     {SeqId, State3};
 publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                           id = MsgId },
-                   MsgProps = #message_properties {
-                                 needs_confirming = NeedsConfirming },
-                   _ChPid, _Flow, PersistFun,
+                   MsgProps, _ChPid, _Flow, PersistFun,
                    State = #vqstate { mode                = lazy,
                                       qi_embed_msgs_below = IndexMaxSize,
                                       next_seq_id         = SeqId,
@@ -1893,6 +1949,7 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                       durable             = IsDurable,
                                       unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
+    NeedsConfirming = message_properties:get_needs_confirming(MsgProps),
     MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
@@ -2008,8 +2065,7 @@ maybe_prepare_write_to_disk(ForceMsg, ForceIndex, MsgStatus, State) ->
 determine_persist_to(#basic_message{
                         content = #content{properties     = Props,
                                            properties_bin = PropsBin}},
-                     #message_properties{size = BodySize},
-                     IndexMaxSize) ->
+                     MsgProps, IndexMaxSize) ->
     %% The >= is so that you can set the env to 0 and never persist
     %% to the index.
     %%
@@ -2023,6 +2079,7 @@ determine_persist_to(#basic_message{
     %% case) we can just check their size. If we don't (message came
     %% via the direct client), we make a guess based on the number of
     %% headers.
+    BodySize = message_properties:get_size(MsgProps),
     case BodySize >= IndexMaxSize of
         true  -> msg_store;
         false -> Est = case is_binary(PropsBin) of
@@ -2292,7 +2349,7 @@ msg_from_pending_ack(SeqId, State) ->
             {none, State};
         {#msg_status { msg_props = MsgProps } = MsgStatus, State1} ->
             {MsgStatus #msg_status {
-               msg_props = MsgProps #message_properties { needs_confirming = false } },
+               msg_props = message_properties:set_needs_confirming(MsgProps, false)},
              State1}
     end.
 

@@ -12,7 +12,8 @@
          implicit_default_bindings_migration/3,
          virtual_host_metadata_migration/3,
          maintenance_mode_status_migration/3,
-         user_limits_migration/3]).
+         user_limits_migration/3,
+         classic_delivery_limits_migration/3]).
 
 -rabbit_feature_flag(
    {quorum_queue,
@@ -58,6 +59,13 @@
      #{desc          => "Configure connection and channel limits for a user",
        stability     => stable,
        migration_fun => {?MODULE, user_limits_migration}
+     }}).
+
+-rabbit_feature_flag(
+    {classic_delivery_limits,
+     #{desc          => "Classic queue delivery limits",
+       stability     => stable,
+       migration_fun => {?MODULE, classic_delivery_limits_migration}
      }}).
 
 %% -------------------------------------------------------------------
@@ -177,3 +185,83 @@ user_limits_migration(_FeatureName, _FeatureProps, enable) ->
     end;
 user_limits_migration(_FeatureName, _FeatureProps, is_enabled) ->
     mnesia:table_info(rabbit_user, attributes) =:= internal_user:fields(internal_user_v2).
+
+%% -------------------------------------------------------------------
+%% Classic queue delivery limits.
+%% -------------------------------------------------------------------
+
+classic_delivery_limits_migration(FeatureName, _FeatureProps, enable) ->
+    T0 = erlang:timestamp(),
+    rabbit_table:wait([rabbit_queue]),
+    rabbit_log:info("Creating table ~s for feature flag ~s",
+        [rabbit_transform:table_name(), FeatureName]),
+    Queues = mnesia:dirty_match_object(rabbit_queue,
+                 amqqueue:pattern_match_on_type(rabbit_classic_queue)),
+    QNodes = lists:usort([node(amqqueue:get_pid(Q)) || Q <- Queues]),
+    try
+        ok = rabbit_transform:check_safety(Queues),
+        case rabbit_transform:create_table() of
+            ok ->
+                Fun = fun(MsgProp) ->
+                          message_properties:upgrade_to(message_properties_v2, MsgProp)
+                      end,
+                TF = rabbit_transform:new(message_properties, message_properties_v2),
+                %% Transient transforms (queue message status)
+                case rabbit_amqqueue:transform(TF, Fun, Queues) of
+                    ok ->
+                        %% Persistent transform (queue index)
+                        case rabbit_transform:add_delivery_count_to_classic_queue_index(QNodes) of
+                            ok ->
+                                Result = rabbit_transform:add(TF),
+                                Time = timer:now_diff(erlang:timestamp(), T0),
+                                Msg = rabbit_misc:format("~p queues", [length(Queues)]),
+                                rabbit_transform:log_success(Msg, TF, Time),
+                                Result;
+                            {error, Errors} ->
+                                rabbit_log:error("Failed to transform queue indices "
+                                                 "during ~p migration: ~p",
+                                                 [FeatureName, Errors]),
+                                {error, Errors}
+                        end;
+                    {error, Reason} = Error ->
+                        rabbit_log:error("Failed to transform queues during "
+                                         "~p migration: ~p", [FeatureName, Reason]),
+                        Error;
+                    Reason ->
+                        rabbit_log:error("Failed to transform queues during ~p migration: ~p",
+                            [FeatureName, Reason]),
+                        {error, Reason}
+                end;
+            {error, Reason} = Error ->
+                rabbit_log:error("Failed to create transform table: ~p", [Reason]),
+                Error
+        end
+    catch
+        _:Reason1 ->
+            rabbit_log:error("Failed to start transform operation for "
+                             "~p migration: ~p", [FeatureName, Reason1]),
+            {error, Reason1}
+    end;
+classic_delivery_limits_migration(FeatureName, _FeatureProps, is_enabled) ->
+    case rabbit_transform:exists(TP = message_properties, TV = message_properties_v2) of
+        true -> true;
+        false ->
+            %% e.g. RAM nodes leaving the cluster having been previously enabled
+            case rabbit_feature_flags:read_enabled_feature_flags_list() of
+                FFList when is_list(FFList) ->
+                    case lists:member(classic_delivery_limits, FFList) of
+                        true ->
+                            rabbit_log:warning("Feature flag ~p is enabled but "
+                                "missing transform details (name: ~p, version: ~p) "
+                                "in '~p' table. Ensure ~p metadata is fully "
+                                "synchronized",
+                                [FeatureName, TP, TV, rabbit_transform:table_name(),
+                                 node()]),
+                            true;
+                        false ->
+                            false
+                    end;
+                _ ->
+                    false
+            end
+    end.

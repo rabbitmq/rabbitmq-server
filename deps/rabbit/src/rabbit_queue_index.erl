@@ -14,6 +14,7 @@
          read/3, next_segment_boundary/1, bounds/1, start/2, stop/1]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
+-export([add_delivery_count/0]).
 -export([scan_queue_segments/3, scan_queue_segments/4]).
 
 %% Migrates from global to per-vhost message stores
@@ -153,15 +154,25 @@
 -define(SIZE_BYTES, 4).
 -define(SIZE_BITS, (?SIZE_BYTES * 8)).
 
+%% Delivery count field 4 bytes
+-define(DC_BYTES, 4).
+-define(DC_BITS, (?DC_BYTES * 8)).
+
 %% This is the size of the message record embedded in the queue
 %% index. If 0, the message can be found in the message store.
 -define(EMBEDDED_SIZE_BYTES, 4).
 -define(EMBEDDED_SIZE_BITS, (?EMBEDDED_SIZE_BYTES * 8)).
 
-%% 16 bytes for md5sum + 8 for expiry
--define(PUB_RECORD_BODY_BYTES, (?MSG_ID_BYTES + ?EXPIRY_BYTES + ?SIZE_BYTES)).
+%% 16 bytes for md5sum + 8 for expiry + 4 for size
+-define(PUB_RECORD_BODY_BYTES_v1, (?MSG_ID_BYTES + ?EXPIRY_BYTES + ?SIZE_BYTES)).
+
+%% 16 bytes for md5sum + 8 for expiry + 4 for size + 4 for delivery count
+-define(PUB_RECORD_BODY_BYTES_v2, (?MSG_ID_BYTES + ?EXPIRY_BYTES + ?SIZE_BYTES + ?DC_BYTES)).
+
 %% + 4 for size
--define(PUB_RECORD_SIZE_BYTES, (?PUB_RECORD_BODY_BYTES + ?EMBEDDED_SIZE_BYTES)).
+-define(PUB_RECORD_SIZE_BYTES_v1, (?PUB_RECORD_BODY_BYTES_v1 + ?EMBEDDED_SIZE_BYTES)).
+
+-define(PUB_RECORD_SIZE_BYTES_v2, (?PUB_RECORD_BODY_BYTES_v2 + ?EMBEDDED_SIZE_BYTES)).
 
 %% + 2 for seq, bits and prefix
 -define(PUB_RECORD_PREFIX_BYTES, 2).
@@ -378,7 +389,7 @@ flush_delivered_cache(State = #qistate{delivered_cache = DC}) ->
     State1#qistate{delivered_cache = []}.
 
 -spec publish(rabbit_types:msg_id(), seq_id(),
-                    rabbit_types:message_properties(), boolean(),
+                    message_properties:message_properties(), boolean(),
                     non_neg_integer(), qistate()) -> qistate().
 
 publish(MsgOrId, SeqId, MsgProps, IsPersistent, JournalSizeHint, State) ->
@@ -406,7 +417,7 @@ maybe_needs_confirming(MsgProps, MsgOrId,
                 Id when is_binary(Id)   -> Id
             end,
     ?MSG_ID_BYTES = size(MsgId),
-    case {MsgProps#message_properties.needs_confirming, MsgOrId} of
+    case {message_properties:get_needs_confirming(MsgProps), MsgOrId} of
       {true,  MsgId} -> UC1  = gb_sets:add_element(MsgId, UC),
                         State#qistate{unconfirmed     = UC1};
       {true,  _}     -> UCM1 = gb_sets:add_element(MsgId, UCM),
@@ -457,7 +468,7 @@ flush(State)                                -> flush_journal(State).
 
 -spec read(seq_id(), seq_id(), qistate()) ->
                      {[{rabbit_types:msg_id(), seq_id(),
-                        rabbit_types:message_properties(),
+                        message_properties:message_properties(),
                         boolean(), boolean()}], qistate()}.
 
 read(StartEnd, StartEnd, State) ->
@@ -669,7 +680,7 @@ recover_segment(ContainsCheckFun, CleanShutdown,
               {recover_message(ContainsCheckFun(MsgOrId), CleanShutdown,
                                Del, RelSeq, SegmentAndDirtyCount, MaxJournal),
                Bytes + case IsPersistent of
-                           true  -> MsgProps#message_properties.size;
+                           true  -> message_properties:get_size(MsgProps);
                            false -> 0
                        end}
       end,
@@ -682,7 +693,7 @@ recover_message( true, false,    del, _RelSeq, SegmentAndDirtyCount, _MaxJournal
     SegmentAndDirtyCount;
 recover_message( true, false, no_del,  RelSeq, {Segment, _DirtyCount}, MaxJournal) ->
     %% force to flush the segment
-    {add_to_journal(RelSeq, del, Segment), MaxJournal + 1}; 
+    {add_to_journal(RelSeq, del, Segment), MaxJournal + 1};
 recover_message(false,     _,    del,  RelSeq, {Segment, DirtyCount}, _MaxJournal) ->
     {add_to_journal(RelSeq, ack, Segment), DirtyCount + 1};
 recover_message(false,     _, no_del,  RelSeq, {Segment, DirtyCount}, _MaxJournal) ->
@@ -750,14 +761,24 @@ scan_queue_segments(Fun, Acc, VHostDir, QueueName) ->
 %% expiry/binary manipulation
 %%----------------------------------------------------------------------------
 
-create_pub_record_body(MsgOrId, #message_properties { expiry = Expiry,
-                                                      size   = Size }) ->
+create_pub_record_body(MsgOrId, MsgProps) ->
+    Expiry = message_properties:get_expiry(MsgProps),
+    Size = message_properties:get_size(MsgProps),
+    DC = message_properties:get_delivery_count(MsgProps),
     ExpiryBin = expiry_to_binary(Expiry),
     case MsgOrId of
         MsgId when is_binary(MsgId) ->
-            {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS>>, <<>>};
+            create_pub_record_body(MsgId, ExpiryBin, Size, DC, <<>>);
         #basic_message{id = MsgId} ->
             MsgBin = term_to_binary(MsgOrId),
+            create_pub_record_body(MsgId, ExpiryBin, Size, DC, MsgBin)
+    end.
+
+create_pub_record_body(MsgId, ExpiryBin, Size, DC, MsgBin) ->
+    case rabbit_feature_flags:is_enabled(classic_delivery_limits) of
+        true ->
+            {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS, DC:?DC_BITS>>, MsgBin};
+        false ->
             {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS>>, MsgBin}
     end.
 
@@ -765,15 +786,21 @@ expiry_to_binary(undefined) -> <<?NO_EXPIRY:?EXPIRY_BITS>>;
 expiry_to_binary(Expiry)    -> <<Expiry:?EXPIRY_BITS>>.
 
 parse_pub_record_body(<<MsgIdNum:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
-                        Size:?SIZE_BITS>>, MsgBin) ->
+                        Size:?SIZE_BITS, Rest/binary>>, MsgBin) ->
+    DC =
+        case rabbit_feature_flags:is_enabled(classic_delivery_limits) of
+            true ->
+                <<DC0:?DC_BITS, _/binary>> = Rest, DC0;
+            false ->
+                <<>> = Rest, 0
+        end,
     %% work around for binary data fragmentation. See
     %% rabbit_msg_file:read_next/2
     <<MsgId:?MSG_ID_BYTES/binary>> = <<MsgIdNum:?MSG_ID_BITS>>,
-    Props = #message_properties{expiry = case Expiry of
-                                             ?NO_EXPIRY -> undefined;
-                                             X          -> X
-                                         end,
-                                size   = Size},
+    Props = message_properties:new(case Expiry of
+                                       ?NO_EXPIRY -> undefined;
+                                       X          -> X
+                                   end, false, Size, DC),
     case MsgBin of
         <<>> -> {MsgId, Props};
         _    -> Msg = #basic_message{id = MsgId} = binary_to_term(MsgBin),
@@ -907,7 +934,8 @@ load_journal(State = #qistate { dir = Dir }) ->
                  Size = rabbit_file:file_size(Path),
                  {ok, 0} = file_handle_cache:position(JournalHdl, 0),
                  {ok, JournalBin} = file_handle_cache:read(JournalHdl, Size),
-                 parse_journal_entries(JournalBin, State1);
+                 parse_journal_entries(JournalBin, State1,
+                    rabbit_feature_flags:is_enabled(classic_delivery_limits));
         false -> State
     end.
 
@@ -934,28 +962,43 @@ recover_journal(State) ->
     State1 #qistate { segments = Segments1 }.
 
 parse_journal_entries(<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                        Rest/binary>>, State) ->
-    parse_journal_entries(Rest, add_to_journal(SeqId, del, State));
+                        Rest/binary>>, State, FF) ->
+    parse_journal_entries(Rest, add_to_journal(SeqId, del, State), FF);
 
 parse_journal_entries(<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                        Rest/binary>>, State) ->
-    parse_journal_entries(Rest, add_to_journal(SeqId, ack, State));
+                        Rest/binary>>, State, FF) ->
+    parse_journal_entries(Rest, add_to_journal(SeqId, ack, State), FF);
 parse_journal_entries(<<0:?JPREFIX_BITS, 0:?SEQ_BITS,
-                        0:?PUB_RECORD_SIZE_BYTES/unit:8, _/binary>>, State) ->
+                        0:?PUB_RECORD_SIZE_BYTES_v1/unit:8, _/binary>>, State, false) ->
+    %% Journal entry composed only of zeroes was probably
+    %% produced during a dirty shutdown so stop reading
+    State;
+parse_journal_entries(<<0:?JPREFIX_BITS, 0:?SEQ_BITS,
+                        0:?PUB_RECORD_SIZE_BYTES_v2/unit:8, _/binary>>, State, true) ->
     %% Journal entry composed only of zeroes was probably
     %% produced during a dirty shutdown so stop reading
     State;
 parse_journal_entries(<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                        Bin:?PUB_RECORD_BODY_BYTES/binary,
+                        Bin:?PUB_RECORD_BODY_BYTES_v1/binary,
                         MsgSize:?EMBEDDED_SIZE_BITS, MsgBin:MsgSize/binary,
-                        Rest/binary>>, State) ->
+                        Rest/binary>>, State, false = FF) ->
     IsPersistent = case Prefix of
                        ?PUB_PERSIST_JPREFIX -> true;
                        ?PUB_TRANS_JPREFIX   -> false
                    end,
     parse_journal_entries(
-      Rest, add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State));
-parse_journal_entries(_ErrOrEoF, State) ->
+      Rest, add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State), FF);
+parse_journal_entries(<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS,
+                        Bin:?PUB_RECORD_BODY_BYTES_v2/binary,
+                        MsgSize:?EMBEDDED_SIZE_BITS, MsgBin:MsgSize/binary,
+                        Rest/binary>>, State, true = FF) ->
+    IsPersistent = case Prefix of
+                       ?PUB_PERSIST_JPREFIX -> true;
+                       ?PUB_TRANS_JPREFIX   -> false
+                   end,
+    parse_journal_entries(
+      Rest, add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State), FF);
+parse_journal_entries(_ErrOrEoF, State, _FF) ->
     State.
 
 deliver_or_ack(_Kind, [], State) ->
@@ -1130,7 +1173,8 @@ parse_segment_entries(<<?PUB_PREFIX:?PUB_PREFIX_BITS,
                         IsPersistNum:1, RelSeq:?REL_SEQ_BITS, Rest/binary>>,
                       KeepAcked, Acc) ->
     parse_segment_publish_entry(
-      Rest, 1 == IsPersistNum, RelSeq, KeepAcked, Acc);
+      Rest, 1 == IsPersistNum, RelSeq, KeepAcked, Acc,
+      rabbit_feature_flags:is_enabled(classic_delivery_limits));
 parse_segment_entries(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                        RelSeq:?REL_SEQ_BITS, Rest/binary>>, KeepAcked, Acc) ->
     parse_segment_entries(
@@ -1138,15 +1182,23 @@ parse_segment_entries(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
 parse_segment_entries(<<>>, _KeepAcked, Acc) ->
     Acc.
 
-parse_segment_publish_entry(<<Bin:?PUB_RECORD_BODY_BYTES/binary,
+parse_segment_publish_entry(<<Bin:?PUB_RECORD_BODY_BYTES_v1/binary,
                               MsgSize:?EMBEDDED_SIZE_BITS,
                               MsgBin:MsgSize/binary, Rest/binary>>,
                             IsPersistent, RelSeq, KeepAcked,
-                            {SegEntries, Unacked}) ->
+                            {SegEntries, Unacked}, false) ->
     Obj = {{IsPersistent, Bin, MsgBin}, no_del, no_ack},
     SegEntries1 = array:set(RelSeq, Obj, SegEntries),
     parse_segment_entries(Rest, KeepAcked, {SegEntries1, Unacked + 1});
-parse_segment_publish_entry(Rest, _IsPersistent, _RelSeq, KeepAcked, Acc) ->
+parse_segment_publish_entry(<<Bin:?PUB_RECORD_BODY_BYTES_v2/binary,
+                              MsgSize:?EMBEDDED_SIZE_BITS,
+                              MsgBin:MsgSize/binary, Rest/binary>>,
+                            IsPersistent, RelSeq, KeepAcked,
+                            {SegEntries, Unacked}, true) ->
+    Obj = {{IsPersistent, Bin, MsgBin}, no_del, no_ack},
+    SegEntries1 = array:set(RelSeq, Obj, SegEntries),
+    parse_segment_entries(Rest, KeepAcked, {SegEntries1, Unacked + 1});
+parse_segment_publish_entry(Rest, _IsPersistent, _RelSeq, KeepAcked, Acc, _FF) ->
     parse_segment_entries(Rest, KeepAcked, Acc).
 
 add_segment_relseq_entry(KeepAcked, RelSeq, {SegEntries, Unacked}) ->
@@ -1409,6 +1461,44 @@ store_msg_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
     {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
      Rest};
 store_msg_segment(_) ->
+    stop.
+
+%%----------------------------------------------------------------------------
+%% Add 4-byte delivery count field. Migration carried out through feature-flag
+%%----------------------------------------------------------------------------
+-spec add_delivery_count() -> 'ok'.
+
+add_delivery_count() ->
+    foreach_queue_index({fun add_delivery_count_journal/1,
+                         fun add_delivery_count_segment/1}).
+
+add_delivery_count_journal(<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
+                    Rest/binary>>) ->
+    {<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
+add_delivery_count_journal(<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
+                    Rest/binary>>) ->
+    {<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
+add_delivery_count_journal(<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS,
+                    MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS, Size:?SIZE_BITS,
+                    MsgSize:?EMBEDDED_SIZE_BITS, Msg:MsgSize/binary, Rest/binary>>) ->
+    {[ <<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS, MsgId:?MSG_ID_BITS,
+         Expiry:?EXPIRY_BITS, Size:?SIZE_BITS, 0:?DC_BITS, MsgSize:?EMBEDDED_SIZE_BITS>>,
+         Msg ], Rest};
+add_delivery_count_journal(_) ->
+    stop.
+
+add_delivery_count_segment(<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1,
+                    RelSeq:?REL_SEQ_BITS, MsgId:?MSG_ID_BITS,
+                    Expiry:?EXPIRY_BITS, Size:?SIZE_BITS, MsgSize:?EMBEDDED_SIZE_BITS,
+                    Msg:MsgSize/binary, Rest/binary>>) ->
+    {[ <<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1, RelSeq:?REL_SEQ_BITS,
+         MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS, Size:?SIZE_BITS,
+         0:?DC_BITS, MsgSize:?EMBEDDED_SIZE_BITS>>, Msg ], Rest};
+add_delivery_count_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
+                    RelSeq:?REL_SEQ_BITS, Rest/binary>>) ->
+    {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
+     Rest};
+add_delivery_count_segment(_) ->
     stop.
 
 

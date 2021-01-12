@@ -7,6 +7,7 @@
          wait_for_messages_pending_ack/3,
          wait_for_messages_total/3,
          wait_for_messages/2,
+         wait_for_messages/3,
          dirty_query/3,
          ra_name/1,
          fifo_machines_use_same_version/1,
@@ -53,26 +54,29 @@ wait_for_messages(Servers, QName, Number, Fun, N) ->
     end.
 
 wait_for_messages(Config, Stats) ->
-    wait_for_messages(Config, lists:sort(Stats), 60).
+    wait_for_messages(Config, 0, Stats).
 
-wait_for_messages(Config, Stats, 0) ->
+wait_for_messages(Config, Node, Stats) ->
+    wait_for_messages(Config, Node, lists:sort(Stats), 60).
+
+wait_for_messages(Config, Node, Stats, 0) ->
     ?assertEqual(Stats,
                  lists:sort(
                    filter_queues(Stats,
                                  rabbit_ct_broker_helpers:rabbitmqctl_list(
-                                   Config, 0, ["list_queues", "name", "messages", "messages_ready",
-                                               "messages_unacknowledged"]))));
-wait_for_messages(Config, Stats, N) ->
+                                   Config, Node, ["list_queues", "name", "messages", "messages_ready",
+                                                  "messages_unacknowledged"]))));
+wait_for_messages(Config, Node, Stats, N) ->
     case lists:sort(
            filter_queues(Stats,
                          rabbit_ct_broker_helpers:rabbitmqctl_list(
-                           Config, 0, ["list_queues", "name", "messages", "messages_ready",
-                                       "messages_unacknowledged"]))) of
+                           Config, Node, ["list_queues", "name", "messages", "messages_ready",
+                                          "messages_unacknowledged"]))) of
         Stats0 when Stats0 == Stats ->
             ok;
         _ ->
             timer:sleep(500),
-            wait_for_messages(Config, Stats, N - 1)
+            wait_for_messages(Config, Node, Stats, N - 1)
     end.
 
 dirty_query(Servers, QName, Fun) ->

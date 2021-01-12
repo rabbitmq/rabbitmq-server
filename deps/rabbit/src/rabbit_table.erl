@@ -12,7 +12,7 @@
     wait_for_replicated/1, wait/1, wait/2,
     force_load/0, is_present/0, is_empty/0, needs_default_data/0,
     check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
-    wait_for_replicated/0, exists/1]).
+    wait_for_replicated/0, exists/1, delete/1]).
 
 %% for testing purposes
 -export([definitions/0]).
@@ -53,6 +53,13 @@ create(TableName, TableDefinition) ->
 -spec exists(mnesia_table()) -> boolean().
 exists(Table) ->
     lists:member(Table, mnesia:system_info(tables)).
+
+-spec delete(mnesia:table()) -> 'ok'.
+delete(TableName) ->
+    case mnesia:delete_table(TableName) of
+        {atomic, ok}                      -> ok;
+        {aborted, {no_exists, TableName}} -> ok
+    end.
 
 %% Sets up secondary indexes in a blank node database.
 ensure_secondary_indexes() ->

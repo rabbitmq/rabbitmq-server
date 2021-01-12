@@ -35,7 +35,7 @@
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
--export([has_synchronised_mirrors_online/1]).
+-export([has_synchronised_mirrors_online/1, transform/3, emit_transform/5]).
 -export([is_replicated/1, is_exclusive/1, is_not_exclusive/1, is_dead_exclusive/1]).
 -export([list_local_quorum_queues/0, list_local_quorum_queue_names/0,
          list_local_mirrored_classic_queues/0, list_local_mirrored_classic_names/0,
@@ -770,6 +770,7 @@ declare_args() ->
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
      {<<"x-dead-letter-exchange">>,    fun check_dlxname_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
+     {<<"x-delivery-limit">>,          fun check_delivery_limit_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
      {<<"x-max-in-memory-length">>,    fun check_non_neg_int_arg/2},
@@ -802,6 +803,19 @@ check_non_neg_int_arg({Type, Val}, Args) ->
         ok when Val >= 0 -> ok;
         ok               -> {error, {value_negative, Val}};
         Error            -> Error
+    end.
+
+check_delivery_limit_arg({Type, Val}, Args) ->
+    case get_queue_type(Args) of
+        rabbit_classic_queue ->
+            case rabbit_feature_flags:is_enabled(classic_delivery_limits) of
+                true ->
+                    check_non_neg_int_arg({Type, Val}, Args);
+                false ->
+                    {error, {feature_flag_not_enabled, classic_delivery_limits}}
+            end;
+        _Other ->
+            check_non_neg_int_arg({Type, Val}, Args)
     end.
 
 check_expires_arg({Type, Val}, Args) ->
@@ -1255,16 +1269,25 @@ collect_info_all(VHostPath, Items) ->
     rabbit_control_misc:await_emitters_termination(Pids),
     wait_for_queues(Ref, length(Pids), []).
 
+wait_for_queues(_Ref, 0, Acc) -> Acc;
 wait_for_queues(Ref, N, Acc) ->
+    wait_for_queues(Ref, N, Acc, fun() -> ok end, 1000).
+
+wait_for_queues(Ref, N, Acc, TimeoutFun, Timeout) when is_integer(Timeout) ->
     receive
         {Ref, finished} when N == 1 ->
             Acc;
         {Ref, finished} ->
             wait_for_queues(Ref, N - 1, Acc);
         {Ref, Items, continue} ->
-            wait_for_queues(Ref, N, [Items | Acc])
+            wait_for_queues(Ref, N, [Items | Acc]);
+        {Ref, Result, finished} when N == 1 ->
+            [Result | Acc];
+        {Ref, Result, finished} ->
+            wait_for_queues(Ref, N - 1, [Result | Acc])
     after
-        1000 ->
+        Timeout ->
+            TimeoutFun(),
             Acc
     end.
 
@@ -1750,6 +1773,73 @@ on_node_up(Node) ->
                    [maybe_clear_recoverable_node(Node, Q) || Q <- Qs],
                    ok
            end).
+
+-spec transform(rabbit_types:transform(), function(),
+                amqqueue:amqqueue() | [amqqueue:amqqueue()]) ->
+                    rabbit_types:ok_or_error(any()).
+
+transform(_TF, _Fun, _Qs = []) -> ok;
+transform(TF = #transform{options = Opts}, Fun, Qs = [_|_]) ->
+    Ref = make_ref(),
+    Opts1 = maps:put(transform_ref, Ref, Opts),
+    Opts2 = maps:put(transform_client, TClient = self(), Opts1),
+    TF1 = TF#transform{options = Opts2},
+    AllSPids = lists:flatten([amqqueue:get_slave_pids(Q) || Q <- Qs]),
+    Pids = [spawn_link(rabbit_amqqueue, emit_transform, [TF1, Fun, Q, Ref, TClient])
+                || Q <- Qs],
+    case wait_for_transform_pids(Ref, Pids ++ AllSPids, transform_complete) of
+        ok     -> ok;
+        Errors -> Errors
+    end;
+
+transform(TF = #transform{options = Opts}, Fun, Q) when ?amqqueue_is_classic(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    QName = rabbit_misc:rs(amqqueue:get_name(Q)),
+    SPids = amqqueue:get_slave_pids(Q),
+    %% We can't fully rely on remote queue master known mirror pids. Set and use
+    %% expected mirrors from onset, e.g. in case of mnesia deviations on queue
+    Opts1 = Opts#{expected_mirrors => SPids},
+    %% Check if queue transformation is permitted and if known SPids are
+    %% reacheable e.g. interval before net_ticktime has elapsed
+    case rabbit_transform:is_permitted([QPid | SPids]) of
+       true ->
+           try
+                delegate:invoke(QPid, {gen_server2, call,
+                    [{transform, TF#transform{options = Opts1}, Fun},
+                      infinity]})
+           catch
+               _:Reason ->
+                   rabbit_transform:log_error(QName, TF, Reason),
+                   {error, Reason}
+           end;
+       false ->
+           rabbit_transform:log_error(QName, TF, transform_not_permitted),
+           {error, transform_not_permitted}
+    end;
+transform(_TF, _Fun, _Q) ->
+    ok.
+
+-spec emit_transform(rabbit_types:transform(), function(), amqqueue:amqqueue(),
+    reference(), pid()) -> rabbit_types:ok_or_error(any()).
+
+emit_transform(TF, Fun, Q, Ref, ReplyPid) ->
+    rabbit_control_misc:emit(
+        ReplyPid, Ref, fun() -> rabbit_amqqueue:transform(TF, Fun, Q) end).
+
+wait_for_transform_pids(Ref, Pids, Expected) ->
+    wait_for_transform_pids(Ref, Pids, Expected, transform_timeout).
+
+wait_for_transform_pids(Ref, Pids, Expected, Error) ->
+    wait_for_transform_pids(Ref, Pids, Expected, Error, rabbit_transform:get_timeout()).
+
+wait_for_transform_pids(_Ref, [], _Expected, _Error, _Timeout) -> ok;
+wait_for_transform_pids(Ref, Pids, Expected, Error, Timeout) ->
+    Results = lists:usort(wait_for_queues(Ref, length(Pids), [],
+                             fun() -> throw({error, Error}) end, Timeout)),
+    case lists:delete(Expected, Results) of
+        []     -> ok;
+        Errors -> Errors
+    end.
 
 maybe_clear_recoverable_node(Node, Q) ->
     SPids = amqqueue:get_sync_slave_pids(Q),

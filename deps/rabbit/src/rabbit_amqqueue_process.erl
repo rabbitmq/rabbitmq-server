@@ -90,7 +90,10 @@
             %% running | flow | idle
             status,
             %% true | false
-            single_active_consumer_on
+            single_active_consumer_on,
+            %% delivery limit for expiring poison messages
+            delivery_limit,
+            delivery_limit_ttl_timer_ref
            }).
 
 %%----------------------------------------------------------------------------
@@ -160,7 +163,8 @@ init_state(Q) ->
                status                    = running,
                args_policy_version       = 0,
                overflow                  = 'drop-head',
-               single_active_consumer_on = SingleActiveConsumerOn},
+               single_active_consumer_on = SingleActiveConsumerOn,
+               delivery_limit            = infinity},
     rabbit_event:init_stats_timer(State, #q.stats_timer).
 
 init_it(Recover, From, State = #q{q = Q})
@@ -366,7 +370,8 @@ terminate_shutdown(Fun, #q{status = Status} = State) ->
                     [fun stop_sync_timer/1,
                      fun stop_rate_timer/1,
                      fun stop_expiry_timer/1,
-                     fun stop_ttl_timer/1]),
+                     fun stop_ttl_timer/1,
+                     fun stop_delivery_limit_ttl/1]),
     case BQS of
         undefined -> State1;
         _         -> ok = rabbit_memory_monitor:deregister(self()),
@@ -422,7 +427,8 @@ process_args_policy(State = #q{q                   = Q,
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
          {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
          {<<"overflow">>,                fun res_arg/2, fun init_overflow/2},
-         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2}],
+         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2},
+         {<<"delivery-limit">>,          fun res_arg/2, fun init_delivery_limit/2}],
       drop_expired_msgs(
          lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
                              Fun(rabbit_queue_type_util:args_policy_lookup(Name, Resolve, Q), StateN)
@@ -479,6 +485,11 @@ init_queue_mode(Mode, State = #q {backing_queue = BQ,
                                   backing_queue_state = BQS}) ->
     BQS1 = BQ:set_queue_mode(binary_to_existing_atom(Mode, utf8), BQS),
     State#q{backing_queue_state = BQS1}.
+
+init_delivery_limit(undefined, State) ->
+    stop_delivery_limit_ttl(State#q{delivery_limit = infinity});
+init_delivery_limit(DeliveryLimit, State) ->
+    State#q{delivery_limit = DeliveryLimit}.
 
 reply(Reply, NewState) ->
     {NewState1, Timeout} = next_state(NewState),
@@ -539,7 +550,7 @@ ensure_expiry_timer(State = #q{expires             = Expires,
 stop_expiry_timer(State) -> rabbit_misc:stop_timer(State, #q.expiry_timer_ref).
 
 ensure_ttl_timer(undefined, State) ->
-    State;
+    ensure_delivery_limit_ttl_timer(State);
 ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref       = undefined,
                                     args_policy_version = Version}) ->
     After = (case Expiry - os:system_time(micro_seconds) of
@@ -555,6 +566,21 @@ ensure_ttl_timer(Expiry, State = #q{ttl_timer_ref    = TRef,
     ensure_ttl_timer(Expiry, State#q{ttl_timer_ref = undefined});
 ensure_ttl_timer(_Expiry, State) ->
     State.
+
+ensure_delivery_limit_ttl_timer(State = #q{delivery_limit = infinity}) -> State;
+ensure_delivery_limit_ttl_timer(
+  State = #q{delivery_limit_ttl_timer_ref = undefined,
+             args_policy_version = Version}) ->
+    After = ?CLASSIC_QUEUE_DELIVERY_LIMIT_TTL,
+    DL_TRef = rabbit_misc:send_after(After, self(), {drop_expired, Version}),
+    State#q{delivery_limit_ttl_timer_ref = DL_TRef};
+ensure_delivery_limit_ttl_timer(
+  State = #q{delivery_limit_ttl_timer_ref = DL_TRef}) ->
+    rabbit_misc:cancel_timer(DL_TRef),
+    ensure_delivery_limit_ttl_timer(State#q{delivery_limit_ttl_timer_ref = undefined}).
+
+stop_delivery_limit_ttl(State) ->
+    rabbit_misc:stop_timer(State, #q.delivery_limit_ttl_timer_ref).
 
 stop_ttl_timer(State) -> rabbit_misc:stop_timer(State, #q.ttl_timer_ref).
 
@@ -674,13 +700,15 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
                  Props, Delivered, State = #q{q                   = Q,
                                               backing_queue       = BQ,
                                               backing_queue_state = BQS,
-                                              msg_id_to_channel   = MTC}) ->
+                                              msg_id_to_channel   = MTC,
+                                              delivery_limit      = DL}) ->
     case rabbit_queue_consumers:deliver(
            fun (true)  -> true = BQ:is_empty(BQS),
+                          {Message1, Props1} = maybe_inc_delivery_count(DL, Message, Props),
                           {AckTag, BQS1} =
                               BQ:publish_delivered(
-                                Message, Props, SenderPid, Flow, BQS),
-                          {{Message, Delivered, AckTag}, {BQS1, MTC}};
+                                Message1, Props1, SenderPid, Flow, BQS),
+                          {{Message1, Delivered, AckTag}, {BQS1, MTC}};
                (false) -> {{Message, Delivered, undefined},
                            discard(Delivery, BQ, BQS, MTC, amqqueue:get_name(Q))}
            end, qname(State), State#q.consumers, State#q.single_active_consumer_on, State#q.active_consumer) of
@@ -695,6 +723,10 @@ attempt_delivery(Delivery = #delivery{sender  = SenderPid,
                             ActiveConsumersChanged,
                             State#q{consumers = Consumers})}
     end.
+
+maybe_inc_delivery_count(infinity, Message, Props) -> {Message, Props};
+maybe_inc_delivery_count(_DL, Message, Props) ->
+    rabbit_basic:inc_delivery_count(Message, Props).
 
 maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
                          Delivered,
@@ -714,7 +746,7 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
               DLX,
               fun (X) ->
                       QName = qname(State),
-                      rabbit_dead_letter:publish(Message, maxlen, X, RK, QName)
+                      rabbit_dead_letter:publish(prep_dlx(Message), maxlen, X, RK, QName)
               end,
               fun () -> ok end),
             %% Drop publish and nack to publisher
@@ -738,7 +770,7 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
                                         sender  = SenderPid,
                                         flow    = Flow},
                    Delivered,
-                   State = #q{q = Q, backing_queue = BQ}) ->
+                   State = #q{q = Q, backing_queue = BQ, delivery_limit = DL}) ->
     {Confirm, State1} = send_or_record_confirm(Delivery, State),
     Props = message_properties(Message, Confirm, State1),
     case attempt_delivery(Delivery, Props, Delivered, State1) of
@@ -763,10 +795,12 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
             %% remains unchanged, or if the newly published message
             %% has no expiry and becomes the head of the queue then
             %% the call is unnecessary.
-            case {Dropped, QLen =:= 1, Props#message_properties.expiry} of
-                {false, false,         _} -> State3;
-                {true,  true,  undefined} -> State3;
-                {_,     _,             _} -> drop_expired_msgs(State3)
+            Expiry = message_properties:get_expiry(Props),
+            ShouldExpire = (Expiry =/= undefined) or (DL =/= infinity),
+            case {Dropped, QLen =:= 1, ShouldExpire} of
+                {false, false,     _} -> State3;
+                {true,  true,  false} -> State3;
+                {_,     _,         _} -> drop_expired_msgs(State3)
             end
     end.
 
@@ -846,9 +880,15 @@ requeue_and_run(AckTags, State = #q{backing_queue       = BQ,
 
 fetch(AckRequired, State = #q{backing_queue       = BQ,
                               backing_queue_state = BQS}) ->
-    {Result, BQS1} = BQ:fetch(AckRequired, BQS),
-    State1 = drop_expired_msgs(State#q{backing_queue_state = BQS1}),
-    {Result, maybe_send_drained(Result =:= empty, State1)}.
+    {Result1, BQS2} =
+        case BQ:fetch_delivery(AckRequired, BQS) of
+            {{Msg, IsDelivered, AckTag}, BQS1} ->
+                {{Msg, IsDelivered, AckTag}, BQS1};
+            {Result, BQS1} ->
+                {Result, BQS1}
+        end,
+    State1 = drop_expired_msgs(State#q{backing_queue_state = BQS2}),
+    {Result1, maybe_send_drained(Result1 =:= empty, State1)}.
 
 ack(AckTags, ChPid, State) ->
     subtract_acks(ChPid, AckTags, State,
@@ -968,9 +1008,10 @@ subtract_acks(ChPid, AckTags, State = #q{consumers = Consumers}, Fun) ->
 message_properties(Message = #basic_message{content = Content},
                    Confirm, #q{ttl = TTL}) ->
     #content{payload_fragments_rev = PFR} = Content,
-    #message_properties{expiry           = calculate_msg_expiry(Message, TTL),
-                        needs_confirming = Confirm == eventually,
-                        size             = iolist_size(PFR)}.
+    message_properties:new(calculate_msg_expiry(Message, TTL),
+                           Confirm == eventually,
+                           iolist_size(PFR),
+                           0).
 
 calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
     #content{properties = Props} =
@@ -995,8 +1036,13 @@ drop_expired_msgs(State) ->
     end.
 
 drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
-                                  backing_queue       = BQ }) ->
-    ExpirePred = fun (#message_properties{expiry = Exp}) -> Now >= Exp end,
+                                  backing_queue       = BQ,
+                                  delivery_limit      = DL}) ->
+    ExpirePred = fun (MessageProps) ->
+                      Exp = message_properties:get_expiry(MessageProps),
+                      DC = message_properties:get_delivery_count(MessageProps),
+                      (Now >= Exp) or (DC >= DL)
+                 end,
     {Props, State1} =
         with_dlx(
           State#q.dlx,
@@ -1004,9 +1050,29 @@ drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
           fun () -> {Next, BQS1} = BQ:dropwhile(ExpirePred, BQS),
                     {Next, State#q{backing_queue_state = BQS1}} end),
     ensure_ttl_timer(case Props of
-                         undefined                         -> undefined;
-                         #message_properties{expiry = Exp} -> Exp
+                         undefined    -> undefined;
+                         MessageProps ->
+                             message_properties:get_expiry(MessageProps)
                      end, State1).
+
+prep_dlx(Msg = #basic_message{content = Content = #content{properties = Props}}) ->
+    %% Add delivery attempts header here, to be moved to x-death header in DLX.
+    %% Reset x-delivery-count in the context of classic queues only. Hence being
+    %% done here (since 'rabbit_dead_letter' is also used by other queue types).
+    Props1 = add_delivery_attempts_header(Props),
+    rabbit_basic:reset_delivery_count(
+        Msg#basic_message{content = Content#content{properties = Props1}}).
+
+add_delivery_attempts_header(Props = #'P_basic'{headers = undefined}) -> Props;
+add_delivery_attempts_header(Props = #'P_basic'{headers = Headers}) ->
+    DAHeader =
+        case rabbit_misc:table_lookup(Headers, <<"x-delivery-count">>) of
+            undefined ->
+                [];
+            {_Type, DeliveryCount} ->
+                [{<<"x-delivery-attempts">>, long, DeliveryCount}]
+        end,
+    Props#'P_basic'{headers = Headers ++ DAHeader}.
 
 with_dlx(undefined, _With,  Without) -> Without();
 with_dlx(DLX,        With,  Without) -> case rabbit_exchange:lookup(DLX) of
@@ -1043,7 +1109,7 @@ dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
     QName = qname(State),
     {Res, Acks1, BQS1} =
         Fun(fun (Msg, AckTag, Acks) ->
-                    rabbit_dead_letter:publish(Msg, Reason, X, RK, QName),
+                    rabbit_dead_letter:publish(prep_dlx(Msg), Reason, X, RK, QName),
                     [AckTag | Acks]
             end, [], BQS),
     {_Guids, BQS2} = BQ:ack(Acks1, BQS1),
@@ -1466,7 +1532,40 @@ handle_call(sync_mirrors, _From, State) ->
 
 %% By definition if we get this message here we do not have to do anything.
 handle_call(cancel_sync_mirrors, _From, State) ->
-    reply({ok, not_syncing}, State).
+    reply({ok, not_syncing}, State);
+
+handle_call({transform, TF = #transform{name     = TName,
+                                        versions = TVersions,
+                                        options  = TOpts}, TFun}, _From,
+             State = #q{q                   = Q,
+                        backing_queue       = BQ,
+                        backing_queue_state = BQS}) ->
+    QName = rabbit_misc:rs(amqqueue:get_name(Q)),
+    {Result, BQS2} =
+        try
+            [TVersion] = TVersions,  %% We only expect a single version
+            TPid = maps:get(transform_client, TOpts, undefined),
+            rabbit_transform:log_info(QName, TF),
+            BQS1 = BQ:transform(TName, TVersion, TOpts, TFun, BQS),
+            %% Post check. Only apply transformation if still permitted.
+            SPids = maps:get(expected_mirrors, TOpts, []),
+            case rabbit_transform:is_permitted([TPid | SPids]) of
+                true  ->
+                    rabbit_transform:log_success(QName, TF),
+                    {transform_complete, BQS1};
+                false ->
+                    rabbit_transform:log_error(QName, TF, transform_not_permitted),
+                    {{error, transform_not_permitted}, BQS}
+            end
+        catch
+          _:{error, Reason} = Error ->
+              rabbit_transform:log_error(QName, TF, Reason),
+              {Error, BQS};
+          _:Reason ->
+              rabbit_transform:log_error(QName, TF, Reason),
+              {{error, Reason}, BQS}
+        end,
+    reply(Result, State#q{backing_queue_state = BQS2}).
 
 new_single_active_consumer_after_basic_cancel(ChPid, ConsumerTag, CurrentSingleActiveConsumer,
             _SingleActiveConsumerIsOn = true, Consumers) ->
@@ -1669,7 +1768,8 @@ handle_info({maybe_expire, _Vsn}, State) ->
 
 handle_info({drop_expired, Vsn}, State = #q{args_policy_version = Vsn}) ->
     WasEmpty = is_empty(State),
-    State1 = drop_expired_msgs(State#q{ttl_timer_ref = undefined}),
+    State1 = drop_expired_msgs(State#q{ttl_timer_ref = undefined,
+                                       delivery_limit_ttl_timer_ref = undefined}),
     noreply(maybe_send_drained(WasEmpty, State1));
 
 handle_info({drop_expired, _Vsn}, State) ->
@@ -1845,5 +1945,3 @@ update_ha_mode(State) ->
 
 confirm_to_sender(Pid, QName, MsgSeqNos) ->
     rabbit_classic_queue:confirm_to_sender(Pid, QName, MsgSeqNos).
-
-

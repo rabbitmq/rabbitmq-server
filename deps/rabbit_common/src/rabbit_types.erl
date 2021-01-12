@@ -12,7 +12,7 @@
 -export_type([maybe/1, info/0, infos/0, info_key/0, info_keys/0,
               message/0, msg_id/0, basic_message/0,
               delivery/0, content/0, decoded_content/0, undecoded_content/0,
-              unencoded_content/0, encoded_content/0, message_properties/0,
+              unencoded_content/0, encoded_content/0,
               vhost/0, ctag/0, amqp_error/0, r/1, r2/2, r3/3, listener/0,
               binding/0, binding_source/0, binding_destination/0,
               exchange/0,
@@ -24,7 +24,8 @@
               proc_type_and_name/0, timestamp/0, tracked_connection_id/0,
               tracked_connection/0, tracked_channel_id/0, tracked_channel/0,
               node_type/0, topic_access_context/0,
-              authz_data/0, authz_context/0]).
+              authz_data/0, authz_context/0,
+              transform/0, transform_name/0, transform_version/0, transform_options/0]).
 
 -type(maybe(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
@@ -67,9 +68,6 @@
         #delivery{mandatory :: boolean(),
                   sender    :: pid(),
                   message   :: message()}).
--type(message_properties() ::
-        #message_properties{expiry :: pos_integer() | 'undefined',
-                            needs_confirming :: boolean()}).
 
 -type(info_key() :: atom()).
 -type(info_keys() :: [info_key()]).
@@ -194,3 +192,11 @@
                                   _ => _}).
 
 -type(authz_context() :: map()).
+
+-type(transform_name() :: atom()).
+-type(transform_version() :: any()).
+-type(transform_options() :: map()).
+-type(transform() ::
+        #transform{name     :: transform_name(),
+                   versions :: [transform_version()],
+                   options  :: transform_options()}).

@@ -7,11 +7,12 @@
 
 -module(rabbit_control_misc).
 
--export([emitting_map/4, emitting_map/5, emitting_map_with_exit_handler/4,
+-export([emit/3, emitting_map/4, emitting_map/5, emitting_map_with_exit_handler/4,
          emitting_map_with_exit_handler/5, wait_for_info_messages/6,
          spawn_emitter_caller/7, await_emitters_termination/1,
          print_cmd_result/2]).
 
+-spec emit(pid(), reference(), function()) -> 'ok'.
 -spec emitting_map(pid(), reference(), fun(), list()) -> 'ok'.
 -spec emitting_map(pid(), reference(), fun(), list(), atom()) -> 'ok'.
 -spec emitting_map_with_exit_handler
@@ -27,6 +28,15 @@
 -spec await_emitters_termination([pid()]) -> 'ok'.
 
 -spec print_cmd_result(atom(), term()) -> 'ok'.
+
+emit(ReplyPid, Ref, Fun) ->
+    Result = try Fun()
+             catch
+                _:{error, _Reason} = Error -> Error;
+                _:Reason -> {error, Reason}
+             end,
+    ReplyPid ! {Ref, Result, finished},
+    ok.
 
 emitting_map(AggregatorPid, Ref, Fun, List) ->
     emitting_map(AggregatorPid, Ref, Fun, List, continue),

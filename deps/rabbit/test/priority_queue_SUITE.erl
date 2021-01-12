@@ -387,7 +387,7 @@ info_head_message_timestamp1(_Config) ->
         }},
       is_persistent = false
     },
-    BQS2 = PQ:publish(Msg1, #message_properties{size = 0}, false, self(),
+    BQS2 = PQ:publish(Msg1, message_properties:new({size, 0}), false, self(),
       noflow, BQS1),
     1000 = PQ:info(head_message_timestamp, BQS2),
     %% Publish a higher priority message with no timestamp.
@@ -399,7 +399,7 @@ info_head_message_timestamp1(_Config) ->
         }},
       is_persistent = false
     },
-    BQS3 = PQ:publish(Msg2, #message_properties{size = 0}, false, self(),
+    BQS3 = PQ:publish(Msg2, message_properties:new({size, 0}), false, self(),
       noflow, BQS2),
     '' = PQ:info(head_message_timestamp, BQS3),
     %% Consume message with no timestamp.

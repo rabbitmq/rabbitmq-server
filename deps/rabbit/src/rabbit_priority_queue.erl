@@ -29,11 +29,11 @@
          purge/1, purge_acks/1,
          publish/6, publish_delivered/5, discard/4, drain_confirmed/1,
          batch_publish/4, batch_publish_delivered/4,
-         dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
-         ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+         dropwhile/2, fetchwhile/4, fetch/2, fetch_delivery/2, drop/2, ack/2,
+         requeue/2, ackfold/4, fold/3, len/1, is_empty/1, depth/1,
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
-         info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
+         info/2, invoke/3, is_duplicate/2, set_queue_mode/2, transform/5,
          zip_msgs_and_acks/4, handle_info/2]).
 
 -record(state, {bq, bqss, max_priority}).
@@ -289,15 +289,23 @@ fetchwhile(Pred, Fun, Acc, State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough3(fetchwhile(Pred, Fun, Acc, BQS)).
 
 fetch(AckRequired, State = #state{bq = BQ}) ->
+    process_fetch(fun BQ:fetch/2, AckRequired, State);
+fetch(AckRequired, State = #passthrough{bq = BQ, bqs = BQS}) ->
+    ?passthrough2(fetch(AckRequired, BQS)).
+
+fetch_delivery(AckRequired, State = #state{bq = BQ}) ->
+    process_fetch(fun BQ:fetch_delivery/2, AckRequired, State);
+fetch_delivery(AckRequired, State = #passthrough{bq = BQ, bqs = BQS}) ->
+    ?passthrough2(fetch_delivery(AckRequired, BQS)).
+
+process_fetch(FetchFun, AckRequired, State) ->
     find2(
       fun (P, BQSN) ->
-              case BQ:fetch(AckRequired, BQSN) of
+              case FetchFun(AckRequired, BQSN) of
                   {empty,            BQSN1} -> {empty, BQSN1};
                   {{Msg, Del, ATag}, BQSN1} -> {{Msg, Del, {P, ATag}}, BQSN1}
               end
-      end, empty, State);
-fetch(AckRequired, State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough2(fetch(AckRequired, BQS)).
+      end, empty, State).
 
 drop(AckRequired, State = #state{bq = BQ}) ->
     find2(fun (P, BQSN) ->
@@ -441,6 +449,11 @@ set_queue_mode(Mode, State = #state{bq = BQ}) ->
     foreach1(fun (_P, BQSN) -> BQ:set_queue_mode(Mode, BQSN) end, State);
 set_queue_mode(Mode, State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough1(set_queue_mode(Mode, BQS)).
+
+transform(Type, Vsn, Opts, Fun, State = #state{bq = BQ}) ->
+    foreach1(fun (_P, BQSN) -> BQ:transform(Type, Vsn, Opts, Fun, BQSN) end, State);
+transform(Type, Vsn, Opts, Fun, State = #passthrough{bq = BQ, bqs = BQS}) ->
+    ?passthrough1(transform(Type, Vsn, Opts, Fun, BQS)).
 
 zip_msgs_and_acks(Msgs, AckTags, Accumulator, #state{bqss = [{MaxP, _} |_]}) ->
     MsgsByPriority = partition_publish_delivered_batch(Msgs, MaxP),

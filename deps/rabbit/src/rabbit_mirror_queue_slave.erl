@@ -1027,7 +1027,48 @@ process_instruction({set_queue_mode, Mode},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
     BQS1 = BQ:set_queue_mode(Mode, BQS),
-    {ok, State #state { backing_queue_state = BQS1 }}.
+    {ok, State #state { backing_queue_state = BQS1 }};
+process_instruction({transform, TName, TVersion, TOpts, TFun},
+                     State = #state { q                   = Q,
+                                      backing_queue       = BQ,
+                                      backing_queue_state = BQS }) ->
+    TPid = maps:get(transform_client, TOpts, undefined),
+    TRef = maps:get(transform_ref, TOpts, undefined),
+    QName = "mirror " ++ rabbit_misc:rs(amqqueue:get_name(Q)),
+    TF = rabbit_transform:new(TName, TVersion, TOpts), %% internal encoding
+    {Reply, BQS2} =
+        try
+            transform_mirror_queue(QName, TPid, TF, TFun, BQ, BQS)
+        of
+            {ok, BQS1} ->
+                {transform_complete, BQS1};
+            {error, mirror_transform_not_permitted = Reason} = Error ->
+                rabbit_transform:log_error(QName, TF, Reason),
+                {Error, BQS}
+        catch
+            _:Reason1 ->
+                rabbit_transform:log_error(QName, TF, Reason1),
+                {{error, Reason1}, BQS}
+        end,
+
+    catch rabbit_control_misc:emit(TPid, TRef, fun() -> Reply end),
+
+    {ok, State #state{backing_queue_state = BQS2}}.
+
+transform_mirror_queue(QName, TPid, TF = #transform{name     = TName,
+                                                    versions = [TVersion],
+                                                    options  = TOpts}, TFun, BQ, BQS) ->
+    rabbit_transform:log_info(QName, TF),
+    BQS1 = BQ:transform(TName, TVersion, TOpts, TFun, BQS),
+    %% Only apply transformation if still permitted and master reacheable
+    case rabbit_transform:is_permitted([TPid]) of
+        true  ->
+            rabbit_transform:log_success(QName, TF),
+            {ok, BQS1};
+        false ->
+            rabbit_transform:log_error(QName, TF, Reason = mirror_transform_not_permitted),
+            {error, Reason}
+    end.
 
 maybe_flow_ack(Sender, flow)    -> credit_flow:ack(Sender);
 maybe_flow_ack(_Sender, noflow) -> ok.

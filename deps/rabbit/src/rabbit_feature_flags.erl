@@ -106,7 +106,8 @@
          sync_feature_flags_with_cluster/2,
          sync_feature_flags_with_cluster/3,
          refresh_feature_flags_after_app_load/1,
-         enabled_feature_flags_list_file/0
+         enabled_feature_flags_list_file/0,
+         read_enabled_feature_flags_list/0
         ]).
 
 %% RabbitMQ internal use only.

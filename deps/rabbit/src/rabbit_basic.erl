@@ -17,6 +17,7 @@
          maybe_gc_large_msg/1, maybe_gc_large_msg/2]).
 -export([add_header/4,
          peek_fmt_message/1]).
+-export([inc_delivery_count/2, inc_delivery_count/3, reset_delivery_count/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -352,3 +353,57 @@ header_key(A) ->
 
 binary_prefix_64(Bin, Len) ->
     binary:part(Bin, 0, min(byte_size(Bin), Len)).
+
+%% Delivery count (classic queues)
+
+-spec inc_delivery_count(rabbit_types:basic_message(),
+                         message_properties:message_properties()) ->
+    {rabbit_types:basic_message(), message_properties:message_properties()}.
+
+inc_delivery_count(Message, Props) ->
+    inc_delivery_count(Message, Props, 1).
+
+-spec inc_delivery_count(rabbit_types:basic_message() | any(),
+                         message_properties:message_properties(), integer()) ->
+    {rabbit_types:basic_message(), message_properties:message_properties()}.
+
+inc_delivery_count(Message = #basic_message{content = Content}, Props, Delta) ->
+    case rabbit_feature_flags:is_enabled(classic_delivery_limits) of
+        true ->
+            case extract_headers(Content) of
+                undefined ->
+                    {add_header(<<"x-delivery-count">>, long, 0, Message),
+                        message_properties:set_delivery_count(Props, 0)};
+                Headers ->
+                    case rabbit_misc:table_lookup(Headers, <<"x-delivery-count">>) of
+                        {_Type, DeliveryCount} ->
+                            Count = rabbit_data_coercion:to_integer(DeliveryCount) + Delta,
+                            {add_header(<<"x-delivery-count">>, long, Count, Message),
+                                message_properties:set_delivery_count(Props, Count)};
+                        undefined ->
+                            {add_header(<<"x-delivery-count">>, long, 0, Message),
+                                message_properties:set_delivery_count(Props, 0)}
+                    end
+            end;
+        false ->
+            {Message, Props}
+    end;
+inc_delivery_count(Message, Props, _Delta) -> {Message, Props}.
+
+-spec reset_delivery_count(rabbit_types:basic_message()) -> rabbit_types:basic_message().
+
+reset_delivery_count(Message = #basic_message{content = Content}) ->
+    case rabbit_feature_flags:is_enabled(classic_delivery_limits) of
+        true ->
+            case extract_headers(Content) of
+                undefined ->
+                    Message;
+                Headers ->
+                    #content{properties = Props} = Content,
+                    Headers1 = rabbit_misc:table_delete(Headers, <<"x-delivery-count">>),
+                    Message#basic_message{content = Content#content{
+                        properties = Props#'P_basic'{headers = Headers1}}}
+            end;
+        false ->
+            Message
+    end.

@@ -128,8 +128,6 @@
 
 -record(event, {type, props, reference = undefined, timestamp}).
 
--record(message_properties, {expiry, needs_confirming = false, size}).
-
 -record(plugin, {name,             %% atom()
                  version,          %% string()
                  description,      %% string()
@@ -206,6 +204,14 @@
           status = regular,
           context = #{}
         }).
+
+%% Transformations for changing entities in a node
+-record(transform, {
+            name,
+            versions = [],
+            options
+        }).
+
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2020 VMware, Inc. or its affiliates.").
@@ -251,6 +257,9 @@
 %% If user configures a greater rabbit.max_message_size,
 %% this value is used instead.
 -define(MAX_MSG_SIZE, 536870912).
+
+%% Time after which, messages exceeding configured delivery-limit policy expire
+-define(CLASSIC_QUEUE_DELIVERY_LIMIT_TTL, 5000).
 
 -define(store_proc_name(N), rabbit_misc:store_proc_name(?MODULE, N)).
 
