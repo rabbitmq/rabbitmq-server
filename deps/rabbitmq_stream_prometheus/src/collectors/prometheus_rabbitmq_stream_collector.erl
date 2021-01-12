@@ -82,7 +82,7 @@ get_data(?TABLE_PUBLISHER = Table, false) ->
                      {T,
                       sum(proplists:get_value(published, Props), A1),
                       sum(proplists:get_value(confirmed, Props), A2),
-                      sum(proplists:get_value(errorred, Props), A3)}
+                      sum(proplists:get_value(errored, Props), A3)}
                   end,
                   empty(Table), Table),
     [{Table, [{published, A1}, {confirmed, A2}, {errored, A3}]}];
