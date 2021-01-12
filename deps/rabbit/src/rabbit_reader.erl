@@ -282,9 +282,6 @@ socket_error(Reason) ->
         %% This is presumably a TCP healthcheck, so don't log
         %% it unless specified otherwise.
         {ssl_upgrade_error, closed} ->
-            %% Lager sinks (rabbit_log_connection)
-            %% are handled by the lager parse_transform.
-            %% Hence have to define the loglevel as a function call.
             rabbit_log_connection:debug(Fmt, Args);
         _ ->
             rabbit_log_connection:error(Fmt, Args)

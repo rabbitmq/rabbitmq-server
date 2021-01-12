@@ -54,10 +54,10 @@ defmodule LogTailStreamCommandTest do
     time_before = System.system_time(:second)
 
     stream = @command.run([], Map.merge(context[:opts], %{duration: 15}))
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Message"])
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Message1"])
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Message2"])
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Message3"])
+    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Message")])
+    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Message1")])
+    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Message2")])
+    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Message3")])
 
     # This may take a long time and fail with an ExUnit timeout
     data = Enum.join(stream)
@@ -81,7 +81,7 @@ defmodule LogTailStreamCommandTest do
   end
 
   def ensure_log_file() do
-    [log|_] = :rpc.call(get_rabbit_hostname(), :rabbit_lager, :log_locations, [])
+    [log|_] = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
     ensure_file(log, 100)
   end
 
@@ -92,14 +92,14 @@ defmodule LogTailStreamCommandTest do
     case File.exists?(log) do
       true -> :ok
       false ->
-        :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, ["Ping"])
+        :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Ping")])
         :timer.sleep(100)
         ensure_file(log, attempts - 1)
     end
   end
 
   def delete_log_files() do
-    [_|_] = logs = :rpc.call(get_rabbit_hostname(), :rabbit_lager, :log_locations, [])
+    [_|_] = logs = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
     Enum.map(logs, fn(log) ->
       File.rm(log)
     end)

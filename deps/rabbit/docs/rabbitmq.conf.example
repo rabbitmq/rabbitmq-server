@@ -883,7 +883,7 @@
 
 ## Logging settings.
 ##
-## See https://rabbitmq.com/logging.html and https://github.com/erlang-lager/lager for details.
+## See https://rabbitmq.com/logging.html for details.
 ##
 
 ## Log directory, taken from the RABBITMQ_LOG_BASE env variable by default.

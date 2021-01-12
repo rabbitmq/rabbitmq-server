@@ -9,6 +9,10 @@
 
 -behaviour(gen_server).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([start_link/0]).
 
 -export([init/1,
@@ -65,20 +69,23 @@ code_change(_OldVsn, State, _Extra) ->
 
 notify_boot_state(ready = BootState,
                   #state{mechanism = legacy, sd_notify_module = SDNotify}) ->
-    rabbit_log_prelaunch:debug(
+    ?LOG_DEBUG(
       ?LOG_PREFIX "notifying of state `~s` (via native module)",
-      [BootState]),
+      [BootState],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     sd_notify_legacy(SDNotify);
 notify_boot_state(ready = BootState,
                   #state{mechanism = socat, socket = Socket}) ->
-    rabbit_log_prelaunch:debug(
+    ?LOG_DEBUG(
       ?LOG_PREFIX "notifying of state `~s` (via socat(1))",
-      [BootState]),
+      [BootState],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     sd_notify_socat(Socket);
 notify_boot_state(BootState, _) ->
-    rabbit_log_prelaunch:debug(
+    ?LOG_DEBUG(
       ?LOG_PREFIX "ignoring state `~s`",
-      [BootState]),
+      [BootState],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok.
 
 sd_notify_message() ->
@@ -99,9 +106,10 @@ sd_notify_legacy(SDNotify) ->
 sd_notify_socat(Socket) ->
     case sd_current_unit() of
         {ok, Unit} ->
-            rabbit_log_prelaunch:debug(
+            ?LOG_DEBUG(
               ?LOG_PREFIX "systemd unit for activation check: \"~s\"~n",
-              [Unit]),
+              [Unit],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             sd_notify_socat(Socket, Unit);
         _ ->
             ok
@@ -116,9 +124,10 @@ sd_notify_socat(Socket, Unit) ->
             Result
     catch
         Class:Reason ->
-            rabbit_log_prelaunch:debug(
+            ?LOG_DEBUG(
               ?LOG_PREFIX "Failed to start socat(1): ~p:~p~n",
-              [Class, Reason]),
+              [Class, Reason],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             false
     end.
 
@@ -147,8 +156,10 @@ sd_open_port(Socket) ->
 sd_wait_activation(Port, Unit) ->
     case os:find_executable("systemctl") of
         false ->
-            rabbit_log_prelaunch:debug(
-              ?LOG_PREFIX "systemctl(1) unavailable, falling back to sleep~n"),
+            ?LOG_DEBUG(
+              ?LOG_PREFIX "systemctl(1) unavailable, falling back to sleep~n",
+              [],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             timer:sleep(5000),
             ok;
         _ ->
@@ -156,8 +167,10 @@ sd_wait_activation(Port, Unit) ->
     end.
 
 sd_wait_activation(_, _, 0) ->
-    rabbit_log_prelaunch:debug(
-      ?LOG_PREFIX "service still in 'activating' state, bailing out~n"),
+    ?LOG_DEBUG(
+      ?LOG_PREFIX "service still in 'activating' state, bailing out~n",
+      [],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok;
 sd_wait_activation(Port, Unit, AttemptsLeft) ->
     Ret = os:cmd("systemctl show --property=ActiveState -- '" ++ Unit ++ "'"),
@@ -168,7 +181,8 @@ sd_wait_activation(Port, Unit, AttemptsLeft) ->
         "ActiveState=" ++ _ ->
             ok;
         _ = Err ->
-            rabbit_log_prelaunch:debug(
-              ?LOG_PREFIX "unexpected status from systemd: ~p~n", [Err]),
+            ?LOG_DEBUG(
+              ?LOG_PREFIX "unexpected status from systemd: ~p~n", [Err],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             ok
     end.

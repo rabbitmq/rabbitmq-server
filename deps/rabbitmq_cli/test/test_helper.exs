@@ -608,7 +608,7 @@ defmodule TestHelper do
     ## Assume default log is the first one
     log_file = case file do
       nil ->
-        [default_log | _] = :rpc.call(get_rabbit_hostname(), :rabbit_lager, :log_locations, [])
+        [default_log | _] = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
         default_log
       _ -> file
     end

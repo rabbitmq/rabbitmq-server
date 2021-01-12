@@ -1,12 +1,19 @@
 -module(rabbit_prelaunch_dist).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([setup/1]).
 
 setup(#{nodename := Node, nodename_type := NameType} = Context) ->
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Erlang distribution =="),
-    rabbit_log_prelaunch:debug("Rqeuested node name: ~s (type: ~s)",
-                               [Node, NameType]),
+    ?LOG_DEBUG(
+       "~n== Erlang distribution ==", [],
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    ?LOG_DEBUG(
+       "Rqeuested node name: ~s (type: ~s)",
+       [Node, NameType],
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case node() of
         nonode@nohost ->
             ok = rabbit_nodes_common:ensure_epmd(),
@@ -16,8 +23,9 @@ setup(#{nodename := Node, nodename_type := NameType} = Context) ->
 
             ok = do_setup(Context);
         Node ->
-            rabbit_log_prelaunch:debug(
-              "Erlang distribution already running", []),
+            ?LOG_DEBUG(
+              "Erlang distribution already running", [],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             ok;
         Unexpected ->
             throw({error, {erlang_dist_running_with_unexpected_nodename,
@@ -26,7 +34,9 @@ setup(#{nodename := Node, nodename_type := NameType} = Context) ->
     ok.
 
 do_setup(#{nodename := Node, nodename_type := NameType}) ->
-    rabbit_log_prelaunch:debug("Starting Erlang distribution", []),
+    ?LOG_DEBUG(
+       "Starting Erlang distribution",
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case application:get_env(kernel, net_ticktime) of
         {ok, Ticktime} when is_integer(Ticktime) andalso Ticktime >= 1 ->
             %% The value passed to net_kernel:start/1 is the
@@ -43,8 +53,9 @@ do_setup(#{nodename := Node, nodename_type := NameType}) ->
 
 %% Check whether a node with the same name is already running
 duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
-    rabbit_log_prelaunch:debug(
-      "Checking if node name ~s is already used", [NodeName]),
+    ?LOG_DEBUG(
+      "Checking if node name ~s is already used", [NodeName],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     PrelaunchName = rabbit_nodes_common:make(
                       {NodeName ++ "_prelaunch_" ++ os:getpid(),
                        "localhost"}),
@@ -63,8 +74,9 @@ duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
     end.
 
 dist_port_range_check(#{erlang_dist_tcp_port := DistTcpPort}) ->
-    rabbit_log_prelaunch:debug(
-      "Checking if TCP port ~b is valid", [DistTcpPort]),
+    ?LOG_DEBUG(
+      "Checking if TCP port ~b is valid", [DistTcpPort],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case DistTcpPort of
         _ when DistTcpPort < 1 orelse DistTcpPort > 65535 ->
             throw({error, {invalid_dist_port_range, DistTcpPort}});
@@ -74,8 +86,9 @@ dist_port_range_check(#{erlang_dist_tcp_port := DistTcpPort}) ->
 
 dist_port_use_check(#{split_nodename := {_, NodeHost},
                       erlang_dist_tcp_port := DistTcpPort}) ->
-    rabbit_log_prelaunch:debug(
-      "Checking if TCP port ~b is available", [DistTcpPort]),
+    ?LOG_DEBUG(
+       "Checking if TCP port ~b is available", [DistTcpPort],
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     dist_port_use_check_ipv4(NodeHost, DistTcpPort).
 
 dist_port_use_check_ipv4(NodeHost, Port) ->
