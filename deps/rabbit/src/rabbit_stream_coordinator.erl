@@ -747,17 +747,15 @@ phase_stop_replicas(#{replica_nodes := Replicas,
               ra:pipeline_command({?MODULE, node()}, {replicas_stopped, StreamId})
       end).
 
-phase_start_new_leader(#{name := StreamId, leader_node := Node, leader_pid := LPid} = Conf) ->
+phase_start_new_leader(#{name := StreamId, leader_node := Node} = Conf) ->
     spawn(fun() ->
                   osiris_replica:stop(Node, Conf),
+                  osiris_writer:stop(Conf),
                   %% If the start fails, the monitor will capture the crash and restart it
                   case osiris_writer:start(Conf) of
                       {ok, Pid} ->
                           ra:pipeline_command({?MODULE, node()},
                                               {leader_elected, StreamId, Pid});
-                      {error, already_present} ->
-                          ra:pipeline_command({?MODULE, node()},
-                                              {leader_elected, StreamId, LPid});
                       {error, {already_started, Pid}} ->
                           ra:pipeline_command({?MODULE, node()},
                                               {leader_elected, StreamId, Pid})
