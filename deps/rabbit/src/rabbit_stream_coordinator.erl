@@ -54,6 +54,7 @@
 
 -record(?MODULE, {streams, monitors}).
 
+-include("amqqueue.hrl").
 start() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
     ServerId = {?MODULE, node()},
@@ -109,8 +110,10 @@ add_replica(StreamId, Node) ->
     process_command({start_replica, #{stream_id => StreamId, node => Node,
                                       retries => 1}}).
 
-policy_changed(StreamId) ->
+policy_changed(Q) when ?is_amqqueue(Q) ->
+    StreamId = maps:get(name, amqqueue:get_type_state(Q)),
     process_command({policy_changed, #{stream_id => StreamId,
+                                       queue => Q,
                                        retries => 1}}).
 
 delete_replica(StreamId, Node) ->
@@ -176,15 +179,17 @@ init(_Conf) ->
     #?MODULE{streams = #{},
              monitors = #{}}.
 
-apply(#{from := From}, {policy_changed, #{stream_id := StreamId,
-                                          retries := Retries}} = Cmd,
+apply(Meta, {policy_changed, #{stream_id := StreamId,
+                               queue := Q,
+                               retries := Retries}} = Cmd,
       #?MODULE{streams = Streams0} = State) ->
+    From = maps:get(from, Meta, undefined),
     case maps:get(StreamId, Streams0, undefined) of
         undefined ->
             {State, ok, []};
         #{conf := Conf,
           state := running} = SState0 ->
-            case rabbit_stream_queue:update_stream_conf(Conf) of
+            case rabbit_stream_queue:update_stream_conf(Q, Conf) of
                 Conf ->
                     %% No changes, ensure we only trigger an election if it's a must
                     {State, ok, []};
@@ -271,9 +276,9 @@ apply(_Meta, {start_replica_failed, StreamId, Node, Retries, Reply},
                 ?RESTART_TIMEOUT * Retries}],
               State#?MODULE{streams = Streams})
     end;
-apply(_Meta, {update_retention_failed, StreamId, Retention, Retries, Reply},
+apply(_Meta, {update_retention_failed, StreamId, Q, Retries, Reply},
       #?MODULE{streams = Streams0} = State) ->
-    rabbit_log:debug("rabbit_stream_coordinator: ~p update retention failed", [StreamId]),
+    rabbit_log:debug("rabbit_stream_coordinator: ~w update retention failed", [StreamId]),
     case maps:get(StreamId, Streams0, undefined) of
         undefined ->
             {State, {error, not_found}, []};
@@ -283,7 +288,7 @@ apply(_Meta, {update_retention_failed, StreamId, Retention, Retries, Reply},
               From, StreamId, ok, Reply,
               [{timer, {pipeline,
                         [{policy_changed, #{stream_id => StreamId,
-                                            from => undefined,
+                                            queue => Q,
                                             retries => Retries + 1}}]},
                 ?RESTART_TIMEOUT * Retries}],
               State#?MODULE{streams = Streams})
@@ -420,7 +425,8 @@ apply(_Meta, {delete_cluster_reply, StreamId}, #?MODULE{streams = Streams} = Sta
     State = State0#?MODULE{streams = maps:remove(StreamId, Streams)},
     rabbit_log:debug("rabbit_stream_coordinator: ~p finished delete_cluster_reply",
                      [StreamId]),
-    Actions = [{ra, pipeline_command, [{?MODULE, node()}, Cmd]} || Cmd <- Pending],
+    Actions = [{mod_call, ra, pipeline_command, [{?MODULE, node()}, Cmd]}
+               || Cmd <- Pending],
     {State, ok, Actions ++ wrap_reply(From, {ok, 0})};
 apply(_Meta, {down, Pid, _Reason} = Cmd, #?MODULE{streams = Streams,
                                                   monitors = Monitors0} = State) ->
@@ -474,7 +480,7 @@ apply(_Meta, {down, Pid, _Reason} = Cmd, #?MODULE{streams = Streams,
         undefined ->
             {State, ok, []}
     end;
-apply(_Meta, {start_leader_election, StreamId, NewEpoch, Offsets},
+apply(_Meta, {start_leader_election, StreamId, Q, NewEpoch, Offsets},
       #?MODULE{streams = Streams} = State) ->
     #{conf := Conf0} = SState0 = maps:get(StreamId, Streams),
     #{leader_node := Leader,
@@ -485,10 +491,10 @@ apply(_Meta, {start_leader_election, StreamId, NewEpoch, Offsets},
                     [StreamId, NewLeader]),
     {ReplicaPids, _} = delete_replica_pid(NewLeader, ReplicaPids0),
     Conf = rabbit_stream_queue:update_stream_conf(
-             Conf0#{epoch => NewEpoch,
-                    leader_node => NewLeader,
-                    replica_nodes => lists:delete(NewLeader, Replicas ++ [Leader]),
-                    replica_pids => ReplicaPids}),
+             Q, Conf0#{epoch => NewEpoch,
+                       leader_node => NewLeader,
+                       replica_nodes => lists:delete(NewLeader, Replicas ++ [Leader]),
+                       replica_pids => ReplicaPids}),
     Phase = phase_start_new_leader,
     PhaseArgs = [Conf],
     SState = SState0#{conf => Conf,
@@ -798,21 +804,28 @@ phase_start_new_leader(#{name := StreamId, leader_node := Node} = Conf) ->
           end).
 
 phase_check_quorum(#{name := StreamId,
+                     reference := QName,
                      epoch := Epoch,
                      replica_nodes := Nodes} = Conf) ->
     spawn(fun() ->
                   Offsets = find_replica_offsets(Conf),
                   case is_quorum(length(Nodes) + 1, length(Offsets)) of
                       true ->
+                          Q = case rabbit_amqqueue:lookup(QName) of
+                                  {ok, A} -> A;
+                                  {error, not_found} ->
+                                      undefined
+                              end,
                           ra:pipeline_command({?MODULE, node()},
-                                              {start_leader_election, StreamId, Epoch + 1, Offsets});
+                                              {start_leader_election, StreamId,
+                                               Q, Epoch + 1, Offsets});
                       false ->
                           %% Let's crash this process so the monitor will restart it
                           exit({not_enough_quorum, StreamId})
                   end
           end).
 
-phase_update_retention(Pids0, Retention, #{name := StreamId} = Conf0, Retries) ->
+phase_update_retention(Pids0, Retention, #{name := StreamId}, Retries) ->
     spawn(
       fun() ->
               case update_retention(Pids0, Retention) of
@@ -820,7 +833,8 @@ phase_update_retention(Pids0, Retention, #{name := StreamId} = Conf0, Retries) -
                       ra:pipeline_command({?MODULE, node()}, {phase_finished, StreamId, ok});
                   {error, Reason} ->
                       ra:pipeline_command({?MODULE, node()},
-                                          {update_retention_failed, StreamId, Retention, Retries,
+                                          {update_retention_failed, StreamId,
+                                           Retention, Retries,
                                            {error, Reason}})
               end
       end).
