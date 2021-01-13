@@ -28,36 +28,27 @@
 
 -define(METRIC_NAME_PREFIX, "rabbitmq_stream_").
 -define(METRICS_RAW,
-        [% { ETS table, [ {index, conversion, Prometheus metrics name, type, help, key} ] }
+        [% { ETS table, [ {index, Prometheus metrics name, type, help, key} ] }
          {?TABLE_PUBLISHER,
-          [{2,
-            undefined,
-            publishers,
-            gauge,
-            "Number of publishers",
-            publishers},
+          [{2, publishers, gauge, "Number of publishers", publishers},
            {2,
-            undefined,
             publishers_messages_published_total,
             counter,
             "Total number of messages published to streams",
             published},
            {2,
-            undefined,
             publishers_messages_confirmed_total,
             counter,
             "Total number of messages confirmed",
             confirmed},
            {2,
-            undefined,
             publishers_messages_errored_total,
             counter,
             "Total number of messages errored",
             errored}]},
          {?TABLE_CONSUMER,
-          [{2, undefined, consumers, gauge, "Number of consumers", consumers},
+          [{2, consumers, gauge, "Number of consumers", consumers},
            {2,
-            undefined,
             consumers_messages_consumed_total,
             counter,
             "Total number of messages from streams",
@@ -108,23 +99,14 @@ get_data(Table, _) ->
 
 mf(Callback, Contents, Data) ->
     [begin
-         Fun = case Conversion of
-                   undefined ->
-                       fun(D) -> proplists:get_value(Key, element(Index, D))
-                       end;
-                   BaseUnitConversionFactor ->
-                       fun(D) ->
-                          proplists:get_value(Key, element(Index, D))
-                          / BaseUnitConversionFactor
-                       end
-               end,
+         Fun = fun(D) -> proplists:get_value(Key, element(Index, D)) end,
          Callback(prometheus_model_helpers:create_mf(?METRIC_NAME(Name),
                                                      Help,
                                                      catch_boolean(Type),
                                                      ?MODULE,
                                                      {Type, Fun, Data}))
      end
-     || {Index, Conversion, Name, Type, Help, Key} <- Contents].
+     || {Index, Name, Type, Help, Key} <- Contents].
 
 collect_metrics(_Name, {Type, Fun, Items}) ->
     [metric(Type, labels(Item), Fun(Item)) || Item <- Items].

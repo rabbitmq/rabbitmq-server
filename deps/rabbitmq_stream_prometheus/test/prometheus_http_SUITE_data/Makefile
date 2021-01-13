@@ -1,7 +1,7 @@
 export PATH :=$(CURDIR):$(PATH)
 HOSTNAME := $(shell hostname)
 MVN_FLAGS += -Dstream.port=$(STREAM_PORT) \
-             -Dmanagement.port=$(MANAGEMENT_PORT)
+             -Dprometheus.port=$(PROMETHEUS_PORT)
 
 .PHONY: tests clean
 

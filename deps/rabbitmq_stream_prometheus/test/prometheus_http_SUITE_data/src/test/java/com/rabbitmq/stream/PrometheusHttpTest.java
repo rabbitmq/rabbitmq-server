@@ -11,38 +11,40 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2021 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
 
-import com.rabbitmq.stream.TestUtils.ClientFactory;
-import java.io.BufferedReader;
+import static com.rabbitmq.stream.MetricsUtils.*;
+import static com.rabbitmq.stream.MetricsUtils.parseMetrics;
+import static com.rabbitmq.stream.TestUtils.*;
+import static com.rabbitmq.stream.TestUtils.waitUntil;
+import static java.util.stream.Collectors.toList;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.condition.AllOf.allOf;
+
+import com.rabbitmq.stream.MetricsUtils.Metrics;
+import com.rabbitmq.stream.TestUtils.CallableSupplier;
 import java.io.IOException;
-import java.io.StringReader;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.BinaryOperator;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
-@ExtendWith(TestUtils.StreamTestInfrastructureExtension.class)
 public class PrometheusHttpTest {
 
   static OkHttpClient httpClient = new OkHttpClient.Builder().build();
-  ClientFactory cf;
-  String stream;
 
   static String get(String endpoint) throws IOException {
     return get(httpClient, endpoint);
@@ -62,141 +64,221 @@ public class PrometheusHttpTest {
     return "http://localhost:" + TestUtils.prometheusPort() + "/metrics" + endpoint;
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    METRIC_PUBLISHERS + ",true",
+    METRIC_PUBLISHERS_PUBLISHED + ",false",
+    METRIC_PUBLISHERS_CONFIRMED + ",false",
+    METRIC_PUBLISHERS_ERRORED + ",false",
+    METRIC_CONSUMERS + ",true",
+    METRIC_CONSUMERS_CONSUMED + ",false"
+  })
+  void aggregatedMetricsWithNoConnectionShouldReturnZero(String name, boolean isGauge)
+      throws Exception {
+    Metrics metrics = metrics();
+    assertThat(metrics.metrics).hasSameSizeAs(METRICS);
+    Metric metric = metrics.get(name);
+    assertThat(metric).isNotNull().has(help()).is(zero()).is(isGauge ? gauge() : counter());
+  }
+
+  @Test
+  void perObjectMetricsWithNoConnectionShouldReturnNoValue() throws Exception {
+    Metrics metrics = metricsPerObject();
+    METRICS.forEach(
+        name -> {
+          Metric metric = metrics.get(name);
+          assertThat(metric).isNotNull().has(noValue());
+        });
+  }
+
+  @Test
+  void aggregatedMetricsWithPublishersAndConsumersShouldReturnCorrectCounts(TestInfo info)
+      throws Exception {
+    List<String> streams =
+        IntStream.range(0, 5).mapToObj(i -> TestUtils.streamName(info)).collect(toList());
+    int producersCount = streams.size();
+    int consumersCount = streams.size() * 2;
+    int messagesByProducer = 10_000;
+    int messageCount = producersCount * messagesByProducer;
+
+    Environment env = Environment.builder().port(TestUtils.streamPort()).build();
+    List<Producer> producers = Collections.emptyList();
+    List<Consumer> consumers = Collections.emptyList();
+    CallableSupplier<Metrics> metricsCall = () -> metrics();
+    try {
+      streams.forEach(stream -> env.streamCreator().stream(stream).create());
+
+      producers =
+          IntStream.range(0, producersCount)
+              .mapToObj(i -> env.producerBuilder().stream(streams.get(i % streams.size())).build())
+              .collect(toList());
+
+      waitUntil(() -> metricsCall.get().get(METRIC_PUBLISHERS).value() == producersCount);
+
+      CountDownLatch confirmedLatch = new CountDownLatch(messageCount);
+      ConfirmationHandler confirmationHandler = status -> confirmedLatch.countDown();
+      producers.forEach(
+          producer -> {
+            IntStream.range(0, messagesByProducer)
+                .forEach(
+                    i ->
+                        producer.send(
+                            producer.messageBuilder().addData("".getBytes()).build(),
+                            confirmationHandler));
+          });
+
+      assertThat(confirmedLatch.await(10, TimeUnit.SECONDS)).isTrue();
+
+      waitUntil(() -> metricsCall.get().get(METRIC_PUBLISHERS_CONFIRMED).value() == messageCount);
+
+      Metrics metrics = metricsCall.get();
+      assertThat(metrics.get(METRIC_PUBLISHERS_PUBLISHED)).has(value(messageCount));
+      assertThat(metrics.get(METRIC_PUBLISHERS_CONFIRMED)).has(value(messageCount));
+      assertThat(metrics.get(METRIC_PUBLISHERS_ERRORED)).is(zero());
+      assertThat(metrics.get(METRIC_CONSUMERS)).is(zero());
+      assertThat(metrics.get(METRIC_CONSUMERS_CONSUMED)).is(zero());
+
+      int consumedMessageCount = consumersCount * messagesByProducer;
+      CountDownLatch consumedLatch = new CountDownLatch(consumedMessageCount);
+      consumers =
+          IntStream.range(0, consumersCount)
+              .mapToObj(
+                  i ->
+                      env.consumerBuilder().stream(streams.get(i % streams.size()))
+                          .messageHandler((ctx, msg) -> consumedLatch.countDown())
+                          .build())
+              .collect(toList());
+
+      assertThat(consumedLatch.await(10, TimeUnit.SECONDS)).isTrue();
+
+      waitUntil(
+          () -> metricsCall.get().get(METRIC_CONSUMERS_CONSUMED).value() == consumedMessageCount);
+
+      metrics = metricsCall.get();
+      assertThat(metrics.get(METRIC_CONSUMERS)).has(value(consumersCount));
+      assertThat(metrics.get(METRIC_CONSUMERS_CONSUMED)).has(value(consumedMessageCount));
+
+    } finally {
+      producers.forEach(producer -> producer.close());
+      consumers.forEach(consumer -> consumer.close());
+      streams.forEach(stream -> env.deleteStream(stream));
+      env.close();
+    }
+  }
+
+  @Test
+  void perObjectMetricsWithPublishersAndConsumersShouldReturnCorrectCounts(TestInfo info)
+      throws Exception {
+    List<String> streams =
+        IntStream.range(0, 5).mapToObj(i -> TestUtils.streamName(info)).collect(toList());
+    int producersCount = streams.size();
+    int consumersCount = streams.size() * 2;
+    int messagesByProducer = 10_000;
+    int messageCount = producersCount * messagesByProducer;
+
+    Environment env = Environment.builder().port(TestUtils.streamPort()).build();
+    List<Producer> producers = Collections.emptyList();
+    List<Consumer> consumers = Collections.emptyList();
+    CallableSupplier<Metrics> metricsCall = () -> metricsPerObject();
+    try {
+      streams.forEach(stream -> env.streamCreator().stream(stream).create());
+
+      producers =
+          IntStream.range(0, producersCount)
+              .mapToObj(i -> env.producerBuilder().stream(streams.get(i % streams.size())).build())
+              .collect(toList());
+
+      CountDownLatch confirmedLatch = new CountDownLatch(messageCount);
+      ConfirmationHandler confirmationHandler = status -> confirmedLatch.countDown();
+      producers.forEach(
+          producer -> {
+            IntStream.range(0, messagesByProducer)
+                .forEach(
+                    i ->
+                        producer.send(
+                            producer.messageBuilder().addData("".getBytes()).build(),
+                            confirmationHandler));
+          });
+
+      assertThat(confirmedLatch.await(10, TimeUnit.SECONDS)).isTrue();
+
+      waitUntil(
+          () ->
+              metricsCall.get().get(METRIC_PUBLISHERS_CONFIRMED).values().stream()
+                      .mapToInt(MetricValue::value)
+                      .sum()
+                  == messageCount);
+
+      Metrics metrics = metricsCall.get();
+      assertThat(metrics.get(METRIC_PUBLISHERS)).has(noValue());
+      assertThat(metrics.get(METRIC_PUBLISHERS_PUBLISHED))
+          .has(valueCount(producersCount))
+          .has(valuesWithLabels("vhost", "queue", "connection", "id"))
+          .has(
+              allOf(
+                  streams.stream()
+                      .map(s -> value("queue", s, messagesByProducer))
+                      .collect(toList())));
+      assertThat(metrics.get(METRIC_PUBLISHERS_CONFIRMED))
+          .has(valueCount(producersCount))
+          .has(valuesWithLabels("vhost", "queue", "connection", "id"))
+          .has(
+              allOf(
+                  streams.stream()
+                      .map(s -> value("queue", s, messagesByProducer))
+                      .collect(toList())));
+      assertThat(metrics.get(METRIC_PUBLISHERS_ERRORED))
+          .has(valueCount(producersCount))
+          .has(valuesWithLabels("vhost", "queue", "connection", "id"))
+          .has(allOf(streams.stream().map(s -> value("queue", s, 0)).collect(toList())));
+      assertThat(metrics.get(METRIC_CONSUMERS)).has(noValue());
+      assertThat(metrics.get(METRIC_CONSUMERS_CONSUMED)).has(noValue());
+
+      int consumedMessageCount = consumersCount * messagesByProducer;
+      CountDownLatch consumedLatch = new CountDownLatch(consumedMessageCount);
+      consumers =
+          IntStream.range(0, consumersCount)
+              .mapToObj(
+                  i ->
+                      env.consumerBuilder().stream(streams.get(i % streams.size()))
+                          .messageHandler((ctx, msg) -> consumedLatch.countDown())
+                          .build())
+              .collect(toList());
+
+      assertThat(consumedLatch.await(10, TimeUnit.SECONDS)).isTrue();
+
+      waitUntil(
+          () ->
+              metricsCall.get().get(METRIC_CONSUMERS_CONSUMED).values().stream()
+                      .mapToInt(MetricValue::value)
+                      .sum()
+                  == consumedMessageCount);
+
+      metrics = metricsCall.get();
+      assertThat(metrics.get(METRIC_CONSUMERS)).has(noValue());
+      assertThat(metrics.get(METRIC_CONSUMERS_CONSUMED))
+          .has(valueCount(consumersCount))
+          .has(valuesWithLabels("vhost", "queue", "connection", "id"))
+          .has(
+              allOf(
+                  streams.stream()
+                      .flatMap(s -> Stream.of(s, s))
+                      .map(s -> value("queue", s, messagesByProducer))
+                      .collect(toList())));
+
+    } finally {
+      producers.forEach(producer -> producer.close());
+      consumers.forEach(consumer -> consumer.close());
+      streams.forEach(stream -> env.deleteStream(stream));
+      env.close();
+    }
+  }
+
   static Metrics metrics() throws IOException {
     return parseMetrics(get(""));
   }
 
-  static Metrics parseMetrics(String content) throws IOException {
-    Metrics metrics = new Metrics();
-    try (BufferedReader reader = new BufferedReader(new StringReader(content))) {
-      String line;
-      String type = null, name = null;
-      Metric metric = null;
-      while ((line = reader.readLine()) != null) {
-        if (line.trim().isEmpty() || !line.contains("rabbitmq_stream_")) {
-          continue;
-        }
-        if (line.startsWith("# TYPE ")) {
-          String[] nameType = line.replace("# TYPE ", "").split(" ");
-          name = nameType[0];
-          type = nameType[1];
-        } else if (line.startsWith("# HELP ")) {
-          String help = line.replace("# HELP ", "").replace(name + " ", "");
-          metric = new Metric(name, type, help);
-          metrics.add(metric);
-        } else if (line.startsWith(name)) {
-          Map<String, String> labels = Collections.emptyMap();
-          if (line.contains("{")) {
-            String l = line.substring(line.indexOf("{"), line.indexOf("}"));
-            labels = Arrays.stream(l.split(",")).map(label -> label.trim().split("="))
-                .collect(() -> new HashMap<>(),
-                    (acc, keyValue) -> acc.put(keyValue[0], keyValue[1].replace("\"", "")),
-                    (BiConsumer<Map<String, String>, Map<String, String>>) (stringStringHashMap, stringStringHashMap2) -> stringStringHashMap.putAll(stringStringHashMap2));
-
-          }
-          int value;
-          try {
-            value = Integer.valueOf(line.split(" ")[1]);
-          } catch (NumberFormatException e) {
-            value = 0;
-          }
-          metric.add(new MetricValue(value, labels));
-        } else {
-          throw new IllegalStateException("Cannot parse line: " + line);
-        }
-      }
-    }
-
-    return metrics;
-  }
-
-  @Test
-  void aggregatedMetricsWithNoConnectionShouldReturnZero() throws Exception {
-    Metrics metrics = metrics();
-    System.out.println(metrics);
-  }
-
-  static class MetricValue {
-
-    private final int value;
-    private final Map<String, String> labels;
-
-    MetricValue(int value, Map<String, String> labels) {
-      this.value = value;
-      this.labels = labels == null ? Collections.emptyMap() : labels;
-    }
-
-    @Override
-    public String toString() {
-      return "MetricValue{" +
-          "value=" + value +
-          ", labels=" + labels +
-          '}';
-    }
-  }
-
-  static class Metric {
-
-    private final String name;
-    private final String type;
-    private final String help;
-    private final List<MetricValue> values = new ArrayList<>();
-
-    Metric(String name, String type, String help) {
-      this.name = name;
-      this.type = type;
-      this.help = help;
-    }
-
-    void add(MetricValue value) {
-      values.add(value);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      Metric metric = (Metric) o;
-      return name.equals(metric.name);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(name);
-    }
-
-    @Override
-    public String toString() {
-      return "Metric{" +
-          "name='" + name + '\'' +
-          ", type='" + type + '\'' +
-          ", help='" + help + '\'' +
-          ", values=" + values +
-          '}';
-    }
-  }
-
-  static class Metrics {
-
-    private final Map<String, Metric> metrics = new HashMap<>();
-
-    void add(Metric metric) {
-      this.metrics.put(metric.name, metric);
-    }
-
-    Metric get(String name) {
-      return metrics.get(name);
-    }
-
-    @Override
-    public String toString() {
-      return "Metrics{" +
-          "metrics=" + metrics +
-          '}';
-    }
+  static Metrics metricsPerObject() throws IOException {
+    return parseMetrics(get("/per-object"));
   }
 }

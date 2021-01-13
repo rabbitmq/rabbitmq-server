@@ -11,32 +11,21 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2021 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
 
-import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import com.rabbitmq.stream.impl.Client;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import java.lang.reflect.Field;
+import com.rabbitmq.stream.MetricsUtils.Metric;
 import java.lang.reflect.Method;
 import java.time.Duration;
-import java.util.Set;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import okhttp3.Authenticator;
-import okhttp3.Credentials;
+import org.assertj.core.api.Condition;
 import org.junit.jupiter.api.TestInfo;
-import org.junit.jupiter.api.extension.AfterAllCallback;
-import org.junit.jupiter.api.extension.AfterEachCallback;
-import org.junit.jupiter.api.extension.BeforeAllCallback;
-import org.junit.jupiter.api.extension.BeforeEachCallback;
-import org.junit.jupiter.api.extension.ExtensionContext;
 
 public class TestUtils {
 
@@ -76,102 +65,13 @@ public class TestUtils {
     boolean getAsBoolean() throws Exception;
   }
 
-  static class StreamTestInfrastructureExtension
-      implements BeforeAllCallback, AfterAllCallback, BeforeEachCallback, AfterEachCallback {
-
-    private static final ExtensionContext.Namespace NAMESPACE =
-        ExtensionContext.Namespace.create(StreamTestInfrastructureExtension.class);
-
-    private static ExtensionContext.Store store(ExtensionContext extensionContext) {
-      return extensionContext.getRoot().getStore(NAMESPACE);
-    }
-
-    private static EventLoopGroup eventLoopGroup(ExtensionContext context) {
-      return (EventLoopGroup) store(context).get("nettyEventLoopGroup");
-    }
-
-    @Override
-    public void beforeAll(ExtensionContext context) {
-      store(context).put("nettyEventLoopGroup", new NioEventLoopGroup());
-    }
-
-    @Override
-    public void beforeEach(ExtensionContext context) throws Exception {
-      try {
-        Field streamField =
-            context.getTestInstance().get().getClass().getDeclaredField("eventLoopGroup");
-        streamField.setAccessible(true);
-        streamField.set(context.getTestInstance().get(), eventLoopGroup(context));
-      } catch (NoSuchFieldException e) {
-
-      }
-      try {
-        Field streamField = context.getTestInstance().get().getClass().getDeclaredField("stream");
-        streamField.setAccessible(true);
-        String stream = streamName(context);
-        streamField.set(context.getTestInstance().get(), stream);
-        Client client =
-            new Client(
-                new Client.ClientParameters()
-                    .eventLoopGroup(eventLoopGroup(context))
-                    .port(streamPort()));
-        Client.Response response = client.create(stream);
-        assertThat(response.isOk()).isTrue();
-        client.close();
-        store(context).put("testMethodStream", stream);
-      } catch (NoSuchFieldException e) {
-
-      }
-
-      for (Field declaredField : context.getTestInstance().get().getClass().getDeclaredFields()) {
-        if (declaredField.getType().equals(ClientFactory.class)) {
-          declaredField.setAccessible(true);
-          ClientFactory clientFactory = new ClientFactory(eventLoopGroup(context));
-          declaredField.set(context.getTestInstance().get(), clientFactory);
-          store(context).put("testClientFactory", clientFactory);
-          break;
-        }
-      }
-    }
-
-    @Override
-    public void afterEach(ExtensionContext context) throws Exception {
-      try {
-        Field streamField = context.getTestInstance().get().getClass().getDeclaredField("stream");
-        streamField.setAccessible(true);
-        String stream = (String) streamField.get(context.getTestInstance().get());
-        Client client =
-            new Client(
-                new Client.ClientParameters()
-                    .eventLoopGroup(eventLoopGroup(context))
-                    .port(streamPort()));
-        Client.Response response = client.delete(stream);
-        assertThat(response.isOk()).isTrue();
-        client.close();
-        store(context).remove("testMethodStream");
-      } catch (NoSuchFieldException e) {
-
-      }
-
-      ClientFactory clientFactory = (ClientFactory) store(context).get("testClientFactory");
-      if (clientFactory != null) {
-        clientFactory.close();
-      }
-    }
-
-    @Override
-    public void afterAll(ExtensionContext context) throws Exception {
-      EventLoopGroup eventLoopGroup = eventLoopGroup(context);
-      eventLoopGroup.shutdownGracefully(1, 10, SECONDS).get(10, SECONDS);
-    }
+  @FunctionalInterface
+  interface CallableSupplier<T> {
+    T get() throws Exception;
   }
 
   static String streamName(TestInfo info) {
     return streamName(info.getTestClass().get(), info.getTestMethod().get());
-  }
-
-  private static String streamName(ExtensionContext context) {
-    return streamName(context.getTestInstance().get().getClass(), context.getTestMethod().get());
   }
 
   private static String streamName(Class<?> testClass, Method testMethod) {
@@ -181,29 +81,58 @@ public class TestUtils {
         testClass.getSimpleName(), testMethod.getName(), uuid.substring(uuid.length() / 2));
   }
 
-  static class ClientFactory {
+  static Condition<Metric> gauge() {
+    return new Condition<>(m -> m.isGauge(), "should be a gauge");
+  }
 
-    private final EventLoopGroup eventLoopGroup;
-    private final Set<Client> clients = ConcurrentHashMap.newKeySet();
+  static Condition<Metric> counter() {
+    return new Condition<>(m -> m.isCounter(), "should be a counter");
+  }
 
-    public ClientFactory(EventLoopGroup eventLoopGroup) {
-      this.eventLoopGroup = eventLoopGroup;
-    }
+  static Condition<Metric> help() {
+    return new Condition<>(m -> m.help != null, "should have a help description");
+  }
 
-    public Client get() {
-      return get(new Client.ClientParameters());
-    }
+  static Condition<Metric> zero() {
+    return new Condition<>(
+        m -> m.values.size() == 1 && m.values.get(0).value == 0, "should have one metric at 0");
+  }
 
-    public Client get(Client.ClientParameters parameters) {
-      Client client = new Client(parameters.eventLoopGroup(eventLoopGroup).port(streamPort()));
-      clients.add(client);
-      return client;
-    }
+  static Condition<Metric> noValue() {
+    return new Condition<>(m -> m.values.isEmpty(), "should have no value");
+  }
 
-    private void close() {
-      for (Client c : clients) {
-        c.close();
-      }
-    }
+  static Condition<Metric> value(int expected) {
+    return new Condition<>(m -> m.value() == expected, "should have value " + expected);
+  }
+
+  static Condition<Metric> valueCount(int expected) {
+    return new Condition<>(m -> m.values.size() == expected, "should have " + expected + " values");
+  }
+
+  static Condition<Metric> valuesWithLabels(String... expectedLabels) {
+    Collection<String> expected = Arrays.asList(expectedLabels);
+    return new Condition<>(
+        m ->
+            m.values().stream()
+                .map(v -> v.labels.keySet())
+                .map(labels -> labels.containsAll(expected))
+                .reduce(true, (b1, b2) -> b1 && b2),
+        "should have values with labels " + String.join(",", expected));
+  }
+
+  static Condition<Metric> value(String labelKey, String labelValue, int value) {
+    return new Condition<>(
+        m ->
+            m.values().stream()
+                    .filter(v -> v.labels.containsKey(labelKey))
+                    .filter(v -> v.labels.get(labelKey).equals(labelValue))
+                    .filter(v -> v.value() == value)
+                    .count()
+                >= 1,
+        "should have value with %s=%s %d",
+        labelKey,
+        labelValue,
+        value);
   }
 }
