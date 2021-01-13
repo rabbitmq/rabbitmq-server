@@ -43,7 +43,7 @@
 -export([add_replica/3,
          delete_replica/3]).
 -export([format_osiris_event/2]).
--export([update_stream_conf/1]).
+-export([update_stream_conf/2]).
 
 -include("rabbit.hrl").
 -include("amqqueue.hrl").
@@ -142,8 +142,7 @@ purge(_) ->
 
 -spec policy_changed(amqqueue:amqqueue()) -> 'ok'.
 policy_changed(Q) ->
-    Name = maps:get(name, amqqueue:get_type_state(Q)),
-    _ = rabbit_stream_coordinator:policy_changed(Name),
+    _ = rabbit_stream_coordinator:policy_changed(Q),
     ok.
 
 stat(_) ->
@@ -571,20 +570,18 @@ select_stream_nodes(Size, Rest, Selected) ->
     S = lists:nth(rand:uniform(length(Rest)), Rest),
     select_stream_nodes(Size - 1, lists:delete(S, Rest), [S | Selected]).
 
-update_stream_conf(#{reference := QName} = Conf) ->
-    case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} ->
-            MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
-            MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun max_age/2, Q)),
-            MaxSegmentSize = args_policy_lookup(<<"max-segment-size">>, fun min/2, Q),
-            Retention = lists:filter(fun({_, R}) ->
-                                             R =/= undefined
-                                     end, [{max_bytes, MaxBytes},
-                                           {max_age, MaxAge}]),
-            add_if_defined(max_segment_size, MaxSegmentSize, Conf#{retention => Retention});
-        _ ->
-            Conf
-    end.
+update_stream_conf(undefined, #{} = Conf) ->
+    Conf;
+update_stream_conf(Q, #{} = Conf) when ?is_amqqueue(Q) ->
+    MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
+    MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun max_age/2, Q)),
+    MaxSegmentSize = args_policy_lookup(<<"max-segment-size">>, fun min/2, Q),
+    Retention = lists:filter(fun({_, R}) ->
+                                     R =/= undefined
+                             end, [{max_bytes, MaxBytes},
+                                   {max_age, MaxAge}]),
+    add_if_defined(max_segment_size, MaxSegmentSize,
+                   Conf#{retention => Retention}).
 
 add_if_defined(_, undefined, Map) ->
     Map;
