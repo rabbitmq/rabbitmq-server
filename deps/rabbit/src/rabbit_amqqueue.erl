@@ -1795,7 +1795,6 @@ on_node_down(Node) ->
     ok.
 
 delete_queues_on_node_down(Node) ->
-    rabbit_log:info("delete_queues_on_node_down GAHHH", []),
     lists:unzip(lists:flatten([
         rabbit_misc:execute_mnesia_transaction(
           fun () -> [{Queue, delete_queue(Queue)} || Queue <- Queues] end
