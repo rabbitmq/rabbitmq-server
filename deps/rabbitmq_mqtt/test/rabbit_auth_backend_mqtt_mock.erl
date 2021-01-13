@@ -13,14 +13,15 @@
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
 
--export([setup/0,
+-export([setup/1,
          user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4,
          state_can_expire/0,
          get/1]).
 
-setup() ->
+setup(CallerPid) ->
     ets:new(?MODULE, [set, public, named_table]),
+    CallerPid ! ok,
     receive
         stop -> ok
     end.

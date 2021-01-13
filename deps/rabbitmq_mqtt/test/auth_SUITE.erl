@@ -396,11 +396,17 @@ client_id_propagation(Config) ->
                                                              rabbit_auth_backend_mqtt_mock),
     %% setup creates the ETS table required for the mqtt auth mock
     %% it blocks indefinitely so we need to spawn
+    Self = self(),
     _ = spawn(fun () ->
                       rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_mqtt_mock,
                                                    setup,
-                                                   [])
+                                                   [Self])
               end),
+    %% the setup process will notify us
+    receive
+        ok         -> ok
+        after 3000 -> ok
+    end,
     ClientId = <<"client-id-propagation">>,
     {ok, C} = connect_user(<<"client-id-propagation">>, <<"client-id-propagation">>,
                            Config, ClientId),
