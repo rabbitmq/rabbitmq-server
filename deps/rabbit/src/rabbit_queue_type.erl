@@ -36,7 +36,6 @@
          is_server_named_allowed/1
          ]).
 
-%% gah what is a good identity of a classic queue including all replicas
 -type queue_name() :: rabbit_types:r(queue).
 -type queue_ref() :: queue_name() | atom().
 -type queue_state() :: term().
@@ -440,6 +439,7 @@ deliver(Qs, Delivery, stateless) ->
                   end, Qs),
     {ok, stateless, []};
 deliver(Qs, Delivery, #?STATE{} = State0) ->
+    %% TODO: optimise single queue case?
     %% sort by queue type - then dispatch each group
     ByType = lists:foldl(
                fun (Q, Acc) ->
@@ -457,7 +457,7 @@ deliver(Qs, Delivery, #?STATE{} = State0) ->
                               end, {[], []}, ByType),
     State = lists:foldl(
               fun({Q, S}, Acc) ->
-                      Ctx = get_ctx(Q, Acc),
+                      Ctx = get_ctx_with(Q, Acc, S),
                       set_ctx(qref(Q), Ctx#ctx{state = S}, Acc)
               end, State0, Xs),
     return_ok(State, Actions).
@@ -511,21 +511,32 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
             Err
     end.
 
-get_ctx(Q, #?STATE{ctxs = Contexts}) when ?is_amqqueue(Q) ->
+get_ctx(QOrQref, State) ->
+    get_ctx_with(QOrQref, State, undefined).
+
+get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState)
+  when ?is_amqqueue(Q) ->
     Ref = qref(Q),
     case Contexts of
         #{Ref := #ctx{module = Mod,
                       state = State} = Ctx} ->
             Ctx#ctx{state = Mod:update(Q, State)};
-        _ ->
-            %% not found - initialize
+        _ when InitState == undefined ->
+            %% not found and no initial state passed - initialize new state
             Mod = amqqueue:get_type(Q),
             Name = amqqueue:get_name(Q),
             #ctx{module = Mod,
                  name = Name,
-                 state = Mod:init(Q)}
+                 state = Mod:init(Q)};
+        _  ->
+            %% not found - initialize with supplied initial state
+            Mod = amqqueue:get_type(Q),
+            Name = amqqueue:get_name(Q),
+            #ctx{module = Mod,
+                 name = Name,
+                 state = InitState}
     end;
-get_ctx(QRef, Contexts) when ?QREF(QRef) ->
+get_ctx_with(QRef, Contexts, undefined) when ?QREF(QRef) ->
     case get_ctx(QRef, Contexts, undefined) of
         undefined ->
             exit({queue_context_not_found, QRef});

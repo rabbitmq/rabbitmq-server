@@ -462,6 +462,8 @@ filter_per_type(all, _) ->
     true;
 filter_per_type(quorum, Q) ->
     ?amqqueue_is_quorum(Q);
+filter_per_type(stream, Q) ->
+    ?amqqueue_is_stream(Q);
 filter_per_type(classic, Q) ->
     ?amqqueue_is_classic(Q).
 
@@ -1714,10 +1716,11 @@ cancel_sync_mirrors(QPid) ->
 
 -spec is_replicated(amqqueue:amqqueue()) -> boolean().
 
-is_replicated(Q) when ?amqqueue_is_quorum(Q) ->
-    true;
-is_replicated(Q) ->
-    rabbit_mirror_queue_misc:is_mirrored(Q).
+is_replicated(Q) when ?amqqueue_is_classic(Q) ->
+    rabbit_mirror_queue_misc:is_mirrored(Q);
+is_replicated(_Q) ->
+    %% streams and quorum queues are all replicated
+    true.
 
 is_exclusive(Q) when ?amqqueue_exclusive_owner_is(Q, none) ->
     false;
