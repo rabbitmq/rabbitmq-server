@@ -167,7 +167,7 @@ policy_changed(Q) when ?is_amqqueue(Q) ->
 delete_replica(StreamId, Node) ->
     process_command({delete_replica, #{stream_id => StreamId, node => Node}}).
 
--spec register_listener(amqeueue:amqqueue()) ->
+-spec register_listener(amqqueue:amqqueue()) ->
     {error, term()} | {ok, ok, atom() | {atom(), atom()}}.
 register_listener(Q) when ?is_amqqueue(Q)->
     #{name := StreamId} = amqqueue:get_type_state(Q),
