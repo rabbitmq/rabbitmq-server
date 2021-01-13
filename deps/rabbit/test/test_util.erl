@@ -6,7 +6,7 @@
 
 
 fake_pid(Node) ->
-    NodeBin = rabbit_data_coercion:to_binary(Node),
+    NodeBin = atom_to_binary(Node),
     ThisNodeSize = size(term_to_binary(node())) + 1,
     Pid = spawn(fun () -> ok end),
     %% drop the local node data from a local pid

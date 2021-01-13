@@ -65,8 +65,10 @@
                  listening_offset = 0 :: non_neg_integer(),
                  log :: undefined | osiris_log:state()}).
 
--record(stream_client, {name :: term(),
+-record(stream_client, {stream_id :: string(),
+                        name :: term(),
                         leader :: pid(),
+                        local_pid :: undefined | pid(),
                         next_seq = 1 :: non_neg_integer(),
                         correlation = #{} :: #{appender_seq() => {msg_id(), msg()}},
                         soft_limit :: non_neg_integer(),
@@ -93,42 +95,42 @@ declare(Q0, Node) when ?amqqueue_is_stream(Q0) ->
             fun rabbit_queue_type_util:check_non_durable/1],
            Q0) of
         ok ->
-            start_cluster(Q0, Node);
+            create_stream(Q0, Node);
         Err ->
             Err
     end.
 
-start_cluster(Q0, Node) ->
+create_stream(Q0, Node) ->
     Arguments = amqqueue:get_arguments(Q0),
     QName = amqqueue:get_name(Q0),
     Opts = amqqueue:get_options(Q0),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
     Conf0 = make_stream_conf(Node, Q0),
-    case rabbit_stream_coordinator:start_cluster(
-           amqqueue:set_type_state(Q0, Conf0)) of
-        {ok, {error, already_started}, _} ->
-            {protocol_error, precondition_failed, "safe queue name already in use '~s'",
-             [Node]};
-        {ok, {created, Q}, _} ->
-            rabbit_event:notify(queue_created,
-                                [{name, QName},
-                                 {durable, true},
-                                 {auto_delete, false},
-                                 {arguments, Arguments},
-                                 {user_who_performed_action,
-                                  ActingUser}]),
-            {new, Q};
-        {ok, {error, Error}, _} ->
-            _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-            {protocol_error, internal_error, "Cannot declare a queue '~s' on node '~s': ~255p",
-             [rabbit_misc:rs(QName), node(), Error]};
-        {ok, {existing, Q}, _} ->
-            {existing, Q};
-        {error, coordinator_unavailable} ->
-            _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-            {protocol_error, internal_error,
-              "Cannot declare a queue '~s' on node '~s': coordinator unavailable",
-             [rabbit_misc:rs(QName), node()]}
+    Conf = apply_leader_locator_strategy(Conf0),
+    #{leader_node := LeaderNode} = Conf,
+    Q1 = amqqueue:set_type_state(Q0, Conf),
+    case rabbit_amqqueue:internal_declare(Q1, false) of
+        {created, Q} ->
+            case rabbit_stream_coordinator:new_stream(Q, LeaderNode) of
+                {ok, {ok, LeaderPid}, _} ->
+                    %% update record with leader pid
+                    set_leader_pid(LeaderPid, amqqueue:get_name(Q)),
+                    rabbit_event:notify(queue_created,
+                                        [{name, QName},
+                                         {durable, true},
+                                         {auto_delete, false},
+                                         {arguments, Arguments},
+                                         {user_who_performed_action,
+                                          ActingUser}]),
+                    {new, Q};
+                Error ->
+
+                    _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
+                    {protocol_error, internal_error, "Cannot declare a queue '~s' on node '~s': ~255p",
+                     [rabbit_misc:rs(QName), node(), Error]}
+            end;
+        {existing, Q} ->
+            {existing, Q}
     end.
 
 -spec delete(amqqueue:amqqueue(), boolean(),
@@ -136,8 +138,7 @@ start_cluster(Q0, Node) ->
     rabbit_types:ok(non_neg_integer()) |
     rabbit_types:error(in_use | not_empty).
 delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
-    Name = maps:get(name, amqqueue:get_type_state(Q)),
-    {ok, Reply, _} = rabbit_stream_coordinator:delete_cluster(Name, ActingUser),
+    {ok, Reply} = rabbit_stream_coordinator:delete_stream(Q, ActingUser),
     Reply.
 
 -spec purge(amqqueue:amqqueue()) ->
@@ -199,42 +200,57 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
             %% really it should be sent by the stream queue process like classic queues
             %% do
             maybe_send_reply(ChPid, OkMsg),
-            QState = begin_stream(QState0, Q, ConsumerTag, Offset,
-                                  ConsumerPrefetchCount),
-            {ok, QState, []};
+            begin_stream(QState0, Q, ConsumerTag, Offset, ConsumerPrefetchCount);
         Err ->
             Err
     end.
 
-get_local_pid(#{leader_pid := Pid}) when node(Pid) == node() ->
-    Pid;
-get_local_pid(#{replica_pids := ReplicaPids}) ->
-    [Local | _] = lists:filter(fun(Pid) ->
-                                       node(Pid) == node()
-                               end, ReplicaPids),
-    Local.
+get_local_pid(#stream_client{local_pid = Pid} = State)
+  when is_pid(Pid) ->
+    {Pid, State};
+get_local_pid(#stream_client{leader = Pid} = State)
+  when is_pid(Pid) andalso node(Pid) == node() ->
+    {Pid, State#stream_client{local_pid = Pid}};
+get_local_pid(#stream_client{stream_id = StreamId,
+                             local_pid = undefined} = State) ->
+    %% query local coordinator to get pid
+    case rabbit_stream_coordinator:local_pid(StreamId) of
+        {ok, Pid} ->
+            {Pid, State#stream_client{local_pid = Pid}};
+        {error, not_found} ->
+            {undefined, State}
+    end.
 
-begin_stream(#stream_client{readers = Readers0} = State,
+begin_stream(#stream_client{readers = Readers0} = State0,
              Q, Tag, Offset, Max) ->
-    LocalPid = get_local_pid(amqqueue:get_type_state(Q)),
-    {ok, Seg0} = osiris:init_reader(LocalPid, Offset),
-    NextOffset = osiris_log:next_offset(Seg0) - 1,
-    osiris:register_offset_listener(LocalPid, NextOffset),
-    %% TODO: avoid double calls to the same process
-    StartOffset = case Offset of
-                      first -> NextOffset;
-                      last -> NextOffset;
-                      next -> NextOffset;
-                      {timestamp, _} -> NextOffset;
-                      _ -> Offset
-                  end,
-    Str0 = #stream{name = amqqueue:get_name(Q),
-                   credit = Max,
-                   start_offset = StartOffset,
-                   listening_offset = NextOffset,
-                   log = Seg0,
-                   max = Max},
-    State#stream_client{readers = Readers0#{Tag => Str0}}.
+    {LocalPid, State} = get_local_pid(State0),
+    case LocalPid of
+        undefined ->
+            {error, no_local_stream_replica_available};
+        _ ->
+
+            {ok, Seg0} = osiris:init_reader(LocalPid, Offset),
+            NextOffset = osiris_log:next_offset(Seg0) - 1,
+            osiris:register_offset_listener(LocalPid, NextOffset),
+            %% TODO: avoid double calls to the same process
+            StartOffset = case Offset of
+                              first -> NextOffset;
+                              last -> NextOffset;
+                              next -> NextOffset;
+                              {timestamp, _} -> NextOffset;
+                              _ -> Offset
+                          end,
+            Str0 = #stream{name = amqqueue:get_name(Q),
+                           credit = Max,
+                           start_offset = StartOffset,
+                           listening_offset = NextOffset,
+                           log = Seg0,
+                           max = Max},
+            Actions = [],
+            %% TODO: we need to monitor the local pid in case the stream is
+            %% restarted
+            {ok, State#stream_client{readers = Readers0#{Tag => Str0}}, Actions}
+    end.
 
 cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,
                                                           name = QName} = State) ->
@@ -326,6 +342,7 @@ handle_event({osiris_written, From, _WriterId, Corrs},
                           fun (_Seq, {I, _M}, Acc) ->
                                   [I | Acc]
                           end, [], maps:with(Corrs, Correlation0))),
+
     Correlation = maps:without(Corrs, Correlation0),
     Slow = case maps:size(Correlation) < SftLmt of
                true when Slow0 ->
@@ -401,10 +418,13 @@ i(durable,     Q) when ?is_amqqueue(Q) -> amqqueue:is_durable(Q);
 i(auto_delete, Q) when ?is_amqqueue(Q) -> amqqueue:is_auto_delete(Q);
 i(arguments,   Q) when ?is_amqqueue(Q) -> amqqueue:get_arguments(Q);
 i(leader, Q) when ?is_amqqueue(Q) ->
-    #{leader_node := Leader} = amqqueue:get_type_state(Q),
-    Leader;
+    case amqqueue:get_pid(Q) of
+        none ->
+            undefined;
+        Pid -> node(Pid)
+    end;
 i(members, Q) when ?is_amqqueue(Q) ->
-    #{replica_nodes := Nodes} = amqqueue:get_type_state(Q),
+    #{nodes := Nodes} = amqqueue:get_type_state(Q),
     Nodes;
 i(online, Q) ->
     #{replica_pids := ReplicaPids,
@@ -464,11 +484,14 @@ i(_, _) ->
 
 init(Q) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
+    #{name := StreamId} = amqqueue:get_type_state(Q),
+    %% tell us about leader changes so we can fail over
     {ok, ok, _} = rabbit_stream_coordinator:register_listener(Q),
     Prefix = erlang:pid_to_list(self()) ++ "_",
     WriterId = rabbit_guid:binary(rabbit_guid:gen(), Prefix),
     {ok, SoftLimit} = application:get_env(rabbit, stream_messages_soft_limit),
-    #stream_client{name = amqqueue:get_name(Q),
+    #stream_client{stream_id = StreamId,
+                   name = amqqueue:get_name(Q),
                    leader = Leader,
                    writer_id = WriterId,
                    soft_limit = SoftLimit}.
@@ -487,6 +510,7 @@ update(Q, State)
 update_leader_pid(Pid, #stream_client{leader = Pid} =  State) ->
     State;
 update_leader_pid(Pid, #stream_client{} =  State) ->
+    rabbit_log:debug("stream client: new leader detected ~w", [Pid]),
     resend_all(State#stream_client{leader = Pid}).
 
 state_info(_) ->
@@ -553,16 +577,18 @@ delete_replica(VHost, Name, Node) ->
 
 make_stream_conf(Node, Q) ->
     QName = amqqueue:get_name(Q),
-    Name = queue_name(QName),
+    Name = stream_name(QName),
     %% MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
     MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun max_age/2, Q)),
     MaxSegmentSize = args_policy_lookup(<<"max-segment-size">>, fun min/2, Q),
     LeaderLocator = queue_leader_locator(args_policy_lookup(<<"queue-leader-locator">>,
                                                             fun res_arg/2, Q)),
-    InitialClusterSize = initial_cluster_size(args_policy_lookup(<<"initial-cluster-size">>,
-                                                                 fun res_arg/2, Q)),
+    InitialClusterSize = initial_cluster_size(
+                           args_policy_lookup(<<"initial-cluster-size">>,
+                                              fun res_arg/2, Q)),
     Replicas0 = rabbit_mnesia:cluster_nodes(all) -- [Node],
+    %% TODO: try to avoid nodes that are not connected
     Replicas = select_stream_nodes(InitialClusterSize - 1, Replicas0),
     Formatter = {?MODULE, format_osiris_event, [QName]},
     Retention = lists:filter(fun({_, R}) ->
@@ -572,6 +598,7 @@ make_stream_conf(Node, Q) ->
     add_if_defined(max_segment_size, MaxSegmentSize, #{reference => QName,
                                                        name => Name,
                                                        retention => Retention,
+                                                       nodes => [Node | Replicas],
                                                        leader_locator_strategy => LeaderLocator,
                                                        leader_node => Node,
                                                        replica_nodes => Replicas,
@@ -637,7 +664,7 @@ initial_cluster_size(Val) ->
 res_arg(PolVal, undefined) -> PolVal;
 res_arg(_, ArgVal) ->  ArgVal.
 
-queue_name(#resource{virtual_host = VHost, name = Name}) ->
+stream_name(#resource{virtual_host = VHost, name = Name}) ->
     Timestamp = erlang:integer_to_binary(erlang:system_time()),
     osiris_util:to_base64uri(erlang:binary_to_list(<<VHost/binary, "_", Name/binary, "_",
                                                      Timestamp/binary>>)).
@@ -648,7 +675,8 @@ recover(Q) ->
 
 check_queue_exists_in_local_node(Q) ->
     Conf = amqqueue:get_type_state(Q),
-    AllNodes = [maps:get(leader_node, Conf) | maps:get(replica_nodes, Conf)],
+    AllNodes = [maps:get(leader_node, Conf) |
+                maps:get(replica_nodes, Conf)],
     case lists:member(node(), AllNodes) of
         true ->
             ok;
@@ -682,6 +710,9 @@ stream_entries(Name, LeaderPid,
                 false ->
                     {Str0#stream{log = Seg}, MsgIn}
             end;
+        {error, Err} ->
+            rabbit_log:debug("stream client: error reading chunk ~w", [Err]),
+            exit(Err);
         {Records, Seg} ->
             Msgs = [begin
                         Msg0 = binary_to_msg(QName, B),
@@ -770,7 +801,75 @@ resend_all(#stream_client{leader = LeaderPid,
                           writer_id = WriterId,
                           correlation = Corrs} = State) ->
     Msgs = lists:sort(maps:values(Corrs)),
+    case Msgs of
+        [] -> ok;
+        [{Seq, _} | _] ->
+            rabbit_log:debug("stream client: resending from seq ~w num ~b",
+                             [Seq, maps:size(Corrs)])
+    end,
     [begin
          ok = osiris:write(LeaderPid, WriterId, Seq, msg_to_iodata(Msg))
      end || {Seq, Msg} <- Msgs],
     State.
+
+set_leader_pid(Pid, QName) ->
+    Fun = fun (Q) ->
+                  amqqueue:set_pid(Q, Pid)
+          end,
+    case rabbit_misc:execute_mnesia_transaction(
+           fun() ->
+                   rabbit_amqqueue:update(QName, Fun)
+           end) of
+        not_found ->
+            %% This can happen during recovery
+            [Q] = mnesia:dirty_read(rabbit_durable_queue, QName),
+            rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q));
+        _ ->
+            ok
+    end.
+
+apply_leader_locator_strategy(#{leader_locator_strategy := <<"client-local">>} = Conf) ->
+    Conf;
+apply_leader_locator_strategy(#{leader_node := Leader,
+                                replica_nodes := Replicas0,
+                                leader_locator_strategy := <<"random">>,
+                                name := StreamId} = Conf) ->
+    Replicas = [Leader | Replicas0],
+    ClusterSize = length(Replicas),
+    Hash = erlang:phash2(StreamId),
+    Pos = (Hash rem ClusterSize) + 1,
+    NewLeader = lists:nth(Pos, Replicas),
+    NewReplicas = lists:delete(NewLeader, Replicas),
+    Conf#{leader_node => NewLeader,
+          replica_nodes => NewReplicas};
+apply_leader_locator_strategy(#{leader_node := Leader,
+                                replica_nodes := Replicas0,
+                                leader_locator_strategy := <<"least-leaders">>} = Conf) ->
+    Replicas = [Leader | Replicas0],
+    Counters0 = maps:from_list([{R, 0} || R <- Replicas]),
+    Counters = maps:to_list(
+                 lists:foldl(fun(Q, Acc) ->
+                                     P = amqqueue:get_pid(Q),
+                                     case amqqueue:get_type(Q) of
+                                         ?MODULE when is_pid(P) ->
+                                             maps:update_with(node(P), fun(V) -> V + 1 end, 1, Acc);
+                                         _ ->
+                                             Acc
+                                     end
+                             end, Counters0, rabbit_amqqueue:list())),
+    Ordered = lists:sort(fun({_, V1}, {_, V2}) ->
+                                 V1 =< V2
+                         end, Counters),
+    %% We could have potentially introduced nodes that are not in the list of replicas if
+    %% initial cluster size is smaller than the cluster size. Let's select the first one
+    %% that is on the list of replicas
+    NewLeader = select_first_matching_node(Ordered, Replicas),
+    NewReplicas = lists:delete(NewLeader, Replicas),
+    Conf#{leader_node => NewLeader,
+          replica_nodes => NewReplicas}.
+
+select_first_matching_node([{N, _} | Rest], Replicas) ->
+    case lists:member(N, Replicas) of
+        true -> N;
+        false -> select_first_matching_node(Rest, Replicas)
+    end.

@@ -1786,6 +1786,8 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
             E;
         {{error, global_qos_not_supported_for_queue_type} = E, _Q} ->
             E;
+        {{error, no_local_stream_replica_available} = E, _Q} ->
+            E;
         {{protocol_error, Type, Reason, ReasonArgs}, _Q} ->
             rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
     end.

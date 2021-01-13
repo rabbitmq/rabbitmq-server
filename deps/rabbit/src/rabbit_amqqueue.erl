@@ -1157,7 +1157,9 @@ list_local_mirrored_classic_without_synchronised_mirrors_for_cli() ->
 is_local_to_node(QPid, Node) when ?IS_CLASSIC(QPid) ->
     Node =:= node(QPid);
 is_local_to_node({_, Leader} = QPid, Node) when ?IS_QUORUM(QPid) ->
-    Node =:= Leader.
+    Node =:= Leader;
+is_local_to_node(_QPid, _Node) ->
+    false.
 
 -spec list(rabbit_types:vhost()) -> [amqqueue:amqqueue()].
 
