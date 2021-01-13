@@ -456,7 +456,7 @@ apply(_Meta, {down, Pid, _Reason} = Cmd, #?MODULE{streams = Streams,
                                            streams = Streams#{StreamId => SState}},
                              ok, Events ++ [{aux, {phase, StreamId, Phase, PhaseArgs}}]};
                         follower ->
-                            case rabbit_misc:is_process_alive(maps:get(leader_pid, Conf0)) of
+                            case maps:is_key(maps:get(leader_pid, Conf0), Monitors) of
                                 true ->
                                     Phase = phase_start_replica,
                                     PhaseArgs = [node(Pid), Conf0, 1],
@@ -466,11 +466,13 @@ apply(_Meta, {down, Pid, _Reason} = Cmd, #?MODULE{streams = Streams,
                                                                  SState0),
                                     rabbit_log:debug("rabbit_stream_coordinator: ~p replica on node ~p is down, entering ~p", [StreamId, node(Pid), Phase]),
                                     {State#?MODULE{monitors = Monitors,
-                                                           streams = Streams#{StreamId => SState}},
+                                                   streams = Streams#{StreamId => SState}},
                                              ok, [{aux, {phase, StreamId, Phase, PhaseArgs}}]};
                                 false ->
                                     SState = SState0#{pending_cmds => Pending0 ++ [Cmd]},
-                                    reply_and_run_pending(undefined, StreamId, ok, ok, [], State#?MODULE{streams = Streams#{StreamId => SState}})
+                                    reply_and_run_pending(undefined, StreamId, ok, ok, [],
+                                                          State#?MODULE{monitors = Monitors,
+                                                                        streams = Streams#{StreamId => SState}})
                             end
                     end;
                 #{pending_cmds := Pending0} = SState0 ->
