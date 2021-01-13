@@ -309,7 +309,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/connections</td>
-        <td>A list of all open connections.</td>
+        <td>A list of all open connections. Use <a href="#pagination">pagination parameters</a> to filter connections.</td>
       </tr>
       <tr>
         <td>X</td>
@@ -317,7 +317,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/vhosts/<i>vhost</i>/connections</td>
-        <td>A list of all open connections in a specific vhost.</td>
+        <td>A list of all open connections in a specific virtual host. Use <a href="#pagination">pagination parameters</a> to filter connections.</td>
       </tr>
       <tr>
         <td>X</td>
@@ -347,7 +347,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/channels</td>
-        <td>A list of all open channels.</td>
+        <td>A list of all open channels. Use <a href="#pagination">pagination parameters</a> to filter channels.</td>
       </tr>
       <tr>
         <td>X</td>
@@ -355,7 +355,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/vhosts/<i>vhost</i>/channels</td>
-        <td>A list of all open channels in a specific vhost.</td>
+        <td>A list of all open channels in a specific virtual host. Use <a href="#pagination">pagination parameters</a> to filter channels.</td>
       </tr>
       <tr>
         <td>X</td>
@@ -387,7 +387,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/exchanges</td>
-        <td>A list of all exchanges.</td>
+        <td>A list of all exchanges. Use <a href="#pagination">pagination parameters</a> to filter exchanges.</td>
       </tr>
       <tr>
         <td>X</td>
@@ -395,7 +395,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/exchanges/<i>vhost</i></td>
-        <td>A list of all exchanges in a given virtual host.</td>
+        <td>A list of all exchanges in a given virtual host. Use <a href="#pagination">pagination parameters</a> to filter exchanges.</td>
       </tr>
       <tr>
         <td>X</td>
@@ -466,7 +466,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/queues</td>
-        <td>A list of all queues.</td>
+        <td>A list of all queues. Use <a href="#pagination">pagination parameters</a> to filter queues.</td>
       </tr>
       <tr>
         <td>X</td>
@@ -474,7 +474,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/queues/<i>vhost</i></td>
-        <td>A list of all queues in a given virtual host.</td>
+        <td>A list of all queues in a given virtual host. Use <a href="#pagination">pagination parameters</a> to filter queues.</td>
       </tr>
       <tr>
         <td>X</td>
@@ -2089,5 +2089,90 @@ or:
         </td>
       </tr>
     </table>
+
+    <section id="pagination">
+      <h2> Pagination Parameters</h2>
+
+      The pagination can be applied to the endpoints that list
+
+      <ul>
+        <li>
+          queues
+        </li>
+        <li>
+          exchanges
+        </li>
+        <li>
+          connections
+        </li>
+        <li>
+          channels
+        </li>
+      </ul>
+
+      <p>
+        Below are the query parameters that can be used.
+
+        <table>
+          <thead>
+            <tr>Parameter Name</tr>
+            <tr>Data Type</tr>
+            <tr>Description</tr>
+          </thead>
+          <tr>
+            <td><code>page</code></td>
+            <td>Positive integer</td>
+            <td>
+              Page number
+            </td>
+          </tr>
+          <tr>
+            <td><code>page_size</code></td>
+            <td>Positive integer</td>
+            <td>
+              Number of elements for page (default value: 100)
+            </td>
+          </tr>
+          <tr>
+            <td><code>name</code></td>
+            <td>String</td>
+            <td>
+              Filter by name, for example queue name, exchange name etc..
+            </td>
+          </tr>
+          <tr>
+            <td><code>use_regex</code></td>
+            <td>Boolean</td>
+            <td>
+              Enables regular expression for the param name
+            </td>
+          </tr>
+        </table>
+      </p>
+
+      <p>
+        Examples:
+        <table>
+          <tr>
+            <td><code>http://localhost:15672/api/queues?page=1&page_size=50</code></td>
+            <td>
+              Fetches the first queue page with 50 elements
+            </td>
+          </tr>
+          <tr>
+            <td><code>http://localhost:15672/api/queues/my-vhost?page=1&page_size=100&name=&use_regex=false&pagination=true</code></td>
+            <td>
+              Filter the first queues page for the virtual host "my-vhost"
+            </td>
+          </tr>
+          <tr>
+            <td><code>http://localhost:15672/api/exchanges?page=1&page_size=100&name=%5Eamq&use_regex=true&pagination=true</code></td>
+            <td>
+              Filter the first exchanges page, 100 elements, with named filtered using the regular expression "^amq"
+            </td>
+          </tr>
+        </table>
+      </p>
+    </section>
   </body>
 </html>
