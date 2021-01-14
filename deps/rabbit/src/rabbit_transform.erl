@@ -222,7 +222,7 @@ add_delivery_count_to_classic_queue_index(Nodes) ->
                 [rpc:call(N, rabbit_queue_index, add_delivery_count, [],
                     rabbit_transform:get_queue_index_transform_timeout())
                   || N <- Nodes],
-            case lists:delete(ok, Results) of
+            case lists:delete(ok, lists:usort(Results)) of
                 []     -> ok;
                 Errors -> Errors
             end;
