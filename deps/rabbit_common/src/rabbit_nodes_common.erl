@@ -28,6 +28,9 @@
 
 -spec names(string()) ->
           rabbit_types:ok_or_error2([{string(), integer()}], term()).
+-spec epmd_names(string()) ->
+  rabbit_types:ok_or_error2([{string(), integer()}], term()).
+
 -spec diagnostics([node()]) -> string().
 -spec cookie_hash() -> string().
 
@@ -41,7 +44,7 @@
 %% In K8s for example *.nodes.default needs some second.
 
 names(Hostname) ->
-  names(Hostname, 10).
+  names(Hostname, ?EPMD_ATTEMPT).
 
 names(Hostname, 0) ->
   epmd_names(Hostname);
@@ -49,7 +52,7 @@ names(Hostname, Attempt) ->
   case catch epmd_names(Hostname) of
     {ok, R } -> {ok, R };
     {error, _} ->
-      names(Attempt - 1)
+      names(Hostname, Attempt - 1)
   end.
 
 epmd_names(Hostname) ->
