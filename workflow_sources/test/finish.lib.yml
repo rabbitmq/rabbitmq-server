@@ -9,50 +9,6 @@
 #@ end
 
 #@ def finish_jobs(prepare_jobs_names, erlang_version=None):
-package-generic-unix:
-  name: package-generic-unix
-  needs: [prepare]
-  runs-on: ubuntu-18.04
-  if: #@ skip_ci_condition()
-  #@yaml/text-templated-strings
-  steps:
-    - name: RECORD STEP START
-      id: buildevents
-      run: |
-        echo "::set-output name=step_start::$(date +%s)"
-    - uses: actions/cache@v2
-      with:
-        key: #@ ci_image_tag(erlang_version)
-        path: ci.tar
-    - name: LOAD CI DOCKER IMAGE FROM CACHE
-      run: |
-        docker load --input ci.tar
-    - name: PACKAGE GENERIC UNIX
-      run: |
-        mkdir PACKAGES && chmod 777 PACKAGES
-        docker run \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume ${PWD}/PACKAGES:/workspace/rabbitmq/PACKAGES \
-          (@= ci_image(erlang_version) @) \
-          ci/scripts/package_generic_unix.sh
-    - name: UPLOAD GENERIC UNIX PACKAGE ARTIFACT
-      #! https://github.com/marketplace/actions/upload-artifact
-      uses: actions/upload-artifact@v2-preview
-      with:
-        name: rabbitmq-server-generic-unix.tar.xz
-        path: "PACKAGES/rabbitmq-server-generic-unix-*.tar.xz"
-    - name: RECORD STEP FINISH
-      if: always()
-      run: |
-        docker run \
-          --env project=packaging \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          (@= ci_image(erlang_version) @) \
-          ci/scripts/collect.sh
 finish:
   name: finish
   needs: #@ prepare_jobs_names + [dep.name for dep in data.values.deps if not getattr(dep, "skip_tests", False)] + ['package-generic-unix']
