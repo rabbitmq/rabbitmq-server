@@ -1738,12 +1738,13 @@ collect_by_predicate(Pred, QAcc, State) ->
 %%----------------------------------------------------------------------------
 
 transform(message_properties, _Vsn = message_properties_v2, _Opts, Fun,
-          State = #vqstate{q1 = Q1, q2 = Q2, q3 = Q3, q4 = Q4}) ->
+          State = #vqstate{q1 = Q1, q2 = Q2, q3 = Q3, q4 = Q4, index_state = IndexState}) ->
     NQ1 = transform_internal_queue(Q1, Fun),
     NQ2 = transform_internal_queue(Q2, Fun),
     NQ3 = transform_internal_queue(Q3, Fun),
     NQ4 = transform_internal_queue(Q4, Fun),
-    State#vqstate{q1 = NQ1, q2 = NQ2, q3 = NQ3, q4 = NQ4};
+    State#vqstate{q1 = NQ1, q2 = NQ2, q3 = NQ3, q4 = NQ4,
+                  index_state = rabbit_queue_index:flush(IndexState)};
 
 transform(Transform, Vsn, _Opts, _Fun, _State) ->
     throw({unsupported_transform, {Transform, Vsn}}).
