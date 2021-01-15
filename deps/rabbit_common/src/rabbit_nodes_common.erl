@@ -7,8 +7,8 @@
 
 -module(rabbit_nodes_common).
 
--define(EPMD_TIMEOUT, 6000).
--define(EPMD_ATTEMPT, 10).
+-define(EPMD_OPERATION_TIMEOUT, 6000).
+-define(NAME_LOOKUP_ATTEMPTS, 10).
 -define(TCP_DIAGNOSTIC_TIMEOUT, 5000).
 -define(ERROR_LOGGER_HANDLER, rabbit_error_logger_handler).
 
@@ -44,17 +44,17 @@
 %% In K8s for example *.nodes.default needs some second.
 
 names(Hostname) ->
-  names(Hostname, ?EPMD_ATTEMPT).
+  names(Hostname, ?NAME_LOOKUP_ATTEMPTS).
 
 names(Hostname, 0) ->
   epmd_names(Hostname);
-names(Hostname, Attempt) ->
-  rabbit_log:info("Getting the epmd names for ~s hostname, ~b retries left",
-    [Hostname, Attempt]),
+names(Hostname, RetriesLeft) ->
+  rabbit_log:debug("Getting epmd names for hostname '~s', ~b retries left",
+    [Hostname, RetriesLeft]),
   case catch epmd_names(Hostname) of
-    {ok, R } -> {ok, R };
+    {ok, R } -> {ok, R};
     {error, _} ->
-      names(Hostname, Attempt - 1)
+      names(Hostname, RetriesLeft - 1)
   end.
 
 epmd_names(Hostname) ->
@@ -62,7 +62,7 @@ epmd_names(Hostname) ->
     Ref = make_ref(),
     {Pid, MRef} = spawn_monitor(
                     fun () -> Self ! {Ref, net_adm:names(Hostname)} end),
-    _ = timer:exit_after(?EPMD_TIMEOUT, Pid, timeout),
+    _ = timer:exit_after(?EPMD_OPERATION_TIMEOUT, Pid, timeout),
     receive
         {Ref, Names}                         -> erlang:demonitor(MRef, [flush]),
                                                 Names;
