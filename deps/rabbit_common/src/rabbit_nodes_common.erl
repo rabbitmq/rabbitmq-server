@@ -7,7 +7,8 @@
 
 -module(rabbit_nodes_common).
 
--define(EPMD_TIMEOUT, 30000).
+-define(EPMD_TIMEOUT, 6000).
+-define(EPMD_ATTEMPT, 10).
 -define(TCP_DIAGNOSTIC_TIMEOUT, 5000).
 -define(ERROR_LOGGER_HANDLER, rabbit_error_logger_handler).
 
@@ -36,7 +37,22 @@
 %% Therefore we disable this specific warning.
 -dialyzer({nowarn_function, diagnostics_node/1}).
 
+%% In same case the hostname resolution can take a moment.
+%% In K8s for example *.nodes.default needs some second.
+
 names(Hostname) ->
+  names(Hostname, 10).
+
+names(Hostname, 0) ->
+  epmd_names(Hostname);
+names(Hostname, Attempt) ->
+  case catch epmd_names(Hostname) of
+    {ok, R } -> {ok, R };
+    {error, _} ->
+      names(Attempt - 1)
+  end.
+
+epmd_names(Hostname) ->
     Self = self(),
     Ref = make_ref(),
     {Pid, MRef} = spawn_monitor(
