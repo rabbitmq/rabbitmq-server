@@ -49,6 +49,8 @@ names(Hostname) ->
 names(Hostname, 0) ->
   epmd_names(Hostname);
 names(Hostname, Attempt) ->
+  rabbit_log:info("Getting the epmd names for ~s hostname, ~b retries left",
+    [Hostname, Attempt]),
   case catch epmd_names(Hostname) of
     {ok, R } -> {ok, R };
     {error, _} ->
