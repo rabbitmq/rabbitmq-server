@@ -11,7 +11,7 @@
 #@ def finish_jobs(prepare_jobs_names, erlang_version=None):
 finish:
   name: finish
-  needs: #@ prepare_jobs_names + [dep.name for dep in data.values.deps if not getattr(dep, "skip_tests", False)] + ['package-generic-unix']
+  needs: #@ prepare_jobs_names + [dep.name for dep in data.values.deps if not getattr(dep, "skip_tests", False)]
   runs-on: ubuntu-18.04
   #! See https://docs.github.com/en/free-pro-team@latest/actions/reference/context-and-expression-syntax-for-github-actions#job-status-check-functions
   #! as to why '(success() || failure())' is needed
