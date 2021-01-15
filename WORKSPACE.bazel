@@ -53,8 +53,9 @@ github_bazel_erlang_lib(
 github_bazel_erlang_lib(
     name = "goldrush",
     org = "DeadZen",
-    version = "0.1.9",
-    sha256 = "c04fc2f1f66abc167db8589640500da06cda9f0b92f1481bff59d41edbc45fe2",
+    version = "0.2.0",
+    tag = "0.2.0",
+    sha256 = "9e82214dea7909f9068ae15ee1fbb13ccc622a4bb2b7cdb2c87b5dd8f9be3a6d",
 )
 
 github_bazel_erlang_lib(
@@ -120,6 +121,7 @@ github_bazel_erlang_lib(
     name = "recon",
     org = "ferd",
     version = "2.5.1",
+    tag = "2.5.1",
     sha256 = "299701100e0e9f3845cf9a02d51b7c554b40342e014df2b8de7a465f5599d3af",
 )
 

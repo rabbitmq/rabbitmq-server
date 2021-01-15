@@ -34,5 +34,21 @@ jobs:
     - name: RUN TESTS
       run: |
         ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-        "${GITHUB_WORKSPACE}/bin/bazel" test deps/rabbit_common:all \
-          --//bazel_erlang:erlang_home=${ERLANG_HOME}
+        ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+        "${GITHUB_WORKSPACE}/bin/bazel" test //... \
+          --//bazel_erlang:erlang_home=${ERLANG_HOME} \
+          --//bazel_erlang:elixir_home=${ELIXIR_HOME} \
+          --//bazel_erlang:mix_archives=/home/runner/.mix/archives \
+          --test_verbose_timeout_warnings \
+          --verbose_failures
+    - name: RESOVLE TESTLOGS
+      id: resolve_logs
+      if: success() || failure()
+      run: |
+        echo "::set-output name=dir::$(readlink -f bazel-testlogs)"
+    - name: CAPTURE LOGS
+      uses: actions/upload-artifact@v2
+      if: success() || failure()
+      with:
+        name: bazel-testlogs
+        path: ${{ steps.resolve_logs.outputs.dir }}

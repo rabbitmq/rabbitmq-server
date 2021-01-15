@@ -21,9 +21,9 @@ def _impl(ctx):
         ["-pa {}".format(ebin_dir(dep)) for dep in ctx.attr.deps]
     )
 
-    script = """set -euxo pipefail
-    pwd
-    /usr/local/bin/tree
+    script = """set -euo pipefail
+    # pwd
+    # /usr/local/bin/tree
     exec env HOME=${{TEST_TMPDIR}} ct_run \\
         -no_auto_compile \\
         -noinput \\
