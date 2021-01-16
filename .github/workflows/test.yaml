@@ -33,6 +33,7 @@ jobs:
         chmod +x "${GITHUB_WORKSPACE}/bin/bazel"
     - name: RUN TESTS
       run: |
+        echo "${{ secrets.BAZELRC_CONTENTS }}" > .bazelrc
         ERLANG_HOME="$(dirname $(dirname $(which erl)))"
         ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
         "${GITHUB_WORKSPACE}/bin/bazel" test //... \
