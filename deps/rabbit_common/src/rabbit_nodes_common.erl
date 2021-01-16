@@ -53,6 +53,8 @@ names(Hostname, RetriesLeft) ->
     [Hostname, RetriesLeft]),
   case catch epmd_names(Hostname) of
     {ok, R } -> {ok, R};
+    noport ->
+      names(Hostname, RetriesLeft - 1);
     {error, _} ->
       names(Hostname, RetriesLeft - 1)
   end.
