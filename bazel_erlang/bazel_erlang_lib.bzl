@@ -239,6 +239,7 @@ bazel_erlang_lib = rule(
         "priv": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "erlc_opts": attr.string_list(),
+        "_erlang_version": attr.label(default = ":erlang_version"),
         "_erlang_home": attr.label(default = ":erlang_home"),
         "_app_file_template": attr.label(
             default = Label("//bazel_erlang:app_file.template"),

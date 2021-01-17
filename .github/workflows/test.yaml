@@ -37,6 +37,7 @@ jobs:
         ERLANG_HOME="$(dirname $(dirname $(which erl)))"
         ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
         "${GITHUB_WORKSPACE}/bin/bazel" test //... \
+          --//bazel_erlang:erlang_version=${{ matrix.erlang_version }} \
           --//bazel_erlang:erlang_home=${ERLANG_HOME} \
           --//bazel_erlang:elixir_home=${ELIXIR_HOME} \
           --//bazel_erlang:mix_archives=/home/runner/.mix/archives \

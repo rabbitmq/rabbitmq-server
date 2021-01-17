@@ -1,3 +1,4 @@
+load("erlang_version.bzl", "erlang_version")
 load("erlang_home.bzl", "erlang_home")
 load("elixir_home.bzl", "elixir_home", "mix_archives")
 
@@ -5,6 +6,12 @@ exports_files([
     "app_file.template",
     "app_with_mod_file.template",
 ])
+
+erlang_version(
+    name = "erlang_version",
+    build_setting_default = "23.1",
+    visibility = ["//visibility:public"],
+)
 
 # This allows us to
 # `bazel build //my/target \

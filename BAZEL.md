@@ -5,6 +5,7 @@
 Additionally, create a `.bazelrc` file with at least:
 
 ```
+build --//bazel_erlang:erlang_version=ERLANG_VERSION
 build --//bazel_erlang:erlang_home=/path/to/erlang/installation
 build --//bazel_erlang:elixir_home=/path/to/elixir/installation
 build --//bazel_erlang:mix_archives=~/.mix/archives
