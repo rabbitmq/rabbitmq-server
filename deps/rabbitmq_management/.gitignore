@@ -22,14 +22,6 @@ MnesiaCore.*
 rabbitmq_management.d
 .rabbitmq_management.plt
 
-# Common Test
-ct_run*
-all_runs.html
-index.html
-ct_default.css
-ct_log_cache
-variables-ct*
-
 *.coverdata
 
 test/config_schema_SUITE_data/schema/

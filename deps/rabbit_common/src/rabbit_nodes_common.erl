@@ -7,7 +7,8 @@
 
 -module(rabbit_nodes_common).
 
--define(EPMD_TIMEOUT, 30000).
+-define(EPMD_OPERATION_TIMEOUT, 6000).
+-define(NAME_LOOKUP_ATTEMPTS, 10).
 -define(TCP_DIAGNOSTIC_TIMEOUT, 5000).
 -define(ERROR_LOGGER_HANDLER, rabbit_error_logger_handler).
 
@@ -27,6 +28,9 @@
 
 -spec names(string()) ->
           rabbit_types:ok_or_error2([{string(), integer()}], term()).
+-spec epmd_names(string()) ->
+  rabbit_types:ok_or_error2([{string(), integer()}], term()).
+
 -spec diagnostics([node()]) -> string().
 -spec cookie_hash() -> string().
 
@@ -36,12 +40,31 @@
 %% Therefore we disable this specific warning.
 -dialyzer({nowarn_function, diagnostics_node/1}).
 
+%% In same case the hostname resolution can take a moment.
+%% In K8s for example *.nodes.default needs some second.
+
 names(Hostname) ->
+  names(Hostname, ?NAME_LOOKUP_ATTEMPTS).
+
+names(Hostname, 0) ->
+  epmd_names(Hostname);
+names(Hostname, RetriesLeft) ->
+  rabbit_log:debug("Getting epmd names for hostname '~s', ~b retries left",
+    [Hostname, RetriesLeft]),
+  case catch epmd_names(Hostname) of
+    {ok, R } -> {ok, R};
+    noport ->
+      names(Hostname, RetriesLeft - 1);
+    {error, _} ->
+      names(Hostname, RetriesLeft - 1)
+  end.
+
+epmd_names(Hostname) ->
     Self = self(),
     Ref = make_ref(),
     {Pid, MRef} = spawn_monitor(
                     fun () -> Self ! {Ref, net_adm:names(Hostname)} end),
-    _ = timer:exit_after(?EPMD_TIMEOUT, Pid, timeout),
+    _ = timer:exit_after(?EPMD_OPERATION_TIMEOUT, Pid, timeout),
     receive
         {Ref, Names}                         -> erlang:demonitor(MRef, [flush]),
                                                 Names;

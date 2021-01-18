@@ -9000,49 +9000,6 @@ jobs:
       with:
         name: rabbitmq_web_stomp_examples-ct-logs
         path: ct-logs/*-ct-logs-*.tar.xz
-  package-generic-unix:
-    name: package-generic-unix
-    needs:
-    - prepare
-    runs-on: ubuntu-18.04
-    if: '!contains(github.event.head_commit.message, ''[ci skip]'')'
-    steps:
-    - name: RECORD STEP START
-      id: buildevents
-      run: |
-        echo "::set-output name=step_start::$(date +%s)"
-    - uses: actions/cache@v2
-      with:
-        key: erlang-22.3-rabbitmq-${{ github.sha }}
-        path: ci.tar
-    - name: LOAD CI DOCKER IMAGE FROM CACHE
-      run: |
-        docker load --input ci.tar
-    - name: PACKAGE GENERIC UNIX
-      run: |
-        mkdir PACKAGES && chmod 777 PACKAGES
-        docker run \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          --volume ${PWD}/PACKAGES:/workspace/rabbitmq/PACKAGES \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
-          ci/scripts/package_generic_unix.sh
-    - name: UPLOAD GENERIC UNIX PACKAGE ARTIFACT
-      uses: actions/upload-artifact@v2-preview
-      with:
-        name: rabbitmq-server-generic-unix.tar.xz
-        path: PACKAGES/rabbitmq-server-generic-unix-*.tar.xz
-    - name: RECORD STEP FINISH
-      if: always()
-      run: |
-        docker run \
-          --env project=packaging \
-          --env GITHUB_RUN_ID=${{ github.run_id }} \
-          --env BUILDEVENT_APIKEY=${{ secrets.HONEYCOMB_API_KEY }} \
-          --env STEP_START=${{ steps.buildevents.outputs.step_start }} \
-          eu.gcr.io/cf-rabbitmq-core/ci:erlang-22.3-rabbitmq-${{ github.sha }} \
-          ci/scripts/collect.sh
   finish:
     name: finish
     needs:
@@ -9091,7 +9048,6 @@ jobs:
     - rabbitmq_web_mqtt_examples
     - rabbitmq_web_stomp
     - rabbitmq_web_stomp_examples
-    - package-generic-unix
     runs-on: ubuntu-18.04
     if: '!contains(github.event.head_commit.message, ''[ci skip]'') && (success() || failure())'
     steps:

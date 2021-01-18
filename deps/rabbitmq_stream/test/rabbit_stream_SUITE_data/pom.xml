@@ -27,10 +27,10 @@
 
     <properties>
         <stream-client.version>0.1.0-SNAPSHOT</stream-client.version>
-        <proton-j.version>0.33.6</proton-j.version>
+        <proton-j.version>0.33.8</proton-j.version>
         <junit.jupiter.version>5.7.0</junit.jupiter.version>
-        <assertj.version>3.17.2</assertj.version>
-        <mockito.version>3.5.11</mockito.version>
+        <assertj.version>3.18.1</assertj.version>
+        <mockito.version>3.7.0</mockito.version>
         <logback.version>1.2.3</logback.version>
         <maven.compiler.plugin.version>3.8.1</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>

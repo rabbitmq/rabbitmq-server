@@ -47,6 +47,7 @@ groups() ->
            delete_quorum_replica,
            consume_from_replica,
            leader_failover,
+           leader_failover_dedupe,
            initial_cluster_size_one,
            initial_cluster_size_two,
            initial_cluster_size_one_policy,
@@ -93,7 +94,8 @@ all_tests() ->
      invalid_policy,
      max_age_policy,
      max_segment_size_policy,
-     purge
+     purge,
+     update_retention_policy
     ].
 
 %% -------------------------------------------------------------------
@@ -1193,6 +1195,76 @@ leader_failover(Config) ->
     ?assert(NewLeader =/= Server1),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1).
 
+leader_failover_dedupe(Config) ->
+    %% tests that in-flight messages are automatically handled in the case where
+    %% a leader change happens during publishing
+    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    check_leader_and_replicas(Config, Q, Server1, [Server2, Server3]),
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch2, #'confirm.select'{}),
+
+    Self= self(),
+    F = fun F(N) ->
+                receive
+                    go ->
+                        [publish(Ch2, Q, integer_to_binary(N + I))
+                         || I <- lists:seq(1, 100)],
+                        true = amqp_channel:wait_for_confirms(Ch2, 25),
+                        F(N + 100);
+                    stop ->
+                        Self ! {last_msg, N},
+                        ct:pal("stop"),
+                        ok
+                after 2 ->
+                          self() ! go,
+                          F(N)
+                end
+        end,
+    Pid = spawn(fun () ->
+                        amqp_channel:register_confirm_handler(Ch2, self()),
+                        F(0)
+                end),
+    erlang:monitor(process, Pid),
+    Pid ! go,
+    timer:sleep(10),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+    %% this should cause a new leader to be elected and the channel on node 2
+    %% to have to resend any pending messages to ensure none is lost
+    timer:sleep(30000),
+    [Info] = lists:filter(
+               fun(Props) ->
+                       QName = rabbit_misc:r(<<"/">>, queue, Q),
+                       lists:member({name, QName}, Props)
+               end,
+               rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_amqqueue,
+                                            info_all, [<<"/">>, [name, leader, members]])),
+    NewLeader = proplists:get_value(leader, Info),
+    ?assert(NewLeader =/= Server1),
+    flush(),
+    ?assert(erlang:is_process_alive(Pid)),
+    Pid ! stop,
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+
+    N = receive
+            {last_msg, X} -> X
+        after 2000 ->
+                  exit(last_msg_timeout)
+        end,
+    %% validate that no duplicates were written even though an internal
+    %% resend might have taken place
+    qos(Ch2, 100, false),
+    subscribe(Ch2, Q, false, 0),
+    validate_dedupe(Ch2, 1, N),
+
+    ok.
+
 initial_cluster_size_one(Config) ->
     [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1458,6 +1530,7 @@ max_age_policy(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, <<"age">>, <<"max_age_policy.*">>, <<"queues">>,
            [{<<"max-age">>, <<"1Y">>}]),
@@ -1470,7 +1543,39 @@ max_age_policy(Config) ->
     ?assertEqual('', proplists:get_value(operator_policy, Info)),
     ?assertEqual([{<<"max-age">>, <<"1Y">>}],
                  proplists:get_value(effective_policy_definition, Info)),
+
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"age">>).
+
+update_retention_policy(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-max-segment-size">>, long, 200}
+                                ])),
+    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"0">>, <<"0">>, <<"0">>]]),
+    [publish(Ch, Q, <<"msg">>) || _ <- lists:seq(1, 10000)],
+    quorum_queue_utils:wait_for_min_messages(Config, Q, 10000),
+
+    {ok, Q0} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                            [rabbit_misc:r(<<"/">>, queue, Q)]),
+    timer:sleep(1000),
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"retention">>, <<"update_retention_policy.*">>, <<"queues">>,
+           [{<<"max-age">>, <<"1s">>}]),
+    timer:sleep(1000),
+
+    quorum_queue_utils:wait_for_max_messages(Config, Q, 1000),
+
+    {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
+                                            [rabbit_misc:r(<<"/">>, queue, Q)]),
+
+    %% If there are changes only in the retention policy, processes should not be restarted
+    ?assertEqual(amqqueue:get_pid(Q0), amqqueue:get_pid(Q1)),
+
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"retention">>).
 
 max_segment_size_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1564,6 +1669,30 @@ qos(Ch, Prefetch, Global) ->
                  amqp_channel:call(Ch, #'basic.qos'{global = Global,
                                                     prefetch_count = Prefetch})).
 
+validate_dedupe(Ch, N, N) ->
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag},
+         #amqp_msg{payload = B}} ->
+            I = binary_to_integer(B),
+            ?assertEqual(N, I),
+            ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                                    multiple     = false})
+    after 60000 ->
+            exit({missing_record, N})
+    end;
+validate_dedupe(Ch, N, M) ->
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag},
+         #amqp_msg{payload = B}} ->
+            I = binary_to_integer(B),
+            ?assertEqual(N, I),
+            ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                                    multiple     = false}),
+            validate_dedupe(Ch, N + 1, M)
+    after 60000 ->
+            exit({missing_record, N})
+    end.
+
 receive_batch(Ch, N, N) ->
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag},
@@ -1608,3 +1737,12 @@ run_proper(Fun, Args, NumTests) ->
           {on_output, fun(".", _) -> ok; % don't print the '.'s on new lines
                          (F, A) -> ct:pal(?LOW_IMPORTANCE, F, A)
                       end}])).
+
+flush() ->
+    receive
+        Any ->
+            ct:pal("flush ~p", [Any]),
+            flush()
+    after 0 ->
+              ok
+    end.
