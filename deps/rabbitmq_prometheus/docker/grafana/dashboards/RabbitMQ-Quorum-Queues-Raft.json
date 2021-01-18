@@ -4,7 +4,13 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "6.0.0"
+      "version": "7.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "2.0.0"
     },
     {
       "type": "panel",
@@ -17,12 +23,6 @@
       "id": "heatmap",
       "name": "Heatmap",
       "version": ""
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
     }
   ],
   "annotations": {
