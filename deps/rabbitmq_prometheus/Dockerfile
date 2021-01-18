@@ -276,20 +276,26 @@ RUN rabbitmq-plugins enable --offline rabbitmq_management && \
 # extract "rabbitmqadmin" from inside the "rabbitmq_management-X.Y.Z.ez" plugin zipfile
 # see https://github.com/docker-library/rabbitmq/issues/207
 RUN set -eux; \
-	erl -noinput -eval ' \
-		{ ok, AdminBin } = zip:foldl(fun(FileInArchive, GetInfo, GetBin, Acc) -> \
-			case Acc of \
-				"" -> \
-					case lists:suffix("/rabbitmqadmin", FileInArchive) of \
-						true -> GetBin(); \
-						false -> Acc \
-					end; \
-				_ -> Acc \
-			end \
-		end, "", init:get_plain_arguments()), \
-		io:format("~s", [ AdminBin ]), \
-		init:stop(). \
-	' -- /plugins/rabbitmq_management-*.ez > /usr/local/bin/rabbitmqadmin; \
+        rabbitmqadmin_path="$(find -L /plugins -name rabbitmqadmin -type f)"; \
+        if [ -f "$rabbitmqadmin_path" ]; \
+        then \
+          cp "$rabbitmqadmin_path" /usr/local/bin/rabbitmqadmin; \
+        else \
+          erl -noinput -eval ' \
+                  { ok, AdminBin } = zip:foldl(fun(FileInArchive, GetInfo, GetBin, Acc) -> \
+                          case Acc of \
+                                  "" -> \
+                                          case lists:suffix("/rabbitmqadmin", FileInArchive) of \
+                                                  true -> GetBin(); \
+                                                  false -> Acc \
+                                          end; \
+                                  _ -> Acc \
+                          end \
+                  end, "", init:get_plain_arguments()), \
+                  io:format("~s", [ AdminBin ]), \
+                  init:stop(). \
+          ' -- /plugins/rabbitmq_management-*.ez > /usr/local/bin/rabbitmqadmin; \
+        fi; \
 	[ -s /usr/local/bin/rabbitmqadmin ]; \
 	chmod +x /usr/local/bin/rabbitmqadmin; \
 	apt-get update; apt-get install -y --no-install-recommends python3; rm -rf /var/lib/apt/lists/*; \
@@ -301,13 +307,20 @@ RUN rabbitmq-plugins enable --offline rabbitmq_top && \
     rabbitmq-plugins is_enabled rabbitmq_top --offline
 
 # rabbitmq_prometheus
-RUN rm /plugins/prometheus*.ez
-COPY plugins/prometheus*.ez /plugins/
-RUN rm /plugins/rabbitmq_prometheus*.ez
-COPY plugins/rabbitmq_prometheus*.ez  /plugins/
+# We copy all local plugins to a temporary directory so that
+#       we replace only the prometheus & rabbitmq_prometheus plugins in the image.
+# If we don't do this, things get very weird with globs,
+#       and we either copy the the contents of those directories (e.g. ebin & priv) inside plugins,
+#       or we end up with prometheus* & rabbitmq_prometheus directories (I know! 🙄)
+# This has been an ongoing issue since 2015, still not solved in 2021:
+# https://github.com/moby/moby/issues/15858
+COPY plugins /plugins-tmp
+RUN rm -fr /plugins/prometheus* && mv /plugins-tmp/prometheus* /plugins/
+RUN rm -fr /plugins/rabbitmq_prometheus* && mv /plugins-tmp/rabbitmq_prometheus* /plugins/
+RUN rm -fr /plugins-tmp
 
 ARG RABBITMQ_PROMETHEUS_VERSION
-RUN chmod --recursive --verbose a+r /plugins/*.ez && \
+RUN chmod --recursive --verbose a+r /plugins/* && \
     chown --recursive --verbose rabbitmq:rabbitmq /plugins && \
     rabbitmq-plugins enable --offline rabbitmq_prometheus && \
     rabbitmq-plugins is_enabled rabbitmq_prometheus --offline && \
