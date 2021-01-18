@@ -1245,45 +1245,6 @@ handle_frame_post_auth(Transport,
             {Connection0, State, Rest}
     end;
 handle_frame_post_auth(Transport,
-                       #stream_connection{publishers = Publishers,
-                                          publisher_to_ids = PubToIds} =
-                           Connection0,
-                       State,
-                       <<?COMMAND_DELETE_PUBLISHER:16,
-                         ?VERSION_0:16,
-                         CorrelationId:32,
-                         PublisherId:8>>,
-                       Rest) ->
-    case Publishers of
-        #{PublisherId := #publisher{stream = Stream, reference = Ref}} ->
-            Connection1 =
-                Connection0#stream_connection{publishers =
-                                                  maps:remove(PublisherId,
-                                                              Publishers),
-                                              publisher_to_ids =
-                                                  maps:remove({Stream, Ref},
-                                                              PubToIds)},
-            Connection2 =
-                maybe_clean_connection_from_stream(Stream, Connection1),
-            response(Transport,
-                     Connection1,
-                     ?COMMAND_DELETE_PUBLISHER,
-                     CorrelationId,
-                     ?RESPONSE_CODE_OK),
-            rabbit_stream_metrics:publisher_deleted(self(),
-                                                    stream_r(Stream,
-                                                             Connection2),
-                                                    PublisherId),
-            {Connection2, State, Rest};
-        _ ->
-            response(Transport,
-                     Connection0,
-                     ?COMMAND_DELETE_PUBLISHER,
-                     CorrelationId,
-                     ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST),
-            {Connection0, State, Rest}
-    end;
-handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           credits = Credits,
                                           virtual_host = VirtualHost,
@@ -1351,6 +1312,93 @@ handle_frame_post_auth(Transport,
                               MessageCount:32,
                               Details/binary>>]),
             {Connection, State, Rest}
+    end;
+handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S,
+                                          virtual_host = VirtualHost,
+                                          user = User} =
+                           Connection,
+                       State,
+                       <<?COMMAND_QUERY_PUBLISHER_SEQUENCE:16,
+                         ?VERSION_0:16,
+                         CorrelationId:32,
+                         ReferenceSize:16,
+                         Reference:ReferenceSize/binary,
+                         StreamSize:16,
+                         Stream:StreamSize/binary>>,
+                       Rest) ->
+    FrameSize = ?RESPONSE_FRAME_SIZE + 8,
+    {ResponseCode, Sequence} =
+        case rabbit_stream_utils:check_read_permitted(#resource{name = Stream,
+                                                                kind = queue,
+                                                                virtual_host =
+                                                                    VirtualHost},
+                                                      User, #{})
+        of
+            ok ->
+                case rabbit_stream_manager:lookup_local_member(VirtualHost,
+                                                               Stream)
+                of
+                    {error, not_found} ->
+                        {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0};
+                    {ok, LocalMemberPid} ->
+                        {?RESPONSE_CODE_OK,
+                         case osiris:fetch_writer_seq(LocalMemberPid, Reference)
+                         of
+                             undefined ->
+                                 0;
+                             Offt ->
+                                 Offt
+                         end}
+                end;
+            error ->
+                {?RESPONSE_CODE_ACCESS_REFUSED, 0}
+        end,
+    Transport:send(S,
+                   [<<FrameSize:32, ?COMMAND_QUERY_PUBLISHER_SEQUENCE:16,
+                      ?VERSION_0:16>>,
+                    <<CorrelationId:32>>,
+                    <<ResponseCode:16>>,
+                    <<Sequence:64>>]),
+    {Connection, State, Rest};
+handle_frame_post_auth(Transport,
+                       #stream_connection{publishers = Publishers,
+                                          publisher_to_ids = PubToIds} =
+                           Connection0,
+                       State,
+                       <<?COMMAND_DELETE_PUBLISHER:16,
+                         ?VERSION_0:16,
+                         CorrelationId:32,
+                         PublisherId:8>>,
+                       Rest) ->
+    case Publishers of
+        #{PublisherId := #publisher{stream = Stream, reference = Ref}} ->
+            Connection1 =
+                Connection0#stream_connection{publishers =
+                                                  maps:remove(PublisherId,
+                                                              Publishers),
+                                              publisher_to_ids =
+                                                  maps:remove({Stream, Ref},
+                                                              PubToIds)},
+            Connection2 =
+                maybe_clean_connection_from_stream(Stream, Connection1),
+            response(Transport,
+                     Connection1,
+                     ?COMMAND_DELETE_PUBLISHER,
+                     CorrelationId,
+                     ?RESPONSE_CODE_OK),
+            rabbit_stream_metrics:publisher_deleted(self(),
+                                                    stream_r(Stream,
+                                                             Connection2),
+                                                    PublisherId),
+            {Connection2, State, Rest};
+        _ ->
+            response(Transport,
+                     Connection0,
+                     ?COMMAND_DELETE_PUBLISHER,
+                     CorrelationId,
+                     ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST),
+            {Connection0, State, Rest}
     end;
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = Socket,
@@ -1493,56 +1541,6 @@ handle_frame_post_auth(Transport,
             {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport,
-                       #stream_connection{stream_subscriptions =
-                                              StreamSubscriptions} =
-                           Connection,
-                       #stream_connection_state{consumers = Consumers} = State,
-                       <<?COMMAND_UNSUBSCRIBE:16,
-                         ?VERSION_0:16,
-                         CorrelationId:32,
-                         SubscriptionId:8/unsigned>>,
-                       Rest) ->
-    case subscription_exists(StreamSubscriptions, SubscriptionId) of
-        false ->
-            response(Transport,
-                     Connection,
-                     ?COMMAND_UNSUBSCRIBE,
-                     CorrelationId,
-                     ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST),
-            {Connection, State, Rest};
-        true ->
-            #{SubscriptionId := Consumer} = Consumers,
-            Stream = Consumer#consumer.stream,
-            #{Stream := SubscriptionsForThisStream} = StreamSubscriptions,
-            SubscriptionsForThisStream1 =
-                lists:delete(SubscriptionId, SubscriptionsForThisStream),
-            StreamSubscriptions1 =
-                case length(SubscriptionsForThisStream1) of
-                    0 ->
-                        % no more subscription for this stream
-                        maps:remove(Stream, StreamSubscriptions);
-                    _ ->
-                        StreamSubscriptions#{Stream =>
-                                                 SubscriptionsForThisStream1}
-                end,
-            Connection1 =
-                Connection#stream_connection{stream_subscriptions =
-                                                 StreamSubscriptions1},
-            Consumers1 = maps:remove(SubscriptionId, Consumers),
-            Connection2 =
-                maybe_clean_connection_from_stream(Stream, Connection1),
-            rabbit_stream_metrics:consumer_cancelled(self(),
-                                                     stream_r(Stream,
-                                                              Connection2),
-                                                     SubscriptionId),
-            response_ok(Transport,
-                        Connection,
-                        ?COMMAND_SUBSCRIBE,
-                        CorrelationId),
-            {Connection2, State#stream_connection_state{consumers = Consumers1},
-             Rest}
-    end;
-handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
                                           send_file_oct = SendFileOct} =
                            Connection,
@@ -1665,53 +1663,55 @@ handle_frame_post_auth(Transport,
                     <<Offset:64>>]),
     {Connection, State, Rest};
 handle_frame_post_auth(Transport,
-                       #stream_connection{socket = S,
-                                          virtual_host = VirtualHost,
-                                          user = User} =
+                       #stream_connection{stream_subscriptions =
+                                              StreamSubscriptions} =
                            Connection,
-                       State,
-                       <<?COMMAND_QUERY_PUBLISHER_SEQUENCE:16,
+                       #stream_connection_state{consumers = Consumers} = State,
+                       <<?COMMAND_UNSUBSCRIBE:16,
                          ?VERSION_0:16,
                          CorrelationId:32,
-                         ReferenceSize:16,
-                         Reference:ReferenceSize/binary,
-                         StreamSize:16,
-                         Stream:StreamSize/binary>>,
+                         SubscriptionId:8/unsigned>>,
                        Rest) ->
-    FrameSize = ?RESPONSE_FRAME_SIZE + 8,
-    {ResponseCode, Sequence} =
-        case rabbit_stream_utils:check_read_permitted(#resource{name = Stream,
-                                                                kind = queue,
-                                                                virtual_host =
-                                                                    VirtualHost},
-                                                      User, #{})
-        of
-            ok ->
-                case rabbit_stream_manager:lookup_local_member(VirtualHost,
-                                                               Stream)
-                of
-                    {error, not_found} ->
-                        {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0};
-                    {ok, LocalMemberPid} ->
-                        {?RESPONSE_CODE_OK,
-                         case osiris:fetch_writer_seq(LocalMemberPid, Reference)
-                         of
-                             undefined ->
-                                 0;
-                             Offt ->
-                                 Offt
-                         end}
-                end;
-            error ->
-                {?RESPONSE_CODE_ACCESS_REFUSED, 0}
-        end,
-    Transport:send(S,
-                   [<<FrameSize:32, ?COMMAND_QUERY_PUBLISHER_SEQUENCE:16,
-                      ?VERSION_0:16>>,
-                    <<CorrelationId:32>>,
-                    <<ResponseCode:16>>,
-                    <<Sequence:64>>]),
-    {Connection, State, Rest};
+    case subscription_exists(StreamSubscriptions, SubscriptionId) of
+        false ->
+            response(Transport,
+                     Connection,
+                     ?COMMAND_UNSUBSCRIBE,
+                     CorrelationId,
+                     ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST),
+            {Connection, State, Rest};
+        true ->
+            #{SubscriptionId := Consumer} = Consumers,
+            Stream = Consumer#consumer.stream,
+            #{Stream := SubscriptionsForThisStream} = StreamSubscriptions,
+            SubscriptionsForThisStream1 =
+                lists:delete(SubscriptionId, SubscriptionsForThisStream),
+            StreamSubscriptions1 =
+                case length(SubscriptionsForThisStream1) of
+                    0 ->
+                        % no more subscription for this stream
+                        maps:remove(Stream, StreamSubscriptions);
+                    _ ->
+                        StreamSubscriptions#{Stream =>
+                                                 SubscriptionsForThisStream1}
+                end,
+            Connection1 =
+                Connection#stream_connection{stream_subscriptions =
+                                                 StreamSubscriptions1},
+            Consumers1 = maps:remove(SubscriptionId, Consumers),
+            Connection2 =
+                maybe_clean_connection_from_stream(Stream, Connection1),
+            rabbit_stream_metrics:consumer_cancelled(self(),
+                                                     stream_r(Stream,
+                                                              Connection2),
+                                                     SubscriptionId),
+            response_ok(Transport,
+                        Connection,
+                        ?COMMAND_SUBSCRIBE,
+                        CorrelationId),
+            {Connection2, State#stream_connection_state{consumers = Consumers1},
+             Rest}
+    end;
 handle_frame_post_auth(Transport,
                        #stream_connection{virtual_host = VirtualHost,
                                           user =

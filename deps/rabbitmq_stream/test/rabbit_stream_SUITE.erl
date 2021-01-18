@@ -277,7 +277,6 @@ test_authenticate(S) ->
     gen_tcp:send(S,
                  <<SaslAuthenticateFrameSize:32,
                    SaslAuthenticateFrame/binary>>),
-
     {ok,
      <<10:32,
        ?COMMAND_SASL_AUTHENTICATE:16,
