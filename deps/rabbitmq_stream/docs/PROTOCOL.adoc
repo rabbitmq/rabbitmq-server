@@ -3,7 +3,7 @@
 This is the reference of the RabbitMQ stream protocol. Note the protocol
 is still under development and is subject to change.
 
-The https://github.com/rabbitmq/rabbitmq-stream-java-client[RabbitMQ stream Java client]
+The https://github.com/rabbitmq/rabbitmq-stream-java-client[RabbitMQ Stream Java client]
 is currently the reference implementation.
 
 == Types
@@ -45,6 +45,33 @@ Command => Key Version Content
 
 Most commands are request/reply, but some commands (e.g. `Deliver`) are one-direction only and thus
 doest not contain a correlation ID.
+
+== Response Codes
+
+.Stream Protocol Response Codes
+|===
+|Response|Code
+
+|OK|0
+|Stream does not exist|1
+|Subscription ID already exists|2
+|Subscription ID does not exist|3
+|Stream already exists|4
+|Stream not available|5
+|SASL mechanism not supported|6
+|Authentication failure|7
+|SASL error|8
+|SASL challenge|9
+|SASL authentication failure loopback|10
+|Virtual host access failure|11
+|Unknown frame|12
+|Frame too large|13
+|Internal error|14
+|Access refused|15
+|Precondition failed|16
+|Publisher does not exist|17
+
+|===
 
 == Commands
 
