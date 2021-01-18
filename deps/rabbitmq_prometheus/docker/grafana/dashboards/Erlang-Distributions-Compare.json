@@ -137,7 +137,7 @@
       ],
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=~\"^${namespace}$|''\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
@@ -235,7 +235,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=~\"^${namespace}$|''\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -1643,16 +1643,21 @@
     "list": [
       {
         "allValue": null,
-        "current": {},
+        "current": {
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
+        },
         "datasource": null,
-        "definition": "label_values(rabbitmq_identity_info, namespace)",
+        "definition": "label_values(rabbitmq_identity_info{namespace=\"$namespace\"}, rabbitmq_cluster)",
         "hide": 0,
-        "includeAll": false,
-        "label": "Namespace",
-        "multi": false,
-        "name": "namespace",
+        "includeAll": true,
+        "label": "RabbitMQ Cluster",
+        "multi": true,
+        "name": "rabbitmq_cluster",
         "options": [],
-        "query": "label_values(rabbitmq_identity_info, namespace)",
+        "query": "label_values(rabbitmq_identity_info{namespace=\"$namespace\"}, rabbitmq_cluster)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -1665,21 +1670,16 @@
       },
       {
         "allValue": null,
-        "current": {
-          "text": "All",
-          "value": [
-            "$__all"
-          ]
-        },
+        "current": {},
         "datasource": null,
-        "definition": "label_values(rabbitmq_identity_info{namespace=~\"^${namespace}$|''\"}, rabbitmq_cluster)",
+        "definition": "label_values(rabbitmq_identity_info, namespace)",
         "hide": 0,
-        "includeAll": true,
-        "label": "RabbitMQ Cluster",
-        "multi": true,
-        "name": "rabbitmq_cluster",
+        "includeAll": false,
+        "label": "Namespace",
+        "multi": false,
+        "name": "namespace",
         "options": [],
-        "query": "label_values(rabbitmq_identity_info{namespace=~\"^${namespace}$|''\"}, rabbitmq_cluster)",
+        "query": "label_values(rabbitmq_identity_info, namespace)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -1825,5 +1825,5 @@
   "timezone": "",
   "title": "Erlang-Distributions-Compare",
   "uid": "C0jeDstZk",
-  "version": 2
+  "version": 20210118
 }
