@@ -19,12 +19,6 @@ jobs:
         otp-version: ${{ matrix.erlang_version }}
         # https://github.com/elixir-lang/elixir/releases
         elixir-version: 1.10.4
-    - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v2
-      with:
-        path: "/home/runner/.cache/bazel"
-        # use a version keyed cache, since we don't control the version of erlang/elixir within bazel yet
-        key: ${{ runner.os }}-bazel-${{ matrix.erlang_version }}
     - name: INSTALL BAZELISK
       run: |
         curl -LO "https://github.com/bazelbuild/bazelisk/releases/download/v1.1.0/bazelisk-linux-amd64"
@@ -43,14 +37,3 @@ jobs:
           --//bazel_erlang:mix_archives=/home/runner/.mix/archives \
           --test_verbose_timeout_warnings \
           --verbose_failures
-    - name: RESOVLE TESTLOGS
-      id: resolve_logs
-      if: success() || failure()
-      run: |
-        echo "::set-output name=dir::$(readlink -f bazel-testlogs)"
-    - name: CAPTURE LOGS
-      uses: actions/upload-artifact@v2
-      if: success() || failure()
-      with:
-        name: bazel-testlogs
-        path: ${{ steps.resolve_logs.outputs.dir }}
