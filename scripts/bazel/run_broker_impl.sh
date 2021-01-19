@@ -3,8 +3,7 @@ set -exuo pipefail
 
 # pwd
 
-# Note: we should probably use the classic TEST_TMPDIR location
-TEST_TMPDIR=$(pwd)
+TEST_TMPDIR=${TMPDIR}/rabbitmq-test-instances
 RABBITMQ_SCRIPTS_DIR="$(dirname {RABBITMQ_SERVER_PATH})"
 RABBITMQ_PLUGINS=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-plugins
 RABBITMQ_SERVER=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server
@@ -36,6 +35,8 @@ RABBITMQ_LOG='debug,+color'
 export RABBITMQ_LOG
 
 RABBITMQ_ENABLED_PLUGINS=ALL
+
+mkdir -p ${TEST_TMPDIR}
 
 mkdir -p ${RABBITMQ_LOG_BASE} \
     ${RABBITMQ_MNESIA_BASE} \
