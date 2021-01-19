@@ -100,7 +100,7 @@ test_gc_consumers(Config) ->
                                   10,
                                   0,
                                   0]),
-    ok = wait_until(fun() -> consumer_count(Config) == 0 end),
+    ok = test_utils:wait_until(fun() -> consumer_count(Config) == 0 end),
     ok.
 
 test_gc_publishers(Config) ->
@@ -115,31 +115,8 @@ test_gc_publishers(Config) ->
                                             virtual_host = <<"/">>},
                                   0,
                                   <<"ref">>]),
-    ok = wait_until(fun() -> publisher_count(Config) == 0 end),
+    ok = test_utils:wait_until(fun() -> publisher_count(Config) == 0 end),
     ok.
-
-wait_until(Predicate) ->
-    Fun = fun(Pid, Fun) ->
-             case Predicate() of
-                 true ->
-                     Pid ! done,
-                     ok;
-                 _ ->
-                     timer:sleep(100),
-                     Fun(Pid, Fun)
-             end
-          end,
-    CurrentPid = self(),
-    Pid = spawn(fun() -> Fun(CurrentPid, Fun) end),
-    Result =
-        receive
-            done ->
-                ok
-        after 5000 ->
-            failed
-        end,
-    exit(Pid, kill),
-    Result.
 
 consumer_count(Config) ->
     ets_count(Config, ?TABLE_CONSUMER).
@@ -454,8 +431,9 @@ test_deliver(S, Rest, SubscriptionId, Body) ->
 
 test_metadata_update_stream_deleted(S, Stream) ->
     StreamSize = byte_size(Stream),
+    FrameSize = 2 + 2 + 2 + 2 + StreamSize,
     {ok,
-     <<15:32,
+     <<FrameSize:32,
        ?COMMAND_METADATA_UPDATE:16,
        ?VERSION_0:16,
        ?RESPONSE_CODE_STREAM_NOT_AVAILABLE:16,

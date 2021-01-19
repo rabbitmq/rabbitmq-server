@@ -25,7 +25,11 @@
 -export([stop/1]).
 -export([emit_connection_info_local/3,
          emit_connection_info_all/4,
-         list/0]).
+         emit_consumer_info_all/5,
+         emit_consumer_info_local/4,
+         emit_publisher_info_all/5,
+         emit_publisher_info_local/4,
+         list/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -108,9 +112,47 @@ emit_connection_info_local(Items, Ref, AggregatorPid) ->
                                                           rabbit_stream_reader:info(Pid,
                                                                                     Items)
                                                        end,
-                                                       list()).
+                                                       list(undefined)).
 
-list() ->
+emit_consumer_info_all(Nodes, VHost, Items, Ref, AggregatorPid) ->
+    Pids =
+        [spawn_link(Node,
+                    rabbit_stream,
+                    emit_consumer_info_local,
+                    [VHost, Items, Ref, AggregatorPid])
+         || Node <- Nodes],
+    rabbit_control_misc:await_emitters_termination(Pids),
+    ok.
+
+emit_consumer_info_local(VHost, Items, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(AggregatorPid,
+                                                       Ref,
+                                                       fun(Pid) ->
+                                                          rabbit_stream_reader:consumers_info(Pid,
+                                                                                              Items)
+                                                       end,
+                                                       list(VHost)).
+
+emit_publisher_info_all(Nodes, VHost, Items, Ref, AggregatorPid) ->
+    Pids =
+        [spawn_link(Node,
+                    rabbit_stream,
+                    emit_publisher_info_local,
+                    [VHost, Items, Ref, AggregatorPid])
+         || Node <- Nodes],
+    rabbit_control_misc:await_emitters_termination(Pids),
+    ok.
+
+emit_publisher_info_local(VHost, Items, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(AggregatorPid,
+                                                       Ref,
+                                                       fun(Pid) ->
+                                                          rabbit_stream_reader:publishers_info(Pid,
+                                                                                               Items)
+                                                       end,
+                                                       list(VHost)).
+
+list(VHost) ->
     [Client
      || {_, ListSupPid, _, _}
             <- supervisor2:which_children(rabbit_stream_sup),
@@ -120,4 +162,5 @@ list() ->
             <- supervisor:which_children(RanchSup),
         {_, CliSup, _, _} <- supervisor:which_children(ConnSup),
         {rabbit_stream_reader, Client, _, _}
-            <- supervisor:which_children(CliSup)].
+            <- supervisor:which_children(CliSup),
+        rabbit_stream_reader:in_vhost(Client, VHost)].
