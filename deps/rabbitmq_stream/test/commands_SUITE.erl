@@ -19,15 +19,20 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand').
 -define(COMMAND_LIST_CONSUMERS,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand').
+-define(COMMAND_LIST_PUBLISHERS,
+        'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand').
 
 all() ->
-    [{group, list_connections}, {group, list_consumers}].
+    [{group, list_connections}, {group, list_consumers},
+     {group, list_publishers}].
 
 groups() ->
     [{list_connections, [],
       [list_connections_merge_defaults, list_connections_run]},
      {list_consumers, [],
-      [list_consumers_merge_defaults, list_consumers_run]}].
+      [list_consumers_merge_defaults, list_consumers_run]},
+     {list_publishers, [],
+      [list_publishers_merge_defaults, list_publishers_run]}].
 
 init_per_suite(Config) ->
     Config1 =
@@ -195,11 +200,83 @@ list_consumers_run(Config) ->
     wait_until_consumer_count(Config, 0),
     ok.
 
+list_publishers_merge_defaults(_Config) ->
+    DefaultItems =
+        [rabbit_data_coercion:to_binary(Item)
+         || Item <- ?PUBLISHER_INFO_ITEMS],
+    {DefaultItems, #{verbose := false}} =
+        ?COMMAND_LIST_PUBLISHERS:merge_defaults([], #{}),
+
+    {[<<"other_key">>], #{verbose := true}} =
+        ?COMMAND_LIST_PUBLISHERS:merge_defaults([<<"other_key">>],
+                                                #{verbose => true}),
+
+    {[<<"other_key">>], #{verbose := false}} =
+        ?COMMAND_LIST_PUBLISHERS:merge_defaults([<<"other_key">>],
+                                                #{verbose => false}).
+
+list_publishers_run(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Opts =
+        #{node => Node,
+          timeout => 10000,
+          verbose => false,
+          vhost => <<"/">>},
+
+    %% No connections, no publishers
+    [] = to_list(?COMMAND_LIST_PUBLISHERS:run([], Opts)),
+
+    StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
+    S1 = start_stream_connection(StreamPort),
+    wait_until_connection_count(Config, 1),
+
+    Stream = <<"list_publishers_run">>,
+    create_stream(S1, Stream),
+    PubId = 42,
+    declare_publisher(S1, PubId, Stream),
+
+    wait_until_publisher_count(Config, 1),
+
+    S2 = start_stream_connection(StreamPort),
+    wait_until_connection_count(Config, 2),
+    declare_publisher(S2, PubId, Stream),
+
+    wait_until_publisher_count(Config, 2),
+
+    %% Verbose returns all keys
+    InfoItems = ?PUBLISHER_INFO_ITEMS,
+    Infos = lists:map(fun(El) -> atom_to_binary(El, utf8) end, InfoItems),
+    AllKeys = to_list(?COMMAND_LIST_PUBLISHERS:run(Infos, Opts)),
+    Verbose =
+        to_list(?COMMAND_LIST_PUBLISHERS:run([], Opts#{verbose => true})),
+    ?assertEqual(AllKeys, Verbose),
+    %% There are two consumers
+    [[First], [_Second]] = AllKeys,
+
+    %% Keys are info items
+    ?assertEqual(length(InfoItems), length(First)),
+
+    {Keys, _} = lists:unzip(First),
+
+    ?assertEqual([], Keys -- InfoItems),
+    ?assertEqual([], InfoItems -- Keys),
+
+    delete_stream(S1, Stream),
+    metadata_update_stream_deleted(S1, Stream),
+    metadata_update_stream_deleted(S2, Stream),
+    close(S1),
+    close(S2),
+    wait_until_publisher_count(Config, 0),
+    ok.
+
 create_stream(S, Stream) ->
     rabbit_stream_SUITE:test_create_stream(S, Stream).
 
 subscribe(S, SubId, Stream) ->
     rabbit_stream_SUITE:test_subscribe(S, SubId, Stream).
+
+declare_publisher(S, PubId, Stream) ->
+    rabbit_stream_SUITE:test_declare_publisher(S, PubId, Stream).
 
 delete_stream(S, Stream) ->
     rabbit_stream_SUITE:test_delete_stream(S, Stream).
@@ -241,6 +318,15 @@ consumer_count(Config) ->
 wait_until_consumer_count(Config, Expected) ->
     ok =
         test_utils:wait_until(fun() -> consumer_count(Config) == Expected
+                              end).
+
+publisher_count(Config) ->
+    command_result_count(?COMMAND_LIST_PUBLISHERS:run([<<"stream">>],
+                                                      options(Config))).
+
+wait_until_publisher_count(Config, Expected) ->
+    ok =
+        test_utils:wait_until(fun() -> publisher_count(Config) == Expected
                               end).
 
 start_stream_connection(Port) ->

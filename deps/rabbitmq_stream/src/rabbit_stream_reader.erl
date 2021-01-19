@@ -141,6 +141,7 @@
          init/1,
          info/2,
          consumers_info/2,
+         publishers_info/2,
          in_vhost/2]).
 
 start_link(KeepaliveSup, Transport, Ref, Opts) ->
@@ -662,6 +663,9 @@ listen_loop_post_auth(Transport,
             listen_loop_post_auth(Transport, Connection, State, Configuration);
         {'$gen_call', From, {consumers_info, Items}} ->
             gen_server:reply(From, consumers_infos(Items, State)),
+            listen_loop_post_auth(Transport, Connection, State, Configuration);
+        {'$gen_call', From, {publishers_info, Items}} ->
+            gen_server:reply(From, publishers_infos(Items, Connection)),
             listen_loop_post_auth(Transport, Connection, State, Configuration);
         emit_stats ->
             Connection1 = emit_stats(Connection, State),
@@ -2437,6 +2441,39 @@ consumer_i(connection_pid, _) ->
     self();
 consumer_i(stream, #consumer{stream = S}) ->
     S.
+
+publishers_info(Pid, InfoItems) ->
+    case InfoItems -- ?PUBLISHER_INFO_ITEMS of
+        [] ->
+            gen_server2:call(Pid, {publishers_info, InfoItems});
+        UnknownItems ->
+            throw({bad_argument, UnknownItems})
+    end.
+
+publishers_infos(Items,
+                 #stream_connection{publishers = Publishers}) ->
+    [[{Item, publisher_i(Item, Publisher)} || Item <- Items]
+     || Publisher <- maps:values(Publishers)].
+
+publisher_i(stream, #publisher{stream = S}) ->
+    S;
+publisher_i(connection_pid, _) ->
+    self();
+publisher_i(publisher_id, #publisher{publisher_id = Id}) ->
+    Id;
+publisher_i(reference, #publisher{reference = undefined}) ->
+    <<"">>;
+publisher_i(reference, #publisher{reference = Ref}) ->
+    Ref;
+publisher_i(messages_published,
+            #publisher{message_counters = Counters}) ->
+    messages_published(Counters);
+publisher_i(messages_confirmed,
+            #publisher{message_counters = Counters}) ->
+    messages_confirmed(Counters);
+publisher_i(messages_errored,
+            #publisher{message_counters = Counters}) ->
+    messages_errored(Counters).
 
 info(Pid, InfoItems) ->
     case InfoItems -- ?INFO_ITEMS of

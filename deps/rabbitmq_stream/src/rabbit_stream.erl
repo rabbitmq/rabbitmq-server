@@ -27,6 +27,8 @@
          emit_connection_info_all/4,
          emit_consumer_info_all/5,
          emit_consumer_info_local/4,
+         emit_publisher_info_all/5,
+         emit_publisher_info_local/4,
          list/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -128,6 +130,25 @@ emit_consumer_info_local(VHost, Items, Ref, AggregatorPid) ->
                                                        fun(Pid) ->
                                                           rabbit_stream_reader:consumers_info(Pid,
                                                                                               Items)
+                                                       end,
+                                                       list(VHost)).
+
+emit_publisher_info_all(Nodes, VHost, Items, Ref, AggregatorPid) ->
+    Pids =
+        [spawn_link(Node,
+                    rabbit_stream,
+                    emit_publisher_info_local,
+                    [VHost, Items, Ref, AggregatorPid])
+         || Node <- Nodes],
+    rabbit_control_misc:await_emitters_termination(Pids),
+    ok.
+
+emit_publisher_info_local(VHost, Items, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map_with_exit_handler(AggregatorPid,
+                                                       Ref,
+                                                       fun(Pid) ->
+                                                          rabbit_stream_reader:publishers_info(Pid,
+                                                                                               Items)
                                                        end,
                                                        list(VHost)).
 
