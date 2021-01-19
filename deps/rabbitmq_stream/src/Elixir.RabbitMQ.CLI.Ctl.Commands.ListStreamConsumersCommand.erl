@@ -11,9 +11,9 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2021 VMware, Inc. or its affiliates.  All rights reserved.
 
--module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand').
+-module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand').
 
 -include("rabbit_stream.hrl").
 
@@ -47,14 +47,14 @@ aliases() ->
     [{'V', verbose}].
 
 description() ->
-    <<"Lists stream connections">>.
+    <<"Lists all stream consumers for a vhost">>.
 
 help_section() ->
     {plugin, stream}.
 
 validate(Args, _) ->
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?INFO_ITEMS)
+                                                               ?CONSUMER_INFO_ITEMS)
     of
         {ok, _} ->
             ok;
@@ -63,12 +63,15 @@ validate(Args, _) ->
     end.
 
 merge_defaults([], Opts) ->
-    merge_defaults([<<"conn_name">>], Opts);
+    merge_defaults([rabbit_data_coercion:to_binary(Item)
+                    || Item <- ?CONSUMER_INFO_ITEMS],
+                   Opts);
 merge_defaults(Args, Opts) ->
-    {Args, maps:merge(#{verbose => false}, Opts)}.
+    {Args, maps:merge(#{verbose => false, vhost => <<"/">>}, Opts)}.
 
 usage() ->
-    <<"list_stream_connections [<column> ...]">>.
+    <<"list_stream_consumers [--vhost <vhost>] [<column> "
+      "...]">>.
 
 usage_additional() ->
     Prefix = <<" must be one of ">>,
@@ -82,12 +85,13 @@ usage_doc_guides() ->
 
 run(Args,
     #{node := NodeName,
+      vhost := VHost,
       timeout := Timeout,
       verbose := Verbose}) ->
     InfoKeys =
         case Verbose of
             true ->
-                ?INFO_ITEMS;
+                ?CONSUMER_INFO_ITEMS;
             false ->
                 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
         end,
@@ -95,14 +99,15 @@ run(Args,
 
     'Elixir.RabbitMQ.CLI.Ctl.RpcStream':receive_list_items(NodeName,
                                                            rabbit_stream,
-                                                           emit_connection_info_all,
-                                                           [Nodes, InfoKeys],
+                                                           emit_consumer_info_all,
+                                                           [Nodes, VHost,
+                                                            InfoKeys],
                                                            Timeout,
                                                            InfoKeys,
                                                            length(Nodes)).
 
 banner(_, _) ->
-    <<"Listing stream connections ...">>.
+    <<"Listing stream consumers ...">>.
 
 output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).

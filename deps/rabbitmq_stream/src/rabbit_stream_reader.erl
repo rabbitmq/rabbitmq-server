@@ -139,7 +139,9 @@
 %% API
 -export([start_link/4,
          init/1,
-         info/2]).
+         info/2,
+         consumers_info/2,
+         in_vhost/2]).
 
 start_link(KeepaliveSup, Transport, Ref, Opts) ->
     Pid = proc_lib:spawn_link(?MODULE, init,
@@ -657,6 +659,9 @@ listen_loop_post_auth(Transport,
             listen_loop_post_auth(Transport, Connection, State, Configuration);
         {'$gen_call', From, {info, Items}} ->
             gen_server:reply(From, infos(Items, Connection, State)),
+            listen_loop_post_auth(Transport, Connection, State, Configuration);
+        {'$gen_call', From, {consumers_info, Items}} ->
+            gen_server:reply(From, consumers_infos(Items, State)),
             listen_loop_post_auth(Transport, Connection, State, Configuration);
         emit_stats ->
             Connection1 = emit_stats(Connection, State),
@@ -2396,6 +2401,42 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
 ensure_stats_timer(Connection = #stream_connection{}) ->
     rabbit_event:ensure_stats_timer(Connection,
                                     #stream_connection.stats_timer, emit_stats).
+
+in_vhost(_Pid, undefined) ->
+    true;
+in_vhost(Pid, VHost) ->
+    case info(Pid, [vhost]) of
+        [{vhost, VHost}] ->
+            true;
+        _ ->
+            false
+    end.
+
+consumers_info(Pid, InfoItems) ->
+    case InfoItems -- ?CONSUMER_INFO_ITEMS of
+        [] ->
+            gen_server2:call(Pid, {consumers_info, InfoItems});
+        UnknownItems ->
+            throw({bad_argument, UnknownItems})
+    end.
+
+consumers_infos(Items,
+                #stream_connection_state{consumers = Consumers}) ->
+    [[{Item, consumer_i(Item, Consumer)} || Item <- Items]
+     || Consumer <- maps:values(Consumers)].
+
+consumer_i(subscription_id, #consumer{subscription_id = SubId}) ->
+    SubId;
+consumer_i(credits, #consumer{credit = Credits}) ->
+    Credits;
+consumer_i(messages, #consumer{counters = Counters}) ->
+    messages_consumed(Counters);
+consumer_i(offset, #consumer{counters = Counters}) ->
+    consumer_offset(Counters);
+consumer_i(connection_pid, _) ->
+    self();
+consumer_i(stream, #consumer{stream = S}) ->
+    S.
 
 info(Pid, InfoItems) ->
     case InfoItems -- ?INFO_ITEMS of

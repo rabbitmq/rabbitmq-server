@@ -71,4 +71,13 @@
     connected_at
     ]).
 
+-define(CONSUMER_INFO_ITEMS, [
+  stream,
+  connection_pid,
+  subscription_id,
+  credits,
+  messages,
+  offset
+  ]).
+
 -define(STREAM_GUIDE_URL, <<"https://rabbitmq.com/stream.html">>).
