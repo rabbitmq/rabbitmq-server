@@ -3,12 +3,6 @@ load("//bazel_erlang:ct.bzl", "lib_dir")
 
 _PLUGINS_DIR = "plugins"
 
-# def plugin_path(plugin):
-#     c = []
-#     c.append(plugin.label.workspace_root) if plugin.label.workspace_root != "" else None
-#     c.append(plugin[DefaultInfo].files.to_list()[0].short_path)
-#     return path_join(*c)
-
 def _plugins_dir_link(ctx, plugin):
     lib_info = plugin[ErlangLibInfo]
     output = ctx.actions.declare_file(path_join(_PLUGINS_DIR, "{}-{}".format(lib_info.lib_name, lib_info.lib_version)))
@@ -19,7 +13,7 @@ def _plugins_dir_link(ctx, plugin):
     return output
 
 def _impl(ctx):
-    plugins_dir_contents = [_plugins_dir_link(ctx, plugin) for plugin in ctx.attr._plugins]
+    plugins_dir_contents = [_plugins_dir_link(ctx, plugin) for plugin in ctx.attr._base_plugins + ctx.attr.plugins]
 
     ctx.actions.expand_template(
         template = ctx.file._run_broker_template,
@@ -51,7 +45,7 @@ rabbitmq_node = rule(
             default = Label("//:rabbitmq-server"),
         ),
         # Maybe we should not have to declare the deps here that rabbit/rabbit_common declare
-        "_plugins": attr.label_list(
+        "_base_plugins": attr.label_list(
             default = [
                 Label("@cuttlefish//:cuttlefish"),
                 Label("@ranch//:ranch"),
@@ -71,7 +65,11 @@ rabbitmq_node = rule(
                 Label("@credentials-obfuscation//:credentials-obfuscation"),
                 Label("@aten//:aten"),
                 Label("@gen-batch-server//:gen-batch-server"),
-                # rabbitmq_management is not strictly necessary
+            ],
+        ),
+        "plugins": attr.label_list(
+            default = [
+                # default to rabbitmq_management
                 Label("//deps/rabbitmq_management:rabbitmq_management"),
                 Label("//deps/rabbitmq_management_agent:rabbitmq_management_agent"),
                 Label("//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch"),
