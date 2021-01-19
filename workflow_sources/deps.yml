@@ -12,7 +12,8 @@ deps:
   - name: worker_pool
 
 - name: rabbit
-  test_suites_in_parallel: true
+#! 2021-01-19 setting 'test_suites_in_parallel' false due to lack of cache space - PJK
+  test_suites_in_parallel: false
   suites:
   - name: amqqueue_backward_compatibility
   - name: backing_queue
