@@ -44,7 +44,7 @@ mkdir -p ${RABBITMQ_LOG_BASE} \
 
 # tree
 
-export ERL_LIBS \
+export \
     RABBITMQ_NODENAME \
     RABBITMQ_NODE_IP_ADDRESS \
     RABBITMQ_BASE \

@@ -1,17 +1,4 @@
-load(":rabbitmq_sbin.bzl", "rabbitmq_sbin")
 load(":rabbitmq_node.bzl", "rabbitmq_node")
-
-rabbitmq_sbin(
-    name = "rabbitmq-server",
-    scripts = [
-        "//deps/rabbit:scripts/rabbitmq-env",
-        "//deps/rabbit:scripts/rabbitmq-defaults",
-        "//deps/rabbit:scripts/rabbitmq-server",
-    ],
-    escripts = [
-        "//deps/rabbitmq_cli:rabbitmqctl",
-    ],
-)
 
 # Allow us to bazel run :broker
 # for the equivalent of `make run-broker`

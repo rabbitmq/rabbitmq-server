@@ -3,9 +3,37 @@ load("//bazel_erlang:ct.bzl", "lib_dir")
 
 _PLUGINS_DIR = "plugins"
 
+def _copy_script(ctx, script):
+    dest = ctx.actions.declare_file(path_join("sbin", script.basename))
+    args = ctx.actions.args()
+    args.add_all([script, dest])
+    ctx.actions.run(
+        inputs = [script],
+        outputs = [dest],
+        executable = "cp",
+        arguments = [args],
+        mnemonic = "COPY",
+        progress_message = "Copying script from deps/rabbit/scripts",
+    )
+    return dest
+
+def _link_escript(ctx, escript):
+    e = escript[DefaultInfo].files.to_list()[0]
+    s = ctx.actions.declare_file(path_join("escript", e.basename))
+    ctx.actions.symlink(
+        output = s,
+        target_file = e,
+    )
+    return s
+
 def _plugins_dir_link(ctx, plugin):
     lib_info = plugin[ErlangLibInfo]
-    output = ctx.actions.declare_file(path_join(_PLUGINS_DIR, "{}-{}".format(lib_info.lib_name, lib_info.lib_version)))
+    output = ctx.actions.declare_file(
+        path_join(
+            _PLUGINS_DIR,
+            "{}-{}".format(lib_info.lib_name, lib_info.lib_version),
+        )
+    )
     ctx.actions.symlink(
         output = output,
         target_file = lib_info.lib_dir,
@@ -13,19 +41,23 @@ def _plugins_dir_link(ctx, plugin):
     return output
 
 def _impl(ctx):
+    scripts = [_copy_script(ctx, script) for script in ctx.files._scripts]
+
+    escripts = [_link_escript(ctx, escript) for escript in ctx.attr._escripts]
+
     plugins_dir_contents = [_plugins_dir_link(ctx, plugin) for plugin in ctx.attr._base_plugins + ctx.attr.plugins]
 
     ctx.actions.expand_template(
         template = ctx.file._run_broker_template,
         output = ctx.outputs.executable,
         substitutions = {
-            "{RABBITMQ_SERVER_PATH}": ctx.attr._rabbitmq_server.files.to_list()[0].short_path,
+            "{RABBITMQ_SERVER_PATH}": "sbin/rabbitmq-server",
             "{PLUGINS_DIR}": _PLUGINS_DIR,
         },
         is_executable = True,
     )
 
-    runfiles = ctx.attr._rabbitmq_server[DefaultInfo].default_runfiles
+    runfiles = ctx.runfiles(scripts + escripts)
     runfiles = runfiles.merge(ctx.runfiles(plugins_dir_contents))
 
     return [DefaultInfo(
@@ -41,8 +73,18 @@ rabbitmq_node = rule(
             default = Label("//:scripts/bazel/run_broker_impl.sh"),
             allow_single_file = True,
         ),
-        "_rabbitmq_server": attr.label(
-            default = Label("//:rabbitmq-server"),
+        "_scripts": attr.label_list(
+            default = [
+                "//deps/rabbit:scripts/rabbitmq-env",
+                "//deps/rabbit:scripts/rabbitmq-defaults",
+                "//deps/rabbit:scripts/rabbitmq-server",
+            ],
+            allow_files = True,
+        ),
+        "_escripts": attr.label_list(
+            default = [
+                Label("//deps/rabbitmq_cli:rabbitmqctl"),
+            ],
         ),
         # Maybe we should not have to declare the deps here that rabbit/rabbit_common declare
         "_base_plugins": attr.label_list(
