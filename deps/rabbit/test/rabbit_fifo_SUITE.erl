@@ -1518,6 +1518,32 @@ machine_version_test(_) ->
     ?assert(priority_queue:is_queue(S)),
     ok.
 
+machine_version_waiting_consumer_test(_) ->
+    V0 = rabbit_fifo_v0,
+    S0 = V0:init(#{name => ?FUNCTION_NAME,
+                   queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
+    Idx = 1,
+    {#rabbit_fifo{}, ok, []} = apply(meta(Idx), {machine_version, 0, 1}, S0),
+
+    Cid = {atom_to_binary(?FUNCTION_NAME, utf8), self()},
+    Entries = [
+               {1, rabbit_fifo_v0:make_enqueue(self(), 1, banana)},
+               {2, rabbit_fifo_v0:make_enqueue(self(), 2, apple)},
+               {3, rabbit_fifo_v0:make_checkout(Cid, {auto, 5, unsettled}, #{})}
+              ],
+    {S1, _Effects} = rabbit_fifo_v0_SUITE:run_log(S0, Entries),
+    Self = self(),
+    {#rabbit_fifo{enqueuers = #{Self := #enqueuer{}},
+                  consumers = #{Cid := #consumer{priority = 0}},
+                  service_queue = S,
+                  messages = Msgs}, ok, []} = apply(meta(Idx),
+                                                    {machine_version, 0, 1}, S1),
+    %% validate message conversion to lqueue
+    ?assertEqual(0, lqueue:len(Msgs)),
+    ?assert(priority_queue:is_queue(S)),
+    ?assertEqual(1, priority_queue:len(S)),
+    ok.
+
 queue_ttl_test(_) ->
     QName = rabbit_misc:r(<<"/">>, queue, <<"test">>),
     Conf = #{name => ?FUNCTION_NAME,
