@@ -27,6 +27,8 @@
          publisher_updated/7,
          publisher_deleted/3]).
 
+-define(CTAG_PREFIX, <<"stream.subid-">>).
+
 init() ->
     rabbit_core_metrics:create_table({?TABLE_CONSUMER, set}),
     rabbit_core_metrics:create_table({?TABLE_PUBLISHER, set}),
@@ -42,7 +44,14 @@ consumer_created(Connection,
         [{credits, Credits}, {consumed, MessageCount}, {offset, Offset}],
     ets:insert(?TABLE_CONSUMER,
                {{StreamResource, Connection, SubscriptionId}, Values}),
+    rabbit_core_metrics:consumer_created(
+      Connection, consumer_tag(SubscriptionId), false, false, StreamResource, 0, true, up, []
+    ),
     ok.
+
+consumer_tag(SubscriptionId) ->
+  SubIdBinary = rabbit_data_coercion:to_binary(SubscriptionId),
+  <<?CTAG_PREFIX/binary, SubIdBinary/binary>>.
 
 consumer_updated(Connection,
                  StreamResource,
@@ -59,6 +68,7 @@ consumer_updated(Connection,
 consumer_cancelled(Connection, StreamResource, SubscriptionId) ->
     ets:delete(?TABLE_CONSUMER,
                {StreamResource, Connection, SubscriptionId}),
+    rabbit_core_metrics:consumer_deleted(Connection, consumer_tag(SubscriptionId), StreamResource),
     ok.
 
 publisher_created(Connection,
