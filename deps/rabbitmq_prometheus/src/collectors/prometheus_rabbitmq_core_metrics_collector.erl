@@ -192,8 +192,8 @@
 
     {auth_attempt_metrics, [
         {2, undefined, auth_attempts_total, counter, "Total number of authorization attempts on a node"},
-        {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authorization attempts on a node"},
-        {4, undefined, auth_attempts_failed_total, counter, "Total number of failed authorization attempts on a node"}
+        {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authentication attempts on a node"},
+        {4, undefined, auth_attempts_failed_total, counter, "Total number of failed authentication attempts on a node"}
     ]},
 
     {auth_attempt_detailed_metrics, [
