@@ -512,6 +512,10 @@ apply(Meta, #update_config{config = Conf}, State) ->
     checkout(Meta, State, update_config(Conf, State), []);
 apply(_Meta, {machine_version, 0, 1}, V0State) ->
     State = convert_v0_to_v1(V0State),
+    {State, ok, []};
+apply(_Meta, Cmd, State) ->
+    %% handle unhandled commands gracefully
+    rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
 convert_v0_to_v1(V0State0) ->
