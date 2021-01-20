@@ -532,7 +532,7 @@ convert_v0_to_v1(V0State0) ->
                        list_to_tuple(tuple_to_list(C0) ++ [0])
                end, V0Cons),
     V0SQ = rabbit_fifo_v0:get_field(service_queue, V0State),
-    V1SQ = priority_queue:from_list(queue:to_list(V0SQ)),
+    V1SQ = priority_queue:from_list([{0, C} || C <- queue:to_list(V0SQ)]),
     Cfg = #cfg{name = rabbit_fifo_v0:get_cfg_field(name, V0State),
                resource = rabbit_fifo_v0:get_cfg_field(resource, V0State),
                release_cursor_interval = rabbit_fifo_v0:get_cfg_field(release_cursor_interval, V0State),
