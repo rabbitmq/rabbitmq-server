@@ -1,7 +1,14 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
 load("//bazel_erlang:ct.bzl", "lib_dir")
 
-_PLUGINS_DIR = "plugins"
+RabbitmqHomeInfo = provider(
+    doc = "An assembled RABBITMQ_HOME dir",
+    fields = {
+        'sbin': 'Files making up the sbin dir',
+        'escript': 'Files making up the escript dir',
+        'plugins': 'Files making up the plugins dir',
+    },
+)
 
 def _copy_script(ctx, script):
     dest = ctx.actions.declare_file(path_join("sbin", script.basename))
@@ -30,7 +37,7 @@ def _plugins_dir_link(ctx, plugin):
     lib_info = plugin[ErlangLibInfo]
     output = ctx.actions.declare_file(
         path_join(
-            _PLUGINS_DIR,
+            "plugins",
             "{}-{}".format(lib_info.lib_name, lib_info.lib_version),
         )
     )
@@ -45,39 +52,28 @@ def _impl(ctx):
 
     escripts = [_link_escript(ctx, escript) for escript in ctx.attr._escripts]
 
-    plugins_dir_contents = [_plugins_dir_link(ctx, plugin) for plugin in ctx.attr._base_plugins + ctx.attr.plugins]
+    plugins = [_plugins_dir_link(ctx, plugin) for plugin in ctx.attr._base_plugins + ctx.attr.plugins]
 
-    ctx.actions.expand_template(
-        template = ctx.file._run_broker_template,
-        output = ctx.outputs.executable,
-        substitutions = {
-            "{RABBITMQ_SERVER_PATH}": "sbin/rabbitmq-server",
-            "{PLUGINS_DIR}": _PLUGINS_DIR,
-        },
-        is_executable = True,
-    )
+    return [
+        RabbitmqHomeInfo(
+            sbin = scripts,
+            escript = escripts,
+            plugins = plugins,
+        ),
+        DefaultInfo(
+            files = depset(scripts + escripts + plugins),
+        ),
+    ]
 
-    runfiles = ctx.runfiles(scripts + escripts)
-    runfiles = runfiles.merge(ctx.runfiles(plugins_dir_contents))
-
-    return [DefaultInfo(
-        runfiles = runfiles,
-    )]
-
-# this rule (should) creates a test node directory and wrapper around
-# rabbitmq-server (in sbin dir) that sets the missing env vars
-rabbitmq_node = rule(
+rabbitmq_home = rule(
     implementation = _impl,
     attrs = {
-        "_run_broker_template": attr.label(
-            default = Label("//:scripts/bazel/run_broker_impl.sh"),
-            allow_single_file = True,
-        ),
         "_scripts": attr.label_list(
             default = [
                 "//deps/rabbit:scripts/rabbitmq-env",
                 "//deps/rabbit:scripts/rabbitmq-defaults",
                 "//deps/rabbit:scripts/rabbitmq-server",
+                "//deps/rabbit:scripts/rabbitmqctl",
             ],
             allow_files = True,
         ),
@@ -109,17 +105,6 @@ rabbitmq_node = rule(
                 Label("@gen-batch-server//:gen-batch-server"),
             ],
         ),
-        "plugins": attr.label_list(
-            default = [
-                # default to rabbitmq_management
-                Label("//deps/rabbitmq_management:rabbitmq_management"),
-                Label("//deps/rabbitmq_management_agent:rabbitmq_management_agent"),
-                Label("//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch"),
-                Label("//deps/amqp_client:amqp_client"),
-                Label("@cowboy//:cowboy"),
-                Label("@cowlib//:cowlib"),
-            ],
-        ),
+        "plugins": attr.label_list(),
     },
-    executable = True,
 )

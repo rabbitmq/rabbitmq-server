@@ -2,6 +2,7 @@ exports_files([
     "scripts/rabbitmq-defaults",
     "scripts/rabbitmq-env",
     "scripts/rabbitmq-server",
+    "scripts/rabbitmqctl",
 ])
 
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")

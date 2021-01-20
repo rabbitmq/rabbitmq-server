@@ -1,39 +1,54 @@
-load(":rabbitmq_node.bzl", "rabbitmq_node")
+load(":rabbitmq_home.bzl", "rabbitmq_home")
+load(":rabbitmq_run.bzl", "run_broker", "start_background_broker")
+load(":rabbitmqctl.bzl", "rabbitmqctl")
+
+rabbitmq_home(
+    name = "broker-home",
+)
+
+rabbitmq_home(
+    name = "broker-management-home",
+    plugins = [
+        "//deps/rabbitmq_management:rabbitmq_management",
+        "//deps/rabbitmq_management_agent:rabbitmq_management_agent",
+        "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch",
+        "//deps/amqp_client:amqp_client",
+        "@cowboy//:cowboy",
+        "@cowlib//:cowlib",
+    ],
+)
+
+rabbitmq_home(
+    name = "broker-for-cli-tests-home",
+    plugins = [
+        "//deps/rabbitmq_federation:rabbitmq_federation",
+        "//deps/rabbitmq_stomp:rabbitmq_stomp",
+        "//deps/amqp_client:amqp_client",
+    ],
+)
 
 # Allow us to bazel run :broker
 # for the equivalent of `make run-broker`
-rabbitmq_node(
+# (though it as of yet includes no plugins)
+run_broker(
     name = "broker",
+    home = ":broker-home",
 )
 
-# This needs to:
-# - Have rabbitmqctl (from deps/rabbit/scripts) as a run file
-# - Have rabbitmqctl (built escript from deps/rabbitmq_cli) as a run file
-# - Have the broker beam files as run files
-# - Invoke rabbitmqctl correctly
-# genrule(
-#     name = "start-background-broker",
-#     srcs = [],
-#     outs = ["start_background_broker.sh"],
-#     executable = True,
-#     cmd = """cat << EOF > $@
-# #!/usr/bin/env bash
+# `bazel run :broker-management` for the broker with just the
+# management plugin
+run_broker(
+    name = "broker-management",
+    home = ":broker-management-home",
+)
 
-# echo hi
-# exit 1
-# EOF""",
-#     visibility = ["//visibility:public"],
-# )
+start_background_broker(
+    name = "broker-for-cli-tests",
+    home = ":broker-for-cli-tests-home",
+    visibility = ["//visibility:public"],
+)
 
-# genrule(
-#     name = "stop-node",
-#     srcs = [],
-#     outs = ["stop_node.sh"],
-#     executable = True,
-#     cmd = """cat << EOF > $@
-# #!/usr/bin/env bash
-
-# echo hi
-# exit 1
-# EOF""",
-# )
+rabbitmqctl(
+    name = "rabbitmqctl",
+    home = ":broker-home",
+)

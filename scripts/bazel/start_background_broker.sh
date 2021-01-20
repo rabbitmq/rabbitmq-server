@@ -2,9 +2,10 @@
 set -exuo pipefail
 
 # pwd
+# /usr/local/bin/tree
 
-TEST_TMPDIR=${TMPDIR}/rabbitmq-test-instances
-RABBITMQ_SCRIPTS_DIR="$(dirname {RABBITMQ_SERVER_PATH})"
+TEST_TMPDIR=${TEST_TMPDIR:=${TMPDIR}/rabbitmq-test-instances}
+RABBITMQ_SCRIPTS_DIR=${PWD}/sbin
 RABBITMQ_PLUGINS=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-plugins
 RABBITMQ_SERVER=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server
 RABBITMQCTL=${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl
@@ -24,7 +25,7 @@ RABBITMQ_MNESIA_BASE=${NODE_TMPDIR}/mnesia
 RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME_FOR_PATHS}
 RABBITMQ_QUORUM_DIR=${RABBITMQ_MNESIA_DIR}/quorum
 RABBITMQ_STREAM_DIR=${RABBITMQ_MNESIA_DIR}/stream
-RABBITMQ_PLUGINS_DIR={PLUGINS_DIR}
+RABBITMQ_PLUGINS_DIR=${PWD}/plugins
 RABBITMQ_PLUGINS_EXPAND_DIR=${NODE_TMPDIR}/plugins
 RABBITMQ_FEATURE_FLAGS_FILE=${NODE_TMPDIR}/feature_flags
 RABBITMQ_ENABLED_PLUGINS_FILE=${NODE_TMPDIR}/enabled_plugins
@@ -38,11 +39,9 @@ RABBITMQ_ENABLED_PLUGINS=ALL
 
 mkdir -p ${TEST_TMPDIR}
 
-mkdir -p ${RABBITMQ_LOG_BASE} \
-    ${RABBITMQ_MNESIA_BASE} \
-    ${RABBITMQ_PLUGINS_EXPAND_DIR}
-
-# tree
+mkdir -p ${RABBITMQ_LOG_BASE}
+mkdir -p ${RABBITMQ_MNESIA_BASE}
+mkdir -p ${RABBITMQ_PLUGINS_EXPAND_DIR}
 
 export \
     RABBITMQ_NODENAME \
@@ -61,45 +60,27 @@ export \
     RABBITMQ_ENABLED_PLUGINS \
     RABBITMQ_ENABLED_PLUGINS_FILE
 
-export RABBITMQ_ALLOW_INPUT=true
-export RABBITMQ_CONFIG_FILE=test.config
+# =============================================================
 
-cat << EOF > ${RABBITMQ_CONFIG_FILE}
-%% vim:ft=erlang:
+RMQCTL_WAIT_TIMEOUT=60
 
-[
-  {rabbit, [
-      {loopback_users, []},
-      {log, [{file, [{level, debug}]},
-             {console, [{level, debug}]}]}
-    ]},
-  {rabbitmq_management, [
-    ]},
-  {rabbitmq_mqtt, [
-    ]},
-  {rabbitmq_stomp, [
-    ]},
-  {ra, [
-      {data_dir, "${RABBITMQ_QUORUM_DIR}"},
-      {wal_sync_method, sync}
-    ]},
-  {lager, [
-      {colors, [
-          %% https://misc.flogisoft.com/bash/tip_colors_and_formatting
-          {debug,     "\\\e[0;34m" },
-          {info,      "\\\e[1;37m" },
-          {notice,    "\\\e[1;36m" },
-          {warning,   "\\\e[1;33m" },
-          {error,     "\\\e[1;31m" },
-          {critical,  "\\\e[1;35m" },
-          {alert,     "\\\e[1;44m" },
-          {emergency, "\\\e[1;41m" }
-      ]}
-    ]},
-  {osiris, [
-      {data_dir, "${RABBITMQ_STREAM_DIR}"}
-    ]}
-].
-EOF
+export ERL_LIBS={ERL_LIBS}
 
-./{RABBITMQ_SERVER_PATH}
+./sbin/rabbitmq-server $@ \
+    > ${RABBITMQ_LOG_BASE}/startup_log \
+    2> ${RABBITMQ_LOG_BASE}/startup_err &
+
+# rabbitmqctl wait shells out to 'ps', which is broken in the bazel macOS
+# sandbox (https://github.com/bazelbuild/bazel/issues/7448)
+# adding "--spawn_strategy=local" to the invocation is a workaround
+./sbin/rabbitmqctl \
+    -n ${RABBITMQ_NODENAME} \
+    wait \
+    --timeout ${RMQCTL_WAIT_TIMEOUT} \
+    ${RABBITMQ_PID_FILE}
+
+{ERLANG_HOME}/bin/erl \
+    -noinput \
+    -eval "true = rpc:call('${RABBITMQ_NODENAME}', rabbit, is_running, []), halt()." \
+    -sname {SNAME} \
+    -hidden

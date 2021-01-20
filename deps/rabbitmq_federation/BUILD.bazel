@@ -1,0 +1,33 @@
+load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("//bazel_erlang:ct.bzl", "ct_test")
+load("//bazel_erlang:ez.bzl", "ez")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+
+APP_ENV = """[
+	    {pgroup_name_cluster_id, false},
+	    {internal_exchange_check_interval, 90000}
+	  ]"""
+
+bazel_erlang_lib(
+    name = "rabbitmq_federation",
+    app_name = "rabbitmq_federation",
+    app_description = "RabbitMQ Federation",
+    app_version = APP_VERSION,
+    app_module = "rabbit_federation_app",
+    app_env = APP_ENV,
+    hdrs = glob(["include/*.hrl"]),
+    srcs = glob(["src/*.erl"]),
+    priv = glob(["priv/**/*"]),
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    deps = [
+        "//deps/rabbit_common:rabbit_common",
+        "//deps/rabbit:rabbit",
+        "//deps/amqp_client:amqp_client",
+        # "@cowboy//:cowboy",
+        # "@cowlib//:cowlib",
+        # "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch",
+        # "//deps/rabbitmq_management_agent:rabbitmq_management_agent",
+        "@lager//:lager", # again this should probably come via rabbit_common
+    ],
+    visibility = ["//visibility:public"],
+)
