@@ -124,9 +124,9 @@ get_memory_use(ratio) ->
     {ProcessMemory, MemoryLimit} = get_cached_process_memory_and_limit(),
     case MemoryLimit > 0.0 of
         true  -> 
-            case MemoryLimit =:= infinity of
-                false -> ProcessMemory / MemoryLimit;
-                _ -> 0.0
+            case MemoryLimit of
+                infinity -> 0.0;
+                _        -> ProcessMemory / MemoryLimit
             end;
         false -> infinity
     end.
