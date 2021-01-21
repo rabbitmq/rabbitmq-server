@@ -122,9 +122,11 @@ get_memory_use(bytes) ->
                     end};
 get_memory_use(ratio) ->
     {ProcessMemory, MemoryLimit} = get_cached_process_memory_and_limit(),
-    case MemoryLimit > 0.0 of
-        true  -> ProcessMemory / MemoryLimit;
-        false -> infinity
+    case MemoryLimit of
+        infinity -> 0.0;
+        Num when is_number(Num) andalso Num > 0.0 ->
+            ProcessMemory / MemoryLimit;
+        _        -> infinity
     end.
 
 %% Memory reported by erlang:memory(total) is not supposed to
