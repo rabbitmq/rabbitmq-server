@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
@@ -58,6 +59,7 @@ public class FailureTest {
     }
   }
 
+  @Disabled
   @Test
   void leaderFailureWhenPublisherConnectedToReplica() throws Exception {
     Set<String> messages = new HashSet<>();
