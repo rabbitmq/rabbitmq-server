@@ -31,9 +31,6 @@ def _impl(ctx):
 
         export PATH=${{PATH}}:{erlang_home}/bin:{elixir_home}/bin
 
-        pwd
-        /usr/local/bin/tree -L 2
-
         INITIAL_DIR=${{PWD}}
 
         ln -s ${{PWD}}/{package_dir}/config ${{TEST_UNDECLARED_OUTPUTS_DIR}}
@@ -45,9 +42,6 @@ def _impl(ctx):
         {copy_compiled_deps_command}
 
         cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
-
-        pwd
-        /usr/local/bin/tree -L 2
 
         export HOME=${{PWD}}
         export MIX_ARCHIVES={mix_archives}

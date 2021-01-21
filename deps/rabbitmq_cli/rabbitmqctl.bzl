@@ -32,11 +32,10 @@ def _impl(ctx):
 
         mkdir -p {mix_invocation_dir}
 
-        ln -s ${{PWD}}/{package_dir}/config {mix_invocation_dir}
-        ln -s ${{PWD}}/{package_dir}/include {mix_invocation_dir}
-        ln -s ${{PWD}}/{package_dir}/lib {mix_invocation_dir}
-        ln -s ${{PWD}}/{package_dir}/test {mix_invocation_dir}
-        ln -s ${{PWD}}/{package_dir}/mix.exs {mix_invocation_dir}
+        cp -R ${{PWD}}/{package_dir}/config {mix_invocation_dir}/config
+        # cp -R ${{PWD}}/{package_dir}/include {mix_invocation_dir}/include # rabbitmq_cli's include directory is empty
+        cp -R ${{PWD}}/{package_dir}/lib {mix_invocation_dir}/lib
+        cp    ${{PWD}}/{package_dir}/mix.exs {mix_invocation_dir}/mix.exs
 
         {copy_compiled_deps_command}
 
