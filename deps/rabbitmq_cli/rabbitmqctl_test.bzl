@@ -5,66 +5,86 @@ load("//bazel_erlang:ct.bzl", "lib_dir")
 load(":rabbitmqctl.bzl", "MIX_DEPS_DIR")
 
 def _impl(ctx):
-    build_deps_dir_commands = []
-    build_deps_dir_commands.append("mkdir -p {}".format(MIX_DEPS_DIR))
+    erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
+    elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
+    mix_archives = ctx.attr._mix_archives[MixArchivesProvider].path
+
+    # when linked instead of copied, we encounter a bazel error such as
+    # "A TreeArtifact may not contain relative symlinks whose target paths traverse outside of the TreeArtifact"
+    copy_compiled_deps_commands = []
+    copy_compiled_deps_commands.append("mkdir ${{TEST_UNDECLARED_OUTPUTS_DIR}}/{}".format(MIX_DEPS_DIR))
     for dep in ctx.attr.deps:
-        build_deps_dir_commands.append("ln -s {source} {target}".format(
-            # TODO: The next line is fragile w.r.t the rabbitmq_cli package path
-            source = path_join("../..", "..", lib_dir(dep)),
-            target = path_join(MIX_DEPS_DIR, dep[ErlangLibInfo].lib_name)
-        ))
+        info = dep[ErlangLibInfo]
+        copy_compiled_deps_commands.append(
+            "cp -R ${{PWD}}/{source} ${{TEST_UNDECLARED_OUTPUTS_DIR}}/{target}".format(
+                source = lib_dir(dep),
+                target = path_join(MIX_DEPS_DIR, info.lib_name)
+            )
+        )
 
     erl_libs = ":".join(
-        [path_join("../..", lib_dir(dep)) for dep in ctx.attr.deps]
+        [path_join("${TEST_SRCDIR}/__main__", lib_dir(dep)) for dep in ctx.attr.deps]
     )
 
     script = """
-    set -exuo pipefail
+        set -euxo pipefail
 
-    PATH={elixir_home}/bin:{erlang_home}/bin:${{PATH}}
+        export PATH=${{PATH}}:{erlang_home}/bin:{elixir_home}/bin
 
-    INITIAL_DIR=${{PWD}}
-    cd {package_dir}
-    export HOME=${{TEST_TMPDIR}}
-    export MIX_ARCHIVES={mix_archives}
-    {build_deps_dir_command}
-    export DEPS_DIR={mix_deps_dir}
+        pwd
+        /usr/local/bin/tree -L 2
 
-    mix local.rebar --force
-    mix make_deps
+        INITIAL_DIR=${{PWD}}
 
-    # cd ${{INITIAL_DIR}} && tree && cd {package_dir}
+        ln -s ${{PWD}}/{package_dir}/config ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+        ln -s ${{PWD}}/{package_dir}/include ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+        ln -s ${{PWD}}/{package_dir}/lib ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+        ln -s ${{PWD}}/{package_dir}/test ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+        ln -s ${{PWD}}/{package_dir}/mix.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
-    # The test cases will need to be able to load code from the deps
-    # directly, so we set ERL_LIBS
-    export ERL_LIBS={erl_libs}
+        {copy_compiled_deps_command}
 
-    # due to https://github.com/elixir-lang/elixir/issues/7699 we
-    # "run" the tests, but skip them all, in order to trigger
-    # compilation of all *_test.exs files before we actually run them
-    mix test --exclude test
+        cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
-    export TEST_TMPDIR=${{TEST_UNDECLARED_OUTPUTS_DIR}}
+        pwd
+        /usr/local/bin/tree -L 2
 
-    # we need a running broker with certain plugins for this to pass 
-    trap 'catch $?' EXIT
-    catch() {{
-        pid=$(cat ${{TEST_TMPDIR}}/*/*.pid)
-        kill -TERM "${{pid}}"
-    }}
-    cd ${{INITIAL_DIR}}
-    ./{start_background_broker_cmd}
-    cd {package_dir}
+        export HOME=${{PWD}}
+        export MIX_ARCHIVES={mix_archives}
+        export DEPS_DIR={mix_deps_dir}
+        mix local.rebar --force
+        mix make_deps
 
-    # run the actual tests
-    mix test --trace --max-failures 1
+        # due to https://github.com/elixir-lang/elixir/issues/7699 we
+        # "run" the tests, but skip them all, in order to trigger
+        # compilation of all *_test.exs files before we actually run them
+        mix test --exclude test
+
+        export TEST_TMPDIR=${{TEST_UNDECLARED_OUTPUTS_DIR}}
+
+        # we need a running broker with certain plugins for this to pass 
+        trap 'catch $?' EXIT
+        catch() {{
+            pid=$(cat ${{TEST_TMPDIR}}/*/*.pid)
+            kill -TERM "${{pid}}"
+        }}
+        cd ${{INITIAL_DIR}}
+        ./{start_background_broker_cmd}
+        cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
+
+        # The test cases will need to be able to load code from the deps
+        # directly, so we set ERL_LIBS
+        export ERL_LIBS={erl_libs}
+
+        # run the actual tests
+        mix test --trace --max-failures 1
     """.format(
-        package_dir=ctx.label.package,
-        erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
-        elixir_home=ctx.attr._elixir_home[ElixirHomeProvider].path,
+        erlang_home=erlang_home,
+        elixir_home=elixir_home,
         mix_archives=ctx.attr._mix_archives[MixArchivesProvider].path,
+        package_dir=ctx.label.package,
+        copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
         mix_deps_dir=MIX_DEPS_DIR,
-        build_deps_dir_command=" && ".join(build_deps_dir_commands),
         erl_libs=erl_libs,
         start_background_broker_cmd=ctx.attr._start_background_broker.files.to_list()[0].short_path,
     )

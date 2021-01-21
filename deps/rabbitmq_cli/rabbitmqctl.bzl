@@ -9,58 +9,72 @@ def _impl(ctx):
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
     mix_archives = ctx.attr._mix_archives[MixArchivesProvider].path
 
-    home_dir = ctx.actions.declare_directory("home")
-    ctx.actions.run(
-        outputs = [home_dir],
-        executable = "mkdir",
-        arguments = [home_dir.path],
-    )
-
+    mix_invocation_dir = ctx.actions.declare_directory("mix")
     escript = ctx.actions.declare_file(path_join("escript", ctx.attr.name))
 
-    build_cmds = []
-    # build_cmds.append("find .")
-    build_cmds.append("cd {}".format(ctx.label.package))
-    build_cmds.append("mkdir -p {}".format(MIX_DEPS_DIR))
+    # when linked instead of copied, we encounter a bazel error such as
+    # "A TreeArtifact may not contain relative symlinks whose target paths traverse outside of the TreeArtifact"
+    copy_compiled_deps_commands = []
+    copy_compiled_deps_commands.append("mkdir {}/{}".format(mix_invocation_dir.path, MIX_DEPS_DIR))
     for dep in ctx.attr.deps:
         info = dep[ErlangLibInfo]
-        build_cmds.append("ln -s {source} {target}".format(
-            # TODO: The next line is fragile w.r.t the rabbitmq_cli package path
-            source = path_join("../..", "..", info.lib_dir.path),
-            target = path_join(MIX_DEPS_DIR, info.lib_name)
-        ))
-    build_cmds.append("mix local.rebar --force")
-    build_cmds.append("mix $@")
-    build_cmds.append("mkdir -p $OLDPWD/{0} && mv escript/* $OLDPWD/{0}".format(escript.dirname))
+        copy_compiled_deps_commands.append(
+            "cp -R ${{PWD}}/{source} {target}".format(
+                source = info.lib_dir.path,
+                target = path_join(mix_invocation_dir.path, MIX_DEPS_DIR, info.lib_name)
+            )
+        )
 
-    cmds = [
-        "export PATH=$PATH:{}/bin:{}/bin".format(erlang_home, elixir_home),
-        "set -x",
-        # "printenv",
-        # "/usr/local/bin/tree",
-        " && ".join(build_cmds),
-    ]
+    script = """
+        set -euxo pipefail
+
+        export PATH=${{PATH}}:{erlang_home}/bin:{elixir_home}/bin
+
+        mkdir -p {mix_invocation_dir}
+
+        ln -s ${{PWD}}/{package_dir}/config {mix_invocation_dir}
+        ln -s ${{PWD}}/{package_dir}/include {mix_invocation_dir}
+        ln -s ${{PWD}}/{package_dir}/lib {mix_invocation_dir}
+        ln -s ${{PWD}}/{package_dir}/test {mix_invocation_dir}
+        ln -s ${{PWD}}/{package_dir}/mix.exs {mix_invocation_dir}
+
+        {copy_compiled_deps_command}
+
+        cd {mix_invocation_dir}
+        export HOME=${{PWD}}
+        export DEPS_DIR={mix_deps_dir}
+        mix local.rebar --force
+        mix make_all
+
+        cd ${{OLDPWD}}
+        cp {mix_invocation_dir}/escript/rabbitmqctl {escript_path}
+    """.format(
+        erlang_home=erlang_home,
+        elixir_home=elixir_home,
+        mix_invocation_dir=mix_invocation_dir.path,
+        package_dir=ctx.label.package,
+        copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
+        mix_deps_dir=MIX_DEPS_DIR,
+        escript_path=escript.path,
+    )
 
     ctx.actions.run_shell(
         inputs = ctx.files.srcs + [dep[ErlangLibInfo].lib_dir for dep in ctx.attr.deps],
-        outputs = [escript],
-        command = "; ".join(cmds),
-        arguments = [ctx.attr.command],
+        outputs = [mix_invocation_dir, escript],
+        command = script,
         env = {
-            "HOME": home_dir.path,
             "MIX_ARCHIVES": mix_archives,
-            "DEPS_DIR": MIX_DEPS_DIR,
         },
     )
 
     return [DefaultInfo(
         executable = escript,
+        # files = depset([mix_invocation_dir]),
     )]
 
 rabbitmqctl = rule(
     implementation = _impl,
     attrs = {
-        "command": attr.string(),
         "srcs": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),

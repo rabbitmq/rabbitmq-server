@@ -35,13 +35,11 @@ bazel_erlang_lib(
     hdrs = glob(["include/*.hrl"]),
     srcs = glob(["src/*.erl"]),
     priv = glob(["priv/**/*"]),
-    erlc_opts = RABBITMQ_ERLC_OPTS,
     deps = [
+        "@ranch//:ranch",
         "//deps/rabbit_common:rabbit_common",
         "//deps/rabbit:rabbit",
         "//deps/amqp_client:amqp_client",
-        "@ranch//:ranch",
-        "@lager//:lager", # again this should probably come via rabbit_common
     ],
     visibility = ["//visibility:public"],
 )
