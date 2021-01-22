@@ -4,6 +4,8 @@ set -exuo pipefail
 # pwd
 # /usr/local/bin/tree
 
+cd {PATH_PREFIX}
+
 TEST_TMPDIR=${TEST_TMPDIR:=${TMPDIR}/rabbitmq-test-instances}
 RABBITMQ_SCRIPTS_DIR=${PWD}/sbin
 RABBITMQ_PLUGINS=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-plugins

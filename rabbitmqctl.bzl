@@ -1,18 +1,16 @@
-load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider")
+load("//bazel_erlang:erlang_home.bzl", "ErlangVersionProvider", "ErlangHomeProvider")
 load(":rabbitmq_home.bzl", "RabbitmqHomeInfo")
-
-# Note: Theses rules take advantage of the fact that when the files from
-#       the rabbitmq_home rule are used as runfiles, they are linked in
-#       at their declared relative paths. In other words, since
-#       rabbitmq_home declares "sbin/rabbitmq-server", is still at
-#       "sbin/rabbitmq-server" when our script runs.
 
 def _impl(ctx):
     rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
 
+    if rabbitmq_home.erlang_version != ctx.attr._erlang_version[ErlangVersionProvider].version:
+        fail()
+
     script = """
+    cd {}/*
     exec ./sbin/rabbitmqctl $@ 
-    """
+    """.format(ctx.attr.home.label.name)
 
     ctx.actions.write(
         output = ctx.outputs.executable,
@@ -26,6 +24,7 @@ def _impl(ctx):
 rabbitmqctl = rule(
     implementation = _impl,
     attrs = {
+        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
         "home": attr.label(providers=[RabbitmqHomeInfo]),
     },
     executable = True,
