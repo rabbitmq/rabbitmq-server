@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_json).
@@ -29,7 +29,7 @@ try_decode(JSON) ->
     try_decode(JSON, ?DEFAULT_DECODE_OPTIONS).
 
 
--spec try_decode(jsx:json_text(), jsx_to_term:config()) -> 
+-spec try_decode(jsx:json_text(), jsx_to_term:config()) ->
 			{ok, jsx:json_term()} | {error, Reason :: term()}.
 try_decode(JSON, Opts) ->
     try
@@ -47,7 +47,7 @@ encode(Term, Opts) ->
     jsx:encode(Term, Opts).
 
 
--spec try_encode(jsx:json_term()) -> {ok, jsx:json_text()} | 
+-spec try_encode(jsx:json_term()) -> {ok, jsx:json_text()} |
 				     {error, Reason :: term()}.
 try_encode(Term) ->
     try_encode(Term, []).

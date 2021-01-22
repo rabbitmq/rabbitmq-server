@@ -53,4 +53,4 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) and our [development process overview](
 
 ## Copyright
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2021 VMware, Inc. or its affiliates.

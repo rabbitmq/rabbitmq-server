@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_etcd).

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 alias RabbitMQ.CLI.Formatters.FormatterHelpers
 
 defmodule RabbitMQ.CLI.DefaultOutput do
@@ -55,7 +55,7 @@ defmodule RabbitMQ.CLI.DefaultOutput do
   defp normalize_output({unknown, _} = input, _opts) when is_atom(unknown), do: {:error, input}
   defp normalize_output(result, _opts) when not is_atom(result), do: {:ok, result}
 
-  
+
   defp format_output({:error, _} = result) do
     result
   end

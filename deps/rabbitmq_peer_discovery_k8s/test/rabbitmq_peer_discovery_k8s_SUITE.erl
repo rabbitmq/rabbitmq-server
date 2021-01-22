@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbitmq_peer_discovery_k8s_SUITE).
@@ -127,6 +127,6 @@ event_v1_test(_Config) ->
 			       host => <<"MyHostName">>
 			      }
 		   },
-    ?assertEqual(Expectation, 
-		 rabbit_peer_discovery_k8s:generate_v1_event(<<"namespace">>, "test",  
+    ?assertEqual(Expectation,
+		 rabbit_peer_discovery_k8s:generate_v1_event(<<"namespace">>, "test",
 							     "Normal", "Reason", "MyMessage", "2019-12-06T15:10:23+00:00", "MyHostName")).

@@ -11,7 +11,7 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% Copyright (c) 2015-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2015-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_boot_state_systemd).

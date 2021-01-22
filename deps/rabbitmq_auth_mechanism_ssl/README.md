@@ -7,7 +7,7 @@ instead of credentials (username/password pairs).
 
 ## How it Works
 
-When a client connects and performs TLS upgrade, 
+When a client connects and performs TLS upgrade,
 the username is obtained from the client's
 TLS (x509) certificate. The user's password is not checked.
 
@@ -81,6 +81,6 @@ backends if so configured.
 
 ## Copyright & License
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2021 VMware, Inc. or its affiliates.
 
 Released under the same license as RabbitMQ.

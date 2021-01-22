@@ -8,7 +8,7 @@
 %% license for the specific language governing rights and limitations
 %% under the license.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc and its affiliates. All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc and its affiliates. All rights reserved.
 
 -define(KEEP_NB, 20).
 -define(RH_TABLE, rh_exchange_table).

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_fifo).
@@ -528,7 +528,7 @@ convert_v0_to_v1(V0State0) ->
                        #enqueuer{next_seqno = element(2, E),
                                  pending = element(3, E),
                                  status = element(4, E)}
-               end, V0Enqs), 
+               end, V0Enqs),
     V0Cons = rabbit_fifo_v0:get_field(consumers, V0State),
     V1Cons = maps:map(
                fun (_CId, C0) ->

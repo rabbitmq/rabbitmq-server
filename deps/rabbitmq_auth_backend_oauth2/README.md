@@ -260,6 +260,6 @@ field will be ignored as long as the token provides a client ID.
 
 ## License and Copyright
 
-(c) 2016-2020 VMware, Inc. or its affiliates.
+(c) 2016-2021 VMware, Inc. or its affiliates.
 
 Released under the same license as RabbitMQ, see `LICENSE`.

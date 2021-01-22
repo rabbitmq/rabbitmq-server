@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(exchange_SUITE).
@@ -650,7 +650,7 @@ message_cycle_detection_case2(Config) ->
     declare_exchange(VH3Ch, x(X, <<"fanout">>)),
     declare_exchange(VH2Ch, x(X, <<"fanout">>)),
     declare_exchange(VH1Ch, x(X, <<"fanout">>)),
-    
+
     rabbit_ct_helpers:await_condition(
         fun () ->
             LinksInB = federation_links_in_vhost(Config, 0, VH2),
@@ -659,9 +659,9 @@ message_cycle_detection_case2(Config) ->
             length(LinksInC) =:= 1 andalso
             [running] =:= status_fields(status, LinksInB ++ LinksInC)
         end),
-    
+
     Statuses = federation_links_in_vhost(Config, 0, VH2) ++ federation_links_in_vhost(Config, 0, VH3),
-    
+
     ?assertEqual(lists:usort([URI1, URI2]),
                  status_fields(uri, Statuses)),
     ?assertEqual(lists:usort([<<"federated.x">>]),
@@ -670,7 +670,7 @@ message_cycle_detection_case2(Config) ->
                  status_fields(vhost, Statuses)),
     ?assertEqual(lists:usort([exchange]),
                  status_fields(type, Statuses)),
-    
+
     %% give links some time to set up their topology
     rabbit_ct_helpers:await_condition(
         fun () ->
@@ -679,7 +679,7 @@ message_cycle_detection_case2(Config) ->
             length(ExchangesInA) >= 1 andalso
             length(ExchangesInB) >= 1
         end),
-    
+
     RK = <<"doesn't matter">>,
     Q  = bind_queue(VH3Ch, X, RK),
     ?assertEqual(ok, await_binding(Config, 0, VH2, X, RK, 1)),
@@ -693,7 +693,7 @@ message_cycle_detection_case2(Config) ->
                     XName =:= rabbit_misc:r(VH1, exchange, X)
                   end, ExchangesInA)
     end),
-    
+
     Payload1 = <<"msg1">>,
     Payload2 = <<"msg2">>,
     publish(VH1Ch, X, RK, Payload1),
@@ -900,7 +900,7 @@ delete_federated_queue_upstream(Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, VH2),
     rabbit_ct_broker_helpers:add_vhost(Config, VH2),
     rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VH2),
-    
+
     rabbit_ct_broker_helpers:rpc(Config, 0,
                                  rabbit_policy, set,
                                  [VH1,
@@ -933,13 +933,13 @@ delete_federated_queue_upstream(Config) ->
                                           #'queue.declare'{queue = <<"federated.queue">>,
                                                            durable = true}),
 
-    
+
     rabbit_ct_helpers:await_condition(
         fun () ->
             length(federation_links_in_vhost(Config, 0, VH1)) > 0 andalso
             length(federation_links_in_vhost(Config, 0, VH2)) > 0
         end),
-    
+
     ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH1))),
     ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH2))),
 
