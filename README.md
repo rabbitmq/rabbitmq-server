@@ -25,11 +25,16 @@
 
  * [RabbitMQ tutorials](https://rabbitmq.com/getstarted.html)
  * [All documentation guides](https://rabbitmq.com/documentation.html)
+
+Some key doc guides include
+
  * [CLI tools guide](https://rabbitmq.com/cli.html) 
+ * [Clustering](https://www.rabbitmq.com/clustering.html) and [Cluster Formation](https://www.rabbitmq.com/cluster-formation.html) guides
  * [Configuration guide](https://rabbitmq.com/configure.html) 
  * [Client libraries and tools](https://rabbitmq.com/devtools.html)
- * [Monitoring guide](https://rabbitmq.com/monitoring.html)
+ * [Monitoring](https://rabbitmq.com/monitoring.html) and [Prometheus/Grafana](https://www.rabbitmq.com/prometheus.html) guides
  * [Production checklist](https://rabbitmq.com/production-checklist.html)
+ * [Quorum queues](https://rabbitmq.com/quorum-queues.html): a replicated, data safety- and consistency-oriented queue type
  * [Runnable tutorials](https://github.com/rabbitmq/rabbitmq-tutorials/)
  * [Documentation source](https://github.com/rabbitmq/rabbitmq-website/)
 
