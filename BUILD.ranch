@@ -1,5 +1,4 @@
 load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("@//bazel_erlang:ez.bzl", "ez")
 
 # ranch is a special case where the archive includes a built ebin/ranch.app
 # bazel_erlang_lib doesn't yet support that, so we just provide the values
@@ -28,11 +27,5 @@ bazel_erlang_lib(
     deps = [
         "@lager//:lager",
     ],
-    visibility = ["//visibility:public"],
-)
-
-ez(
-    name = "ranch.ez",
-    lib = ":ranch",
     visibility = ["//visibility:public"],
 )

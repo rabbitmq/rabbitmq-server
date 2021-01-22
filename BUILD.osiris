@@ -1,5 +1,4 @@
 load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("@//bazel_erlang:ez.bzl", "ez")
 
 APP_ENV = """[
 	{data_dir, "/tmp/osiris"},
@@ -22,11 +21,5 @@ bazel_erlang_lib(
     deps = [
         "@gen-batch-server//:gen-batch-server",
     ],
-    visibility = ["//visibility:public"],
-)
-
-ez(
-    name = "osiris.ez",
-    lib = ":osiris",
     visibility = ["//visibility:public"],
 )

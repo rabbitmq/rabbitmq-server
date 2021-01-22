@@ -1,5 +1,4 @@
 load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("@//bazel_erlang:ez.bzl", "ez")
 
 bazel_erlang_lib(
     name = "cuttlefish",
@@ -13,11 +12,5 @@ bazel_erlang_lib(
     deps = [
         "@lager//:lager",
     ],
-    visibility = ["//visibility:public"],
-)
-
-ez(
-    name = "cuttlefish.ez",
-    lib = ":cuttlefish",
     visibility = ["//visibility:public"],
 )

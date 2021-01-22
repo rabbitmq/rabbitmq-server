@@ -21,7 +21,6 @@ def github_bazel_erlang_lib(name, org="rabbitmq", version=APP_VERSION, tag=None,
 
 _BUILD_FILE_TEMPLATE = """
 load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("@//bazel_erlang:ez.bzl", "ez")
 
 bazel_erlang_lib(
     name = "{name}",

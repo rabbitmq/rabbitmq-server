@@ -1,16 +1,30 @@
-load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider")
+load("//bazel_erlang:erlang_home.bzl", "ErlangVersionProvider", "ErlangHomeProvider")
 load("//bazel_erlang:elixir_home.bzl", "ElixirHomeProvider", "MixArchivesProvider")
 load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
 
 MIX_DEPS_DIR = "mix_deps"
 
 def _impl(ctx):
+    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
     erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
     mix_archives = ctx.attr._mix_archives[MixArchivesProvider].path
 
-    mix_invocation_dir = ctx.actions.declare_directory("mix")
-    escript = ctx.actions.declare_file(path_join("escript", ctx.attr.name))
+    mix_invocation_dir = ctx.actions.declare_directory(
+        path_join(
+            ctx.label.name,
+            erlang_version,
+            "mix",
+        )
+    )
+    escript = ctx.actions.declare_file(
+        path_join(
+            ctx.label.name,
+            erlang_version,
+            "escript",
+            ctx.attr.name,
+        )
+    )
 
     # when linked instead of copied, we encounter a bazel error such as
     # "A TreeArtifact may not contain relative symlinks whose target paths traverse outside of the TreeArtifact"
@@ -71,7 +85,6 @@ def _impl(ctx):
 
     return [DefaultInfo(
         executable = escript,
-        # files = depset([mix_invocation_dir]),
     )]
 
 rabbitmqctl = rule(
@@ -79,6 +92,7 @@ rabbitmqctl = rule(
     attrs = {
         "srcs": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
+        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
         "_mix_archives": attr.label(default = "//bazel_erlang:mix_archives"),

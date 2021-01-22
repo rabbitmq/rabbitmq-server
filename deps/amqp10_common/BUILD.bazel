@@ -1,5 +1,4 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("//bazel_erlang:ez.bzl", "ez")
 # load("//bazel_erlang:ct.bzl", "ct_test")
 # load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS")
 
@@ -39,12 +38,6 @@ bazel_erlang_lib(
     #     "//deps/rabbit_common:rabbit_common", # "a BUILD_DEP in Erlang.mk speak
     #     "@lager//:lager", # this is a transitive dep through rabbit_common (and maybe should be included automatically)
     # ],
-    visibility = ["//visibility:public"],
-)
-
-ez(
-    name = "amqp10_common.ez",
-    lib = ":amqp10_common",
     visibility = ["//visibility:public"],
 )
 

@@ -6,7 +6,6 @@ exports_files([
 ])
 
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("//bazel_erlang:ez.bzl", "ez")
 load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS")
 
 _APP_ENV = """[

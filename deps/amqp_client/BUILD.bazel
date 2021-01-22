@@ -1,7 +1,6 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
 load("//:rabbitmq.bzl", "APP_VERSION")
-load("//bazel_erlang:ez.bzl", "ez")
 
 APP_ENV = """[
 	    {prefer_ipv6, false},

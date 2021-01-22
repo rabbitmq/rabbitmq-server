@@ -1,5 +1,4 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("//bazel_erlang:ez.bzl", "ez")
 load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
 
 bazel_erlang_lib(
@@ -15,11 +14,5 @@ bazel_erlang_lib(
         "//deps/rabbit_common:rabbit_common",
         "@lager//:lager",
     ],
-    visibility = ["//visibility:public"],
-)
-
-ez(
-    name = "rabbitmq_prelaunch.ez",
-    lib = ":rabbitmq_prelaunch",
     visibility = ["//visibility:public"],
 )
