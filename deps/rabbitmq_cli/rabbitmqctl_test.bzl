@@ -66,6 +66,8 @@ def _impl(ctx):
             kill -TERM "${{pid}}"
         }}
         cd ${{INITIAL_DIR}}
+        printenv
+        find ${{PWD}}
         ./{start_background_broker_cmd}
         cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
