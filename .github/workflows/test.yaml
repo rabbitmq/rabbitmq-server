@@ -8,8 +8,8 @@ jobs:
       max-parallel: 1
       matrix:
         erlang_version:
-        - "22.3"
         - "23.1"
+        - "22.3"
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
