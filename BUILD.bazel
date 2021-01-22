@@ -2,6 +2,9 @@ load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "run_broker", "start_background_broker")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 
+# Note: maybe the different erlang versions need to be modeled as
+#       different target platforms?
+
 rabbitmq_home(
     name = "broker-home",
 )

@@ -80,6 +80,7 @@ def _impl(ctx):
         command = script,
         env = {
             "MIX_ARCHIVES": mix_archives,
+            "ERLANG_VERSION": erlang_version,
         },
     )
 

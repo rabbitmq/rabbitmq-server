@@ -22,6 +22,9 @@ def _copy_script(ctx, script):
         outputs = [dest],
         executable = "cp",
         arguments = [args],
+        env = {
+            "ERLANG_VERSION": erlang_version,
+        },
     )
     return dest
 
@@ -114,4 +117,5 @@ rabbitmq_home = rule(
         ),
         "plugins": attr.label_list(),
     },
+    # Maybe named outputs here as well?
 )

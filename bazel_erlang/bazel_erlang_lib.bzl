@@ -115,10 +115,12 @@ def _deps_dir_link(ctx, dep):
 def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
     app_file = _gen_app_file(ctx, srcs) if gen_app_file else None
 
+    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
+
     output_dir = ctx.actions.declare_directory(
         path_join(
             ctx.label.name,
-            ctx.attr._erlang_version[ErlangVersionProvider].version,
+            erlang_version,
             "{}-{}".format(ctx.attr.app_name, ctx.attr.app_version)
         )
     )
@@ -204,18 +206,23 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
     if app_file != None:
         inputs.append(app_file)
 
+    # The script is computed differently based on the erlang version, so
+    # why do we seem to get a cache collision?
     ctx.actions.run_shell(
         inputs = inputs,
         outputs = [output_dir],
         command = script,
         arguments = [erl_args],
+        env = {
+            "ERLANG_VERSION": erlang_version,
+        },
     )
 
     return ErlangLibInfo(
         lib_name = ctx.attr.app_name,
         lib_version = ctx.attr.app_version,
         lib_dir = output_dir,
-        erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version,
+        erlang_version = erlang_version,
     )
 
 def _impl(ctx):
