@@ -80,5 +80,6 @@ rabbitmqctl = rule(
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
         "_mix_archives": attr.label(default = "//bazel_erlang:mix_archives"),
     },
+    # Should we used named outputs here?
     executable = True,
 )

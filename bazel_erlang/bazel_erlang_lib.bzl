@@ -1,4 +1,5 @@
 load(":erlang_home.bzl", "ErlangHomeProvider")
+load(":erlang_version.bzl", "ErlangVersionProvider")
 
 #TODO: go back to a place where we have an erlc rule that does compilation and emits
 #      single files. Then have an additional erlang_lib rule that emits a directory,
@@ -17,6 +18,7 @@ ErlangLibInfo = provider(
         'lib_name': 'Name of the erlang lib',
         'lib_version': 'Version of the erlang lib',
         'lib_dir': 'A directory that contains the compiled lib',
+        'erlang_version': 'The erlang version used to produce the beam files',
     },
 )
 
@@ -117,6 +119,7 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
     output_dir = ctx.actions.declare_directory(
         path_join(
             ctx.label.name,
+            ctx.attr._erlang_version[ErlangVersionProvider].version,
             "{}-{}".format(ctx.attr.app_name, ctx.attr.app_version)
         )
     )
@@ -213,6 +216,7 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
         lib_name = ctx.attr.app_name,
         lib_version = ctx.attr.app_version,
         lib_dir = output_dir,
+        erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version,
     )
 
 def _impl(ctx):
