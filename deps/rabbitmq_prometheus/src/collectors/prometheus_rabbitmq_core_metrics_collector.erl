@@ -231,7 +231,7 @@ collect(PerObjectMetrics, Callback) ->
     [begin
          Data = get_data(Table, PerObjectMetrics),
          mf(Callback, Contents, Data)
-     end || {Table, Contents} <- ?METRICS_RAW, needs_processing(PerObjectMetrics, Table)],
+     end || {Table, Contents} <- ?METRICS_RAW, include_when_per_object_metrics(PerObjectMetrics, Table)],
     [begin
          Size = ets:info(Table, size),
          mf_totals(Callback, Name, Type, Help, Size)
@@ -240,11 +240,11 @@ collect(PerObjectMetrics, Callback) ->
     add_metric_family(identity_info(), Callback),
     ok.
 
-needs_processing(false, auth_attempt_detailed_metrics) ->
-    %% When per object metrics are disabled the detailed authentication attempt metrics
-    %% create duplicates. Totals are carried on `auth_attempt_metrics`
+include_when_per_object_metrics(true, auth_attempt_metrics) ->
     false;
-needs_processing(_, _) ->
+include_when_per_object_metrics(false, auth_attempt_detailed_metrics) ->
+    false;
+include_when_per_object_metrics(_, _) ->
     true.
 
 build_info() ->

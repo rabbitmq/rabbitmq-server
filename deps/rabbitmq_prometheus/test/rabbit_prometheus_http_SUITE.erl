@@ -36,7 +36,8 @@ groups() ->
         ]},
         {per_object_metrics, [], [
             globally_configure_per_object_metrics_test,
-            specific_erlang_metrics_present_test
+            specific_erlang_metrics_present_test,
+            single_auth_attempts_type_test
         ]},
         {per_object_endpoint_metrics, [], [
             endpoint_per_object_metrics,
@@ -257,6 +258,12 @@ per_object_metrics_test(Config, Path) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds{", [{capture, none}, multiline])),
     %% Check the first TOTALS metric value
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])).
+
+single_auth_attempts_type_test(Config) ->
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
+    TypeDefinition = "TYPE rabbitmq_auth_attempts_total",
+    {match, Matches} = re:run(Body, TypeDefinition, [{capture, all, binary}, global]),
+    ?assertEqual(1, length(Matches), "Expecting a single occurence of " ++ TypeDefinition).
 
 build_info_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
