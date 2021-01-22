@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_ct_client_helpers).
@@ -273,10 +273,7 @@ consume(Ch, QName, Count) ->
          after 5000 ->
                  exit(timeout)
          end
-     end|| I <- lists:seq(1, Count)],
-    #'queue.declare_ok'{message_count = 0}
-        = amqp_channel:call(Ch, #'queue.declare'{queue   = QName,
-                                                 durable = true}),
+     end || I <- lists:seq(1, Count)],
     amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
     ok.
 
