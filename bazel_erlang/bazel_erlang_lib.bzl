@@ -1,5 +1,4 @@
-load(":erlang_home.bzl", "ErlangHomeProvider")
-load(":erlang_version.bzl", "ErlangVersionProvider")
+load(":erlang_home.bzl", "ErlangVersionProvider", "ErlangHomeProvider")
 
 #TODO: go back to a place where we have an erlc rule that does compilation and emits
 #      single files. Then have an additional erlang_lib rule that emits a directory,

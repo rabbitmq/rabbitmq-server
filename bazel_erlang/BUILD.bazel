@@ -1,5 +1,4 @@
-load("erlang_version.bzl", "erlang_version")
-load("erlang_home.bzl", "erlang_home")
+load("erlang_home.bzl", "erlang_version", "erlang_home")
 load("elixir_home.bzl", "elixir_home", "mix_archives")
 
 exports_files([
