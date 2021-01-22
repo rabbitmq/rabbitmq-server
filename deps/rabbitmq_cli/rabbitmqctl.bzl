@@ -28,6 +28,9 @@ def _impl(ctx):
     script = """
         set -euxo pipefail
 
+        export LANG="en_US.UTF-8"
+        export LC_ALL="en_US.UTF-8"
+
         export PATH=${{PATH}}:{erlang_home}/bin:{elixir_home}/bin
 
         mkdir -p {mix_invocation_dir}

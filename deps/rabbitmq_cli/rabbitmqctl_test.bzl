@@ -29,6 +29,9 @@ def _impl(ctx):
     script = """
         set -euxo pipefail
 
+        export LANG="en_US.UTF-8"
+        export LC_ALL="en_US.UTF-8"
+
         export PATH=${{PATH}}:{erlang_home}/bin:{elixir_home}/bin
 
         INITIAL_DIR=${{PWD}}
@@ -91,9 +94,7 @@ def _impl(ctx):
     runfiles = ctx.runfiles(ctx.files.srcs)
     runfiles = runfiles.merge(ctx.runfiles(ctx.files.data))
     runfiles = runfiles.merge(
-        ctx.runfiles(
-            files = [dep[ErlangLibInfo].lib_dir for dep in ctx.attr.deps],
-        ),
+        ctx.runfiles([dep[ErlangLibInfo].lib_dir for dep in ctx.attr.deps]),
     )
     runfiles = runfiles.merge(ctx.attr._start_background_broker[DefaultInfo].default_runfiles)
 
