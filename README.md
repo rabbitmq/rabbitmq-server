@@ -39,10 +39,14 @@ Some key doc guides include
  * [Documentation source](https://github.com/rabbitmq/rabbitmq-website/)
 
 
-## Getting Help
+## Commercial Support
 
+* [Commercial support](https://rabbitmq.com/services.html) from [VMware](https://vmware.com) for open source RabbitMQ
+
+## Getting Help from the Community
+
+ * [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions/)
  * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
- * [Commercial support](https://rabbitmq.com/services.html) from [VMware](https://vmware.com) for open source RabbitMQ
  * [Community Slack](https://rabbitmq-slack.herokuapp.com/)
  * `#rabbitmq` on Freenode
 
