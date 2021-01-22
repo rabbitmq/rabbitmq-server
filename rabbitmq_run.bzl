@@ -45,7 +45,6 @@ def _start_background_broker_impl(ctx):
         template = ctx.file._template,
         output = ctx.outputs.executable,
         substitutions = {
-            "{ERL_LIBS}": erl_libs,
             "{ERLANG_HOME}": ctx.attr._erlang_home[ErlangHomeProvider].path,
             "{SNAME}": "sbb-" + ctx.attr.name,
         },

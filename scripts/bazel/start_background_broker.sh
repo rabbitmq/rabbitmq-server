@@ -64,8 +64,6 @@ export \
 
 RMQCTL_WAIT_TIMEOUT=60
 
-export ERL_LIBS={ERL_LIBS}
-
 ./sbin/rabbitmq-server $@ \
     > ${RABBITMQ_LOG_BASE}/startup_log \
     2> ${RABBITMQ_LOG_BASE}/startup_err &
