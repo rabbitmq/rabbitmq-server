@@ -191,15 +191,15 @@
     ]},
 
     {auth_attempt_metrics, [
-        {2, undefined, auth_attempts_total, counter, "Total number of authorization attempts on a node"},
-        {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authentication attempts on a node"},
-        {4, undefined, auth_attempts_failed_total, counter, "Total number of failed authentication attempts on a node"}
+        {2, undefined, auth_attempts_total, counter, "Total number of authorization attempts"},
+        {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authentication attempts"},
+        {4, undefined, auth_attempts_failed_total, counter, "Total number of failed authentication attempts"}
     ]},
 
     {auth_attempt_detailed_metrics, [
-        {2, undefined, auth_attempts_total, counter, "Total number of authorization attempts on a node"},
-        {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authorization attempts on a node"},
-        {4, undefined, auth_attempts_failed_total, counter, "Total number of failed authorization attempts on a node"}
+        {2, undefined, auth_attempts_detailed_total, counter, "Total number of authorization attempts with source info"},
+        {3, undefined, auth_attempts_detailed_succeeded_total, counter, "Total number of successful authorization attempts with source info"},
+        {4, undefined, auth_attempts_detailed_failed_total, counter, "Total number of failed authorization attempts with source info"}
     ]}
 
 ]).
@@ -231,7 +231,7 @@ collect(PerObjectMetrics, Callback) ->
     [begin
          Data = get_data(Table, PerObjectMetrics),
          mf(Callback, Contents, Data)
-     end || {Table, Contents} <- ?METRICS_RAW, needs_processing(PerObjectMetrics, Table)],
+     end || {Table, Contents} <- ?METRICS_RAW, include_when_per_object_metrics(PerObjectMetrics, Table)],
     [begin
          Size = ets:info(Table, size),
          mf_totals(Callback, Name, Type, Help, Size)
@@ -240,11 +240,9 @@ collect(PerObjectMetrics, Callback) ->
     add_metric_family(identity_info(), Callback),
     ok.
 
-needs_processing(false, auth_attempt_detailed_metrics) ->
-    %% When per object metrics are disabled the detailed authentication attempt metrics
-    %% create duplicates. Totals are carried on `auth_attempt_metrics`
+include_when_per_object_metrics(false, auth_attempt_detailed_metrics) ->
     false;
-needs_processing(_, _) ->
+include_when_per_object_metrics(_, _) ->
     true.
 
 build_info() ->
