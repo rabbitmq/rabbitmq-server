@@ -1773,8 +1773,10 @@ end}.
 
 {validator, "file_accessible", "file doesn't exist or isn't readable",
 fun(File) ->
-    ReadFile = file:read_file_info(File),
-    element(1, ReadFile) == ok
+    case file:read_file_info(File) of
+        {ok, FileInfo} -> (element(4, FileInfo) == read) or (element(4, FileInfo) == read_write);
+        _ -> false
+    end
 end}.
 
 {validator, "is_ip", "string is a valid IP address",
