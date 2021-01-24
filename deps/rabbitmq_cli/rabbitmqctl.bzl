@@ -58,6 +58,9 @@ def _impl(ctx):
 
         cd {mix_invocation_dir}
         export HOME=${{PWD}}
+        V=$({erlang_home}/bin/erl -eval '{{ok, Version}} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell)
+        echo "Erlang Version $V"
+
         export DEPS_DIR={mix_deps_dir}
         mix local.rebar --force
         mix make_all

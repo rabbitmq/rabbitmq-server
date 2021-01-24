@@ -3,7 +3,9 @@ load(":rabbitmq_run.bzl", "run_broker", "start_background_broker")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 
 # Note: maybe the different erlang versions need to be modeled as
-#       different target platforms?
+#       different target platforms? We could select between deps of
+#       fixed versions (i.e. rabbitmq_run could select a home that
+#       is hard coded to an erlang version)
 
 rabbitmq_home(
     name = "broker-home",

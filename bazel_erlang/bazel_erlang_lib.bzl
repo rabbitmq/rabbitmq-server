@@ -178,12 +178,14 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
 
     script = """
         set -euo pipefail
-        # /usr/local/bin/tree
+
         mkdir -p {output_dir}
         mkdir -p {output_dir}/include
         mkdir -p {output_dir}/ebin
         mkdir -p {output_dir}/priv
         export HOME=$PWD
+        V=$({erlang_home}/bin/erl -eval '{{ok, Version}} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell)
+        echo "Erlang Version $V"
         {erlang_home}/bin/erlc $@
         {expose_app_file_command}
         {expose_headers_command}
