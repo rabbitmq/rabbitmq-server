@@ -1,11 +1,10 @@
-load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@//:rabbitmq.bzl", "erlang_libs")
 
 # ranch is a special case where the archive includes a built ebin/ranch.app
 # bazel_erlang_lib doesn't yet support that, so we just provide the values
 # here that will let it generate the equivalent (though it is a fragile
 # approach)
-bazel_erlang_lib(
-    name = "ranch",
+erlang_libs(
     app_name = "ranch",
     app_version = "1.7.1",
     app_description = "Socket acceptor pool for TCP protocols.",

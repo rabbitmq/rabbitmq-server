@@ -1,12 +1,11 @@
-load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@//:rabbitmq.bzl", "erlang_libs")
 
 APP_ENV = """[
 	{data_dir, "/tmp/osiris"},
 	{port_range, {6000, 6500}}
 ]"""
 
-bazel_erlang_lib(
-    name = "osiris",
+erlang_libs(
     app_name = "osiris",
     app_version = "master",
     app_description = "New project",
@@ -19,7 +18,7 @@ bazel_erlang_lib(
     hdrs = glob(["include/*.hrl", "src/*.hrl"]),
     srcs = glob(["src/*.erl"]),
     deps = [
-        "@gen-batch-server//:gen-batch-server",
+        "@gen-batch-server//:gen_batch_server",
     ],
     visibility = ["//visibility:public"],
 )

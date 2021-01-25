@@ -4,7 +4,6 @@ load("//:rabbitmq.bzl", "APP_VERSION")
 def github_bazel_erlang_lib(name, org="rabbitmq", version=APP_VERSION, tag=None, sha256=None, app_name=None, **kwargs):
     if not ("build_file" in kwargs.keys() or "build_file_content" in kwargs.keys()):
         kwargs.update(build_file_content=_BUILD_FILE_TEMPLATE.format(
-            name=name,
             app_name=app_name if app_name != None else name,
             version=version,
         ))
@@ -20,10 +19,9 @@ def github_bazel_erlang_lib(name, org="rabbitmq", version=APP_VERSION, tag=None,
     )
 
 _BUILD_FILE_TEMPLATE = """
-load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@//:rabbitmq.bzl", "erlang_libs")
 
-bazel_erlang_lib(
-    name = "{name}",
+erlang_libs(
     app_name = "{app_name}",
     app_version = "{version}",
     app_src = glob(["src/{app_name}.app.src"]),

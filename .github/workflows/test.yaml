@@ -36,5 +36,6 @@ jobs:
           --//bazel_erlang:erlang_home=${ERLANG_HOME} \
           --//bazel_erlang:elixir_home=${ELIXIR_HOME} \
           --//bazel_erlang:mix_archives=/home/runner/.mix/archives \
+          --test_tag_filters="erlang-${{ matrix.erlang_version }}" \
           --test_verbose_timeout_warnings \
           --verbose_failures

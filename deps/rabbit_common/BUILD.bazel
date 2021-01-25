@@ -1,6 +1,4 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_libs")
-load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs", "ct_tests")
 
 py_binary(
     name = "codegen",
@@ -45,8 +43,7 @@ genrule(
     cmd = "$(location :codegen) body $(SRCS) $@",
 )
 
-bazel_erlang_libs(
-    name = "rabbit_common",
+erlang_libs(
     app_name = "rabbit_common",
     app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
     app_version = APP_VERSION,
@@ -70,12 +67,12 @@ bazel_erlang_libs(
         "@jsx//:jsx",
         "@ranch//:ranch",
         "@recon//:recon",
-        "@credentials-obfuscation//:credentials-obfuscation",
+        "@credentials-obfuscation//:credentials_obfuscation",
     ],
     visibility = ["//visibility:public"],
 )
 
-ct_test(
+ct_tests(
     name = "rabbit_env_SUITE",
     app_name = "rabbit_common",
     suites = ["test/rabbit_env_SUITE.erl"],
@@ -89,7 +86,7 @@ ct_test(
     size = "small",
 )
 
-ct_test(
+ct_tests(
     name = "supervisor2_SUITE",
     app_name = "rabbit_common",
     suites = ["test/supervisor2_SUITE.erl"],
@@ -100,7 +97,7 @@ ct_test(
     size = "small",
 )
 
-ct_test(
+ct_tests(
     name = "unit_priority_queue_SUITE",
     app_name = "rabbit_common",
     suites = ["test/unit_priority_queue_SUITE.erl"],
@@ -111,7 +108,7 @@ ct_test(
     size = "small",
 )
 
-ct_test(
+ct_tests(
     name = "unit_SUITE",
     app_name = "rabbit_common",
     suites = ["test/unit_SUITE.erl", "test/gen_server2_test_server.erl"],
@@ -120,12 +117,12 @@ ct_test(
         ":rabbit_common_test",
         "@proper//:proper",
         "@lager//:lager",
-        "@credentials-obfuscation//:credentials-obfuscation",
+        "@credentials-obfuscation//:credentials_obfuscation",
     ],
     size = "small",
 )
 
-ct_test(
+ct_tests(
     name = "worker_pool_SUITE",
     app_name = "rabbit_common",
     suites = ["test/worker_pool_SUITE.erl"],
@@ -136,3 +133,4 @@ ct_test(
     ],
     size = "small",
 )
+

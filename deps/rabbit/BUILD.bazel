@@ -5,8 +5,7 @@ exports_files([
     "scripts/rabbitmqctl",
 ])
 
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs", "ct_tests")
 
 _APP_ENV = """[
 	    {tcp_listeners, [5672]},
@@ -123,8 +122,7 @@ _APP_ENV = """[
 	  ]
 """
 
-bazel_erlang_lib(
-    name = "rabbit",
+erlang_libs(
     app_name = "rabbit",
     app_version = "3.9.0",
     app_description = "RabbitMQ",
@@ -163,7 +161,7 @@ bazel_erlang_lib(
         "@cuttlefish//:cuttlefish",
         "@ranch//:ranch",
         "@ra//:ra",
-        "@sysmon-handler//:sysmon-handler",
+        "@sysmon-handler//:sysmon_handler",
         "@recon//:recon",
         "@observer_cli//:observer_cli",
         "@osiris//:osiris",

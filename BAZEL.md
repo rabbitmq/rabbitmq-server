@@ -27,9 +27,13 @@ for certain `rabbitmq_cli` tests to pass. This is because `rabbitmqctl wait` she
 
 ## Running tests
 
-### Run all tests
+### Run all tests (for Erlang 22 & 23)
 
 `bazel test //...`
+
+or just Erlang 23
+
+`bazel test --test_tag_filters="erlang-23.1" --build_tests_only //...`
 
 ### Run tests in a 'package' and its 'subpackages'
 

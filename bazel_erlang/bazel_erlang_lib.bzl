@@ -105,10 +105,9 @@ def _gen_app_file(ctx, srcs):
 
 def _deps_dir_link(ctx, dep):
     info = dep[ErlangLibInfo]
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
     output = ctx.actions.declare_file(
         path_join(
-            "{}@{}".format(_DEPS_DIR, erlang_version),
+            "{}@{}".format(_DEPS_DIR, ctx.attr.erlang_version),
             info.lib_name,
         )
     )
@@ -121,12 +120,9 @@ def _deps_dir_link(ctx, dep):
 def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
     app_file = _gen_app_file(ctx, srcs) if gen_app_file else None
 
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
-
     output_dir = ctx.actions.declare_directory(
         path_join(
             ctx.label.name,
-            erlang_version,
             "{}-{}".format(ctx.attr.app_name, ctx.attr.app_version)
         )
     )
@@ -142,10 +138,10 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
     for dir in unique_dirnames(hdrs):
         erl_args.add("-I", dir)
 
-    erl_args.add("-I", path_join(
+    erl_args.add("-I",path_join(
         ctx.bin_dir.path,
-        "{}@{}".format(_DEPS_DIR, erlang_version,
-    )))
+        "{}@{}".format(_DEPS_DIR, ctx.attr.erlang_version),
+    ))
 
     for dep in ctx.attr.deps:
         info = dep[ErlangLibInfo]
@@ -194,9 +190,9 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
         {expose_app_file_command}
         {expose_headers_command}
         {expose_priv_command}
-        # /usr/local/bin/tree {output_dir}
     """.format(
         output_dir=output_dir.path,
+        erlang_version=ctx.attr.erlang_version,
         erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
         expose_app_file_command=" && ".join(expose_app_file_commands),
         expose_headers_command=" && ".join(expose_headers_commands),
@@ -220,7 +216,7 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
         command = script,
         arguments = [erl_args],
         env = {
-            "ERLANG_VERSION": erlang_version,
+            "ERLANG_VERSION": ctx.attr.erlang_version,
         },
     )
 
@@ -228,7 +224,7 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
         lib_name = ctx.attr.app_name,
         lib_version = ctx.attr.app_version,
         lib_dir = output_dir,
-        erlang_version = erlang_version,
+        erlang_version = ctx.attr.erlang_version,
     )
 
 def _impl(ctx):
@@ -256,7 +252,7 @@ bazel_erlang_lib = rule(
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
         "erlc_opts": attr.string_list(),
-        "_erlang_version": attr.label(default = ":erlang_version"),
+        "erlang_version": attr.string(mandatory=True),
         "_erlang_home": attr.label(default = ":erlang_home"),
         "_app_file_template": attr.label(
             default = Label("//bazel_erlang:app_file.template"),
@@ -268,17 +264,3 @@ bazel_erlang_lib = rule(
         ),
     },
 )
-
-# convenience function for producing prod and test versions of the lib
-def bazel_erlang_libs(**kwargs):
-    bazel_erlang_lib(**kwargs)
-
-    erlc_opts = kwargs.get('erlc_opts', [])
-    if "-DTEST" not in erlc_opts:
-        erlc_opts = erlc_opts + ["-DTEST"]
-    kwargs.update(
-        name = kwargs['name'] + "_test",
-        erlc_opts = erlc_opts,
-        testonly = True,
-    )
-    bazel_erlang_lib(**kwargs)
