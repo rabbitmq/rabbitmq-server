@@ -154,17 +154,19 @@ bazel_erlang_lib(
     priv = glob(["priv/schema/rabbit.schema"]),
     erlc_opts = RABBITMQ_ERLC_OPTS + ["-DINSTR_MOD=gm"],
     deps = [
-        "@cuttlefish//:cuttlefish", # runtime
-        "@ranch//:ranch", # runtime
         "@lager//:lager",
         "//deps/rabbit_common:rabbit_common",
-        "@ra//:ra", # runtime
-        "@sysmon-handler//:sysmon-handler", # runtime
         "@stdout_formatter//:stdout_formatter",
-        "@recon//:recon", # runtime
-        "@observer_cli//:observer_cli", # runtime
-        "@osiris//:osiris", # runtime
         "//deps/amqp10_common:amqp10_common",
+    ],
+    runtime_deps = [
+        "@cuttlefish//:cuttlefish",
+        "@ranch//:ranch",
+        "@ra//:ra",
+        "@sysmon-handler//:sysmon-handler",
+        "@recon//:recon",
+        "@observer_cli//:observer_cli",
+        "@osiris//:osiris",
     ],
     visibility = ["//visibility:public"],
 )

@@ -264,3 +264,13 @@ bazel_erlang_lib = rule(
         ),
     },
 )
+
+# convenience function for producing prod and test versions of the lib
+def bazel_erlang_libs(**kwargs):
+    bazel_erlang_lib(**kwargs)
+
+    kwargs.update(
+        name = kwargs['name'] + "_test",
+        testonly = True,
+    )
+    bazel_erlang_lib(**kwargs)

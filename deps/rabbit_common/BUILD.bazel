@@ -1,4 +1,4 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_libs")
 load("//bazel_erlang:ct.bzl", "ct_test")
 load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
 
@@ -45,7 +45,7 @@ genrule(
     cmd = "$(location :codegen) body $(SRCS) $@",
 )
 
-bazel_erlang_lib(
+bazel_erlang_libs(
     name = "rabbit_common",
     app_name = "rabbit_common",
     app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
@@ -73,30 +73,6 @@ bazel_erlang_lib(
         "@credentials-obfuscation//:credentials-obfuscation",
     ],
     visibility = ["//visibility:public"],
-)
-
-bazel_erlang_lib(
-    name = "rabbit_common_test",
-    app_name = "rabbit_common",
-    app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
-    app_version = APP_VERSION,
-    extra_apps = [
-        "compiler",
-        "crypto",
-        "public_key",
-        "sasl",
-        "ssl",
-        "syntax_tools",
-        "tools",
-        "xmerl",
-    ],
-    hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-    erlc_opts = RABBITMQ_ERLC_OPTS,
-    deps = [
-        "@lager//:lager",
-    ],
-    testonly = True,
 )
 
 ct_test(
