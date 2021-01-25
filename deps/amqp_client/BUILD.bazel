@@ -52,4 +52,5 @@ ct_test(
         "//deps/rabbit_common:rabbit_common",
         "//deps/rabbit:rabbit",
     ],
+    size = "small",
 )
