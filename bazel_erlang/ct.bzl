@@ -30,11 +30,12 @@ def _impl(ctx):
         {pa_args} \\
         -dir {suite_beam_dir} \\
         -logdir ${{TEST_UNDECLARED_OUTPUTS_DIR}} \\
-        -sname ct-{name}
+        -sname ct-{project}-{name}
     """.format(
         pa_args=pa_args,
         suite_beam_dir=path_join(erlang_lib_info.lib_dir.short_path, "ebin"),
-        name=ctx.attr.name,
+        project=erlang_lib_info.lib_name,
+        name=ctx.label.name,
     )
 
     script_file = ctx.actions.declare_file(ctx.attr.name + ".sh")
