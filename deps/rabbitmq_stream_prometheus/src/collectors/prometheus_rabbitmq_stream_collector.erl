@@ -70,10 +70,16 @@ collect_mf(_Registry, Callback) ->
 collect(PerObjectMetrics, Callback) ->
     [begin
          Data = get_data(Table, PerObjectMetrics),
-         mf(Callback, Contents, Data)
+         mf(Callback, filter_contents(Contents, PerObjectMetrics), Data)
      end
      || {Table, Contents} <- ?METRICS_RAW],
     ok.
+
+filter_contents(Contents, false) ->
+    Contents;
+filter_contents(Contents, true) ->
+    [E || {_, _, Type, _, _} = E <- Contents,
+          Type == counter].
 
 get_data(?TABLE_PUBLISHER = Table, false) ->
     {Table, A1, A2, A3, A4} =
