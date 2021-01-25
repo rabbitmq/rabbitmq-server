@@ -30,7 +30,7 @@ def _copy_script(ctx, script):
 
 def _link_escript(ctx, escript):
     erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
-    e = escript[DefaultInfo].files.to_list()[0]
+    e = escript.files_to_run.executable
     s = ctx.actions.declare_file(path_join(ctx.label.name, erlang_version, "escript", e.basename))
     ctx.actions.symlink(
         output = s,
