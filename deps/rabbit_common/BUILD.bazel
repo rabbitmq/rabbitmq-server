@@ -65,10 +65,12 @@ bazel_erlang_lib(
     erlc_opts = RABBITMQ_ERLC_OPTS,
     deps = [
         "@lager//:lager",
-        "@jsx//:jsx", #runtime
-        "@ranch//:ranch", #runtime
-        "@recon//:recon", #runtime
-        "@credentials-obfuscation//:credentials-obfuscation", #runtime
+    ],
+    runtime_deps = [
+        "@jsx//:jsx",
+        "@ranch//:ranch",
+        "@recon//:recon",
+        "@credentials-obfuscation//:credentials-obfuscation",
     ],
     visibility = ["//visibility:public"],
 )

@@ -61,6 +61,7 @@ ct_test = rule(
         "hdrs": attr.label_list(allow_files=[".hrl"]),
         "priv": attr.label_list(allow_files = True), # This should be removed once compilation is pulled out of bazel_erlang_lib
         "deps": attr.label_list(providers=[ErlangLibInfo]),
+        "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
         "erlc_opts": attr.string_list(),
         "_erlang_version": attr.label(default = ":erlang_version"),
         "_erlang_home": attr.label(default = ":erlang_home"),

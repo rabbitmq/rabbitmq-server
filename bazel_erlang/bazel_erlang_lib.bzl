@@ -81,7 +81,7 @@ def _gen_app_file(ctx, srcs):
 
         # [$(call comma_list,kernel stdlib $(OTP_DEPS) $(LOCAL_DEPS) $(foreach dep,$(DEPS),$(call dep_name,$(dep))))]
         applications = ["kernel", "stdlib"] + ctx.attr.extra_apps
-        for dep in ctx.attr.deps:
+        for dep in ctx.attr.deps + ctx.attr.runtime_deps:
             applications.append(dep[ErlangLibInfo].lib_name)
         applications_list = "[" + ",".join(applications) + "]"
 
@@ -250,6 +250,7 @@ bazel_erlang_lib = rule(
         "srcs": attr.label_list(allow_files=[".erl"]),
         "priv": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
+        "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
         "erlc_opts": attr.string_list(),
         "_erlang_version": attr.label(default = ":erlang_version"),
         "_erlang_home": attr.label(default = ":erlang_home"),
