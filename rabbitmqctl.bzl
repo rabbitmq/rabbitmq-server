@@ -8,8 +8,7 @@ def _impl(ctx):
         fail()
 
     script = """
-    cd {}/{}
-    exec ./sbin/rabbitmqctl $@ 
+    exec ./{}/{}/sbin/rabbitmqctl $@
     """.format(ctx.attr.home.label.name, rabbitmq_home.erlang_version)
 
     ctx.actions.write(
