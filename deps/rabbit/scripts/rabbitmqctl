@@ -10,8 +10,6 @@
 # a list, or a compound command returns a non-zero status
 set -e
 
-set -x
-
 # Each variable or function that is created or modified is given the export
 # attribute and marked for export to the environment of subsequent commands.
 set -a
