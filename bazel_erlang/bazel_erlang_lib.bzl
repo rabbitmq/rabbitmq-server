@@ -21,7 +21,7 @@ ErlangLibInfo = provider(
     },
 )
 
-_DEPS_DIR = "build_deps"
+_DEPS_DIR = "deps"
 
 # NOTE: we should probably fetch the separator with ctx.host_configuration.host_path_separator
 def path_join(*components):
@@ -105,7 +105,13 @@ def _gen_app_file(ctx, srcs):
 
 def _deps_dir_link(ctx, dep):
     info = dep[ErlangLibInfo]
-    output = ctx.actions.declare_file(path_join(_DEPS_DIR, info.lib_name))
+    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
+    output = ctx.actions.declare_file(
+        path_join(
+            "{}@{}".format(_DEPS_DIR, erlang_version),
+            info.lib_name,
+        )
+    )
     ctx.actions.symlink(
         output = output,
         target_file = info.lib_dir,
@@ -136,16 +142,16 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
     for dir in unique_dirnames(hdrs):
         erl_args.add("-I", dir)
 
-    erl_args.add("-I", path_join(ctx.bin_dir.path, _DEPS_DIR))
+    erl_args.add("-I", path_join(
+        ctx.bin_dir.path,
+        "{}@{}".format(_DEPS_DIR, erlang_version,
+    )))
 
     for dep in ctx.attr.deps:
         info = dep[ErlangLibInfo]
         erl_args.add("-pa", ebin_dir(info))
 
     erl_args.add("-o", path_join(output_dir.path, "ebin"))
-
-    if ctx.attr.testonly:
-        erl_args.add("-DTEST")
 
     erl_args.add_all(ctx.attr.erlc_opts)
 
@@ -184,8 +190,6 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
         mkdir -p {output_dir}/ebin
         mkdir -p {output_dir}/priv
         export HOME=$PWD
-        V=$({erlang_home}/bin/erl -eval '{{ok, Version}} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell)
-        echo "Erlang Version $V"
         {erlang_home}/bin/erlc $@
         {expose_app_file_command}
         {expose_headers_command}
@@ -269,8 +273,12 @@ bazel_erlang_lib = rule(
 def bazel_erlang_libs(**kwargs):
     bazel_erlang_lib(**kwargs)
 
+    erlc_opts = kwargs.get('erlc_opts', [])
+    if "-DTEST" not in erlc_opts:
+        erlc_opts = erlc_opts + ["-DTEST"]
     kwargs.update(
         name = kwargs['name'] + "_test",
+        erlc_opts = erlc_opts,
         testonly = True,
     )
     bazel_erlang_lib(**kwargs)

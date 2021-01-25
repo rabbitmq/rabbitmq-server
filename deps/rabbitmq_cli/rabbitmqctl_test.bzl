@@ -47,9 +47,6 @@ def _impl(ctx):
         cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
         export HOME=${{PWD}}
-        V=$({erlang_home}/bin/erl -eval '{{ok, Version}} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell)
-        echo "Erlang Version $V"
-
         export MIX_ARCHIVES={mix_archives}
         export DEPS_DIR={mix_deps_dir}
         mix local.rebar --force

@@ -22,8 +22,6 @@ def _impl(ctx):
     )
 
     script = """set -euo pipefail
-    # pwd
-    # /usr/local/bin/tree
     exec env HOME=${{TEST_TMPDIR}} ct_run \\
         -no_auto_compile \\
         -noinput \\

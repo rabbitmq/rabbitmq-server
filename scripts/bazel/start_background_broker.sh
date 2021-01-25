@@ -66,11 +66,6 @@ export \
 
 RMQCTL_WAIT_TIMEOUT=60
 
-V=$({ERLANG_HOME}/bin/erl -eval '{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell)
-echo "Erlang Version $V"
-
-./escript/rabbitmqctl || true
-
 ./sbin/rabbitmq-server $@ \
     > ${RABBITMQ_LOG_BASE}/startup_log \
     2> ${RABBITMQ_LOG_BASE}/startup_err &
