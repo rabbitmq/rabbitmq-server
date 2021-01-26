@@ -45,10 +45,17 @@ jobs:
       id: resolve_logs
       if: success() || failure()
       run: |
-        echo "::set-output name=dir::$(readlink -f bazel-testlogs)"
+        echo "::set-output name=bin::$(readlink -f bazel-bin)"
+        echo "::set-output name=testlogs::$(readlink -f bazel-testlogs)"
+    - name: CAPTURE BIN
+      uses: actions/upload-artifact@v2
+      if: success() || failure()
+      with:
+        name: bazel-bin-${{ matrix.erlang_version }}
+        path: ${{ steps.resolve_logs.outputs.bin }}
     - name: CAPTURE LOGS
       uses: actions/upload-artifact@v2
       if: success() || failure()
       with:
-        name: bazel-testlogs
-        path: ${{ steps.resolve_logs.outputs.dir }}
+        name: bazel-testlogs-${{ matrix.erlang_version }}
+        path: ${{ steps.resolve_logs.outputs.testlogs }}
