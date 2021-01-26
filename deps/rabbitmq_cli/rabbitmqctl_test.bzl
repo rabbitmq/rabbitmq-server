@@ -15,6 +15,8 @@ def _impl(ctx):
     copy_compiled_deps_commands.append("mkdir ${{TEST_UNDECLARED_OUTPUTS_DIR}}/{}".format(MIX_DEPS_DIR))
     for dep in ctx.attr.deps:
         info = dep[ErlangLibInfo]
+        if info.erlang_version != ctx.attr.erlang_version:
+            fail("Mismatched erlang versions", ctx.attr.erlang_version, info.erlang_version)
         copy_compiled_deps_commands.append(
             "cp -R ${{PWD}}/{source} ${{TEST_UNDECLARED_OUTPUTS_DIR}}/{target}".format(
                 source = lib_dir(dep),
@@ -106,8 +108,11 @@ rabbitmqctl_test = rule(
         "srcs": attr.label_list(allow_files = [".ex", ".exs"]),
         "data": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [ErlangLibInfo]),
-        "erlang_version": attr.string(),
-        "start_background_broker": attr.label(),
+        "erlang_version": attr.string(mandatory = True),
+        "start_background_broker": attr.label(
+            executable = True,
+            cfg = "host",
+        ),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
         "_mix_archives": attr.label(default = "//bazel_erlang:mix_archives"),

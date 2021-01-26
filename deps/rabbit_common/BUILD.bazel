@@ -133,4 +133,3 @@ ct_tests(
     ],
     size = "small",
 )
-

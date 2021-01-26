@@ -12,6 +12,9 @@ load(":rabbitmq_home.bzl", "RabbitmqHomeInfo")
 def _run_broker_impl(ctx):
     rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
 
+    if rabbitmq_home.erlang_version != ctx.attr.erlang_version:
+        fail("Mismatched erlang versions", ctx.attr.erlang_version, rabbitmq_home.erlang_version)
+
     ctx.actions.expand_template(
         template = ctx.file._template,
         output = ctx.outputs.executable,
@@ -32,7 +35,7 @@ run_broker = rule(
             default = Label("//:scripts/bazel/run_broker.sh"),
             allow_single_file = True,
         ),
-        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
+        "erlang_version": attr.string(mandatory = True),
         "home": attr.label(providers=[RabbitmqHomeInfo]),
     },
     executable = True,
@@ -40,6 +43,9 @@ run_broker = rule(
 
 def _start_background_broker_impl(ctx):
     rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
+
+    if rabbitmq_home.erlang_version != ctx.attr.erlang_version:
+        fail("Mismatched erlang versions", ctx.attr.erlang_version, rabbitmq_home.erlang_version)
 
     erl_libs = ":".join(
         [p.short_path for p in rabbitmq_home.plugins]
@@ -69,6 +75,7 @@ start_background_broker = rule(
             allow_single_file = True,
         ),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
+        "erlang_version": attr.string(mandatory = True),
         "home": attr.label(providers=[RabbitmqHomeInfo]),
     },
     executable = True,

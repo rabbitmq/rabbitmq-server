@@ -60,36 +60,38 @@ def erlang_libs(**kwargs):
     deps = kwargs.get('deps', [])
     runtime_deps = kwargs.get('runtime_deps', [])
     for erlang_version in ERLANG_VERSIONS:
-        kwargs.update(
+        kwargs2 = dict(kwargs.items())
+        kwargs2.update(
             deps = [dep + "@" + erlang_version for dep in deps],
             runtime_deps = [dep + "@" + erlang_version for dep in runtime_deps],
         )
         bazel_erlang_lib(
             name = "{}@{}".format(app_name, erlang_version),
             erlang_version = erlang_version,
-            **kwargs
+            **kwargs2
         )
-        kwargs2 = dict(kwargs.items())
-        erlc_opts = kwargs2.get('erlc_opts', [])
+        kwargs3 = dict(kwargs2.items())
+        erlc_opts = kwargs3.get('erlc_opts', [])
         if "-DTEST" not in erlc_opts:
-            kwargs2.update(erlc_opts = erlc_opts + ["-DTEST"])
+            kwargs3.update(erlc_opts = erlc_opts + ["-DTEST"])
         bazel_erlang_lib(
             name = "{}_test@{}".format(app_name, erlang_version),
             erlang_version = erlang_version,
             testonly = True,
-            **kwargs2
+            **kwargs3
         )
 
 def ct_tests(**kwargs):
     name = kwargs['name']
     deps = kwargs.get('deps', [])
     for erlang_version in ERLANG_VERSIONS:
-        kwargs.update(
+        kwargs2 = dict(kwargs.items())
+        kwargs2.update(
             name = "{}@{}".format(name, erlang_version),
             deps = [dep + "@" + erlang_version for dep in deps],
         )
         ct_test(
             erlang_version = erlang_version,
             tags = ["erlang-{}".format(erlang_version)],
-            **kwargs
+            **kwargs2
         )

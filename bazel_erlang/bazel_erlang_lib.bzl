@@ -145,6 +145,8 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
 
     for dep in ctx.attr.deps:
         info = dep[ErlangLibInfo]
+        if info.erlang_version != ctx.attr.erlang_version:
+            fail("Mismatched erlang versions", ctx.attr.erlang_version, info.erlang_version)
         erl_args.add("-pa", ebin_dir(info))
 
     erl_args.add("-o", path_join(output_dir.path, "ebin"))

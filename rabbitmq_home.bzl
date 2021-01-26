@@ -8,6 +8,7 @@ RabbitmqHomeInfo = provider(
         'sbin': 'Files making up the sbin dir',
         'escript': 'Files making up the escript dir',
         'plugins': 'Files making up the plugins dir',
+        'erlang_version': 'Version of the Erlang compiler used',
     },
 )
 
@@ -47,7 +48,19 @@ def _plugins_dir_link(ctx, plugin):
     )
     return output
 
+def _unique_versions(plugins):
+    erlang_versions = []
+    for plugin in plugins:
+        erlang_version = plugin[ErlangLibInfo].erlang_version
+        if not erlang_version in erlang_versions:
+            erlang_versions.append(erlang_version)
+    return erlang_versions
+
 def _impl(ctx):
+    erlang_versions = _unique_versions(ctx.attr.plugins)
+    if len(erlang_versions) > 1:
+        fail("plugins do not have a unified erlang version", erlang_versions)
+
     scripts = [_copy_script(ctx, script) for script in ctx.files._scripts]
 
     escripts = [_link_escript(ctx, escript) for escript in ctx.attr.escripts]
@@ -59,6 +72,7 @@ def _impl(ctx):
             sbin = scripts,
             escript = escripts,
             plugins = plugins,
+            erlang_version = erlang_versions[0],
         ),
         DefaultInfo(
             files = depset(scripts + escripts + plugins),
@@ -77,6 +91,7 @@ rabbitmq_home = rule(
             ],
             allow_files = True,
         ),
+        "erlang_version": attr.string(mandatory = True),
         "escripts": attr.label_list(),
         # Maybe we should not have to declare the deps here that rabbit/rabbit_common declare
         "plugins": attr.label_list(),

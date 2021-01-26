@@ -30,6 +30,8 @@ def _impl(ctx):
     copy_compiled_deps_commands.append("mkdir {}/{}".format(mix_invocation_dir.path, MIX_DEPS_DIR))
     for dep in ctx.attr.deps:
         info = dep[ErlangLibInfo]
+        if info.erlang_version != ctx.attr.erlang_version:
+            fail("Mismatched erlang versions", ctx.attr.erlang_version, info.erlang_version)
         copy_compiled_deps_commands.append(
             "cp -R ${{PWD}}/{source} {target}".format(
                 source = info.lib_dir.path,
@@ -91,7 +93,7 @@ rabbitmqctl = rule(
     attrs = {
         "srcs": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
-        "erlang_version": attr.string(),
+        "erlang_version": attr.string(mandatory = True),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
         "_mix_archives": attr.label(default = "//bazel_erlang:mix_archives"),

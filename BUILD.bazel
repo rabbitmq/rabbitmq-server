@@ -10,18 +10,21 @@ load(":rabbitmq.bzl", "required_plugins")
 
 rabbitmq_home(
     name = "broker-home@22.3",
+    erlang_version = "22.3",
     escripts = ["//deps/rabbitmq_cli:rabbitmqctl@22.3"],
     plugins = required_plugins("22.3"),
 )
 
 rabbitmq_home(
     name = "broker-home@23.1",
+    erlang_version = "23.1",
     escripts = ["//deps/rabbitmq_cli:rabbitmqctl@23.1"],
     plugins = required_plugins("23.1"),
 )
 
 rabbitmq_home(
     name = "broker-management-home@22.3",
+    erlang_version = "22.3",
     escripts = ["//deps/rabbitmq_cli:rabbitmqctl@22.3"],
     plugins = required_plugins("22.3") + [
         "//deps/rabbitmq_management:rabbitmq_management@22.3",
@@ -35,6 +38,7 @@ rabbitmq_home(
 
 rabbitmq_home(
     name = "broker-management-home@23.1",
+    erlang_version = "23.1",
     escripts = ["//deps/rabbitmq_cli:rabbitmqctl@23.1"],
     plugins = required_plugins("23.1") + [
         "//deps/rabbitmq_management:rabbitmq_management@23.1",
@@ -48,6 +52,7 @@ rabbitmq_home(
 
 rabbitmq_home(
     name = "broker-for-cli-tests-home@22.3",
+    erlang_version = "22.3",
     escripts = ["//deps/rabbitmq_cli:rabbitmqctl@22.3"],
     plugins = required_plugins("22.3") + [
         "//deps/rabbitmq_federation:rabbitmq_federation@22.3",
@@ -58,6 +63,7 @@ rabbitmq_home(
 
 rabbitmq_home(
     name = "broker-for-cli-tests-home@23.1",
+    erlang_version = "23.1",
     escripts = ["//deps/rabbitmq_cli:rabbitmqctl@23.1"],
     plugins = required_plugins("23.1") + [
         "//deps/rabbitmq_federation:rabbitmq_federation@23.1",
@@ -71,44 +77,67 @@ rabbitmq_home(
 # (though it as of yet includes no plugins)
 run_broker(
     name = "broker@22.3",
+    erlang_version = "22.3",
     home = ":broker-home@22.3",
 )
 
 run_broker(
     name = "broker@23.1",
+    erlang_version = "23.1",
     home = ":broker-home@23.1",
+)
+
+alias(
+    name = "broker",
+    actual = "broker@23.1",
 )
 
 # `bazel run :broker-management` for the broker with just the
 # management plugin
 run_broker(
     name = "broker-management@22.3",
+    erlang_version = "22.3",
     home = ":broker-management-home@22.3",
 )
 
 run_broker(
     name = "broker-management@23.1",
+    erlang_version = "23.1",
     home = ":broker-management-home@23.1",
+)
+
+alias(
+    name = "broker-management",
+    actual = "broker-management@23.1",
 )
 
 start_background_broker(
     name = "broker-for-cli-tests@22.3",
+    erlang_version = "22.3",
     home = ":broker-for-cli-tests-home@22.3",
     visibility = ["//visibility:public"],
 )
 
 start_background_broker(
     name = "broker-for-cli-tests@23.1",
+    erlang_version = "23.1",
     home = ":broker-for-cli-tests-home@23.1",
     visibility = ["//visibility:public"],
 )
 
 rabbitmqctl(
     name = "rabbitmqctl@22.3",
+    erlang_version = "22.3",
     home = ":broker-home@22.3",
 )
 
 rabbitmqctl(
     name = "rabbitmqctl@23.1",
+    erlang_version = "23.1",
     home = ":broker-home@23.1",
+)
+
+alias(
+    name = "rabbitmqctl",
+    actual = "rabbitmqctl@23.1",
 )
