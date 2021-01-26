@@ -10,7 +10,7 @@ jobs:
         erlang_version:
         - "23.1"
         - "22.3"
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
