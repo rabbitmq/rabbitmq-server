@@ -18,7 +18,7 @@ def _run_broker_impl(ctx):
         template = ctx.file._template,
         output = ctx.outputs.executable,
         substitutions = {
-            "{PATH_PREFIX}": path_join(ctx.attr.home.label.name, rabbitmq_home.erlang_version)
+            "{PATH_PREFIX}": path_join(ctx.attr.home.label.name, rabbitmq_home.erlang_version),
         },
         is_executable = True,
     )
