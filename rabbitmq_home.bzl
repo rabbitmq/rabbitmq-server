@@ -8,13 +8,11 @@ RabbitmqHomeInfo = provider(
         'sbin': 'Files making up the sbin dir',
         'escript': 'Files making up the escript dir',
         'plugins': 'Files making up the plugins dir',
-        'erlang_version': 'The version of Erlang the plugins were compiled with',
     },
 )
 
 def _copy_script(ctx, script):
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
-    dest = ctx.actions.declare_file(path_join(ctx.label.name, erlang_version, "sbin", script.basename))
+    dest = ctx.actions.declare_file(path_join(ctx.label.name, "sbin", script.basename))
     args = ctx.actions.args()
     args.add_all([script, dest])
     ctx.actions.run(
@@ -22,16 +20,12 @@ def _copy_script(ctx, script):
         outputs = [dest],
         executable = "cp",
         arguments = [args],
-        env = {
-            "ERLANG_VERSION": erlang_version,
-        },
     )
     return dest
 
 def _link_escript(ctx, escript):
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
     e = escript.files_to_run.executable
-    s = ctx.actions.declare_file(path_join(ctx.label.name, erlang_version, "escript", e.basename))
+    s = ctx.actions.declare_file(path_join(ctx.label.name, "escript", e.basename))
     ctx.actions.symlink(
         output = s,
         target_file = e,
@@ -39,12 +33,10 @@ def _link_escript(ctx, escript):
     return s
 
 def _plugins_dir_link(ctx, plugin):
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
     lib_info = plugin[ErlangLibInfo]
     output = ctx.actions.declare_file(
         path_join(
             ctx.label.name,
-            erlang_version,
             "plugins",
             "{}-{}".format(lib_info.lib_name, lib_info.lib_version),
         )
@@ -58,16 +50,15 @@ def _plugins_dir_link(ctx, plugin):
 def _impl(ctx):
     scripts = [_copy_script(ctx, script) for script in ctx.files._scripts]
 
-    escripts = [_link_escript(ctx, escript) for escript in ctx.attr._escripts]
+    escripts = [_link_escript(ctx, escript) for escript in ctx.attr.escripts]
 
-    plugins = [_plugins_dir_link(ctx, plugin) for plugin in ctx.attr._base_plugins + ctx.attr.plugins]
+    plugins = [_plugins_dir_link(ctx, plugin) for plugin in ctx.attr.plugins]
 
     return [
         RabbitmqHomeInfo(
             sbin = scripts,
             escript = escripts,
             plugins = plugins,
-            erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version,
         ),
         DefaultInfo(
             files = depset(scripts + escripts + plugins),
@@ -77,7 +68,6 @@ def _impl(ctx):
 rabbitmq_home = rule(
     implementation = _impl,
     attrs = {
-        "erlang_version": attr.string(),
         "_scripts": attr.label_list(
             default = [
                 "//deps/rabbit:scripts/rabbitmq-env",
@@ -87,35 +77,8 @@ rabbitmq_home = rule(
             ],
             allow_files = True,
         ),
-        "_escripts": attr.label_list(
-            default = [
-                Label("//deps/rabbitmq_cli:rabbitmqctl"),
-            ],
-        ),
+        "escripts": attr.label_list(),
         # Maybe we should not have to declare the deps here that rabbit/rabbit_common declare
-        "_base_plugins": attr.label_list(
-            default = [
-                Label("@cuttlefish//:cuttlefish"),
-                Label("@ranch//:ranch"),
-                Label("@lager//:lager"),
-                Label("//deps/rabbit_common:rabbit_common"),
-                Label("@ra//:ra"),
-                Label("@sysmon-handler//:sysmon-handler"),
-                Label("@stdout_formatter//:stdout_formatter"),
-                Label("@recon//:recon"),
-                Label("@observer_cli//:observer_cli"),
-                Label("@osiris//:osiris"),
-                Label("//deps/amqp10_common:amqp10_common"),
-                Label("//deps/rabbit:rabbit"),
-                Label("//deps/rabbit/apps/rabbitmq_prelaunch:rabbitmq_prelaunch"),
-                Label("@goldrush//:goldrush"),
-                Label("@jsx//:jsx"),
-                Label("@credentials-obfuscation//:credentials-obfuscation"),
-                Label("@aten//:aten"),
-                Label("@gen-batch-server//:gen-batch-server"),
-            ],
-        ),
         "plugins": attr.label_list(),
     },
-    # Maybe named outputs here as well?
 )

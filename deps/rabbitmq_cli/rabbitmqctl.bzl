@@ -13,16 +13,14 @@ def _impl(ctx):
     mix_invocation_dir = ctx.actions.declare_directory(
         path_join(
             ctx.label.name,
-            erlang_version,
             "mix",
         )
     )
     escript = ctx.actions.declare_file(
         path_join(
             ctx.label.name,
-            erlang_version,
             "escript",
-            ctx.attr.name,
+            "rabbitmqctl",
         )
     )
 

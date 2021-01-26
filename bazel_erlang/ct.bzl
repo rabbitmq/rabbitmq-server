@@ -9,7 +9,7 @@ def lib_dir(dep):
 def ebin_dir(dep):
     return path_join(lib_dir(dep), "ebin")
 
-def _sanitize_sname(s):
+def sanitize_sname(s):
     return s.replace("@", "-").replace(".", "_")
 
 def _impl(ctx):
@@ -36,7 +36,7 @@ def _impl(ctx):
         pa_args=pa_args,
         suite_beam_dir=path_join(erlang_lib_info.lib_dir.short_path, "ebin"),
         project=erlang_lib_info.lib_name,
-        name=_sanitize_sname(ctx.label.name),
+        name=sanitize_sname(ctx.label.name),
     )
 
     script_file = ctx.actions.declare_file(ctx.attr.name + ".sh")

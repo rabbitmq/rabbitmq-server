@@ -1,6 +1,7 @@
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "run_broker", "start_background_broker")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
+load(":rabbitmq.bzl", "required_plugins")
 
 # Note: maybe the different erlang versions need to be modeled as
 #       different target platforms? We could select between deps of
@@ -9,15 +10,20 @@ load(":rabbitmqctl.bzl", "rabbitmqctl")
 
 rabbitmq_home(
     name = "broker-home@22.3",
+    escripts = ["//deps/rabbitmq_cli:rabbitmqctl@22.3"],
+    plugins = required_plugins("22.3"),
 )
 
 rabbitmq_home(
     name = "broker-home@23.1",
+    escripts = ["//deps/rabbitmq_cli:rabbitmqctl@23.1"],
+    plugins = required_plugins("23.1"),
 )
 
 rabbitmq_home(
     name = "broker-management-home@22.3",
-    plugins = [
+    escripts = ["//deps/rabbitmq_cli:rabbitmqctl@22.3"],
+    plugins = required_plugins("22.3") + [
         "//deps/rabbitmq_management:rabbitmq_management@22.3",
         "//deps/rabbitmq_management_agent:rabbitmq_management_agent@22.3",
         "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch@22.3",
@@ -29,7 +35,8 @@ rabbitmq_home(
 
 rabbitmq_home(
     name = "broker-management-home@23.1",
-    plugins = [
+    escripts = ["//deps/rabbitmq_cli:rabbitmqctl@23.1"],
+    plugins = required_plugins("23.1") + [
         "//deps/rabbitmq_management:rabbitmq_management@23.1",
         "//deps/rabbitmq_management_agent:rabbitmq_management_agent@23.1",
         "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch@23.1",
@@ -41,7 +48,8 @@ rabbitmq_home(
 
 rabbitmq_home(
     name = "broker-for-cli-tests-home@22.3",
-    plugins = [
+    escripts = ["//deps/rabbitmq_cli:rabbitmqctl@22.3"],
+    plugins = required_plugins("22.3") + [
         "//deps/rabbitmq_federation:rabbitmq_federation@22.3",
         "//deps/rabbitmq_stomp:rabbitmq_stomp@22.3",
         "//deps/amqp_client:amqp_client@22.3",
@@ -50,7 +58,8 @@ rabbitmq_home(
 
 rabbitmq_home(
     name = "broker-for-cli-tests-home@23.1",
-    plugins = [
+    escripts = ["//deps/rabbitmq_cli:rabbitmqctl@23.1"],
+    plugins = required_plugins("23.1") + [
         "//deps/rabbitmq_federation:rabbitmq_federation@23.1",
         "//deps/rabbitmq_stomp:rabbitmq_stomp@23.1",
         "//deps/amqp_client:amqp_client@23.1",

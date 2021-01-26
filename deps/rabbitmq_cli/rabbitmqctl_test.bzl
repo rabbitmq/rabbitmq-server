@@ -66,7 +66,6 @@ def _impl(ctx):
             kill -TERM "${{pid}}"
         }}
         cd ${{INITIAL_DIR}}
-        find ${{PWD}}
         ./{start_background_broker_cmd}
         cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
@@ -84,7 +83,7 @@ def _impl(ctx):
         copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
         mix_deps_dir=MIX_DEPS_DIR,
         erl_libs=erl_libs,
-        start_background_broker_cmd=ctx.attr._start_background_broker.files.to_list()[0].short_path,
+        start_background_broker_cmd=ctx.attr.start_background_broker[DefaultInfo].files_to_run.executable.short_path,
     )
 
     ctx.actions.write(
@@ -97,7 +96,7 @@ def _impl(ctx):
     runfiles = runfiles.merge(
         ctx.runfiles([dep[ErlangLibInfo].lib_dir for dep in ctx.attr.deps]),
     )
-    runfiles = runfiles.merge(ctx.attr._start_background_broker[DefaultInfo].default_runfiles)
+    runfiles = runfiles.merge(ctx.attr.start_background_broker[DefaultInfo].default_runfiles)
 
     return [DefaultInfo(runfiles = runfiles)]
 
@@ -108,9 +107,7 @@ rabbitmqctl_test = rule(
         "data": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [ErlangLibInfo]),
         "erlang_version": attr.string(),
-        "_start_background_broker": attr.label(
-            default = Label("//:broker-for-cli-tests"),
-        ),
+        "start_background_broker": attr.label(),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
         "_mix_archives": attr.label(default = "//bazel_erlang:mix_archives"),

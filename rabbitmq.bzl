@@ -31,6 +31,30 @@ ERLANG_VERSIONS = [
     "22.3",
 ]
 
+_REQUIRED_PLUGINS = [
+    "@cuttlefish//:cuttlefish",
+    "@ranch//:ranch",
+    "@lager//:lager",
+    "//deps/rabbit_common:rabbit_common",
+    "@ra//:ra",
+    "@sysmon-handler//:sysmon_handler",
+    "@stdout_formatter//:stdout_formatter",
+    "@recon//:recon",
+    "@observer_cli//:observer_cli",
+    "@osiris//:osiris",
+    "//deps/amqp10_common:amqp10_common",
+    "//deps/rabbit:rabbit",
+    "//deps/rabbit/apps/rabbitmq_prelaunch:rabbitmq_prelaunch",
+    "@goldrush//:goldrush",
+    "@jsx//:jsx",
+    "@credentials-obfuscation//:credentials_obfuscation",
+    "@aten//:aten",
+    "@gen-batch-server//:gen_batch_server",
+]
+
+def required_plugins(erlang_version):
+    return [Label("{}@{}".format(p, erlang_version)) for p in _REQUIRED_PLUGINS]
+
 def erlang_libs(**kwargs):
     app_name = kwargs['app_name']
     deps = kwargs.get('deps', [])
