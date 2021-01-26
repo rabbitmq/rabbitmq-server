@@ -1,4 +1,4 @@
-load("//bazel_erlang:erlang_home.bzl", "ErlangVersionProvider", "ErlangHomeProvider")
+load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider")
 load("//bazel_erlang:elixir_home.bzl", "ElixirHomeProvider", "MixArchivesProvider")
 load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
 

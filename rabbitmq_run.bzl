@@ -1,4 +1,4 @@
-load("//bazel_erlang:erlang_home.bzl", "ErlangVersionProvider", "ErlangHomeProvider")
+load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider")
 load("//bazel_erlang:bazel_erlang_lib.bzl", "path_join")
 load("//bazel_erlang:ct.bzl", "sanitize_sname")
 load(":rabbitmq_home.bzl", "RabbitmqHomeInfo")

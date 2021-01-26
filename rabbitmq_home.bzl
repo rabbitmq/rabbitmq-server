@@ -1,4 +1,3 @@
-load("//bazel_erlang:erlang_home.bzl", "ErlangVersionProvider")
 load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
 load("//bazel_erlang:ct.bzl", "lib_dir")
 

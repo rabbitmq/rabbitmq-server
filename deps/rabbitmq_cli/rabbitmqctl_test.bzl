@@ -111,7 +111,7 @@ rabbitmqctl_test = rule(
         "erlang_version": attr.string(mandatory = True),
         "start_background_broker": attr.label(
             executable = True,
-            cfg = "host",
+            cfg = "target",
         ),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
