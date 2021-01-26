@@ -107,10 +107,10 @@ rabbitmqctl_test = rule(
         "srcs": attr.label_list(allow_files = [".ex", ".exs"]),
         "data": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [ErlangLibInfo]),
+        "erlang_version": attr.string(),
         "_start_background_broker": attr.label(
             default = Label("//:broker-for-cli-tests"),
         ),
-        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
         "_mix_archives": attr.label(default = "//bazel_erlang:mix_archives"),

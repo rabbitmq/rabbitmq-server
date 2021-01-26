@@ -1,14 +1,12 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs")
 
 APP_ENV = """[
 	    {pgroup_name_cluster_id, false},
 	    {internal_exchange_check_interval, 90000}
 	  ]"""
 
-bazel_erlang_lib(
-    name = "rabbitmq_federation",
+erlang_libs(
     app_name = "rabbitmq_federation",
     app_description = "RabbitMQ Federation",
     app_version = APP_VERSION,

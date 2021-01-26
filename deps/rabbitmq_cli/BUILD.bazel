@@ -3,27 +3,53 @@ load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
-    name = "rabbitmqctl",
+    name = "rabbitmqctl@22.3",
     srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex"]),
     deps = [
-        "//deps/rabbit_common:rabbit_common",
-        "@goldrush//:goldrush",
-        "@lager//:lager",
+        "//deps/rabbit_common:rabbit_common@22.3",
+        "@goldrush//:goldrush@22.3",
+        "@lager//:lager@22.3",
+        # "//deps/amqp_client:amqp_client",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+rabbitmqctl(
+    name = "rabbitmqctl@23.1",
+    srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex"]),
+    deps = [
+        "//deps/rabbit_common:rabbit_common@23.1",
+        "@goldrush//:goldrush@23.1",
+        "@lager//:lager@23.1",
         # "//deps/amqp_client:amqp_client",
     ],
     visibility = ["//visibility:public"],
 )
 
 rabbitmqctl_test(
-    name = "rabbitmqctl_tests",
+    name = "rabbitmqctl_tests@22.3",
     srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex", "test/**/*.exs"]),
     data = glob(["test/fixtures/**/*"]),
     deps = [
-        "//deps/rabbit_common:rabbit_common",
-        "@goldrush//:goldrush",
-        "@lager//:lager",
-        "//deps/amqp_client:amqp_client",
-        "//deps/rabbit:rabbit",
+        "//deps/rabbit_common:rabbit_common@22.3",
+        "@goldrush//:goldrush@22.3",
+        "@lager//:lager@22.3",
+        "//deps/amqp_client:amqp_client@22.3",
+        "//deps/rabbit:rabbit@22.3",
+    ],
+    size = "large",
+)
+
+rabbitmqctl_test(
+    name = "rabbitmqctl_tests@23.1",
+    srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex", "test/**/*.exs"]),
+    data = glob(["test/fixtures/**/*"]),
+    deps = [
+        "//deps/rabbit_common:rabbit_common@23.1",
+        "@goldrush//:goldrush@23.1",
+        "@lager//:lager@23.1",
+        "//deps/amqp_client:amqp_client@23.1",
+        "//deps/rabbit:rabbit@23.1",
     ],
     size = "large",
 )

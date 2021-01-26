@@ -1,6 +1,5 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs")
 
 APP_ENV = """[
 	    {rates_mode,        basic},
@@ -11,8 +10,7 @@ APP_ENV = """[
 	      {detailed, [{605, 5}]}]}
 	  ]"""
 
-bazel_erlang_lib(
-    name = "rabbitmq_management_agent",
+erlang_libs(
     app_name = "rabbitmq_management_agent",
     app_description = "RabbitMQ Management Agent",
     app_version = APP_VERSION,

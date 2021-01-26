@@ -1,6 +1,5 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs")
 
 APP_ENV = """[
 	    {http_log_dir,      none},
@@ -14,8 +13,7 @@ APP_ENV = """[
 	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
 	  ]"""
 
-bazel_erlang_lib(
-    name = "rabbitmq_management",
+erlang_libs(
     app_name = "rabbitmq_management",
     app_description = "RabbitMQ Management Console",
     app_version = APP_VERSION,

@@ -1,6 +1,4 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "APP_VERSION")
+load("//:rabbitmq.bzl", "APP_VERSION", "erlang_libs", "ct_tests")
 
 APP_ENV = """[
 	    {prefer_ipv6, false},
@@ -8,8 +6,7 @@ APP_ENV = """[
 	    {writer_gc_threshold, 1000000000}
 	  ]"""
 
-bazel_erlang_lib(
-    name = "amqp_client",
+erlang_libs(
     app_name = "amqp_client",
     app_version = APP_VERSION,
     app_description = "RabbitMQ AMQP Client",
@@ -42,7 +39,7 @@ bazel_erlang_lib(
 #     ],
 # )
 
-ct_test(
+ct_tests(
     name = "unit_SUITE",
     app_name = "amqp_client",
     suites = ["test/unit_SUITE.erl"],

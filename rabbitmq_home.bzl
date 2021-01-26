@@ -77,7 +77,7 @@ def _impl(ctx):
 rabbitmq_home = rule(
     implementation = _impl,
     attrs = {
-        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
+        "erlang_version": attr.string(),
         "_scripts": attr.label_list(
             default = [
                 "//deps/rabbit:scripts/rabbitmq-env",

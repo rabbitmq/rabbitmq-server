@@ -5,7 +5,7 @@ load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
 MIX_DEPS_DIR = "mix_deps"
 
 def _impl(ctx):
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
+    erlang_version = ctx.attr.erlang_version
     erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
     mix_archives = ctx.attr._mix_archives[MixArchivesProvider].path
@@ -93,7 +93,7 @@ rabbitmqctl = rule(
     attrs = {
         "srcs": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
-        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
+        "erlang_version": attr.string(),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
         "_mix_archives": attr.label(default = "//bazel_erlang:mix_archives"),

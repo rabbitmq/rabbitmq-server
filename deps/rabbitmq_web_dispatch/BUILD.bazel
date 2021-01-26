@@ -1,9 +1,7 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs")
 
-bazel_erlang_lib(
-    name = "rabbitmq_web_dispatch",
+erlang_libs(
     app_name = "rabbitmq_web_dispatch",
     app_description = "RabbitMQ Web Dispatcher",
     app_version = APP_VERSION,

@@ -1,5 +1,7 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
+load("//deps/rabbitmq_cli:rabbitmqctl.bzl", "rabbitmqctl")
+load("//deps/rabbitmq_cli:rabbitmqctl_test.bzl", "rabbitmqctl_test")
 
 _LAGER_EXTRA_SINKS = [
     "rabbit_log",

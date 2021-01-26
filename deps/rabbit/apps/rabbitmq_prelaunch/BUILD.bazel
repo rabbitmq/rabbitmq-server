@@ -1,8 +1,7 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs")
 
-bazel_erlang_lib(
-    name = "rabbitmq_prelaunch",
+erlang_libs(
     app_name = "rabbitmq_prelaunch",
     app_version = APP_VERSION,
     app_description = "RabbitMQ prelaunch setup",

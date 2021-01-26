@@ -8,27 +8,52 @@ load(":rabbitmqctl.bzl", "rabbitmqctl")
 #       is hard coded to an erlang version)
 
 rabbitmq_home(
-    name = "broker-home",
+    name = "broker-home@22.3",
 )
 
 rabbitmq_home(
-    name = "broker-management-home",
+    name = "broker-home@23.1",
+)
+
+rabbitmq_home(
+    name = "broker-management-home@22.3",
     plugins = [
-        "//deps/rabbitmq_management:rabbitmq_management",
-        "//deps/rabbitmq_management_agent:rabbitmq_management_agent",
-        "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch",
-        "//deps/amqp_client:amqp_client",
-        "@cowboy//:cowboy",
-        "@cowlib//:cowlib",
+        "//deps/rabbitmq_management:rabbitmq_management@22.3",
+        "//deps/rabbitmq_management_agent:rabbitmq_management_agent@22.3",
+        "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch@22.3",
+        "//deps/amqp_client:amqp_client@22.3",
+        "@cowboy//:cowboy@22.3",
+        "@cowlib//:cowlib@22.3",
     ],
 )
 
 rabbitmq_home(
-    name = "broker-for-cli-tests-home",
+    name = "broker-management-home@23.1",
     plugins = [
-        "//deps/rabbitmq_federation:rabbitmq_federation",
-        "//deps/rabbitmq_stomp:rabbitmq_stomp",
-        "//deps/amqp_client:amqp_client",
+        "//deps/rabbitmq_management:rabbitmq_management@23.1",
+        "//deps/rabbitmq_management_agent:rabbitmq_management_agent@23.1",
+        "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch@23.1",
+        "//deps/amqp_client:amqp_client@23.1",
+        "@cowboy//:cowboy@23.1",
+        "@cowlib//:cowlib@23.1",
+    ],
+)
+
+rabbitmq_home(
+    name = "broker-for-cli-tests-home@22.3",
+    plugins = [
+        "//deps/rabbitmq_federation:rabbitmq_federation@22.3",
+        "//deps/rabbitmq_stomp:rabbitmq_stomp@22.3",
+        "//deps/amqp_client:amqp_client@22.3",
+    ],
+)
+
+rabbitmq_home(
+    name = "broker-for-cli-tests-home@23.1",
+    plugins = [
+        "//deps/rabbitmq_federation:rabbitmq_federation@23.1",
+        "//deps/rabbitmq_stomp:rabbitmq_stomp@23.1",
+        "//deps/amqp_client:amqp_client@23.1",
     ],
 )
 
@@ -36,24 +61,45 @@ rabbitmq_home(
 # for the equivalent of `make run-broker`
 # (though it as of yet includes no plugins)
 run_broker(
-    name = "broker",
-    home = ":broker-home",
+    name = "broker@22.3",
+    home = ":broker-home@22.3",
+)
+
+run_broker(
+    name = "broker@23.1",
+    home = ":broker-home@23.1",
 )
 
 # `bazel run :broker-management` for the broker with just the
 # management plugin
 run_broker(
-    name = "broker-management",
-    home = ":broker-management-home",
+    name = "broker-management@22.3",
+    home = ":broker-management-home@22.3",
+)
+
+run_broker(
+    name = "broker-management@23.1",
+    home = ":broker-management-home@23.1",
 )
 
 start_background_broker(
-    name = "broker-for-cli-tests",
-    home = ":broker-for-cli-tests-home",
+    name = "broker-for-cli-tests@22.3",
+    home = ":broker-for-cli-tests-home@22.3",
+    visibility = ["//visibility:public"],
+)
+
+start_background_broker(
+    name = "broker-for-cli-tests@23.1",
+    home = ":broker-for-cli-tests-home@23.1",
     visibility = ["//visibility:public"],
 )
 
 rabbitmqctl(
-    name = "rabbitmqctl",
-    home = ":broker-home",
+    name = "rabbitmqctl@22.3",
+    home = ":broker-home@22.3",
+)
+
+rabbitmqctl(
+    name = "rabbitmqctl@23.1",
+    home = ":broker-home@23.1",
 )
