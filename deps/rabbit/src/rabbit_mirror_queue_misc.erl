@@ -235,11 +235,9 @@ add_mirror(QName, MirrorNode, SyncMode) ->
                     case rabbit_vhost_sup_sup:get_vhost_sup(VHost, MirrorNode) of
                         {ok, _} ->
                             try
-                                SPid = rabbit_amqqueue_sup_sup:start_queue_process(
-                                       MirrorNode, Q, slave),
-                                log_info(QName, "Adding mirror on node ~p: ~p~n",
-                                     [MirrorNode, SPid]),
-                                rabbit_mirror_queue_slave:go(SPid, SyncMode)
+                                MirrorPid = rabbit_amqqueue_sup_sup:start_queue_process(MirrorNode, Q, slave),
+                                log_info(QName, "Adding mirror on node ~p: ~p~n", [MirrorNode, MirrorPid]),
+                                rabbit_mirror_queue_slave:go(MirrorPid, SyncMode)
                             of
                                 _ -> ok
                             catch
@@ -447,14 +445,15 @@ is_mirrored_ha_nodes(Q) ->
     end.
 
 actual_queue_nodes(Q) when ?is_amqqueue(Q) ->
-    MPid = amqqueue:get_pid(Q),
-    SPids = amqqueue:get_slave_pids(Q),
-    SSPids = amqqueue:get_sync_slave_pids(Q),
-    Nodes = fun (L) -> [node(Pid) || Pid <- L] end,
-    {case MPid of
-         none -> none;
-         _    -> node(MPid)
-     end, Nodes(SPids), Nodes(SSPids)}.
+    PrimaryPid = amqqueue:get_pid(Q),
+    MirrorPids = amqqueue:get_slave_pids(Q),
+    InSyncMirrorPids = amqqueue:get_sync_slave_pids(Q),
+    CollectNodes = fun (L) -> [node(Pid) || Pid <- L] end,
+    NodeHostingPrimary = case PrimaryPid of
+                         none -> none;
+                         _ -> node(PrimaryPid)
+                     end,
+    {NodeHostingPrimary, CollectNodes(MirrorPids), CollectNodes(InSyncMirrorPids)}.
 
 -spec maybe_auto_sync(amqqueue:amqqueue()) -> 'ok'.
 
@@ -520,19 +519,19 @@ update_mirrors(OldQ, NewQ) when ?amqqueue_pids_are_equal(OldQ, NewQ) ->
 
 update_mirrors(Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
-    {OldMNode, OldSNodes, _} = actual_queue_nodes(Q),
-    {NewMNode, NewSNodes}    = suggested_queue_nodes(Q),
-    OldNodes = [OldMNode | OldSNodes],
-    NewNodes = [NewMNode | NewSNodes],
+    {PreTransferPrimaryNode, PreTransferMirrorNodes, __PreTransferInSyncMirrorNodes} = actual_queue_nodes(Q),
+    {NewlySelectedPrimaryNode, NewlySelectedMirrorNodes} = suggested_queue_nodes(Q),
+    PreTransferNodesWithReplicas = [PreTransferPrimaryNode | PreTransferMirrorNodes],
+    NewlySelectedNodesWithReplicas = [NewlySelectedPrimaryNode | NewlySelectedMirrorNodes],
     %% When a mirror dies, remove_from_queue/2 might have to add new
-    %% mirrors (in "exactly" mode). It will check mnesia to see which
+    %% mirrors (in "exactly" mode). It will check the queue record to see which
     %% mirrors there currently are. If drop_mirror/2 is invoked first
     %% then when we end up in remove_from_queue/2 it will not see the
     %% mirrors that add_mirror/2 will add, and also want to add them
     %% (even though we are not responding to the death of a
     %% mirror). Breakage ensues.
-    add_mirrors (QName, NewNodes -- OldNodes, async),
-    drop_mirrors(QName, OldNodes -- NewNodes),
+    add_mirrors(QName, NewlySelectedNodesWithReplicas -- PreTransferNodesWithReplicas, async),
+    drop_mirrors(QName, PreTransferNodesWithReplicas -- NewlySelectedNodesWithReplicas),
     %% This is for the case where no extra nodes were added but we changed to
     %% a policy requiring auto-sync.
     maybe_auto_sync(Q),
@@ -548,10 +547,18 @@ get_replicas(Q) ->
 
 transfer_leadership(Q, Destination) ->
     QName = amqqueue:get_name(Q),
-    {OldMNode, OldSNodes, _} = actual_queue_nodes(Q),
-    OldNodes = [OldMNode | OldSNodes],
-    add_mirrors(QName, [Destination] -- OldNodes, async),
-    drop_mirrors(QName, OldNodes -- [Destination]),
+    {PreTransferPrimaryNode, PreTransferMirrorNodes, _PreTransferInSyncMirrorNodes} = actual_queue_nodes(Q),
+    PreTransferNodesWithReplicas = [PreTransferPrimaryNode | PreTransferMirrorNodes],
+
+    NodesToAddMirrorsOn = [Destination] -- PreTransferNodesWithReplicas,
+    %% This will wait for the transfer/eager sync to finish before we begin dropping
+    %% mirrors on the next step. In this case we cannot add mirrors asynchronously
+    %% as that will race with the dropping step.
+    add_mirrors(QName, NodesToAddMirrorsOn, sync),
+
+    NodesToDropMirrorsOn = PreTransferNodesWithReplicas -- [Destination],
+    drop_mirrors(QName, NodesToDropMirrorsOn),
+
     {Result, NewQ} = wait_for_new_master(QName, Destination),
     update_mirrors(NewQ),
     Result.
