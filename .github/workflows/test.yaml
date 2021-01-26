@@ -41,3 +41,14 @@ jobs:
           --build_tests_only \
           --test_verbose_timeout_warnings \
           --verbose_failures
+    - name: RESOVLE TESTLOGS
+      id: resolve_logs
+      if: success() || failure()
+      run: |
+        echo "::set-output name=dir::$(readlink -f bazel-testlogs)"
+    - name: CAPTURE LOGS
+      uses: actions/upload-artifact@v2
+      if: success() || failure()
+      with:
+        name: bazel-testlogs
+        path: ${{ steps.resolve_logs.outputs.dir }}
