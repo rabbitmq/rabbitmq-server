@@ -8,13 +8,20 @@ RabbitmqHomeInfo = provider(
         'sbin': 'Files making up the sbin dir',
         'escript': 'Files making up the escript dir',
         'plugins': 'Files making up the plugins dir',
-        'erlang_version': 'The version of Erlang the plugins were compiled with',
+        # 'erlang_version': 'The version of Erlang the plugins were compiled with',
     },
 )
 
 def _copy_script(ctx, script):
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
-    dest = ctx.actions.declare_file(path_join(ctx.label.name, erlang_version, "sbin", script.basename))
+    # erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
+    dest = ctx.actions.declare_file(
+        path_join(
+            ctx.label.name,
+            # erlang_version,
+            "sbin",
+            script.basename,
+        )
+    )
     args = ctx.actions.args()
     args.add_all([script, dest])
     ctx.actions.run(
@@ -23,15 +30,22 @@ def _copy_script(ctx, script):
         executable = "cp",
         arguments = [args],
         env = {
-            "ERLANG_VERSION": erlang_version,
+            # "ERLANG_VERSION": erlang_version,
         },
     )
     return dest
 
 def _link_escript(ctx, escript):
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
+    # erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
     e = escript.files_to_run.executable
-    s = ctx.actions.declare_file(path_join(ctx.label.name, erlang_version, "escript", e.basename))
+    s = ctx.actions.declare_file(
+        path_join(
+            ctx.label.name,
+            # erlang_version,
+            "escript",
+            e.basename,
+        )
+    )
     ctx.actions.symlink(
         output = s,
         target_file = e,
@@ -39,12 +53,12 @@ def _link_escript(ctx, escript):
     return s
 
 def _plugins_dir_link(ctx, plugin):
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
+    # erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
     lib_info = plugin[ErlangLibInfo]
     output = ctx.actions.declare_file(
         path_join(
             ctx.label.name,
-            erlang_version,
+            # erlang_version,
             "plugins",
             "{}-{}".format(lib_info.lib_name, lib_info.lib_version),
         )
@@ -67,7 +81,7 @@ def _impl(ctx):
             sbin = scripts,
             escript = escripts,
             plugins = plugins,
-            erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version,
+            # erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version,
         ),
         DefaultInfo(
             files = depset(scripts + escripts + plugins),
@@ -77,7 +91,7 @@ def _impl(ctx):
 rabbitmq_home = rule(
     implementation = _impl,
     attrs = {
-        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
+        # "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
         "_scripts": attr.label_list(
             default = [
                 "//deps/rabbit:scripts/rabbitmq-env",
