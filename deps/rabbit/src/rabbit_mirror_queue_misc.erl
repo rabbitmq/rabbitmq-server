@@ -17,9 +17,9 @@
          sync_batch_size/1, log_info/3, log_warning/3]).
 -export([stop_all_slaves/5]).
 
--export([sync_queue/1, cancel_sync_queue/1]).
+-export([sync_queue/1, cancel_sync_queue/1, queue_length/1]).
 
--export([transfer_leadership/2, queue_length/1, get_replicas/1]).
+-export([get_replicas/1, transfer_leadership/2, migrate_leadership_to_existing_replica/2]).
 
 %% for testing only
 -export([module/1]).
@@ -201,12 +201,13 @@ drop_mirror(QName, MirrorNode) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?is_amqqueue(Q) ->
             Name = amqqueue:get_name(Q),
-            QPid = amqqueue:get_pid(Q),
-            SPids = amqqueue:get_slave_pids(Q),
-            case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
+            PrimaryPid = amqqueue:get_pid(Q),
+            MirrorPids = amqqueue:get_slave_pids(Q),
+            AllReplicaPids = [PrimaryPid | MirrorPids],
+            case [Pid || Pid <- AllReplicaPids, node(Pid) =:= MirrorNode] of
                 [] ->
                     {error, {queue_not_mirrored_on_node, MirrorNode}};
-                [QPid] when SPids =:= [] ->
+                [PrimaryPid] when MirrorPids =:= [] ->
                     {error, cannot_drop_only_mirror};
                 [Pid] ->
                     log_info(Name, "Dropping queue mirror on node ~p~n",
@@ -542,9 +543,12 @@ queue_length(Q) ->
     M.
 
 get_replicas(Q) ->
-    {MNode, SNodes} = suggested_queue_nodes(Q),
-    [MNode] ++ SNodes.
+    {PrimaryNode, MirrorNodes} = suggested_queue_nodes(Q),
+    [PrimaryNode] ++ MirrorNodes.
 
+%% Moves the primary replica (leader) of a classic mirrored queue to another node.
+%% Target node can be any node in the cluster, and does not have to host a replica
+%% of this queue.
 transfer_leadership(Q, Destination) ->
     QName = amqqueue:get_name(Q),
     {PreTransferPrimaryNode, PreTransferMirrorNodes, _PreTransferInSyncMirrorNodes} = actual_queue_nodes(Q),
@@ -557,6 +561,27 @@ transfer_leadership(Q, Destination) ->
     add_mirrors(QName, NodesToAddMirrorsOn, sync),
 
     NodesToDropMirrorsOn = PreTransferNodesWithReplicas -- [Destination],
+    drop_mirrors(QName, NodesToDropMirrorsOn),
+
+    {Result, NewQ} = wait_for_new_master(QName, Destination),
+    update_mirrors(NewQ),
+    Result.
+
+%% Moves the primary replica (leader) of a classic mirrored queue to another node
+%% which already hosts a replica of this queue. In this case we can stop
+%% fewer replicas and reduce the load the operation has on the cluster.
+migrate_leadership_to_existing_replica(Q, Destination) ->
+    QName = amqqueue:get_name(Q),
+    {PreTransferPrimaryNode, PreTransferMirrorNodes, _PreTransferInSyncMirrorNodes} = actual_queue_nodes(Q),
+    PreTransferNodesWithReplicas = [PreTransferPrimaryNode | PreTransferMirrorNodes],
+
+    NodesToAddMirrorsOn = [Destination] -- PreTransferNodesWithReplicas,
+    %% This will wait for the transfer/eager sync to finish before we begin dropping
+    %% mirrors on the next step. In this case we cannot add mirrors asynchronously
+    %% as that will race with the dropping step.
+    add_mirrors(QName, NodesToAddMirrorsOn, sync),
+
+    NodesToDropMirrorsOn = [PreTransferPrimaryNode],
     drop_mirrors(QName, NodesToDropMirrorsOn),
 
     {Result, NewQ} = wait_for_new_master(QName, Destination),

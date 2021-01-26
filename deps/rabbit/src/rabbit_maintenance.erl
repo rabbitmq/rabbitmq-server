@@ -265,7 +265,7 @@ transfer_leadership_of_classic_mirrored_queues(TransferCandidates) ->
              {ok, Pick} ->
                  rabbit_log:debug("Will transfer leadership of local ~s to node ~s",
                           [rabbit_misc:rs(Name), Pick]),
-                 case rabbit_mirror_queue_misc:transfer_leadership(Q, Pick) of
+                 case rabbit_mirror_queue_misc:migrate_leadership_to_existing_replica(Q, Pick) of
                      {migrated, _} ->
                          rabbit_log:debug("Successfully transferred leadership of queue ~s to node ~s",
                                           [rabbit_misc:rs(Name), Pick]);
