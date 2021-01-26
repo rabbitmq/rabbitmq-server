@@ -263,10 +263,10 @@ add_mirror(QName, MirrorNode, SyncMode) ->
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
 report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
-    log_info(QueueName, "~s ~s saw deaths of mirrors~s~n",
+    log_info(QueueName, "~s replica of queue ~s detected replica ~s to be down~n",
                     [case IsMaster of
-                         true  -> "Master";
-                         false -> "Slave"
+                         true  -> "Primary";
+                         false -> "Secondary"
                      end,
                      rabbit_misc:pid_to_string(MirrorPid),
                      [[$ , rabbit_misc:pid_to_string(P)] || P <- DeadPids]]).
