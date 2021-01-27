@@ -529,7 +529,7 @@ rebalance(Type, VhostSpec, QueueSpec) ->
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     rabbit_log:info("Starting queue rebalance operation: '~s' for vhosts matching '~s' and queues matching '~s'",
                     [Type, VhostSpec, QueueSpec]),
-    Running = rabbit_nodes:all_running(),
+    Running = rabbit_maintenance:filter_out_drained_nodes_consistent_read(rabbit_nodes:all_running()),
     NumRunning = length(Running),
     ToRebalance = [Q || Q <- rabbit_amqqueue:list(),
                         filter_per_type(Type, Q),
@@ -596,12 +596,12 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
         [{_, Q, false} = Queue | Queues] = All when length(All) > MaxQueuesDesired ->
             Name = amqqueue:get_name(Q),
             Module = rebalance_module(Q),
-            OtherNodes = Module:get_replicas(Q) -- [N],
-            case OtherNodes of
+            Candidates = Module:get_replicas(Q) -- [N],
+            case Candidates of
                 [] ->
                     {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)};
                 _ ->
-                    [{Length, Destination} | _] = sort_by_number_of_queues(OtherNodes, ByNode),
+                    [{Length, Destination} | _] = sort_by_number_of_queues(Candidates, ByNode),
                     rabbit_log:warning("Migrating queue ~p from node ~p with ~p queues to node ~p with ~p queues",
                                        [Name, N, length(All), Destination, Length]),
                     case Module:transfer_leadership(Q, Destination) of

@@ -25,7 +25,7 @@
     resume_all_client_listeners/0,
     close_all_client_connections/0,
     primary_replica_transfer_candidate_nodes/0,
-    random_primary_replica_transfer_candidate_node/1,
+    random_primary_replica_transfer_candidate_node/2,
     transfer_leadership_of_quorum_queues/1,
     transfer_leadership_of_classic_mirrored_queues/1,
     status_table_name/0,
@@ -256,14 +256,16 @@ transfer_leadership_of_classic_mirrored_queues(TransferCandidates) ->
     ReadableCandidates = readable_candidate_list(TransferCandidates),
     rabbit_log:info("Will transfer leadership of ~b classic mirrored queues hosted on this node to these peer nodes: ~s",
                     [length(Queues), ReadableCandidates]),
-
     [begin
          Name = amqqueue:get_name(Q),
-         case random_primary_replica_transfer_candidate_node(TransferCandidates) of
+         ExistingReplicaNodes = [node(Pid) || Pid <- amqqueue:get_sync_slave_pids(Q)],
+         rabbit_log:debug("Local ~s has replicas on nodes ~s",
+                          [rabbit_misc:rs(Name), readable_candidate_list(ExistingReplicaNodes)]),
+         case random_primary_replica_transfer_candidate_node(TransferCandidates, ExistingReplicaNodes) of
              {ok, Pick} ->
-                 rabbit_log:debug("Will transfer leadership of local queue ~s to node ~s",
+                 rabbit_log:debug("Will transfer leadership of local ~s to node ~s",
                           [rabbit_misc:rs(Name), Pick]),
-                 case rabbit_mirror_queue_misc:transfer_leadership(Q, Pick) of
+                 case rabbit_mirror_queue_misc:migrate_leadership_to_existing_replica(Q, Pick) of
                      {migrated, _} ->
                          rabbit_log:debug("Successfully transferred leadership of queue ~s to node ~s",
                                           [rabbit_misc:rs(Name), Pick]);
@@ -300,17 +302,29 @@ stop_local_quorum_queue_followers() ->
      end || Q <- Queues],
     rabbit_log:info("Stopped all local replicas of quorum queues hosted on this node").
 
- -spec primary_replica_transfer_candidate_nodes() -> [node()].
+-spec primary_replica_transfer_candidate_nodes() -> [node()].
 primary_replica_transfer_candidate_nodes() ->
     filter_out_drained_nodes_consistent_read(rabbit_nodes:all_running() -- [node()]).
 
--spec random_primary_replica_transfer_candidate_node([node()]) -> {ok, node()} | undefined.
-random_primary_replica_transfer_candidate_node([]) ->
+-spec random_primary_replica_transfer_candidate_node([node()], [node()]) -> {ok, node()} | undefined.
+random_primary_replica_transfer_candidate_node([], _Preferred) ->
     undefined;
-random_primary_replica_transfer_candidate_node(Candidates) ->
-    Nth = erlang:phash2(erlang:monotonic_time(), length(Candidates)),
-    Candidate = lists:nth(Nth + 1, Candidates),
+random_primary_replica_transfer_candidate_node(Candidates, PreferredNodes) ->
+    Overlap = sets:to_list(sets:intersection(sets:from_list(Candidates), sets:from_list(PreferredNodes))),
+    Candidate = case Overlap of
+                    [] ->
+                        %% Since ownership transfer is meant to be run only when we are sure
+                        %% there are in-sync replicas to transfer to, this is an edge case.
+                        %% We skip the transfer.
+                        undefined;
+                    Nodes ->
+                        random_nth(Nodes)
+                end,
     {ok, Candidate}.
+
+random_nth(Nodes) ->
+    Nth = erlang:phash2(erlang:monotonic_time(), length(Nodes)),
+    lists:nth(Nth + 1, Nodes).
 
 revive_local_quorum_queue_replicas() ->
     Queues = rabbit_amqqueue:list_local_followers(),
