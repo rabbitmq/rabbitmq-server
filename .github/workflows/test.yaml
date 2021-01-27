@@ -50,5 +50,5 @@ jobs:
       uses: actions/upload-artifact@v2
       if: success() || failure()
       with:
-        name: bazel-testlogs
+        name: bazel-testlogs-${{ matrix.erlang_version }}
         path: ${{ steps.resolve_logs.outputs.dir }}
