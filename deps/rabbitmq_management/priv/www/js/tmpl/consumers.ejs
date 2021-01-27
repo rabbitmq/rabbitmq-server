@@ -3,7 +3,7 @@
       <thead>
         <tr>
 <% if (mode == 'queue') { %>
-          <th>Channel</th>
+          <th>Channel <span class="help" id="consumer-owner"></th>
           <th>Consumer tag</th>
 <% } else { %>
           <th>Consumer tag</th>
@@ -23,7 +23,7 @@
 %>
       <tr<%= alt_rows(i) %>>
 <% if (mode == 'queue') { %>
-        <td><%= link_channel(consumer.channel_details.name) %></td>
+        <td><%= link_consumer_owner(consumer) %></td>
         <td><%= fmt_string(consumer.consumer_tag) %></td>
 <% } else { %>
         <td><%= fmt_string(consumer.consumer_tag) %></td>

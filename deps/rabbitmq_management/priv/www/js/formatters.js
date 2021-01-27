@@ -9,6 +9,23 @@ const PROCESS_THRESHOLDS = [[0.75, 'red'],
 const TAB_HIGHLIGHTER = "\u2192";
 const WHITESPACE_HIGHLIGHTER = "\u23B5";
 
+const CONSUMER_OWNER_FORMATTERS = [
+    {order: 10, formatter: function(consumer) {
+        if (consumer.consumer_tag.startsWith('stream.subid-')) {
+            return link_conn(consumer.channel_details.connection_name);
+        } else {
+            return undefined;
+        }
+    }},
+    {order: 100, formatter: function(consumer) {
+        return link_channel(consumer.channel_details.name);
+    }}
+];
+
+const CONSUMER_OWNER_FORMATTERS_COMPARATOR = function(formatter1, formatter2) {
+    return formatter1.order - formatter2.order;
+}
+
 function fmt_string(str, unknown) {
     if (unknown == undefined) {
         unknown = UNKNOWN_REPR;
@@ -727,6 +744,15 @@ function highlight_extra_whitespace(str) {
           [replace_leading_chars,  /^(\s+)/g, WHITESPACE_HIGHLIGHTER]].reduce(function(acc, triplet) {
     return triplet[0](acc, triplet[1], triplet[2]);
   }, str.replace(/\t/g, TAB_HIGHLIGHTER));
+}
+
+function link_consumer_owner(consumer) {
+    for (var i = 0; i < CONSUMER_OWNER_FORMATTERS.length; i++) {
+        var result = CONSUMER_OWNER_FORMATTERS[i].formatter(consumer);
+        if (result != undefined) {
+            return result;
+        }
+    }
 }
 
 function link_conn(name, desc) {

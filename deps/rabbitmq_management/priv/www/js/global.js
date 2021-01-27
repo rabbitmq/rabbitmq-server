@@ -493,6 +493,10 @@ var HELP = {
     For a quorum queue, a consumer can be inactive because its owning node is suspected down. <br/><br/> \
     (<a href="https://www.rabbitmq.com/consumers.html#active-consumer" target="_blank">Documentation</a>)',
 
+    'consumer-owner' :
+    '<a href="https://www.rabbitmq.com/consumers.html">AMQP consumers</a> belong to an AMQP channel, \
+    and <a href="https://www.rabbitmq.com/stream.html">stream consumers</a> belong to a stream connection.',
+
     'plugins' :
     'Note that only plugins which are both explicitly enabled and running are shown here.',
 

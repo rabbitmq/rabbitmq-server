@@ -371,7 +371,6 @@ detail_queue_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
     DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_detail_queue_data,
                                       [Ids, Ranges]}),
-
     QueueStats = adjust_hibernated_memory_use(
       [begin
        Id = id_lookup(queue_stats, Obj),

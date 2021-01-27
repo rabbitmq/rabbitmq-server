@@ -52,8 +52,23 @@ function renderStreamConnections() {
                           'streamConnections', '#/stream/connections');
 }
 
-function link_stream_conn(vhost, name, desc) {
+function link_stream_conn(vhost, name) {
   return _link_to(short_conn(name), '#/stream/connections/' + esc(vhost) + '/' + esc(name));
 }
 
 RENDER_CALLBACKS['streamConnections'] = function() { renderStreamConnections() };
+
+CONSUMER_OWNER_FORMATTERS.push({
+    order: 0, formatter: function(consumer) {
+        if (consumer.consumer_tag.startsWith('stream.subid-')) {
+            return link_stream_conn(
+                consumer.queue.vhost,
+                consumer.channel_details.connection_name
+            );
+        } else {
+            return undefined;
+        }
+    }
+});
+
+CONSUMER_OWNER_FORMATTERS.sort(CONSUMER_OWNER_FORMATTERS_COMPARATOR);
