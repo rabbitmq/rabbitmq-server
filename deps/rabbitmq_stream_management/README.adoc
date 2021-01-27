@@ -1,4 +1,4 @@
-= RabbitMQ Stream Plugin Management
+= RabbitMQ Stream Management Plugin
 
 == Project Maturity
 
@@ -8,7 +8,7 @@ It is not ready for production use.
 == Support
 
 * For questions: https://groups.google.com/forum/#!forum/rabbitmq-users[RabbitMQ Users]
-* For bugs and feature requests: https://github.com/rabbitmq/rabbitmq-stream/issues[GitHub Issues]
+* For bugs and feature requests: https://github.com/rabbitmq/rabbitmq-server/issues[GitHub Issues]
 
 The project is currently under development, there is no guarantee yet that it will be maintained and supported
 in the future (read: you are welcome to experiment with it and give feedback, but please do not base
@@ -20,4 +20,4 @@ Released under the link:LICENSE-MPL-RabbitMQ[MPL 2.0].
 
 == Copyright
 
-(c) 2020 VMware, Inc. or its affiliates.
+(c) 2020-2021 VMware, Inc. or its affiliates.

@@ -41,6 +41,7 @@
 !/deps/rabbitmq_stomp/
 !/deps/rabbitmq_stream/
 !/deps/rabbitmq_stream_management/
+!/deps/rabbitmq_stream_prometheus/
 !/deps/rabbitmq_top/
 !/deps/rabbitmq_tracing/
 !/deps/rabbitmq_trust_store/
