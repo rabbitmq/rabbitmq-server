@@ -346,6 +346,11 @@ deps:
   suites:
   - name: http
 
+- name: rabbitmq_stream_prometheus
+  skip_dialyzer: true
+  suites:
+  - name: prometheus_http
+
 - name: rabbitmq_top
   suites: []
 
