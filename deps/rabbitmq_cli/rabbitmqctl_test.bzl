@@ -1,5 +1,5 @@
 load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider")
-load("//bazel_erlang:elixir_home.bzl", "ElixirHomeProvider", "MixArchivesProvider")
+load("//bazel_erlang:elixir_home.bzl", "ElixirHomeProvider")
 load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "BEGINS_WITH_FUN", "QUERY_ERL_VERSION", "path_join")
 load("//bazel_erlang:ct.bzl", "lib_dir")
 load(":rabbitmqctl.bzl", "MIX_DEPS_DIR")

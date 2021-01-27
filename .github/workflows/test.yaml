@@ -10,7 +10,7 @@ jobs:
         erlang_version:
         - "22.3"
         - "23.1"
-    timeout-minutes: 20
+    #! timeout-minutes: 20
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
@@ -26,6 +26,8 @@ jobs:
         mkdir -p "${GITHUB_WORKSPACE}/bin/"
         mv bazelisk-linux-amd64 "${GITHUB_WORKSPACE}/bin/bazel"
         chmod +x "${GITHUB_WORKSPACE}/bin/bazel"
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
       run: |
         erl -eval '{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell
@@ -37,7 +39,6 @@ jobs:
         "${GITHUB_WORKSPACE}/bin/bazel" test //... \
           --//bazel_erlang:erlang_home=${ERLANG_HOME} \
           --//bazel_erlang:elixir_home=${ELIXIR_HOME} \
-          --//bazel_erlang:mix_archives=/home/runner/.mix/archives \
           --test_tag_filters="erlang-${{ matrix.erlang_version }}" \
           --build_tests_only \
           --test_verbose_timeout_warnings \
