@@ -24,8 +24,7 @@ groups() ->
       {cluster_size_3, [], [
           maintenance_mode_status,
           listener_suspension_status,
-          client_connection_closure,
-          classic_mirrored_queue_leadership_transfer
+          client_connection_closure
         ]},
       {quorum_queues, [], [
           quorum_queue_leadership_transfer
@@ -210,33 +209,6 @@ client_connection_closure(Config) ->
 
     rabbit_ct_broker_helpers:revive_node(Config, A).
 
-
-classic_mirrored_queue_leadership_transfer(Config) ->
-    [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ct:pal("Picked node ~s for maintenance tests...", [A]),
-
-    rabbit_ct_helpers:await_condition(
-        fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
-
-    PolicyPattern = <<"^cq.mirrored">>,
-    rabbit_ct_broker_helpers:set_ha_policy(Config, A, PolicyPattern, <<"all">>),
-
-    Conn = rabbit_ct_client_helpers:open_connection(Config, A),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    QName = <<"cq.mirrored.1">>,
-    amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
-
-    ?assertEqual(1, length(rabbit_ct_broker_helpers:rpc(Config, A, rabbit_amqqueue, list_local, [<<"/">>]))),
-
-    rabbit_ct_broker_helpers:drain_node(Config, A),
-    rabbit_ct_helpers:await_condition(
-        fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
-
-    ?assertEqual(0, length(rabbit_ct_broker_helpers:rpc(Config, A, rabbit_amqqueue, list_local, [<<"/">>]))),
-
-    rabbit_ct_broker_helpers:revive_node(Config, A),
-    %% rabbit_ct_broker_helpers:set_ha_policy/4 uses pattern for policy name
-    rabbit_ct_broker_helpers:clear_policy(Config, A, PolicyPattern).
 
 quorum_queue_leadership_transfer(Config) ->
     [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

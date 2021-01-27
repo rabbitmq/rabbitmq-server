@@ -88,7 +88,8 @@ do_drain() ->
     ReadableCandidates = readable_candidate_list(TransferCandidates),
     rabbit_log:info("Node will transfer primary replicas of its queues to ~b peers: ~s",
                     [length(TransferCandidates), ReadableCandidates]),
-    transfer_leadership_of_classic_mirrored_queues(TransferCandidates),
+    %% Note: only QQ leadership is transferred because it is a reasonably quick thing to do a lot of queues
+    %% in the cluster, unlike with CMQs.
     transfer_leadership_of_quorum_queues(TransferCandidates),
     stop_local_quorum_queue_followers(),
 
@@ -248,7 +249,12 @@ transfer_leadership_of_quorum_queues(_TransferCandidates) ->
     rabbit_log:info("Leadership transfer for quorum queues hosted on this node has been initiated").
 
 -spec transfer_leadership_of_classic_mirrored_queues([node()]) -> ok.
- transfer_leadership_of_classic_mirrored_queues([]) ->
+%% This function is no longer used by maintanence mode. We retain it in case
+%% classic mirrored queue leadership transfer would be reconsidered.
+%%
+%% With a lot of CMQs in a cluster, the transfer procedure can take prohibitively long
+%% for a pre-upgrade task.
+transfer_leadership_of_classic_mirrored_queues([]) ->
     rabbit_log:warning("Skipping leadership transfer of classic mirrored queues: no candidate "
                        "(online, not under maintenance) nodes to transfer to!");
 transfer_leadership_of_classic_mirrored_queues(TransferCandidates) ->
