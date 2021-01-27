@@ -173,6 +173,7 @@ public class FailureTest {
     assertThat(bodies).hasSameSizeAs(messages).containsAll(messages);
   }
 
+  @Disabled
   @Test
   void noLostConfirmedMessagesWhenLeaderGoesAway() throws Exception {
     executorService = Executors.newCachedThreadPool();
