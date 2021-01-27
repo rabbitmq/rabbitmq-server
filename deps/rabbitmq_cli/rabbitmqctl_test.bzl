@@ -1,6 +1,6 @@
 load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider")
 load("//bazel_erlang:elixir_home.bzl", "ElixirHomeProvider", "MixArchivesProvider")
-load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
+load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "BEGINS_WITH_FUN", "QUERY_ERL_VERSION", "path_join")
 load("//bazel_erlang:ct.bzl", "lib_dir")
 load(":rabbitmqctl.bzl", "MIX_DEPS_DIR")
 
@@ -49,6 +49,14 @@ def _impl(ctx):
         cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
         export HOME=${{PWD}}
+
+        {begins_with_fun}
+        V=$({erlang_home}/bin/{query_erlang_version})
+        if ! beginswith "{erlang_version}" "$V"; then
+            echo "Erlang version mismatch (Expected {erlang_version}, found $V)"
+            exit 1
+        fi
+
         export MIX_ARCHIVES={mix_archives}
         export DEPS_DIR={mix_deps_dir}
         mix local.rebar --force
@@ -78,6 +86,9 @@ def _impl(ctx):
         # run the actual tests
         mix test --trace --max-failures 1
     """.format(
+        begins_with_fun=BEGINS_WITH_FUN,
+        query_erlang_version=QUERY_ERL_VERSION,
+        erlang_version=ctx.attr.erlang_version,
         erlang_home=erlang_home,
         elixir_home=elixir_home,
         mix_archives=ctx.attr._mix_archives[MixArchivesProvider].path,

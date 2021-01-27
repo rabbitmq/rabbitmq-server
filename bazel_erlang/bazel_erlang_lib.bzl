@@ -23,6 +23,7 @@ ErlangLibInfo = provider(
 
 _DEPS_DIR = "deps"
 
+BEGINS_WITH_FUN = """beginswith() { case $2 in "$1"*) true;; *) false;; esac; }"""
 QUERY_ERL_VERSION = """erl -eval '{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell"""
 
 # NOTE: we should probably fetch the separator with ctx.host_configuration.host_path_separator
@@ -185,14 +186,13 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
     script = """
         set -euo pipefail
 
-        beginswith() {{ case $2 in "$1"*) true;; *) false;; esac; }}
-
         mkdir -p {output_dir}
         mkdir -p {output_dir}/include
         mkdir -p {output_dir}/ebin
         mkdir -p {output_dir}/priv
         export HOME=$PWD
 
+        {begins_with_fun}
         V=$({erlang_home}/bin/{query_erlang_version})
         if ! beginswith "{erlang_version}" "$V"; then
             echo "Erlang version mismatch (Expected {erlang_version}, found $V)"
@@ -205,6 +205,7 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
         {expose_priv_command}
     """.format(
         output_dir=output_dir.path,
+        begins_with_fun=BEGINS_WITH_FUN,
         query_erlang_version=QUERY_ERL_VERSION,
         erlang_version=ctx.attr.erlang_version,
         erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,

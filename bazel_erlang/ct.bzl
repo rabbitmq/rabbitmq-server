@@ -1,4 +1,5 @@
-load(":bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join", "compile_erlang_action")
+load(":erlang_home.bzl", "ErlangHomeProvider")
+load(":bazel_erlang_lib.bzl", "ErlangLibInfo", "BEGINS_WITH_FUN", "QUERY_ERL_VERSION", "path_join", "compile_erlang_action")
 
 def lib_dir(dep):
     c = []
@@ -25,7 +26,17 @@ def _impl(ctx):
     )
 
     script = """set -euo pipefail
-    exec env HOME=${{TEST_TMPDIR}} ct_run \\
+
+    export HOME=${{TEST_TMPDIR}}
+
+    {begins_with_fun}
+    V=$({erlang_home}/bin/{query_erlang_version})
+    if ! beginswith "{erlang_version}" "$V"; then
+        echo "Erlang version mismatch (Expected {erlang_version}, found $V)"
+        exit 1
+    fi
+
+    {erlang_home}/bin/ct_run \\
         -no_auto_compile \\
         -noinput \\
         {pa_args} \\
@@ -33,6 +44,10 @@ def _impl(ctx):
         -logdir ${{TEST_UNDECLARED_OUTPUTS_DIR}} \\
         -sname ct-{project}-{name}
     """.format(
+        begins_with_fun=BEGINS_WITH_FUN,
+        query_erlang_version=QUERY_ERL_VERSION,
+        erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
+        erlang_version=ctx.attr.erlang_version,
         pa_args=pa_args,
         suite_beam_dir=path_join(erlang_lib_info.lib_dir.short_path, "ebin"),
         project=erlang_lib_info.lib_name,

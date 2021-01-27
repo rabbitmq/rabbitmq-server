@@ -1,6 +1,6 @@
 load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider")
 load("//bazel_erlang:elixir_home.bzl", "ElixirHomeProvider", "MixArchivesProvider")
-load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
+load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "BEGINS_WITH_FUN", "QUERY_ERL_VERSION", "path_join")
 
 MIX_DEPS_DIR = "mix_deps"
 
@@ -58,6 +58,14 @@ def _impl(ctx):
 
         cd {mix_invocation_dir}
         export HOME=${{PWD}}
+
+        {begins_with_fun}
+        V=$({erlang_home}/bin/{query_erlang_version})
+        if ! beginswith "{erlang_version}" "$V"; then
+            echo "Erlang version mismatch (Expected {erlang_version}, found $V)"
+            exit 1
+        fi
+
         export DEPS_DIR={mix_deps_dir}
         mix local.rebar --force
         mix make_all
@@ -65,6 +73,9 @@ def _impl(ctx):
         cd ${{OLDPWD}}
         cp {mix_invocation_dir}/escript/rabbitmqctl {escript_path}
     """.format(
+        begins_with_fun=BEGINS_WITH_FUN,
+        query_erlang_version=QUERY_ERL_VERSION,
+        erlang_version=ctx.attr.erlang_version,
         erlang_home=erlang_home,
         elixir_home=elixir_home,
         mix_invocation_dir=mix_invocation_dir.path,
