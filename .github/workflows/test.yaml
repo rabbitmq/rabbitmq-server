@@ -31,6 +31,7 @@ jobs:
         erl -eval '{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell
         mix --version
 
+        echo "${{ secrets.BAZELRC_CONTENTS }}" > .bazelrc
         ERLANG_HOME="$(dirname $(dirname $(which erl)))"
         ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
         "${GITHUB_WORKSPACE}/bin/bazel" test //... \
