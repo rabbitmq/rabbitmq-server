@@ -87,7 +87,11 @@ public class PrometheusHttpTest {
     METRICS.forEach(
         name -> {
           Metric metric = metrics.get(name);
-          assertThat(metric).isNotNull().has(noValue());
+          if (METRIC_PUBLISHERS.equals(name) || METRIC_CONSUMERS.equals(name)) {
+            assertThat(metric).isNull();
+          } else {
+            assertThat(metric).isNotNull().has(noValue());
+          }
         });
   }
 
@@ -210,7 +214,7 @@ public class PrometheusHttpTest {
                   == messageCount);
 
       Metrics metrics = metricsCall.get();
-      assertThat(metrics.get(METRIC_PUBLISHERS)).has(noValue());
+      assertThat(metrics.get(METRIC_PUBLISHERS)).isNull(); // no counters in per-object
       assertThat(metrics.get(METRIC_PUBLISHERS_PUBLISHED))
           .has(valueCount(producersCount))
           .has(valuesWithLabels("vhost", "queue", "connection", "id"))
@@ -231,7 +235,7 @@ public class PrometheusHttpTest {
           .has(valueCount(producersCount))
           .has(valuesWithLabels("vhost", "queue", "connection", "id"))
           .has(allOf(streams.stream().map(s -> value("queue", s, 0)).collect(toList())));
-      assertThat(metrics.get(METRIC_CONSUMERS)).has(noValue());
+      assertThat(metrics.get(METRIC_CONSUMERS)).isNull(); // no counters in per-object
       assertThat(metrics.get(METRIC_CONSUMERS_CONSUMED)).has(noValue());
 
       int consumedMessageCount = consumersCount * messagesByProducer;
@@ -255,7 +259,7 @@ public class PrometheusHttpTest {
                   == consumedMessageCount);
 
       metrics = metricsCall.get();
-      assertThat(metrics.get(METRIC_CONSUMERS)).has(noValue());
+      assertThat(metrics.get(METRIC_CONSUMERS)).isNull(); // no counters in per-object
       assertThat(metrics.get(METRIC_CONSUMERS_CONSUMED))
           .has(valueCount(consumersCount))
           .has(valuesWithLabels("vhost", "queue", "connection", "id"))
