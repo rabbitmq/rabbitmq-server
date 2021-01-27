@@ -8,7 +8,6 @@ def _impl(ctx):
     erlang_version = ctx.attr.erlang_version
     erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
-    mix_archives = ctx.attr._mix_archives[MixArchivesProvider].path
 
     mix_invocation_dir = ctx.actions.declare_directory(
         path_join(
@@ -66,7 +65,9 @@ def _impl(ctx):
             exit 1
         fi
 
+        export MIX_ARCHIVES={mix_invocation_dir}
         export DEPS_DIR={mix_deps_dir}
+        mix local.hex --force
         mix local.rebar --force
         mix make_all
 
@@ -90,7 +91,6 @@ def _impl(ctx):
         outputs = [mix_invocation_dir, escript],
         command = script,
         env = {
-            "MIX_ARCHIVES": mix_archives,
             "ERLANG_VERSION": erlang_version,
         },
     )
@@ -107,7 +107,6 @@ rabbitmqctl = rule(
         "erlang_version": attr.string(mandatory = True),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
-        "_mix_archives": attr.label(default = "//bazel_erlang:mix_archives"),
     },
     # Should we used named outputs here?
     executable = True,

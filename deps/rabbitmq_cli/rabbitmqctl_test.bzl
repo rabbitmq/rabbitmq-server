@@ -7,7 +7,6 @@ load(":rabbitmqctl.bzl", "MIX_DEPS_DIR")
 def _impl(ctx):
     erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
-    mix_archives = ctx.attr._mix_archives[MixArchivesProvider].path
 
     # when linked instead of copied, we encounter a bazel error such as
     # "A TreeArtifact may not contain relative symlinks whose target paths traverse outside of the TreeArtifact"
@@ -57,8 +56,9 @@ def _impl(ctx):
             exit 1
         fi
 
-        export MIX_ARCHIVES={mix_archives}
+        export MIX_ARCHIVES=${{TEST_UNDECLARED_OUTPUTS_DIR}}
         export DEPS_DIR={mix_deps_dir}
+        mix local.hex --force
         mix local.rebar --force
         mix make_deps
 
@@ -91,7 +91,6 @@ def _impl(ctx):
         erlang_version=ctx.attr.erlang_version,
         erlang_home=erlang_home,
         elixir_home=elixir_home,
-        mix_archives=ctx.attr._mix_archives[MixArchivesProvider].path,
         package_dir=ctx.label.package,
         copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
         mix_deps_dir=MIX_DEPS_DIR,
@@ -126,7 +125,6 @@ rabbitmqctl_test = rule(
         ),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
-        "_mix_archives": attr.label(default = "//bazel_erlang:mix_archives"),
     },
     test = True,
 )
