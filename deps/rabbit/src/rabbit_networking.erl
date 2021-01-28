@@ -470,6 +470,12 @@ close_connections(Pids, Explanation) ->
     [close_connection(Pid, Explanation) || Pid <- Pids],
     ok.
 
+-spec close_all_user_connections(string(), string()) -> 'ok'.
+close_all_user_connections(Username, Explanation) ->
+    Pids = lists:map(fun(X) -> element(6, X) end, rabbit_connection_tracking:list_of_user(Username)),
+    [close_connection(Pid, Explanation) || Pid <- Pids],
+    ok.
+
 %% Meant to be used by tests only
 -spec close_all_connections(string()) -> 'ok'.
 close_all_connections(Explanation) ->
