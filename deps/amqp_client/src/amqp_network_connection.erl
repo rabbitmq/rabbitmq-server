@@ -164,10 +164,10 @@ inet_address_preference() ->
 gethostaddr(Host) ->
     resolve_address(Host, inet_address_preference()).
 
-resolve_address(Host, [Family | Other]) ->
+resolve_address(Host, [Family | Remaining]) ->
     case inet:getaddr(Host, Family) of
         {ok, IP} -> {IP, Family};
-        _ -> resolve_address(Host, Other)
+        _ -> resolve_address(Host, Remaining)
     end;
 resolve_address(_Host, []) ->
     {error, unknown_host}.
