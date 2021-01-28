@@ -33,7 +33,8 @@ def _impl(ctx):
         export LANG="en_US.UTF-8"
         export LC_ALL="en_US.UTF-8"
 
-        export PATH=${{PATH}}:{erlang_home}/bin:{elixir_home}/bin
+        # In github actions, there is an erl at /usr/bin/erl...
+        export PATH={elixir_home}/bin:{erlang_home}/bin:${{PATH}}
 
         INITIAL_DIR=${{PWD}}
 
@@ -50,13 +51,13 @@ def _impl(ctx):
         export HOME=${{PWD}}
 
         {begins_with_fun}
-        V=$({erlang_home}/bin/{query_erlang_version})
+        V=$({query_erlang_version})
         if ! beginswith "{erlang_version}" "$V"; then
             echo "Erlang version mismatch (Expected {erlang_version}, found $V)"
             exit 1
         fi
 
-        export MIX_ARCHIVES=${{TEST_UNDECLARED_OUTPUTS_DIR}}
+        # export MIX_ARCHIVES=${{TEST_UNDECLARED_OUTPUTS_DIR}}
         export DEPS_DIR={mix_deps_dir}
         mix local.hex --force
         mix local.rebar --force
