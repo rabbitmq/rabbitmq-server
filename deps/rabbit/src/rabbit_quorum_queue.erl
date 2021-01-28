@@ -157,6 +157,8 @@ start_cluster(Q) ->
     Nodes = select_quorum_nodes(QuorumSize, rabbit_mnesia:cluster_nodes(all)),
     NewQ0 = amqqueue:set_pid(Q, Id),
     NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => Nodes}),
+
+    rabbit_log:debug("Will start up to ~s replicas for quorum queue ~s", [QuorumSize, rabbit_misc:rs(QName)]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval, ?TICK_TIMEOUT),
