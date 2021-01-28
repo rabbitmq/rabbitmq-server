@@ -86,8 +86,6 @@ do_drain() ->
 
     TransferCandidates = primary_replica_transfer_candidate_nodes(),
     ReadableCandidates = readable_candidate_list(TransferCandidates),
-    rabbit_log:info("Node will transfer primary replicas of its queues to ~b peers: ~s",
-                    [length(TransferCandidates), ReadableCandidates]),
     %% Note: only QQ leadership is transferred because it is a reasonably quick thing to do a lot of queues
     %% in the cluster, unlike with CMQs.
     transfer_leadership_of_quorum_queues(TransferCandidates),
