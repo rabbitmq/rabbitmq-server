@@ -157,6 +157,8 @@ start_cluster(Q) ->
     Nodes = select_quorum_nodes(QuorumSize, rabbit_mnesia:cluster_nodes(all)),
     NewQ0 = amqqueue:set_pid(Q, Id),
     NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => Nodes}),
+
+    rabbit_log:debug("Will start up to ~p replicas for quorum queue ~s", [QuorumSize, rabbit_misc:rs(QName)]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval, ?TICK_TIMEOUT),
@@ -1444,8 +1446,10 @@ queue_name(RaFifoState) ->
 
 get_default_quorum_initial_group_size(Arguments) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-quorum-initial-group-size">>) of
-        undefined -> application:get_env(rabbit, default_quorum_initial_group_size);
-        {_Type, Val} -> Val
+        undefined ->
+            application:get_env(rabbit, quorum_cluster_size, 3);
+        {_Type, Val} ->
+            Val
     end.
 
 select_quorum_nodes(Size, All) when length(All) =< Size ->
