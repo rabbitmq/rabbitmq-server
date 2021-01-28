@@ -1444,8 +1444,11 @@ queue_name(RaFifoState) ->
 
 get_default_quorum_initial_group_size(Arguments) ->
     case rabbit_misc:table_lookup(Arguments, <<"x-quorum-initial-group-size">>) of
-        undefined -> application:get_env(rabbit, quorum_cluster_size);
-        {_Type, Val} -> Val
+        undefined ->
+            {ok, Val} = application:get_env(rabbit, quorum_cluster_size),
+            Val;
+        {_Type, Val} ->
+            Val
     end.
 
 select_quorum_nodes(Size, All) when length(All) =< Size ->
