@@ -108,9 +108,8 @@ info_keys() ->
 
 connect(AmqpParams = #amqp_params_network{host = Host}, SIF, TypeSup, State) ->
     case gethostaddr(Host) of
-        []     -> {error, unknown_host};
-        [AF|_] -> do_connect(
-                    AF, AmqpParams, SIF, State#state{type_sup = TypeSup})
+        {error, Reason}     -> {error, Reason};
+        AF -> do_connect(AF, AmqpParams, SIF, State#state{type_sup = TypeSup})
     end.
 
 do_connect({Addr, Family},
@@ -163,9 +162,15 @@ inet_address_preference() ->
     end.
 
 gethostaddr(Host) ->
-    Lookups = [{Family, inet:getaddr(Host, Family)}
-               || Family <- inet_address_preference()],
-    [{IP, Family} || {Family, {ok, IP}} <- Lookups].
+    resolve_address(Host, inet_address_preference()).
+
+resolve_address(Host, [Family | Remaining]) ->
+    case inet:getaddr(Host, Family) of
+        {ok, IP} -> {IP, Family};
+        _ -> resolve_address(Host, Remaining)
+    end;
+resolve_address(_Host, []) ->
+    {error, unknown_host}.
 
 try_handshake(AmqpParams, SIF, State = #state{sock = Sock}) ->
     Name = case rabbit_net:connection_string(Sock, outbound) of
