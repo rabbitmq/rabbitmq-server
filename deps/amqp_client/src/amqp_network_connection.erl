@@ -169,9 +169,8 @@ resolve_address(Host, [Family | Other]) ->
         {ok, IP} -> {IP, Family};
         _ -> resolve_address(Host, Other)
     end;
-resolve_address(Host, []) ->
+resolve_address(_Host, []) ->
     {error, unknown_host}.
-
 
 try_handshake(AmqpParams, SIF, State = #state{sock = Sock}) ->
     Name = case rabbit_net:connection_string(Sock, outbound) of
