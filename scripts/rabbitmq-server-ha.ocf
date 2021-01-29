@@ -1238,6 +1238,8 @@ start_beam_process() {
             sleep 1
         done
         if [ "${pid}" != "0" -a -d "/proc/${pid}" ] ; then
+            # waiting for initializing beam process
+            sleep 5
             rc=$OCF_SUCCESS
             break
         fi
