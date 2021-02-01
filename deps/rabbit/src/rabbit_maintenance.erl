@@ -85,7 +85,6 @@ do_drain() ->
     rabbit_log:alert("Closed ~b local client connections", [NConnections]),
 
     TransferCandidates = primary_replica_transfer_candidate_nodes(),
-    ReadableCandidates = readable_candidate_list(TransferCandidates),
     %% Note: only QQ leadership is transferred because it is a reasonably quick thing to do a lot of queues
     %% in the cluster, unlike with CMQs.
     transfer_leadership_of_quorum_queues(TransferCandidates),
@@ -194,7 +193,7 @@ filter_out_drained_nodes_consistent_read(Nodes) ->
 -spec suspend_all_client_listeners() -> rabbit_types:ok_or_error(any()).
  %% Pauses all listeners on the current node except for
  %% Erlang distribution (clustering and CLI tools).
- %% A respausedumed listener will not accept any new client connections
+ %% A resumed listener will not accept any new client connections
  %% but previously established connections won't be interrupted.
 suspend_all_client_listeners() ->
     Listeners = rabbit_networking:node_client_listeners(node()),
