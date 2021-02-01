@@ -14,13 +14,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllUserConnectionsCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  ## rabbit_networking:close_connections(lists:map(fun(X) -> element(6, X) end, rabbit_connection_tracking:list_of_user(<<"guest">>)), "because").
-  # def run([username, explanation], %{node: node_name}) do
-  #   :rabbit_misc.rpc_call(node_name, :rabbit_networking, :close_connections, [
-  #     Enum.map(:rabbit_connection_tracking.list_of_user(username), fn x -> elem(6, x) end),
-  #     explanation
-  #   ])
-  # end
   def run([username, explanation], %{node: node_name}) do
     :rabbit_misc.rpc_call(
       node_name,
@@ -36,7 +29,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllUserConnectionsCommand do
 
   def usage_additional do
     [
-      ["<username>", "TODO"],
+      ["<username>", "Self-explanatory"],
       ["<explanation>", "reason for connection closure"]
     ]
   end
