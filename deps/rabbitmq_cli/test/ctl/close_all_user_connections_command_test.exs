@@ -41,7 +41,10 @@ defmodule CloseAllUserConnectionsCommandTest do
   test "run: a close connections request on a user with open connections", context do
     with_connection("/", fn _ ->
       node = @helpers.normalise_node(context[:node], :shortnames)
-      Process.sleep(500)
+      await_condition(fn ->
+        conns = fetch_user_connections("guest", context)
+        length(conns) > 0
+      end, 10000)
 
       # make sure there is a connection to close
       conns = fetch_user_connections("guest", context)
@@ -55,7 +58,11 @@ defmodule CloseAllUserConnectionsCommandTest do
 
       # finally, make sure we can close guest's connections
       assert :ok == @command.run(["guest", "test"], %{node: node})
-      Process.sleep(500)
+      await_condition(fn ->
+        conns = fetch_user_connections("guest", context)
+        length(conns) == 0
+      end, 10000)
+
       conns = fetch_user_connections("guest", context)
       assert length(conns) == 0
     end)
