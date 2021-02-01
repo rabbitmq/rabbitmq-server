@@ -29,6 +29,7 @@
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
          close_connection/2, close_connections/2, close_all_connections/1,
+         close_all_user_connections/2,
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, tcp_host/1,
          ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1,
@@ -467,6 +468,12 @@ close_connection(Pid, Explanation) ->
 
 -spec close_connections([pid()], string()) -> 'ok'.
 close_connections(Pids, Explanation) ->
+    [close_connection(Pid, Explanation) || Pid <- Pids],
+    ok.
+
+-spec close_all_user_connections(rabbit_types:username(), string()) -> 'ok'.
+close_all_user_connections(Username, Explanation) ->
+    Pids = [Pid || #tracked_connection{pid = Pid} <- rabbit_connection_tracking:list_of_user(Username)],
     [close_connection(Pid, Explanation) || Pid <- Pids],
     ok.
 
