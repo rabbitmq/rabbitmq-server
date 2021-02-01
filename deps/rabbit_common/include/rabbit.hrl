@@ -168,6 +168,7 @@
           node,
           vhost,
           name,
+          %% Main connection process pid
           pid,
           protocol,
           %% network or direct
