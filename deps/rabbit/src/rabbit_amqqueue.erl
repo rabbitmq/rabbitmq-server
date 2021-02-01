@@ -1551,9 +1551,12 @@ basic_cancel(Q, ConsumerTag, OkMsg, ActingUser, QStates) ->
 
 -spec notify_decorators(amqqueue:amqqueue()) -> 'ok'.
 
-notify_decorators(Q) ->
+notify_decorators(Q) when ?amqqueue_is_classic(Q) ->
     QPid = amqqueue:get_pid(Q),
-    delegate:invoke_no_result(QPid, {gen_server2, cast, [notify_decorators]}).
+    delegate:invoke_no_result(QPid, {gen_server2, cast, [notify_decorators]});
+notify_decorators(_Q) ->
+    %% Not supported by any other queue type
+    ok.
 
 notify_sent(QPid, ChPid) ->
     rabbit_amqqueue_common:notify_sent(QPid, ChPid).
