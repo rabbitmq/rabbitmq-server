@@ -14,7 +14,7 @@ it has to be [enabled](https://www.rabbitmq.com/plugins.html#basics) before it c
 ## Documentation
 
  * [RabbitMQ management UI documentation](https://www.rabbitmq.com/management.html).
- * [HTTP API documentation](https://www.rabbitmq.com/management.html#http-api) and [reference](https://raw.githack.com/rabbitmq/rabbitmq-management/rabbitmq_v3_6_9/priv/www/api/index.html)
+ * [HTTP API documentation](https://www.rabbitmq.com/management.html#http-api) and [reference](https://rawcdn.githack.com/rabbitmq/rabbitmq-server/master/deps/rabbitmq_management/priv/www/api/index.html)
 
 ## Copyright
 
