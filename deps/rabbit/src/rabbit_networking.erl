@@ -471,7 +471,7 @@ close_connections(Pids, Explanation) ->
     [close_connection(Pid, Explanation) || Pid <- Pids],
     ok.
 
--spec close_all_user_connections(string(), string()) -> 'ok'.
+-spec close_all_user_connections(rabbit_types:username(), string()) -> 'ok'.
 close_all_user_connections(Username, Explanation) ->
     Pids = [Pid || #tracked_connection{pid = Pid} <- rabbit_connection_tracking:list_of_user(Username)],
     [close_connection(Pid, Explanation) || Pid <- Pids],
