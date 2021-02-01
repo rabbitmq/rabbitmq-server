@@ -1771,7 +1771,7 @@ fun(Dir) ->
     Res
 end}.
 
-{validator, "file_accessible", "file doesn't exist or isn't readable",
+{validator, "file_accessible", "file does not exist or cannot be read by the node",
 fun(File) ->
     case file:read_file_info(File) of
         {ok, FileInfo} -> (element(4, FileInfo) == read) or (element(4, FileInfo) == read_write);
