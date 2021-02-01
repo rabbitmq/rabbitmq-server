@@ -30,7 +30,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.CloseAllUserConnectionsCommand do
   def usage_additional do
     [
       ["<username>", "Self-explanatory"],
-      ["<explanation>", "reason for connection closure"]
+      ["<explanation>", "reason for connection closure, will be logged and provided to clients"]
     ]
   end
 
