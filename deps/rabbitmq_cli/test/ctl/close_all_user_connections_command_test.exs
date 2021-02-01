@@ -2,17 +2,15 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule CloseAllUserConnectionsCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  # alias RabbitMQ.CLI.Ctl.RpcStream
-
-  @helpers RabbitMQ.CLI.Core.Helpers
-
   @command RabbitMQ.CLI.Ctl.Commands.CloseAllUserConnectionsCommand
+
+  @vhost "/"
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -24,6 +22,13 @@ defmodule CloseAllUserConnectionsCommandTest do
     end)
 
     :ok
+  end
+
+  setup context do
+    {:ok, opts: %{
+        node: get_rabbit_hostname(),
+        timeout: context[:test_timeout] || 30000
+      }}
   end
 
   test "validate: with an invalid number of arguments returns an arg count error", context do
@@ -39,42 +44,40 @@ defmodule CloseAllUserConnectionsCommandTest do
   end
 
   test "run: a close connections request on a user with open connections", context do
-    with_connection("/", fn _ ->
-      node = @helpers.normalise_node(context[:node], :shortnames)
-      await_condition(fn ->
-        conns = fetch_user_connections("guest", context)
-        length(conns) > 0
-      end, 10000)
-
-      # make sure there is a connection to close
+    Application.ensure_all_started(:amqp)
+    # open a localhost connection with default username
+    {:ok, _conn} = AMQP.Connection.open(virtual_host: @vhost)
+    
+    await_condition(fn ->
       conns = fetch_user_connections("guest", context)
-      assert length(conns) > 0
+      length(conns) > 0
+    end, 10000)
 
-      # make sure closing yeti's connections doesn't affect guest's connections
-      assert :ok == @command.run(["yeti", "test"], %{node: node})
-      Process.sleep(500)
+    # make sure there is a connection to close
+    conns = fetch_user_connections("guest", context)
+    assert length(conns) > 0
+
+    # make sure closing yeti's connections doesn't affect guest's connections
+    assert :ok == @command.run(["yeti", "test"], context[:opts])
+    Process.sleep(500)
+    conns = fetch_user_connections("guest", context)
+    assert length(conns) > 0
+
+    # finally, make sure we can close guest's connections
+    assert :ok == @command.run(["guest", "test"], context[:opts])
+    await_condition(fn ->
       conns = fetch_user_connections("guest", context)
-      assert length(conns) > 0
+      length(conns) == 0
+    end, 10000)
 
-      # finally, make sure we can close guest's connections
-      assert :ok == @command.run(["guest", "test"], %{node: node})
-      await_condition(fn ->
-        conns = fetch_user_connections("guest", context)
-        length(conns) == 0
-      end, 10000)
-
-      conns = fetch_user_connections("guest", context)
-      assert length(conns) == 0
-    end)
+    conns = fetch_user_connections("guest", context)
+    assert length(conns) == 0
   end
 
-  test "run: a close connections request on for a non existing user returns successfully",
-       context do
+  test "run: a close connections request on for a non existing user returns successfully", context do
     assert match?(
              :ok,
-             @command.run(["yeti", "test"], %{
-               node: @helpers.normalise_node(context[:node], :shortnames)
-             })
+             @command.run(["yeti", "test"], context[:opts])
            )
   end
 
@@ -83,13 +86,5 @@ defmodule CloseAllUserConnectionsCommandTest do
     assert s =~ ~r/Closing connections/
     assert s =~ ~r/user username/
     assert s =~ ~r/reason: some reason/
-  end
-
-  defp fetch_user_connections(username, context) do
-    node = @helpers.normalise_node(context[:node], :shortnames)
-
-    :rabbit_misc.rpc_call(node, :rabbit_connection_tracking, :list_of_user, [
-      username
-    ])
   end
 end

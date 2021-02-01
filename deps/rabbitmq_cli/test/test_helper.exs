@@ -376,6 +376,14 @@ defmodule TestHelper do
     end
   end
 
+  def fetch_user_connections(username, context) do
+    node = Helpers.normalise_node(context[:node], :shortnames)
+
+    :rabbit_misc.rpc_call(node, :rabbit_connection_tracking, :list_of_user, [
+      username
+    ])
+  end
+
   def close_all_connections(node) do
     # we intentionally use connections_local/0 here because connections/0,
     # the cluster-wide version, loads some bits around cluster membership
