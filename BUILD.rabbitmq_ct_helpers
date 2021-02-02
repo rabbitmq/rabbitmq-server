@@ -1,7 +1,6 @@
-load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@//:rabbitmq.bzl", "erlang_libs")
 
-bazel_erlang_lib(
-    name = "rabbitmq_ct_helpers",
+erlang_libs(
     app_name = "rabbitmq_ct_helpers",
     app_version = "master",
     hdrs = glob(["include/*.hrl"]),

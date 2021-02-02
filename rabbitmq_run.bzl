@@ -80,3 +80,51 @@ start_background_broker = rule(
     },
     executable = True,
 )
+
+def _stop_node_impl(ctx):
+    rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
+
+    if rabbitmq_home.erlang_version != ctx.attr.erlang_version:
+        fail("Mismatched erlang versions", ctx.attr.erlang_version, rabbitmq_home.erlang_version)
+
+    ctx.actions.expand_template(
+        template = ctx.file._template,
+        output = ctx.outputs.executable,
+        substitutions = {
+            "{PATH_PREFIX}": ctx.attr.home.label.name,
+        },
+        is_executable = True,
+    )
+
+stop_node = rule(
+    implementation = _stop_node_impl,
+    attrs = {
+        "_template": attr.label(
+            default = Label("//:scripts/bazel/stop_node.sh"),
+            allow_single_file = True,
+        ),
+        "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
+        "erlang_version": attr.string(mandatory = True),
+        "home": attr.label(providers=[RabbitmqHomeInfo]),
+    },
+    executable = True,
+)
+
+def _fake_impl(ctx):
+    ctx.actions.expand_template(
+        template = ctx.file._template,
+        output = ctx.outputs.executable,
+        substitutions = {},
+        is_executable = True,
+    )
+
+fake = rule(
+    implementation = _fake_impl,
+    attrs = {
+        "_template": attr.label(
+            default = Label("//:scripts/bazel/fake.sh"),
+            allow_single_file = True,
+        ),
+    },
+    executable = True,
+)

@@ -73,7 +73,10 @@ def erlang_libs(**kwargs):
         kwargs3 = dict(kwargs2.items())
         erlc_opts = kwargs3.get('erlc_opts', [])
         if "-DTEST" not in erlc_opts:
-            kwargs3.update(erlc_opts = erlc_opts + ["-DTEST"])
+            erlc_opts = erlc_opts + ["-DTEST"]
+        if "+debug_info" not in erlc_opts:
+            erlc_opts = erlc_opts + ["+debug_info"]
+        kwargs3.update(erlc_opts = erlc_opts)
         bazel_erlang_lib(
             name = "{}_test@{}".format(app_name, erlang_version),
             erlang_version = erlang_version,
@@ -81,14 +84,18 @@ def erlang_libs(**kwargs):
             **kwargs3
         )
 
+_VERSIONLESS_TOOLS = ["//:fake"]
+
 def ct_tests(**kwargs):
     name = kwargs['name']
     deps = kwargs.get('deps', [])
+    tools = kwargs.get('tools', [])
     for erlang_version in ERLANG_VERSIONS:
         kwargs2 = dict(kwargs.items())
         kwargs2.update(
             name = "{}@{}".format(name, erlang_version),
             deps = [dep + "@" + erlang_version for dep in deps],
+            tools = [tool + "@" + erlang_version if not tool in _VERSIONLESS_TOOLS else tool for tool in tools],
         )
         ct_test(
             erlang_version = erlang_version,

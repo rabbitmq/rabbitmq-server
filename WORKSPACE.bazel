@@ -74,6 +74,14 @@ github_bazel_erlang_lib(
 )
 
 github_bazel_erlang_lib(
+    name = "meck",
+    org = "eproxus",
+    version = "0.9.0",
+    tag = "0.9.0",
+    sha256 = "7bb57fbfca65c4cda7a8783ee11747db409a56cb201abe4311de161cf6d233af",
+)
+
+github_bazel_erlang_lib(
     name = "observer_cli",
     org = "zhongwencool",
     version = "1.6.0",

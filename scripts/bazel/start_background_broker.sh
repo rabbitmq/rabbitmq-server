@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-set -exuo pipefail
-
-# pwd
-# /usr/local/bin/tree
+set -euxo pipefail
 
 cd {PATH_PREFIX}
 
@@ -16,8 +13,8 @@ export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS RABBITMQ_SERVER
 
 HOSTNAME="$(hostname -s)"
 
-RABBITMQ_NODENAME=rabbit@${HOSTNAME}
-RABBITMQ_NODENAME_FOR_PATHS=${RABBITMQ_NODENAME}
+RABBITMQ_NODENAME=${RABBITMQ_NODENAME:=rabbit@${HOSTNAME}}
+RABBITMQ_NODENAME_FOR_PATHS=${RABBITMQ_NODENAME_FOR_PATHS:=${RABBITMQ_NODENAME}}
 NODE_TMPDIR=${TEST_TMPDIR}/${RABBITMQ_NODENAME_FOR_PATHS}
 
 RABBITMQ_BASE=${NODE_TMPDIR}
@@ -32,9 +29,11 @@ RABBITMQ_PLUGINS_EXPAND_DIR=${NODE_TMPDIR}/plugins
 RABBITMQ_FEATURE_FLAGS_FILE=${NODE_TMPDIR}/feature_flags
 RABBITMQ_ENABLED_PLUGINS_FILE=${NODE_TMPDIR}/enabled_plugins
 
+RABBITMQ_SERVER_START_ARGS="${RABBITMQ_SERVER_START_ARGS:=-ra wal_sync_method sync}"
+
 # Enable colourful debug logging by default
 # To change this, set RABBITMQ_LOG to info, notice, warning etc.
-RABBITMQ_LOG='debug,+color'
+RABBITMQ_LOG=${RABBITMQ_LOG:='debug,+color'}
 export RABBITMQ_LOG
 
 RABBITMQ_ENABLED_PLUGINS=ALL
@@ -58,13 +57,11 @@ export \
     RABBITMQ_FEATURE_FLAGS_FILE \
     RABBITMQ_PLUGINS_DIR \
     RABBITMQ_PLUGINS_EXPAND_DIR \
-    RABBITMQ_SERVER_START_ARGS="-ra wal_sync_method sync" \
+    RABBITMQ_SERVER_START_ARGS \
     RABBITMQ_ENABLED_PLUGINS \
     RABBITMQ_ENABLED_PLUGINS_FILE
 
-# =============================================================
-
-RMQCTL_WAIT_TIMEOUT=60
+RMQCTL_WAIT_TIMEOUT=${RMQCTL_WAIT_TIMEOUT:=60}
 
 ./sbin/rabbitmq-server $@ \
     > ${RABBITMQ_LOG_BASE}/startup_log \

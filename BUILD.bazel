@@ -1,5 +1,8 @@
 load(":rabbitmq_home.bzl", "rabbitmq_home")
-load(":rabbitmq_run.bzl", "run_broker", "start_background_broker")
+load(":rabbitmq_run.bzl", "run_broker",
+                          "start_background_broker",
+                          "stop_node",
+                          "fake")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmq.bzl", "required_plugins")
 
@@ -112,10 +115,25 @@ alias(
 )
 
 start_background_broker(
+    name = "start-background-broker@22.3",
+    erlang_version = "22.3",
+    home = ":broker-home@22.3",
+    visibility = ["//visibility:public"],
+)
+
+start_background_broker(
+    name = "start-background-broker@23.1",
+    erlang_version = "23.1",
+    home = ":broker-home@23.1",
+    visibility = ["//visibility:public"],
+)
+
+start_background_broker(
     name = "broker-for-cli-tests@22.3",
     erlang_version = "22.3",
     home = ":broker-for-cli-tests-home@22.3",
     visibility = ["//visibility:public"],
+    testonly = True,
 )
 
 start_background_broker(
@@ -123,18 +141,43 @@ start_background_broker(
     erlang_version = "23.1",
     home = ":broker-for-cli-tests-home@23.1",
     visibility = ["//visibility:public"],
+    testonly = True,
+)
+
+stop_node(
+    name = "stop-node@22.3",
+    erlang_version = "22.3",
+    home = ":broker-home@22.3",
+    visibility = ["//visibility:public"],
+    testonly = True,
+)
+
+stop_node(
+    name = "stop-node@23.1",
+    erlang_version = "23.1",
+    home = ":broker-home@23.1",
+    visibility = ["//visibility:public"],
+    testonly = True,
+)
+
+fake(
+    name = "fake",
+    visibility = ["//visibility:public"],
+    testonly = True,
 )
 
 rabbitmqctl(
     name = "rabbitmqctl@22.3",
     erlang_version = "22.3",
     home = ":broker-home@22.3",
+    visibility = ["//visibility:public"],
 )
 
 rabbitmqctl(
     name = "rabbitmqctl@23.1",
     erlang_version = "23.1",
     home = ":broker-home@23.1",
+    visibility = ["//visibility:public"],
 )
 
 alias(

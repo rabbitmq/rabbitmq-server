@@ -61,45 +61,8 @@ export \
     RABBITMQ_ENABLED_PLUGINS \
     RABBITMQ_ENABLED_PLUGINS_FILE
 
-export RABBITMQ_ALLOW_INPUT=true
-export RABBITMQ_CONFIG_FILE=${TEST_TMPDIR}/test.config
-
-cat << EOF > ${RABBITMQ_CONFIG_FILE}
-%% vim:ft=erlang:
-
-[
-  {rabbit, [
-      {loopback_users, []},
-      {log, [{file, [{level, debug}]},
-             {console, [{level, debug}]}]}
-    ]},
-  {rabbitmq_management, [
-    ]},
-  {rabbitmq_mqtt, [
-    ]},
-  {rabbitmq_stomp, [
-    ]},
-  {ra, [
-      {data_dir, "${RABBITMQ_QUORUM_DIR}"},
-      {wal_sync_method, sync}
-    ]},
-  {lager, [
-      {colors, [
-          %% https://misc.flogisoft.com/bash/tip_colors_and_formatting
-          {debug,     "\\\e[0;34m" },
-          {info,      "\\\e[1;37m" },
-          {notice,    "\\\e[1;36m" },
-          {warning,   "\\\e[1;33m" },
-          {error,     "\\\e[1;31m" },
-          {critical,  "\\\e[1;35m" },
-          {alert,     "\\\e[1;44m" },
-          {emergency, "\\\e[1;41m" }
-      ]}
-    ]},
-  {osiris, [
-      {data_dir, "${RABBITMQ_STREAM_DIR}"}
-    ]}
-].
-EOF
-
-./sbin/rabbitmq-server $@
+pid=$(test -f $RABBITMQ_PID_FILE && cat $RABBITMQ_PID_FILE); \
+    test "$pid" && \
+    kill -TERM "$pid" && \
+    echo "waiting for process to exit" && \
+    while ps -p "$pid" >/dev/null 2>&1; do sleep 1; done

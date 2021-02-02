@@ -1,4 +1,3 @@
-load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("@//:rabbitmq.bzl", "erlang_libs")
 
 erlang_libs(

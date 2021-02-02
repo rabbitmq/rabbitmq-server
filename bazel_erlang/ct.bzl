@@ -22,8 +22,12 @@ def _impl(ctx):
     )
 
     pa_args = " ".join(
-        ["-pa {}".format(ebin_dir(dep)) for dep in ctx.attr.deps]
+        ["-pa {}".format(ebin_dir(dep)) for dep in ctx.attr.deps + ctx.attr.runtime_deps]
     )
+
+    test_env_commands = []
+    for k, v in ctx.attr.test_env.items():
+        test_env_commands.append("export {}=\"{}\"".format(k, v))
 
     script = """set -euo pipefail
 
@@ -35,6 +39,10 @@ def _impl(ctx):
         echo "Erlang version mismatch (Expected {erlang_version}, found $V)"
         exit 1
     fi
+
+    {test_env}
+
+    # /usr/local/bin/tree
 
     {erlang_home}/bin/ct_run \\
         -no_auto_compile \\
@@ -52,6 +60,7 @@ def _impl(ctx):
         suite_beam_dir=path_join(erlang_lib_info.lib_dir.short_path, "ebin"),
         project=erlang_lib_info.lib_name,
         name=sanitize_sname(ctx.label.name),
+        test_env=" && ".join(test_env_commands)
     )
 
     script_file = ctx.actions.declare_file(ctx.attr.name + ".sh")
@@ -61,16 +70,21 @@ def _impl(ctx):
         content = script,
     )
 
-    lib_dirs = [info.lib_dir for info in [erlang_lib_info] + [dep[ErlangLibInfo] for dep in ctx.attr.deps]]
+    lib_dirs = [info.lib_dir for info in [erlang_lib_info] + [dep[ErlangLibInfo] for dep in ctx.attr.deps + ctx.attr.runtime_deps]]
+
+    runfiles = ctx.runfiles(files = lib_dirs)
+    for tool in ctx.attr.tools:
+        runfiles = runfiles.merge(tool[DefaultInfo].default_runfiles)
 
     return [DefaultInfo(
         executable = script_file,
-        runfiles = ctx.runfiles(files = lib_dirs),
+        runfiles = runfiles,
     )]
 
 ct_test = rule(
     implementation = _impl,
     attrs = {
+        "_erlang_home": attr.label(default = ":erlang_home"),
         "app_name": attr.string(mandatory=True),
         "app_version": attr.string(default="0.1.0"),
         "suites": attr.label_list(allow_files=[".erl"]),
@@ -78,9 +92,10 @@ ct_test = rule(
         "priv": attr.label_list(allow_files = True), # This should be removed once compilation is pulled out of bazel_erlang_lib
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
+        "tools": attr.label_list(),
         "erlc_opts": attr.string_list(),
         "erlang_version": attr.string(),
-        "_erlang_home": attr.label(default = ":erlang_home"),
+        "test_env": attr.string_dict(),
     },
     test = True,
 )

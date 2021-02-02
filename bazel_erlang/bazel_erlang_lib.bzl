@@ -110,6 +110,7 @@ def _deps_dir_link(ctx, dep):
     info = dep[ErlangLibInfo]
     output = ctx.actions.declare_file(
         path_join(
+            ctx.label.name,
             "{}@{}".format(_DEPS_DIR, ctx.attr.erlang_version),
             info.lib_name,
         )
@@ -143,6 +144,7 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
 
     erl_args.add("-I",path_join(
         ctx.bin_dir.path,
+        ctx.label.name,
         "{}@{}".format(_DEPS_DIR, ctx.attr.erlang_version),
     ))
 
