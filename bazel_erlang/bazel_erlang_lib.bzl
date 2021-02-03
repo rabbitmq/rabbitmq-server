@@ -1,23 +1,14 @@
-load(":erlang_home.bzl", "ErlangHomeProvider")
+load(":erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
 
-#TODO: go back to a place where we have an erlc rule that does compilation and emits
-#      single files. Then have an additional erlang_lib rule that emits a directory,
-#      either symlinking or coping the .hrl and .beam and .app files into a lib_parent
-#      as this rule does. So it will be the erlang_lib rule that produces ErlangLibInfo
-#      providers (The erlc rule will still consume ErlangLibInfos as deps). This way
-#      it should be easier to have a hexpm rule and/or rebar3 rules (or even an
-#      Erlang.mk rule) that also produce ErlangLibInfos, but we can also do incremental
-#      compilation (both for compiling behaviors first) for the sources in the monorepo.
-#      It would also be nice if there was a kind of beam CodePath provider that gave you
-#      a path you could use with ERL_LIBS and was implemented by both the new erlang_lib
-#      rule and the ez rule.
 ErlangLibInfo = provider(
     doc = "Compiled Erlang sources",
     fields = {
         'lib_name': 'Name of the erlang lib',
         'lib_version': 'Version of the erlang lib',
-        'lib_dir': 'A directory that contains the compiled lib',
         'erlang_version': 'The erlang version used to produce the beam files',
+        'include': 'Public header files',
+        'beam': 'Compiled bytecode',
+        'priv': 'Additional files',
     },
 )
 
@@ -29,9 +20,6 @@ QUERY_ERL_VERSION = """erl -eval '{ok, Version} = file:read_file(filename:join([
 # NOTE: we should probably fetch the separator with ctx.host_configuration.host_path_separator
 def path_join(*components):
     return "/".join(components)
-
-def ebin_dir(erlang_lib_info):
-    return path_join(erlang_lib_info.lib_dir.path, "ebin")
 
 def unique_dirnames(files):
     dirs = []
@@ -45,10 +33,7 @@ def _module_name(f):
 
 def _gen_app_file(ctx, srcs):
     app_file = ctx.actions.declare_file(
-        path_join(
-            ctx.label.name,
-            "{}.app".format(ctx.attr.app_name),
-        )
+        path_join("ebin", "{}.app".format(ctx.attr.app_name))
     )
 
     if len(ctx.files.app_src) > 1:
@@ -106,32 +91,16 @@ def _gen_app_file(ctx, srcs):
 
     return app_file
 
-def _deps_dir_link(ctx, dep):
-    info = dep[ErlangLibInfo]
-    output = ctx.actions.declare_file(
-        path_join(
-            ctx.label.name,
-            "{}@{}".format(_DEPS_DIR, ctx.attr.erlang_version),
-            info.lib_name,
-        )
-    )
-    ctx.actions.symlink(
-        output = output,
-        target_file = info.lib_dir,
-    )
-    return output
+def _beam_file(ctx, src):
+    name = src.basename.replace(".erl", ".beam")
+    return ctx.actions.declare_file(path_join("ebin", name))
 
-def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
-    app_file = _gen_app_file(ctx, srcs) if gen_app_file else None
+def compile_erlang_action(ctx, srcs=[], hdrs=[]):
+    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
 
-    output_dir = ctx.actions.declare_directory(
-        path_join(ctx.label.name, ctx.attr.app_name)
-    )
+    beam_files = [_beam_file(ctx, src) for src in ctx.files.srcs]
 
-    # build a deps dir that can be passed erlc with -I
-    deps_dir_contents = [_deps_dir_link(ctx, dep) for dep in ctx.attr.deps]
-
-    dep_files = depset(transitive=[dep[DefaultInfo].files for dep in ctx.attr.deps])
+    ebin_dir = beam_files[0].dirname
 
     erl_args = ctx.actions.args()
     erl_args.add("-v")
@@ -139,56 +108,27 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
     for dir in unique_dirnames(hdrs):
         erl_args.add("-I", dir)
 
-    erl_args.add("-I",path_join(
-        ctx.bin_dir.path,
-        ctx.label.name,
-        "{}@{}".format(_DEPS_DIR, ctx.attr.erlang_version),
-    ))
-
     for dep in ctx.attr.deps:
-        info = dep[ErlangLibInfo]
-        if info.erlang_version != ctx.attr.erlang_version:
-            fail("Mismatched erlang versions", ctx.attr.erlang_version, info.erlang_version)
-        erl_args.add("-pa", ebin_dir(info))
+        lib_info = dep[ErlangLibInfo]
+        if lib_info.erlang_version != erlang_version:
+            fail("Mismatched erlang versions", erlang_version, lib_info.erlang_version)
+        for dir in unique_dirnames(lib_info.include):
+            erl_args.add("-I", path_join(dir, "../.."))
+        for dir in unique_dirnames(lib_info.beam):
+            erl_args.add("-pa", dir)
 
-    erl_args.add("-o", path_join(output_dir.path, "ebin"))
+    erl_args.add("-o", ebin_dir)
 
     erl_args.add_all(ctx.attr.erlc_opts)
 
     erl_args.add_all(srcs)
 
-    expose_app_file_commands = []
-    if app_file != None:
-        expose_app_file_commands.append(
-            "cp {app_file_path} {output_dir}/ebin/{app_name}.app".format(
-                app_file_path = app_file.path,
-                output_dir = output_dir.path,
-                app_name = ctx.attr.app_name,
-            )
-        )
-
-    expose_headers_commands = []
-    for header in hdrs:
-        src = header.path
-        dst = path_join(output_dir.path, "include", header.basename)
-        expose_headers_commands.append("cp {} {}".format(src, dst))
-
-    expose_priv_commands = []
-    for priv in ctx.files.priv:
-        src = priv.path
-        parts = priv.path.rpartition("priv/")
-        dst = path_join(output_dir.path, "priv", parts[2])
-        expose_priv_commands.append(
-            "mkdir -p $(dirname {dst}) && cp {src} {dst}".format(src=src, dst=dst)
-        )
-
     script = """
         set -euo pipefail
 
-        mkdir -p {output_dir}
-        mkdir -p {output_dir}/include
-        mkdir -p {output_dir}/ebin
-        mkdir -p {output_dir}/priv
+        # /usr/local/bin/tree $PWD
+
+        mkdir -p {ebin_dir}
         export HOME=$PWD
 
         {begins_with_fun}
@@ -199,51 +139,57 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
         fi
 
         {erlang_home}/bin/erlc $@
-        {expose_app_file_command}
-        {expose_headers_command}
-        {expose_priv_command}
     """.format(
-        output_dir=output_dir.path,
+        ebin_dir=ebin_dir,
         begins_with_fun=BEGINS_WITH_FUN,
         query_erlang_version=QUERY_ERL_VERSION,
-        erlang_version=ctx.attr.erlang_version,
+        erlang_version=erlang_version,
         erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
-        expose_app_file_command=" && ".join(expose_app_file_commands),
-        expose_headers_command=" && ".join(expose_headers_commands),
-        expose_priv_command=" && ".join(expose_priv_commands),
     )
 
     inputs = []
     inputs.extend(hdrs)
     inputs.extend(srcs)
-    inputs.extend(ctx.files.priv)
-    inputs.extend(deps_dir_contents)
-    inputs.extend(dep_files.to_list())
-    if app_file != None:
-        inputs.append(app_file)
+    for dep in ctx.attr.deps:
+        lib_info = dep[ErlangLibInfo]
+        inputs.extend(lib_info.include)
+        inputs.extend(lib_info.beam)
 
     ctx.actions.run_shell(
         inputs = inputs,
-        outputs = [output_dir],
+        outputs = beam_files,
         command = script,
         arguments = [erl_args],
         env = {
             # "ERLANG_VERSION": ctx.attr.erlang_version,
         },
+        mnemonic = "ERLC",
     )
 
     return ErlangLibInfo(
         lib_name = ctx.attr.app_name,
         lib_version = ctx.attr.app_version,
-        lib_dir = output_dir,
-        erlang_version = ctx.attr.erlang_version,
+        erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version,
+        include = ctx.files.hdrs, # <- should be filtered public only
+        beam = beam_files,
+        priv = ctx.files.priv,
     )
 
 def _impl(ctx):
+    app_file = _gen_app_file(ctx, ctx.files.srcs)
+
     erlang_lib_info = compile_erlang_action(ctx, srcs=ctx.files.srcs, hdrs=ctx.files.hdrs)
+    erlang_lib_info = ErlangLibInfo(
+        lib_name = erlang_lib_info.lib_name,
+        lib_version = erlang_lib_info.lib_version,
+        erlang_version = erlang_lib_info.erlang_version,
+        include = erlang_lib_info.include,
+        beam = [app_file] + erlang_lib_info.beam,
+        priv = erlang_lib_info.priv,
+    )
 
     return [
-        DefaultInfo(files = depset([erlang_lib_info.lib_dir])),
+        DefaultInfo(files = depset(erlang_lib_info.beam)),
         erlang_lib_info,
     ]
 
@@ -264,8 +210,8 @@ bazel_erlang_lib = rule(
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
         "erlc_opts": attr.string_list(),
-        "erlang_version": attr.string(mandatory=True),
         "_erlang_home": attr.label(default = ":erlang_home"),
+        "_erlang_version": attr.label(default = ":erlang_version"),
         "_app_file_template": attr.label(
             default = Label("//bazel_erlang:app_file.template"),
             allow_single_file = True,

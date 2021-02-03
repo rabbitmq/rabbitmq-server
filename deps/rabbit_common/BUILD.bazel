@@ -1,4 +1,5 @@
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs", "ct_tests")
+load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "ct_tests")
 
 py_binary(
     name = "codegen",
@@ -43,7 +44,8 @@ genrule(
     cmd = "$(location :codegen) body $(SRCS) $@",
 )
 
-erlang_libs(
+bazel_erlang_lib(
+    name = "rabbit_common",
     app_name = "rabbit_common",
     app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
     app_version = APP_VERSION,

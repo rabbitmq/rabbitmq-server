@@ -14,6 +14,7 @@ def sanitize_sname(s):
     return s.replace("@", "-").replace(".", "_")
 
 def _impl(ctx):
+    # We need the compiled tests to go into the test dir
     erlang_lib_info = compile_erlang_action(
         ctx, 
         srcs=ctx.files.suites, 

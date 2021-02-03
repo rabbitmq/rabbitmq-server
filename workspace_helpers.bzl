@@ -19,9 +19,10 @@ def github_bazel_erlang_lib(name, org="rabbitmq", version=APP_VERSION, tag=None,
     )
 
 _BUILD_FILE_TEMPLATE = """
-load("@//:rabbitmq.bzl", "erlang_libs")
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 
-erlang_libs(
+bazel_erlang_lib(
+    name = "{app_name}",
     app_name = "{app_name}",
     app_version = "{version}",
     app_src = glob(["src/{app_name}.app.src"]),
