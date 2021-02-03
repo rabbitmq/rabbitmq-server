@@ -89,7 +89,7 @@ ct_test(
         # "PATH": "$PWD:$PATH", # allow fake to be run without an absolute path
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-run@23.1",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-home@23.1/sbin/rabbitmqctl"
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-home@23.1/sbin/rabbitmqctl",
     },
     erlang_version = "23.1",
     tags = ["erlang-23.1"],

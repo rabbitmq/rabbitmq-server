@@ -125,10 +125,7 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
     app_file = _gen_app_file(ctx, srcs) if gen_app_file else None
 
     output_dir = ctx.actions.declare_directory(
-        path_join(
-            ctx.label.name,
-            "{}-{}".format(ctx.attr.app_name, ctx.attr.app_version)
-        )
+        path_join(ctx.label.name, ctx.attr.app_name)
     )
 
     # build a deps dir that can be passed erlc with -I
