@@ -48,14 +48,13 @@ ct_test(
         "@meck//:meck@22.3",
     ],
     tools = [
-        "//:fake",
-        "//:start-background-broker@22.3",
-        "//:stop-node@22.3",
-        "//:rabbitmqctl@22.3",
+        "//:rabbitmq-run@22.3",
+        # "//:rabbitmqctl@22.3",
     ],
     test_env = {
-        "PATH": "$PWD:$PATH", # allow fake to be run without an absolute path
+        # "PATH": "$PWD:$PATH", # allow 'rabbitmq-run' to be run without an absolute path
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-run@22.3",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-home@22.3/sbin/rabbitmqctl"
     },
     erlang_version = "22.3",
@@ -83,14 +82,13 @@ ct_test(
         "@meck//:meck@23.1",
     ],
     tools = [
-        "//:fake",
-        "//:start-background-broker@23.1",
-        "//:stop-node@23.1",
-        "//:rabbitmqctl@23.1",
+        "//:rabbitmq-run@23.1",
+        # "//:rabbitmqctl@23.1",
     ],
     test_env = {
-        "PATH": "$PWD:$PATH", # allow fake to be run without an absolute path
+        # "PATH": "$PWD:$PATH", # allow fake to be run without an absolute path
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-run@23.1",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-home@23.1/sbin/rabbitmqctl"
     },
     erlang_version = "23.1",

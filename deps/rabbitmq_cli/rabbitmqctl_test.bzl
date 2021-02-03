@@ -77,7 +77,7 @@ def _impl(ctx):
             kill -TERM "${{pid}}"
         }}
         cd ${{INITIAL_DIR}}
-        ./{start_background_broker_cmd}
+        ./{rabbitmq_run_cmd} start-background-broker
         cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
         # The test cases will need to be able to load code from the deps
@@ -96,7 +96,7 @@ def _impl(ctx):
         copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
         mix_deps_dir=MIX_DEPS_DIR,
         erl_libs=erl_libs,
-        start_background_broker_cmd=ctx.attr.start_background_broker[DefaultInfo].files_to_run.executable.short_path,
+        rabbitmq_run_cmd=ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
     )
 
     ctx.actions.write(
@@ -109,7 +109,7 @@ def _impl(ctx):
     runfiles = runfiles.merge(
         ctx.runfiles([dep[ErlangLibInfo].lib_dir for dep in ctx.attr.deps]),
     )
-    runfiles = runfiles.merge(ctx.attr.start_background_broker[DefaultInfo].default_runfiles)
+    runfiles = runfiles.merge(ctx.attr.rabbitmq_run[DefaultInfo].default_runfiles)
 
     return [DefaultInfo(runfiles = runfiles)]
 
@@ -120,7 +120,7 @@ rabbitmqctl_test = rule(
         "data": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [ErlangLibInfo]),
         "erlang_version": attr.string(mandatory = True),
-        "start_background_broker": attr.label(
+        "rabbitmq_run": attr.label(
             executable = True,
             cfg = "target",
         ),

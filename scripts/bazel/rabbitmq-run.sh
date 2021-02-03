@@ -1,13 +1,41 @@
 #!/usr/bin/env bash
-set -euxo pipefail
+set -euo pipefail
 
-cd {PATH_PREFIX}
+# https://stackoverflow.com/a/4774063
+SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
+
+if [ $1 = "-C" ]; then
+    shift 2
+fi
+
+for arg in "$@"; do
+    case $arg in
+        run-broker)
+            CMD="$arg"
+            ;;
+        start-background-broker)
+            CMD="$arg"
+            ;;
+        stop-node)
+            CMD="$arg"
+            ;;
+        set-resource-alarm)
+            CMD="$arg"
+            ;;
+        clear-resource-alarm)
+            CMD="$arg"
+            ;;
+        *)
+            export "$arg"
+            ;;
+    esac
+done
 
 TEST_TMPDIR=${TEST_TMPDIR:=${TMPDIR}/rabbitmq-test-instances}
-RABBITMQ_SCRIPTS_DIR=${PWD}/sbin
+RABBITMQ_SCRIPTS_DIR=${SCRIPTPATH}/{RABBITMQ_HOME}/sbin
 RABBITMQ_PLUGINS=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-plugins
 RABBITMQ_SERVER=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server
-RABBITMQCTL=${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl
+RABBITMQCTL=${RABBITMQ_SCRIPTS_DIR}/rabbitmqzctl
 
 export RABBITMQ_SCRIPTS_DIR RABBITMQCTL RABBITMQ_PLUGINS RABBITMQ_SERVER
 
@@ -24,7 +52,7 @@ RABBITMQ_MNESIA_BASE=${NODE_TMPDIR}/mnesia
 RABBITMQ_MNESIA_DIR=${RABBITMQ_MNESIA_BASE}/${RABBITMQ_NODENAME_FOR_PATHS}
 RABBITMQ_QUORUM_DIR=${RABBITMQ_MNESIA_DIR}/quorum
 RABBITMQ_STREAM_DIR=${RABBITMQ_MNESIA_DIR}/stream
-RABBITMQ_PLUGINS_DIR=${PWD}/plugins
+RABBITMQ_PLUGINS_DIR=${SCRIPTPATH}/{RABBITMQ_HOME}/plugins
 RABBITMQ_PLUGINS_EXPAND_DIR=${NODE_TMPDIR}/plugins
 RABBITMQ_FEATURE_FLAGS_FILE=${NODE_TMPDIR}/feature_flags
 RABBITMQ_ENABLED_PLUGINS_FILE=${NODE_TMPDIR}/enabled_plugins
@@ -61,9 +89,7 @@ export \
     RABBITMQ_ENABLED_PLUGINS \
     RABBITMQ_ENABLED_PLUGINS_FILE
 
-export RABBITMQ_ALLOW_INPUT=true
-export RABBITMQ_CONFIG_FILE=${TEST_TMPDIR}/test.config
-
+write_config_file() {
 cat << EOF > ${RABBITMQ_CONFIG_FILE}
 %% vim:ft=erlang:
 
@@ -101,5 +127,56 @@ cat << EOF > ${RABBITMQ_CONFIG_FILE}
     ]}
 ].
 EOF
+}
 
-./sbin/rabbitmq-server $@
+case $CMD in
+    run-broker)
+        export RABBITMQ_ALLOW_INPUT=true
+        export RABBITMQ_CONFIG_FILE=${TEST_TMPDIR}/test.config
+        write_config_file
+        ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server
+        ;;
+    start-background-broker)
+        RMQCTL_WAIT_TIMEOUT=${RMQCTL_WAIT_TIMEOUT:=60}
+
+        ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server \
+            > ${RABBITMQ_LOG_BASE}/startup_log \
+            2> ${RABBITMQ_LOG_BASE}/startup_err &
+
+        # rabbitmqctl wait shells out to 'ps', which is broken in the bazel macOS
+        # sandbox (https://github.com/bazelbuild/bazel/issues/7448)
+        # adding "--spawn_strategy=local" to the invocation is a workaround
+        ${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl \
+            -n ${RABBITMQ_NODENAME} \
+            wait \
+            --timeout ${RMQCTL_WAIT_TIMEOUT} \
+            ${RABBITMQ_PID_FILE}
+
+        {ERLANG_HOME}/bin/erl \
+            -noinput \
+            -eval "true = rpc:call('${RABBITMQ_NODENAME}', rabbit, is_running, []), halt()." \
+            -sname {SNAME} \
+            -hidden
+        ;;
+    stop-node)
+        pid=$(test -f $RABBITMQ_PID_FILE && cat $RABBITMQ_PID_FILE); \
+            test "$pid" && \
+            kill -TERM "$pid" && \
+            echo "waiting for process to exit" && \
+            while ps -p "$pid" >/dev/null 2>&1; do sleep 1; done
+        ;;
+    set-resource-alarm)
+        ERL_LIBS="{ERL_LIBS}" \
+           ${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl -n ${RABBITMQ_NODENAME} \
+            eval "rabbit_alarm:set_alarm({{resource_limit, ${SOURCE}, node()}, []})."
+        ;;
+    clear-resource-alarm)
+        ERL_LIBS="{ERL_LIBS}" \
+            ${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl -n ${RABBITMQ_NODENAME} \
+            eval "rabbit_alarm:clear_alarm({resource_limit, ${SOURCE}, node()})."
+        ;;
+    *)
+        echo "rabbitmq-run does not support $CMD"
+        exit 1
+        ;;
+esac

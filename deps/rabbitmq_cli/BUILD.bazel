@@ -9,7 +9,6 @@ rabbitmqctl(
         "//deps/rabbit_common:rabbit_common@22.3",
         "@goldrush//:goldrush@22.3",
         "@lager//:lager@22.3",
-        # "//deps/amqp_client:amqp_client",
     ],
     erlang_version = "22.3",
     visibility = ["//visibility:public"],
@@ -22,7 +21,6 @@ rabbitmqctl(
         "//deps/rabbit_common:rabbit_common@23.1",
         "@goldrush//:goldrush@23.1",
         "@lager//:lager@23.1",
-        # "//deps/amqp_client:amqp_client",
     ],
     erlang_version = "23.1",
     visibility = ["//visibility:public"],
@@ -40,7 +38,7 @@ rabbitmqctl_test(
         "//deps/rabbit:rabbit@22.3",
     ],
     erlang_version = "22.3",
-    start_background_broker = "//:broker-for-cli-tests@22.3",
+    rabbitmq_run = "//:rabbitmq-for-cli-tests-run@22.3",
     tags = ["erlang-22.3"],
     size = "large",
 )
@@ -57,7 +55,7 @@ rabbitmqctl_test(
         "//deps/rabbit:rabbit@23.1",
     ],
     erlang_version = "23.1",
-    start_background_broker = "//:broker-for-cli-tests@23.1",
+    rabbitmq_run = "//:rabbitmq-for-cli-tests-run@23.1",
     tags = ["erlang-23.1"],
     size = "large",
 )

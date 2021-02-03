@@ -1,15 +1,7 @@
 load(":rabbitmq_home.bzl", "rabbitmq_home")
-load(":rabbitmq_run.bzl", "run_broker",
-                          "start_background_broker",
-                          "stop_node",
-                          "fake")
+load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmq.bzl", "required_plugins")
-
-# Note: maybe the different erlang versions need to be modeled as
-#       different target platforms? We could select between deps of
-#       fixed versions (i.e. rabbitmq_run could select a home that
-#       is hard coded to an erlang version)
 
 rabbitmq_home(
     name = "broker-home@22.3",
@@ -75,19 +67,69 @@ rabbitmq_home(
     ],
 )
 
+rabbitmq_run(
+    name = "rabbitmq-run@22.3",
+    erlang_version = "22.3",
+    home = ":broker-home@22.3",
+    visibility = ["//visibility:public"],
+    testonly = True,
+)
+
+rabbitmq_run(
+    name = "rabbitmq-run@23.1",
+    erlang_version = "23.1",
+    home = ":broker-home@23.1",
+    visibility = ["//visibility:public"],
+    testonly = True,
+)
+
+rabbitmq_run(
+    name = "rabbitmq-management-run@22.3",
+    erlang_version = "22.3",
+    home = ":broker-management-home@22.3",
+    visibility = ["//visibility:public"],
+    testonly = True,
+)
+
+rabbitmq_run(
+    name = "rabbitmq-management-run@23.1",
+    erlang_version = "23.1",
+    home = ":broker-management-home@23.1",
+    visibility = ["//visibility:public"],
+    testonly = True,
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-cli-tests-run@22.3",
+    erlang_version = "22.3",
+    home = ":broker-for-cli-tests-home@22.3",
+    visibility = ["//visibility:public"],
+    testonly = True,
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-cli-tests-run@23.1",
+    erlang_version = "23.1",
+    home = ":broker-for-cli-tests-home@23.1",
+    visibility = ["//visibility:public"],
+    testonly = True,
+)
+
 # Allow us to bazel run :broker
 # for the equivalent of `make run-broker`
 # (though it as of yet includes no plugins)
-run_broker(
+rabbitmq_run_command(
     name = "broker@22.3",
-    erlang_version = "22.3",
-    home = ":broker-home@22.3",
+    rabbitmq_run = ":rabbitmq-run@22.3",
+    subcommand = "run-broker",
+    testonly = True,
 )
 
-run_broker(
+rabbitmq_run_command(
     name = "broker@23.1",
-    erlang_version = "23.1",
-    home = ":broker-home@23.1",
+    rabbitmq_run = ":rabbitmq-run@23.1",
+    subcommand = "run-broker",
+    testonly = True,
 )
 
 alias(
@@ -97,73 +139,23 @@ alias(
 
 # `bazel run :broker-management` for the broker with just the
 # management plugin
-run_broker(
+rabbitmq_run_command(
     name = "broker-management@22.3",
-    erlang_version = "22.3",
-    home = ":broker-management-home@22.3",
+    rabbitmq_run = ":rabbitmq-management-run@22.3",
+    subcommand = "run-broker",
+    testonly = True,
 )
 
-run_broker(
+rabbitmq_run_command(
     name = "broker-management@23.1",
-    erlang_version = "23.1",
-    home = ":broker-management-home@23.1",
+    rabbitmq_run = ":rabbitmq-management-run@23.1",
+    subcommand = "run-broker",
+    testonly = True,
 )
 
 alias(
     name = "broker-management",
     actual = "broker-management@23.1",
-)
-
-start_background_broker(
-    name = "start-background-broker@22.3",
-    erlang_version = "22.3",
-    home = ":broker-home@22.3",
-    visibility = ["//visibility:public"],
-)
-
-start_background_broker(
-    name = "start-background-broker@23.1",
-    erlang_version = "23.1",
-    home = ":broker-home@23.1",
-    visibility = ["//visibility:public"],
-)
-
-start_background_broker(
-    name = "broker-for-cli-tests@22.3",
-    erlang_version = "22.3",
-    home = ":broker-for-cli-tests-home@22.3",
-    visibility = ["//visibility:public"],
-    testonly = True,
-)
-
-start_background_broker(
-    name = "broker-for-cli-tests@23.1",
-    erlang_version = "23.1",
-    home = ":broker-for-cli-tests-home@23.1",
-    visibility = ["//visibility:public"],
-    testonly = True,
-)
-
-stop_node(
-    name = "stop-node@22.3",
-    erlang_version = "22.3",
-    home = ":broker-home@22.3",
-    visibility = ["//visibility:public"],
-    testonly = True,
-)
-
-stop_node(
-    name = "stop-node@23.1",
-    erlang_version = "23.1",
-    home = ":broker-home@23.1",
-    visibility = ["//visibility:public"],
-    testonly = True,
-)
-
-fake(
-    name = "fake",
-    visibility = ["//visibility:public"],
-    testonly = True,
 )
 
 rabbitmqctl(

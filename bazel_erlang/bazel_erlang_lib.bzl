@@ -225,15 +225,13 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[], gen_app_file=True):
     if app_file != None:
         inputs.append(app_file)
 
-    # The script is computed differently based on the erlang version, so
-    # why do we seem to get a cache collision?
     ctx.actions.run_shell(
         inputs = inputs,
         outputs = [output_dir],
         command = script,
         arguments = [erl_args],
         env = {
-            "ERLANG_VERSION": ctx.attr.erlang_version,
+            # "ERLANG_VERSION": ctx.attr.erlang_version,
         },
     )
 

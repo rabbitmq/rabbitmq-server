@@ -9,39 +9,7 @@ load(":rabbitmq_home.bzl", "RabbitmqHomeInfo")
 #       rabbitmq_home declares "sbin/rabbitmq-server", is still at
 #       "sbin/rabbitmq-server" when our script runs.
 
-def _run_broker_impl(ctx):
-    rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
-
-    if rabbitmq_home.erlang_version != ctx.attr.erlang_version:
-        fail("Mismatched erlang versions", ctx.attr.erlang_version, rabbitmq_home.erlang_version)
-
-    ctx.actions.expand_template(
-        template = ctx.file._template,
-        output = ctx.outputs.executable,
-        substitutions = {
-            "{PATH_PREFIX}": ctx.attr.home.label.name,
-        },
-        is_executable = True,
-    )
-
-    return [DefaultInfo(
-        runfiles = ctx.runfiles(ctx.attr.home[DefaultInfo].files.to_list()),
-    )]
-
-run_broker = rule(
-    implementation = _run_broker_impl,
-    attrs = {
-        "_template": attr.label(
-            default = Label("//:scripts/bazel/run_broker.sh"),
-            allow_single_file = True,
-        ),
-        "erlang_version": attr.string(mandatory = True),
-        "home": attr.label(providers=[RabbitmqHomeInfo]),
-    },
-    executable = True,
-)
-
-def _start_background_broker_impl(ctx):
+def _impl(ctx):
     rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
 
     if rabbitmq_home.erlang_version != ctx.attr.erlang_version:
@@ -55,7 +23,8 @@ def _start_background_broker_impl(ctx):
         template = ctx.file._template,
         output = ctx.outputs.executable,
         substitutions = {
-            "{PATH_PREFIX}": ctx.attr.home.label.name,
+            "{RABBITMQ_HOME}": ctx.attr.home.label.name,
+            "{ERL_LIBS}": erl_libs,
             "{ERLANG_HOME}": ctx.attr._erlang_home[ErlangHomeProvider].path,
             "{SNAME}": sanitize_sname("sbb-" + ctx.attr.name),
         },
@@ -66,12 +35,11 @@ def _start_background_broker_impl(ctx):
         runfiles = ctx.runfiles(ctx.attr.home[DefaultInfo].files.to_list()),
     )]
 
-
-start_background_broker = rule(
-    implementation = _start_background_broker_impl,
+rabbitmq_run = rule(
+    implementation = _impl,
     attrs = {
         "_template": attr.label(
-            default = Label("//:scripts/bazel/start_background_broker.sh"),
+            default = Label("//:scripts/bazel/rabbitmq-run.sh"),
             allow_single_file = True,
         ),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
@@ -81,50 +49,31 @@ start_background_broker = rule(
     executable = True,
 )
 
-def _stop_node_impl(ctx):
-    rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
-
-    if rabbitmq_home.erlang_version != ctx.attr.erlang_version:
-        fail("Mismatched erlang versions", ctx.attr.erlang_version, rabbitmq_home.erlang_version)
-
-    ctx.actions.expand_template(
-        template = ctx.file._template,
+def _run_command_impl(ctx):
+    ctx.actions.write(
         output = ctx.outputs.executable,
-        substitutions = {
-            "{PATH_PREFIX}": ctx.attr.home.label.name,
-        },
-        is_executable = True,
+        content = "exec ./{} {} $@".format(
+            ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
+            ctx.attr.subcommand,
+        )
     )
 
-stop_node = rule(
-    implementation = _stop_node_impl,
-    attrs = {
-        "_template": attr.label(
-            default = Label("//:scripts/bazel/stop_node.sh"),
-            allow_single_file = True,
-        ),
-        "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
-        "erlang_version": attr.string(mandatory = True),
-        "home": attr.label(providers=[RabbitmqHomeInfo]),
-    },
-    executable = True,
-)
+    return [DefaultInfo(
+        runfiles = ctx.attr.rabbitmq_run[DefaultInfo].default_runfiles,
+    )]
 
-def _fake_impl(ctx):
-    ctx.actions.expand_template(
-        template = ctx.file._template,
-        output = ctx.outputs.executable,
-        substitutions = {},
-        is_executable = True,
-    )
-
-fake = rule(
-    implementation = _fake_impl,
+rabbitmq_run_command = rule(
+    implementation = _run_command_impl,
     attrs = {
-        "_template": attr.label(
-            default = Label("//:scripts/bazel/fake.sh"),
-            allow_single_file = True,
+        "rabbitmq_run": attr.label(
+            executable = True,
+            cfg = "target",
         ),
+        "subcommand": attr.string(values = [
+            "run-broker",
+            "start-background-broker",
+            "stop-node",
+        ]),
     },
     executable = True,
 )
