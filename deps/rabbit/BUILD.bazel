@@ -1,11 +1,12 @@
+load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+
 exports_files([
     "scripts/rabbitmq-defaults",
     "scripts/rabbitmq-env",
     "scripts/rabbitmq-server",
     "scripts/rabbitmqctl",
 ])
-
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs", "ct_tests")
 
 _APP_ENV = """[
 	    {tcp_listeners, [5672]},
@@ -122,7 +123,8 @@ _APP_ENV = """[
 	  ]
 """
 
-erlang_libs(
+bazel_erlang_lib(
+    name = "rabbit",
     app_name = "rabbit",
     app_version = "3.9.0",
     app_description = "RabbitMQ",

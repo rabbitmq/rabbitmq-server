@@ -1,5 +1,10 @@
-load(":erlang_home.bzl", "ErlangHomeProvider")
-load(":bazel_erlang_lib.bzl", "ErlangLibInfo", "BEGINS_WITH_FUN", "QUERY_ERL_VERSION", "path_join", "compile_erlang_action")
+load(":erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
+load(":bazel_erlang_lib.bzl", "ErlangLibInfo",
+                              "path_join",
+                              "unique_dirnames",
+                              "beam_file",
+                              "BEGINS_WITH_FUN",
+                              "QUERY_ERL_VERSION")
 
 def lib_dir(dep):
     c = []
@@ -7,24 +12,177 @@ def lib_dir(dep):
     c.append(dep[ErlangLibInfo].lib_dir.short_path)
     return path_join(*c)
 
-def ebin_dir(dep):
-    return path_join(lib_dir(dep), "ebin")
+# def ebin_dir(dep):
+#     return path_join(lib_dir(dep), "ebin")
 
 def sanitize_sname(s):
     return s.replace("@", "-").replace(".", "_")
 
-def _impl(ctx):
-    # We need the compiled tests to go into the test dir
-    erlang_lib_info = compile_erlang_action(
-        ctx, 
-        srcs=ctx.files.suites, 
-        hdrs=ctx.files.hdrs,
-        gen_app_file=False,
+def _compile_srcs(ctx):
+    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
+
+    # Note: the sources must be placed in the src dir, so as not to conflict
+    #       with the files compiled without test compiler options
+    beam_files = [beam_file(ctx, src, "src") for src in ctx.files.srcs]
+
+    ebin_dir = beam_files[0].dirname
+
+    erl_args = ctx.actions.args()
+    erl_args.add("-v")
+
+    for dir in unique_dirnames(ctx.files.hdrs):
+        erl_args.add("-I", dir)
+
+    for dep in ctx.attr.deps:
+        lib_info = dep[ErlangLibInfo]
+        if lib_info.erlang_version != erlang_version:
+            fail("Mismatched erlang versions", erlang_version, lib_info.erlang_version)
+        for dir in unique_dirnames(lib_info.include):
+            erl_args.add("-I", path_join(dir, "../.."))
+        for dir in unique_dirnames(lib_info.beam):
+            erl_args.add("-pa", dir)
+
+    erl_args.add("-o", ebin_dir)
+
+    erl_args.add("-DTEST")
+    erl_args.add("+debug_info")
+    erl_args.add_all(ctx.attr.erlc_opts)
+
+    erl_args.add_all(ctx.files.srcs)
+
+    script = """
+        set -euo pipefail
+
+        # /usr/local/bin/tree $PWD
+
+        mkdir -p {ebin_dir}
+        export HOME=$PWD
+
+        {begins_with_fun}
+        V=$({erlang_home}/bin/{query_erlang_version})
+        if ! beginswith "{erlang_version}" "$V"; then
+            echo "Erlang version mismatch (Expected {erlang_version}, found $V)"
+            exit 1
+        fi
+
+        {erlang_home}/bin/erlc $@
+    """.format(
+        ebin_dir=ebin_dir,
+        begins_with_fun=BEGINS_WITH_FUN,
+        query_erlang_version=QUERY_ERL_VERSION,
+        erlang_version=erlang_version,
+        erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
     )
 
-    pa_args = " ".join(
-        ["-pa {}".format(ebin_dir(dep)) for dep in ctx.attr.deps + ctx.attr.runtime_deps]
+    inputs = []
+    inputs.extend(ctx.files.hdrs)
+    inputs.extend(ctx.files.srcs)
+    for dep in ctx.attr.deps:
+        lib_info = dep[ErlangLibInfo]
+        inputs.extend(lib_info.include)
+        inputs.extend(lib_info.beam)
+
+    ctx.actions.run_shell(
+        inputs = inputs,
+        outputs = beam_files,
+        command = script,
+        arguments = [erl_args],
+        env = {
+            # "ERLANG_VERSION": ctx.attr.erlang_version,
+        },
+        mnemonic = "ERLC",
     )
+
+    return beam_files
+
+def _compile_suites(ctx, srcs_beam_files):
+    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
+
+    beam_files = [beam_file(ctx, src, "test") for src in ctx.files.suites]
+
+    test_dir = beam_files[0].dirname
+
+    erl_args = ctx.actions.args()
+    erl_args.add("-v")
+
+    for dir in unique_dirnames(ctx.files.hdrs):
+        erl_args.add("-I", dir)
+
+    for dep in ctx.attr.deps:
+        lib_info = dep[ErlangLibInfo]
+        if lib_info.erlang_version != erlang_version:
+            fail("Mismatched erlang versions", erlang_version, lib_info.erlang_version)
+        for dir in unique_dirnames(lib_info.include):
+            erl_args.add("-I", path_join(dir, "../.."))
+        for dir in unique_dirnames(lib_info.beam):
+            erl_args.add("-pa", dir)
+
+    for dir in unique_dirnames(srcs_beam_files):
+        erl_args.add("-pa", dir)
+
+    erl_args.add("-o", test_dir)
+
+    erl_args.add("-DTEST")
+    erl_args.add("+debug_info")
+    erl_args.add_all(ctx.attr.erlc_opts)
+
+    erl_args.add_all(ctx.files.suites)
+
+    script = """
+        set -euo pipefail
+
+        # /usr/local/bin/tree $PWD
+
+        mkdir -p {test_dir}
+        export HOME=$PWD
+
+        {begins_with_fun}
+        V=$({erlang_home}/bin/{query_erlang_version})
+        if ! beginswith "{erlang_version}" "$V"; then
+            echo "Erlang version mismatch (Expected {erlang_version}, found $V)"
+            exit 1
+        fi
+
+        {erlang_home}/bin/erlc $@
+    """.format(
+        test_dir=test_dir,
+        begins_with_fun=BEGINS_WITH_FUN,
+        query_erlang_version=QUERY_ERL_VERSION,
+        erlang_version=erlang_version,
+        erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
+    )
+
+    inputs = []
+    inputs.extend(ctx.files.hdrs)
+    inputs.extend(ctx.files.suites)
+    for dep in ctx.attr.deps:
+        lib_info = dep[ErlangLibInfo]
+        inputs.extend(lib_info.include)
+        inputs.extend(lib_info.beam)
+
+    ctx.actions.run_shell(
+        inputs = inputs,
+        outputs = beam_files,
+        command = script,
+        arguments = [erl_args],
+        env = {
+            # "ERLANG_VERSION": ctx.attr.erlang_version,
+        },
+        mnemonic = "ERLC",
+    )
+
+    return beam_files
+
+def _impl(ctx):
+    srcs_beam_files = _compile_srcs(ctx)
+    suite_beam_files = _compile_suites(ctx, srcs_beam_files)
+
+    paths = []
+    paths.append(path_join(ctx.label.package, "src"))
+    for dep in ctx.attr.deps + ctx.attr.runtime_deps:
+        paths.append(path_join(dep.label.package, "ebin"))
+
+    pa_args = " ".join(["-pa {}".format(p) for p in paths])
 
     test_env_commands = []
     for k, v in ctx.attr.test_env.items():
@@ -43,7 +201,7 @@ def _impl(ctx):
 
     {test_env}
 
-    # /usr/local/bin/tree
+    # /usr/local/bin/tree $PWD
 
     {erlang_home}/bin/ct_run \\
         -no_auto_compile \\
@@ -56,29 +214,31 @@ def _impl(ctx):
         begins_with_fun=BEGINS_WITH_FUN,
         query_erlang_version=QUERY_ERL_VERSION,
         erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
-        erlang_version=ctx.attr.erlang_version,
+        erlang_version=ctx.attr._erlang_version[ErlangVersionProvider].version,
         pa_args=pa_args,
-        suite_beam_dir=path_join(erlang_lib_info.lib_dir.short_path, "ebin"),
-        project=erlang_lib_info.lib_name,
+        suite_beam_dir=path_join(ctx.label.package, "test"),
+        project=ctx.attr.app_name,
         name=sanitize_sname(ctx.label.name),
         test_env=" && ".join(test_env_commands)
     )
 
-    script_file = ctx.actions.declare_file(ctx.attr.name + ".sh")
+    # script_file = ctx.actions.declare_file(ctx.attr.name + ".sh")
 
     ctx.actions.write(
-        output = script_file,
+        output = ctx.outputs.executable,
         content = script,
     )
 
-    lib_dirs = [info.lib_dir for info in [erlang_lib_info] + [dep[ErlangLibInfo] for dep in ctx.attr.deps + ctx.attr.runtime_deps]]
+    # lib_dirs = [info.lib_dir for info in [erlang_lib_info] + [dep[ErlangLibInfo] for dep in ctx.attr.deps + ctx.attr.runtime_deps]]
 
-    runfiles = ctx.runfiles(files = lib_dirs)
+    runfiles = ctx.runfiles(files = srcs_beam_files + suite_beam_files)
+    for dep in ctx.attr.deps:
+        runfiles = runfiles.merge(ctx.runfiles(dep[DefaultInfo].files.to_list()))
     for tool in ctx.attr.tools:
         runfiles = runfiles.merge(tool[DefaultInfo].default_runfiles)
 
     return [DefaultInfo(
-        executable = script_file,
+        # executable = script_file,
         runfiles = runfiles,
     )]
 
@@ -86,16 +246,17 @@ ct_test = rule(
     implementation = _impl,
     attrs = {
         "_erlang_home": attr.label(default = ":erlang_home"),
+        "_erlang_version": attr.label(default = ":erlang_version"),
         "app_name": attr.string(mandatory=True),
         "app_version": attr.string(default="0.1.0"),
-        "suites": attr.label_list(allow_files=[".erl"]),
         "hdrs": attr.label_list(allow_files=[".hrl"]),
-        "priv": attr.label_list(allow_files = True), # This should be removed once compilation is pulled out of bazel_erlang_lib
+        "srcs": attr.label_list(allow_files=[".erl"]),
+        "suites": attr.label_list(allow_files=[".erl"]),
+        # "priv": attr.label_list(allow_files = True), # This should be removed once compilation is pulled out of bazel_erlang_lib
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
         "tools": attr.label_list(),
         "erlc_opts": attr.string_list(),
-        "erlang_version": attr.string(),
         "test_env": attr.string_dict(),
     },
     test = True,

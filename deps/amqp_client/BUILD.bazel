@@ -1,5 +1,6 @@
+load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "APP_VERSION", "erlang_libs", "ct_tests")
+load("//:rabbitmq.bzl", "APP_VERSION")
 
 APP_ENV = """[
 	    {prefer_ipv6, false},
@@ -7,7 +8,8 @@ APP_ENV = """[
 	    {writer_gc_threshold, 1000000000}
 	  ]"""
 
-erlang_libs(
+bazel_erlang_lib(
+    name = "amqp_client",
     app_name = "amqp_client",
     app_version = APP_VERSION,
     app_description = "RabbitMQ AMQP Client",
@@ -28,81 +30,46 @@ erlang_libs(
     visibility = ["//visibility:public"],
 )
 
-ct_test(
-    name = "system_SUITE@22.3",
-    app_name = "amqp_client",
-    suites = ["test/system_SUITE.erl"],
-    hdrs = glob(["include/*.hrl"]),
-    deps = [
-        ":amqp_client_test@22.3",
-        "//deps/rabbit_common:rabbit_common@22.3",
-        "@rabbitmq_ct_helpers//:rabbitmq_ct_helpers@22.3",
-        "@credentials-obfuscation//:credentials_obfuscation@22.3",
-    ],
-    runtime_deps = [
-        "@lager//:lager@22.3",
-        "@goldrush//:goldrush@22.3",
-        "@jsx//:jsx@22.3",
-        "@ranch//:ranch@22.3",
-        "@recon//:recon@22.3",
-        "@meck//:meck@22.3",
-    ],
-    tools = [
-        "//:rabbitmq-run@22.3",
-        # "//:rabbitmqctl@22.3",
-    ],
-    test_env = {
-        # "PATH": "$PWD:$PATH", # allow 'rabbitmq-run' to be run without an absolute path
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-run@22.3",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-home@22.3/sbin/rabbitmqctl"
-    },
-    erlang_version = "22.3",
-    tags = ["erlang-22.3"],
-    size = "large",
-)
+# ct_test(
+#     name = "system_SUITE",
+#     app_name = "amqp_client",
+#     hdrs = glob(["include/*.hrl"]),
+#     srcs = glob(["src/*.erl"]),
+#     suites = ["test/system_SUITE.erl"],
+#     deps = [
+#         ":amqp_client_test",
+#         "//deps/rabbit_common:rabbit_common",
+#         "@rabbitmq_ct_helpers//:rabbitmq_ct_helpers",
+#         "@credentials-obfuscation//:credentials_obfuscation",
+#     ],
+#     runtime_deps = [
+#         "@lager//:lager",
+#         "@goldrush//:goldrush",
+#         "@jsx//:jsx",
+#         "@ranch//:ranch",
+#         "@recon//:recon",
+#         "@meck//:meck",
+#     ],
+#     tools = [
+#         "//:rabbitmq-run",
+#         # "//:rabbitmqctl",
+#     ],
+#     test_env = {
+#         # "PATH": "$PWD:$PATH", # allow 'rabbitmq-run' to be run without an absolute path
+#         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+#         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-run",
+#         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-home/sbin/rabbitmqctl"
+#     },
+#     size = "large",
+# )
 
 ct_test(
-    name = "system_SUITE@23.1",
-    app_name = "amqp_client",
-    suites = ["test/system_SUITE.erl"],
-    hdrs = glob(["include/*.hrl"]),
-    deps = [
-        ":amqp_client_test@23.1",
-        "//deps/rabbit_common:rabbit_common@23.1",
-        "@rabbitmq_ct_helpers//:rabbitmq_ct_helpers@23.1",
-    ],
-    runtime_deps = [
-        "@lager//:lager@23.1",
-        "@goldrush//:goldrush@23.1",
-        "@jsx//:jsx@23.1",
-        "@ranch//:ranch@23.1",
-        "@recon//:recon@23.1",
-        "@credentials-obfuscation//:credentials_obfuscation@23.1",
-        "@meck//:meck@23.1",
-    ],
-    tools = [
-        "//:rabbitmq-run@23.1",
-        # "//:rabbitmqctl@23.1",
-    ],
-    test_env = {
-        # "PATH": "$PWD:$PATH", # allow fake to be run without an absolute path
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-run@23.1",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-home@23.1/sbin/rabbitmqctl",
-    },
-    erlang_version = "23.1",
-    tags = ["erlang-23.1"],
-    size = "large",
-)
-
-ct_tests(
     name = "unit_SUITE",
     app_name = "amqp_client",
-    suites = ["test/unit_SUITE.erl"],
     hdrs = glob(["include/*.hrl"]),
+    srcs = glob(["src/*.erl"]),
+    suites = ["test/unit_SUITE.erl"],
     deps = [
-        ":amqp_client",
         "//deps/rabbit_common:rabbit_common",
         "//deps/rabbit:rabbit",
     ],

@@ -1,4 +1,4 @@
-load("//:rabbitmq.bzl", "erlang_libs")
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 
 py_binary(
     name = "codegen",
@@ -24,7 +24,8 @@ genrule(
     cmd = "$(location :codegen) hrl $(SRCS) > $@",
 )
 
-erlang_libs(
+bazel_erlang_lib(
+    name = "amqp10_common",
     app_name = "amqp10_common",
     app_version = "3.9.0",
     app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",

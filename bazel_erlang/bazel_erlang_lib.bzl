@@ -91,21 +91,26 @@ def _gen_app_file(ctx, srcs):
 
     return app_file
 
-def _beam_file(ctx, src):
+def beam_file(ctx, src, dir):
     name = src.basename.replace(".erl", ".beam")
-    return ctx.actions.declare_file(path_join("ebin", name))
+    return ctx.actions.declare_file(path_join(dir, name))
 
-def compile_erlang_action(ctx, srcs=[], hdrs=[]):
+# def compile_erlang_action(ctx, hdrs=[], srcs=[]):
+#     return None
+
+def _impl(ctx):
+    app_file = _gen_app_file(ctx, ctx.files.srcs)
+
     erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
 
-    beam_files = [_beam_file(ctx, src) for src in ctx.files.srcs]
+    beam_files = [beam_file(ctx, src, "ebin") for src in ctx.files.srcs]
 
     ebin_dir = beam_files[0].dirname
 
     erl_args = ctx.actions.args()
     erl_args.add("-v")
 
-    for dir in unique_dirnames(hdrs):
+    for dir in unique_dirnames(ctx.files.hdrs):
         erl_args.add("-I", dir)
 
     for dep in ctx.attr.deps:
@@ -121,7 +126,7 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[]):
 
     erl_args.add_all(ctx.attr.erlc_opts)
 
-    erl_args.add_all(srcs)
+    erl_args.add_all(ctx.files.srcs)
 
     script = """
         set -euo pipefail
@@ -148,8 +153,8 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[]):
     )
 
     inputs = []
-    inputs.extend(hdrs)
-    inputs.extend(srcs)
+    inputs.extend(ctx.files.hdrs)
+    inputs.extend(ctx.files.srcs)
     for dep in ctx.attr.deps:
         lib_info = dep[ErlangLibInfo]
         inputs.extend(lib_info.include)
@@ -166,31 +171,16 @@ def compile_erlang_action(ctx, srcs=[], hdrs=[]):
         mnemonic = "ERLC",
     )
 
-    return ErlangLibInfo(
-        lib_name = ctx.attr.app_name,
-        lib_version = ctx.attr.app_version,
-        erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version,
-        include = ctx.files.hdrs, # <- should be filtered public only
-        beam = beam_files,
-        priv = ctx.files.priv,
-    )
-
-def _impl(ctx):
-    app_file = _gen_app_file(ctx, ctx.files.srcs)
-
-    erlang_lib_info = compile_erlang_action(ctx, srcs=ctx.files.srcs, hdrs=ctx.files.hdrs)
-    erlang_lib_info = ErlangLibInfo(
-        lib_name = erlang_lib_info.lib_name,
-        lib_version = erlang_lib_info.lib_version,
-        erlang_version = erlang_lib_info.erlang_version,
-        include = erlang_lib_info.include,
-        beam = [app_file] + erlang_lib_info.beam,
-        priv = erlang_lib_info.priv,
-    )
-
     return [
-        DefaultInfo(files = depset(erlang_lib_info.beam)),
-        erlang_lib_info,
+        ErlangLibInfo(
+            lib_name = ctx.attr.app_name,
+            lib_version = ctx.attr.app_version,
+            erlang_version = erlang_version,
+            include = ctx.files.hdrs, # <- should be filtered public only,
+            beam = [app_file] + beam_files,
+            priv = ctx.files.priv,
+        ),
+        DefaultInfo(files = depset([app_file] + beam_files)),
     ]
 
 bazel_erlang_lib = rule(

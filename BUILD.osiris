@@ -1,11 +1,12 @@
-load("@//:rabbitmq.bzl", "erlang_libs")
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 
 APP_ENV = """[
 	{data_dir, "/tmp/osiris"},
 	{port_range, {6000, 6500}}
 ]"""
 
-erlang_libs(
+bazel_erlang_lib(
+    name = "osiris",
     app_name = "osiris",
     app_version = "master",
     app_description = "New project",

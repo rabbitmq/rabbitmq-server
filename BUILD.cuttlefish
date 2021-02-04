@@ -1,6 +1,7 @@
-load("@//:rabbitmq.bzl", "erlang_libs")
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
 
-erlang_libs(
+bazel_erlang_lib(
+    name = "cuttlefish",
     app_name = "cuttlefish",
     app_version = "2.5.0",
     hdrs = glob(["include/*.hrl", "src/*.hrl"]),

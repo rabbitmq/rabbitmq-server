@@ -1,5 +1,6 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "ct_tests")
+load("//bazel_erlang:ct.bzl", "ct_test")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
 
 py_binary(
     name = "codegen",
@@ -74,7 +75,7 @@ bazel_erlang_lib(
     visibility = ["//visibility:public"],
 )
 
-ct_tests(
+ct_test(
     name = "rabbit_env_SUITE",
     app_name = "rabbit_common",
     suites = ["test/rabbit_env_SUITE.erl"],
@@ -88,7 +89,7 @@ ct_tests(
     size = "small",
 )
 
-ct_tests(
+ct_test(
     name = "supervisor2_SUITE",
     app_name = "rabbit_common",
     suites = ["test/supervisor2_SUITE.erl"],
@@ -99,7 +100,7 @@ ct_tests(
     size = "small",
 )
 
-ct_tests(
+ct_test(
     name = "unit_priority_queue_SUITE",
     app_name = "rabbit_common",
     suites = ["test/unit_priority_queue_SUITE.erl"],
@@ -110,7 +111,7 @@ ct_tests(
     size = "small",
 )
 
-ct_tests(
+ct_test(
     name = "unit_SUITE",
     app_name = "rabbit_common",
     suites = ["test/unit_SUITE.erl", "test/gen_server2_test_server.erl"],
@@ -124,7 +125,7 @@ ct_tests(
     size = "small",
 )
 
-ct_tests(
+ct_test(
     name = "worker_pool_SUITE",
     app_name = "rabbit_common",
     suites = ["test/worker_pool_SUITE.erl"],
