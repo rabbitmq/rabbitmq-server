@@ -12,11 +12,12 @@ def lib_dir(dep):
     c.append(dep[ErlangLibInfo].lib_dir.short_path)
     return path_join(*c)
 
-# def ebin_dir(dep):
-#     return path_join(lib_dir(dep), "ebin")
-
 def sanitize_sname(s):
     return s.replace("@", "-").replace(".", "_")
+
+def short_dirname(f):
+    parts = f.short_path.partition("/")
+    return path_join(*(parts[0:-2]))
 
 def _compile_srcs(ctx):
     erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
@@ -178,9 +179,9 @@ def _impl(ctx):
     suite_beam_files = _compile_suites(ctx, srcs_beam_files)
 
     paths = []
-    paths.append(path_join(ctx.label.package, "src"))
+    paths.append(short_dirname(srcs_beam_files[0]))
     for dep in ctx.attr.deps + ctx.attr.runtime_deps:
-        paths.append(path_join(dep.label.package, "ebin"))
+        paths.append(short_dirname(dep[ErlangLibInfo].beam[0]))
 
     pa_args = " ".join(["-pa {}".format(p) for p in paths])
 
@@ -216,20 +217,16 @@ def _impl(ctx):
         erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
         erlang_version=ctx.attr._erlang_version[ErlangVersionProvider].version,
         pa_args=pa_args,
-        suite_beam_dir=path_join(ctx.label.package, "test"),
+        suite_beam_dir=short_dirname(suite_beam_files[0]),
         project=ctx.attr.app_name,
         name=sanitize_sname(ctx.label.name),
         test_env=" && ".join(test_env_commands)
     )
 
-    # script_file = ctx.actions.declare_file(ctx.attr.name + ".sh")
-
     ctx.actions.write(
         output = ctx.outputs.executable,
         content = script,
     )
-
-    # lib_dirs = [info.lib_dir for info in [erlang_lib_info] + [dep[ErlangLibInfo] for dep in ctx.attr.deps + ctx.attr.runtime_deps]]
 
     runfiles = ctx.runfiles(files = srcs_beam_files + suite_beam_files)
     for dep in ctx.attr.deps:

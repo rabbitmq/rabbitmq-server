@@ -19,15 +19,29 @@ def github_bazel_erlang_lib(name, org="rabbitmq", version=APP_VERSION, tag=None,
     )
 
 _BUILD_FILE_TEMPLATE = """
-load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "erlc", "bazel_erlang_lib")
 
-bazel_erlang_lib(
-    name = "{app_name}",
+app_file(
+    name = "app_file",
     app_name = "{app_name}",
     app_version = "{version}",
     app_src = glob(["src/{app_name}.app.src"]),
+    modules = [":beam_files"],
+)
+
+erlc(
+    name = "beam_files",
     hdrs = glob(["include/*.hrl", "src/*.hrl"]),
     srcs = glob(["src/*.erl"]),
+    dest = "ebin",
+)
+
+bazel_erlang_lib(
+    name = "bazel_erlang_lib",
+    app_name = "{app_name}",
+    app_version = "{version}",
+    hdrs = glob(["include/*.hrl"]),
+    beam = [":beam_files"],
     visibility = ["//visibility:public"],
 )
 """

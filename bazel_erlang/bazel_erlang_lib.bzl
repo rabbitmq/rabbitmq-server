@@ -12,8 +12,6 @@ ErlangLibInfo = provider(
     },
 )
 
-_DEPS_DIR = "deps"
-
 BEGINS_WITH_FUN = """beginswith() { case $2 in "$1"*) true;; *) false;; esac; }"""
 QUERY_ERL_VERSION = """erl -eval '{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell"""
 
@@ -29,9 +27,9 @@ def unique_dirnames(files):
     return dirs
 
 def _module_name(f):
-    return "'{}'".format(f.basename.replace(".erl", "", 1))
+    return "'{}'".format(f.basename.replace(".beam", "", 1))
 
-def _gen_app_file(ctx, srcs):
+def _app_file_impl(ctx):
     app_file = ctx.actions.declare_file(
         path_join("ebin", "{}.app".format(ctx.attr.app_name))
     )
@@ -39,7 +37,7 @@ def _gen_app_file(ctx, srcs):
     if len(ctx.files.app_src) > 1:
         fail("Multiple .app.src files ({}) are not supported".format(ctx.files.app_src))
     
-    modules_list = "[" + ",".join([_module_name(src) for src in srcs]) + "]"
+    modules_list = "[" + ",".join([_module_name(m) for m in ctx.files.modules]) + "]"
 
     if len(ctx.files.app_src) == 1:
         # print("Expanding {app_name}.app.src -> {app_name}.app and injecting modules list".format(app_name=ctx.attr.app_name))
@@ -58,7 +56,7 @@ def _gen_app_file(ctx, srcs):
         )
     else:
         # print("Generating {app_name}.app".format(app_name=ctx.attr.app_name))
-        if ctx.attr.app_module != "" and len([src for src in srcs if src.basename == ctx.attr.app_module + ".erl"]) == 1:
+        if ctx.attr.app_module != "" and len([m for m in ctx.files.modules if m.basename == ctx.attr.app_module + ".beam"]) == 1:
             template = ctx.file._app_with_mod_file_template
         else:
             template = ctx.file._app_file_template
@@ -89,23 +87,47 @@ def _gen_app_file(ctx, srcs):
             },
         )
 
-    return app_file
+    return [
+        DefaultInfo(files = depset([app_file])),
+    ]
+
+app_file = rule(
+    implementation = _app_file_impl,
+    attrs = {
+        "_erlang_home": attr.label(default = ":erlang_home"),
+        "_erlang_version": attr.label(default = ":erlang_version"),
+        "_app_file_template": attr.label(
+            default = Label("//bazel_erlang:app_file.template"),
+            allow_single_file = True,
+        ),
+        "_app_with_mod_file_template": attr.label(
+            default = Label("//bazel_erlang:app_with_mod_file.template"),
+            allow_single_file = True,
+        ),
+        "app_name": attr.string(mandatory=True),
+        "app_version": attr.string(mandatory=True),
+        "app_description": attr.string(),
+        "app_module": attr.string(),
+        "app_registered": attr.string_list(),
+        "app_env": attr.string(default = "[]"),
+        "extra_apps": attr.string_list(),
+        "app_src": attr.label_list(allow_files=[".app.src"]), # type list > type optional
+        "modules": attr.label_list(allow_files=[".beam"]),
+        "deps": attr.label_list(providers=[ErlangLibInfo]),
+        "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
+    },
+)
 
 def beam_file(ctx, src, dir):
     name = src.basename.replace(".erl", ".beam")
     return ctx.actions.declare_file(path_join(dir, name))
 
-# def compile_erlang_action(ctx, hdrs=[], srcs=[]):
-#     return None
-
-def _impl(ctx):
-    app_file = _gen_app_file(ctx, ctx.files.srcs)
-
+def _erlc_impl(ctx):
     erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
 
-    beam_files = [beam_file(ctx, src, "ebin") for src in ctx.files.srcs]
+    beam_files = [beam_file(ctx, src, ctx.attr.dest) for src in ctx.files.srcs]
 
-    ebin_dir = beam_files[0].dirname
+    dest_dir = beam_files[0].dirname
 
     erl_args = ctx.actions.args()
     erl_args.add("-v")
@@ -122,7 +144,9 @@ def _impl(ctx):
         for dir in unique_dirnames(lib_info.beam):
             erl_args.add("-pa", dir)
 
-    erl_args.add("-o", ebin_dir)
+    # TODO: add the ctx.files.beam to the args with -pa
+
+    erl_args.add("-o", dest_dir)
 
     erl_args.add_all(ctx.attr.erlc_opts)
 
@@ -133,7 +157,7 @@ def _impl(ctx):
 
         # /usr/local/bin/tree $PWD
 
-        mkdir -p {ebin_dir}
+        mkdir -p {dest_dir}
         export HOME=$PWD
 
         {begins_with_fun}
@@ -145,7 +169,7 @@ def _impl(ctx):
 
         {erlang_home}/bin/erlc $@
     """.format(
-        ebin_dir=ebin_dir,
+        dest_dir=dest_dir,
         begins_with_fun=BEGINS_WITH_FUN,
         query_erlang_version=QUERY_ERL_VERSION,
         erlang_version=erlang_version,
@@ -165,50 +189,52 @@ def _impl(ctx):
         outputs = beam_files,
         command = script,
         arguments = [erl_args],
-        env = {
-            # "ERLANG_VERSION": ctx.attr.erlang_version,
-        },
         mnemonic = "ERLC",
     )
 
     return [
+        DefaultInfo(files = depset(beam_files)),
+    ]
+
+erlc = rule(
+    implementation = _erlc_impl,
+    attrs = {
+        "_erlang_home": attr.label(default = ":erlang_home"),
+        "_erlang_version": attr.label(default = ":erlang_version"),
+        "hdrs": attr.label_list(allow_files=[".hrl"]),
+        "srcs": attr.label_list(allow_files=[".erl"]),
+        "beam": attr.label_list(allow_files=[".beam"]),
+        "deps": attr.label_list(providers=[ErlangLibInfo]),
+        "erlc_opts": attr.string_list(),
+        "dest": attr.string(
+            default = "ebin",
+        ),
+    },
+)
+
+def _impl(ctx):
+    compiled_files = ctx.files.app + ctx.files.beam
+    return [
         ErlangLibInfo(
             lib_name = ctx.attr.app_name,
             lib_version = ctx.attr.app_version,
-            erlang_version = erlang_version,
-            include = ctx.files.hdrs, # <- should be filtered public only,
-            beam = [app_file] + beam_files,
+            erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version,
+            include = ctx.files.hdrs,
+            beam = compiled_files,
             priv = ctx.files.priv,
         ),
-        DefaultInfo(files = depset([app_file] + beam_files)),
+        DefaultInfo(files = depset(compiled_files)),
     ]
 
 bazel_erlang_lib = rule(
     implementation = _impl,
     attrs = {
+        "_erlang_version": attr.label(default = ":erlang_version"),
         "app_name": attr.string(mandatory=True),
         "app_version": attr.string(mandatory=True),
-        "app_description": attr.string(),
-        "app_module": attr.string(),
-        "app_registered": attr.string_list(),
-        "app_env": attr.string(default = "[]"),
-        "extra_apps": attr.string_list(),
-        "app_src": attr.label_list(allow_files=[".app.src"]), # type list > type optional
         "hdrs": attr.label_list(allow_files=[".hrl"]),
-        "srcs": attr.label_list(allow_files=[".erl"]),
-        "priv": attr.label_list(allow_files = True),
-        "deps": attr.label_list(providers=[ErlangLibInfo]),
-        "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
-        "erlc_opts": attr.string_list(),
-        "_erlang_home": attr.label(default = ":erlang_home"),
-        "_erlang_version": attr.label(default = ":erlang_version"),
-        "_app_file_template": attr.label(
-            default = Label("//bazel_erlang:app_file.template"),
-            allow_single_file = True,
-        ),
-        "_app_with_mod_file_template": attr.label(
-            default = Label("//bazel_erlang:app_with_mod_file.template"),
-            allow_single_file = True,
-        ),
+        "app": attr.label(allow_files=[".app"]),
+        "beam": attr.label_list(allow_files=[".beam"]),
+        "priv": attr.label_list(allow_files=True),
     },
 )
