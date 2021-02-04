@@ -1,4 +1,4 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
 
 exports_files([
@@ -123,8 +123,25 @@ _APP_ENV = """[
 	  ]
 """
 
-bazel_erlang_lib(
-    name = "rabbit",
+DEPS = [
+    "@lager//:bazel_erlang_lib",
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "@stdout_formatter//:bazel_erlang_lib",
+    "//deps/amqp10_common:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "@cuttlefish//:bazel_erlang_lib",
+    "@ranch//:bazel_erlang_lib",
+    "@ra//:bazel_erlang_lib",
+    "@sysmon-handler//:bazel_erlang_lib",
+    "@recon//:bazel_erlang_lib",
+    "@observer_cli//:bazel_erlang_lib",
+    "@osiris//:bazel_erlang_lib",
+]
+
+app_file(
+    name = "app_file",
     app_name = "rabbit",
     app_version = "3.9.0",
     app_description = "RabbitMQ",
@@ -149,24 +166,27 @@ bazel_erlang_lib(
         "syntax_tools",
         "xmerl",
     ],
+    modules = [":beam_files"],
+    deps = DEPS + RUNTIME_DEPS,
+)
+
+erlc(
+    name = "beam_files",
     hdrs = glob(["include/*.hrl", "src/*.hrl"]),
     srcs = glob(["src/*.erl"]),
+    erlc_opts = RABBITMQ_ERLC_OPTS + [
+        "-DINSTR_MOD=gm",
+    ],
+    dest = "ebin",
+    deps = DEPS,
+)
+
+bazel_erlang_lib(
+    name = "bazel_erlang_lib",
+    app_name = "rabbit",
+    app_version = "3.9.0",
+    hdrs = glob(["include/*.hrl"]),
+    beam = [":beam_files"],
     priv = glob(["priv/schema/rabbit.schema"]),
-    erlc_opts = RABBITMQ_ERLC_OPTS + ["-DINSTR_MOD=gm"],
-    deps = [
-        "@lager//:lager",
-        "//deps/rabbit_common:rabbit_common",
-        "@stdout_formatter//:stdout_formatter",
-        "//deps/amqp10_common:amqp10_common",
-    ],
-    runtime_deps = [
-        "@cuttlefish//:cuttlefish",
-        "@ranch//:ranch",
-        "@ra//:ra",
-        "@sysmon-handler//:sysmon_handler",
-        "@recon//:recon",
-        "@observer_cli//:observer_cli",
-        "@osiris//:osiris",
-    ],
     visibility = ["//visibility:public"],
 )

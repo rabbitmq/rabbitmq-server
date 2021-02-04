@@ -8,6 +8,10 @@ APP_ENV = """[
 	    {writer_gc_threshold, 1000000000}
 	  ]"""
 
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+]
+
 app_file(
     name = "app_file",
     app_name = "amqp_client",
@@ -22,9 +26,7 @@ app_file(
         "xmerl",
     ],
     modules = [":beam_files"],
-    deps = [
-        "//deps/rabbit_common:rabbit_common",
-    ],
+    deps = DEPS,
     # visibility = ["//visibility:public"],
 )
 
@@ -34,10 +36,18 @@ erlc(
     srcs = glob(["src/*.erl"]),
     # erlc_opts = RABBITMQ_ERLC_OPTS,
     dest = "ebin",
-    deps = [
-        "//deps/rabbit_common:rabbit_common",
-    ],
+    deps = DEPS,
     # visibility = ["//visibility:public"],
+)
+
+bazel_erlang_lib(
+    name = "bazel_erlang_lib",
+    app_name = "amqp_client",
+    app_version = APP_VERSION,
+    hdrs = glob(["include/*.hrl"]),
+    app = ":app_file",
+    beam = [":beam_files"],
+    visibility = ["//visibility:public"],
 )
 
 erlc(
@@ -49,19 +59,17 @@ erlc(
         "+debug_info",
     ],
     dest = "src",
-    deps = [
-        "//deps/rabbit_common:rabbit_common",
-    ],
+    deps = DEPS,
     # visibility = ["//visibility:public"],
 )
 
 bazel_erlang_lib(
-    name = "bazel_erlang_lib",
+    name = "test_bazel_erlang_lib",
     app_name = "amqp_client",
     app_version = APP_VERSION,
     hdrs = glob(["include/*.hrl"]),
     app = ":app_file",
-    beam = [":beam_files"],
+    beam = [":test_beam_files"],
     visibility = ["//visibility:public"],
 )
 
@@ -98,15 +106,22 @@ bazel_erlang_lib(
 #     size = "large",
 # )
 
+erlc(
+    name = "unit_SUITE_beam_files",
+    hdrs = glob(["include/*.hrl"]),
+    srcs = ["test/unit_SUITE.erl"],
+    dest = "test",
+    deps = DEPS + [
+        ":test_bazel_erlang_lib",
+    ],
+)
+
 ct_test(
     name = "unit_SUITE",
-    app_name = "amqp_client",
-    hdrs = glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
-    suites = ["test/unit_SUITE.erl"],
-    deps = [
-        "//deps/rabbit_common:rabbit_common",
-        "//deps/rabbit:rabbit",
+    suites = [":unit_SUITE_beam_files"],
+    deps = DEPS + [
+        ":test_bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
     ],
     size = "small",
 )

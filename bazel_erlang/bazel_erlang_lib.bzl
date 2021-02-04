@@ -67,7 +67,7 @@ def _app_file_impl(ctx):
 
         # [$(call comma_list,kernel stdlib $(OTP_DEPS) $(LOCAL_DEPS) $(foreach dep,$(DEPS),$(call dep_name,$(dep))))]
         applications = ["kernel", "stdlib"] + ctx.attr.extra_apps
-        for dep in ctx.attr.deps + ctx.attr.runtime_deps:
+        for dep in ctx.attr.deps:
             applications.append(dep[ErlangLibInfo].lib_name)
         applications_list = "[" + ",".join(applications) + "]"
 
@@ -114,7 +114,6 @@ app_file = rule(
         "app_src": attr.label_list(allow_files=[".app.src"]), # type list > type optional
         "modules": attr.label_list(allow_files=[".beam"]),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
-        "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
     },
 )
 
@@ -143,8 +142,6 @@ def _erlc_impl(ctx):
             erl_args.add("-I", path_join(dir, "../.."))
         for dir in unique_dirnames(lib_info.beam):
             erl_args.add("-pa", dir)
-
-    # TODO: add the ctx.files.beam to the args with -pa
 
     erl_args.add("-o", dest_dir)
 
@@ -203,7 +200,7 @@ erlc = rule(
         "_erlang_version": attr.label(default = ":erlang_version"),
         "hdrs": attr.label_list(allow_files=[".hrl"]),
         "srcs": attr.label_list(allow_files=[".erl"]),
-        "beam": attr.label_list(allow_files=[".beam"]),
+        # "beam": attr.label_list(allow_files=[".beam"]),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "erlc_opts": attr.string_list(),
         "dest": attr.string(

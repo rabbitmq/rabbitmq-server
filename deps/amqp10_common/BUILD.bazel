@@ -1,4 +1,4 @@
-load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 
 py_binary(
     name = "codegen",
@@ -24,18 +24,28 @@ genrule(
     cmd = "$(location :codegen) hrl $(SRCS) > $@",
 )
 
-bazel_erlang_lib(
-    name = "amqp10_common",
+app_file(
+    name = "app_file",
     app_name = "amqp10_common",
     app_version = "3.9.0",
     app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",
-    srcs = glob(["src/*.erl"]),
+    modules = [":beam_files"],
+)
+
+erlc(
+    name = "beam_files",
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
-    # erlc_opts = RABBITMQ_ERLC_OPTS,
-    # deps = [
-    #     "//deps/rabbit_common:rabbit_common", # "a BUILD_DEP in Erlang.mk speak
-    #     "@lager//:lager", # this is a transitive dep through rabbit_common (and maybe should be included automatically)
-    # ],
+    srcs = glob(["src/*.erl"]),
+    dest = "ebin",
+)
+
+bazel_erlang_lib(
+    name = "bazel_erlang_lib",
+    app_name = "amqp10_common",
+    app_version = "3.9.0",
+    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    app = ":app_file",
+    beam = [":beam_files"],
     visibility = ["//visibility:public"],
 )
 

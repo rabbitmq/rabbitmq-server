@@ -45,6 +45,17 @@ genrule(
     cmd = "$(location :codegen) body $(SRCS) $@",
 )
 
+DEPS = [
+    "@lager//:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "@jsx//:bazel_erlang_lib",
+    "@ranch//:bazel_erlang_lib",
+    "@recon//:bazel_erlang_lib",
+    "@credentials-obfuscation//:bazel_erlang_lib",
+]
+
 app_file(
     name = "app_file",
     app_name = "rabbit_common",
@@ -61,15 +72,7 @@ app_file(
         "xmerl",
     ],
     modules = [":beam_files"],
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
-    runtime_deps = [
-        "@jsx//:bazel_erlang_lib",
-        "@ranch//:bazel_erlang_lib",
-        "@recon//:bazel_erlang_lib",
-        "@credentials-obfuscation//:bazel_erlang_lib",
-    ],
+    deps = DEPS + RUNTIME_DEPS,
 )
 
 erlc(
@@ -78,23 +81,7 @@ erlc(
     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
     erlc_opts = RABBITMQ_ERLC_OPTS,
     dest = "ebin",
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
-)
-
-erlc(
-    name = "test_beam_files",
-    hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-    erlc_opts = RABBITMQ_ERLC_OPTS + [
-        "-DTEST",
-        "+debug_info",
-    ],
-    dest = "src",
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
+    deps = DEPS,
 )
 
 bazel_erlang_lib(
@@ -107,65 +94,77 @@ bazel_erlang_lib(
     visibility = ["//visibility:public"],
 )
 
-ct_test(
-    name = "rabbit_env_SUITE",
-    app_name = "rabbit_common",
+erlc(
+    name = "test_beam_files",
     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-    suites = ["test/rabbit_env_SUITE.erl"],
-    erlc_opts = RABBITMQ_ERLC_OPTS,
-    deps = [
-        "//deps/rabbit:rabbit",
-        "@lager//:lager",
-        "@proper//:proper",
+    erlc_opts = RABBITMQ_ERLC_OPTS + [
+        "-DTEST",
+        "+debug_info",
     ],
-    size = "small",
+    dest = "src",
+    deps = DEPS,
 )
 
-ct_test(
-    name = "supervisor2_SUITE",
-    app_name = "rabbit_common",
-    hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-    suites = ["test/supervisor2_SUITE.erl"],
-    erlc_opts = RABBITMQ_ERLC_OPTS,
-    size = "small",
-)
+# ct_test(
+#     name = "rabbit_env_SUITE",
+#     app_name = "rabbit_common",
+#     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
+#     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
+#     suites = ["test/rabbit_env_SUITE.erl"],
+#     erlc_opts = RABBITMQ_ERLC_OPTS,
+#     deps = [
+#         "//deps/rabbit:rabbit",
+#         "@lager//:lager",
+#         "@proper//:proper",
+#     ],
+#     size = "small",
+# )
 
-ct_test(
-    name = "unit_priority_queue_SUITE",
-    app_name = "rabbit_common",
-    hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-    suites = ["test/unit_priority_queue_SUITE.erl"],
-    erlc_opts = RABBITMQ_ERLC_OPTS,
-    size = "small",
-)
+# ct_test(
+#     name = "supervisor2_SUITE",
+#     app_name = "rabbit_common",
+#     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
+#     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
+#     suites = ["test/supervisor2_SUITE.erl"],
+#     erlc_opts = RABBITMQ_ERLC_OPTS,
+#     size = "small",
+# )
 
-ct_test(
-    name = "unit_SUITE",
-    app_name = "rabbit_common",
-    hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-    suites = ["test/unit_SUITE.erl", "test/gen_server2_test_server.erl"],
-    erlc_opts = RABBITMQ_ERLC_OPTS,
-    deps = [
-        "@proper//:proper",
-        "@lager//:lager",
-        "@credentials-obfuscation//:credentials_obfuscation",
-    ],
-    size = "small",
-)
+# ct_test(
+#     name = "unit_priority_queue_SUITE",
+#     app_name = "rabbit_common",
+#     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
+#     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
+#     suites = ["test/unit_priority_queue_SUITE.erl"],
+#     erlc_opts = RABBITMQ_ERLC_OPTS,
+#     size = "small",
+# )
 
-ct_test(
-    name = "worker_pool_SUITE",
-    app_name = "rabbit_common",
-    hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-    suites = ["test/worker_pool_SUITE.erl"],
-    erlc_opts = RABBITMQ_ERLC_OPTS,
-    deps = [
-        "@lager//:lager",
-    ],
-    size = "small",
-)
+# ct_test(
+#     name = "unit_SUITE",
+#     app_name = "rabbit_common",
+#     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
+#     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
+#     suites = ["test/unit_SUITE.erl", "test/gen_server2_test_server.erl"],
+#     erlc_opts = RABBITMQ_ERLC_OPTS,
+#     deps = [
+#         "@proper//:proper",
+#         "@lager//:lager",
+#         "@credentials-obfuscation//:credentials_obfuscation",
+#     ],
+#     size = "small",
+# )
+
+# ct_test(
+#     name = "worker_pool_SUITE",
+#     app_name = "rabbit_common",
+#     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
+#     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
+#     suites = ["test/worker_pool_SUITE.erl"],
+#     erlc_opts = RABBITMQ_ERLC_OPTS,
+#     deps = [
+#         "@lager//:lager",
+#     ],
+#     size = "small",
+# )

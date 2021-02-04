@@ -175,19 +175,18 @@ def _compile_suites(ctx, srcs_beam_files):
     return beam_files
 
 def _impl(ctx):
-    srcs_beam_files = _compile_srcs(ctx)
-    suite_beam_files = _compile_suites(ctx, srcs_beam_files)
-
-    paths = []
-    paths.append(short_dirname(srcs_beam_files[0]))
-    for dep in ctx.attr.deps + ctx.attr.runtime_deps:
-        paths.append(short_dirname(dep[ErlangLibInfo].beam[0]))
+    paths = [short_dirname(dep[ErlangLibInfo].beam[0]) for dep in ctx.attr.deps]
 
     pa_args = " ".join(["-pa {}".format(p) for p in paths])
 
     test_env_commands = []
     for k, v in ctx.attr.test_env.items():
         test_env_commands.append("export {}=\"{}\"".format(k, v))
+
+    sname = sanitize_sname("ct-{}-{}".format(
+        ctx.label.package.partition("/")[-1],
+        ctx.label.name,
+    ))
 
     script = """set -euo pipefail
 
@@ -210,16 +209,15 @@ def _impl(ctx):
         {pa_args} \\
         -dir {suite_beam_dir} \\
         -logdir ${{TEST_UNDECLARED_OUTPUTS_DIR}} \\
-        -sname ct-{project}-{name}
+        -sname {sname}
     """.format(
         begins_with_fun=BEGINS_WITH_FUN,
         query_erlang_version=QUERY_ERL_VERSION,
         erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
         erlang_version=ctx.attr._erlang_version[ErlangVersionProvider].version,
         pa_args=pa_args,
-        suite_beam_dir=short_dirname(suite_beam_files[0]),
-        project=ctx.attr.app_name,
-        name=sanitize_sname(ctx.label.name),
+        suite_beam_dir=short_dirname(ctx.files.suites[0]),
+        sname=sname,
         test_env=" && ".join(test_env_commands)
     )
 
@@ -228,7 +226,7 @@ def _impl(ctx):
         content = script,
     )
 
-    runfiles = ctx.runfiles(files = srcs_beam_files + suite_beam_files)
+    runfiles = ctx.runfiles(files = ctx.files.suites)
     for dep in ctx.attr.deps:
         runfiles = runfiles.merge(ctx.runfiles(dep[DefaultInfo].files.to_list()))
     for tool in ctx.attr.tools:
@@ -244,16 +242,16 @@ ct_test = rule(
     attrs = {
         "_erlang_home": attr.label(default = ":erlang_home"),
         "_erlang_version": attr.label(default = ":erlang_version"),
-        "app_name": attr.string(mandatory=True),
-        "app_version": attr.string(default="0.1.0"),
-        "hdrs": attr.label_list(allow_files=[".hrl"]),
-        "srcs": attr.label_list(allow_files=[".erl"]),
-        "suites": attr.label_list(allow_files=[".erl"]),
+        # "app_name": attr.string(mandatory=True),
+        # "app_version": attr.string(default="0.1.0"),
+        # "hdrs": attr.label_list(allow_files=[".hrl"]),
+        # "srcs": attr.label_list(allow_files=[".erl"]),
+        "suites": attr.label_list(allow_files=[".beam"]),
         # "priv": attr.label_list(allow_files = True), # This should be removed once compilation is pulled out of bazel_erlang_lib
         "deps": attr.label_list(providers=[ErlangLibInfo]),
-        "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
+        # "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
         "tools": attr.label_list(),
-        "erlc_opts": attr.string_list(),
+        # "erlc_opts": attr.string_list(),
         "test_env": attr.string_dict(),
     },
     test = True,
