@@ -9,6 +9,8 @@
 -behaviour(gen_server).
 -behaviour(rabbit_auth_cache).
 
+-include("include/rabbit_auth_backend_cache.hrl").
+
 -export([start_link/1,
          get/1, put/3, delete/1]).
 -export([gc/0]).
@@ -90,7 +92,7 @@ segment(Expiration, SegmentSize) ->
     End.
 
 add_segment(Segment) ->
-    gen_server:call(?MODULE, {add_segment, Segment}).
+    gen_server:call(?MODULE, {add_segment, Segment}, ?CACHE_OPERATION_TIMEOUT).
 
 do_add_segment(Segment) ->
     case ets:lookup(?SEGMENT_TABLE, Segment) of

@@ -16,6 +16,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-include("include/rabbit_auth_backend_cache.hrl").
+
 -record(state, {
     segments = [],
     gc_timer,
@@ -32,13 +34,13 @@ get(Key) ->
 
 put(Key, Value, TTL) ->
     Expiration = rabbit_auth_cache:expiration(TTL),
-    Segment = gen_server:call(?MODULE, {get_write_segment, Expiration}),
+    Segment = gen_server:call(?MODULE, {get_write_segment, Expiration}, ?CACHE_OPERATION_TIMEOUT),
     ets:insert(Segment, {Key, {Expiration, Value}}),
     ok.
 
 delete(Key) ->
     [ets:delete(Table, Key)
-     || Table <- gen_server:call(?MODULE, get_segment_tables)].
+     || Table <- gen_server:call(?MODULE, get_segment_tables, ?CACHE_OPERATION_TIMEOUT)].
 
 gc() ->
     case whereis(?MODULE) of
@@ -96,7 +98,7 @@ maybe_add_segment(Expiration, SegmentSize, OldSegments) ->
     end.
 
 get_from_segments(Key) ->
-    Tables = gen_server:call(?MODULE, get_segment_tables),
+    Tables = gen_server:call(?MODULE, get_segment_tables, ?CACHE_OPERATION_TIMEOUT),
     lists:flatmap(
         fun(undefined) -> [];
            (T) ->
