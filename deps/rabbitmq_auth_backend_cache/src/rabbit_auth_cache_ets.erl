@@ -10,6 +10,8 @@
 -compile({no_auto_import,[get/1]}).
 -compile({no_auto_import,[put/2]}).
 
+-include("include/rabbit_auth_backend_cache.hrl").
+
 -behaviour(rabbit_auth_cache).
 
 -export([start_link/0,
@@ -18,17 +20,23 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {cache, timers, ttl}).
+-record(state, {
+    cache,
+    timers,
+    ttl
+}).
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-get(Key) -> gen_server:call(?MODULE, {get, Key}).
+get(Key) -> gen_server:call(?MODULE, {get, Key}, ?CACHE_OPERATION_TIMEOUT).
+
 put(Key, Value, TTL) ->
     Expiration = rabbit_auth_cache:expiration(TTL),
     gen_server:cast(?MODULE, {put, Key, Value, TTL, Expiration}).
-delete(Key) -> gen_server:call(?MODULE, {delete, Key}).
 
-init(_Args) ->
+delete(Key) -> gen_server:call(?MODULE, {delete, Key}, ?CACHE_OPERATION_TIMEOUT).
+
+init([]) ->
     {ok, #state{cache = ets:new(?MODULE, [set, private]),
                 timers = ets:new(auth_cache_ets_timers, [set, private])}}.
 
