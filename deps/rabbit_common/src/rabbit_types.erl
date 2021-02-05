@@ -24,7 +24,7 @@
               proc_type_and_name/0, timestamp/0, tracked_connection_id/0,
               tracked_connection/0, tracked_channel_id/0, tracked_channel/0,
               node_type/0, topic_access_context/0,
-              authz_data/0, authz_context/0]).
+              authz_data/0, authz_context/0, runtime_parameters_acl/0]).
 
 -type(maybe(T) :: T | 'none').
 -type(timestamp() :: {non_neg_integer(), non_neg_integer(), non_neg_integer()}).
@@ -194,3 +194,7 @@
                                   _ => _}).
 
 -type(authz_context() :: map()).
+
+-type(runtime_parameters_acl() ::
+        #runtime_parameters_acl{component :: {vhost(), binary()},
+                                disallowed_list :: [binary()]}).

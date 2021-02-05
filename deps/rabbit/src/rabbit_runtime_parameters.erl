@@ -134,7 +134,8 @@ format_error(L) ->
 set_any(VHost, Component, Name, Term, User) ->
     case set_any0(VHost, Component, Name, Term, User) of
         ok          -> ok;
-        {errors, L} -> format_error(L)
+        {errors, L} -> format_error(L);
+        {error_string, _Msg} = Error -> Error
     end.
 
 set_any0(VHost, Component, Name, Term, User) ->
@@ -143,24 +144,29 @@ set_any0(VHost, Component, Name, Term, User) ->
                      [Name, VHost, Component, Term]),
     case lookup_component(Component) of
         {ok, Mod} ->
-            case flatten_errors(
-                   Mod:validate(VHost, Component, Name, Term, get_user(User))) of
-                ok ->
-                    case mnesia_update(VHost, Component, Name, Term) of
-                        {old, Term} ->
+            case rabbit_runtime_parameters_acl:is_allowed(VHost, Component, Term) of
+                true ->
+                    case flatten_errors(
+                           Mod:validate(VHost, Component, Name, Term, get_user(User))) of
+                        ok ->
+                            case mnesia_update(VHost, Component, Name, Term) of
+                                {old, Term} ->
+                                    ok;
+                                _           ->
+                                    ActingUser = get_username(User),
+                                    event_notify(
+                                      parameter_set, VHost, Component,
+                                      [{name,  Name},
+                                       {value, Term},
+                                       {user_who_performed_action, ActingUser}]),
+                                    Mod:notify(VHost, Component, Name, Term, ActingUser)
+                            end,
                             ok;
-                        _           ->
-                            ActingUser = get_username(User),
-                            event_notify(
-                              parameter_set, VHost, Component,
-                              [{name,  Name},
-                               {value, Term},
-                               {user_who_performed_action, ActingUser}]),
-                            Mod:notify(VHost, Component, Name, Term, ActingUser)
-                    end,
-                    ok;
-                E ->
-                    E
+                        E ->
+                            E
+                    end;
+                {false, Attribute} ->
+                    {error_string, rabbit_runtime_parameters_acl:format_error(Attribute, Component, VHost)}
             end;
         E ->
             E
