@@ -13,7 +13,7 @@
 -export([remove_from_queue/3, on_vhost_up/1, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1,
          initial_queue_node/2, suggested_queue_nodes/1, actual_queue_nodes/1,
-         is_mirrored/1, is_mirrored_ha_nodes/1,
+         is_mirrored/1, is_mirrored_ha_nodes/1, is_allowed/1,
          update_mirrors/2, update_mirrors/1, validate_policy/1,
          maybe_auto_sync/1, maybe_drop_master_after_sync/1,
          sync_batch_size/1, log_info/3, log_warning/3]).
@@ -410,9 +410,15 @@ policy(Policy, Q) ->
     end.
 
 module(Q) when ?is_amqqueue(Q) ->
-    case rabbit_policy:get(<<"ha-mode">>, Q) of
-        undefined -> not_mirrored;
-        Mode      -> module(Mode)
+    VHost = amqqueue:get_vhost(Q),
+    case is_allowed(VHost) of
+        true ->
+            case rabbit_policy:get(<<"ha-mode">>, Q) of
+                undefined -> not_mirrored;
+                Mode      -> module(Mode)
+            end;
+        false ->
+            not_mirrored
     end;
 
 module(Mode) when is_binary(Mode) ->
@@ -447,6 +453,14 @@ is_mirrored_ha_nodes(Q) ->
         _ -> false
     end,
     MatchedByPolicy andalso (not rabbit_amqqueue:is_exclusive(Q)).
+
+-spec is_allowed(rabbit_types:vhost()) -> boolean().
+
+is_allowed(VHost) ->
+    case rabbit_runtime_parameters_acl:is_allowed(VHost, <<"policy">>, <<"ha-mode">>) of
+        true                   -> true;
+        {false, <<"ha-mode">>} -> false
+    end.
 
 actual_queue_nodes(Q) when ?is_amqqueue(Q) ->
     PrimaryPid = amqqueue:get_pid(Q),

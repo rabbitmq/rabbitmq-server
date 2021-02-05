@@ -1794,9 +1794,15 @@ log_auto_delete(Reason, #q{ q = Q }) ->
 needs_update_mirroring(Q, Version) ->
     {ok, UpQ} = rabbit_amqqueue:lookup(amqqueue:get_name(Q)),
     DBVersion = amqqueue:get_policy_version(UpQ),
-    case DBVersion > Version of
-        true -> {rabbit_policy:get(<<"ha-mode">>, UpQ), DBVersion};
-        false -> false
+    VHost = amqqueue:get_vhost(UpQ),
+    case rabbit_mirror_queue_misc:is_allowed(VHost) of
+        true ->
+            case DBVersion > Version of
+                true -> {rabbit_policy:get(<<"ha-mode">>, UpQ), DBVersion};
+                false -> false
+            end;
+        false ->
+            false
     end.
 
 
@@ -1845,5 +1851,3 @@ update_ha_mode(State) ->
 
 confirm_to_sender(Pid, QName, MsgSeqNos) ->
     rabbit_classic_queue:confirm_to_sender(Pid, QName, MsgSeqNos).
-
-
