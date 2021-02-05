@@ -1,4 +1,4 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib", "erlc", "erlang_lib")
+load("//bazel_erlang:bazel_erlang_lib.bzl", "erlang_lib", "erlc")
 load("//bazel_erlang:ct.bzl", "ct_test")
 load("//:rabbitmq.bzl", "APP_VERSION", "rabbitmq_lib")
 
@@ -9,10 +9,11 @@ APP_ENV = """[
 	  ]"""
 
 DEPS = [
+    "@lager//:bazel_erlang_lib",
     "//deps/rabbit_common:bazel_erlang_lib",
 ]
 
-erlang_lib(
+rabbitmq_lib(
     app_name = "amqp_client",
     app_description = "RabbitMQ AMQP Client",
     app_module = "amqp_client",
@@ -23,29 +24,8 @@ erlang_lib(
     extra_apps = [
         "xmerl",
     ],
+    first_srcs = ["src/amqp_gen_connection.erl", "src/amqp_gen_consumer.erl"],
     deps = DEPS,
-)
-
-erlc(
-    name = "test_beam_files",
-    hdrs = glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
-    erlc_opts = [
-        "-DTEST",
-        "+debug_info",
-    ],
-    dest = "src",
-    deps = DEPS,
-)
-
-bazel_erlang_lib(
-    name = "test_bazel_erlang_lib",
-    app_name = "amqp_client",
-    app_version = APP_VERSION,
-    hdrs = glob(["include/*.hrl"]),
-    app = ":app_file",
-    beam = [":test_beam_files"],
-    visibility = ["//visibility:public"],
 )
 
 # ct_test(

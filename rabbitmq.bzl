@@ -1,4 +1,4 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
+load("//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc", "erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
 load("//deps/rabbitmq_cli:rabbitmqctl.bzl", "rabbitmqctl")
 load("//deps/rabbitmq_cli:rabbitmqctl_test.bzl", "rabbitmqctl_test")
@@ -56,12 +56,12 @@ def rabbitmq_lib(
     app_env="[]",
     extra_apps=[],
     extra_erlc_opts=[],
+    first_srcs=[],
     priv=[],
     deps=[],
     runtime_deps=[]):
 
-    app_file(
-        name = "app_file",
+    erlang_lib(
         app_name = app_name,
         app_version = app_version,
         app_description = app_description,
@@ -69,27 +69,48 @@ def rabbitmq_lib(
         app_registered = app_registered,
         app_env = app_env,
         extra_apps = extra_apps,
-        app_src = native.glob(["src/{}.app.src".format(app_name)]),
-        modules = [":beam_files"],
-        deps = deps + runtime_deps,
+        erlc_opts = RABBITMQ_ERLC_OPTS + extra_erlc_opts,
+        first_srcs = first_srcs,
+        priv = priv,
+        deps = deps,
+        runtime_deps = runtime_deps,
     )
 
+    test_erlc_opts = RABBITMQ_ERLC_OPTS + extra_erlc_opts + [
+        "-DTEST",
+        "+debug_info",
+    ]
+
+    all_test_beam = []
+
+    if len(first_srcs) > 0:
+        all_test_beam = [":first_test_beam_files"]
+        erlc(
+            name = "first_test_beam_files",
+            hdrs = native.glob(["include/*.hrl", "src/*.hrl"]),
+            srcs = native.glob(first_srcs),
+            erlc_opts = test_erlc_opts,
+            dest = "src",
+            deps = deps,
+        )
+
     erlc(
-        name = "beam_files",
+        name = "test_beam_files",
         hdrs = native.glob(["include/*.hrl", "src/*.hrl"]),
-        srcs = native.glob(["src/*.erl"]),
-        erlc_opts = RABBITMQ_ERLC_OPTS + extra_erlc_opts,
-        dest = "ebin",
+        srcs = native.glob(["src/*.erl"], exclude=first_srcs),
+        beam = all_test_beam,
+        erlc_opts = test_erlc_opts,
+        dest = "src",
         deps = deps,
     )
 
+    all_test_beam = all_test_beam + [":test_beam_files"]
+
     bazel_erlang_lib(
-        name = "bazel_erlang_lib",
+        name = "test_bazel_erlang_lib",
         app_name = app_name,
-        app_version = app_version,
+        app_version = APP_VERSION,
         hdrs = native.glob(["include/*.hrl"]),
         app = ":app_file",
-        beam = [":beam_files"],
-        priv = priv,
-        visibility = ["//visibility:public"],
+        beam = all_test_beam,
     )
