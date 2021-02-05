@@ -49,8 +49,6 @@ def _impl(ctx):
 
     {test_env}
 
-    /usr/local/bin/tree $PWD
-
     {erlang_home}/bin/ct_run \\
         -no_auto_compile \\
         -noinput \\
@@ -81,7 +79,6 @@ def _impl(ctx):
         runfiles = runfiles.merge(tool[DefaultInfo].default_runfiles)
 
     return [DefaultInfo(
-        # executable = script_file,
         runfiles = runfiles,
     )]
 
@@ -90,16 +87,9 @@ ct_test = rule(
     attrs = {
         "_erlang_home": attr.label(default = ":erlang_home"),
         "_erlang_version": attr.label(default = ":erlang_version"),
-        # "app_name": attr.string(mandatory=True),
-        # "app_version": attr.string(default="0.1.0"),
-        # "hdrs": attr.label_list(allow_files=[".hrl"]),
-        # "srcs": attr.label_list(allow_files=[".erl"]),
         "suites": attr.label_list(allow_files=[".beam"]),
-        # "priv": attr.label_list(allow_files = True), # This should be removed once compilation is pulled out of bazel_erlang_lib
         "deps": attr.label_list(providers=[ErlangLibInfo]),
-        # "runtime_deps": attr.label_list(providers=[ErlangLibInfo]),
         "tools": attr.label_list(),
-        # "erlc_opts": attr.string_list(),
         "test_env": attr.string_dict(),
     },
     test = True,
