@@ -143,6 +143,9 @@ def _erlc_impl(ctx):
         for dir in unique_dirnames(lib_info.beam):
             erl_args.add("-pa", dir)
 
+    for dir in unique_dirnames(ctx.files.beam):
+        erl_args.add("-pa", dir)
+
     erl_args.add("-o", dest_dir)
 
     erl_args.add_all(ctx.attr.erlc_opts)
@@ -180,6 +183,7 @@ def _erlc_impl(ctx):
         lib_info = dep[ErlangLibInfo]
         inputs.extend(lib_info.include)
         inputs.extend(lib_info.beam)
+    inputs.extend(ctx.files.beam)
 
     ctx.actions.run_shell(
         inputs = inputs,
@@ -200,7 +204,7 @@ erlc = rule(
         "_erlang_version": attr.label(default = ":erlang_version"),
         "hdrs": attr.label_list(allow_files=[".hrl"]),
         "srcs": attr.label_list(allow_files=[".erl"]),
-        # "beam": attr.label_list(allow_files=[".beam"]),
+        "beam": attr.label_list(allow_files=[".beam"]),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
         "erlc_opts": attr.string_list(),
         "dest": attr.string(
@@ -245,9 +249,35 @@ def erlang_lib(
     app_env="[]",
     extra_apps=[],
     erlc_opts=[],
+    first_srcs=[],
     priv=[],
     deps=[],
     runtime_deps=[]):
+
+    all_beam = []
+
+    if len(first_srcs) > 0:
+        all_beam = [":first_beam_files"]
+        erlc(
+            name = "first_beam_files",
+            hdrs = native.glob(["include/*.hrl", "src/*.hrl"]),
+            srcs = native.glob(first_srcs),
+            erlc_opts = erlc_opts,
+            dest = "ebin",
+            deps = deps,
+        )
+
+    erlc(
+        name = "beam_files",
+        hdrs = native.glob(["include/*.hrl", "src/*.hrl"]),
+        srcs = native.glob(["src/*.erl"], exclude=first_srcs),
+        beam = all_beam,
+        erlc_opts = erlc_opts,
+        dest = "ebin",
+        deps = deps,
+    )
+
+    all_beam = all_beam + [":beam_files"]
 
     app_file(
         name = "app_file",
@@ -259,17 +289,8 @@ def erlang_lib(
         app_env = app_env,
         extra_apps = extra_apps,
         app_src = native.glob(["src/{}.app.src".format(app_name)]),
-        modules = [":beam_files"],
+        modules = all_beam,
         deps = deps + runtime_deps,
-    )
-
-    erlc(
-        name = "beam_files",
-        hdrs = native.glob(["include/*.hrl", "src/*.hrl"]),
-        srcs = native.glob(["src/*.erl"]),
-        erlc_opts = erlc_opts,
-        dest = "ebin",
-        deps = deps,
     )
 
     bazel_erlang_lib(
@@ -278,7 +299,7 @@ def erlang_lib(
         app_version = app_version,
         hdrs = native.glob(["include/*.hrl"]),
         app = ":app_file",
-        beam = [":beam_files"],
+        beam = all_beam,
         priv = priv,
         visibility = ["//visibility:public"],
     )

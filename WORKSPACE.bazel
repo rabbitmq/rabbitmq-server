@@ -71,6 +71,7 @@ github_bazel_erlang_lib(
     version = "3.8.1",
     tag = "3.8.1",
     sha256 = "10da9c026c29b9d647353909a83b2ff769548de7308aa9e9138aa640527c83bc",
+    first_srcs = ["src/lager_rotator_behaviour.erl"],
 )
 
 github_bazel_erlang_lib(
