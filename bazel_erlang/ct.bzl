@@ -4,7 +4,8 @@ load(":bazel_erlang_lib.bzl", "ErlangLibInfo",
                               "unique_dirnames",
                               "beam_file",
                               "BEGINS_WITH_FUN",
-                              "QUERY_ERL_VERSION")
+                              "QUERY_ERL_VERSION",
+                              "erlc")
 
 def sanitize_sname(s):
     return s.replace("@", "-").replace(".", "_")
@@ -94,3 +95,28 @@ ct_test = rule(
     },
     test = True,
 )
+
+def ct_suite(
+    suite_name="",
+    deps=[],
+    runtime_deps=[],
+    tools=[],
+    test_env={},
+    **kwargs):
+
+    erlc(
+        name = "{}_beam_files".format(suite_name),
+        hdrs = native.glob(["include/*.hrl"]),
+        srcs = ["test/{}.erl".format(suite_name)],
+        dest = "test",
+        deps = [":test_bazel_erlang_lib"] + deps,
+    )
+
+    ct_test(
+        name = suite_name,
+        suites = [":{}_beam_files".format(suite_name)],
+        deps = [":test_bazel_erlang_lib"] + deps + runtime_deps,
+        tools = tools,
+        test_env = test_env,
+        **kwargs
+    )

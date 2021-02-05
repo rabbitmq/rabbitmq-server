@@ -96,12 +96,12 @@ new_git_repository(
     build_file = "@//:BUILD.osiris",
 )
 
-http_archive(
+github_bazel_erlang_lib(
     name = "proper",
-    urls = ["https://github.com/proper-testing/proper/archive/v1.3.zip"],
+    org = "proper-testing",
+    version = "1.3",
     sha256 = "b2fb969604ae71b0ea0ab7d8cedca78cef5f46181aba433c1ea493db0eaf81c6",
-    strip_prefix = "proper-1.3",
-    build_file = "@//:BUILD.proper",
+    first_srcs = ["src/vararg.erl"],
 )
 
 new_git_repository(
