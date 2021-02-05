@@ -12,7 +12,8 @@
          implicit_default_bindings_migration/3,
          virtual_host_metadata_migration/3,
          maintenance_mode_status_migration/3,
-         user_limits_migration/3]).
+         user_limits_migration/3,
+         runtime_parameters_acl_migration/3]).
 
 -rabbit_feature_flag(
    {quorum_queue,
@@ -58,6 +59,13 @@
      #{desc          => "Configure connection and channel limits for a user",
        stability     => stable,
        migration_fun => {?MODULE, user_limits_migration}
+     }}).
+
+-rabbit_feature_flag(
+    {runtime_parameters_acl,
+     #{desc          => "Support policies and parameters access control",
+       stability     => stable,
+       migration_fun => {?MODULE, runtime_parameters_acl_migration}
      }}).
 
 %% -------------------------------------------------------------------
@@ -177,3 +185,17 @@ user_limits_migration(_FeatureName, _FeatureProps, enable) ->
     end;
 user_limits_migration(_FeatureName, _FeatureProps, is_enabled) ->
     mnesia:table_info(rabbit_user, attributes) =:= internal_user:fields(internal_user_v2).
+
+%% -------------------------------------------------------------------
+%% Policies and parameters access control
+%% -------------------------------------------------------------------
+
+runtime_parameters_acl_migration(FeatureName, _FeatureProps, enable) ->
+    rabbit_log:info("Creating table ~s for feature flag ~s",
+        [rabbit_runtime_parameters_acl:table_name(), FeatureName]),
+    case rabbit_runtime_parameters_acl:create_table() of
+        ok      -> ok;
+        {error, _Reason} = Error -> Error
+    end;
+runtime_parameters_acl_migration(_FeatureName, _FeatureProps, is_enabled) ->
+    rabbit_table:exists(rabbit_runtime_parameters_acl).
