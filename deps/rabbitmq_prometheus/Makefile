@@ -123,7 +123,7 @@ docker-image-bump: ## diu | Bump Docker image version across all docker-compose-
 	@sed -i '' \
 	  -e 's|$(DOCKER_IMAGE_NAME):.*|$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION)|g' \
 	  -e 's|pivotalrabbitmq/perf-test:.*|pivotalrabbitmq/perf-test:2.11.0-ubuntu|g' \
-	  docker/docker-compose-{overview,dist-tls,qq}.yml
+	  docker/docker-compose-{overview,dist-tls,qq,dist-metrics}.yml
 .PHONY: diu
 diu: docker-image-bump
 
@@ -203,6 +203,12 @@ qq: ## q   | Make RabbitMQ-Quorum-Queues-Raft panels come alive - HIGH LOAD
 	@$(DOCKER_COMPOSE_UP)
 .PHONY: q
 q: qq
+
+.PHONY: dist-metrics
+dist-metrics: ## dm  | Make inet_tcp_metrics come alive
+	@$(DOCKER_COMPOSE_UP)
+.PHONY: dm
+dm: dist-metrics
 
 .PHONY: h
 h:
