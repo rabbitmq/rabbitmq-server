@@ -122,6 +122,22 @@ If a symmetric key is used, the configuration will look like this:
 ].
 ```
 
+The key set can also be retrieved dynamically from a URL serving a [JWK Set](https://tools.ietf.org/html/rfc7517#section-5).
+In that case, the configuration will look like this:
+
+```erlang
+[
+  {rabbitmq_auth_backend_oauth2, [
+    {resource_server_id, <<"my_rabbit_server">>},
+    {key_config, [
+      {jwks_url, "https://my-jwt-issuer/jwks.json"}
+    ]}
+  ]},
+].
+```
+
+NOTE: `jwks_url` takes precedence over `signing_keys` if both are provided.
+
 ### Resource Server ID and Scope Prefixes
 
 OAuth 2.0 (and thus UAA-provided) tokens use scopes to communicate what set of permissions particular
