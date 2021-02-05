@@ -106,7 +106,7 @@ github_bazel_erlang_lib(
 
 new_git_repository(
     name = "rabbitmq_ct_helpers",
-    branch = "master",
+    branch = "bazel",
     remote = "https://github.com/rabbitmq/rabbitmq-ct-helpers.git",
     build_file = "@//:BUILD.rabbitmq_ct_helpers",
 )
