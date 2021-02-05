@@ -6,176 +6,24 @@ load(":bazel_erlang_lib.bzl", "ErlangLibInfo",
                               "BEGINS_WITH_FUN",
                               "QUERY_ERL_VERSION")
 
-def lib_dir(dep):
-    c = []
-    c.append(dep.label.workspace_root) if dep.label.workspace_root != "" else None
-    c.append(dep[ErlangLibInfo].lib_dir.short_path)
-    return path_join(*c)
-
 def sanitize_sname(s):
     return s.replace("@", "-").replace(".", "_")
 
 def short_dirname(f):
-    parts = f.short_path.partition("/")
-    return path_join(*(parts[0:-2]))
+    return f.short_path.rpartition("/")[0]
 
-def _compile_srcs(ctx):
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
-
-    # Note: the sources must be placed in the src dir, so as not to conflict
-    #       with the files compiled without test compiler options
-    beam_files = [beam_file(ctx, src, "src") for src in ctx.files.srcs]
-
-    ebin_dir = beam_files[0].dirname
-
-    erl_args = ctx.actions.args()
-    erl_args.add("-v")
-
-    for dir in unique_dirnames(ctx.files.hdrs):
-        erl_args.add("-I", dir)
-
-    for dep in ctx.attr.deps:
-        lib_info = dep[ErlangLibInfo]
-        if lib_info.erlang_version != erlang_version:
-            fail("Mismatched erlang versions", erlang_version, lib_info.erlang_version)
-        for dir in unique_dirnames(lib_info.include):
-            erl_args.add("-I", path_join(dir, "../.."))
-        for dir in unique_dirnames(lib_info.beam):
-            erl_args.add("-pa", dir)
-
-    erl_args.add("-o", ebin_dir)
-
-    erl_args.add("-DTEST")
-    erl_args.add("+debug_info")
-    erl_args.add_all(ctx.attr.erlc_opts)
-
-    erl_args.add_all(ctx.files.srcs)
-
-    script = """
-        set -euo pipefail
-
-        # /usr/local/bin/tree $PWD
-
-        mkdir -p {ebin_dir}
-        export HOME=$PWD
-
-        {begins_with_fun}
-        V=$({erlang_home}/bin/{query_erlang_version})
-        if ! beginswith "{erlang_version}" "$V"; then
-            echo "Erlang version mismatch (Expected {erlang_version}, found $V)"
-            exit 1
-        fi
-
-        {erlang_home}/bin/erlc $@
-    """.format(
-        ebin_dir=ebin_dir,
-        begins_with_fun=BEGINS_WITH_FUN,
-        query_erlang_version=QUERY_ERL_VERSION,
-        erlang_version=erlang_version,
-        erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
-    )
-
-    inputs = []
-    inputs.extend(ctx.files.hdrs)
-    inputs.extend(ctx.files.srcs)
-    for dep in ctx.attr.deps:
-        lib_info = dep[ErlangLibInfo]
-        inputs.extend(lib_info.include)
-        inputs.extend(lib_info.beam)
-
-    ctx.actions.run_shell(
-        inputs = inputs,
-        outputs = beam_files,
-        command = script,
-        arguments = [erl_args],
-        env = {
-            # "ERLANG_VERSION": ctx.attr.erlang_version,
-        },
-        mnemonic = "ERLC",
-    )
-
-    return beam_files
-
-def _compile_suites(ctx, srcs_beam_files):
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
-
-    beam_files = [beam_file(ctx, src, "test") for src in ctx.files.suites]
-
-    test_dir = beam_files[0].dirname
-
-    erl_args = ctx.actions.args()
-    erl_args.add("-v")
-
-    for dir in unique_dirnames(ctx.files.hdrs):
-        erl_args.add("-I", dir)
-
-    for dep in ctx.attr.deps:
-        lib_info = dep[ErlangLibInfo]
-        if lib_info.erlang_version != erlang_version:
-            fail("Mismatched erlang versions", erlang_version, lib_info.erlang_version)
-        for dir in unique_dirnames(lib_info.include):
-            erl_args.add("-I", path_join(dir, "../.."))
-        for dir in unique_dirnames(lib_info.beam):
-            erl_args.add("-pa", dir)
-
-    for dir in unique_dirnames(srcs_beam_files):
-        erl_args.add("-pa", dir)
-
-    erl_args.add("-o", test_dir)
-
-    erl_args.add("-DTEST")
-    erl_args.add("+debug_info")
-    erl_args.add_all(ctx.attr.erlc_opts)
-
-    erl_args.add_all(ctx.files.suites)
-
-    script = """
-        set -euo pipefail
-
-        # /usr/local/bin/tree $PWD
-
-        mkdir -p {test_dir}
-        export HOME=$PWD
-
-        {begins_with_fun}
-        V=$({erlang_home}/bin/{query_erlang_version})
-        if ! beginswith "{erlang_version}" "$V"; then
-            echo "Erlang version mismatch (Expected {erlang_version}, found $V)"
-            exit 1
-        fi
-
-        {erlang_home}/bin/erlc $@
-    """.format(
-        test_dir=test_dir,
-        begins_with_fun=BEGINS_WITH_FUN,
-        query_erlang_version=QUERY_ERL_VERSION,
-        erlang_version=erlang_version,
-        erlang_home=ctx.attr._erlang_home[ErlangHomeProvider].path,
-    )
-
-    inputs = []
-    inputs.extend(ctx.files.hdrs)
-    inputs.extend(ctx.files.suites)
-    for dep in ctx.attr.deps:
-        lib_info = dep[ErlangLibInfo]
-        inputs.extend(lib_info.include)
-        inputs.extend(lib_info.beam)
-
-    ctx.actions.run_shell(
-        inputs = inputs,
-        outputs = beam_files,
-        command = script,
-        arguments = [erl_args],
-        env = {
-            # "ERLANG_VERSION": ctx.attr.erlang_version,
-        },
-        mnemonic = "ERLC",
-    )
-
-    return beam_files
+def unique_short_dirnames(files):
+    dirs = []
+    for f in files:
+        dirname = short_dirname(f)
+        if dirname not in dirs:
+            dirs.append(dirname)
+    return dirs
 
 def _impl(ctx):
-    paths = [short_dirname(dep[ErlangLibInfo].beam[0]) for dep in ctx.attr.deps]
+    paths = []
+    for dep in ctx.attr.deps:
+        paths.extend(unique_short_dirnames(dep[ErlangLibInfo].beam))
 
     pa_args = " ".join(["-pa {}".format(p) for p in paths])
 
@@ -188,7 +36,7 @@ def _impl(ctx):
         ctx.label.name,
     ))
 
-    script = """set -euo pipefail
+    script = """set -euxo pipefail
 
     export HOME=${{TEST_TMPDIR}}
 
@@ -201,7 +49,7 @@ def _impl(ctx):
 
     {test_env}
 
-    # /usr/local/bin/tree $PWD
+    /usr/local/bin/tree $PWD
 
     {erlang_home}/bin/ct_run \\
         -no_auto_compile \\

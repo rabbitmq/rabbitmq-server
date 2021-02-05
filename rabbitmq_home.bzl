@@ -1,5 +1,4 @@
 load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
-load("//bazel_erlang:ct.bzl", "lib_dir")
 
 RabbitmqHomeInfo = provider(
     doc = "An assembled RABBITMQ_HOME dir",
@@ -32,18 +31,46 @@ def _link_escript(ctx, escript):
     )
     return s
 
-def _plugins_dir_link(ctx, plugin):
+def _plugins_dir_links(ctx, plugin):
     lib_info = plugin[ErlangLibInfo]
-    output = ctx.actions.declare_file(
+    output = ctx.actions.declare_directory(
         path_join(
             ctx.label.name,
             "plugins",
             "{}-{}".format(lib_info.lib_name, lib_info.lib_version),
         )
     )
-    ctx.actions.symlink(
-        output = output,
-        target_file = lib_info.lib_dir,
+
+    link_commands = []
+    for f in lib_info.include:
+        link_commands.append("ln -s ${{PWD}}/{source} {target}".format(
+            source = f.path,
+            target = path_join(output.path, "include", f.basename)
+        ))
+    for f in lib_info.beam:
+        link_commands.append("ln -s ${{PWD}}/{source} {target}".format(
+            source = f.path,
+            target = path_join(output.path, "ebin", f.basename)
+        ))
+    for f in lib_info.priv:
+        p = f.short_path.replace(plugin.label.package + "/", "")
+        target = path_join(output.path, p)
+        link_commands.append("mkdir -p $(dirname {})".format(target))
+        link_commands.append("ln -s ${{PWD}}/{source} {target}".format(
+            source = f.path,
+            target = target,
+        ))
+
+    ctx.actions.run_shell(
+        inputs = lib_info.include + lib_info.beam + lib_info.priv,
+        outputs = [output],
+        command = """set -euo pipefail
+        mkdir -p {lib_dir}
+        mkdir -p {lib_dir}/include
+        mkdir -p {lib_dir}/ebin
+        mkdir -p {lib_dir}/priv
+        {link_commands}
+        """.format(lib_dir=output.path, link_commands=" \\\n    && ".join(link_commands)),
     )
     return output
 
@@ -64,7 +91,7 @@ def _impl(ctx):
 
     escripts = [_link_escript(ctx, escript) for escript in ctx.attr.escripts]
 
-    plugins = [_plugins_dir_link(ctx, plugin) for plugin in ctx.attr.plugins]
+    plugins = [_plugins_dir_links(ctx, plugin) for plugin in ctx.attr.plugins]
 
     return [
         RabbitmqHomeInfo(
@@ -90,7 +117,7 @@ rabbitmq_home = rule(
             ],
             allow_files = True,
         ),
-        "erlang_version": attr.string(mandatory = True),
+        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
         "escripts": attr.label_list(),
         # Maybe we should not have to declare the deps here that rabbit/rabbit_common declare
         "plugins": attr.label_list(),

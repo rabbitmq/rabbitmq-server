@@ -1,38 +1,15 @@
 load("@//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 
-# ranch is a special case where the archive includes a built ebin/ranch.app
-# bazel_erlang_lib doesn't yet support that, so we just provide the values
-# here that will let it generate the equivalent (though it is a fragile
-# approach)
-app_file(
-    name = "app_file",
-    app_name = "ranch",
-    app_version = "1.7.1",
-    app_description = "Socket acceptor pool for TCP protocols.",
-    app_module = "ranch_app",
-    app_registered = [
-        "ranch_sup",
-        "ranch_server",
-    ],
-    extra_apps = [
-        "kernel",
-        "stdlib",
-        "ssl",
-    ],
-    modules = [":beam_files"],
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
-)
+DEPS = [
+    "@lager//:bazel_erlang_lib",
+]
 
 erlc(
     name = "beam_files",
     hdrs = glob(["include/*.hrl", "src/*.hrl"]),
     srcs = glob(["src/*.erl"]),
     dest = "ebin",
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
+    deps = DEPS,
 )
 
 bazel_erlang_lib(
@@ -40,7 +17,7 @@ bazel_erlang_lib(
     app_name = "ranch",
     app_version = "1.7.1",
     hdrs = glob(["include/*.hrl"]),
-    app = ":app_file",
+    app = ":ebin/ranch.app",
     beam = [":beam_files"],
     visibility = ["//visibility:public"],
 )

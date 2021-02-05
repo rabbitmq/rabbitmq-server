@@ -1,20 +1,12 @@
-load("@//:rabbitmq.bzl", "erlang_libs")
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "erlang_lib")
 
-erlang_libs(
+DEPS = [
+    "@cowlib//:bazel_erlang_lib",
+    "@ranch//:bazel_erlang_lib",
+]
+
+erlang_lib(
     app_name = "cowboy",
     app_version = "2.8.0",
-    app_description = "Small, fast, modern HTTP server.",
-    app_registered = [
-        "cowboy_clock",
-    ],
-    extra_apps = [
-        "crypto",
-    ],
-    hdrs = glob(["include/*.hrl", "src/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
-    deps = [
-        "@cowlib//:cowlib",
-        "@ranch//:ranch",
-    ],
-    visibility = ["//visibility:public"],
+    deps = DEPS,
 )

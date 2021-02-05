@@ -1,28 +1,28 @@
+load("//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "rabbitmq_lib")
 
 APP_ENV = """[
 	    {pgroup_name_cluster_id, false},
 	    {internal_exchange_check_interval, 90000}
 	  ]"""
 
-erlang_libs(
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/amqp_client:bazel_erlang_lib",
+    "@lager//:bazel_erlang_lib",
+    # "@cowboy//:cowboy",
+    # "@cowlib//:cowlib",
+    # "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch",
+    # "//deps/rabbitmq_management_agent:rabbitmq_management_agent",
+]
+
+rabbitmq_lib(
     app_name = "rabbitmq_federation",
     app_description = "RabbitMQ Federation",
     app_version = APP_VERSION,
     app_module = "rabbit_federation_app",
     app_env = APP_ENV,
-    hdrs = glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
-    priv = glob(["priv/**/*"]),
-    deps = [
-        "//deps/rabbit_common:rabbit_common",
-        "//deps/rabbit:rabbit",
-        "//deps/amqp_client:amqp_client",
-        # "@cowboy//:cowboy",
-        # "@cowlib//:cowlib",
-        # "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch",
-        # "//deps/rabbitmq_management_agent:rabbitmq_management_agent",
-    ],
-    visibility = ["//visibility:public"],
+    deps = DEPS,
 )

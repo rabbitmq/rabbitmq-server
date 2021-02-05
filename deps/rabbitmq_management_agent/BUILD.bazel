@@ -1,5 +1,5 @@
 load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs")
+load("//:rabbitmq.bzl", "rabbitmq_lib")
 
 APP_ENV = """[
 	    {rates_mode,        basic},
@@ -10,10 +10,9 @@ APP_ENV = """[
 	      {detailed, [{605, 5}]}]}
 	  ]"""
 
-erlang_libs(
+rabbitmq_lib(
     app_name = "rabbitmq_management_agent",
     app_description = "RabbitMQ Management Agent",
-    app_version = APP_VERSION,
     app_module = "rabbit_mgmt_agent_app",
     app_env = APP_ENV,
     extra_apps = [
@@ -24,14 +23,10 @@ erlang_libs(
         "crypto",
         "public_key",
     ],
-    hdrs = glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
     priv = glob(["priv/**/*"]),
-    erlc_opts = RABBITMQ_ERLC_OPTS,
     deps = [
-        "//deps/rabbit_common:rabbit_common",
-        "//deps/rabbit:rabbit",
-        "@lager//:lager", # again this should probably come via rabbit_common
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib", # again this should probably come via rabbit_common
     ],
-    visibility = ["//visibility:public"],
 )

@@ -1,4 +1,4 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 load("//bazel_erlang:ct.bzl", "ct_test")
 load("//deps/rabbitmq_cli:rabbitmqctl.bzl", "rabbitmqctl")
 load("//deps/rabbitmq_cli:rabbitmqctl_test.bzl", "rabbitmqctl_test")
@@ -26,79 +26,70 @@ RABBITMQ_ERLC_OPTS = [
 
 APP_VERSION = "3.9.0"
 
-ERLANG_VERSIONS = [
-    "23.1",
-    "22.3",
+REQUIRED_PLUGINS = [
+    "@cuttlefish//:bazel_erlang_lib",
+    "@ranch//:bazel_erlang_lib",
+    "@lager//:bazel_erlang_lib",
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "@ra//:bazel_erlang_lib",
+    "@sysmon-handler//:bazel_erlang_lib",
+    "@stdout_formatter//:bazel_erlang_lib",
+    "@recon//:bazel_erlang_lib",
+    "@observer_cli//:bazel_erlang_lib",
+    "@osiris//:bazel_erlang_lib",
+    "//deps/amqp10_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
+    "@goldrush//:bazel_erlang_lib",
+    "@jsx//:bazel_erlang_lib",
+    "@credentials-obfuscation//:bazel_erlang_lib",
+    "@aten//:bazel_erlang_lib",
+    "@gen-batch-server//:bazel_erlang_lib",
 ]
 
-_REQUIRED_PLUGINS = [
-    "@cuttlefish//:cuttlefish",
-    "@ranch//:ranch",
-    "@lager//:lager",
-    "//deps/rabbit_common:rabbit_common",
-    "@ra//:ra",
-    "@sysmon-handler//:sysmon_handler",
-    "@stdout_formatter//:stdout_formatter",
-    "@recon//:recon",
-    "@observer_cli//:observer_cli",
-    "@osiris//:osiris",
-    "//deps/amqp10_common:amqp10_common",
-    "//deps/rabbit:rabbit",
-    "//deps/rabbit/apps/rabbitmq_prelaunch:rabbitmq_prelaunch",
-    "@goldrush//:goldrush",
-    "@jsx//:jsx",
-    "@credentials-obfuscation//:credentials_obfuscation",
-    "@aten//:aten",
-    "@gen-batch-server//:gen_batch_server",
-]
+def rabbitmq_lib(
+    app_name="",
+    app_version=APP_VERSION,
+    app_description="",
+    app_module="",
+    app_registered=[],
+    app_env="[]",
+    extra_apps=[],
+    extra_erlc_opts=[],
+    priv=[],
+    deps=[],
+    runtime_deps=[]):
 
-def required_plugins(erlang_version):
-    return [Label("{}@{}".format(p, erlang_version)) for p in _REQUIRED_PLUGINS]
+    app_file(
+        name = "app_file",
+        app_name = app_name,
+        app_version = app_version,
+        app_description = app_description,
+        app_module = app_module,
+        app_registered = app_registered,
+        app_env = app_env,
+        extra_apps = extra_apps,
+        app_src = native.glob(["src/{}.app.src".format(app_name)]),
+        modules = [":beam_files"],
+        deps = deps + runtime_deps,
+    )
 
-def erlang_libs(**kwargs):
-    app_name = kwargs['app_name']
-    deps = kwargs.get('deps', [])
-    runtime_deps = kwargs.get('runtime_deps', [])
-    for erlang_version in ERLANG_VERSIONS:
-        kwargs2 = dict(kwargs.items())
-        kwargs2.update(
-            deps = [dep + "@" + erlang_version for dep in deps],
-            runtime_deps = [dep + "@" + erlang_version for dep in runtime_deps],
-        )
-        bazel_erlang_lib(
-            name = "{}@{}".format(app_name, erlang_version),
-            erlang_version = erlang_version,
-            **kwargs2
-        )
-        kwargs3 = dict(kwargs2.items())
-        erlc_opts = kwargs3.get('erlc_opts', [])
-        if "-DTEST" not in erlc_opts:
-            erlc_opts = erlc_opts + ["-DTEST"]
-        if "+debug_info" not in erlc_opts:
-            erlc_opts = erlc_opts + ["+debug_info"]
-        kwargs3.update(erlc_opts = erlc_opts)
-        bazel_erlang_lib(
-            name = "{}_test@{}".format(app_name, erlang_version),
-            erlang_version = erlang_version,
-            testonly = True,
-            **kwargs3
-        )
+    erlc(
+        name = "beam_files",
+        hdrs = native.glob(["include/*.hrl", "src/*.hrl"]),
+        srcs = native.glob(["src/*.erl"]),
+        erlc_opts = RABBITMQ_ERLC_OPTS + extra_erlc_opts,
+        dest = "ebin",
+        deps = deps,
+    )
 
-_VERSIONLESS_TOOLS = ["//:fake"]
-
-def ct_tests(**kwargs):
-    name = kwargs['name']
-    deps = kwargs.get('deps', [])
-    tools = kwargs.get('tools', [])
-    for erlang_version in ERLANG_VERSIONS:
-        kwargs2 = dict(kwargs.items())
-        kwargs2.update(
-            name = "{}@{}".format(name, erlang_version),
-            deps = [dep + "@" + erlang_version for dep in deps],
-            tools = [tool + "@" + erlang_version if not tool in _VERSIONLESS_TOOLS else tool for tool in tools],
-        )
-        ct_test(
-            erlang_version = erlang_version,
-            tags = ["erlang-{}".format(erlang_version)],
-            **kwargs2
-        )
+    bazel_erlang_lib(
+        name = "bazel_erlang_lib",
+        app_name = app_name,
+        app_version = app_version,
+        hdrs = native.glob(["include/*.hrl"]),
+        app = ":app_file",
+        beam = [":beam_files"],
+        priv = priv,
+        visibility = ["//visibility:public"],
+    )

@@ -1,10 +1,13 @@
+load("//bazel_erlang:erlang_home.bzl", "ErlangVersionProvider")
 load(":rabbitmq_home.bzl", "RabbitmqHomeInfo")
 
 def _impl(ctx):
+    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
+
     rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
 
-    if rabbitmq_home.erlang_version != ctx.attr.erlang_version:
-        fail("Mismatched erlang versions", ctx.attr.erlang_version, rabbitmq_home.erlang_version)
+    if rabbitmq_home.erlang_version != erlang_version:
+        fail("Mismatched erlang versions", erlang_version, rabbitmq_home.erlang_version)
 
     script = """
     exec ./{}/sbin/rabbitmqctl $@
@@ -22,7 +25,7 @@ def _impl(ctx):
 rabbitmqctl = rule(
     implementation = _impl,
     attrs = {
-        "erlang_version": attr.string(mandatory = True),
+        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
         "home": attr.label(providers=[RabbitmqHomeInfo]),
     },
     executable = True,

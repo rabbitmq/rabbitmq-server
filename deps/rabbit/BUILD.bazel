@@ -186,6 +186,7 @@ bazel_erlang_lib(
     app_name = "rabbit",
     app_version = "3.9.0",
     hdrs = glob(["include/*.hrl"]),
+    app = ":app_file",
     beam = [":beam_files"],
     priv = glob(["priv/schema/rabbit.schema"]),
     visibility = ["//visibility:public"],

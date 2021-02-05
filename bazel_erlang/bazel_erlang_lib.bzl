@@ -235,3 +235,50 @@ bazel_erlang_lib = rule(
         "priv": attr.label_list(allow_files=True),
     },
 )
+
+def erlang_lib(
+    app_name="",
+    app_version="",
+    app_description="",
+    app_module="",
+    app_registered=[],
+    app_env="[]",
+    extra_apps=[],
+    erlc_opts=[],
+    priv=[],
+    deps=[],
+    runtime_deps=[]):
+
+    app_file(
+        name = "app_file",
+        app_name = app_name,
+        app_version = app_version,
+        app_description = app_description,
+        app_module = app_module,
+        app_registered = app_registered,
+        app_env = app_env,
+        extra_apps = extra_apps,
+        app_src = native.glob(["src/{}.app.src".format(app_name)]),
+        modules = [":beam_files"],
+        deps = deps + runtime_deps,
+    )
+
+    erlc(
+        name = "beam_files",
+        hdrs = native.glob(["include/*.hrl", "src/*.hrl"]),
+        srcs = native.glob(["src/*.erl"]),
+        erlc_opts = erlc_opts,
+        dest = "ebin",
+        deps = deps,
+    )
+
+    bazel_erlang_lib(
+        name = "bazel_erlang_lib",
+        app_name = app_name,
+        app_version = app_version,
+        hdrs = native.glob(["include/*.hrl"]),
+        app = ":app_file",
+        beam = [":beam_files"],
+        priv = priv,
+        visibility = ["//visibility:public"],
+    )

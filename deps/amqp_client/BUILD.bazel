@@ -1,6 +1,6 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
+load("//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib", "erlc", "erlang_lib")
 load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "APP_VERSION")
+load("//:rabbitmq.bzl", "APP_VERSION", "rabbitmq_lib")
 
 APP_ENV = """[
 	    {prefer_ipv6, false},
@@ -12,10 +12,8 @@ DEPS = [
     "//deps/rabbit_common:bazel_erlang_lib",
 ]
 
-app_file(
-    name = "app_file",
+erlang_lib(
     app_name = "amqp_client",
-    app_version = APP_VERSION,
     app_description = "RabbitMQ AMQP Client",
     app_module = "amqp_client",
     app_registered = [
@@ -25,29 +23,7 @@ app_file(
     extra_apps = [
         "xmerl",
     ],
-    modules = [":beam_files"],
     deps = DEPS,
-    # visibility = ["//visibility:public"],
-)
-
-erlc(
-    name = "beam_files",
-    hdrs = glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
-    # erlc_opts = RABBITMQ_ERLC_OPTS,
-    dest = "ebin",
-    deps = DEPS,
-    # visibility = ["//visibility:public"],
-)
-
-bazel_erlang_lib(
-    name = "bazel_erlang_lib",
-    app_name = "amqp_client",
-    app_version = APP_VERSION,
-    hdrs = glob(["include/*.hrl"]),
-    app = ":app_file",
-    beam = [":beam_files"],
-    visibility = ["//visibility:public"],
 )
 
 erlc(
@@ -60,7 +36,6 @@ erlc(
     ],
     dest = "src",
     deps = DEPS,
-    # visibility = ["//visibility:public"],
 )
 
 bazel_erlang_lib(

@@ -1,19 +1,33 @@
-load("@//bazel_erlang:bazel_erlang_lib.bzl", "bazel_erlang_lib")
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 
-bazel_erlang_lib(
-    name = "erl_first_files",
+app_file(
+    name = "app_file",
     app_name = "proper",
     app_version = "1.3",
+    app_src = ["src/proper.app.src"],
+    modules = [":first_beam_files", ":beam_files"],
+)
+
+erlc(
+    name = "first_beam_files",
+    hdrs = glob(["include/*.hrl"]),
     srcs = glob(["src/vararg.erl"]),
-    hdrs = glob(["include/proper_internal.hrl", "include/proper_common.hrl"]),
+    dest = "ebin",
+)
+
+erlc(
+    name = "beam_files",
+    hdrs = glob(["include/*.hrl"]),
+    srcs = glob(["src/*.erl"], exclude = ["src/vararg.erl"]),
+    dest = "ebin",
 )
 
 bazel_erlang_lib(
-    name = "proper",
+    name = "bazel_erlang_lib",
     app_name = "proper",
     app_version = "1.3",
     hdrs = glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"], exclude = ["src/vararg.erl"]),
-    deps = [":erl_first_files"],
+    app = ":app_file",
+    beam = [":first_beam_files", ":beam_files"],
     visibility = ["//visibility:public"],
 )

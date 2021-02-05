@@ -1,22 +1,17 @@
 load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "rabbitmq_lib")
 
-erlang_libs(
+rabbitmq_lib(
     app_name = "rabbitmq_web_dispatch",
     app_description = "RabbitMQ Web Dispatcher",
-    app_version = APP_VERSION,
     app_module = "rabbit_web_dispatch_app",
     extra_apps = [
         "inets",
     ],
-    hdrs = glob(["include/*.hrl", "src/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
-    erlc_opts = RABBITMQ_ERLC_OPTS,
     deps = [
-        "//deps/rabbit_common:rabbit_common",
-        "//deps/rabbit:rabbit",
-        "@cowboy//:cowboy",
-        "@lager//:lager", # again this should probably come via rabbit_common
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
+        "@cowboy//:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib", # again this should probably come via rabbit_common
     ],
-    visibility = ["//visibility:public"],
 )

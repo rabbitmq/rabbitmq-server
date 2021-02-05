@@ -1,5 +1,5 @@
 load("//bazel_erlang:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "erlang_libs")
+load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "rabbitmq_lib")
 
 APP_ENV = """[
 	    {http_log_dir,      none},
@@ -13,10 +13,9 @@ APP_ENV = """[
 	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
 	  ]"""
 
-erlang_libs(
+rabbitmq_lib(
     app_name = "rabbitmq_management",
     app_description = "RabbitMQ Management Console",
-    app_version = APP_VERSION,
     app_module = "rabbit_mgmt_app",
     app_env = APP_ENV,
     extra_apps = [
@@ -26,19 +25,15 @@ erlang_libs(
         "crypto",
         "public_key",
     ],
-    hdrs = glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
     priv = glob(["priv/**/*"]),
-    erlc_opts = RABBITMQ_ERLC_OPTS,
     deps = [
-        "//deps/rabbit_common:rabbit_common",
-        "//deps/rabbit:rabbit",
-        "//deps/amqp_client:amqp_client",
-        "@cowboy//:cowboy",
-        "@cowlib//:cowlib",
-        "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch",
-        "//deps/rabbitmq_management_agent:rabbitmq_management_agent",
-        "@lager//:lager", # again this should probably come via rabbit_common
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/amqp_client:bazel_erlang_lib",
+        "@cowboy//:bazel_erlang_lib",
+        "@cowlib//:bazel_erlang_lib",
+        "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
+        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib", # again this should probably come via rabbit_common
     ],
-    visibility = ["//visibility:public"],
 )

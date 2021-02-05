@@ -1,13 +1,10 @@
-load("@//:rabbitmq.bzl", "erlang_libs")
+load("@//bazel_erlang:bazel_erlang_lib.bzl", "erlang_lib")
 
-erlang_libs(
+erlang_lib(
     app_name = "rabbitmq_ct_helpers",
     app_version = "master",
-    hdrs = glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
     deps = [
         "@//deps/rabbit_common:rabbit_common",
         "@proper//:proper",
     ],
-    visibility = ["//visibility:public"],
 )

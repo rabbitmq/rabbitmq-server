@@ -3,59 +3,28 @@ load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
-    name = "rabbitmqctl@22.3",
+    name = "rabbitmqctl",
     srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex"]),
     deps = [
-        "//deps/rabbit_common:rabbit_common@22.3",
-        "@goldrush//:goldrush@22.3",
-        "@lager//:lager@22.3",
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
-    erlang_version = "22.3",
     visibility = ["//visibility:public"],
 )
 
-rabbitmqctl(
-    name = "rabbitmqctl@23.1",
-    srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex"]),
-    deps = [
-        "//deps/rabbit_common:rabbit_common@23.1",
-        "@goldrush//:goldrush@23.1",
-        "@lager//:lager@23.1",
-    ],
-    erlang_version = "23.1",
-    visibility = ["//visibility:public"],
-)
 
 rabbitmqctl_test(
-    name = "rabbitmqctl_tests@22.3",
+    name = "rabbitmqctl_tests",
     srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex", "test/**/*.exs"]),
     data = glob(["test/fixtures/**/*"]),
     deps = [
-        "//deps/rabbit_common:rabbit_common@22.3",
-        "@goldrush//:goldrush@22.3",
-        "@lager//:lager@22.3",
-        "//deps/amqp_client:amqp_client@22.3",
-        "//deps/rabbit:rabbit@22.3",
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
     ],
-    erlang_version = "22.3",
-    rabbitmq_run = "//:rabbitmq-for-cli-tests-run@22.3",
-    tags = ["erlang-22.3"],
-    size = "large",
-)
-
-rabbitmqctl_test(
-    name = "rabbitmqctl_tests@23.1",
-    srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex", "test/**/*.exs"]),
-    data = glob(["test/fixtures/**/*"]),
-    deps = [
-        "//deps/rabbit_common:rabbit_common@23.1",
-        "@goldrush//:goldrush@23.1",
-        "@lager//:lager@23.1",
-        "//deps/amqp_client:amqp_client@23.1",
-        "//deps/rabbit:rabbit@23.1",
-    ],
-    erlang_version = "23.1",
-    rabbitmq_run = "//:rabbitmq-for-cli-tests-run@23.1",
-    tags = ["erlang-23.1"],
+    rabbitmq_run = "//:rabbitmq-for-cli-tests-run",
     size = "large",
 )

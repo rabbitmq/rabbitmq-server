@@ -1,4 +1,4 @@
-load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider")
+load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
 load("//bazel_erlang:bazel_erlang_lib.bzl", "path_join")
 load("//bazel_erlang:ct.bzl", "sanitize_sname")
 load(":rabbitmq_home.bzl", "RabbitmqHomeInfo")
@@ -10,10 +10,11 @@ load(":rabbitmq_home.bzl", "RabbitmqHomeInfo")
 #       "sbin/rabbitmq-server" when our script runs.
 
 def _impl(ctx):
+    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
     rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
 
-    if rabbitmq_home.erlang_version != ctx.attr.erlang_version:
-        fail("Mismatched erlang versions", ctx.attr.erlang_version, rabbitmq_home.erlang_version)
+    if rabbitmq_home.erlang_version != erlang_version:
+        fail("Mismatched erlang versions", erlang_version, rabbitmq_home.erlang_version)
 
     erl_libs = ":".join(
         [p.short_path for p in rabbitmq_home.plugins]
@@ -43,7 +44,7 @@ rabbitmq_run = rule(
             allow_single_file = True,
         ),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
-        "erlang_version": attr.string(mandatory = True),
+        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
         "home": attr.label(providers=[RabbitmqHomeInfo]),
     },
     executable = True,

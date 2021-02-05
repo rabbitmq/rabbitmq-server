@@ -1,11 +1,11 @@
-load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider")
+load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
 load("//bazel_erlang:elixir_home.bzl", "ElixirHomeProvider")
 load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "BEGINS_WITH_FUN", "QUERY_ERL_VERSION", "path_join")
 
 MIX_DEPS_DIR = "mix_deps"
 
 def _impl(ctx):
-    erlang_version = ctx.attr.erlang_version
+    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
     erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
 
@@ -17,29 +17,45 @@ def _impl(ctx):
     )
     escript = ctx.actions.declare_file(
         path_join(
-            ctx.label.name,
             "escript",
             "rabbitmqctl",
         )
     )
 
-    # when linked instead of copied, we encounter a bazel error such as
-    # "A TreeArtifact may not contain relative symlinks whose target paths traverse outside of the TreeArtifact"
-    copy_compiled_deps_commands = []
-    copy_compiled_deps_commands.append("mkdir {}/{}".format(mix_invocation_dir.path, MIX_DEPS_DIR))
+    link_compiled_deps_commands = []
+    link_compiled_deps_commands.append("mkdir {}/{}".format(mix_invocation_dir.path, MIX_DEPS_DIR))
     for dep in ctx.attr.deps:
-        info = dep[ErlangLibInfo]
-        if info.erlang_version != ctx.attr.erlang_version:
-            fail("Mismatched erlang versions", ctx.attr.erlang_version, info.erlang_version)
-        copy_compiled_deps_commands.append(
-            "cp -R ${{PWD}}/{source} {target}".format(
-                source = info.lib_dir.path,
-                target = path_join(mix_invocation_dir.path, MIX_DEPS_DIR, info.lib_name)
-            )
+        lib_info = dep[ErlangLibInfo]
+        if lib_info.erlang_version != erlang_version:
+            fail("Mismatched erlang versions", erlang_version, lib_info.erlang_version)
+
+        dest_dir = path_join(mix_invocation_dir.path, MIX_DEPS_DIR, lib_info.lib_name)
+        link_compiled_deps_commands.append(
+            "mkdir {}".format(dest_dir)
         )
+        link_compiled_deps_commands.append(
+            "mkdir {}".format(path_join(dest_dir, "include"))
+        )
+        link_compiled_deps_commands.append(
+            "mkdir {}".format(path_join(dest_dir, "ebin"))
+        )
+        for hdr in lib_info.include:
+            link_compiled_deps_commands.append(
+                "ln -s ${{PWD}}/{source} {target}".format(
+                    source = hdr.path,
+                    target = path_join(dest_dir, "include", hdr.basename)
+                )
+            )
+        for beam in lib_info.beam:
+            link_compiled_deps_commands.append(
+                "ln -s ${{PWD}}/{source} {target}".format(
+                    source = beam.path,
+                    target = path_join(dest_dir, "ebin", beam.basename)
+                )
+            )
 
     script = """
-        set -euxo pipefail
+        set -euo pipefail
 
         export LANG="en_US.UTF-8"
         export LC_ALL="en_US.UTF-8"
@@ -54,7 +70,7 @@ def _impl(ctx):
         cp -R ${{PWD}}/{package_dir}/lib {mix_invocation_dir}/lib
         cp    ${{PWD}}/{package_dir}/mix.exs {mix_invocation_dir}/mix.exs
 
-        {copy_compiled_deps_command}
+        {link_compiled_deps_command}
 
         cd {mix_invocation_dir}
         export HOME=${{PWD}}
@@ -66,7 +82,6 @@ def _impl(ctx):
             exit 1
         fi
 
-        # export MIX_ARCHIVES=${{PWD}}/{mix_invocation_dir}
         export DEPS_DIR={mix_deps_dir}
         mix local.hex --force
         mix local.rebar --force
@@ -77,18 +92,25 @@ def _impl(ctx):
     """.format(
         begins_with_fun=BEGINS_WITH_FUN,
         query_erlang_version=QUERY_ERL_VERSION,
-        erlang_version=ctx.attr.erlang_version,
+        erlang_version=erlang_version,
         erlang_home=erlang_home,
         elixir_home=elixir_home,
         mix_invocation_dir=mix_invocation_dir.path,
         package_dir=ctx.label.package,
-        copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
+        link_compiled_deps_command=" && ".join(link_compiled_deps_commands),
         mix_deps_dir=MIX_DEPS_DIR,
         escript_path=escript.path,
     )
 
+    inputs = []
+    inputs.extend(ctx.files.srcs)
+    for dep in ctx.attr.deps:
+        lib_info = dep[ErlangLibInfo]
+        inputs.extend(lib_info.include)
+        inputs.extend(lib_info.beam)
+
     ctx.actions.run_shell(
-        inputs = ctx.files.srcs + [dep[ErlangLibInfo].lib_dir for dep in ctx.attr.deps],
+        inputs = inputs,
         outputs = [mix_invocation_dir, escript],
         command = script,
     )
@@ -102,10 +124,9 @@ rabbitmqctl = rule(
     attrs = {
         "srcs": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers=[ErlangLibInfo]),
-        "erlang_version": attr.string(mandatory = True),
+        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
         "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
         "_elixir_home": attr.label(default = "//bazel_erlang:elixir_home"),
     },
-    # Should we used named outputs here?
     executable = True,
 )
