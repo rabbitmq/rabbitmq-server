@@ -22,33 +22,33 @@ def _impl(ctx):
         )
     )
 
-    link_compiled_deps_commands = []
-    link_compiled_deps_commands.append("mkdir {}/{}".format(mix_invocation_dir.path, MIX_DEPS_DIR))
+    copy_compiled_deps_commands = []
+    copy_compiled_deps_commands.append("mkdir {}/{}".format(mix_invocation_dir.path, MIX_DEPS_DIR))
     for dep in ctx.attr.deps:
         lib_info = dep[ErlangLibInfo]
         if lib_info.erlang_version != erlang_version:
             fail("Mismatched erlang versions", erlang_version, lib_info.erlang_version)
 
         dest_dir = path_join(mix_invocation_dir.path, MIX_DEPS_DIR, lib_info.lib_name)
-        link_compiled_deps_commands.append(
+        copy_compiled_deps_commands.append(
             "mkdir {}".format(dest_dir)
         )
-        link_compiled_deps_commands.append(
+        copy_compiled_deps_commands.append(
             "mkdir {}".format(path_join(dest_dir, "include"))
         )
-        link_compiled_deps_commands.append(
+        copy_compiled_deps_commands.append(
             "mkdir {}".format(path_join(dest_dir, "ebin"))
         )
         for hdr in lib_info.include:
-            link_compiled_deps_commands.append(
-                "ln -s ${{PWD}}/{source} {target}".format(
+            copy_compiled_deps_commands.append(
+                "cp ${{PWD}}/{source} {target}".format(
                     source = hdr.path,
                     target = path_join(dest_dir, "include", hdr.basename)
                 )
             )
         for beam in lib_info.beam:
-            link_compiled_deps_commands.append(
-                "ln -s ${{PWD}}/{source} {target}".format(
+            copy_compiled_deps_commands.append(
+                "cp ${{PWD}}/{source} {target}".format(
                     source = beam.path,
                     target = path_join(dest_dir, "ebin", beam.basename)
                 )
@@ -70,7 +70,7 @@ def _impl(ctx):
         cp -R ${{PWD}}/{package_dir}/lib {mix_invocation_dir}/lib
         cp    ${{PWD}}/{package_dir}/mix.exs {mix_invocation_dir}/mix.exs
 
-        {link_compiled_deps_command}
+        {copy_compiled_deps_command}
 
         cd {mix_invocation_dir}
         export HOME=${{PWD}}
@@ -97,7 +97,7 @@ def _impl(ctx):
         elixir_home=elixir_home,
         mix_invocation_dir=mix_invocation_dir.path,
         package_dir=ctx.label.package,
-        link_compiled_deps_command=" && ".join(link_compiled_deps_commands),
+        copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
         mix_deps_dir=MIX_DEPS_DIR,
         escript_path=escript.path,
     )

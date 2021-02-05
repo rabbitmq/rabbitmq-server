@@ -16,33 +16,33 @@ def _impl(ctx):
     erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
 
-    link_compiled_deps_commands = []
-    link_compiled_deps_commands.append("mkdir ${{TEST_UNDECLARED_OUTPUTS_DIR}}/{}".format(MIX_DEPS_DIR))
+    copy_compiled_deps_commands = []
+    copy_compiled_deps_commands.append("mkdir ${{TEST_UNDECLARED_OUTPUTS_DIR}}/{}".format(MIX_DEPS_DIR))
     for dep in ctx.attr.deps:
         lib_info = dep[ErlangLibInfo]
         if lib_info.erlang_version != erlang_version:
             fail("Mismatched erlang versions", erlang_version, lib_info.erlang_version)
 
         dest_dir = path_join("${TEST_UNDECLARED_OUTPUTS_DIR}", MIX_DEPS_DIR, lib_info.lib_name)
-        link_compiled_deps_commands.append(
+        copy_compiled_deps_commands.append(
             "mkdir {}".format(dest_dir)
         )
-        link_compiled_deps_commands.append(
+        copy_compiled_deps_commands.append(
             "mkdir {}".format(path_join(dest_dir, "include"))
         )
-        link_compiled_deps_commands.append(
+        copy_compiled_deps_commands.append(
             "mkdir {}".format(path_join(dest_dir, "ebin"))
         )
         for hdr in lib_info.include:
-            link_compiled_deps_commands.append(
-                "ln -s ${{PWD}}/{source} {target}".format(
+            copy_compiled_deps_commands.append(
+                "cp ${{PWD}}/{source} {target}".format(
                     source = hdr.short_path,
                     target = path_join(dest_dir, "include", hdr.basename)
                 )
             )
         for beam in lib_info.beam:
-            link_compiled_deps_commands.append(
-                "ln -s ${{PWD}}/{source} {target}".format(
+            copy_compiled_deps_commands.append(
+                "cp ${{PWD}}/{source} {target}".format(
                     source = beam.short_path,
                     target = path_join(dest_dir, "ebin", beam.basename)
                 )
@@ -69,7 +69,7 @@ def _impl(ctx):
         ln -s ${{PWD}}/{package_dir}/test ${{TEST_UNDECLARED_OUTPUTS_DIR}}
         ln -s ${{PWD}}/{package_dir}/mix.exs ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
-        {link_compiled_deps_command}
+        {copy_compiled_deps_command}
 
         cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 
@@ -117,7 +117,7 @@ def _impl(ctx):
         erlang_home=erlang_home,
         elixir_home=elixir_home,
         package_dir=ctx.label.package,
-        link_compiled_deps_command=" && ".join(link_compiled_deps_commands),
+        copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
         mix_deps_dir=MIX_DEPS_DIR,
         erl_libs=erl_libs,
         rabbitmq_run_cmd=ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
