@@ -33,46 +33,39 @@ def _link_escript(ctx, escript):
 
 def _plugins_dir_links(ctx, plugin):
     lib_info = plugin[ErlangLibInfo]
-    output = ctx.actions.declare_directory(
-        path_join(
-            ctx.label.name,
-            "plugins",
-            "{}-{}".format(lib_info.lib_name, lib_info.lib_version),
-        )
+    plugin_path = path_join(
+        ctx.label.name,
+        "plugins",
+        "{}-{}".format(lib_info.lib_name, lib_info.lib_version),
     )
 
-    link_commands = []
+    links = []
     for f in lib_info.include:
-        link_commands.append("ln -s ${{PWD}}/{source} {target}".format(
-            source = f.path,
-            target = path_join(output.path, "include", f.basename)
-        ))
+        o = ctx.actions.declare_file(path_join(plugin_path, "include", f.basename))
+        ctx.actions.symlink(
+            output = o,
+            target_file = f
+        )
+        links.append(o)
+
     for f in lib_info.beam:
-        link_commands.append("ln -s ${{PWD}}/{source} {target}".format(
-            source = f.path,
-            target = path_join(output.path, "ebin", f.basename)
-        ))
+        o = ctx.actions.declare_file(path_join(plugin_path, "ebin", f.basename))
+        ctx.actions.symlink(
+            output = o,
+            target_file = f
+        )
+        links.append(o)
+
     for f in lib_info.priv:
         p = f.short_path.replace(plugin.label.package + "/", "")
-        target = path_join(output.path, p)
-        link_commands.append("mkdir -p $(dirname {})".format(target))
-        link_commands.append("ln -s ${{PWD}}/{source} {target}".format(
-            source = f.path,
-            target = target,
-        ))
+        o = ctx.actions.declare_file(path_join(plugin_path, p))
+        ctx.actions.symlink(
+            output = o,
+            target_file = f
+        )
+        links.append(o)
 
-    ctx.actions.run_shell(
-        inputs = lib_info.include + lib_info.beam + lib_info.priv,
-        outputs = [output],
-        command = """set -euo pipefail
-        mkdir -p {lib_dir}
-        mkdir -p {lib_dir}/include
-        mkdir -p {lib_dir}/ebin
-        mkdir -p {lib_dir}/priv
-        {link_commands}
-        """.format(lib_dir=output.path, link_commands=" \\\n    && ".join(link_commands)),
-    )
-    return output
+    return links
 
 def _unique_versions(plugins):
     erlang_versions = []
@@ -81,6 +74,9 @@ def _unique_versions(plugins):
         if not erlang_version in erlang_versions:
             erlang_versions.append(erlang_version)
     return erlang_versions
+
+def _flatten(list_of_lists):
+    return [item for sublist in list_of_lists for item in sublist]
 
 def _impl(ctx):
     erlang_versions = _unique_versions(ctx.attr.plugins)
@@ -91,7 +87,7 @@ def _impl(ctx):
 
     escripts = [_link_escript(ctx, escript) for escript in ctx.attr.escripts]
 
-    plugins = [_plugins_dir_links(ctx, plugin) for plugin in ctx.attr.plugins]
+    plugins = _flatten([_plugins_dir_links(ctx, plugin) for plugin in ctx.attr.plugins])
 
     return [
         RabbitmqHomeInfo(
