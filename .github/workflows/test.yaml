@@ -36,6 +36,7 @@ jobs:
         ERLANG_HOME="$(dirname $(dirname $(which erl)))"
         ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
 
+        echo "${{ secrets.BAZELRC_CONTENTS }}" > .bazelrc
         echo "build --//bazel_erlang:erlang_version=${{ matrix.erlang_version }}" >> .bazelrc
         echo "build --//bazel_erlang:erlang_home=${ERLANG_HOME}" >> .bazelrc
         echo "build --//bazel_erlang:elixir_home=${ELIXIR_HOME}" >> .bazelrc
