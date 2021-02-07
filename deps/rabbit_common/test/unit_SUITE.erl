@@ -16,6 +16,10 @@
 
 -compile(export_all).
 
+%% This cipher is listed as supported, but doesn't actually work.
+%% OTP bug: https://bugs.erlang.org/browse/ERL-1478
+-define(SKIPPED_CIPHERS, [aes_ige256]).
+
 all() ->
     [
         {group, parallel_tests},
@@ -318,7 +322,7 @@ pid_decompose_compose(_Config) ->
 encrypt_decrypt(_Config) ->
     %% Take all available block ciphers.
     Hashes = rabbit_pbe:supported_hashes(),
-    Ciphers = rabbit_pbe:supported_ciphers(),
+    Ciphers = rabbit_pbe:supported_ciphers() -- ?SKIPPED_CIPHERS,
     %% For each cipher, try to encrypt and decrypt data sizes from 0 to 64 bytes
     %% with a random passphrase.
     _ = [begin
@@ -336,7 +340,7 @@ encrypt_decrypt(_Config) ->
 encrypt_decrypt_term(_Config) ->
     %% Take all available block ciphers.
     Hashes = rabbit_pbe:supported_hashes(),
-    Ciphers = rabbit_pbe:supported_ciphers(),
+    Ciphers = rabbit_pbe:supported_ciphers() -- ?SKIPPED_CIPHERS,
     %% Different Erlang terms to try encrypting.
     DataSet = [
         10000,
