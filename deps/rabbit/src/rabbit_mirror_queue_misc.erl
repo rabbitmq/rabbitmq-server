@@ -8,6 +8,8 @@
 -module(rabbit_mirror_queue_misc).
 -behaviour(rabbit_policy_validator).
 
+-include("amqqueue.hrl").
+
 -export([remove_from_queue/3, on_vhost_up/1, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1,
          initial_queue_node/2, suggested_queue_nodes/1, actual_queue_nodes/1,
@@ -25,7 +27,6 @@
 -export([module/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
 
 -define(HA_NODES_MODULE, rabbit_mirror_queue_mode_nodes).
 
@@ -434,16 +435,18 @@ validate_mode(Mode) ->
 -spec is_mirrored(amqqueue:amqqueue()) -> boolean().
 
 is_mirrored(Q) ->
-    case module(Q) of
+    MatchedByPolicy = case module(Q) of
         {ok, _}  -> true;
         _        -> false
-    end.
+    end,
+    MatchedByPolicy andalso (not rabbit_amqqueue:is_exclusive(Q)).
 
 is_mirrored_ha_nodes(Q) ->
-    case module(Q) of
+    MatchedByPolicy = case module(Q) of
         {ok, ?HA_NODES_MODULE} -> true;
         _ -> false
-    end.
+    end,
+    MatchedByPolicy andalso (not rabbit_amqqueue:is_exclusive(Q)).
 
 actual_queue_nodes(Q) when ?is_amqqueue(Q) ->
     PrimaryPid = amqqueue:get_pid(Q),
