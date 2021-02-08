@@ -12,6 +12,10 @@
 
 -compile(export_all).
 
+%% This cipher is listed as supported, but doesn't actually work.
+%% OTP bug: https://bugs.erlang.org/browse/ERL-1478
+-define(SKIPPED_CIPHERS, [aes_ige256]).
+
 all() ->
     [
       {group, sequential_tests}
@@ -48,7 +52,7 @@ end_per_testcase(_TC, _Config) ->
 decrypt_config(_Config) ->
     %% Take all available block ciphers.
     Hashes = rabbit_pbe:supported_hashes(),
-    Ciphers = rabbit_pbe:supported_ciphers(),
+    Ciphers = rabbit_pbe:supported_ciphers() -- ?SKIPPED_CIPHERS,
     Iterations = [1, 10, 100, 1000],
     %% Loop through all hashes, ciphers and iterations.
     _ = [begin
