@@ -1,6 +1,6 @@
-load("//bazel_erlang:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
-load("//bazel_erlang:bazel_erlang_lib.bzl", "path_join")
-load("//bazel_erlang:ct.bzl", "sanitize_sname")
+load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "path_join")
+load("@bazel-erlang//:ct.bzl", "sanitize_sname")
 load(":rabbitmq_home.bzl", "RabbitmqHomeInfo")
 
 # Note: Theses rules take advantage of the fact that when the files from
@@ -43,8 +43,8 @@ rabbitmq_run = rule(
             default = Label("//:scripts/bazel/rabbitmq-run.sh"),
             allow_single_file = True,
         ),
-        "_erlang_home": attr.label(default = "//bazel_erlang:erlang_home"),
-        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
+        "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
+        "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
         "home": attr.label(providers=[RabbitmqHomeInfo]),
     },
     executable = True,

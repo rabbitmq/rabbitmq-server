@@ -1,5 +1,5 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
-load("//bazel_erlang:ct.bzl", "ct_test")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
+load("@bazel-erlang//:ct.bzl", "ct_test")
 load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "rabbitmq_lib")
 
 APP_ENV = """[

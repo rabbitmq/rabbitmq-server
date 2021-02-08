@@ -1,5 +1,5 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "erlang_lib", "erlc")
-load("//bazel_erlang:ct.bzl", "ct_suite")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib", "erlc")
+load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq.bzl", "APP_VERSION", "rabbitmq_lib")
 
 APP_ENV = """[
@@ -32,7 +32,7 @@ ct_suite(
     suite_name = "system_SUITE",
     deps = DEPS,
     runtime_deps = [
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
         "@credentials-obfuscation//:bazel_erlang_lib",
         "@goldrush//:bazel_erlang_lib",
         "@jsx//:bazel_erlang_lib",

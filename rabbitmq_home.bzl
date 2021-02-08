@@ -1,4 +1,4 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
 
 RabbitmqHomeInfo = provider(
     doc = "An assembled RABBITMQ_HOME dir",
@@ -113,7 +113,7 @@ rabbitmq_home = rule(
             ],
             allow_files = True,
         ),
-        "_erlang_version": attr.label(default = "//bazel_erlang:erlang_version"),
+        "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
         "escripts": attr.label_list(),
         # Maybe we should not have to declare the deps here that rabbit/rabbit_common declare
         "plugins": attr.label_list(),

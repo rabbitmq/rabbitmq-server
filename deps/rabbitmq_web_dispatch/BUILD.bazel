@@ -1,4 +1,4 @@
-load("//bazel_erlang:ct.bzl", "ct_test")
+load("@bazel-erlang//:ct.bzl", "ct_test")
 load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "rabbitmq_lib")
 
 rabbitmq_lib(

@@ -1,4 +1,4 @@
-load("@//bazel_erlang:bazel_erlang_lib.bzl", "erlang_lib")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
 
 DEPS = [
     "@lager//:bazel_erlang_lib",

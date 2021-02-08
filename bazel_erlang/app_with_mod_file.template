@@ -1,9 +1,0 @@
-{application, '$(PROJECT)', [
-	{description, "$(PROJECT_DESCRIPTION)"},
-	{vsn, "$(PROJECT_VERSION)"},$(PROJECT_ID_TERM)
-	{modules, $(MODULES_LIST)},
-	{registered, $(REGISTERED_LIST)},
-	{applications, $(APPLICATIONS_LIST)},
-	{mod, {$(PROJECT_MOD), []}},
-	{env, $(PROJECT_ENV)}
-]}.

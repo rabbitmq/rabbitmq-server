@@ -1,5 +1,13 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+
+git_repository(
+    name = "bazel-erlang",
+    # path = "../bazel-erlang",
+    branch = "master",
+    remote = "https://github.com/rabbitmq/bazel-erlang.git",
+)
+
 load("//:workspace_helpers.bzl", "github_bazel_erlang_lib")
 
 github_bazel_erlang_lib(
@@ -15,7 +23,10 @@ github_bazel_erlang_lib(
     version = "2.8.0",
     sha256 = "c0248d7ab6e1f27f7fce2f6c52f7b418c76b970f5e3394333485b387d67f44cb",
     tag = "2.8.0",
-    build_file = "@//:BUILD.cowboy"
+    deps = [
+        "@cowlib//:bazel_erlang_lib",
+        "@ranch//:bazel_erlang_lib",
+    ],
 )
 
 github_bazel_erlang_lib(
@@ -104,11 +115,11 @@ github_bazel_erlang_lib(
     first_srcs = ["src/vararg.erl"],
 )
 
-new_git_repository(
-    name = "rabbitmq_ct_helpers",
+git_repository(
+    name = "rabbitmq-ct-helpers",
+    # path = "../rabbitmq-ct-helpers",
     branch = "bazel",
     remote = "https://github.com/rabbitmq/rabbitmq-ct-helpers.git",
-    build_file = "@//:BUILD.rabbitmq_ct_helpers",
 )
 
 github_bazel_erlang_lib(
@@ -123,7 +134,9 @@ github_bazel_erlang_lib(
     version = "1.7.1",
     tag = "1.7.1",
     sha256 = "5607ea3b61fe8e715a1e711c5ce9000c8f16d4c2401c11318b76f65d11bf22d4",
-    build_file = "@//:BUILD.ranch",
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
 )
 
 github_bazel_erlang_lib(

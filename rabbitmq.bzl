@@ -1,5 +1,5 @@
-load("//bazel_erlang:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc", "erlang_lib")
-load("//bazel_erlang:ct.bzl", "ct_test")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc", "erlang_lib")
+load("@bazel-erlang//:ct.bzl", "ct_test")
 load("//deps/rabbitmq_cli:rabbitmqctl.bzl", "rabbitmqctl")
 load("//deps/rabbitmq_cli:rabbitmqctl_test.bzl", "rabbitmqctl_test")
 
