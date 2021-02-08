@@ -237,14 +237,17 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
         validate_limits(Map),
         concurrent_for_all(permissions,        ActingUser, Map, fun add_permission/2),
         concurrent_for_all(topic_permissions,  ActingUser, Map, fun add_topic_permission/2),
-        sequential_for_all(parameters,         ActingUser, Map, fun add_parameter/2),
+
+        concurrent_for_all(queues,             ActingUser, Map, fun add_queue/2),
+        concurrent_for_all(exchanges,          ActingUser, Map, fun add_exchange/2),
+        concurrent_for_all(bindings,           ActingUser, Map, fun add_binding/2),
+
         sequential_for_all(global_parameters,  ActingUser, Map, fun add_global_parameter/2),
         %% importing policies concurrently can be unsafe as queues will be getting
         %% potentially out of order notifications of applicable policy changes
         sequential_for_all(policies,           ActingUser, Map, fun add_policy/2),
-        concurrent_for_all(queues,             ActingUser, Map, fun add_queue/2),
-        concurrent_for_all(exchanges,          ActingUser, Map, fun add_exchange/2),
-        concurrent_for_all(bindings,           ActingUser, Map, fun add_binding/2),
+        sequential_for_all(parameters,         ActingUser, Map, fun add_parameter/2),
+
         SuccessFun(),
         ok
     catch {error, E} -> {error, E};
@@ -261,13 +264,16 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_binary(VHost) ->
                     [VHost, ActingUser]),
     try
         validate_limits(Map, VHost),
+
+        concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
+        concurrent_for_all(exchanges,  ActingUser, Map, VHost, fun add_exchange/3),
+        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
+
         sequential_for_all(parameters, ActingUser, Map, VHost, fun add_parameter/3),
         %% importing policies concurrently can be unsafe as queues will be getting
         %% potentially out of order notifications of applicable policy changes
         sequential_for_all(policies,   ActingUser, Map, VHost, fun add_policy/3),
-        concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
-        concurrent_for_all(exchanges,  ActingUser, Map, VHost, fun add_exchange/3),
-        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
+
         SuccessFun()
     catch {error, E} -> {error, format(E)};
           exit:E     -> {error, format(E)}
@@ -284,13 +290,16 @@ apply_defs(Map, ActingUser, SuccessFun, ErrorFun, VHost) ->
                     [VHost, ActingUser]),
     try
         validate_limits(Map, VHost),
+
+        concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
+        concurrent_for_all(exchanges,  ActingUser, Map, VHost, fun add_exchange/3),
+        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
+
         sequential_for_all(parameters, ActingUser, Map, VHost, fun add_parameter/3),
         %% importing policies concurrently can be unsafe as queues will be getting
         %% potentially out of order notifications of applicable policy changes
         sequential_for_all(policies,   ActingUser, Map, VHost, fun add_policy/3),
-        concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
-        concurrent_for_all(exchanges,  ActingUser, Map, VHost, fun add_exchange/3),
-        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
+
         SuccessFun()
     catch {error, E} -> ErrorFun(format(E));
           exit:E     -> ErrorFun(format(E))
