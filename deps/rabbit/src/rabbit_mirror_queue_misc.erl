@@ -570,7 +570,7 @@ transfer_leadership(Q, Destination) ->
     case wait_for_new_master(QName, Destination) of
         not_migrated ->
             {not_migrated, undefined};
-        {{not_migrated, Destination} = Result, Q} ->
+        {{not_migrated, Destination} = Result, _Q1} ->
             Result;
         {Result, NewQ} ->
             update_mirrors(NewQ),
@@ -599,7 +599,7 @@ migrate_leadership_to_existing_replica(Q, Destination) ->
     case wait_for_new_master(QName, Destination) of
         not_migrated ->
             {not_migrated, undefined};
-        {{not_migrated, Destination} = Result, Q} ->
+        {{not_migrated, Destination} = Result, _Q1} ->
             Result;
         {Result, NewQ} ->
             update_mirrors(NewQ),
