@@ -127,6 +127,10 @@ github_bazel_erlang_lib(
     name = "ra",
     version = "1.1.8",
     sha256 = "867cf522f0e403edc2323a0cbef4ecad8dffee8ed987e0609eb81baa8faf3671",
+    first_srcs = ["src/ra_machine.erl", "src/ra_snapshot.erl"],
+    deps = [
+        "@gen-batch-server//:bazel_erlang_lib",
+    ],
 )
 
 github_bazel_erlang_lib(
