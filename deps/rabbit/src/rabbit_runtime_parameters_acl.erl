@@ -18,7 +18,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
--export([table_name/0, create_table/0]).
+-export([table_name/0, create_table/0, ensure_table/0]).
 -export([new/2, new/3, allow/4, disallow/4, is_allowed/3]).
 -export([lookup/2, get_disallowed_list/2, format_error/3]).
 
@@ -146,6 +146,22 @@ format_error(<<"ha-mode">>, <<"policy">>, VHost) ->
 format_error(Attribute, Component, VHost) ->
     rabbit_misc:format("'~s' ~s is not allowed in vhost '~s'",
         [Attribute, Component, VHost]).
+
+%% This function is for test purposes, ensure runtime parameters ACL table still
+%% exists if feature flag had been previously enabled following changes in mnesia
+-spec ensure_table() -> 'ok'.
+ensure_table() ->
+    case rabbit_feature_flags:is_enabled(runtime_parameters_acl) of
+        true ->
+            case rabbit_table:exists(?TAB) of
+                false ->
+                    create_table();
+                true ->
+                    ok
+            end;
+        false ->
+            ok
+    end.
 
 %% Internal
 

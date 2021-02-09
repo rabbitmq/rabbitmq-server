@@ -120,6 +120,14 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters, :list_global_formatted, [])
   end
 
+  def allow_parameter(vhost, component_name, key) do
+    :ok = :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters_acl, :allow, [vhost, component_name, key, "acting-user"])
+  end
+
+  def disallow_parameter(vhost, component_name, key) do
+    :ok = :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters_acl, :disallow, [vhost, component_name, key, "acting-user"])
+  end
+
   def set_permissions(user, vhost, [conf, write, read]) do
     :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_permissions, [user, vhost, conf, write, read, "acting-user"])
   end
@@ -131,7 +139,7 @@ defmodule TestHelper do
   def set_policy(vhost, name, pattern, value) do
     {:ok, decoded} = :rabbit_json.try_decode(value)
     parsed = :maps.to_list(decoded)
-    :ok = :rpc.call(get_rabbit_hostname(), :rabbit_policy, :set, [vhost, name, pattern, parsed, 0, "all", "acting-user"])
+    :rpc.call(get_rabbit_hostname(), :rabbit_policy, :set, [vhost, name, pattern, parsed, 0, "all", "acting-user"])
   end
 
   def clear_policy(vhost, key) do
