@@ -22,6 +22,11 @@ github_bazel_erlang_lib(
     version = "2.8.0",
     sha256 = "c0248d7ab6e1f27f7fce2f6c52f7b418c76b970f5e3394333485b387d67f44cb",
     tag = "2.8.0",
+    first_srcs = [
+        "src/cowboy_stream.erl",
+        "src/cowboy_middleware.erl",
+        "src/cowboy_sub_protocol.erl",
+    ],
     deps = [
         "@cowlib//:bazel_erlang_lib",
         "@ranch//:bazel_erlang_lib",
