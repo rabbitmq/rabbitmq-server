@@ -1568,30 +1568,28 @@ wait_until_net_ticktime(NetTicktime) ->
             throw({error, {net_ticktime_not_set, NetTicktime}})
     end.
 
-set_resource_alarm(memory, Config) ->
+set_resource_alarm(Resource, Config)
+  when Resource =:= memory orelse Resource =:= disk ->
     SrcDir = ?config(amqp_client_srcdir, Config),
     Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, _} = rabbit_ct_helpers:make(Config, SrcDir, [
-        {"RABBITMQ_NODENAME=~s", [Nodename]},
-        "set-resource-alarm", "SOURCE=memory"]);
-set_resource_alarm(disk, Config) ->
-    SrcDir = ?config(amqp_client_srcdir, Config),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, _} = rabbit_ct_helpers:make(Config, SrcDir, [
-        {"RABBITMQ_NODENAME=~s", [Nodename]},
-        "set-resource-alarm", "SOURCE=disk"]).
+    Cmd = [{"RABBITMQ_NODENAME=~s", [Nodename]},
+           "set-resource-alarm",
+           {"SOURCE=~s", [Resource]}],
+    {ok, _} = case os:getenv("RABBITMQ_RUN") of
+        false -> rabbit_ct_helpers:make(Config, SrcDir, Cmd);
+        Run -> rabbit_ct_helpers:exec([Run | Cmd])
+    end.
 
-clear_resource_alarm(memory, Config) ->
+clear_resource_alarm(Resource, Config)
+  when Resource =:= memory orelse Resource =:= disk ->
     SrcDir = ?config(amqp_client_srcdir, Config),
     Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, _}= rabbit_ct_helpers:make(Config, SrcDir, [
-        {"RABBITMQ_NODENAME=~s", [Nodename]},
-        "clear-resource-alarm", "SOURCE=memory"]);
-clear_resource_alarm(disk, Config) ->
-    SrcDir = ?config(amqp_client_srcdir, Config),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, _}= rabbit_ct_helpers:make(Config, SrcDir, [
-        {"RABBITMQ_NODENAME=~s", [Nodename]},
-        "clear-resource-alarm", "SOURCE=disk"]).
+    Cmd = [{"RABBITMQ_NODENAME=~s", [Nodename]},
+           "clear-resource-alarm",
+           {"SOURCE=~s", [Resource]}],
+    {ok, _} = case os:getenv("RABBITMQ_RUN") of
+        false -> rabbit_ct_helpers:make(Config, SrcDir, Cmd);
+        Run -> rabbit_ct_helpers:exec([Run | Cmd])
+    end.
 
 fmt(Fmt, Args) -> list_to_binary(rabbit_misc:format(Fmt, Args)).

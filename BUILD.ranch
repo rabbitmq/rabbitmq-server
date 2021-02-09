@@ -1,0 +1,34 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "bazel_erlang_lib", "erlc")
+
+DEPS = [
+    "@lager//:bazel_erlang_lib",
+]
+
+first_files = ["src/ranch_transport.erl"]
+
+erlc(
+    name = "first_beam_files",
+    hdrs = glob(["include/*.hrl", "src/*.hrl"]),
+    srcs = glob(first_files),
+    dest = "ebin",
+    deps = DEPS,
+)
+
+erlc(
+    name = "beam_files",
+    hdrs = glob(["include/*.hrl", "src/*.hrl"]),
+    srcs = glob(["src/*.erl"], exclude = first_files),
+    beam = [":first_beam_files"],
+    dest = "ebin",
+    deps = DEPS,
+)
+
+bazel_erlang_lib(
+    name = "bazel_erlang_lib",
+    app_name = "ranch",
+    app_version = "1.7.1",
+    hdrs = glob(["include/*.hrl"]),
+    app = ":ebin/ranch.app", # <- Ranch has a pre-built .app file
+    beam = [":first_beam_files", ":beam_files"],
+    visibility = ["//visibility:public"],
+)

@@ -30,6 +30,10 @@ rabbitmq_lib(
 
 ct_suite(
     suite_name = "system_SUITE",
+    data = [
+        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
+        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+    ],
     deps = DEPS,
     runtime_deps = [
         "@rabbitmq-ct-helpers//:bazel_erlang_lib",
