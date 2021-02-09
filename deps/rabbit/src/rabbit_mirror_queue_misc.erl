@@ -549,6 +549,7 @@ get_replicas(Q) ->
     {PrimaryNode, MirrorNodes} = suggested_queue_nodes(Q),
     [PrimaryNode] ++ MirrorNodes.
 
+-spec transfer_leadership(amqqueue:amqqueue(), node()) -> {migrated, node()} | {not_migrated, atom()}.
 %% Moves the primary replica (leader) of a classic mirrored queue to another node.
 %% Target node can be any node in the cluster, and does not have to host a replica
 %% of this queue.
@@ -566,10 +567,18 @@ transfer_leadership(Q, Destination) ->
     NodesToDropMirrorsOn = PreTransferNodesWithReplicas -- [Destination],
     drop_mirrors(QName, NodesToDropMirrorsOn),
 
-    {Result, NewQ} = wait_for_new_master(QName, Destination),
-    update_mirrors(NewQ),
-    Result.
+    case wait_for_new_master(QName, Destination) of
+        not_migrated ->
+            {not_migrated, undefined};
+        {{not_migrated, Destination} = Result, _Q1} ->
+            Result;
+        {Result, NewQ} ->
+            update_mirrors(NewQ),
+            Result
+    end.
 
+
+-spec migrate_leadership_to_existing_replica(amqqueue:amqqueue(), atom()) -> {migrated, node()} | {not_migrated, atom()}.
 %% Moves the primary replica (leader) of a classic mirrored queue to another node
 %% which already hosts a replica of this queue. In this case we can stop
 %% fewer replicas and reduce the load the operation has on the cluster.
@@ -587,29 +596,42 @@ migrate_leadership_to_existing_replica(Q, Destination) ->
     NodesToDropMirrorsOn = [PreTransferPrimaryNode],
     drop_mirrors(QName, NodesToDropMirrorsOn),
 
-    {Result, NewQ} = wait_for_new_master(QName, Destination),
-    update_mirrors(NewQ),
-    Result.
+    case wait_for_new_master(QName, Destination) of
+        not_migrated ->
+            {not_migrated, undefined};
+        {{not_migrated, Destination} = Result, _Q1} ->
+            Result;
+        {Result, NewQ} ->
+            update_mirrors(NewQ),
+            Result
+    end.
 
+-spec wait_for_new_master(rabbit_amqqueue:name(), atom()) -> {{migrated, node()}, amqqueue:amqqueue()} | {{not_migrated, node()}, amqqueue:amqqueue()} | not_migrated.
 wait_for_new_master(QName, Destination) ->
     wait_for_new_master(QName, Destination, 100).
 
 wait_for_new_master(QName, _, 0) ->
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
-    {{not_migrated, ""}, Q};
+    case rabbit_amqqueue:lookup(QName) of
+        {error, not_found} -> not_migrated;
+        {ok, Q}            -> {{not_migrated, undefined}, Q}
+    end;
 wait_for_new_master(QName, Destination, N) ->
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
-    case amqqueue:get_pid(Q) of
-        none ->
-            timer:sleep(100),
-            wait_for_new_master(QName, Destination, N - 1);
-        Pid ->
-            case node(Pid) of
-                Destination ->
-                    {{migrated, Destination}, Q};
-                _ ->
+    case rabbit_amqqueue:lookup(QName) of
+        {error, not_found} ->
+            not_migrated;
+        {ok, Q} ->
+            case amqqueue:get_pid(Q) of
+                none ->
                     timer:sleep(100),
-                    wait_for_new_master(QName, Destination, N - 1)
+                    wait_for_new_master(QName, Destination, N - 1);
+                Pid ->
+                    case node(Pid) of
+                        Destination ->
+                            {{migrated, Destination}, Q};
+                        _ ->
+                            timer:sleep(100),
+                            wait_for_new_master(QName, Destination, N - 1)
+                    end
             end
     end.
 
