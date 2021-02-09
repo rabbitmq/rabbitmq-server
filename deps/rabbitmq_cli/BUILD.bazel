@@ -27,4 +27,5 @@ rabbitmqctl_test(
     ],
     rabbitmq_run = "//:rabbitmq-for-cli-tests-run",
     size = "large",
+    flaky = True,
 )
