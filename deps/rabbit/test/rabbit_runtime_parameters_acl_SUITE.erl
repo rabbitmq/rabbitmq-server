@@ -72,7 +72,7 @@ policies_acl(Config) ->
     publish(Ch, Q, lists:seq(1, 20)),
 
     disallow_policy(Config, 0, <<"/">>, <<"ha-mode">>),
-    ?assertEqual({error_string, "'ha-mode' policy is not allowed in vhost '/'"},
+    ?assertEqual({error_string, "classic mirroring is not allowed in vhost '/'"},
         set_ha_all_policy(Config, 0, <<"/">>, <<".*">>)),
     ?assertEqual(0, count_mirrors(Config, 0, Q, <<"/">>)),
     wait_for_messages(Config, [[Q, <<"20">>, <<"20">>, <<"0">>]]),
@@ -119,7 +119,7 @@ policies_acl(Config) ->
     rabbit_ct_broker_helpers:clear_policy(Config, 0, <<".*">>),
 
     disallow_policy(Config, 0, <<"/">>, <<"ha-mode">>),
-    ?assertEqual({error_string, "'ha-mode' policy is not allowed in vhost '/'"},
+    ?assertEqual({error_string, "classic mirroring is not allowed in vhost '/'"},
         set_ha_all_policy(Config, 0, <<"/">>, <<".*">>)),
     rabbit_ct_helpers:await_condition(
         fun () ->
