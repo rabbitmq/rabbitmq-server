@@ -498,7 +498,7 @@ maybe_migrate(ByNode, _, []) ->
                                                                 ?amqqueue_is_classic(Q)
                                                         end, V),
                            [[{<<"Node name">>, K}, {<<"Number of quorum queues">>, length(QQs)},
-                             {<<"Number of classic queues">>, length(CQs)}] | Acc]
+                             {<<"Number of replicated classic queues">>, length(CQs)}] | Acc]
                    end, [], ByNode)};
 maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
     case maps:get(N, ByNode, []) of
