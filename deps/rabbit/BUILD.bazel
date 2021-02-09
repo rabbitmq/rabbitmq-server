@@ -1,5 +1,4 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+load("//:rabbitmq.bzl", "rabbitmq_lib")
 
 exports_files([
     "scripts/rabbitmq-defaults",
@@ -128,22 +127,20 @@ DEPS = [
     "//deps/rabbit_common:bazel_erlang_lib",
     "@stdout_formatter//:bazel_erlang_lib",
     "//deps/amqp10_common:bazel_erlang_lib",
+    "@ranch//:bazel_erlang_lib",
+    "@ra//:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
     "@cuttlefish//:bazel_erlang_lib",
-    "@ranch//:bazel_erlang_lib",
-    "@ra//:bazel_erlang_lib",
     "@sysmon-handler//:bazel_erlang_lib",
     "@recon//:bazel_erlang_lib",
     "@observer_cli//:bazel_erlang_lib",
     "@osiris//:bazel_erlang_lib",
 ]
 
-app_file(
-    name = "app_file",
+rabbitmq_lib(
     app_name = "rabbit",
-    app_version = "3.9.0",
     app_description = "RabbitMQ",
     app_module = "rabbit",
     app_registered = [
@@ -166,28 +163,17 @@ app_file(
         "syntax_tools",
         "xmerl",
     ],
-    modules = [":beam_files"],
-    deps = DEPS + RUNTIME_DEPS,
-)
-
-erlc(
-    name = "beam_files",
-    hdrs = glob(["include/*.hrl", "src/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
-    erlc_opts = RABBITMQ_ERLC_OPTS + [
+    extra_erlc_opts = [
         "-DINSTR_MOD=gm",
     ],
-    dest = "ebin",
-    deps = DEPS,
-)
-
-bazel_erlang_lib(
-    name = "bazel_erlang_lib",
-    app_name = "rabbit",
-    app_version = "3.9.0",
-    hdrs = glob(["include/*.hrl"]),
-    app = ":app_file",
-    beam = [":beam_files"],
+    first_srcs = [
+        "src/rabbit_tracking.erl",
+        "src/rabbit_queue_type.erl",
+        "src/rabbit_credential_validator.erl",
+        "src/rabbit_policy_merge_strategy.erl",
+        "src/rabbit_queue_master_locator.erl",
+    ],
     priv = glob(["priv/schema/rabbit.schema"]),
-    visibility = ["//visibility:public"],
+    deps = DEPS,
+    runtime_deps = RUNTIME_DEPS,
 )
