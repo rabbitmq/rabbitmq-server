@@ -26,6 +26,6 @@ rabbitmqctl_test(
         "//deps/rabbit:bazel_erlang_lib",
     ],
     rabbitmq_run = "//:rabbitmq-for-cli-tests-run",
-    size = "large",
-    flaky = True,
+    size = "enormous",
+    timeout = "long",
 )
