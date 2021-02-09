@@ -495,6 +495,17 @@ public class HttpTest {
 
     client.unsubscribe((byte) 1);
     waitUntil(() -> entities(request.call(), client).isEmpty());
+
+    client.subscribe((byte) 0, stream, OffsetSpecification.next(), 10);
+    waitUntil(() -> request.call().size() == initialCount + 1);
+    waitUntil(() -> entities(request.call(), client).size() == 1);
+
+    consumer = entities(request.call(), client).get(0);
+    assertThat(((Number) consumer.get("consumed")).intValue()).isEqualTo(0);
+    assertThat(((Number) consumer.get("offset")).intValue()).isEqualTo(messageCount);
+
+    client.unsubscribe((byte) 0);
+    waitUntil(() -> entities(request.call(), client).isEmpty());
   }
 
   @Test

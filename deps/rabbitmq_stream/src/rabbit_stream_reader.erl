@@ -1509,12 +1509,11 @@ handle_frame_post_auth(Transport,
                             {{segment, Segment1}, {credit, Credit1}} =
                                 send_chunks(Transport, ConsumerState,
                                             SendFileOct),
+                            ConsumerState1 =
+                                ConsumerState#consumer{segment = Segment1,
+                                                       credit = Credit1},
                             Consumers1 =
-                                Consumers#{SubscriptionId =>
-                                               ConsumerState#consumer{segment =
-                                                                          Segment1,
-                                                                      credit =
-                                                                          Credit1}},
+                                Consumers#{SubscriptionId => ConsumerState1},
 
                             StreamSubscriptions1 =
                                 case StreamSubscriptions of
@@ -1526,13 +1525,19 @@ handle_frame_post_auth(Transport,
                                         StreamSubscriptions#{Stream =>
                                                                  [SubscriptionId]}
                                 end,
+
+                            #consumer{counters = ConsumerCounters1} =
+                                ConsumerState1,
+
+                            ConsumerOffset = osiris_log:next_offset(Segment1),
+
                             rabbit_stream_metrics:consumer_created(self(),
                                                                    stream_r(Stream,
                                                                             Connection1),
                                                                    SubscriptionId,
                                                                    Credit1,
-                                                                   messages_consumed(ConsumerCounters),
-                                                                   consumer_offset(ConsumerCounters)),
+                                                                   messages_consumed(ConsumerCounters1),
+                                                                   ConsumerOffset),
                             {Connection1#stream_connection{stream_subscriptions
                                                                =
                                                                StreamSubscriptions1},
