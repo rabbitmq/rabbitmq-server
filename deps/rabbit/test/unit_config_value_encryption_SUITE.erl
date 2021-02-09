@@ -110,7 +110,7 @@ decrypt_start_app_file(Config) ->
 do_decrypt_start_app(Config, Passphrase) ->
     %% Configure rabbit for decrypting configuration.
     application:set_env(rabbit, config_entry_decoder, [
-        {cipher, aes_cbc256},
+        {cipher, aes_256_cbc},
         {hash, sha512},
         {iterations, 1000},
         {passphrase, Passphrase}
