@@ -75,10 +75,18 @@ defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
 
   def help_section, do: :cluster_management
 
-  def description, do: "Rebalances queues."
+  def description, do: "Re-balances leaders of replicated queues across up-and-running cluster nodes"
 
-  def banner([type], _) do
-    "Rebalancing #{type} queues..."
+  def banner([:all], _) do
+    "Re-balancing leaders of all replicated queues..."
   end
-
+  def banner([:classic], _) do
+    "Re-balancing leaders of replicated (mirrored, non-exclusive) classic queues..."
+  end
+  def banner([:quorum], _) do
+    "Re-balancing leaders of quorum queues..."
+  end
+  def banner([type], _) do
+    "Re-balancing leaders of #{type} queues..."
+  end
 end
