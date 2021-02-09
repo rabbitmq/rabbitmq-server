@@ -21,7 +21,7 @@ jobs:
         # https://github.com/elixir-lang/elixir/releases
         elixir-version: 1.10.4
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v2
+      uses: gerbal/always-cache@v1.0.3
       with:
         path: "/home/runner/.cache/bazel"
         key: ${{ runner.os }}-bazel-${{ matrix.erlang_version }}
