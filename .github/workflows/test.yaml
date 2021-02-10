@@ -20,10 +20,10 @@ jobs:
         # https://github.com/elixir-lang/elixir/releases
         elixir-version: 1.10.4
     - name: MOUNT BAZEL CACHE
-      uses: gerbal/always-cache@v1.0.3
+      uses: actions/cache@v2
       with:
-        path: "/home/runner/bazel_repository_cache"
-        key: ${{ runner.os }}-bazel-repository-cache-${{ matrix.erlang_version }}
+        path: "/home/runner/.cache/bazel"
+        key: ${{ runner.os }}-bazel-${{ matrix.erlang_version }}
     - name: INSTALL BAZELISK
       run: |
         curl -LO "https://github.com/bazelbuild/bazelisk/releases/download/v1.1.0/bazelisk-linux-amd64"
@@ -35,15 +35,9 @@ jobs:
         ERLANG_HOME="$(dirname $(dirname $(which erl)))"
         ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
 
-        echo "${{ secrets.BAZELRC_CONTENTS }}" > .bazelrc
-        echo "build --bes_results_url=https://app.buildbuddy.io/invocation/" >> .bazelrc
-        echo "build --bes_backend=grpcs://cloud.buildbuddy.io" >> .bazelrc
-        echo "build --remote_cache=grpcs://cloud.buildbuddy.io" >> .bazelrc
-        echo "build --remote_timeout=3600" >> .bazelrc
         echo "build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}" >> .bazelrc
         echo "build --@bazel-erlang//:erlang_home=${ERLANG_HOME}" >> .bazelrc
         echo "build --@bazel-erlang//:elixir_home=${ELIXIR_HOME}" >> .bazelrc
-        echo "build --repository_cache=/home/runner/bazel_repository_cache" >> .bazelrc
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
