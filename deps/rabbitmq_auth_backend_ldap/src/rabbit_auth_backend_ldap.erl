@@ -709,15 +709,23 @@ ssl_conf() ->
     case env(use_ssl) of
         false -> [{ssl, false}];
         true  -> %% Only the unfixed version can be []
-                 case {env(ssl_options), at_least("5.10")} of %% R16A
-                     {_,  true}  -> [{ssl, true}, {sslopts, ssl_options()}];
-                     {[], _}     -> [{ssl, true}];
-                     {_,  false} -> exit({ssl_options_requires_min_r16a})
+                 case env(ssl_options) of
+                     [] -> [{ssl, true}];
+                     _  -> [{ssl, true}, {sslopts, ssl_options()}]
                  end
     end.
 
 ssl_options() ->
-    rabbit_networking:fix_ssl_options(env(ssl_options)).
+    Opts0 = rabbit_networking:fix_ssl_options(env(ssl_options)),
+    case env(ssl_hostname_verification) of
+        wildcard ->
+            rabbit_log_ldap:debug("Enabling wildcard-aware hostname verification for LDAP client connections"),
+            %% Needed for non-HTTPS connections that connect to servers that use wildcard certificates.
+            %% See https://erlang.org/doc/man/public_key.html#pkix_verify_hostname_match_fun-1.
+            [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Opts0];
+        _ ->
+            Opts0
+    end.
 
 at_least(Ver) ->
     rabbit_misc:version_compare(erlang:system_info(version), Ver) =/= lt.
@@ -736,8 +744,8 @@ get_expected_env_str(Key, Default) ->
         end,
     rabbit_data_coercion:to_list(V).
 
-env(F) ->
-    {ok, V} = application:get_env(rabbitmq_auth_backend_ldap, F),
+env(Key) ->
+    {ok, V} = application:get_env(rabbitmq_auth_backend_ldap, Key),
     V.
 
 login_fun(User, UserDN, Password, AuthProps) ->
