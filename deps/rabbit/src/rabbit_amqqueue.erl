@@ -1279,6 +1279,17 @@ is_unresponsive(Q, Timeout) when ?amqqueue_is_quorum(Q) ->
     catch
         exit:{timeout, _} ->
             true
+    end;
+is_unresponsive(Q, Timeout) when ?amqqueue_is_stream(Q) ->
+    try
+        #{leader_pid := LeaderPid} = amqqueue:get_type_state(Q),
+        case gen_batch_server:call(LeaderPid, get_reader_context, Timeout) of
+            #{dir := _} -> false;
+            _ -> true
+        end
+    catch
+        exit:{timeout, _} ->
+            true
     end.
 
 format(Q) when ?amqqueue_is_quorum(Q) -> rabbit_quorum_queue:format(Q);
