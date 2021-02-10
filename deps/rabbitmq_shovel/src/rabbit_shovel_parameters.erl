@@ -383,7 +383,7 @@ parse_amqp091_source(Def) ->
     SrcX     = pget(<<"src-exchange">>,Def, none),
     SrcXKey  = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
     SrcQ     = pget(<<"src-queue">>, Def, none),
-    SrcQArgs = pget(<<"dest-queue-args">>,   Def, #{}),
+    SrcQArgs = pget(<<"src-queue-args">>,   Def, #{}),
     {SrcDeclFun, Queue, DestHeaders} =
     case SrcQ of
         none -> {fun (_Conn, Ch) ->

@@ -793,7 +793,7 @@ consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
-        false -> {error, {unacceptable_type, Type}}
+        false -> {error, rabbit_misc:format("expected integer, got ~p", [Type])}
     end;
 check_int_arg(Val, _) when is_integer(Val) ->
     ok;
@@ -938,19 +938,16 @@ check_dlxrk_arg(Val, Args) when is_binary(Val) ->
 check_dlxrk_arg(_Val, _Args) ->
     {error, {unacceptable_type, "expected a string"}}.
 
+-define(KNOWN_OVERFLOW_MODES, [<<"drop-head">>, <<"reject-publish">>, <<"reject-publish-dlx">>]).
 check_overflow({longstr, Val}, _Args) ->
-    case lists:member(Val, [<<"drop-head">>,
-                            <<"reject-publish">>,
-                            <<"reject-publish-dlx">>]) of
+    case lists:member(Val, ?KNOWN_OVERFLOW_MODES) of
         true  -> ok;
         false -> {error, invalid_overflow}
     end;
 check_overflow({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}};
-check_overflow(Val, _Args) ->
-    case lists:member(Val, [<<"drop-head">>,
-                            <<"reject-publish">>,
-                            <<"reject-publish-dlx">>]) of
+check_overflow(Val, _Args) when is_binary(Val) ->
+    case lists:member(Val, ?KNOWN_OVERFLOW_MODES) of
         true  -> ok;
         false -> {error, invalid_overflow}
     end;
@@ -977,14 +974,14 @@ check_queue_leader_locator_arg(_Val, _Args) ->
 check_queue_mode({longstr, Val}, _Args) ->
     case lists:member(Val, ?KNOWN_QUEUE_MODES) of
         true  -> ok;
-        false -> {error, invalid_queue_mode}
+        false -> {error, rabbit_misc:format("unsupported queue mode '~s'", [Val])}
     end;
 check_queue_mode({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}};
 check_queue_mode(Val, _Args) when is_binary(Val) ->
     case lists:member(Val, ?KNOWN_QUEUE_MODES) of
         true  -> ok;
-        false -> {error, invalid_queue_mode}
+        false -> {error, rabbit_misc:format("unsupported queue mode '~s'", [Val])}
     end;
 check_queue_mode(_Val, _Args) ->
     {error, invalid_queue_mode}.
@@ -993,14 +990,14 @@ check_queue_mode(_Val, _Args) ->
 check_queue_type({longstr, Val}, _Args) ->
     case lists:member(Val, ?KNOWN_QUEUE_TYPES) of
         true  -> ok;
-        false -> {error, invalid_queue_type}
+        false -> {error, rabbit_misc:format("unsupported queue type '~s'", [Val])}
     end;
 check_queue_type({Type,    _}, _Args) ->
     {error, {unacceptable_type, Type}};
 check_queue_type(Val, _Args) when is_binary(Val) ->
     case lists:member(Val, ?KNOWN_QUEUE_TYPES) of
         true  -> ok;
-        false -> {error, invalid_queue_type}
+        false -> {error, rabbit_misc:format("unsupported queue type '~s'", [Val])}
     end;
 check_queue_type(_Val, _Args) ->
     {error, invalid_queue_type}.
