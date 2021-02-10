@@ -5,7 +5,6 @@ jobs:
     name: test
     runs-on: ubuntu-18.04
     strategy:
-      max-parallel: 1
       matrix:
         erlang_version:
         - "22.3"
@@ -45,7 +44,8 @@ jobs:
       run: |
         "${GITHUB_WORKSPACE}/bin/bazel" test //... \
           --test_verbose_timeout_warnings \
-          --verbose_failures
+          --verbose_failures \
+          --jobs 1
     - name: RESOVLE TESTLOGS
       id: resolve_logs
       if: success() || failure()
