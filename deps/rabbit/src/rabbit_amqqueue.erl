@@ -51,7 +51,7 @@
 -export([rebalance/3]).
 -export([collect_info_all/2]).
 
--export([is_policy_applicable/2]).
+-export([is_policy_applicable/2, declare_args/0]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -872,7 +872,7 @@ declare_args() ->
      {<<"x-queue-mode">>,              fun check_queue_mode/2},
      {<<"x-single-active-consumer">>,  fun check_single_active_consumer_arg/2},
      {<<"x-queue-type">>,              fun check_queue_type/2},
-     {<<"x-quorum-initial-group-size">>,     fun check_default_quorum_initial_group_size_arg/2}].
+     {<<"x-quorum-initial-group-size">>, fun check_initial_cluster_size_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
                    {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
@@ -880,14 +880,27 @@ consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
-        false -> {error, {unacceptable_type, Type}}
-    end.
+        false -> {error, rabbit_misc:format("expected integer, got ~p", [Type])}
+    end;
+check_int_arg(Val, _) when is_integer(Val) ->
+    ok;
+check_int_arg(_Val, _) ->
+    {error, {unacceptable_type, "expected integer"}}.
 
 check_bool_arg({bool, _}, _) -> ok;
-check_bool_arg({Type, _}, _) -> {error, {unacceptable_type, Type}}.
+check_bool_arg({Type, _}, _) -> {error, {unacceptable_type, Type}};
+check_bool_arg(true, _)  -> ok;
+check_bool_arg(false, _) -> ok;
+check_bool_arg(_Val, _) -> {error, {unacceptable_type, "expected boolean"}}.
 
 check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
+        ok when Val >= 0 -> ok;
+        ok               -> {error, {value_negative, Val}};
+        Error            -> Error
+    end;
+check_non_neg_int_arg(Val, Args) ->
+    case check_int_arg(Val, Args) of
         ok when Val >= 0 -> ok;
         ok               -> {error, {value_negative, Val}};
         Error            -> Error
@@ -898,10 +911,21 @@ check_expires_arg({Type, Val}, Args) ->
         ok when Val == 0 -> {error, {value_zero, Val}};
         ok               -> rabbit_misc:check_expiry(Val);
         Error            -> Error
+    end;
+check_expires_arg(Val, Args) ->
+    case check_int_arg(Val, Args) of
+        ok when Val == 0 -> {error, {value_zero, Val}};
+        ok               -> rabbit_misc:check_expiry(Val);
+        Error            -> Error
     end.
 
 check_message_ttl_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
+        ok    -> rabbit_misc:check_expiry(Val);
+        Error -> Error
+    end;
+check_message_ttl_arg(Val, Args) ->
+    case check_int_arg(Val, Args) of
         ok    -> rabbit_misc:check_expiry(Val);
         Error -> Error
     end.
@@ -911,16 +935,27 @@ check_max_priority_arg({Type, Val}, Args) ->
         ok when Val =< ?MAX_SUPPORTED_PRIORITY -> ok;
         ok                                     -> {error, {max_value_exceeded, Val}};
         Error                                  -> Error
+    end;
+check_max_priority_arg(Val, Args) ->
+    case check_non_neg_int_arg(Val, Args) of
+        ok when Val =< ?MAX_SUPPORTED_PRIORITY -> ok;
+        ok                                     -> {error, {max_value_exceeded, Val}};
+        Error                                  -> Error
     end.
 
 check_single_active_consumer_arg({Type, Val}, Args) ->
-    case check_bool_arg({Type, Val}, Args) of
-        ok    -> ok;
-        Error -> Error
-    end.
+    check_bool_arg({Type, Val}, Args);
+check_single_active_consumer_arg(Val, Args) ->
+    check_bool_arg(Val, Args).
 
-check_default_quorum_initial_group_size_arg({Type, Val}, Args) ->
+check_initial_cluster_size_arg({Type, Val}, Args) ->
     case check_non_neg_int_arg({Type, Val}, Args) of
+        ok when Val == 0 -> {error, {value_zero, Val}};
+        ok               -> ok;
+        Error            -> Error
+    end;
+check_initial_cluster_size_arg(Val, Args) ->
+    case check_non_neg_int_arg(Val, Args) of
         ok when Val == 0 -> {error, {value_zero, Val}};
         ok               -> ok;
         Error            -> Error
@@ -929,7 +964,9 @@ check_default_quorum_initial_group_size_arg({Type, Val}, Args) ->
 %% Note that the validity of x-dead-letter-exchange is already verified
 %% by rabbit_channel's queue.declare handler.
 check_dlxname_arg({longstr, _}, _) -> ok;
-check_dlxname_arg({Type,    _}, _) -> {error, {unacceptable_type, Type}}.
+check_dlxname_arg({Type,    _}, _) -> {error, {unacceptable_type, Type}};
+check_dlxname_arg(Val, _) when is_list(Val) or is_binary(Val) -> ok;
+check_dlxname_arg(_Val, _) -> {error, {unacceptable_type, "expected a string (valid exchange name)"}}.
 
 check_dlxrk_arg({longstr, _}, Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-dead-letter-exchange">>) of
@@ -937,33 +974,62 @@ check_dlxrk_arg({longstr, _}, Args) ->
         _         -> ok
     end;
 check_dlxrk_arg({Type,    _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
+    {error, {unacceptable_type, Type}};
+check_dlxrk_arg(Val, Args) when is_binary(Val) ->
+    case rabbit_misc:table_lookup(Args, <<"x-dead-letter-exchange">>) of
+        undefined -> {error, routing_key_but_no_dlx_defined};
+        _         -> ok
+    end;
+check_dlxrk_arg(_Val, _Args) ->
+    {error, {unacceptable_type, "expected a string"}}.
 
+-define(KNOWN_OVERFLOW_MODES, [<<"drop-head">>, <<"reject-publish">>, <<"reject-publish-dlx">>]).
 check_overflow({longstr, Val}, _Args) ->
-    case lists:member(Val, [<<"drop-head">>,
-                            <<"reject-publish">>,
-                            <<"reject-publish-dlx">>]) of
+    case lists:member(Val, ?KNOWN_OVERFLOW_MODES) of
         true  -> ok;
         false -> {error, invalid_overflow}
     end;
 check_overflow({Type,    _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
-
-check_queue_mode({longstr, Val}, _Args) ->
-    case lists:member(Val, [<<"default">>, <<"lazy">>]) of
+    {error, {unacceptable_type, Type}};
+check_overflow(Val, _Args) when is_binary(Val) ->
+    case lists:member(Val, ?KNOWN_OVERFLOW_MODES) of
         true  -> ok;
-        false -> {error, invalid_queue_mode}
+        false -> {error, invalid_overflow}
+    end;
+check_overflow(_Val, _Args) ->
+    {error, invalid_overflow}.
+
+-define(KNOWN_QUEUE_MODES, [<<"default">>, <<"lazy">>]).
+check_queue_mode({longstr, Val}, _Args) ->
+    case lists:member(Val, ?KNOWN_QUEUE_MODES) of
+        true  -> ok;
+        false -> {error, rabbit_misc:format("unsupported queue mode '~s'", [Val])}
     end;
 check_queue_mode({Type,    _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
-
-check_queue_type({longstr, Val}, _Args) ->
-    case lists:member(Val, [<<"classic">>, <<"quorum">>]) of
+    {error, {unacceptable_type, Type}};
+check_queue_mode(Val, _Args) when is_binary(Val) ->
+    case lists:member(Val, ?KNOWN_QUEUE_MODES) of
         true  -> ok;
-        false -> {error, invalid_queue_type}
+        false -> {error, rabbit_misc:format("unsupported queue mode '~s'", [Val])}
+    end;
+check_queue_mode(_Val, _Args) ->
+    {error, invalid_queue_mode}.
+
+-define(KNOWN_QUEUE_TYPES, [<<"classic">>, <<"quorum">>]).
+check_queue_type({longstr, Val}, _Args) ->
+    case lists:member(Val, ?KNOWN_QUEUE_TYPES) of
+        true  -> ok;
+        false -> {error, rabbit_misc:format("unsupported queue type '~s'", [Val])}
     end;
 check_queue_type({Type,    _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
+    {error, {unacceptable_type, Type}};
+check_queue_type(Val, _Args) when is_binary(Val) ->
+    case lists:member(Val, ?KNOWN_QUEUE_TYPES) of
+        true  -> ok;
+        false -> {error, rabbit_misc:format("unsupported queue type '~s'", [Val])}
+    end;
+check_queue_type(_Val, _Args) ->
+    {error, invalid_queue_type}.
 
 -spec list() -> [amqqueue:amqqueue()].
 
