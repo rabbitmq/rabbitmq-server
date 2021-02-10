@@ -58,6 +58,8 @@ RUNTIME_DEPS = [
 
 APP_NAME = "rabbit_common"
 
+HDRS = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"]
+
 app_file(
     name = "app_file",
     app_name = APP_NAME,
@@ -86,7 +88,7 @@ FIRST_SRCS = [
 
 erlc(
     name = "first_beam_files",
-    hdrs = glob(["include/*.hrl"]),
+    hdrs = HDRS,
     srcs = glob(FIRST_SRCS),
     erlc_opts = RABBITMQ_ERLC_OPTS,
     dest = "ebin",
@@ -95,7 +97,7 @@ erlc(
 
 erlc(
     name = "beam_files",
-    hdrs = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"],
+    hdrs = HDRS,
     srcs = glob(["src/*.erl"], exclude = FIRST_SRCS) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
     erlc_opts = RABBITMQ_ERLC_OPTS,
     beam = [":first_beam_files"],
@@ -107,7 +109,7 @@ bazel_erlang_lib(
     name = "bazel_erlang_lib",
     app_name = APP_NAME,
     app_version = APP_VERSION,
-    hdrs = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"],
+    hdrs = HDRS,
     app = ":app_file",
     beam = [":first_beam_files", ":beam_files"],
     visibility = ["//visibility:public"],
@@ -115,7 +117,7 @@ bazel_erlang_lib(
 
 erlc(
     name = "first_test_beam_files",
-    hdrs = glob(["include/*.hrl"]),
+    hdrs = HDRS,
     srcs = glob(FIRST_SRCS),
     erlc_opts = RABBITMQ_ERLC_OPTS + [
         "-DTEST",
@@ -123,11 +125,12 @@ erlc(
     ],
     dest = "src",
     deps = DEPS,
+    testonly = True,
 )
 
 erlc(
     name = "test_beam_files",
-    hdrs = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"],
+    hdrs = HDRS,
     srcs = glob(["src/*.erl"], exclude = FIRST_SRCS) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
     erlc_opts = RABBITMQ_ERLC_OPTS + [
         "-DTEST",
@@ -136,76 +139,118 @@ erlc(
     beam = [":first_test_beam_files"],
     dest = "src",
     deps = DEPS,
+    testonly = True,
 )
 
 bazel_erlang_lib(
     name = "test_bazel_erlang_lib",
     app_name = APP_NAME,
     app_version = APP_VERSION,
-    hdrs = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"],
+    hdrs = HDRS,
     app = ":app_file",
     beam = [":first_test_beam_files", ":test_beam_files"],
+    testonly = True,
 )
 
-# ct_test(
-#     name = "rabbit_env_SUITE",
-#     app_name = "rabbit_common",
-#     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-#     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-#     suites = ["test/rabbit_env_SUITE.erl"],
-#     erlc_opts = RABBITMQ_ERLC_OPTS,
-#     deps = [
-#         "//deps/rabbit:rabbit",
-#         "@lager//:lager",
-#         "@proper//:proper",
-#     ],
-#     size = "small",
-# )
+erlc(
+    name = "rabbit_env_SUITE_beam_files",
+    hdrs = HDRS,
+    srcs = ["test/rabbit_env_SUITE.erl"],
+    dest = "test",
+    deps = [":test_bazel_erlang_lib"] + DEPS,
+    testonly = True,
+)
 
-# ct_test(
-#     name = "supervisor2_SUITE",
-#     app_name = "rabbit_common",
-#     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-#     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-#     suites = ["test/supervisor2_SUITE.erl"],
-#     erlc_opts = RABBITMQ_ERLC_OPTS,
-#     size = "small",
-# )
+ct_test(
+    name = "rabbit_env_SUITE",
+    suites = [":rabbit_env_SUITE_beam_files"],
+    deps = [
+        ":test_bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+        "@proper//:bazel_erlang_lib",
+    ],
+    size = "small",
+)
 
-# ct_test(
-#     name = "unit_priority_queue_SUITE",
-#     app_name = "rabbit_common",
-#     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-#     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-#     suites = ["test/unit_priority_queue_SUITE.erl"],
-#     erlc_opts = RABBITMQ_ERLC_OPTS,
-#     size = "small",
-# )
+erlc(
+    name = "supervisor2_SUITE_beam_files",
+    hdrs = HDRS,
+    srcs = ["test/supervisor2_SUITE.erl"],
+    dest = "test",
+    deps = [":test_bazel_erlang_lib"] + DEPS,
+    testonly = True,
+)
 
-# ct_test(
-#     name = "unit_SUITE",
-#     app_name = "rabbit_common",
-#     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-#     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-#     suites = ["test/unit_SUITE.erl", "test/gen_server2_test_server.erl"],
-#     erlc_opts = RABBITMQ_ERLC_OPTS,
-#     deps = [
-#         "@proper//:proper",
-#         "@lager//:lager",
-#         "@credentials-obfuscation//:credentials_obfuscation",
-#     ],
-#     size = "small",
-# )
+ct_test(
+    name = "supervisor2_SUITE",
+    suites = [":supervisor2_SUITE_beam_files"],
+    deps = [
+        ":test_bazel_erlang_lib",
+    ],
+    size = "small",
+)
 
-# ct_test(
-#     name = "worker_pool_SUITE",
-#     app_name = "rabbit_common",
-#     hdrs = ["include/rabbit_framing.hrl"] + glob(["include/*.hrl"]),
-#     srcs = glob(["src/*.erl"]) + ["src/rabbit_framing_amqp_0_8.erl", "src/rabbit_framing_amqp_0_9_1.erl"],
-#     suites = ["test/worker_pool_SUITE.erl"],
-#     erlc_opts = RABBITMQ_ERLC_OPTS,
-#     deps = [
-#         "@lager//:lager",
-#     ],
-#     size = "small",
-# )
+erlc(
+    name = "unit_priority_queue_SUITE_beam_files",
+    hdrs = HDRS,
+    srcs = ["test/unit_priority_queue_SUITE.erl"],
+    dest = "test",
+    deps = [":test_bazel_erlang_lib"] + DEPS,
+    testonly = True,
+)
+
+ct_test(
+    name = "unit_priority_queue_SUITE",
+    suites = [":unit_priority_queue_SUITE_beam_files"],
+    deps = [
+        ":test_bazel_erlang_lib",
+    ],
+    size = "small",
+)
+
+erlc(
+    name = "unit_SUITE_beam_files",
+    hdrs = HDRS,
+    srcs = [
+        "test/unit_SUITE.erl",
+        "test/gen_server2_test_server.erl",
+    ],
+    dest = "test",
+    deps = DEPS + [
+        ":test_bazel_erlang_lib",
+        "@proper//:bazel_erlang_lib",
+    ],
+    testonly = True,
+)
+
+ct_test(
+    name = "unit_SUITE",
+    suites = [":unit_SUITE_beam_files"],
+    deps = [
+        ":test_bazel_erlang_lib",
+        "@proper//:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+        "@credentials-obfuscation//:bazel_erlang_lib",
+    ],
+    size = "small",
+)
+
+erlc(
+    name = "worker_pool_SUITE_beam_files",
+    hdrs = HDRS,
+    srcs = ["test/worker_pool_SUITE.erl"],
+    dest = "test",
+    deps = [":test_bazel_erlang_lib"] + DEPS,
+    testonly = True,
+)
+
+ct_test(
+    name = "worker_pool_SUITE",
+    suites = [":worker_pool_SUITE_beam_files"],
+    deps = [
+        ":test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+    ],
+    size = "small",
+)

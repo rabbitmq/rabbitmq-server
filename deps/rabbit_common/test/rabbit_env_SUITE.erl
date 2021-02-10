@@ -335,6 +335,7 @@ check_values_from_reachable_remote_node(Config) ->
     Args = ["-noinput",
             "-sname", atom_to_list(Node),
             "-pa", filename:dirname(code:which(rabbit_env)),
+            "-pa", filename:dirname(code:where_is_file("rabbit_common.app")),
             "-pa", filename:dirname(code:which(rabbit)),
             "-pa", RabbitEbinDir,
             "-mnesia", "dir",

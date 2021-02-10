@@ -92,6 +92,7 @@ def rabbitmq_lib(
             erlc_opts = test_erlc_opts,
             dest = "src",
             deps = deps,
+            testonly = True,
         )
 
     erlc(
@@ -102,6 +103,7 @@ def rabbitmq_lib(
         erlc_opts = test_erlc_opts,
         dest = "src",
         deps = deps,
+        testonly = True,
     )
 
     all_test_beam = all_test_beam + [":test_beam_files"]
@@ -113,4 +115,5 @@ def rabbitmq_lib(
         hdrs = native.glob(["include/*.hrl"]),
         app = ":app_file",
         beam = all_test_beam,
+        testonly = True,
     )

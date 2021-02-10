@@ -28,5 +28,6 @@ rabbitmqctl_test(
     rabbitmq_run = "//:rabbitmq-for-cli-tests-run",
     size = "enormous",
     timeout = "long",
-    tags = ["cpu:2"],
+    # tags = ["cpu:2"],
+    # tags = ["exclusive"],
 )
