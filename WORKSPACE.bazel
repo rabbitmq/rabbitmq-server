@@ -1,10 +1,9 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
-git_repository(
+http_archive(
     name = "bazel-erlang",
-    branch = "master",
-    remote = "https://github.com/rabbitmq/bazel-erlang.git",
+    urls = ["https://github.com/rabbitmq/bazel-erlang/archive/master.zip"],
+    strip_prefix = "bazel-erlang-master",
 )
 
 load("//:workspace_helpers.bzl", "github_bazel_erlang_lib")
@@ -104,11 +103,10 @@ github_bazel_erlang_lib(
     sha256 = "b31d2fa5a9d6c3857180bee4a17d265945e0656ad66faf20594a3a8400b3a7e8",
 )
 
-new_git_repository(
+http_archive(
     name = "osiris",
-    # branch = "master",
-    commit = "20511d7cd6951f87f85d58f37d39cfb1ca90b2d8", shallow_since = "1612285593 +0300",
-    remote = "https://github.com/rabbitmq/osiris.git",
+    urls = ["https://github.com/rabbitmq/osiris/archive/master.zip"],
+    strip_prefix = "osiris-master",
     build_file = "@//:BUILD.osiris",
 )
 
@@ -120,10 +118,10 @@ github_bazel_erlang_lib(
     first_srcs = ["src/vararg.erl"],
 )
 
-git_repository(
+http_archive(
     name = "rabbitmq-ct-helpers",
-    branch = "bazel",
-    remote = "https://github.com/rabbitmq/rabbitmq-ct-helpers.git",
+    urls = ["https://github.com/rabbitmq/rabbitmq-ct-helpers/archive/bazel.zip"],
+    strip_prefix = "rabbitmq-ct-helpers-bazel",
     repo_mapping = {
         "@rabbitmq-server": "@",
     },
