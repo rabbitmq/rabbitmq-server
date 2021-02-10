@@ -106,7 +106,8 @@ github_bazel_erlang_lib(
 
 new_git_repository(
     name = "osiris",
-    branch = "master",
+    # branch = "master",
+    commit = "20511d7cd6951f87f85d58f37d39cfb1ca90b2d8", shallow_since = "1612285593 +0300",
     remote = "https://github.com/rabbitmq/osiris.git",
     build_file = "@//:BUILD.osiris",
 )
