@@ -179,6 +179,14 @@ terminate({shutdown, restart}, State = #state{name = Name}) ->
                                 {terminated, "needed a restart"}),
     close_connections(State),
     ok;
+terminate({{shutdown, {server_initiated_close, Code, Reason}}, _}, State = #state{name = Name}) ->
+    rabbit_log_shovel:error("Shovel ~s is stopping: one of its connections closed "
+                            "with code ~b, reason: ~s",
+                            [human_readable_name(Name), Code, Reason]),
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {terminated, "needed a restart"}),
+    close_connections(State),
+    ok;
 terminate(Reason, State = #state{name = Name}) ->
     rabbit_log_shovel:error("Shovel ~s is stopping, reason: ~p", [human_readable_name(Name), Reason]),
     rabbit_shovel_status:report(State#state.name, State#state.type,

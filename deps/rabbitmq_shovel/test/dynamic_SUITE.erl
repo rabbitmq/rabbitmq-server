@@ -21,6 +21,7 @@ groups() ->
     [
       {non_parallel_tests, [], [
           simple,
+          quorum_queues,
           set_properties_using_proplist,
           set_properties_using_map,
           set_empty_properties_using_proplist,
@@ -77,6 +78,20 @@ simple(Config) ->
                 Config,
                 <<"test">>, [{<<"src-queue">>,  <<"src">>},
                              {<<"dest-queue">>, <<"dest">>}]),
+              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
+      end).
+
+quorum_queues(Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              shovel_test_utils:set_param(
+                Config,
+                <<"test">>, [
+                             {<<"src-queue">>,       <<"src">>},
+                             {<<"dest-queue">>,      <<"dest">>},
+                             {<<"src-queue-args">>,  #{<<"x-queue-type">> => <<"quorum">>}},
+                             {<<"dest-queue-args">>, #{<<"x-queue-type">> => <<"quorum">>}}
+                            ]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
 

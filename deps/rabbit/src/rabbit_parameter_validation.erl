@@ -50,7 +50,20 @@ regex(Name, Term) ->
 proplist(Name, Constraints, Term) when is_list(Term) ->
     {Results, Remainder}
         = lists:foldl(
-            fun ({Key, Fun, Needed}, {Results0, Term0}) ->
+            %% if the optional/mandatory flag is not provided in a constraint tuple,
+            %% assume 'optional'
+            fun ({Key, Fun}, {Results0, Term0}) ->
+                    case lists:keytake(Key, 1, Term0) of
+                        {value, {Key, Value}, Term1} ->
+                            {[Fun(Key, Value) | Results0],
+                             Term1};
+                        {value, {Key, Type, Value}, Term1} ->
+                            {[Fun(Key, Type, Value) | Results0],
+                             Term1};
+                        false ->
+                            {Results0, Term0}
+                    end;
+                ({Key, Fun, Needed}, {Results0, Term0}) ->
                     case {lists:keytake(Key, 1, Term0), Needed} of
                         {{value, {Key, Value}, Term1}, _} ->
                             {[Fun(Key, Value) | Results0],
