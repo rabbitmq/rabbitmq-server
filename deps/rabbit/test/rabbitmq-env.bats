@@ -126,3 +126,34 @@ setup() {
     echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +t 4000000 ', but got: $RABBITMQ_SERVER_ERL_ARGS"
     [[ $RABBITMQ_SERVER_ERL_ARGS == *" +t 4000000 "* ]]
 }
+
+@test "default Erlang scheduler busy wait threshold" {
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+    echo $RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD
+
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +sbwt none ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +sbwt none "* ]]
+}
+
+@test "can configure Erlang scheduler busy wait threshold via conf file" {
+    echo 'SCHEDULER_BUSY_WAIT_THRESHOLD=medium' > "$RABBITMQ_CONF_ENV_FILE"
+    source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +sbwt medium ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +sbwt medium "* ]]
+}
+
+@test "can configure Erlang scheduler busy wait threshold via env" {
+    RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD=long source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +sbwt long ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +sbwt long "* ]]
+}
+
+@test "Erlang scheduler busy wait threshold env takes precedence over conf file" {
+    echo 'SCHEDULER_BIND_TYPE=s' > "$RABBITMQ_CONF_ENV_FILE"
+    RABBITMQ_SCHEDULER_BUSY_WAIT_THRESHOLD=short source "$RABBITMQ_SCRIPTS_DIR/rabbitmq-env"
+
+    echo "expected RABBITMQ_SERVER_ERL_ARGS to contain ' +sbwt short ', but got: $RABBITMQ_SERVER_ERL_ARGS"
+    [[ $RABBITMQ_SERVER_ERL_ARGS == *" +sbwt short "* ]]
+}
