@@ -41,6 +41,7 @@
          query_single_active_consumer/1,
          query_in_memory_usage/1,
          query_peek/2,
+         query_notify_decorators_info/1,
          usage/1,
 
          zero/1,
@@ -241,7 +242,7 @@ apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
             {State1, ok, Effects} =
             checkout(Meta, State0,
                      State0#?MODULE{service_queue = ServiceQueue,
-                                    consumers = Cons}, []),
+                                    consumers = Cons}, [], false),
             Response = {send_credit_reply, messages_ready(State1)},
             %% by this point all checkouts for the updated credit value
             %% should be processed so we can evaluate the drain
@@ -299,7 +300,8 @@ apply(#{index := Index,
     Exists = maps:is_key(ConsumerId, Consumers),
     case messages_ready(State0) of
         0 ->
-            update_smallest_raft_index(Index, {dequeue, empty}, State0, []);
+            update_smallest_raft_index(Index, {dequeue, empty}, State0,
+                                       [notify_decorators_effect(State0)]);
         _ when Exists ->
             %% a dequeue using the same consumer_id isn't possible at this point
             {State0, {dequeue, empty}};
@@ -330,8 +332,8 @@ apply(#{index := Index,
                     {{dequeue, {MsgId, Msg}, Ready-1}, Effects1}
 
             end,
-
-            case evaluate_limit(Index, false, State0, State4, Effects2) of
+            NotifyEffect = notify_decorators_effect(State4),
+            case evaluate_limit(Index, false, State0, State4, [NotifyEffect | Effects2]) of
                 {State, true, Effects} ->
                     update_smallest_raft_index(Index, Reply, State, Effects);
                 {State, false, Effects} ->
@@ -456,6 +458,7 @@ apply(#{system_time := Ts} = Meta, {down, Pid, noconnection},
     % Monitor the node so that we can "unsuspect" these processes when the node
     % comes back, then re-issue all monitors and discover the final fate of
     % these processes
+
     Effects = case maps:size(State#?MODULE.consumers) of
                   0 ->
                       [{aux, inactive}, {monitor, node, Node}];
@@ -959,6 +962,21 @@ query_peek(Pos, State0) when Pos > 0 ->
             query_peek(Pos-1, State)
     end.
 
+query_notify_decorators_info(#?MODULE{consumers = Consumers} = State) ->
+    MaxActivePriority = maps:fold(fun(_, #consumer{credit = C,
+                                                   status = up,
+                                                   priority = P0}, MaxP) when C > 0 ->
+                                          P = -P0,
+                                          case MaxP of
+                                              empty -> P;
+                                              MaxP when MaxP > P -> MaxP;
+                                              _ -> P
+                                          end;
+                                     (_, _, MaxP) ->
+                                          MaxP
+                                  end, empty, Consumers),
+    IsEmpty = (messages_ready(State) == 0),
+    {MaxActivePriority, IsEmpty}.
 
 -spec usage(atom()) -> float().
 usage(Name) when is_atom(Name) ->
@@ -1063,11 +1081,13 @@ cancel_consumer0(Meta, ConsumerId,
         #{ConsumerId := Consumer} ->
             {S, Effects2} = maybe_return_all(Meta, ConsumerId, Consumer,
                                              S0, Effects0, Reason),
+
             %% The effects are emitted before the consumer is actually removed
             %% if the consumer has unacked messages. This is a bit weird but
             %% in line with what classic queues do (from an external point of
             %% view)
             Effects = cancel_consumer_effects(ConsumerId, S, Effects2),
+
             case maps:size(S#?MODULE.consumers) of
                 0 ->
                     {S, [{aux, inactive} | Effects]};
@@ -1130,7 +1150,7 @@ apply_enqueue(#{index := RaftIdx} = Meta, From, Seq, RawMsg, State0) ->
     case maybe_enqueue(RaftIdx, From, Seq, RawMsg, [], State0) of
         {ok, State1, Effects1} ->
             State2 = append_to_master_index(RaftIdx, State1),
-            {State, ok, Effects} = checkout(Meta, State0, State2, Effects1),
+            {State, ok, Effects} = checkout(Meta, State0, State2, Effects1, false),
             {maybe_store_dehydrated_state(RaftIdx, State), ok, Effects};
         {duplicate, State, Effects} ->
             {State, ok, Effects}
@@ -1288,7 +1308,7 @@ return(#{index := IncomingRaftIdx} = Meta, ConsumerId, Returned,
             _ ->
                 State1
         end,
-    {State, ok, Effects} = checkout(Meta, State0, State2, Effects1),
+    {State, ok, Effects} = checkout(Meta, State0, State2, Effects1, false),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 % used to processes messages that are finished
@@ -1332,7 +1352,7 @@ complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerId,
     Discarded = maps:with(MsgIds, Checked0),
     {State2, Effects1} = complete(Meta, ConsumerId, Discarded, Con0,
                                   Effects0, State0),
-    {State, ok, Effects} = checkout(Meta, State0, State2, Effects1),
+    {State, ok, Effects} = checkout(Meta, State0, State2, Effects1, false),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 dead_letter_effects(_Reason, _Discarded,
@@ -1364,9 +1384,10 @@ dead_letter_effects(Reason, Discarded,
       end} | Effects].
 
 cancel_consumer_effects(ConsumerId,
-                        #?MODULE{cfg = #cfg{resource = QName}}, Effects) ->
+                        #?MODULE{cfg = #cfg{resource = QName}} = State, Effects) ->
     [{mod_call, rabbit_quorum_queue,
-      cancel_consumer_handler, [QName, ConsumerId]} | Effects].
+      cancel_consumer_handler, [QName, ConsumerId]},
+     notify_decorators_effect(State) | Effects].
 
 update_smallest_raft_index(Idx, State, Effects) ->
     update_smallest_raft_index(Idx, ok, State, Effects).
@@ -1501,14 +1522,30 @@ return_all(Meta, #?MODULE{consumers = Cons} = State0, Effects0, ConsumerId,
                 end, {State, Effects0}, Checked).
 
 %% checkout new messages to consumers
-checkout(#{index := Index} = Meta, OldState, State0, Effects0) ->
+checkout(Meta, OldState, State, Effects) ->
+    checkout(Meta, OldState, State, Effects, true).
+
+checkout(#{index := Index} = Meta, #?MODULE{cfg = #cfg{resource = QName}} = OldState, State0,
+         Effects0, HandleConsumerChanges) ->
     {State1, _Result, Effects1} = checkout0(Meta, checkout_one(Meta, State0),
                                             Effects0, {#{}, #{}}),
     case evaluate_limit(Index, false, OldState, State1, Effects1) of
         {State, true, Effects} ->
-            update_smallest_raft_index(Index, State, Effects);
+            case have_active_consumers_changed(State, HandleConsumerChanges) of
+                {true, {MaxActivePriority, IsEmpty}} ->
+                    NotifyEffect = notify_decorators_effect(QName, MaxActivePriority, IsEmpty),
+                    update_smallest_raft_index(Index, State, [NotifyEffect | Effects]);
+                false ->
+                    update_smallest_raft_index(Index, State, Effects)
+            end;
         {State, false, Effects} ->
-            {State, ok, Effects}
+            case have_active_consumers_changed(State, HandleConsumerChanges) of
+                {true, {MaxActivePriority, IsEmpty}} ->
+                    NotifyEffect = notify_decorators_effect(QName, MaxActivePriority, IsEmpty),
+                    {State, ok, [NotifyEffect | Effects]};
+                false ->
+                    {State, ok, Effects}
+            end
     end.
 
 checkout0(Meta, {success, ConsumerId, MsgId, {RaftIdx, {Header, 'empty'}}, State},
@@ -2127,3 +2164,16 @@ get_priority_from_args(#{args := Args}) ->
     end;
 get_priority_from_args(_) ->
     0.
+
+have_active_consumers_changed(_, false) ->
+    false;
+have_active_consumers_changed(State, _) ->
+    {true, query_notify_decorators_info(State)}.
+
+notify_decorators_effect(#?MODULE{cfg = #cfg{resource = QName}} = State) ->
+    {MaxActivePriority, IsEmpty} = query_notify_decorators_info(State),
+    notify_decorators_effect(QName, MaxActivePriority, IsEmpty).
+
+notify_decorators_effect(QName, MaxActivePriority, IsEmpty) ->
+    {mod_call, rabbit_quorum_queue, spawn_notify_decorators,
+     [QName, consumer_state_changed, [MaxActivePriority, IsEmpty]]}.
