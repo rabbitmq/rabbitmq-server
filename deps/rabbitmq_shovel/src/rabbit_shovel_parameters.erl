@@ -116,12 +116,13 @@ amqp10_src_validation(_Def, User) ->
 
 amqp091_src_validation(_Def, User) ->
     [
-     {<<"src-uri">>,         validate_uri_fun(User), mandatory},
-     {<<"src-exchange">>,    fun rabbit_parameter_validation:binary/2,optional},
-     {<<"src-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
-     {<<"src-queue">>,       fun rabbit_parameter_validation:binary/2,optional},
-     {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
-     {<<"src-prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
+     {<<"src-uri">>,          validate_uri_fun(User), mandatory},
+     {<<"src-exchange">>,     fun rabbit_parameter_validation:binary/2, optional},
+     {<<"src-exchange-key">>, fun rabbit_parameter_validation:binary/2, optional},
+     {<<"src-queue">>,        fun rabbit_parameter_validation:binary/2, optional},
+     {<<"src-queue-args">>,   fun validate_queue_args/2, optional},
+     {<<"prefetch-count">>,   fun rabbit_parameter_validation:number/2, optional},
+     {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      %% a deprecated pre-3.7 setting
      {<<"delete-after">>, fun validate_delete_after/2, optional},
      %% currently used multi-protocol friend name, introduced in 3.7
@@ -151,6 +152,7 @@ amqp091_dest_validation(_Def, User) ->
      {<<"dest-exchange">>,   fun rabbit_parameter_validation:binary/2,optional},
      {<<"dest-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
      {<<"dest-queue">>,      fun rabbit_parameter_validation:binary/2,optional},
+     {<<"dest-queue-args">>, fun validate_queue_args/2, optional},
      {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
@@ -205,6 +207,11 @@ validate_delete_after(_Name, N) when is_integer(N) -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~s should be number, \"never\" or \"queue-length\", actually was "
      "~p", [Name, Term]}.
+
+validate_queue_args(Name, Term0) ->
+    Term = rabbit_data_coercion:to_proplist(Term0),
+
+    rabbit_parameter_validation:proplist(Name, rabbit_amqqueue:declare_args(), Term).
 
 validate_amqp10_map(Name, Terms0) ->
     Terms = rabbit_data_coercion:to_proplist(Terms0),
@@ -292,14 +299,15 @@ parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
      }.
 
 parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
-    DestURIs = get_uris(<<"dest-uri">>,      Def),
-    DestX    = pget(<<"dest-exchange">>,     Def, none),
-    DestXKey = pget(<<"dest-exchange-key">>, Def, none),
-    DestQ    = pget(<<"dest-queue">>,        Def, none),
+    DestURIs  = get_uris(<<"dest-uri">>,      Def),
+    DestX     = pget(<<"dest-exchange">>,     Def, none),
+    DestXKey  = pget(<<"dest-exchange-key">>, Def, none),
+    DestQ     = pget(<<"dest-queue">>,        Def, none),
+    DestQArgs = pget(<<"dest-queue-args">>,   Def, #{}),
     DestDeclFun = fun (Conn, _Ch) ->
                       case DestQ of
                           none -> ok;
-                          _ -> ensure_queue(Conn, DestQ)
+                          _ -> ensure_queue(Conn, DestQ, rabbit_misc:to_amqp_table(DestQArgs))
                       end
               end,
     {X, Key} = case DestQ of
@@ -371,10 +379,11 @@ parse_amqp10_source(Def) ->
        prefetch_count => PrefetchCount}, Headers}.
 
 parse_amqp091_source(Def) ->
-    SrcURIs = get_uris(<<"src-uri">>, Def),
-    SrcX = pget(<<"src-exchange">>,Def, none),
-    SrcXKey = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
-    SrcQ = pget(<<"src-queue">>, Def, none),
+    SrcURIs  = get_uris(<<"src-uri">>, Def),
+    SrcX     = pget(<<"src-exchange">>,Def, none),
+    SrcXKey  = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
+    SrcQ     = pget(<<"src-queue">>, Def, none),
+    SrcQArgs = pget(<<"dest-queue-args">>,   Def, #{}),
     {SrcDeclFun, Queue, DestHeaders} =
     case SrcQ of
         none -> {fun (_Conn, Ch) ->
@@ -385,7 +394,7 @@ parse_amqp091_source(Def) ->
                  end, <<>>, [{<<"src-exchange">>,     SrcX},
                              {<<"src-exchange-key">>, SrcXKey}]};
         _ -> {fun (Conn, _Ch) ->
-                      ensure_queue(Conn, SrcQ)
+                      ensure_queue(Conn, SrcQ, rabbit_misc:to_amqp_table(SrcQArgs))
               end, SrcQ, [{<<"src-queue">>, SrcQ}]}
     end,
     DeleteAfter = pget(<<"src-delete-after">>, Def,
@@ -416,15 +425,16 @@ translate_ack_mode(<<"on-confirm">>) -> on_confirm;
 translate_ack_mode(<<"on-publish">>) -> on_publish;
 translate_ack_mode(<<"no-ack">>)     -> no_ack.
 
-ensure_queue(Conn, Queue) ->
+ensure_queue(Conn, Queue, XArgs) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     try
         amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
                                                passive = true})
     catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
             {ok, Ch2} = amqp_connection:open_channel(Conn),
-            amqp_channel:call(Ch2, #'queue.declare'{queue   = Queue,
-                                                    durable = true}),
+            amqp_channel:call(Ch2, #'queue.declare'{queue     = Queue,
+                                                    durable   = true,
+                                                    arguments = XArgs}),
             catch amqp_channel:close(Ch2)
 
     after

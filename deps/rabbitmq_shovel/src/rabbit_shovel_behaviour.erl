@@ -48,7 +48,7 @@
                    ack_mode => ack_mode(),
                    atom() => term()}.
 
--export_type([state/0, source_config/0, dest_config/0, uri/0]).
+-export_type([state/0, source_config/0, dest_config/0, uri/0, tag/0]).
 
 -callback parse(binary(), {source | destination, Conf :: proplists:proplist()}) ->
     source_config() | dest_config().
