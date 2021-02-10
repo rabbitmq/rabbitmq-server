@@ -48,6 +48,9 @@
          repair_amqqueue_nodes/2
          ]).
 -export([reclaim_memory/2]).
+-export([notify_decorators/1,
+         notify_decorators/3,
+         spawn_notify_decorators/3]).
 
 -export([is_enabled/0,
          declare/2]).
@@ -172,6 +175,7 @@ start_cluster(Q) ->
                                                                  ra_machine_config(NewQ)),
                     %% force a policy change to ensure the latest config is
                     %% updated even when running the machine version from 0
+                    notify_decorators(QName, startup),
                     rabbit_event:notify(queue_created,
                                         [{name, QName},
                                          {durable, Durable},
@@ -367,6 +371,11 @@ spawn_deleter(QName) ->
     spawn(fun () ->
                   {ok, Q} = rabbit_amqqueue:lookup(QName),
                   delete(Q, false, false, <<"expired">>)
+          end).
+
+spawn_notify_decorators(QName, Fun, Args) ->
+    spawn(fun () ->
+                  notify_decorators(QName, Fun, Args)
           end).
 
 handle_tick(QName,
@@ -568,6 +577,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
             after Timeout ->
                     ok = force_delete_queue(Servers)
             end,
+            notify_decorators(QName, shutdown),
             ok = delete_queue_data(QName, ActingUser),
             rpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
                      ?RPC_TIMEOUT),
@@ -589,6 +599,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                        " Attempting force delete.",
                       [rabbit_misc:rs(QName), Errs]),
                     ok = force_delete_queue(Servers),
+                    notify_decorators(QName, shutdown),
                     delete_queue_data(QName, ActingUser),
                     {ok, ReadyMsgs}
             end
@@ -1524,4 +1535,26 @@ parse_credit_args(Default, Args) ->
             end;
         undefined ->
             {simple_prefetch, Default, false}
+    end.
+
+-spec notify_decorators(amqqueue:amqqueue()) -> 'ok'.
+notify_decorators(Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
+    QPid = amqqueue:get_pid(Q),
+    case ra:local_query(QPid, fun rabbit_fifo:query_notify_decorators_info/1) of
+        {ok, {_, {MaxActivePriority, IsEmpty}}, _} ->
+            notify_decorators(QName, consumer_state_changed, [MaxActivePriority, IsEmpty]);
+        _ -> ok
+    end.
+
+notify_decorators(QName, Event) -> notify_decorators(QName, Event, []).
+
+notify_decorators(QName, F, A) ->
+    %% Look up again in case policy and hence decorators have changed
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            Ds = amqqueue:get_decorators(Q),
+            [ok = apply(M, F, [Q|A]) || M <- rabbit_queue_decorator:select(Ds)];
+        {error, not_found} ->
+            ok
     end.

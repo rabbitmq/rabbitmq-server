@@ -176,10 +176,10 @@ expect([], _Timeout) ->
     ok;
 expect(Payloads, Timeout) ->
     receive
-        {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
+        {#'basic.deliver'{delivery_tag = DTag}, #amqp_msg{payload = Payload}} ->
             case lists:member(Payload, Payloads) of
                 true  ->
-                    ct:pal("Consumed a message: ~p", [Payload]),
+                    ct:pal("Consumed a message: ~p ~p left: ~p", [Payload, DTag, length(Payloads) - 1]),
                     expect(Payloads -- [Payload], Timeout);
                 false -> ?assert(false, rabbit_misc:format("received an unexpected payload ~p", [Payload]))
             end
@@ -350,5 +350,9 @@ delete_queue(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
 
 q(Name) ->
+    q(Name, []).
+
+q(Name, Args) ->
     #'queue.declare'{queue   = Name,
-                     durable = true}.
+                     durable = true,
+                     arguments = Args}.
