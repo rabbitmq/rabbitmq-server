@@ -19,6 +19,11 @@ jobs:
         otp-version: ${{ matrix.erlang_version }}
         # https://github.com/elixir-lang/elixir/releases
         elixir-version: 1.10.4
+    - name: MOUNT BAZEL CACHE
+      uses: gerbal/always-cache@v1.0.3
+      with:
+        path: "/home/runner/bazel_repository_cache"
+        key: ${{ runner.os }}-bazel-repository-cache-${{ matrix.erlang_version }}
     - name: INSTALL BAZELISK
       run: |
         curl -LO "https://github.com/bazelbuild/bazelisk/releases/download/v1.1.0/bazelisk-linux-amd64"
@@ -38,6 +43,7 @@ jobs:
         echo "build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}" >> .bazelrc
         echo "build --@bazel-erlang//:erlang_home=${ERLANG_HOME}" >> .bazelrc
         echo "build --@bazel-erlang//:elixir_home=${ELIXIR_HOME}" >> .bazelrc
+        echo "build --repository_cache=/home/runner/bazel_repository_cache" >> .bazelrc
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
