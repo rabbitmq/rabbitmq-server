@@ -41,6 +41,9 @@ groups() ->
         ]},
       {java, [], [
           roundtrip
+        ]},
+      {streams, [], [
+          stream_interop_basics
         ]}
     ].
 
@@ -55,6 +58,22 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
+init_per_group(streams, Config) ->
+    case os:getenv("SECONDARY_UMBRELLA") of
+        false ->
+            Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+            Config1 = rabbit_ct_helpers:set_config(Config, [
+                {rmq_nodename_suffix, Suffix},
+                {amqp10_client_library, dotnet}
+              ]),
+            rabbit_ct_helpers:run_setup_steps(Config1, [
+                fun build_dotnet_test_project/1
+            ] ++
+            rabbit_ct_broker_helpers:setup_steps() ++
+            rabbit_ct_client_helpers:setup_steps());
+        _     ->
+            {skip, "stream tests are skipped in mixed mode"}
+    end;
 init_per_group(Group, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
@@ -152,10 +171,6 @@ data_types(Config) ->
         {dotnet, "data_types"}
       ]).
 
-%% at_most_once(Config) ->
-%%     run(Config, [
-%%       ]).
-
 reject(Config) ->
     run(Config, [
         {dotnet, "reject"}
@@ -177,6 +192,15 @@ routing(Config) ->
                                            arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
     amqp_channel:call(Ch, #'queue.declare'{queue       = <<"autodel_q">>,
                                            auto_delete = true}),
+    run(Config, [
+        {dotnet, "routing"}
+      ]).
+
+stream_interop_basics(Config) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.declare'{queue   = <<"stream_q">>,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
     run(Config, [
         {dotnet, "routing"}
       ]).
