@@ -24,6 +24,7 @@ defmodule EnableClassicMirroringCommandTest do
     RabbitMQ.CLI.Core.Distribution.start()
 
     add_vhost @vhost
+    enable_feature_flag :runtime_parameters_acl
     :ok = :rpc.call(get_rabbit_hostname(), :rabbit_runtime_parameters_acl, :ensure_table, [])
     disallow_parameter @vhost, @component_name, @key
 

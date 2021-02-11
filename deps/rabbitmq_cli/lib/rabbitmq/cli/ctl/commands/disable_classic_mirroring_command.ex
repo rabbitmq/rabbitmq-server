@@ -9,10 +9,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DisableClassicMirroringCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  def switches(), do: [hard: :boolean]
-
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{vhost: "/", hard: false}, opts)}
+    {args, Map.merge(%{vhost: "/"}, opts)}
   end
 
   def validate([_ | _] = args, _) when length(args) > 1 do
