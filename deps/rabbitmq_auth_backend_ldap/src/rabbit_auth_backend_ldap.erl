@@ -706,18 +706,19 @@ eldap_open(Servers, Opts) ->
 ssl_conf() ->
     %% We must make sure not to add SSL options unless a) we have at least R16A
     %% b) we have SSL turned on (or it breaks StartTLS...)
-    case env(use_ssl) of
+    case env(use_ssl, false) of
         false -> [{ssl, false}];
         true  -> %% Only the unfixed version can be []
                  case env(ssl_options) of
-                     [] -> [{ssl, true}];
-                     _  -> [{ssl, true}, {sslopts, ssl_options()}]
+                     []        -> [{ssl, true}];
+                     undefined -> [{ssl, true}];
+                     _         -> [{ssl, true}, {sslopts, ssl_options()}]
                  end
     end.
 
 ssl_options() ->
     Opts0 = rabbit_networking:fix_ssl_options(env(ssl_options)),
-    case env(ssl_hostname_verification) of
+    case env(ssl_hostname_verification, undefined) of
         wildcard ->
             rabbit_log_ldap:debug("Enabling wildcard-aware hostname verification for LDAP client connections"),
             %% Needed for non-HTTPS connections that connect to servers that use wildcard certificates.
@@ -745,8 +746,13 @@ get_expected_env_str(Key, Default) ->
     rabbit_data_coercion:to_list(V).
 
 env(Key) ->
-    {ok, V} = application:get_env(rabbitmq_auth_backend_ldap, Key),
-    V.
+    case application:get_env(rabbitmq_auth_backend_ldap, Key) of
+       {ok, V} -> V;
+        undefined -> undefined
+    end.
+
+env(Key, Default) ->
+    application:get_env(rabbitmq_auth_backend_ldap, Key, Default).
 
 login_fun(User, UserDN, Password, AuthProps) ->
     fun(L) -> case pget(vhost, AuthProps) of
@@ -897,16 +903,11 @@ scrub_rdn([DN|Rem], Acc) ->
   scrub_rdn(Rem, [string:join(DN0, "=")|Acc]).
 
 is_dn(S) when is_list(S) ->
-    case catch string:tokens(to_list(S), "=") of
+    case catch string:tokens(rabbit_data_coercion:to_list(S), "=") of
         L when length(L) > 1 -> true;
         _                    -> false
     end;
 is_dn(_S) -> false.
-
-to_list(S) when is_list(S)   -> S;
-to_list(S) when is_binary(S) -> binary_to_list(S);
-to_list(S) when is_atom(S)   -> atom_to_list(S);
-to_list(S)                   -> {error, {badarg, S}}.
 
 log(Fmt,  Args) -> case env(log) of
                        false -> ok;
