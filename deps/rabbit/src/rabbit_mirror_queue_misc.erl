@@ -394,11 +394,18 @@ suggested_queue_nodes(Q, DefNode, All) when ?is_amqqueue(Q) ->
                 _    -> MNode0
             end,
     case Owner of
-        none -> Params = policy(<<"ha-params">>, Q),
-                case module(Q) of
-                    {ok, M} -> M:suggested_queue_nodes(
-                                 Params, MNode, SNodes, SSNodes, All);
-                    _       -> {MNode, []}
+        none ->
+                VHost = amqqueue:get_vhost(Q),
+                case is_allowed(VHost) of
+                    true ->
+                        Params = policy(<<"ha-params">>, Q),
+                        case module(Q) of
+                            {ok, M} -> M:suggested_queue_nodes(
+                                         Params, MNode, SNodes, SSNodes, All);
+                            _       -> {MNode, []}
+                        end;
+                    false ->
+                        {MNode, []}
                 end;
         _    -> {MNode, []}
     end.
@@ -410,15 +417,9 @@ policy(Policy, Q) ->
     end.
 
 module(Q) when ?is_amqqueue(Q) ->
-    VHost = amqqueue:get_vhost(Q),
-    case is_allowed(VHost) of
-        true ->
-            case rabbit_policy:get(<<"ha-mode">>, Q) of
-                undefined -> not_mirrored;
-                Mode      -> module(Mode)
-            end;
-        false ->
-            not_mirrored
+    case rabbit_policy:get(<<"ha-mode">>, Q) of
+        undefined -> not_mirrored;
+        Mode      -> module(Mode)
     end;
 
 module(Mode) when is_binary(Mode) ->
