@@ -40,8 +40,8 @@ create_table() ->
              N <- ClusterNodes],
         ok
     catch
-        throw:Reason ->
-            {error, Reason}
+        _:{error, _Reason} = Error -> Error;
+        _:Reason -> {error, Reason}
     end.
 
 -spec new(rabbit_types:vhost(), binary()) -> rabbit_types:runtime_parameters_acl().
