@@ -12,7 +12,8 @@
     wait_for_replicated/1, wait/1, wait/2,
     force_load/0, is_present/0, is_empty/0, needs_default_data/0,
     check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
-    wait_for_replicated/0, exists/1]).
+    wait_for_replicated/0, exists/1, table_type/0,
+    change_table_copy_type/1, change_table_copy_type/3]).
 
 %% for testing purposes
 -export([definitions/0]).
@@ -203,6 +204,28 @@ ensure_local_copies(disc) ->
 ensure_local_copies(ram)  ->
     create_local_copies(ram),
     create_local_copy(schema, ram_copies).
+
+-spec table_type() -> 'disc_copies' | 'ram_copies'.
+
+table_type() ->
+    case rabbit_mnesia:node_type() of
+        disc -> disc_copies;
+        ram  -> ram_copies
+    end.
+
+-spec change_table_copy_type(atom()) -> 'ok'.
+
+change_table_copy_type(Tab) ->
+    change_table_copy_type(Tab, table_type(), node()).
+
+-spec change_table_copy_type(atom(), 'disc_copies' | 'ram_copies', node()) -> 'ok'.
+
+change_table_copy_type(Tab, Type, Node) ->
+    case mnesia:change_table_copy_type(Tab, Node, Type) of
+        {atomic, ok}                                 -> ok;
+        {aborted, {already_exists, Tab, Node, Type}} -> ok;
+        {aborted, Reason}                            -> throw({error, Reason})
+    end.
 
 %%--------------------------------------------------------------------
 %% Internal helpers

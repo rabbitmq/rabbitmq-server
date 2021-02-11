@@ -30,9 +30,15 @@ table_name() -> ?TAB.
 -spec create_table() -> rabbit_types:ok_or_error(any()).
 create_table() ->
     try
-        rabbit_table:create(?MODULE,
+        ClusterNodes = rabbit_mnesia:cluster_nodes(all),
+        rabbit_table:create(?TAB,
             [{record_name, runtime_parameters_acl},
-             {attributes, record_info(fields, runtime_parameters_acl)}])
+             {attributes, record_info(fields, runtime_parameters_acl)},
+             {ram_copies, ClusterNodes}]),
+        %% Ensure table type on each node corresponds to underlying node type
+        [rpc:call(N, rabbit_table, change_table_copy_type, [?TAB]) ||
+             N <- ClusterNodes],
+        ok
     catch
         throw:Reason ->
             {error, Reason}
