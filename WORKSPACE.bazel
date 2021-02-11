@@ -127,6 +127,15 @@ http_archive(
     },
 )
 
+http_archive(
+    name = "rabbitmq-ct-client-helpers",
+    urls = ["https://github.com/rabbitmq/rabbitmq-ct-client-helpers/archive/bazel.zip"],
+    strip_prefix = "rabbitmq-ct-client-helpers-bazel",
+    repo_mapping = {
+        "@rabbitmq-server": "@",
+    },
+)
+
 github_bazel_erlang_lib(
     name = "ra",
     version = "1.1.8",

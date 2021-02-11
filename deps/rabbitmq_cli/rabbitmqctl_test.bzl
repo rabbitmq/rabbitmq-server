@@ -1,15 +1,11 @@
 load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
 load("@bazel-erlang//:elixir_home.bzl", "ElixirHomeProvider")
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "BEGINS_WITH_FUN", "QUERY_ERL_VERSION", "path_join")
-load("@bazel-erlang//:ct.bzl", "short_dirname")
+load("@bazel-erlang//:ct.bzl", "code_paths")
 load(":rabbitmqctl.bzl", "MIX_DEPS_DIR")
 
-def _lib_dir(dep):
-    c = []
-    c.append(dep.label.workspace_root) if dep.label.workspace_root != "" else None
-    c.append(short_dirname(dep[ErlangLibInfo].beam[0]))
-    c.append("..")
-    return path_join(*c)
+def _lib_dirs(dep):
+    return [path_join(p, "..") for p in code_paths(dep)]
 
 def _impl(ctx):
     erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
@@ -49,7 +45,7 @@ def _impl(ctx):
             )
 
     erl_libs = ":".join(
-        [path_join("${TEST_SRCDIR}/${TEST_WORKSPACE}", _lib_dir(dep)) for dep in ctx.attr.deps]
+        [path_join("${TEST_SRCDIR}/${TEST_WORKSPACE}", d) for dep in ctx.attr.deps for d in _lib_dirs(dep)]
     )
 
     script = """

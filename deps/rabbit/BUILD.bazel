@@ -1,3 +1,4 @@
+load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq.bzl", "rabbitmq_lib")
 
 exports_files([
@@ -176,4 +177,127 @@ rabbitmq_lib(
     priv = glob(["priv/schema/rabbit.schema"]),
     deps = DEPS,
     runtime_deps = RUNTIME_DEPS,
+)
+
+ct_suite(
+    suite_name = "amqqueue_backward_compatibility_SUITE",
+    deps = DEPS,
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+    },
+)
+
+ct_suite(
+    suite_name = "backing_queue_SUITE",
+    data = [
+        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
+        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+    ],
+    deps = DEPS + [
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
+    runtime_deps = [
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+    ],
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl"
+    },
+    size = "enormous",
+)
+
+ct_suite(
+    suite_name = "channel_interceptor_SUITE",
+    additional_srcs = [
+        "test/dummy_interceptor.erl",
+        "test/failing_dummy_interceptor.erl",
+    ],
+    data = [
+        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
+        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+    ],
+    deps = DEPS + [
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
+    runtime_deps = [
+        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+    ],
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl"
+    },
+    size = "large",
+)
+
+ct_suite(
+    suite_name = "channel_operation_timeout_SUITE",
+    additional_srcs = [
+        "test/channel_operation_timeout_test_queue.erl"
+    ],
+    data = [
+        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
+        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+    ],
+    deps = DEPS + [
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
+    runtime_deps = [
+        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+    ],
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl"
+    },
+    size = "large",
+)
+
+ct_suite(
+    suite_name = "cluster_rename_SUITE",
+    data = [
+        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
+        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+    ],
+    deps = DEPS + [
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
+    runtime_deps = [
+        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+    ],
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl"
+    },
+    size = "enormous",
 )

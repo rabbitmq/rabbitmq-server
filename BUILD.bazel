@@ -23,6 +23,16 @@ rabbitmq_home(
 )
 
 rabbitmq_home(
+    name = "broker-for-tests-home",
+    escripts = ["//deps/rabbitmq_cli:rabbitmqctl"],
+    plugins = REQUIRED_PLUGINS + [
+        # "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_home(
     name = "broker-for-cli-tests-home",
     escripts = ["//deps/rabbitmq_cli:rabbitmqctl"],
     plugins = REQUIRED_PLUGINS + [
@@ -36,12 +46,17 @@ rabbitmq_run(
     name = "rabbitmq-run",
     home = ":broker-home",
     visibility = ["//visibility:public"],
-    testonly = True,
 )
 
 rabbitmq_run(
     name = "rabbitmq-management-run",
     home = ":broker-management-home",
+    visibility = ["//visibility:public"],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-tests-run",
+    home = ":broker-for-tests-home",
     visibility = ["//visibility:public"],
     testonly = True,
 )
@@ -60,7 +75,6 @@ rabbitmq_run_command(
     name = "broker",
     rabbitmq_run = ":rabbitmq-run",
     subcommand = "run-broker",
-    testonly = True,
 )
 
 # `bazel run broker-management` for the broker with just the
@@ -69,7 +83,6 @@ rabbitmq_run_command(
     name = "broker-management",
     rabbitmq_run = ":rabbitmq-management-run",
     subcommand = "run-broker",
-    testonly = True,
 )
 
 # `bazel run rabbitmqctl`
