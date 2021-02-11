@@ -14,14 +14,14 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, core_tests},
+      {group, quorum_queue_tests}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
+      {core_tests, [], [
           simple,
-          quorum_queues,
           set_properties_using_proplist,
           set_properties_using_map,
           set_empty_properties_using_proplist,
@@ -34,6 +34,10 @@ groups() ->
           validation,
           security_validation,
           get_connection_name
+        ]},
+
+        {quorum_queue_tests, [], [
+          quorum_queues
         ]}
     ].
 
@@ -55,6 +59,11 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_group(quorum_queue_tests, Config) ->
+    case os:getenv("SECONDARY_UMBRELLA") of
+        false -> Config;
+        _     -> {skip, "quorum queue tests are skipped in mixed mode"}
+    end;
 init_per_group(_, Config) ->
     Config.
 
