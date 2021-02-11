@@ -1483,8 +1483,10 @@ handle_frame_post_auth(Transport,
                                             OffsetAndCredit,
                                         {{timestamp, Timestamp}, Crdt}
                                 end,
+                            rabbit_log:info("Creating subscription ~p to ~p, with offset specification ~p~n", [SubscriptionId, Stream, OffsetSpec]),
                             {ok, Segment} =
                                 osiris:init_reader(LocalMemberPid, OffsetSpec),
+                            rabbit_log:info("Next offset for subscription ~p is ~p~n", [SubscriptionId, osiris_log:next_offset(Segment)]),
                             ConsumerCounters =
                                 atomics:new(2, [{signed, false}]),
                             ConsumerState =
@@ -1506,6 +1508,7 @@ handle_frame_post_auth(Transport,
                                         ?COMMAND_SUBSCRIBE,
                                         CorrelationId),
 
+                            rabbit_log:info("Distributing existing messages to subscription ~p~n", [SubscriptionId]),
                             {{segment, Segment1}, {credit, Credit1}} =
                                 send_chunks(Transport, ConsumerState,
                                             SendFileOct),
@@ -1530,6 +1533,10 @@ handle_frame_post_auth(Transport,
                                 ConsumerState1,
 
                             ConsumerOffset = osiris_log:next_offset(Segment1),
+
+                            rabbit_log:info("Subscription ~p is now at offset ~p with ~p message(s) distributed after subscription~n",[
+                               SubscriptionId, ConsumerOffset, messages_consumed(ConsumerCounters1)
+                            ]),
 
                             rabbit_stream_metrics:consumer_created(self(),
                                                                    stream_r(Stream,
