@@ -4,9 +4,6 @@ ifneq ($(filter-out clean,$(MAKECMDGOALS)),)
 ifeq ($(GENERIC_UNIX_ARCHIVE),)
 $(error Cannot find generic-unix archive; please specify GENERIC_UNIX_ARCHIVE)
 endif
-ifneq ($(words $(SOURCE_DIST_FILE)),1)
-$(error Multiple generic-unix archives found; please specify GENERIC_UNIX_ARCHIVE)
-endif
 
 VERSION ?= $(patsubst rabbitmq-server-generic-unix-%.tar.xz,%,$(notdir $(GENERIC_UNIX_ARCHIVE)))
 ifeq ($(VERSION),)
