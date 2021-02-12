@@ -14,8 +14,8 @@ $(error Cannot determine version; please specify VERSION)
 endif
 endif
 
-OTP_VERSION ?= 22.3
-OTP_SHA256 ?= 886e6dbe1e4823c7e8d9c9c1ba8315075a1a9f7717f5a1eaf3b98345ca6c798e
+OTP_VERSION ?= 23.2.4
+OTP_SHA256 ?= e72aa084907e0f34f932cf00caa33aba93147b0a7c9c35569d6bd1c402f532de
 
 all: dist
 
