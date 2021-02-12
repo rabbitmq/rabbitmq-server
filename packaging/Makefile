@@ -109,7 +109,7 @@ package-windows: $(SOURCE_DIST_FILE)
 package-generic-unix: $(SOURCE_DIST_FILE)
 	$(gen_verbose) $(MAKE) -C generic-unix $(VARS) all $(DO_CLEAN)
 
-docker-image: package-generic-unix
+docker-image:
 	$(gen_verbose) $(MAKE) -C docker-image $(VARS) all $(DO_CLEAN)
 
 .PHONY: clean
