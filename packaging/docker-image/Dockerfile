@@ -22,29 +22,7 @@ ARG PGP_KEYSERVER=ha.pool.sks-keyservers.net
 ENV OPENSSL_VERSION 1.1.1g
 ENV OPENSSL_SOURCE_SHA256="ddb04774f1e32f0c49751e21b67216ac87852ceb056b75209af2443400636d46"
 # https://www.openssl.org/community/omc.html
-ENV OPENSSL_PGP_KEY_IDS="{{
-[
-	# Matt Caswell
-	"8657 ABB2 60F0 56B1 E519 0839 D9C4 D26D 0E60 4491",
-
-	# Mark J. Cox
-	"5B25 45DA B219 95F4 088C EFAA 36CE E4DE B00C FE33",
-
-	# Paul Dale
-	"ED23 0BEC 4D4F 2518 B9D7 DF41 F0DB 4D21 C1D3 5231",
-
-	# Tim Hudson
-	"C1F3 3DD8 CE1D 4CC6 13AF 14DA 9195 C482 41FB F7DD",
-
-	# Richard Levitte
-	"7953 AC1F BC3D C8B3 B292 393E D5E9 E43F 7DF9 EE8C",
-
-	# Kurt Roeckx
-	"E5E5 2560 DD91 C556 DDBD A5D0 2064 C536 41C2 5E5D"
-]
-# TODO auto-generate / scrape this list from the canonical upstream source instead (check the signature file and add an entry in the .openssl object with just the one signature that we expect to have signed this release, after cross-referencing the official OMC list?)
-| map("0x" + gsub(" "; "")) | join(" ")
-}}"
+ENV OPENSSL_PGP_KEY_IDS="0x8657ABB260F056B1E5190839D9C4D26D0E604491 0x5B2545DAB21995F4088CEFAA36CEE4DEB00CFE33 0xED230BEC4D4F2518B9D7DF41F0DB4D21C1D35231 0xC1F33DD8CE1D4CC613AF14DA9195C48241FBF7DD 0x7953AC1FBC3DC8B3B292393ED5E9E43F7DF9EE8C 0xE5E52560DD91C556DDBDA5D02064C53641C25E5D"
 
 # Use the latest stable Erlang/OTP release - make find-latest-otp - https://github.com/erlang/otp/tags
 ARG OTP_VERSION
