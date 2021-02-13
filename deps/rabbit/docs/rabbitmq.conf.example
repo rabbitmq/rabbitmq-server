@@ -98,7 +98,7 @@
 # 
 # ssl_options.versions.1 = tlsv1.3
 # ssl_options.versions.2 = tlsv1.2
-# ssl_options.versions.1 = tlsv1.1
+# ssl_options.versions.3 = tlsv1.1
 
 
 
