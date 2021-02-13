@@ -93,10 +93,13 @@
 # ssl_options.certfile             = /path/to/cert.pem
 # ssl_options.keyfile              = /path/to/key.pem
 #
-## These are highly recommended for TLSv1.2 but cannot be used
-## with TLSv1.3. If TLSv1.3 is enabled, these lines MUST be removed.
 # ssl_options.honor_cipher_order   = true
 # ssl_options.honor_ecc_order      = true
+#
+## These are highly recommended for TLSv1.2 but cannot be used
+## with TLSv1.3. If TLSv1.3 is enabled, these lines MUST be removed.
+# ssl_options.client_renegotiation = false
+# ssl_options.secure_renegotiate   = true
 #
 ## Limits what TLS versions the server enables for client TLS
 ## connections. See https://www.rabbitmq.com/ssl.html#tls-versions for details.
@@ -629,12 +632,14 @@
 ## More TLS options
 # management.ssl.honor_cipher_order   = true
 # management.ssl.honor_ecc_order      = true
+
+## These are highly recommended for TLSv1.2 but cannot be used
+## with TLSv1.3. If TLSv1.3 is enabled, these lines MUST be removed.
 # management.ssl.client_renegotiation = false
 # management.ssl.secure_renegotiate   = true
 
 ## Supported TLS versions
 # management.ssl.versions.1 = tlsv1.2
-# management.ssl.versions.2 = tlsv1.1
 
 ## Cipher suites the server is allowed to use
 # management.ssl.ciphers.1 = ECDHE-ECDSA-AES256-GCM-SHA384
