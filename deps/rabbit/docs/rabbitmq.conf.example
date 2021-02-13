@@ -93,15 +93,26 @@
 # ssl_options.certfile             = /path/to/cert.pem
 # ssl_options.keyfile              = /path/to/key.pem
 #
+## These are highly recommended but must be disabled if
+## TLSv1.3 is enabled.
 # ssl_options.honor_cipher_order   = true
 # ssl_options.honor_ecc_order      = true
-# 
+#
+## Limits what TLS versions the server enables for client TLS
+## connections. See https://www.rabbitmq.com/ssl.html#tls-versions for details.
+##
+## Cutting edge TLS version which requires recent client runtime
+## versions and has no cipher suite in common with earlier TLS versions.
 # ssl_options.versions.1 = tlsv1.3
+## Enables TLSv1.2 for best compatibility
 # ssl_options.versions.2 = tlsv1.2
-# ssl_options.versions.3 = tlsv1.1
+## Older TLS versions have known vulnerabilities and are being phased out
+## from wide use.
 
-
-
+## Limits what cipher suites the server will use for client TLS
+## connections. Narrowing this down can prevent some clients
+## from connecting. See https://www.rabbitmq.com/ssl.html#cipher-suites for details.
+#
 # ssl_options.ciphers.1  = ECDHE-ECDSA-AES256-GCM-SHA384
 # ssl_options.ciphers.2  = ECDHE-RSA-AES256-GCM-SHA384
 # ssl_options.ciphers.3  = ECDHE-ECDSA-AES256-SHA384
