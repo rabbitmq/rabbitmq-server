@@ -192,7 +192,7 @@ the `monitoring` tag will be `my_rabbit.tag:monitoring`.
 
 ## Examples
 
-The [demo](/demo) directory contains example configuration files which can be used to set up
+The [demo](/deps/rabbitmq_auth_backend_oauth2/demo) directory contains example configuration files which can be used to set up
 a development UAA server and issue tokens, which can be used to access RabbitMQ
 resources.
 
