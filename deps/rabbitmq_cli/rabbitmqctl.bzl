@@ -9,12 +9,8 @@ def _impl(ctx):
     erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
 
-    mix_invocation_dir = ctx.actions.declare_directory(
-        path_join(
-            ctx.label.name,
-            "mix",
-        )
-    )
+    mix_invocation_dir = ctx.actions.declare_directory(ctx.label.name)
+
     escript = ctx.actions.declare_file(
         path_join(
             "escript",
