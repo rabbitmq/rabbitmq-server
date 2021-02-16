@@ -43,8 +43,8 @@ jobs:
         echo "build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}" >> .bazelrc
         echo "build --@bazel-erlang//:erlang_home=${ERLANG_HOME}" >> .bazelrc
         echo "build --@bazel-erlang//:elixir_home=${ELIXIR_HOME}" >> .bazelrc
-    #! - name: Setup tmate session
-    #!   uses: mxschmitt/action-tmate@v3
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
       run: |
         "${GITHUB_WORKSPACE}/bin/bazel" test //... \
