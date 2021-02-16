@@ -11,12 +11,20 @@
 -ignore_xref([{maps, from_list, 1}]).
 
 -export([boot/0]).
+-export([trace/1, profile/0, profile/1]).
 -export([connections/0]).
 
 boot() ->
     case os:getenv("RABBITMQ_TRACER") of
         false ->
             ok;
+        On when On =:= "1" orelse On =:= "true" ->
+            rabbit_log:info("Loading Looking Glass profiler for interactive use"),
+            case application:ensure_all_started(looking_glass) of
+                {ok, _} -> ok;
+                {error, Error} ->
+                    rabbit_log:error("Failed to start Looking Glass, reason: ~p", [Error])
+            end;
         Value ->
             Input = parse_value(Value),
             rabbit_log:info(
@@ -36,6 +44,27 @@ boot() ->
                 )
              )
     end.
+
+trace(Input) ->
+    lg:trace(Input,
+             lg_file_tracer,
+             "traces.lz4",
+             maps:from_list([
+                 {mode, profile},
+                 {process_dump, true},
+                 {running, true},
+                 {send, true}]
+            )).
+
+profile() ->
+    profile("callgrind.out").
+
+profile(Filename) ->
+    lg_callgrind:profile_many("traces.lz4.*", Filename, #{running => true}).
+
+%%
+%% Implementation
+%%
 
 parse_value(Value) ->
     [begin
