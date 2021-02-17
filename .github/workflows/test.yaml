@@ -28,27 +28,12 @@ jobs:
           build --platforms=//:erlang_${{ matrix.erlang_version }}_platform
           build --extra_execution_platforms=//:erlang_${{ matrix.erlang_version }}_platform
 
-          # Set several flags related to specifying the platform, toolchain and java
-          # properties.
-          # These flags should only be used as is for the rbe-ubuntu16-04 container
-          # and need to be adapted to work with other toolchain containers.
-          build --host_javabase=@rbe_default//java:jdk
-          build --javabase=@rbe_default//java:jdk
-          build --host_java_toolchain=@bazel_tools//tools/jdk:toolchain_hostjdk8
-          build --java_toolchain=@bazel_tools//tools/jdk:toolchain_hostjdk8
-          build --crosstool_top=@rbe_default//cc:toolchain
-          build --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
-
-          # Platform flags:
-          # The toolchain container used for execution is defined in the target indicated
-          # by "extra_execution_platforms", "host_platform" and "platforms".
-          # More about platforms: https://docs.bazel.build/versions/master/platforms.html
-          build --extra_toolchains=@rbe_default//config:cc-toolchain
-
-          # Enforce stricter environment rules, which eliminates some non-hermetic
-          # behavior and therefore improves both the remote cache hit rate and the
-          # correctness and repeatability of the build.
-          build --incompatible_strict_action_env=true
+          build --crosstool_top=@buildbuddy_toolchain//:toolchain
+          build --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
+          build --javabase=@buildbuddy_toolchain//:javabase_jdk8
+          build --host_javabase=@buildbuddy_toolchain//:javabase_jdk8
+          build --java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+          build --host_java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
 
           build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@bazel-erlang//:erlang_home=/usr/local/lib/erlang
