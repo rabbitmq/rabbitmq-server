@@ -11,8 +11,6 @@ exports_files([
     "amqp-rabbitmq-0.8.json",
 ])
 
-py_library(
-    name = "amqp_codegen",
-    srcs = ["amqp_codegen.py"],
-    visibility = ["//visibility:public"],
-)
+exports_files([
+    "amqp_codegen.py",
+])
