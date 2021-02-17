@@ -13,17 +13,6 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - name: CONFIGURE OTP & ELIXIR
-      uses: actions/setup-elixir@v1
-      with:
-        otp-version: ${{ matrix.erlang_version }}
-        # https://github.com/elixir-lang/elixir/releases
-        elixir-version: 1.10.4
-    - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v2
-      with:
-        path: "/home/runner/.cache/bazel"
-        key: ${{ runner.os }}-bazel-${{ matrix.erlang_version }}
     - name: INSTALL BAZELISK
       run: |
         curl -LO "https://github.com/bazelbuild/bazelisk/releases/download/v1.1.0/bazelisk-linux-amd64"
@@ -32,12 +21,29 @@ jobs:
         chmod +x "${GITHUB_WORKSPACE}/bin/bazel"
     - name: CONFIGURE BAZEL
       run: |
-        ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-        ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+        echo "${{ secrets.BAZELRC_CONTENTS }}" > .bazelrc
+        cat << EOF >> .bazelrc
+          build --remote_executor=grpcs://cloud.buildbuddy.io
+          build --host_platform=//:erlang_${{ matrix.erlang_version }}_platform
+          build --platforms=//:erlang_${{ matrix.erlang_version }}_platform
+          build --extra_execution_platforms=//:erlang_${{ matrix.erlang_version }}_platform
 
-        echo "build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}" >> .bazelrc
-        echo "build --@bazel-erlang//:erlang_home=${ERLANG_HOME}" >> .bazelrc
-        echo "build --@bazel-erlang//:elixir_home=${ELIXIR_HOME}" >> .bazelrc
+          build --crosstool_top=@buildbuddy_toolchain//:toolchain
+          build --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
+          build --javabase=@buildbuddy_toolchain//:javabase_jdk8
+          build --host_javabase=@buildbuddy_toolchain//:javabase_jdk8
+          build --java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+          build --host_java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+
+          build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
+          build --@bazel-erlang//:erlang_home=/usr/local/lib/erlang
+          build --@bazel-erlang//:elixir_home=/usr/local/lib/elixir
+
+          build --bes_results_url=https://app.buildbuddy.io/invocation/
+          build --bes_backend=grpcs://cloud.buildbuddy.io
+          build --remote_cache=grpcs://cloud.buildbuddy.io
+          build --remote_timeout=600
+        EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
@@ -46,14 +52,3 @@ jobs:
           --test_verbose_timeout_warnings \
           --verbose_failures \
           --jobs 1
-    - name: RESOVLE TESTLOGS
-      id: resolve_logs
-      if: success() || failure()
-      run: |
-        echo "::set-output name=dir::$(readlink -f bazel-testlogs)"
-    - name: CAPTURE LOGS
-      uses: actions/upload-artifact@v2
-      if: success() || failure()
-      with:
-        name: bazel-testlogs-${{ matrix.erlang_version }}
-        path: ${{ steps.resolve_logs.outputs.dir }}

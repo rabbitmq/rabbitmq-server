@@ -4,10 +4,18 @@ load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmq.bzl", "REQUIRED_PLUGINS")
 
 platform(
-    name = "docker_image_platform",
+    name = "erlang_22.3_platform",
     exec_properties = {
         "OSFamily": "Linux",
-        "container-image": "docker://elixir:1.10.4",
+        "container-image": "docker://elixir:1.10",
+    },
+)
+
+platform(
+    name = "erlang_23.1_platform",
+    exec_properties = {
+        "OSFamily": "Linux",
+        "container-image": "docker://elixir:1.11",
     },
 )
 
