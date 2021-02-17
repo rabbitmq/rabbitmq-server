@@ -57,9 +57,9 @@ jobs:
           build --@bazel-erlang//:erlang_home=/usr/local/lib/erlang
           build --@bazel-erlang//:elixir_home=/usr/local/lib/elixir
 
-          # build --bes_results_url=https://app.buildbuddy.io/invocation/
-          # build --bes_backend=grpcs://cloud.buildbuddy.io
-          # build --remote_cache=grpcs://cloud.buildbuddy.io
+          build --bes_results_url=https://app.buildbuddy.io/invocation/
+          build --bes_backend=grpcs://cloud.buildbuddy.io
+          build --remote_cache=grpcs://cloud.buildbuddy.io
           build --remote_timeout=600
         EOF
     #! - name: Setup tmate session
