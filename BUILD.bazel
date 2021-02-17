@@ -3,6 +3,14 @@ load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmq.bzl", "REQUIRED_PLUGINS")
 
+platform(
+    name = "docker_image_platform",
+    exec_properties = {
+        "OSFamily": "Linux",
+        "container-image": "docker://elixir:1.10.4",
+    },
+)
+
 rabbitmq_home(
     name = "broker-home",
     escripts = ["//deps/rabbitmq_cli:rabbitmqctl"],
