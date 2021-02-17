@@ -24,9 +24,9 @@ jobs:
         echo "${{ secrets.BAZELRC_CONTENTS }}" > .bazelrc
         cat << EOF >> .bazelrc
           build --remote_executor=grpcs://cloud.buildbuddy.io
-          build --host_platform=//:erlang_${{ matrix.erlang_version }}_platform
-          build --platforms=//:erlang_${{ matrix.erlang_version }}_platform
-          build --extra_execution_platforms=//:erlang_${{ matrix.erlang_version }}_platform
+          # build --host_platform=//:erlang_${{ matrix.erlang_version }}_platform
+          # build --platforms=//:erlang_${{ matrix.erlang_version }}_platform
+          # build --extra_execution_platforms=//:erlang_${{ matrix.erlang_version }}_platform
 
           # Set several flags related to specifying the platform, toolchain and java
           # properties.
@@ -44,6 +44,9 @@ jobs:
           # by "extra_execution_platforms", "host_platform" and "platforms".
           # More about platforms: https://docs.bazel.build/versions/master/platforms.html
           build --extra_toolchains=@rbe_default//config:cc-toolchain
+          build --extra_execution_platforms=@rbe_default//config:platform
+          build --host_platform=@rbe_default//config:platform
+          build --platforms=@rbe_default//config:platform
 
           # Enforce stricter environment rules, which eliminates some non-hermetic
           # behavior and therefore improves both the remote cache hit rate and the
@@ -61,6 +64,11 @@ jobs:
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
+    - name: BUILD
+      run: |
+        "${GITHUB_WORKSPACE}/bin/bazel" build //deps/amqp10_common:codegen \
+          --verbose_failures \
+          --jobs 1
     - name: RUN TESTS
       run: |
         "${GITHUB_WORKSPACE}/bin/bazel" test //... \
