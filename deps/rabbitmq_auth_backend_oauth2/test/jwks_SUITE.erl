@@ -143,17 +143,16 @@ start_jwks_server(Config) ->
     %% Assume we don't have more than 100 ports allocated for tests
     PortBase = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_ports_base),
     JwksServerPort = PortBase + 100,
-    ok = application:load(jwks_http),
-    ok = application:set_env(jwks_http, port, JwksServerPort),
     ok = application:set_env(jwks_http, keys, [Jwk]),
-    {ok, _} = application:ensure_all_started(jwks_http),
+    {ok, _} = application:ensure_all_started(cowboy),
+    ok = jwks_http_app:start(JwksServerPort),
     KeyConfig = [{jwks_url, "http://127.0.0.1:" ++ integer_to_list(JwksServerPort) ++ "/jwks"}],
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
     rabbit_ct_helpers:set_config(Config, {fixture_jwk, Jwk}).
 
 stop_jwks_server(Config) ->
-    ok = application:stop(jwks_http),
+    ok = jwks_http_app:stop(),
     Config.
 
 generate_valid_token(Config) ->

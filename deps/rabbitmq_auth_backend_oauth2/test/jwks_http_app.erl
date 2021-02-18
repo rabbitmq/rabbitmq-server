@@ -1,10 +1,8 @@
 -module(jwks_http_app).
--behavior(application).
 
--export([start/2, stop/1]).
+-export([start/1, stop/0]).
 
-start(_Type, _Args) ->
-    {ok, Port} = application:get_env(jwks_http, port),
+start(Port) ->
     Dispatch =
         cowboy_router:compile(
           [
@@ -16,7 +14,7 @@ start(_Type, _Args) ->
     {ok, _} = cowboy:start_clear(jwks_http_listener,
                       [{port, Port}],
                       #{env => #{dispatch => Dispatch}}),
-    jwks_http_sup:start_link().
-
-stop(_State) ->
     ok.
+
+stop() ->
+    ok = cowboy:stop_listener(jwks_http_listener).
