@@ -896,7 +896,7 @@ function paginate_ui(pages, context){
     res += '</select> </th>';
     res += '<th><label for="' + context +'-pageof">of </label>  ' + pages.page_count +'</th>';
     res += '<th><span><label for="'+ context +'-name"> - Filter: </label> <input id="'+ context +'-name"  data-page-start="1"  class="pagination_class pagination_class_input" type="text"';
-    res +=   'value = ' + fmt_filter_name_request(context, "") + '>';
+    res +=   'value="' + fmt_filter_name_request(context, "") + '">';
     res +=   '</input></th></span>';
 
     res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class pagination_class_checkbox" id="'+ context +'-filter-regex-mode"' ;
