@@ -80,7 +80,7 @@ convert(Time, Unit) ->
         error:badarg ->
             {error, "Invalid expiration value."};
         invalid_unit ->
-            {error, "Time unit not recognised. Use: days, seconds, months, years."}
+            {error, "Time unit not recognised. Supported units: days, weeks, months, years."}
     end. 
 
 do_convert(Time, "days") ->
