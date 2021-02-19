@@ -5,6 +5,11 @@ load(":rabbitmq.bzl", "REQUIRED_PLUGINS")
 
 platform(
     name = "erlang_22.3_platform",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+        "@bazel_tools//tools/cpp:clang",
+    ],
     exec_properties = {
         "OSFamily": "Linux",
         "container-image": "docker://elixir:1.10",
@@ -13,6 +18,11 @@ platform(
 
 platform(
     name = "erlang_23.1_platform",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+        "@bazel_tools//tools/cpp:clang",
+    ],
     exec_properties = {
         "OSFamily": "Linux",
         "container-image": "docker://elixir:1.11",
