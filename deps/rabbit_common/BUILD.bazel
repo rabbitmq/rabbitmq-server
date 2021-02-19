@@ -2,60 +2,47 @@ load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "er
 load("@bazel-erlang//:ct.bzl", "ct_test")
 load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
 
+py_binary(
+    name = "codegen",
+    srcs = [
+        "codegen.py",
+    ],
+    deps = [
+        "//deps/rabbitmq_codegen:amqp_codegen",
+    ],
+    imports = ["../../deps/rabbitmq_codegen"],
+)
+
 genrule(
     name = "generated_headers",
     srcs = [
-        "//deps/rabbitmq_codegen:amqp_codegen.py",
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
         "//deps/rabbitmq_codegen:credit_extension.json",
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
-        "codegen.py",
     ],
     outs = ["include/rabbit_framing.hrl"],
-    cmd = """
-    env PYTHONPATH=$$(dirname $(location //deps/rabbitmq_codegen:amqp_codegen.py)) \\
-        python3 $(location codegen.py) \\
-        --ignore-conflicts \\
-        header \\
-        $(location //deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json) \\
-        $(location //deps/rabbitmq_codegen:credit_extension.json) \\
-        $(location //deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json) \\
-        $@
-    """,
+    tools = [":codegen"],
+    cmd = "$(location :codegen) --ignore-conflicts header $(SRCS) $@",
 )
 
 genrule(
     name = "rabbit_framing_amqp_0_9_1.erl",
     srcs = [
-        "//deps/rabbitmq_codegen:amqp_codegen.py",
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
-        "codegen.py",
     ],
     outs = ["src/rabbit_framing_amqp_0_9_1.erl"],
-    cmd = """
-    env PYTHONPATH=$$(dirname $(location //deps/rabbitmq_codegen:amqp_codegen.py)) \\
-        python3 $(location codegen.py) \\
-        body \\
-        $(location //deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json) \\
-        $@
-    """,
+    tools = [":codegen"],
+    cmd = "$(location :codegen) body $(SRCS) $@",
 )
 
 genrule(
     name = "rabbit_framing_amqp_0_8.erl",
     srcs = [
-        "//deps/rabbitmq_codegen:amqp_codegen.py",
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
-        "codegen.py",
     ],
     outs = ["src/rabbit_framing_amqp_0_8.erl"],
-    cmd = """
-    env PYTHONPATH=$$(dirname $(location //deps/rabbitmq_codegen:amqp_codegen.py)) \\
-        python3 $(location codegen.py) \\
-        body \\
-        $(location //deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json) \\
-        $@
-    """,
+    tools = [":codegen"],
+    cmd = "$(location :codegen) body $(SRCS) $@",
 )
 
 DEPS = [

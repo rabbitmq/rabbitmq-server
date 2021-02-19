@@ -1,26 +1,27 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 
+py_binary(
+    name = "codegen",
+    srcs = [
+        "codegen.py",
+    ],
+    deps = [
+        "//deps/rabbitmq_codegen:amqp_codegen",
+    ],
+    imports = ["../../deps/rabbitmq_codegen"],
+)
+
 genrule(
     name = "generated_headers",
     srcs = [
-        "//deps/rabbitmq_codegen:amqp_codegen.py",
         "//deps/rabbitmq_codegen:amqp-1.0/messaging.xml",
         "//deps/rabbitmq_codegen:amqp-1.0/security.xml",
         "//deps/rabbitmq_codegen:amqp-1.0/transport.xml",
         "//deps/rabbitmq_codegen:amqp-1.0/transactions.xml",
-        "codegen.py",
     ],
     outs = ["include/amqp10_framing.hrl"],
-    cmd = """
-    env PYTHONPATH=$$(dirname $(location //deps/rabbitmq_codegen:amqp_codegen.py)) \\
-        python3 $(location codegen.py) \\
-        hrl \\
-        $(location //deps/rabbitmq_codegen:amqp-1.0/messaging.xml) \\
-        $(location //deps/rabbitmq_codegen:amqp-1.0/security.xml) \\
-        $(location //deps/rabbitmq_codegen:amqp-1.0/transport.xml) \\
-        $(location //deps/rabbitmq_codegen:amqp-1.0/transactions.xml) \\
-        > $@
-    """,
+    tools = [":codegen"],
+    cmd = "$(location :codegen) hrl $(SRCS) > $@",
 )
 
 app_file(
