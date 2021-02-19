@@ -84,7 +84,7 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
-conserve_resources(Pid, Source, Conserve) ->
+conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
     ok.
 
