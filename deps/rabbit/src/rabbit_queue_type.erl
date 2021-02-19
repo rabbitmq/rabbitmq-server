@@ -298,9 +298,9 @@ i_down(_K, _Q, _DownReason) -> ''.
 is_policy_applicable(Q, Policy) ->
     Mod = amqqueue:get_type(Q),
     Capabilities = Mod:capabilities(),
-    Applicable = maps:get(policies, Capabilities, []),
+    NotApplicable = maps:get(policies, Capabilities, []),
     lists:all(fun({P, _}) ->
-                      lists:member(P, Applicable)
+                      not lists:member(P, NotApplicable)
               end, Policy).
 
 is_server_named_allowed(Type) ->
