@@ -315,17 +315,13 @@ filter_quorum_critical(Queues, ReplicaStates) ->
 
 -spec is_policy_applicable(amqqueue:amqqueue(), any()) -> boolean().
 is_policy_applicable(_Q, Policy) ->
-    Applicable = [<<"max-length">>,
-                  <<"max-length-bytes">>,
-                  <<"overflow">>,
-                  <<"expires">>,
-                  <<"max-in-memory-length">>,
-                  <<"max-in-memory-bytes">>,
-                  <<"delivery-limit">>,
-                  <<"dead-letter-exchange">>,
-                  <<"dead-letter-routing-key">>],
+    NotApplicable = [ %% Classic policies
+                    <<"message-ttl">>, <<"max-priority">>, <<"queue-mode">>,
+                    <<"single-active-consumer">>, <<"ha-mode">>, <<"ha-params">>,
+                    <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
+                    <<"queue-master-locator">>],
     lists:all(fun({P, _}) ->
-                      lists:member(P, Applicable)
+                      not lists:member(P, NotApplicable)
               end, Policy).
 
 rpc_delete_metrics(QName) ->
