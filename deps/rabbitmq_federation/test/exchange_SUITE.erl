@@ -29,6 +29,7 @@
 all() ->
     [
       {group, without_automatic_setup},
+      {group, channel_use_mode_single},
       {group, without_disambiguate},
       {group, with_disambiguate}
     ].
@@ -76,6 +77,18 @@ groups() ->
                   upstream_has_no_federation
                 ]}
             ]}
+        ]},
+        {channel_use_mode_single, [], [
+            simple,
+              multiple_upstreams,
+              multiple_upstreams_pattern,
+              multiple_uris,
+              multiple_downstreams,
+              e2e,
+              unbind_on_delete,
+              unbind_on_unbind,
+              unbind_gets_transmitted,
+              federate_unfederate
         ]}
     ].
 
@@ -93,6 +106,24 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+%% Some of the "regular" tests but in the single channel mode.
+init_per_group(channel_use_mode_single, Config) ->
+    SetupFederation = [
+        fun(Config) ->
+            rabbit_federation_test_util:setup_federation_with_upstream_params(Config, [
+                {<<"channel-use-mode">>, <<"single">>}
+            ])
+        end
+    ],
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Suffix},
+        {rmq_nodes_clustered, false}
+      ]),
+    rabbit_ct_helpers:run_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps() ++
+      SetupFederation);
 init_per_group(without_automatic_setup, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
