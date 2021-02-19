@@ -4,7 +4,7 @@ load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmq.bzl", "REQUIRED_PLUGINS")
 
 platform(
-    name = "erlang_22.3_platform",
+    name = "erlang_22_platform",
     constraint_values = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
@@ -17,7 +17,7 @@ platform(
 )
 
 platform(
-    name = "erlang_23.1_platform",
+    name = "erlang_23_platform",
     constraint_values = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
