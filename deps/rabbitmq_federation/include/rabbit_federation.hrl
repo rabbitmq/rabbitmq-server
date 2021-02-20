@@ -19,7 +19,9 @@
                    ha_policy,
                    name,
                    bind_nowait,
-                   resource_cleanup_mode}).
+                   resource_cleanup_mode,
+                   channel_use_mode
+    }).
 
 -record(upstream_params,
         {uri,

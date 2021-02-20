@@ -430,11 +430,15 @@ key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
 go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
     Unacked = rabbit_federation_link_util:unacked_new(),
-
     log_link_startup_attempt(Upstream, DownXName),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
-              {ok, CmdCh} = open_cmd_channel(Conn, Upstream, UParams, DownXName, S0),
+              {ok, CmdCh} =
+                  case Upstream#upstream.channel_use_mode of
+                    single   -> reuse_command_channel(Ch, Upstream, DownXName);
+                    multiple -> open_command_channel(Conn, Upstream, UParams, DownXName, S0);
+                    _        -> open_command_channel(Conn, Upstream, UParams, DownXName, S0)
+                  end,
               erlang:monitor(process, CmdCh),
               Props = pget(server_properties,
                            amqp_connection:info(Conn, [server_properties])),
@@ -480,11 +484,18 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
               {noreply, State#state{internal_exchange_timer = TRef}}
       end, Upstream, UParams, DownXName, S0).
 
-log_link_startup_attempt(OUpstream, DownXName) ->
-    rabbit_log_federation:debug("Will try to start a federation link for ~s, upstream: '~s'",
-                                [rabbit_misc:rs(DownXName), OUpstream#upstream.name]).
+log_link_startup_attempt(#upstream{name = Name, channel_use_mode = ChMode}, DownXName) ->
+    rabbit_log_federation:debug("Will try to start a federation link for ~s, upstream: '~s', channel use mode: ~s",
+                                [rabbit_misc:rs(DownXName), Name, ChMode]).
 
-open_cmd_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXName, S0) ->
+%% If channel use mode is 'single', reuse the message transfer channel.
+%% Otherwise open a separate one.
+reuse_command_channel(MainCh, #upstream{name = UName}, DownXName) ->
+    rabbit_log_federation:debug("Will use a single channel for both schema operations and message transfer on links to upstream '~s' for downstream federated ~s",
+                                [UName, rabbit_misc:rs(DownXName)]),
+    {ok, MainCh}.
+
+open_command_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXName, S0) ->
     rabbit_log_federation:debug("Will open a command channel to upstream '~s' for downstream federated ~s",
                                 [UName, rabbit_misc:rs(DownXName)]),
     case amqp_connection:open_channel(Conn) of

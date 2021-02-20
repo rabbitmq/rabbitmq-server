@@ -29,6 +29,7 @@
 all() ->
     [
       {group, without_automatic_setup},
+      {group, channel_use_mode_single},
       {group, without_disambiguate},
       {group, with_disambiguate}
     ].
@@ -76,6 +77,19 @@ groups() ->
                   upstream_has_no_federation
                 ]}
             ]}
+        ]},
+        {channel_use_mode_single, [], [
+            simple,
+            single_channel_mode,
+            multiple_upstreams,
+            multiple_upstreams_pattern,
+            multiple_uris,
+            multiple_downstreams,
+            e2e,
+            unbind_on_delete,
+            unbind_on_unbind,
+            unbind_gets_transmitted,
+            federate_unfederate
         ]}
     ].
 
@@ -93,6 +107,24 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+%% Some of the "regular" tests but in the single channel mode.
+init_per_group(channel_use_mode_single, Config) ->
+    SetupFederation = [
+        fun(Config1) ->
+            rabbit_federation_test_util:setup_federation_with_upstream_params(Config1, [
+                {<<"channel-use-mode">>, <<"single">>}
+            ])
+        end
+    ],
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Suffix},
+        {rmq_nodes_clustered, false}
+      ]),
+    rabbit_ct_helpers:run_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps() ++
+      SetupFederation);
 init_per_group(without_automatic_setup, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
@@ -170,6 +202,17 @@ end_per_testcase(Testcase, Config) ->
 simple(Config) ->
     with_ch(Config,
       fun (Ch) ->
+              Q = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
+              await_binding(Config, 0, <<"upstream">>, <<"key">>),
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>)
+      end, upstream_downstream()).
+
+single_channel_mode(Config) ->
+    with_conn_and_ch(Config,
+      fun (Conn, Ch) ->
+              Infos = amqp_connection:info(Conn, [num_channels]),
+              N = proplists:get_value(num_channels, Infos),
+              ?assertEqual(1, N),
               Q = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
               await_binding(Config, 0, <<"upstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>)
@@ -1166,6 +1209,17 @@ with_ch(Config, Fun, Xs) ->
     rabbit_federation_test_util:assert_status(Config, 0,
       Xs, {exchange, upstream_exchange}),
     Fun(Ch),
+    delete_all(Ch, Xs),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    cleanup(Config, 0),
+    ok.
+
+with_conn_and_ch(Config, Fun, Xs) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    declare_all(Ch, Xs),
+    rabbit_federation_test_util:assert_status(Config, 0,
+      Xs, {exchange, upstream_exchange}),
+    Fun(Conn, Ch),
     delete_all(Ch, Xs),
     rabbit_ct_client_helpers:close_channel(Ch),
     cleanup(Config, 0),
