@@ -9,23 +9,16 @@ def _impl(ctx):
     erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
 
-    mix_invocation_dir = ctx.actions.declare_directory(ctx.label.name)
-
-    escript = ctx.actions.declare_file(
-        path_join(
-            "escript",
-            "rabbitmqctl",
-        )
-    )
+    escript = ctx.actions.declare_file(path_join("escript", "rabbitmqctl"))
 
     copy_compiled_deps_commands = []
-    copy_compiled_deps_commands.append("mkdir {}/{}".format(mix_invocation_dir.path, MIX_DEPS_DIR))
+    copy_compiled_deps_commands.append("mkdir ${{MIX_INVOCATION_DIR}}/{}".format(MIX_DEPS_DIR))
     for dep in ctx.attr.deps:
         lib_info = dep[ErlangLibInfo]
         if lib_info.erlang_version != erlang_version:
             fail("Mismatched erlang versions", erlang_version, lib_info.erlang_version)
 
-        dest_dir = path_join(mix_invocation_dir.path, MIX_DEPS_DIR, lib_info.lib_name)
+        dest_dir = path_join("${MIX_INVOCATION_DIR}", MIX_DEPS_DIR, lib_info.lib_name)
         copy_compiled_deps_commands.append(
             "mkdir {}".format(dest_dir)
         )
@@ -59,16 +52,16 @@ def _impl(ctx):
         # In github actions, there is an erl at /usr/bin/erl...
         export PATH={elixir_home}/bin:{erlang_home}/bin:${{PATH}}
 
-        mkdir -p {mix_invocation_dir}
+        MIX_INVOCATION_DIR="$(mktemp -d)"
 
-        cp -R ${{PWD}}/{package_dir}/config {mix_invocation_dir}/config
-        # cp -R ${{PWD}}/{package_dir}/include {mix_invocation_dir}/include # rabbitmq_cli's include directory is empty
-        cp -R ${{PWD}}/{package_dir}/lib {mix_invocation_dir}/lib
-        cp    ${{PWD}}/{package_dir}/mix.exs {mix_invocation_dir}/mix.exs
+        cp -R ${{PWD}}/{package_dir}/config ${{MIX_INVOCATION_DIR}}/config
+        # cp -R ${{PWD}}/{package_dir}/include ${{MIX_INVOCATION_DIR}}/include # rabbitmq_cli's include directory is empty
+        cp -R ${{PWD}}/{package_dir}/lib ${{MIX_INVOCATION_DIR}}/lib
+        cp    ${{PWD}}/{package_dir}/mix.exs ${{MIX_INVOCATION_DIR}}/mix.exs
 
         {copy_compiled_deps_command}
 
-        cd {mix_invocation_dir}
+        cd ${{MIX_INVOCATION_DIR}}
         export HOME=${{PWD}}
 
         {begins_with_fun}
@@ -84,14 +77,14 @@ def _impl(ctx):
         mix make_all
 
         cd ${{OLDPWD}}
-        cp {mix_invocation_dir}/escript/rabbitmqctl {escript_path}
+        cp ${{MIX_INVOCATION_DIR}}/escript/rabbitmqctl {escript_path}
+        rm -dR ${{MIX_INVOCATION_DIR}}
     """.format(
         begins_with_fun=BEGINS_WITH_FUN,
         query_erlang_version=QUERY_ERL_VERSION,
         erlang_version=erlang_version,
         erlang_home=erlang_home,
         elixir_home=elixir_home,
-        mix_invocation_dir=mix_invocation_dir.path,
         package_dir=ctx.label.package,
         copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
         mix_deps_dir=MIX_DEPS_DIR,
@@ -107,7 +100,7 @@ def _impl(ctx):
 
     ctx.actions.run_shell(
         inputs = inputs,
-        outputs = [mix_invocation_dir, escript],
+        outputs = [escript],
         command = script,
     )
 
