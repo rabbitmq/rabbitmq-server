@@ -16,14 +16,19 @@
 -import(rabbit_misc, [pget/2]).
 
 setup_federation(Config) ->
+    setup_federation_with_upstream_params(Config, []).
+
+setup_federation_with_upstream_params(Config, ExtraParams) ->
     rabbit_ct_broker_helpers:set_parameter(Config, 0,
       <<"federation-upstream">>, <<"localhost">>, [
         {<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)},
-        {<<"consumer-tag">>, <<"fed.tag">>}]),
+        {<<"consumer-tag">>, <<"fed.tag">>}
+        ] ++ ExtraParams),
 
     rabbit_ct_broker_helpers:set_parameter(Config, 0,
       <<"federation-upstream">>, <<"local5673">>, [
-        {<<"uri">>, <<"amqp://localhost:1">>}]),
+        {<<"uri">>, <<"amqp://localhost:1">>}
+        ] ++ ExtraParams),
 
     rabbit_ct_broker_helpers:set_parameter(Config, 0,
       <<"federation-upstream-set">>, <<"upstream">>, [
