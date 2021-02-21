@@ -43,6 +43,10 @@ jobs:
           build --bes_backend=grpcs://cloud.buildbuddy.io
           build --remote_cache=grpcs://cloud.buildbuddy.io
           build --remote_timeout=600
+
+          # build --build_metadata=ROLE=CI
+
+          build --jobs=50
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
@@ -50,5 +54,4 @@ jobs:
       run: |
         "${GITHUB_WORKSPACE}/bin/bazel" test //... \
           --test_verbose_timeout_warnings \
-          --verbose_failures \
-          --jobs 1
+          --verbose_failures

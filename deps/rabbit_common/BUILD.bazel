@@ -163,7 +163,7 @@ erlc(
 
 ct_test(
     name = "rabbit_env_SUITE",
-    suites = [":rabbit_env_SUITE_beam_files"],
+    compiled_suites = [":rabbit_env_SUITE_beam_files"],
     deps = [
         ":test_bazel_erlang_lib",
         "//deps/rabbit:bazel_erlang_lib",
@@ -184,7 +184,7 @@ erlc(
 
 ct_test(
     name = "supervisor2_SUITE",
-    suites = [":supervisor2_SUITE_beam_files"],
+    compiled_suites = [":supervisor2_SUITE_beam_files"],
     deps = [
         ":test_bazel_erlang_lib",
     ],
@@ -202,7 +202,7 @@ erlc(
 
 ct_test(
     name = "unit_priority_queue_SUITE",
-    suites = [":unit_priority_queue_SUITE_beam_files"],
+    compiled_suites = [":unit_priority_queue_SUITE_beam_files"],
     deps = [
         ":test_bazel_erlang_lib",
     ],
@@ -226,7 +226,7 @@ erlc(
 
 ct_test(
     name = "unit_SUITE",
-    suites = [":unit_SUITE_beam_files"],
+    compiled_suites = [":unit_SUITE_beam_files"],
     deps = [
         ":test_bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
@@ -247,7 +247,7 @@ erlc(
 
 ct_test(
     name = "worker_pool_SUITE",
-    suites = [":worker_pool_SUITE_beam_files"],
+    compiled_suites = [":worker_pool_SUITE_beam_files"],
     deps = [
         ":test_bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",

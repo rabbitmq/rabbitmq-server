@@ -276,6 +276,10 @@ ct_suite(
 
 ct_suite(
     suite_name = "cluster_rename_SUITE",
+    groups = [
+        "cluster_size_2",
+        "cluster_size_3",
+    ],
     data = [
         "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
         "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
@@ -299,5 +303,5 @@ ct_suite(
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl"
     },
-    size = "enormous",
+    size = "large",
 )
