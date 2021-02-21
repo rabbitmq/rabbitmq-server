@@ -37,7 +37,8 @@
          update/2,
          state_info/1,
          stat/1,
-         capabilities/0]).
+         capabilities/0,
+         notify_decorators/1]).
 
 -export([set_retention_policy/3]).
 -export([add_replica/3,
@@ -760,6 +761,10 @@ capabilities() ->
                           <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-stream-offset">>],
       server_named => false}.
+
+notify_decorators(Q) when ?is_amqqueue(Q) ->
+    %% Not supported
+    ok.
 
 resend_all(#stream_client{leader = LeaderPid,
                           writer_id = WriterId,

@@ -1559,7 +1559,8 @@ notify_decorators(QName, F, A) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} ->
             Ds = amqqueue:get_decorators(Q),
-            [ok = apply(M, F, [Q|A]) || M <- rabbit_queue_decorator:select(Ds)];
+            [ok = apply(M, F, [Q|A]) || M <- rabbit_queue_decorator:select(Ds)],
+            ok;
         {error, not_found} ->
             ok
     end.
