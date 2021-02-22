@@ -44,7 +44,9 @@ Command => Key Version Content
 ```
 
 Most commands are request/reply, but some commands (e.g. `Deliver`) are one-direction only and thus
-doest not contain a correlation ID.
+does not contain a correlation ID.
+
+Some responses may carry additional information than just the response code, this is specified in the command definition.
 
 == Response Codes
 
