@@ -241,7 +241,7 @@ ct_suite(
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl"
     },
-    size = "small",
+    size = "medium",
 )
 
 ct_suite(
