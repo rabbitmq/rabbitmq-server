@@ -6,6 +6,7 @@ Additionally, create a `.bazelrc` file with at least:
 
 ```
 build --@bazel-erlang//:erlang_home=/path/to/erlang/installation
+build --@bazel-erlang//:erlang_version=23.1
 build --@bazel-erlang//:elixir_home=/path/to/elixir/installation
 ```
 
@@ -23,14 +24,14 @@ for certain `rabbitmq_cli` tests to pass. This is because `rabbitmqctl wait` she
 
 ## Running tests
 
-### Run all tests (for Erlang 23)
+### Run all tests
 
-`bazel test --test_tag_filters="erlang-23.1" --build_tests_only //...`
+`bazel test //...`
 
 ### Run tests in a 'package' and its 'subpackages'
 
-`bazel test --test_tag_filters="erlang-23.1" --build_tests_only deps/rabbit_common/...`
+`bazel test deps/rabbit_common/...`
 
 ### Run tests for a specific 'package'
 
-`bazel test  --test_tag_filters="erlang-23.1" --build_tests_only deps/rabbit:all`
+`bazel test deps/rabbit:all`
