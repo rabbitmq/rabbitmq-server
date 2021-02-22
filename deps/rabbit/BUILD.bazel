@@ -185,6 +185,7 @@ ct_suite(
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
+    size = "small",
 )
 
 ct_suite(
@@ -208,7 +209,7 @@ ct_suite(
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl"
     },
-    size = "enormous",
+    size = "large",
 )
 
 ct_suite(
@@ -240,7 +241,7 @@ ct_suite(
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl"
     },
-    size = "large",
+    size = "small",
 )
 
 ct_suite(
@@ -271,7 +272,7 @@ ct_suite(
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl"
     },
-    size = "large",
+    size = "small",
 )
 
 ct_suite(
@@ -303,5 +304,5 @@ ct_suite(
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl"
     },
-    size = "large",
+    size = "medium",
 )
