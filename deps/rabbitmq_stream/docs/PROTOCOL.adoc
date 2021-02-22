@@ -81,7 +81,7 @@ Some responses may carry additional information than just the response code, thi
 |===
 |Command |From |Key | Expects response?
 
-|<<declareproducer>>
+|<<declarepublisher>>
 |Client
 |0
 |Yes
@@ -106,7 +106,7 @@ Some responses may carry additional information than just the response code, thi
 |4
 |Yes
 
-|<<deleteproducer>>
+|<<deletepublisher>>
 |Client
 |5
 |Yes
@@ -154,7 +154,7 @@ Some responses may carry additional information than just the response code, thi
 |<<metadata>>
 |Client
 |14
-|No
+|Yes
 
 |<<metadataupdate>>
 |Server
@@ -417,6 +417,7 @@ MetadataResponse => Key Version CorrelationId [Broker] [StreamMetadata]
   Key => int16 // 14
   Version => int16
   CorrelationId => int32
+  ResponseCode => int16
   Broker => Reference Host Port
     Reference => int16
     Host => string
