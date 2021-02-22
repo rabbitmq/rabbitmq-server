@@ -6640,7 +6640,7 @@ help::
 		"  ct          Run all the common_test suites for this project" \
 		"" \
 		"All your common_test suites have their associated targets." \
-		"A suite named http_SUITE can be ran using the ct-http target."
+		"A suite named http_SUITE can be run using the ct-http target."
 
 # Plugin-specific targets.
 

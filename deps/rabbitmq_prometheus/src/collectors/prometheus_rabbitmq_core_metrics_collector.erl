@@ -36,7 +36,7 @@
 %% ==How to determine if a metric should be of type GAUGE or COUNTER?==
 %%
 %% * GAUGE if you care about its value rather than rate of change
-%%   - value can decrease as well as decrease
+%%   - value can increase as well as decrease
 %% * COUNTER if you care about the rate of change
 %%   - value can only increase
 %%
@@ -188,7 +188,8 @@
         {2, undefined, queue_messages_paged_out, gauge, "Messages paged out to disk", messages_paged_out},
         {2, undefined, queue_messages_paged_out_bytes, gauge, "Size in bytes of messages paged out to disk", message_bytes_paged_out},
         {2, undefined, queue_disk_reads_total, counter, "Total number of times queue read messages from disk", disk_reads},
-        {2, undefined, queue_disk_writes_total, counter, "Total number of times queue wrote messages to disk", disk_writes}
+        {2, undefined, queue_disk_writes_total, counter, "Total number of times queue wrote messages to disk", disk_writes},
+        {2, {bool, running}, queues_up, gauge, "Number of queues in state running", state}
     ]},
 
     {auth_attempt_metrics, [
@@ -318,6 +319,8 @@ mf(Callback, Contents, Data) ->
         Fun = case Conversion of
                   undefined ->
                       fun(D) -> proplists:get_value(Key, element(Index, D)) end;
+                  {bool, MatchPattern} ->
+                      fun(D) -> bool(proplists:get_value(Key, element(Index, D)), MatchPattern) end;
                   BaseUnitConversionFactor ->
                       fun(D) -> proplists:get_value(Key, element(Index, D)) / BaseUnitConversionFactor end
               end,
@@ -441,9 +444,9 @@ get_data(channel_metrics = Table, false) ->
                {messages_uncommitted, A4}, {acks_uncommitted, A5}, {prefetch_count, A6},
                {global_prefetch_count, A7}]}];
 get_data(queue_metrics = Table, false) ->
-    {Table, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16} =
+    {Table, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17} =
         ets:foldl(fun({_, Props, _}, {T, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10,
-                                      A11, A12, A13, A14, A15, A16}) ->
+                                      A11, A12, A13, A14, A15, A16, A17}) ->
                           {T,
                            sum(proplists:get_value(consumers, Props), A1),
                            sum(proplists:get_value(consumer_utilisation, Props), A2),
@@ -460,7 +463,8 @@ get_data(queue_metrics = Table, false) ->
                            sum(proplists:get_value(messages_paged_out, Props), A13),
                            sum(proplists:get_value(message_bytes_paged_out, Props), A14),
                            sum(proplists:get_value(disk_reads, Props), A15),
-                           sum(proplists:get_value(disk_writes, Props), A16)
+                           sum(proplists:get_value(disk_writes, Props), A16),
+                           sum(bool(proplists:get_value(state, Props), running), A17)
                           }
                   end, empty(Table), Table),
      [{Table, [{consumers, A1}, {consumer_utilisation, A2}, {memory, A3}, {messages_ram, A4},
@@ -469,7 +473,7 @@ get_data(queue_metrics = Table, false) ->
                {messages_bytes_persistent, A9}, {message_bytes, A10},
                {message_bytes_ready, A11}, {message_bytes_unacknowledged, A12},
                {messages_paged_out, A13}, {message_bytes_paged_out, A14},
-               {disk_reads, A15}, {disk_writes, A16}]}];
+               {disk_reads, A15}, {disk_writes, A16}, {state, A17}]}];
 get_data(Table, false) when Table == channel_exchange_metrics;
                            Table == queue_coarse_metrics;
                            Table == channel_queue_metrics;
@@ -525,7 +529,7 @@ empty(T) when T == ra_metrics ->
 empty(T) when T == channel_queue_metrics; T == channel_metrics ->
     {T, 0, 0, 0, 0, 0, 0, 0};
 empty(queue_metrics = T) ->
-    {T, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}.
+    {T, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}.
 
 sum(undefined, B) ->
     B;
@@ -533,3 +537,13 @@ sum('', B) ->
     B;
 sum(A, B) ->
     A + B.
+
+bool(Object, MatchPattern) ->
+    case Object of
+        MatchPattern ->
+            1;
+        Aggregate when is_integer(Aggregate) ->
+            Aggregate;
+        _ ->
+            0
+    end.

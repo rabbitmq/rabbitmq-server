@@ -202,6 +202,7 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^# HELP", [{capture, none}, multiline])),
     ?assertEqual(nomatch, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queues_up 1$", [{capture, none}, multiline])),
     %% Check the first metric value from each ETS table owned by rabbitmq_metrics
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_consumers ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_messages_published_total ", [{capture, none}, multiline])),
@@ -238,6 +239,7 @@ per_object_metrics_test(Config, Path) ->
     ?assertEqual(match, re:run(Body, "^# TYPE", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^# HELP", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, ?config(queue_name, Config), [{capture, none}])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_queues_up{.*} 1$", [{capture, none}, multiline])),
     %% Check the first metric value from each ETS table owned by rabbitmq_metrics
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_consumers{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_channel_messages_published_total{", [{capture, none}, multiline])),

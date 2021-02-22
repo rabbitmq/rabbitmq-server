@@ -900,10 +900,19 @@ policy_changed(Q) ->
 cluster_state(Name) ->
     case whereis(Name) of
         undefined -> down;
-        _ ->
+        Pid ->
             case ets:lookup(ra_state, Name) of
                 [{_, recover}] -> recovering;
-                _ -> running
+                _ ->
+                    case ra:consistent_query(Pid,
+                                             fun (_) -> ok end,
+                                             ?RPC_TIMEOUT) of
+                        {ok, ok, _} ->
+                            running;
+                        _ ->
+                            rabbit_log:debug("ra:consistent_query failed for quorum queue ~w", [Name]),
+                            down
+                    end
             end
     end.
 

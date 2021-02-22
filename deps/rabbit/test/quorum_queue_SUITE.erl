@@ -66,6 +66,7 @@ groups() ->
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
                                             consume_in_minority,
+                                            state_in_minority,
                                             shrink_all,
                                             rebalance,
                                             file_handle_reservations,
@@ -692,6 +693,31 @@ consume_in_minority(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
     ok.
+
+state_in_minority(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    RaName = ra_name(QQ),
+    {ok, _, {_, Leader}} = ra:members({RaName, Server0}),
+    QNameRes = rabbit_misc:r(<<"/">>, queue, QQ),
+    AssertState = fun(ExpectedState) ->
+                      timer:sleep(1000),
+                      [{_, PropList, _}] = rpc:call(Leader, ets, lookup, [queue_metrics, QNameRes]),
+                      ?assertEqual(ExpectedState, proplists:get_value(state, PropList))
+                  end,
+
+    AssertState(running),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    AssertState(down),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    AssertState(running).
 
 shrink_all(Config) ->
     [Server0, Server1, Server2] =
@@ -2522,9 +2548,7 @@ consumer_metrics(Config) ->
     timer:sleep(5000),
     QNameRes = rabbit_misc:r(<<"/">>, queue, QQ),
     [{_, PropList, _}] = rpc:call(Leader, ets, lookup, [queue_metrics, QNameRes]),
-    ?assertMatch([{consumers, 1}], lists:filter(fun({Key, _}) ->
-                                                        Key == consumers
-                                                end, PropList)).
+    ?assertEqual(1, proplists:get_value(consumers, PropList)).
 
 delete_if_empty(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
