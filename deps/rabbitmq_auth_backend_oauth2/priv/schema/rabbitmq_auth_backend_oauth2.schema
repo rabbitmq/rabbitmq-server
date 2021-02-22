@@ -65,7 +65,7 @@
             #{};
         _ ->
             Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.signing_keys", Conf),
-            Read_file =
+            ReadFileFun =
                 fun(Path) ->
                    case file:read_file(Path) of
                        {ok, Bin} ->
@@ -78,7 +78,7 @@
             SigningKeys =
                 lists:map(fun(Key) ->
                              {Id, Path} = Key,
-                             {list_to_binary(lists:last(Id)), Read_file(Path)}
+                             {list_to_binary(lists:last(Id)), ReadFileFun(Path)}
                           end,
                           Settings),
             maps:from_list(SigningKeys)
