@@ -10,6 +10,7 @@ def _impl(ctx):
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
 
     escript = ctx.actions.declare_file(path_join("escript", "rabbitmqctl"))
+    ebin = ctx.actions.declare_directory("ebin")
 
     copy_compiled_deps_commands = []
     copy_compiled_deps_commands.append("mkdir ${{MIX_INVOCATION_DIR}}/{}".format(MIX_DEPS_DIR))
@@ -78,6 +79,11 @@ def _impl(ctx):
 
         cd ${{OLDPWD}}
         cp ${{MIX_INVOCATION_DIR}}/escript/rabbitmqctl {escript_path}
+
+        mkdir -p {ebin_dir}
+        mv ${{MIX_INVOCATION_DIR}}/_build/dev/lib/rabbitmqctl/ebin/* {ebin_dir}
+        mv ${{MIX_INVOCATION_DIR}}/_build/dev/lib/rabbitmqctl/consolidated/* {ebin_dir}
+
         rm -dR ${{MIX_INVOCATION_DIR}}
     """.format(
         begins_with_fun=BEGINS_WITH_FUN,
@@ -89,6 +95,7 @@ def _impl(ctx):
         copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
         mix_deps_dir=MIX_DEPS_DIR,
         escript_path=escript.path,
+        ebin_dir=ebin.path,
     )
 
     inputs = []
@@ -100,19 +107,31 @@ def _impl(ctx):
 
     ctx.actions.run_shell(
         inputs = inputs,
-        outputs = [escript],
+        outputs = [escript, ebin],
         command = script,
     )
 
-    return [DefaultInfo(
-        executable = escript,
-    )]
+    return [
+        DefaultInfo(
+            executable = escript,
+            files = depset([ebin]),
+        ),
+        ErlangLibInfo(
+            lib_name = ctx.attr.name,
+            lib_version = ctx.attr.version,
+            erlang_version = erlang_version,
+            include = [],
+            beam = [ebin],
+            priv = [],
+        ),
+    ]
 
 rabbitmqctl = rule(
     implementation = _impl,
     attrs = {
+        "version": attr.string(mandatory = True),
         "srcs": attr.label_list(allow_files = True),
-        "deps": attr.label_list(providers=[ErlangLibInfo]),
+        "deps": attr.label_list(providers = [ErlangLibInfo]),
         "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
         "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
         "_elixir_home": attr.label(default = "@bazel-erlang//:elixir_home"),
