@@ -71,8 +71,8 @@
                        {ok, Bin} ->
                            string:trim(Bin, trailing, "\n");
                        _ ->
-                           % cuttlefish validators don't work for properties with $name
-                           cuttlefish:invalid(["file does not exist or cannot be read by the node: ", Path])
+                           % cuttlefish validators are not invoked for properties with $variables?
+                           cuttlefish:invalid("file does not exist or cannot be read by the node")
                    end
                 end,
             SigningKeys =
