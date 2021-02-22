@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2017-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2017-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_ct_config_schema).
@@ -23,6 +23,7 @@ init_schemas(App, Config) ->
 
 run_snippets(Config) ->
     {ok, [Snippets]} = file:consult(?config(conf_snippets, Config)),
+    ct:pal("Loaded config schema snippets: ~p", [Snippets]),
     lists:map(
         fun({N, S, C, P})    -> ok = test_snippet(Config, {snippet_id(N), S, []}, C, P);
            ({N, S, A, C, P}) -> ok = test_snippet(Config, {snippet_id(N), S, A},  C, P)
