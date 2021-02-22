@@ -72,10 +72,8 @@
             end
         end,
     SigningKeys =
-        lists:map(fun(Key) ->
-                        {Id, Path} = Key,
-                        {list_to_binary(lists:last(Id)), TryReadingFileFun(Path)}
-                    end,
-                    Settings),
+        lists:map(fun({Id, Path}) ->
+                    {list_to_binary(lists:last(Id)), TryReadingFileFun(Path)}
+                  end, Settings),
     maps:from_list(SigningKeys)
  end}.
