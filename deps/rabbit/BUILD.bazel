@@ -141,9 +141,10 @@ RUNTIME_DEPS = [
 ]
 
 rabbitmq_lib(
-    app_name = "rabbit",
     app_description = "RabbitMQ",
+    app_env = _APP_ENV,
     app_module = "rabbit",
+    app_name = "rabbit",
     app_registered = [
         "rabbit_amqqueue_sup",
         "rabbit_direct_client_sup",
@@ -151,7 +152,6 @@ rabbitmq_lib(
         "rabbit_node_monitor",
         "rabbit_router",
     ],
-    app_env = _APP_ENV,
     extra_apps = [
         "sasl",
         "rabbitmq_prelaunch",
@@ -175,47 +175,47 @@ rabbitmq_lib(
         "src/rabbit_queue_master_locator.erl",
     ],
     priv = glob(["priv/schema/rabbit.schema"]),
-    deps = DEPS,
     runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
 )
 
 ct_suite(
+    size = "small",
     suite_name = "amqqueue_backward_compatibility_SUITE",
-    deps = DEPS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
-    size = "small",
+    deps = DEPS,
 )
 
 ct_suite(
-    suite_name = "backing_queue_SUITE",
+    size = "large",
     data = [
         "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
         "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    deps = DEPS + [
-        "//deps/amqp_client:bazel_erlang_lib",
-    ],
-    runtime_deps = [
-        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
-        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-    ],
-    tools = [
-        "//:rabbitmq-for-tests-run",
-    ],
+    suite_name = "backing_queue_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
     },
-    size = "large",
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+    ],
+    deps = DEPS + [
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
 )
 
 ct_suite(
-    suite_name = "channel_interceptor_SUITE",
+    size = "medium",
     additional_srcs = [
         "test/dummy_interceptor.erl",
         "test/failing_dummy_interceptor.erl",
@@ -224,153 +224,153 @@ ct_suite(
         "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
         "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    deps = DEPS + [
-        "//deps/amqp_client:bazel_erlang_lib",
-    ],
-    runtime_deps = [
-        "@credentials-obfuscation//:bazel_erlang_lib",
-        "@goldrush//:bazel_erlang_lib",
-        "@jsx//:bazel_erlang_lib",
-        "@recon//:bazel_erlang_lib",
-        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
-        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-    ],
-    tools = [
-        "//:rabbitmq-for-tests-run",
-    ],
+    suite_name = "channel_interceptor_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
     },
-    size = "medium",
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+    ],
+    deps = DEPS + [
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
 )
 
 ct_suite(
-    suite_name = "channel_operation_timeout_SUITE",
+    size = "small",
     additional_srcs = [
-        "test/channel_operation_timeout_test_queue.erl"
+        "test/channel_operation_timeout_test_queue.erl",
     ],
     data = [
         "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
         "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    deps = DEPS + [
-        "//deps/amqp_client:bazel_erlang_lib",
-    ],
-    runtime_deps = [
-        "@credentials-obfuscation//:bazel_erlang_lib",
-        "@goldrush//:bazel_erlang_lib",
-        "@jsx//:bazel_erlang_lib",
-        "@recon//:bazel_erlang_lib",
-        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
-        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-    ],
-    tools = [
-        "//:rabbitmq-for-tests-run",
-    ],
+    suite_name = "channel_operation_timeout_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
     },
-    size = "small",
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+    ],
+    deps = DEPS + [
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
 )
 
 ct_suite(
-    suite_name = "cluster_rename_SUITE",
+    size = "medium",
+    data = [
+        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
+        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+    ],
     groups = [
         "cluster_size_2",
         "cluster_size_3",
     ],
-    data = [
-        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
-        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
-    ],
-    deps = DEPS + [
-        "//deps/amqp_client:bazel_erlang_lib",
-    ],
-    runtime_deps = [
-        "@credentials-obfuscation//:bazel_erlang_lib",
-        "@goldrush//:bazel_erlang_lib",
-        "@jsx//:bazel_erlang_lib",
-        "@recon//:bazel_erlang_lib",
-        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
-        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-    ],
-    tools = [
-        "//:rabbitmq-for-tests-run",
-    ],
+    suite_name = "cluster_rename_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
     },
-    size = "medium",
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+    ],
+    deps = DEPS + [
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
 )
 
 ct_suite(
-    suite_name = "cluster_SUITE",
-    data = [
-        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
-        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
-    ],
-    deps = DEPS + [
-        "//deps/amqp_client:bazel_erlang_lib",
-    ],
-    runtime_deps = [
-        "@credentials-obfuscation//:bazel_erlang_lib",
-        "@goldrush//:bazel_erlang_lib",
-        "@jsx//:bazel_erlang_lib",
-        "@recon//:bazel_erlang_lib",
-        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
-        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-    ],
-    tools = [
-        "//:rabbitmq-for-tests-run",
-    ],
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
-    },
     size = "small",
-)
-
-ct_suite(
-    suite_name = "clustering_management_SUITE",
     data = [
         "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
         "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    deps = DEPS + [
-        "//deps/amqp_client:bazel_erlang_lib",
-    ],
-    runtime_deps = [
-        "@credentials-obfuscation//:bazel_erlang_lib",
-        "@goldrush//:bazel_erlang_lib",
-        "@jsx//:bazel_erlang_lib",
-        "@recon//:bazel_erlang_lib",
-        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
-        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-    ],
-    tools = [
-        "//:rabbitmq-for-tests-run",
-    ],
+    suite_name = "cluster_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
     },
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+    ],
+    deps = DEPS + [
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
     size = "large",
+    data = [
+        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
+        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+    ],
+    suite_name = "clustering_management_SUITE",
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
+    },
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+    ],
+    deps = DEPS + [
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
 )

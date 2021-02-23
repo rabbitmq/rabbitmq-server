@@ -82,16 +82,16 @@ rabbitmq_run(
 
 rabbitmq_run(
     name = "rabbitmq-for-tests-run",
+    testonly = True,
     home = ":broker-for-tests-home",
     visibility = ["//visibility:public"],
-    testonly = True,
 )
 
 rabbitmq_run(
     name = "rabbitmq-for-cli-tests-run",
+    testonly = True,
     home = ":broker-for-cli-tests-home",
     visibility = ["//visibility:public"],
-    testonly = True,
 )
 
 # Allow us to `bazel run broker`
