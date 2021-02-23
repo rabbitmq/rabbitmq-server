@@ -40,7 +40,8 @@ all: packages
 	package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
 	package-windows \
 	package-generic-unix \
-	docker-image
+	docker-image \
+	docker-image-push
 
 PACKAGES_DIR ?= ../PACKAGES
 SOURCE_DIST_FILE ?= $(wildcard $(PACKAGES_DIR)/rabbitmq-server-*.tar.xz)
@@ -111,6 +112,9 @@ package-generic-unix: $(SOURCE_DIST_FILE)
 
 docker-image:
 	$(gen_verbose) $(MAKE) -C docker-image $(VARS) all $(DO_CLEAN)
+
+docker-image-push:
+	$(gen_verbose) $(MAKE) -C docker-image $(VARS) push $(DO_CLEAN)
 
 .PHONY: clean
 
