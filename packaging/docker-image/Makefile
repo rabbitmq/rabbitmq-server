@@ -26,6 +26,8 @@ dist:
 	  --build-arg RABBITMQ_BUILD=rabbitmq_server-$(VERSION) \
 	  --tag pivotalrabbitmq/rabbitmq:$(VERSION) \
 	  .
+
+push: dist
 	docker push pivotalrabbitmq/rabbitmq:$(VERSION)
 
 clean:
