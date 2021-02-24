@@ -252,11 +252,11 @@ var HELP = {
       'Total memory used by this queue process. This does not include in-memory message bodies (which may be shared between queues and will appear in the global "binaries" memory) but does include everything else.',
 
     'queue-consumer-capacity':
-      'Fraction of the time that the queue is able to immediately deliver messages to consumers. If this number is less than 100% you may be able to deliver messages faster if: \
+      'Fraction of the time that the queue is able to immediately deliver messages to consumers. Will be 0 for queues that have no consumers. If this number is less than 100% you may be able to deliver messages faster if: \
         <ul> \
           <li>There were more consumers or</li> \
           <li>The consumers were faster or</li> \
-          <li>The consumers had a higher prefetch count</li> \
+          <li>The consumer channels used a higher prefetch count</li> \
         </ul>',
 
     'internal-users-only':
