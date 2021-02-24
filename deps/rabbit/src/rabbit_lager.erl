@@ -221,18 +221,14 @@ configure_lager() ->
         undefined -> application:set_env(lager, error_logger_format_raw, true);
         _         -> ok
     end,
-    case application:get_env(lager, log_root) of
-        undefined ->
-            %% Setting env var to 'undefined' is different from not
-            %% setting it at all, and lager is sensitive to this
-            %% difference.
-            case application:get_env(rabbit, lager_log_root) of
-                {ok, Value} ->
-                    ok = application:set_env(lager, log_root, Value);
-                _ ->
-                    ok
-            end;
-        _ -> ok
+    %% Setting env var to 'undefined' is different from not
+    %% setting it at all, and lager is sensitive to this
+    %% difference.
+    case application:get_env(rabbit, lager_log_root) of
+        {ok, Value} ->
+            ok = application:set_env(lager, log_root, Value);
+        _ ->
+            ok
     end,
     case application:get_env(lager, colored) of
         undefined ->
