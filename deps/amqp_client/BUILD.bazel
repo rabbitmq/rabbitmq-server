@@ -14,57 +14,60 @@ DEPS = [
 ]
 
 rabbitmq_lib(
-    app_name = "amqp_client",
     app_description = "RabbitMQ AMQP Client",
+    app_env = APP_ENV,
     app_module = "amqp_client",
+    app_name = "amqp_client",
     app_registered = [
         "amqp_sup",
     ],
-    app_env = APP_ENV,
     extra_apps = [
         "xmerl",
     ],
-    first_srcs = ["src/amqp_gen_connection.erl", "src/amqp_gen_consumer.erl"],
+    first_srcs = [
+        "src/amqp_gen_connection.erl",
+        "src/amqp_gen_consumer.erl",
+    ],
     deps = DEPS,
 )
 
 ct_suite(
-    suite_name = "system_SUITE",
+    size = "large",
     data = [
         "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
         "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    deps = DEPS,
-    runtime_deps = [
-        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
-        "@credentials-obfuscation//:bazel_erlang_lib",
-        "@goldrush//:bazel_erlang_lib",
-        "@jsx//:bazel_erlang_lib",
-        "@ranch//:bazel_erlang_lib",
-        "@recon//:bazel_erlang_lib",
-        "@meck//:bazel_erlang_lib",
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-    ],
-    tools = [
-        "//:rabbitmq-for-tests-run",
-    ],
+    suite_name = "system_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
     },
-    size = "large",
+    tools = [
+        "//:rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@meck//:bazel_erlang_lib",
+        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@ranch//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+    ],
+    deps = DEPS,
 )
 
 ct_suite(
+    size = "small",
     suite_name = "unit_SUITE",
-    deps = DEPS,
-    runtime_deps = [
-        "//deps/rabbit:bazel_erlang_lib",
-    ],
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
-    size = "small",
+    runtime_deps = [
+        "//deps/rabbit:bazel_erlang_lib",
+    ],
+    deps = DEPS,
 )
