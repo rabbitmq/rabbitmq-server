@@ -640,10 +640,11 @@ default(_) ->
     LogUpgradeFile = "rabbit_default_upgrade.log",
     application:set_env(rabbit, lager_upgrade_file, LogUpgradeFile),
 
+    ?assertEqual(LogRoot, application:get_env(rabbit, lager_log_root, undefined)),
     rabbit_lager:configure_lager(),
 
     ExpectedHandlers = default_expected_handlers(LogFile),
-    LogRoot = application:get_env(lager, log_root, undefined),
+    ?assertEqual(LogRoot, application:get_env(lager, log_root, undefined)),
     ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, handlers, undefined))),
     ?assertEqual(ExpectedHandlers, sort_handlers(application:get_env(lager, rabbit_handlers, undefined))),
 
