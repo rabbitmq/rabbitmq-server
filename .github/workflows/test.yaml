@@ -5,7 +5,6 @@ jobs:
     name: test
     runs-on: ubuntu-18.04
     strategy:
-      max-parallel: 1
       matrix:
         erlang_version:
         - "22"
@@ -41,8 +40,8 @@ jobs:
           build --@bazel-erlang//:erlang_home=/usr/local/lib/erlang
           build --@bazel-erlang//:elixir_home=/usr/local/lib/elixir
 
-          build --bes_results_url=https://app.buildbuddy.io/invocation/
-          build --bes_backend=grpcs://cloud.buildbuddy.io
+          # build --bes_results_url=https://app.buildbuddy.io/invocation/
+          # build --bes_backend=grpcs://cloud.buildbuddy.io
           build --remote_cache=grpcs://cloud.buildbuddy.io
           build --tls_client_certificate=buildbuddy-cert.pem
           build --tls_client_key=buildbuddy-key.pem
