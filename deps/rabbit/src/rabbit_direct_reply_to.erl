@@ -22,7 +22,7 @@
 %% API
 %%
 
--type decoded_pid_and_key() :: {ok, pid(), binary()} | error.
+-type decoded_pid_and_key() :: {ok, pid(), binary()} | {error, any()}.
 
 -spec compute_key_and_suffix_v1(pid()) -> {binary(), binary()}.
 %% This original pid encoding function produces values that exceed routing key length limit
@@ -38,7 +38,7 @@ decode_reply_to_v1(Bin) ->
     case string:tokens(binary_to_list(Bin), ".") of
         [PidEnc, Key] -> Pid = binary_to_term(base64:decode(PidEnc)),
                          {ok, Pid, Key};
-        _             -> error
+        _             -> {error, encoding_failed}
     end.
 
 
@@ -55,7 +55,7 @@ compute_key_and_suffix_v2(Pid) ->
     %%
     %% We also use a synthetic node prefix because the hash alone will be sufficient to 
     NodeHash = erlang:phash2(Node),
-    PidParts = maps:update(node, rabbit_nodes_common:make("generated", NodeHash), PidParts0),
+    PidParts = maps:update(node, rabbit_nodes_common:make("reply", integer_to_list(NodeHash)), PidParts0),
     RecomposedEncoded = base64:encode(pid_recomposition:to_binary(PidParts)),
 
     Suffix = <<RecomposedEncoded/binary, ".", Key/binary>>,
@@ -74,5 +74,5 @@ decode_reply_to_v2(Bin, CandidateNodes) ->
                     PidParts = maps:update(node, Candidate, PidParts0),
                     {ok, pid_recomposition:recompose(PidParts), Key}
             end;
-        _             -> error
+        _             -> {error, encoding_failed}
     end.
