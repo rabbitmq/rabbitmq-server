@@ -41,7 +41,7 @@ from_binary(Bin) ->
     end,
     <<ID:32/integer, Serial:32/integer, Creation:32/integer>> = Rest2,
     #{
-        node     => binary_to_atom(Node),
+        node     => binary_to_atom(Node, utf8),
         id       => ID,
         serial   => Serial,
         creation => Creation
@@ -49,7 +49,7 @@ from_binary(Bin) ->
 
 -spec to_binary(#{atom() => any()}) -> binary().
 to_binary(#{node := Node, id := ID, serial := Serial, creation := Creation}) ->
-    BinNode = atom_to_binary(Node),
+    BinNode = atom_to_binary(Node, utf8),
     NodeLen = byte_size(BinNode),
     <<?TTB_PREFIX:8/unsigned, ?NEW_PID_EXT:8/unsigned, ?ATOM_UTF8_EXT:8/unsigned, NodeLen:16/unsigned, BinNode/binary, ID:32, Serial:32, Creation:32>>.
 
