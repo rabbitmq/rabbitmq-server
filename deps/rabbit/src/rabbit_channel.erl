@@ -345,13 +345,13 @@ declare_fast_reply_to(_) ->
 declare_fast_reply_to_v1(EncodedBin) ->
     %% the the original encoding function
     case rabbit_direct_reply_to:decode_reply_to_v1(EncodedBin) of
-        {error, _} ->
-            not_found;
         {ok, V1Pid, V1Key} ->
             Msg = {declare_fast_reply_to, V1Key},
             rabbit_misc:with_exit_handler(
               rabbit_misc:const(not_found),
-              fun() -> gen_server2:call(V1Pid, Msg, infinity) end)
+              fun() -> gen_server2:call(V1Pid, Msg, infinity) end);
+        {error, _} ->
+            not_found
     end.
 
 -spec send_credit_reply(pid(), non_neg_integer()) -> 'ok'.
@@ -1400,8 +1400,7 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                            end,
                     %% Precalculate both suffix and key
                     {Key, Suffix} = rabbit_direct_reply_to:compute_key_and_suffix_v2(self()),
-                    rabbit_log:debug("amq.rabbitmq.reply-to key: ~p, suffix: ~p", [Key, Suffix]),
-                    Consumer = {CTag, Suffix, binary_to_list(Key)},
+                    Consumer = {CTag, Suffix, Key},
                     State1 = State#ch{reply_consumer = Consumer},
                     case NoWait of
                         true  -> {noreply, State1};
