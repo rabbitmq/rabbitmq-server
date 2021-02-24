@@ -173,7 +173,8 @@
 
     {queue_metrics, [
         {2, undefined, queue_consumers, gauge, "Consumers on a queue", consumers},
-        {2, undefined, queue_consumer_utilisation, gauge, "Consumer utilisation", consumer_utilisation},
+        {2, undefined, queue_consumer_capacity, gauge, "Consumer capacity", consumer_capacity},
+        {2, undefined, queue_consumer_utilisation, gauge, "Same as consumer capacity", consumer_utilisation},
         {2, undefined, queue_process_memory_bytes, gauge, "Memory in bytes used by the Erlang queue process", memory},
         {2, undefined, queue_messages_ram, gauge, "Ready and unacknowledged messages stored in memory", messages_ram},
         {2, undefined, queue_messages_ram_bytes, gauge, "Size of ready and unacknowledged messages stored in memory", message_bytes_ram},
