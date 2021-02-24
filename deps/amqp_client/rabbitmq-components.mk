@@ -90,6 +90,8 @@ dep_rabbitmq_shovel                   = git_rmq rabbitmq-shovel $(current_rmq_re
 dep_rabbitmq_shovel_management        = git_rmq rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_stomp                    = git_rmq rabbitmq-stomp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_stream                   = git_rmq rabbitmq-stream $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_stream_management        = git_rmq rabbitmq-stream-management $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_stream_prometheus        = git_rmq rabbitmq-stream-prometheus $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_toke                     = git_rmq rabbitmq-toke $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_top                      = git_rmq rabbitmq-top $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_tracing                  = git_rmq rabbitmq-tracing $(current_rmq_ref) $(base_rmq_ref) master
@@ -115,7 +117,7 @@ dep_accept = hex 0.3.5
 dep_cowboy = hex 2.8.0
 dep_cowlib = hex 2.9.1
 dep_jsx = hex 2.11.0
-dep_lager = hex 3.8.0
+dep_lager = hex 3.8.2
 dep_prometheus = git https://github.com/deadtrickster/prometheus.erl.git master
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
@@ -177,6 +179,8 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_shovel_management \
 		      rabbitmq_stomp \
 		      rabbitmq_stream \
+		      rabbitmq_stream_management \
+		      rabbitmq_stream_prometheus \
 		      rabbitmq_toke \
 		      rabbitmq_top \
 		      rabbitmq_tracing \
