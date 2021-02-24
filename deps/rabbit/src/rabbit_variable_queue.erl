@@ -2302,7 +2302,7 @@ beta_limit(Q) ->
         empty                                   -> undefined
     end.
 
-delta_limit(?BLANK_DELTA_PATTERN(_X))             -> undefined;
+delta_limit(?BLANK_DELTA_PATTERN(_))              -> undefined;
 delta_limit(#delta { start_seq_id = StartSeqId }) -> StartSeqId.
 
 %%----------------------------------------------------------------------------
