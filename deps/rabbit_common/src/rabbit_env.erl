@@ -16,6 +16,7 @@
          get_context_after_logging_init/1,
          get_context_after_reloading_env/1,
          dbg_config/0,
+         env_vars/0,
          get_used_env_vars/0,
          log_process_env/0,
          log_context/1,
@@ -208,6 +209,14 @@ update_context(Context, Key, Value, Origin)
     Context#{Key => Value,
              var_origins => #{Key => Origin}}.
 
+env_vars() ->
+    case erlang:function_exported(os, list_env_vars, 0) of
+      %% OTP < 24
+      true  -> os:list_env_vars();
+      %% OTP >= 24
+      false -> os:env()
+    end.
+
 get_used_env_vars() ->
     lists:filter(
       fun({Var, _}) -> var_is_used(Var) end,
@@ -218,7 +227,7 @@ log_process_env() ->
     lists:foreach(
       fun({Var, Value}) ->
               rabbit_log_prelaunch:debug("  - ~s = ~ts", [Var, Value])
-      end, lists:sort(os:list_env_vars())).
+      end, lists:sort(env_vars())).
 
 log_context(Context) ->
     rabbit_log_prelaunch:debug("Context (based on environment variables):"),
