@@ -33,12 +33,12 @@ compute_key_and_suffix_v1(Pid) ->
     Suffix = <<PidEnc/binary, ".", Key/binary>>,
     {Key, Suffix}.
 
--spec decode_reply_to_v1(binary()) -> decoded_pid_and_key().
+-spec decode_reply_to_v1(binary()) -> decoded_pid_and_key() | {error, any()}.
 decode_reply_to_v1(Bin) ->
-    case string:tokens(binary_to_list(Bin), ".") of
+    case string:lexemes(Bin, ["."]) of
         [PidEnc, Key] -> Pid = binary_to_term(base64:decode(PidEnc)),
-                         {ok, Pid, Key};
-        _             -> {error, encoding_failed}
+                         {ok, Pid, unicode:characters_to_binary(Key)};
+        _             -> {error, unrecognized_format}
     end.
 
 
@@ -61,9 +61,9 @@ compute_key_and_suffix_v2(Pid) ->
     Suffix = <<RecomposedEncoded/binary, ".", Key/binary>>,
     {Key, Suffix}.
 
--spec decode_reply_to_v2(binary(), #{non_neg_integer() => node()}) -> decoded_pid_and_key().
+-spec decode_reply_to_v2(binary(), #{non_neg_integer() => node()}) -> decoded_pid_and_key() | {error, any()}.
 decode_reply_to_v2(Bin, CandidateNodes) ->
-    case string:tokens(binary_to_list(Bin), ".") of
+    case string:lexemes(Bin, ["."]) of
         [PidEnc, Key] ->
             RawPidBin = base64:decode(PidEnc),
             PidParts0 = #{node := ShortenedNodename} = pid_recomposition:from_binary(RawPidBin),
@@ -72,7 +72,7 @@ decode_reply_to_v2(Bin, CandidateNodes) ->
                 undefined -> error;
                 Candidate ->
                     PidParts = maps:update(node, Candidate, PidParts0),
-                    {ok, pid_recomposition:recompose(PidParts), Key}
+                    {ok, pid_recomposition:recompose(PidParts), unicode:characters_to_binary(Key)}
             end;
-        _             -> {error, encoding_failed}
+        _             -> {error, unrecognized_format}
     end.
