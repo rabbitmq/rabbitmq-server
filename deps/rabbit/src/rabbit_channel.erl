@@ -299,7 +299,7 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 -spec deliver_reply(binary(), rabbit_types:delivery()) -> 'ok'.
 
 deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
-    case decode_fast_reply_to(Rest) of
+    case rabbit_direct_reply_to:decode_reply_to_v1(Rest) of
         {ok, Pid, Key} ->
             delegate:invoke_no_result(
               Pid, {?MODULE, deliver_reply_local, [Key, Delivery]});
@@ -321,7 +321,7 @@ deliver_reply_local(Pid, Key, Delivery) ->
 declare_fast_reply_to(<<"amq.rabbitmq.reply-to">>) ->
     exists;
 declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", Rest/binary>>) ->
-    case decode_fast_reply_to(Rest) of
+    case rabbit_direct_reply_to:decode_reply_to_v1(Rest) of
         {ok, Pid, Key} ->
             Msg = {declare_fast_reply_to, Key},
             rabbit_misc:with_exit_handler(
@@ -332,13 +332,6 @@ declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", Rest/binary>>) ->
     end;
 declare_fast_reply_to(_) ->
     not_found.
-
-decode_fast_reply_to(Rest) ->
-    case string:tokens(binary_to_list(Rest), ".") of
-        [PidEnc, Key] -> Pid = binary_to_term(base64:decode(PidEnc)),
-                         {ok, Pid, Key};
-        _             -> error
-    end.
 
 -spec send_credit_reply(pid(), non_neg_integer()) -> 'ok'.
 
@@ -1384,11 +1377,9 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                           rabbit_guid:gen_secure(), "amq.ctag");
                                Other -> Other
                            end,
-                    %% Precalculate both suffix and key; base64 encoding is
-                    %% expensive
-                    Key = base64:encode(rabbit_guid:gen_secure()),
-                    PidEnc = base64:encode(term_to_binary(self())),
-                    Suffix = <<PidEnc/binary, ".", Key/binary>>,
+                    %% Precalculate both suffix and key
+                    {Key, Suffix} = rabbit_direct_reply_to:compute_key_and_suffix_v1(self()),
+                    rabbit_log:debug("amq.rabbitmq.reply-to key: ~p, suffix: ~p", [Key, Suffix]),
                     Consumer = {CTag, Suffix, binary_to_list(Key)},
                     State1 = State#ch{reply_consumer = Consumer},
                     case NoWait of
