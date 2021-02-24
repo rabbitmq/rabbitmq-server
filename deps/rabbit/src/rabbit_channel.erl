@@ -299,7 +299,7 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 -spec deliver_reply(binary(), rabbit_types:delivery()) -> 'ok'.
 
 deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
-    case rabbit_direct_reply_to:decode_reply_to_v1(Rest) of
+    case rabbit_direct_reply_to:decode_reply_to_v2(Rest, rabbit_nodes:all_running_with_hashes()) of
         {ok, Pid, Key} ->
             delegate:invoke_no_result(
               Pid, {?MODULE, deliver_reply_local, [Key, Delivery]});
@@ -321,7 +321,7 @@ deliver_reply_local(Pid, Key, Delivery) ->
 declare_fast_reply_to(<<"amq.rabbitmq.reply-to">>) ->
     exists;
 declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", Rest/binary>>) ->
-    case rabbit_direct_reply_to:decode_reply_to_v1(Rest) of
+    case rabbit_direct_reply_to:decode_reply_to_v2(Rest, rabbit_nodes:all_running_with_hashes()) of
         {ok, Pid, Key} ->
             Msg = {declare_fast_reply_to, Key},
             rabbit_misc:with_exit_handler(
@@ -1378,7 +1378,7 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                Other -> Other
                            end,
                     %% Precalculate both suffix and key
-                    {Key, Suffix} = rabbit_direct_reply_to:compute_key_and_suffix_v1(self()),
+                    {Key, Suffix} = rabbit_direct_reply_to:compute_key_and_suffix_v2(self()),
                     rabbit_log:debug("amq.rabbitmq.reply-to key: ~p, suffix: ~p", [Key, Suffix]),
                     Consumer = {CTag, Suffix, binary_to_list(Key)},
                     State1 = State#ch{reply_consumer = Consumer},
