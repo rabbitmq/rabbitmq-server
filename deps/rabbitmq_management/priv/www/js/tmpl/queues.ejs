@@ -45,8 +45,8 @@
 <% if (show_column('queues', 'consumers')) { %>
     <th><%= fmt_sort('Consumers',    'consumers') %></th>
 <% } %>
-<% if (show_column('queues', 'consumer_utilisation')) { %>
-    <th><%= fmt_sort('Consumer utilisation', 'consumer_utilisation') %></th>
+<% if (show_column('queues', 'consumer_capacity')) { %>
+    <th><%= fmt_sort('Consumer capacity', 'consumer_capacity') %></th>
 <% } %>
 <% if (show_column('queues', 'state')) { %>
     <th><%= fmt_sort('State',        'state') %></th>
@@ -157,8 +157,8 @@
 <% if (show_column('queues', 'consumers')) { %>
    <td class="c"><%= fmt_string(queue.consumers) %></td>
 <% } %>
-<% if (show_column('queues', 'consumer_utilisation')) { %>
-   <td class="c"><%= fmt_percent(queue.consumer_utilisation) %></td>
+<% if (show_column('queues', 'consumer_capacity')) { %>
+   <td class="c"><%= fmt_percent(queue.consumer_capacity) %></td>
 <% } %>
 <% if (show_column('queues', 'state')) { %>
    <td class="c"><%= fmt_object_state(queue) %></td>

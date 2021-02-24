@@ -133,8 +133,8 @@
         <td><%= fmt_string(queue.consumers) %></td>
       </tr>
       <tr>
-        <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
-        <td><%= fmt_percent(queue.consumer_utilisation) %></td>
+        <th>Consumer capacity <span class="help" id="queue-consumer-capacity"></th>
+        <td><%= fmt_percent(queue.consumer_capacity) %></td>
       </tr>
       <% if (is_quorum(queue) || is_stream(queue)) { %>
       <tr>

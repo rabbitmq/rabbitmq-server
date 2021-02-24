@@ -71,7 +71,7 @@ var ALL_COLUMNS =
                    ['features_no_policy',   'Features (no policy)',   false],
                    ['policy',               'Policy',                 false],
                    ['consumers',            'Consumer count',         false],
-                   ['consumer_utilisation', 'Consumer utilisation',   false],
+                   ['consumer_capacity',    'Consumer capacity',      false],
                    ['state',                'State',                  true]],
       'Messages': [['msgs-ready',      'Ready',          true],
                    ['msgs-unacked',    'Unacknowledged', true],
@@ -251,7 +251,7 @@ var HELP = {
     'queue-process-memory':
       'Total memory used by this queue process. This does not include in-memory message bodies (which may be shared between queues and will appear in the global "binaries" memory) but does include everything else.',
 
-    'queue-consumer-utilisation':
+    'queue-consumer-capacity':
       'Fraction of the time that the queue is able to immediately deliver messages to consumers. If this number is less than 100% you may be able to deliver messages faster if: \
         <ul> \
           <li>There were more consumers or</li> \
