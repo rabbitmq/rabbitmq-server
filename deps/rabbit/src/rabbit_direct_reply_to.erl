@@ -35,7 +35,7 @@ compute_key_and_suffix_v1(Pid) ->
 
 -spec decode_reply_to_v1(binary()) -> decoded_pid_and_key() | {error, any()}.
 decode_reply_to_v1(Bin) ->
-    case string:lexemes(Bin, ["."]) of
+    case string:lexemes(Bin, ".") of
         [PidEnc, Key] -> Pid = binary_to_term(base64:decode(PidEnc)),
                          {ok, Pid, unicode:characters_to_binary(Key)};
         _             -> {error, unrecognized_format}
@@ -63,7 +63,7 @@ compute_key_and_suffix_v2(Pid) ->
 
 -spec decode_reply_to_v2(binary(), #{non_neg_integer() => node()}) -> decoded_pid_and_key() | {error, any()}.
 decode_reply_to_v2(Bin, CandidateNodes) ->
-    case string:lexemes(Bin, ["."]) of
+    case string:lexemes(Bin, ".") of
         [PidEnc, Key] ->
             RawPidBin = base64:decode(PidEnc),
             PidParts0 = #{node := ShortenedNodename} = pid_recomposition:from_binary(RawPidBin),
