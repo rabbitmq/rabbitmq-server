@@ -18,10 +18,11 @@
 %% API
 %%
 
--export([make/1, parts/1, names/1, name_type/1, ensure_epmd/0, is_running/2, is_process_running/2]).
+-export([make/1, make/2, parts/1, names/1, name_type/1, ensure_epmd/0, is_running/2, is_process_running/2]).
 -export([cookie_hash/0, epmd_port/0, diagnostics/1]).
 
 -spec make({string(), string()} | string()) -> node().
+-spec make(string(), string()) -> node().
 -spec parts(node() | string()) -> {string(), string()}.
 -spec ensure_epmd() -> 'ok'.
 -spec epmd_port() -> string().
@@ -76,6 +77,8 @@ make({Prefix, Suffix}) -> rabbit_data_coercion:to_atom(
                                           "@",
                                           rabbit_data_coercion:to_list(Suffix)]));
 make(NodeStr)          -> make(parts(NodeStr)).
+
+make(Prefix, Suffix) -> make({Prefix, Suffix}).
 
 parts(Node) when is_atom(Node) ->
     parts(atom_to_list(Node));

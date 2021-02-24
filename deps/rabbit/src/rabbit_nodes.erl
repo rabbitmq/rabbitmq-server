@@ -14,6 +14,7 @@
          await_running_count/2, is_single_node_cluster/0,
          boot/0]).
 -export([persistent_cluster_id/0, seed_internal_cluster_id/0, seed_user_provided_cluster_name/0]).
+-export([all_running_with_hashes/0]).
 
 -include_lib("kernel/include/inet.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -155,3 +156,7 @@ await_running_count_with_retries(TargetCount, Retries) ->
             timer:sleep(?SAMPLING_INTERVAL),
             await_running_count_with_retries(TargetCount, Retries - 1)
     end.
+
+-spec all_running_with_hashes() -> #{non_neg_integer() => node()}.
+all_running_with_hashes() ->
+    maps:from_list([{erlang:phash2(Node), Node} || Node <- all_running()]).

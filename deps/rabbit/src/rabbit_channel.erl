@@ -299,12 +299,21 @@ deliver(Pid, ConsumerTag, AckRequired, Msg) ->
 
 -spec deliver_reply(binary(), rabbit_types:delivery()) -> 'ok'.
 
-deliver_reply(<<"amq.rabbitmq.reply-to.", Rest/binary>>, Delivery) ->
-    case decode_fast_reply_to(Rest) of
+deliver_reply(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>, Delivery) ->
+    case rabbit_direct_reply_to:decode_reply_to_v2(EncodedBin, rabbit_nodes:all_running_with_hashes()) of
         {ok, Pid, Key} ->
-            delegate:invoke_no_result(
-              Pid, {?MODULE, deliver_reply_local, [Key, Delivery]});
-        error ->
+            delegate:invoke_no_result(Pid, {?MODULE, deliver_reply_local, [Key, Delivery]});
+        {error, _} ->
+            deliver_reply_v1(EncodedBin, Delivery)
+    end.
+
+-spec deliver_reply_v1(binary(), rabbit_types:delivery()) -> 'ok'.
+deliver_reply_v1(EncodedBin, Delivery) ->
+    %% the the original encoding function
+    case rabbit_direct_reply_to:decode_reply_to_v1(EncodedBin) of
+        {ok, V1Pid, V1Key} ->
+            delegate:invoke_no_result(V1Pid, {?MODULE, deliver_reply_local, [V1Key, Delivery]});
+        {error, _} ->
             ok
     end.
 
@@ -321,24 +330,29 @@ deliver_reply_local(Pid, Key, Delivery) ->
 
 declare_fast_reply_to(<<"amq.rabbitmq.reply-to">>) ->
     exists;
-declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", Rest/binary>>) ->
-    case decode_fast_reply_to(Rest) of
+declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>) ->
+    case rabbit_direct_reply_to:decode_reply_to_v2(EncodedBin, rabbit_nodes:all_running_with_hashes()) of
+        {error, _} ->
+            declare_fast_reply_to_v1(EncodedBin);
         {ok, Pid, Key} ->
             Msg = {declare_fast_reply_to, Key},
             rabbit_misc:with_exit_handler(
               rabbit_misc:const(not_found),
-              fun() -> gen_server2:call(Pid, Msg, infinity) end);
-        error ->
-            not_found
+              fun() -> gen_server2:call(Pid, Msg, infinity) end)
     end;
 declare_fast_reply_to(_) ->
     not_found.
 
-decode_fast_reply_to(Rest) ->
-    case string:tokens(binary_to_list(Rest), ".") of
-        [PidEnc, Key] -> Pid = binary_to_term(base64:decode(PidEnc)),
-                         {ok, Pid, Key};
-        _             -> error
+declare_fast_reply_to_v1(EncodedBin) ->
+    %% the the original encoding function
+    case rabbit_direct_reply_to:decode_reply_to_v1(EncodedBin) of
+        {ok, V1Pid, V1Key} ->
+            Msg = {declare_fast_reply_to, V1Key},
+            rabbit_misc:with_exit_handler(
+              rabbit_misc:const(not_found),
+              fun() -> gen_server2:call(V1Pid, Msg, infinity) end);
+        {error, _} ->
+            not_found
     end.
 
 -spec send_credit_reply(pid(), non_neg_integer()) -> 'ok'.
@@ -1429,12 +1443,9 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                           rabbit_guid:gen_secure(), "amq.ctag");
                                Other -> Other
                            end,
-                    %% Precalculate both suffix and key; base64 encoding is
-                    %% expensive
-                    Key = base64:encode(rabbit_guid:gen_secure()),
-                    PidEnc = base64:encode(term_to_binary(self())),
-                    Suffix = <<PidEnc/binary, ".", Key/binary>>,
-                    Consumer = {CTag, Suffix, binary_to_list(Key)},
+                    %% Precalculate both suffix and key
+                    {Key, Suffix} = rabbit_direct_reply_to:compute_key_and_suffix_v2(self()),
+                    Consumer = {CTag, Suffix, Key},
                     State1 = State#ch{reply_consumer = Consumer},
                     case NoWait of
                         true  -> {noreply, State1};
