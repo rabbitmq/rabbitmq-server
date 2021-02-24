@@ -233,7 +233,7 @@ ct_test(
         "@lager//:bazel_erlang_lib",
         "@credentials-obfuscation//:bazel_erlang_lib",
     ],
-    size = "small",
+    size = "medium",
 )
 
 erlc(

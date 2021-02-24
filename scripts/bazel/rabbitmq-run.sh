@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
 if [ $1 = "-C" ]; then
+    cd $2
     shift 2
 fi
 
