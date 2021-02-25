@@ -29,6 +29,11 @@
          value_is_yes/1]).
 -endif.
 
+-ignore_xref([
+    {os, env, 0},
+    {os, list_env_vars, 0}
+]).
+
 -define(USED_ENV_VARS,
         [
          "RABBITMQ_ALLOW_INPUT",
@@ -211,11 +216,13 @@ update_context(Context, Key, Value, Origin)
     Context#{Key => Value,
              var_origins => #{Key => Origin}}.
 
--if(?OTP_RELEASE >= 24).
-env_vars() -> os:env().
--else.
-env_vars() -> os:list_env_vars().
--endif.
+env_vars() ->
+    case erlang:function_exported(os, list_env_vars, 0) of
+      %% OTP < 24
+      true  -> os:list_env_vars();
+      %% OTP >= 24
+      false -> os:env()
+    end.
 
 get_used_env_vars() ->
     lists:filter(
