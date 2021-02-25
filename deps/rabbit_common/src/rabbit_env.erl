@@ -29,12 +29,12 @@
          value_is_yes/1]).
 -endif.
 
-%% Vary from OTP version to version
+%% Vary from OTP version to version.
 -ignore_xref([
     {os, env, 0},
     {os, list_env_vars, 0}
 ]).
-%% Relies on functions only available in certain OTP versions
+%% Relies on functions only available in certain OTP versions.
 -dialyzer({nowarn_function, [env_vars/0]}).
 
 -define(USED_ENV_VARS,
@@ -221,10 +221,8 @@ update_context(Context, Key, Value, Origin)
 
 env_vars() ->
     case erlang:function_exported(os, list_env_vars, 0) of
-      %% OTP < 24
-      true  -> os:list_env_vars();
-      %% OTP >= 24
-      false -> os:env()
+        true  -> os:list_env_vars(); %% OTP < 24
+        false -> os:env()            %% OTP >= 24
     end.
 
 get_used_env_vars() ->
