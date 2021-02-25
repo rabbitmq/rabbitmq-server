@@ -195,6 +195,16 @@ Some responses may carry additional information than just the response code, thi
 |Client & Server
 |22
 |No
+
+|<<route>> (experimental)
+|Client
+|23
+|Yes
+
+|<<partitions>> (experimental)
+|Client
+|24
+|Yes
 |===
 
 === DeclarePublisher
@@ -547,6 +557,39 @@ CloseResponse => Key Version CorrelationId ResponseCode
 Heartbeat => Key Version
   Key => int16 // 22
   Version => int16
+```
+
+=== Route (experimental)
+
+```
+RouteQuery => Key Version CorrelationId RoutingKey SuperStream
+  Key => int16 // 23
+  Version => int16
+  CorrelationId => int32
+  RoutingKey => string
+  SuperStream => string
+
+RouteResponse => Key Version CorrelationId Stream
+  Key => int16 // 14
+  Version => int16
+  CorrelationId => int32
+  Stream => string
+```
+
+=== Partitions (experimental)
+
+```
+PartitionsQuery => Key Version CorrelationId SuperStream
+  Key => int16 // 24
+  Version => int16
+  CorrelationId => int32
+  SuperStream => string
+
+PartitionsResponse => Key Version CorrelationId [Stream]
+  Key => int16 // 23
+  Version => int16
+  CorrelationId => int32
+  Stream => string
 ```
 
 == Authentication

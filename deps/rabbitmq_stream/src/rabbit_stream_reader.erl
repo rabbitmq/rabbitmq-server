@@ -1483,10 +1483,15 @@ handle_frame_post_auth(Transport,
                                             OffsetAndCredit,
                                         {{timestamp, Timestamp}, Crdt}
                                 end,
-                            rabbit_log:info("Creating subscription ~p to ~p, with offset specification ~p~n", [SubscriptionId, Stream, OffsetSpec]),
+                            rabbit_log:info("Creating subscription ~p to ~p, with offset specificat"
+                                            "ion ~p~n",
+                                            [SubscriptionId, Stream,
+                                             OffsetSpec]),
                             {ok, Segment} =
                                 osiris:init_reader(LocalMemberPid, OffsetSpec),
-                            rabbit_log:info("Next offset for subscription ~p is ~p~n", [SubscriptionId, osiris_log:next_offset(Segment)]),
+                            rabbit_log:info("Next offset for subscription ~p is ~p~n",
+                                            [SubscriptionId,
+                                             osiris_log:next_offset(Segment)]),
                             ConsumerCounters =
                                 atomics:new(2, [{signed, false}]),
                             ConsumerState =
@@ -1508,7 +1513,9 @@ handle_frame_post_auth(Transport,
                                         ?COMMAND_SUBSCRIBE,
                                         CorrelationId),
 
-                            rabbit_log:info("Distributing existing messages to subscription ~p~n", [SubscriptionId]),
+                            rabbit_log:info("Distributing existing messages to subscription "
+                                            "~p~n",
+                                            [SubscriptionId]),
                             {{segment, Segment1}, {credit, Credit1}} =
                                 send_chunks(Transport, ConsumerState,
                                             SendFileOct),
@@ -1534,9 +1541,10 @@ handle_frame_post_auth(Transport,
 
                             ConsumerOffset = osiris_log:next_offset(Segment1),
 
-                            rabbit_log:info("Subscription ~p is now at offset ~p with ~p message(s) distributed after subscription~n",[
-                               SubscriptionId, ConsumerOffset, messages_consumed(ConsumerCounters1)
-                            ]),
+                            rabbit_log:info("Subscription ~p is now at offset ~p with ~p message(s) "
+                                            "distributed after subscription~n",
+                                            [SubscriptionId, ConsumerOffset,
+                                             messages_consumed(ConsumerCounters1)]),
 
                             rabbit_stream_metrics:consumer_created(self(),
                                                                    stream_r(Stream,
@@ -2015,6 +2023,78 @@ handle_frame_post_auth(Transport,
           CorrelationId:32,
           BrokersBin/binary,
           MetadataBin/binary>>,
+    FrameSize = byte_size(Frame),
+    Transport:send(S, <<FrameSize:32, Frame/binary>>),
+    {Connection, State, Rest};
+handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S,
+                                          virtual_host = VirtualHost} =
+                           Connection,
+                       State,
+                       <<?COMMAND_ROUTE:16,
+                         ?VERSION_0:16,
+                         CorrelationId:32,
+                         RoutingKeySize:16,
+                         RoutingKey:RoutingKeySize/binary,
+                         SuperStreamSize:16,
+                         SuperStream:SuperStreamSize/binary>>,
+                       Rest) ->
+    {ResponseCode, StreamBin} =
+        case rabbit_stream_manager:route(RoutingKey, VirtualHost, SuperStream)
+        of
+            {ok, no_route} ->
+                {?RESPONSE_CODE_OK, <<(-1):16>>};
+            {ok, Stream} ->
+                StreamSize = byte_size(Stream),
+                {?RESPONSE_CODE_OK,
+                 <<StreamSize:16, Stream:StreamSize/binary>>};
+            {error, _} ->
+                {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, <<(-1):16>>}
+        end,
+
+    Frame =
+        <<?COMMAND_ROUTE:16,
+          ?VERSION_0:16,
+          CorrelationId:32,
+          ResponseCode:16,
+          StreamBin/binary>>,
+    FrameSize = byte_size(Frame),
+    Transport:send(S, <<FrameSize:32, Frame/binary>>),
+    {Connection, State, Rest};
+handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S,
+                                          virtual_host = VirtualHost} =
+                           Connection,
+                       State,
+                       <<?COMMAND_PARTITIONS:16,
+                         ?VERSION_0:16,
+                         CorrelationId:32,
+                         SuperStreamSize:16,
+                         SuperStream:SuperStreamSize/binary>>,
+                       Rest) ->
+    {ResponseCode, PartitionsBin} =
+        case rabbit_stream_manager:partitions(VirtualHost, SuperStream) of
+            {ok, []} ->
+                {?RESPONSE_CODE_OK, <<0:32>>};
+            {ok, Streams} ->
+                StreamCount = length(Streams),
+                Bin = lists:foldl(fun(Stream, Acc) ->
+                                     StreamSize = byte_size(Stream),
+                                     <<Acc/binary, StreamSize:16,
+                                       Stream:StreamSize/binary>>
+                                  end,
+                                  <<StreamCount:32>>, Streams),
+                {?RESPONSE_CODE_OK, Bin};
+            {error, _} ->
+                {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, <<0:32>>}
+        end,
+
+    Frame =
+        <<?COMMAND_PARTITIONS:16,
+          ?VERSION_0:16,
+          CorrelationId:32,
+          ResponseCode:16,
+          PartitionsBin/binary>>,
     FrameSize = byte_size(Frame),
     Transport:send(S, <<FrameSize:32, Frame/binary>>),
     {Connection, State, Rest};
