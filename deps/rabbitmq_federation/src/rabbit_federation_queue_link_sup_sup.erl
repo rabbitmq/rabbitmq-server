@@ -65,7 +65,7 @@ stop_child(Q) ->
           [rabbit_misc:rs(QueueName), Err]),
         ok
     end,
-    ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(Q)).
+    _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Q)).
 
 %%----------------------------------------------------------------------------
 
