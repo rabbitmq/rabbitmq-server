@@ -33,7 +33,8 @@
          dequeue/5,
          fold_state/3,
          is_policy_applicable/2,
-         is_server_named_allowed/1
+         is_server_named_allowed/1,
+         notify_decorators/1
          ]).
 
 -type queue_name() :: rabbit_types:r(queue).
@@ -198,6 +199,9 @@
 -callback capabilities() ->
     #{atom() := term()}.
 
+-callback notify_decorators(amqqueue:amqqueue()) ->
+    ok.
+
 %% TODO: this should be controlled by a registry that is populated on boot
 discover(<<"quorum">>) ->
     rabbit_quorum_queue;
@@ -298,14 +302,18 @@ i_down(_K, _Q, _DownReason) -> ''.
 is_policy_applicable(Q, Policy) ->
     Mod = amqqueue:get_type(Q),
     Capabilities = Mod:capabilities(),
-    Applicable = maps:get(policies, Capabilities, []),
+    NotApplicable = maps:get(policies, Capabilities, []),
     lists:all(fun({P, _}) ->
-                      lists:member(P, Applicable)
+                      not lists:member(P, NotApplicable)
               end, Policy).
 
 is_server_named_allowed(Type) ->
     Capabilities = Type:capabilities(),
     maps:get(server_named, Capabilities, false).
+
+notify_decorators(Q) ->
+    Mod = amqqueue:get_type(Q),
+    Mod:notify_decorators(Q).
 
 -spec init() -> state().
 init() ->

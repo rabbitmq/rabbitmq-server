@@ -48,8 +48,7 @@ policy_changed(Q1, Q2) when ?is_amqqueue(Q1) ->
     QName = amqqueue:get_name(Q1),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q0} when ?is_amqqueue(Q0) ->
-            QPid = amqqueue:get_pid(Q0),
-            rpc:call(node(QPid), rabbit_federation_queue,
+            rpc:call(amqqueue:qnode(Q0), rabbit_federation_queue,
                      policy_changed_local, [Q1, Q2]);
         {error, not_found} ->
             ok

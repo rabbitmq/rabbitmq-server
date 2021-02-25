@@ -38,7 +38,8 @@
          dequeue/4,
          info/2,
          state_info/1,
-         capabilities/0
+         capabilities/0,
+         notify_decorators/1
          ]).
 
 -export([delete_crashed/1,
@@ -441,14 +442,9 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
     [Q || {_, {new, Q}} <- Results].
 
 capabilities() ->
-    #{policies => [<<"expires">>, <<"message-ttl">>, <<"dead-letter-exchange">>,
-                   <<"dead-letter-routing-key">>, <<"max-length">>,
-                   <<"max-length-bytes">>, <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
-                   <<"max-priority">>, <<"overflow">>, <<"queue-mode">>,
-                   <<"single-active-consumer">>, <<"delivery-limit">>,
-                   <<"ha-mode">>, <<"ha-params">>, <<"ha-sync-mode">>,
-                   <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
-                   <<"queue-master-locator">>],
+    #{policies => [ %% Stream policies
+                    <<"max-age">>, <<"max-segment-size">>,
+                    <<"queue-leader-locator">>, <<"initial-cluster-size">>],
       queue_arguments => [<<"x-expires">>, <<"x-message-ttl">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
                           <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
@@ -459,6 +455,10 @@ capabilities() ->
                              <<"x-priority">>, <<"x-credit">>
                             ],
       server_named => true}.
+
+notify_decorators(Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    delegate:invoke_no_result(QPid, {gen_server2, cast, [notify_decorators]}).
 
 reject_seq_no(SeqNo, U0) ->
     reject_seq_no(SeqNo, U0, []).
