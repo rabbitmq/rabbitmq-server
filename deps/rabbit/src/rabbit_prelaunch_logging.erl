@@ -56,7 +56,8 @@ configure_lager(#{log_base_dir := LogBaseDir,
                                      UpgradeLog}
                             end,
 
-    ok = application:set_env(lager, crash_log, "log/crash.log"),
+    %% see https://github.com/erlang-lager/lager/pull/540
+    ok = application:set_env(lager, crash_log, "crash.log"),
 
     Fun = fun({App, Var, Value}) ->
                   case application:get_env(App, Var) of

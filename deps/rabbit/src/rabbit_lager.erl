@@ -178,7 +178,7 @@ lager_file_name(_) ->
 
 lager_file_name1(Settings) when is_list(Settings) ->
     {file, FileName} = proplists:lookup(file, Settings),
-    lager_util:expand_path(FileName);
+    FileName;
 lager_file_name1({FileName, _}) -> lager_util:expand_path(FileName);
 lager_file_name1({FileName, _, _, _, _}) -> lager_util:expand_path(FileName);
 lager_file_name1(_) ->
@@ -186,8 +186,7 @@ lager_file_name1(_) ->
                    lager_file_backend_config_invalid}}).
 
 
-ensure_logfile_exist(FileName) ->
-    LogFile = lager_util:expand_path(FileName),
+ensure_logfile_exist(LogFile) ->
     case rabbit_file:read_file_info(LogFile) of
         {ok,_} -> ok;
         {error, Err} -> throw({error, {cannot_log_to_file, LogFile, Err}})
