@@ -1531,7 +1531,7 @@ checkout(#{index := Index} = Meta, #?MODULE{cfg = #cfg{resource = QName}} = OldS
                                             Effects0, {#{}, #{}}),
     case evaluate_limit(Index, false, OldState, State1, Effects1) of
         {State, true, Effects} ->
-            case have_active_consumers_changed(State, HandleConsumerChanges) of
+            case maybe_notify_decorators(State, HandleConsumerChanges) of
                 {true, {MaxActivePriority, IsEmpty}} ->
                     NotifyEffect = notify_decorators_effect(QName, MaxActivePriority, IsEmpty),
                     update_smallest_raft_index(Index, State, [NotifyEffect | Effects]);
@@ -1539,7 +1539,7 @@ checkout(#{index := Index} = Meta, #?MODULE{cfg = #cfg{resource = QName}} = OldS
                     update_smallest_raft_index(Index, State, Effects)
             end;
         {State, false, Effects} ->
-            case have_active_consumers_changed(State, HandleConsumerChanges) of
+            case maybe_notify_decorators(State, HandleConsumerChanges) of
                 {true, {MaxActivePriority, IsEmpty}} ->
                     NotifyEffect = notify_decorators_effect(QName, MaxActivePriority, IsEmpty),
                     {State, ok, [NotifyEffect | Effects]};
@@ -2165,9 +2165,9 @@ get_priority_from_args(#{args := Args}) ->
 get_priority_from_args(_) ->
     0.
 
-have_active_consumers_changed(_, false) ->
+maybe_notify_decorators(_, false) ->
     false;
-have_active_consumers_changed(State, _) ->
+maybe_notify_decorators(State, _) ->
     {true, query_notify_decorators_info(State)}.
 
 notify_decorators_effect(#?MODULE{cfg = #cfg{resource = QName}} = State) ->

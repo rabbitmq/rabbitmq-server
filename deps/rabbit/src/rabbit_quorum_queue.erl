@@ -1542,7 +1542,8 @@ notify_decorators(Q) when ?is_amqqueue(Q) ->
         _ -> ok
     end.
 
-notify_decorators(QName, Event) -> notify_decorators(QName, Event, []).
+notify_decorators(QName, Event) ->
+    notify_decorators(QName, Event, []).
 
 notify_decorators(QName, F, A) ->
     %% Look up again in case policy and hence decorators have changed
