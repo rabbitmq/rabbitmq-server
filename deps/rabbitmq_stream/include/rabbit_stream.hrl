@@ -21,6 +21,8 @@
 -define(COMMAND_OPEN, 20).
 -define(COMMAND_CLOSE, 21).
 -define(COMMAND_HEARTBEAT, 22).
+-define(COMMAND_ROUTE, 23).
+-define(COMMAND_PARTITIONS, 24).
 
 -define(VERSION_0, 0).
 

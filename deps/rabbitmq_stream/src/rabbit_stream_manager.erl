@@ -30,7 +30,9 @@
          delete/3,
          lookup_leader/2,
          lookup_local_member/2,
-         topology/2]).
+         topology/2,
+         route/3,
+         partitions/2]).
 
 -record(state, {configuration}).
 
@@ -71,6 +73,17 @@ lookup_local_member(VirtualHost, Stream) ->
                   {error, stream_not_found} | {error, stream_not_available}.
 topology(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {topology, VirtualHost, Stream}).
+
+-spec route(binary(), binary(), binary()) ->
+               {ok, binary()} | {error, stream_not_found}.
+route(RoutingKey, VirtualHost, SuperStream) ->
+    gen_server:call(?MODULE,
+                    {route, RoutingKey, VirtualHost, SuperStream}).
+
+-spec partitions(binary(), binary()) ->
+                    {ok, [binary()] | {error, stream_not_found}}.
+partitions(VirtualHost, SuperStream) ->
+    gen_server:call(?MODULE, {partitions, VirtualHost, SuperStream}).
 
 stream_queue_arguments(Arguments) ->
     stream_queue_arguments([{<<"x-queue-type">>, longstr, <<"stream">>}],
@@ -328,6 +341,51 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
                       _ ->
                           {error, stream_not_available}
                   end
+          end,
+    {reply, Res, State};
+handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
+            State) ->
+    ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
+    Res = try
+              Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
+              Delivery =
+                  #delivery{message =
+                                #basic_message{routing_keys = [RoutingKey]}},
+              case rabbit_exchange:route(Exchange, Delivery) of
+                  [] ->
+                      {ok, no_route};
+                  [#resource{name = Stream}] ->
+                      {ok, Stream};
+                  [#resource{name = Stream} | _] ->
+                      {ok, Stream}
+              end
+          catch
+              exit:Error ->
+                  rabbit_log:info("Error while looking up exchange ~p, ~p~n",
+                                  [ExchangeName, Error]),
+                  {error, stream_not_found}
+          end,
+    {reply, Res, State};
+handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
+    ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
+    Res = try
+              rabbit_exchange:lookup_or_die(ExchangeName),
+              %% FIXME make sure queue is a stream
+              %% TODO bindings could be sorted by partition number, by using a binding argument
+              {ok,
+               lists:foldl(fun (#binding{destination =
+                                             #resource{kind = queue, name = Q}},
+                                Acc) ->
+                                   Acc ++ [Q];
+                               (_Binding, Acc) ->
+                                   Acc
+                           end,
+                           [], rabbit_binding:list_for_source(ExchangeName))}
+          catch
+              exit:Error ->
+                  rabbit_log:info("Error while looking up exchange ~p, ~p~n",
+                                  [ExchangeName, Error]),
+                  {error, stream_not_found}
           end,
     {reply, Res, State};
 handle_call(which_children, _From, State) ->
