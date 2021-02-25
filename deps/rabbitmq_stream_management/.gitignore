@@ -24,8 +24,13 @@ erl_crash.dump
 /cover/
 /deps/
 /ebin/
+/escript/
+/escript.lock
 /logs/
 /plugins/
+/plugins.lock
+/sbin/
+/sbin.lock
 /xrefr
 elvis
 callgrind*
@@ -53,4 +58,3 @@ rabbitmq_stream.d
 .DS_Store
 \#~
 /.idea/
-/deps/
