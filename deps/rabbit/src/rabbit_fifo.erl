@@ -759,7 +759,7 @@ which_module(1) -> ?MODULE.
 
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(aux, {name :: atom(),
-              utilisation :: term(),
+              capacity :: term(),
               gc = #aux_gc{} :: #aux_gc{}}).
 
 init_aux(Name) when is_atom(Name) ->
@@ -769,7 +769,7 @@ init_aux(Name) when is_atom(Name) ->
                                       {write_concurrency, true}]),
     Now = erlang:monotonic_time(micro_seconds),
     #aux{name = Name,
-         utilisation = {inactive, Now, 1, 1.0}}.
+         capacity = {inactive, Now, 1, 1.0}}.
 
 handle_aux(leader, _, garbage_collection, State, Log, _MacState) ->
     ra_log_wal:force_roll_over(ra_log_wal),
@@ -779,15 +779,15 @@ handle_aux(follower, _, garbage_collection, State, Log, MacState) ->
     {no_reply, force_eval_gc(Log, MacState, State), Log};
 handle_aux(_RaState, cast, eval, Aux0, Log, _MacState) ->
     {no_reply, Aux0, Log};
-handle_aux(_RaState, cast, Cmd, #aux{utilisation = Use0} = Aux0,
+handle_aux(_RaState, cast, Cmd, #aux{capacity = Use0} = Aux0,
            Log, _MacState)
   when Cmd == active orelse Cmd == inactive ->
-    {no_reply, Aux0#aux{utilisation = update_use(Use0, Cmd)}, Log};
+    {no_reply, Aux0#aux{capacity = update_use(Use0, Cmd)}, Log};
 handle_aux(_RaState, cast, tick, #aux{name = Name,
-                                      utilisation = Use0} = State0,
+                                      capacity = Use0} = State0,
            Log, MacState) ->
     true = ets:insert(rabbit_fifo_usage,
-                      {Name, utilisation(Use0)}),
+                      {Name, capacity(Use0)}),
     Aux = eval_gc(Log, MacState, State0),
     {no_reply, Aux, Log};
 handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
@@ -992,9 +992,11 @@ update_use({inactive, Since, Active, Avg},   active) ->
     Now = erlang:monotonic_time(micro_seconds),
     {active, Now, use_avg(Active, Now - Since, Avg)}.
 
-utilisation({active, Since, Avg}) ->
+capacity({active, Since, Avg}) ->
     use_avg(erlang:monotonic_time(micro_seconds) - Since, 0, Avg);
-utilisation({inactive, Since, Active, Avg}) ->
+capacity({inactive, _, 1, 1.0}) ->
+    1.0;
+capacity({inactive, Since, Active, Avg}) ->
     use_avg(Active, erlang:monotonic_time(micro_seconds) - Since, Avg).
 
 use_avg(0, 0, Avg) ->

@@ -110,6 +110,7 @@
          single_active_consumer_tag,
          consumers,
          consumer_utilisation,
+         consumer_capacity,
          memory,
          slave_pids,
          synchronised_slave_pids,
@@ -1123,10 +1124,12 @@ i(messages, State) ->
                                           messages_unacknowledged]]);
 i(consumers, _) ->
     rabbit_queue_consumers:count();
-i(consumer_utilisation, #q{consumers = Consumers}) ->
+i(consumer_utilisation, State) ->
+    i(consumer_capacity, State);
+i(consumer_capacity, #q{consumers = Consumers}) ->
     case rabbit_queue_consumers:count() of
-        0 -> '';
-        _ -> rabbit_queue_consumers:utilisation(Consumers)
+        0 -> 0;
+        _ -> rabbit_queue_consumers:capacity(Consumers)
     end;
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
@@ -1754,8 +1757,7 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
       State, #q.stats_timer,
       fun () -> emit_stats(State,
                            [{idle_since,
-                             os:system_time(milli_seconds)},
-                            {consumer_utilisation, ''}])
+                             os:system_time(milli_seconds)}])
                 end),
     State1 = rabbit_event:stop_stats_timer(State#q{backing_queue_state = BQS3},
                                            #q.stats_timer),
