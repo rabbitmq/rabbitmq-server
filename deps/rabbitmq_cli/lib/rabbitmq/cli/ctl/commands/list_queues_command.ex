@@ -21,7 +21,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListQueuesCommand do
             messages_persistent message_bytes message_bytes_ready
             message_bytes_unacknowledged message_bytes_ram message_bytes_persistent
             head_message_timestamp disk_reads disk_writes consumers
-            consumer_utilisation memory slave_pids synchronised_slave_pids state type
+            # these are aliases
+            consumer_utilisation consumer_capacity
+            memory slave_pids synchronised_slave_pids state type
             leader members online)a
 
   def description(), do: "Lists queues and their properties"
