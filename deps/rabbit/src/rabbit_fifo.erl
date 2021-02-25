@@ -680,7 +680,8 @@ state_enter(eol, #?MODULE{enqueuers = Enqs,
     AllConsumers = maps:merge(Custs, WaitingConsumers1),
     [{send_msg, P, eol, ra_event}
      || P <- maps:keys(maps:merge(Enqs, AllConsumers))] ++
-        [{mod_call, rabbit_quorum_queue, file_handle_release_reservation, []}];
+                   [{aux, eol},
+                    {mod_call, rabbit_quorum_queue, file_handle_release_reservation, []}];
 state_enter(State, #?MODULE{cfg = #cfg{resource = _Resource}}) when State =/= leader ->
     FHReservation = {mod_call, rabbit_quorum_queue, file_handle_other_reservation, []},
     [FHReservation];
@@ -792,6 +793,9 @@ handle_aux(_RaState, cast, tick, #aux{name = Name,
     true = ets:insert(rabbit_fifo_usage,
                       {Name, capacity(Use0)}),
     Aux = eval_gc(Log, MacState, State0),
+    {no_reply, Aux, Log};
+handle_aux(_RaState, cast, eol, #aux{name = Name} = Aux, Log, _) ->
+    ets:delete(rabbit_fifo_usage, Name),
     {no_reply, Aux, Log};
 handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            Log0, MacState) ->
