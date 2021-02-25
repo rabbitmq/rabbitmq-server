@@ -29,10 +29,13 @@
          value_is_yes/1]).
 -endif.
 
+%% Vary from OTP version to version
 -ignore_xref([
     {os, env, 0},
     {os, list_env_vars, 0}
 ]).
+%% Relies on functions only available in certain OTP versions
+-dialyzer({nowarn_function, [env_vars/0]}).
 
 -define(USED_ENV_VARS,
         [
