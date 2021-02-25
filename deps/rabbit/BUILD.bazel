@@ -1,3 +1,4 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq.bzl", "rabbitmq_integration_suite", "rabbitmq_lib")
 
@@ -179,6 +180,14 @@ rabbitmq_lib(
     deps = DEPS,
 )
 
+erlc(
+    name = "quorum_queue_utils",
+    srcs = [
+        "test/quorum_queue_utils.erl",
+    ],
+    dest = "test",
+)
+
 ct_suite(
     size = "small",
     suite_name = "amqqueue_backward_compatibility_SUITE",
@@ -272,8 +281,8 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     size = "medium",
-    additional_srcs = [
-        "test/quorum_queue_utils.erl",
+    additional_beam = [
+        ":quorum_queue_utils",
     ],
     suite_name = "consumer_timeout_SUITE",
     deps = DEPS,
@@ -287,8 +296,8 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     size = "medium",
-    additional_srcs = [
-        "test/quorum_queue_utils.erl",
+    additional_beam = [
+        ":quorum_queue_utils",
     ],
     suite_name = "dead_lettering_SUITE",
     deps = DEPS,
