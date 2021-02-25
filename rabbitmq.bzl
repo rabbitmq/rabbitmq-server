@@ -1,5 +1,5 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc", "erlang_lib")
-load("@bazel-erlang//:ct.bzl", "ct_test")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlang_lib", "erlc")
+load("@bazel-erlang//:ct.bzl", "ct_suite", "ct_test")
 load("//deps/rabbitmq_cli:rabbitmqctl.bzl", "rabbitmqctl")
 load("//deps/rabbitmq_cli:rabbitmqctl_test.bzl", "rabbitmqctl_test")
 
@@ -48,19 +48,18 @@ REQUIRED_PLUGINS = [
 ]
 
 def rabbitmq_lib(
-    app_name="",
-    app_version=APP_VERSION,
-    app_description="",
-    app_module="",
-    app_registered=[],
-    app_env="[]",
-    extra_apps=[],
-    extra_erlc_opts=[],
-    first_srcs=[],
-    priv=[],
-    deps=[],
-    runtime_deps=[]):
-
+        app_name = "",
+        app_version = APP_VERSION,
+        app_description = "",
+        app_module = "",
+        app_registered = [],
+        app_env = "[]",
+        extra_apps = [],
+        extra_erlc_opts = [],
+        first_srcs = [],
+        priv = [],
+        deps = [],
+        runtime_deps = []):
     erlang_lib(
         app_name = app_name,
         app_version = app_version,
@@ -98,7 +97,7 @@ def rabbitmq_lib(
     erlc(
         name = "test_beam_files",
         hdrs = native.glob(["include/*.hrl", "src/*.hrl"]),
-        srcs = native.glob(["src/*.erl"], exclude=first_srcs),
+        srcs = native.glob(["src/*.erl"], exclude = first_srcs),
         beam = all_test_beam,
         erlc_opts = test_erlc_opts,
         dest = "src",
@@ -116,4 +115,40 @@ def rabbitmq_lib(
         app = ":app_file",
         beam = all_test_beam,
         testonly = True,
+    )
+
+def rabbitmq_integration_suite(
+        data = [],
+        test_env = {},
+        tools = [],
+        runtime_deps = [],
+        deps = [],
+        **kwargs):
+    ct_suite(
+        data = [
+            "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
+            "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+        ] + data,
+        test_env = dict({
+            "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+            "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
+            "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
+        }.items() + test_env.items()),
+        tools = [
+            "//:rabbitmq-for-tests-run",
+        ] + tools,
+        runtime_deps = [
+            "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+            "//deps/rabbitmq_cli:rabbitmqctl",
+            "@credentials-obfuscation//:bazel_erlang_lib",
+            "@goldrush//:bazel_erlang_lib",
+            "@jsx//:bazel_erlang_lib",
+            "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+            "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+            "@recon//:bazel_erlang_lib",
+        ] + runtime_deps,
+        deps = [
+            "//deps/amqp_client:bazel_erlang_lib",
+        ] + deps,
+        **kwargs
     )
