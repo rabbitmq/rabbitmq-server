@@ -177,6 +177,9 @@ $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((1883 
   {rabbitmq_stomp, [
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
+  {rabbitmq_stream, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((5555 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
+    ]},
   {ra, [
       {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
       {wal_sync_method, sync}
