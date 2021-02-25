@@ -211,13 +211,11 @@ update_context(Context, Key, Value, Origin)
     Context#{Key => Value,
              var_origins => #{Key => Origin}}.
 
-env_vars() ->
-    case erlang:function_exported(os, list_env_vars, 0) of
-      %% OTP < 24
-      true  -> os:list_env_vars();
-      %% OTP >= 24
-      false -> os:env()
-    end.
+-if(?OTP_RELEASE >= 24).
+env_vars() -> os:env().
+-else.
+env_vars() -> os:list_env_vars().
+-endif.
 
 get_used_env_vars() ->
     lists:filter(
