@@ -7,8 +7,8 @@ jobs:
     strategy:
       matrix:
         erlang_version:
-        - "22"
         - "23"
+        - "22"
     timeout-minutes: 30
     steps:
     - name: CHECKOUT REPOSITORY
