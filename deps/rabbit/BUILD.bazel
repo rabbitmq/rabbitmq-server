@@ -278,3 +278,43 @@ rabbitmq_integration_suite(
     suite_name = "consumer_timeout_SUITE",
     deps = DEPS,
 )
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "crashing_queues_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    additional_srcs = [
+        "test/quorum_queue_utils.erl",
+    ],
+    suite_name = "dead_lettering_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "definition_import_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "disconnect_detected_during_alarm_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "large",
+    suite_name = "dynamic_ha_SUITE",
+    groups = [
+        "cluster_size_5",
+        "cluster_size_2",
+        "cluster_size_3",
+    ],
+    deps = DEPS + [
+        "@proper//:bazel_erlang_lib",
+    ],
+)
