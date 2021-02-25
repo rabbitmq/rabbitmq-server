@@ -227,7 +227,7 @@ env_vars() ->
 get_used_env_vars() ->
     lists:filter(
       fun({Var, _}) -> var_is_used(Var) end,
-      lists:sort(os:list_env_vars())).
+      lists:sort(env_vars())).
 
 log_process_env() ->
     rabbit_log_prelaunch:debug("Process environment:"),
