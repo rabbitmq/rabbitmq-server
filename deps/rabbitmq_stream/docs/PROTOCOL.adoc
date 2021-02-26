@@ -48,6 +48,15 @@ does not contain a correlation ID.
 
 Some responses may carry additional information than just the response code, this is specified in the command definition.
 
+Keys are int16, but the actual value is defined on the last 15 bits, the most significant bit being
+used to make the difference between a request (0) and a response (1). Example for `subscribe`
+(key is 6):
+
+```
+0b00000000 00000110 => subscribe request
+0b10000000 00000110 => subscribe response
+```
+
 == Response Codes
 
 .Stream Protocol Response Codes
@@ -559,7 +568,9 @@ Heartbeat => Key Version
   Version => int16
 ```
 
-=== Route (experimental)
+=== Route
+
+_Experimental_
 
 ```
 RouteQuery => Key Version CorrelationId RoutingKey SuperStream
@@ -577,6 +588,8 @@ RouteResponse => Key Version CorrelationId Stream
 ```
 
 === Partitions (experimental)
+
+_Experimental_
 
 ```
 PartitionsQuery => Key Version CorrelationId SuperStream

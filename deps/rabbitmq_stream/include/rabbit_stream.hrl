@@ -24,6 +24,9 @@
 -define(COMMAND_ROUTE, 23).
 -define(COMMAND_PARTITIONS, 24).
 
+-define(REQUEST, 0).
+-define(RESPONSE, 1).
+
 -define(VERSION_0, 0).
 
 -define(RESPONSE_CODE_OK, 0).
