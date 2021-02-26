@@ -372,6 +372,7 @@ handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
               rabbit_exchange:lookup_or_die(ExchangeName),
               %% FIXME make sure queue is a stream
               %% TODO bindings could be sorted by partition number, by using a binding argument
+              %% this would make the spreading of messages stable
               {ok,
                lists:foldl(fun (#binding{destination =
                                              #resource{kind = queue, name = Q}},
