@@ -179,8 +179,8 @@ lager_file_name(_) ->
 lager_file_name1(Settings) when is_list(Settings) ->
     {file, FileName} = proplists:lookup(file, Settings),
     FileName;
-lager_file_name1({FileName, _}) -> lager_util:expand_path(FileName);
-lager_file_name1({FileName, _, _, _, _}) -> lager_util:expand_path(FileName);
+lager_file_name1({FileName, _}) -> FileName;
+lager_file_name1({FileName, _, _, _, _}) -> FileName;
 lager_file_name1(_) ->
     throw({error, {cannot_log_to_file, unknown,
                    lager_file_backend_config_invalid}}).
@@ -225,6 +225,7 @@ configure_lager() ->
     %% difference.
     case application:get_env(rabbit, lager_log_root) of
         {ok, Value} ->
+            io:format("Setting lager.log_root to '~s'~n", [Value]),
             ok = application:set_env(lager, log_root, Value);
         _ ->
             ok
@@ -250,6 +251,7 @@ configure_lager() ->
     %% RabbitMQ handlers can be set to [] to use only lager handlers.
     Handlers = case application:get_env(lager, handlers, undefined) of
         undefined -> GeneratedHandlers;
+        []        -> GeneratedHandlers;
         LagerHandlers ->
             %% Remove handlers generated in previous starts
             FormerRabbitHandlers = application:get_env(lager, rabbit_handlers, []),
