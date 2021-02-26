@@ -178,7 +178,7 @@ $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((1883 
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
   {rabbitmq_stream, [
-$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((5555 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((5551 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
   {ra, [
       {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
@@ -395,7 +395,7 @@ start-brokers start-cluster: $(DIST_TARGET)
 		  -rabbitmq_mqtt tcp_listeners [$$((1883 + $$n - 1))] \
 		  -rabbitmq_stomp tcp_listeners [$$((61613 + $$n - 1))] \
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
-		  -rabbitmq_stream tcp_listeners [$$((5555 + $$n - 1))] \
+		  -rabbitmq_stream tcp_listeners [$$((5551 + $$n - 1))] \
 		  "; \
 		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
 			ERL_LIBS="$(DIST_ERL_LIBS)" \
