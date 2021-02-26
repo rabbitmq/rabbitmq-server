@@ -23,23 +23,23 @@ arrays - int32 for the length followed by the repetition of the structure, notat
 
 ```
 Frame => Size (Request | Response | Command)
-  Size => int32 (size without the 4 bytes of the size element)
+  Size => uint32 (size without the 4 bytes of the size element)
 
 Request => Key Version (CorrelationId) Content
-  Key => int16
-  Version => int16
-  CorrelationId => int32
+  Key => uint16
+  Version => uint16
+  CorrelationId => uint32
   Command => bytes // see command details below
 
 Response => Key Version CorrelationId ResponseCode
-  Key => int16
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 
 Command => Key Version Content
-  Key => int16
-  Version => int16
+  Key => uint16
+  Version => uint16
   Content => bytes // see command details below
 ```
 
@@ -48,7 +48,7 @@ does not contain a correlation ID.
 
 Some responses may carry additional information than just the response code, this is specified in the command definition.
 
-Keys are int16, but the actual value is defined on the last 15 bits, the most significant bit being
+Keys are uint16, but the actual value is defined on the last 15 bits, the most significant bit being
 used to make the difference between a request (0) and a response (1). Example for `subscribe`
 (key is 6):
 
@@ -220,30 +220,30 @@ used to make the difference between a request (0) and a response (1). Example fo
 
 ```
 DeclarePublisherRequest => Key Version CorrelationId PublisherId [PublisherReference] Stream
-  Key => int16 // 1
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 1
+  Version => uint16
+  CorrelationId => uint32
   PublisherId => uint8
   PublisherReference => string // max 256 characters
   Stream => string
 
 DeclarePublisherResponse => Key Version CorrelationId ResponseCode PublisherId
-  Key => int16 // 1
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16 // 1
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 === Publish
 
 ```
 Publish => Key Version Stream PublishedMessages
-  Key => int16 // 2
-  Version => int16
+  Key => uint16 // 2
+  Version => uint16
   PublisherId => uint8
   PublishedMessages => [PublishedMessage]
   PublishedMessage => PublishingId Message
-  PublishingId => int64
+  PublishingId => uint64
   Message => bytes
 ```
 
@@ -251,39 +251,39 @@ Publish => Key Version Stream PublishedMessages
 
 ```
 PublishConfirm => Key Version PublishingIds
-  Key => int16 // 3
-  Version => int16
+  Key => uint16 // 3
+  Version => uint16
   PublisherId => uint8
-  PublishingIds => [int64] // to correlate with the messages sent
+  PublishingIds => [uint64] // to correlate with the messages sent
 ```
 
 === PublishError
 
 ```
 PublishError => Key Version [PublishingError]
-  Key => int16 // 4
-  Version => int16
+  Key => uint16 // 4
+  Version => uint16
   PublisherId => uint8
   PublishingError => PublishingId Code
-  PublishingId => int64
-  Code => int16 // code to identify the problem
+  PublishingId => uint64
+  Code => uint16 // code to identify the problem
 ```
 
 === QueryPublisherSequence
 
 ```
 QueryPublisherRequest => Key Version CorrelationId PublisherReference Stream
-  Key => int16 // 5
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 5
+  Version => uint16
+  CorrelationId => uint32
   PublisherReference => string // max 256 characters
   Stream => string
 
 QueryPublisherResponse => Key Version CorrelationId ResponseCode Sequence
-  Key => int16 // 5
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16 // 5
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
   Sequence => uint64
 ```
 
@@ -291,39 +291,39 @@ QueryPublisherResponse => Key Version CorrelationId ResponseCode Sequence
 
 ```
 DeletePublisherRequest => Key Version CorrelationId PublisherId
-  Key => int16 // 6
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 6
+  Version => uint16
+  CorrelationId => uint32
   PublisherId => uint8
 
 DeletePublisherResponse => Key Version CorrelationId ResponseCode
-  Key => int16 // 6
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16 // 6
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 === Subscribe
 
 ```
 Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification Credit
-  Key => int16 // 7
-  Version => int16
-  CorrelationId => int32 // correlation id to correlate the response
+  Key => uint16 // 7
+  Version => uint16
+  CorrelationId => uint32 // correlation id to correlate the response
   SubscriptionId => uint8 // client-supplied id to identify the subscription
   Stream => string // the name of the stream
   OffsetSpecification => OffsetType Offset
-  OffsetType => int16 // 1 (first), 2 (last), 3 (next), 4 (offset), 5 (timestamp)
+  OffsetType => uint16 // 1 (first), 2 (last), 3 (next), 4 (offset), 5 (timestamp)
   Offset => uint64 (for offset) | int64 (for timestamp)
-  Credit => int16
+  Credit => uint16
 ```
 
 === Deliver
 
 ```
 Deliver => Key Version SubscriptionId OsirisChunk
-  Key => int16 // 8
-  Version => int32
+  Key => uint16 // 8
+  Version => uint32
   SubscriptionId => uint8
   OsirisChunk => MagicVersion NumEntries NumRecords Epoch ChunkFirstOffset ChunkCrc DataLength Messages
   MagicVersion => int8
@@ -345,16 +345,16 @@ for details on the structure of messages.
 
 ```
 Credit => Key Version SubscriptionId Credit
-  Key => int16 // 9
-  Version => int16
-  SubscriptionId => int8
-  Credit => int16 // the number of chunks that can be sent
+  Key => uint16 // 9
+  Version => uint16
+  SubscriptionId => uint8
+  Credit => uint16 // the number of chunks that can be sent
 
 CreditResponse => Key Version ResponseCode SubscriptionId
-  Key => int16 // 9
-  Version => int16
-  ResponseCode => int16
-  SubscriptionId => int8
+  Key => uint16 // 9
+  Version => uint16
+  ResponseCode => uint16
+  SubscriptionId => uint8
 ```
 
 NB: the server sent a response only in case of problem, e.g. crediting an unknown subscription.
@@ -363,29 +363,29 @@ NB: the server sent a response only in case of problem, e.g. crediting an unknow
 
 ```
 CommitOffset => Key Version Reference Stream Offset
-  Key => int16 // 10
-  Version => int16
-  CorrelationId => int32 // not used yet
+  Key => uint16 // 10
+  Version => uint16
+  CorrelationId => uint32 // not used yet
   Reference => string // max 256 characters
   SubscriptionId => uint8
-  Offset => int64
+  Offset => uint64
 ```
 
 === QueryOffset
 
 ```
 QueryOffsetRequest => Key Version CorrelationId Reference Stream
-  Key => int16 // 11
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 11
+  Version => uint16
+  CorrelationId => uint32
   Reference => string // max 256 characters
   Stream => string
 
 QueryOffsetResponse => Key Version CorrelationId ResponseCode Offset
-  Key => int16 // 11
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16 // 11
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
   Offset => uint64
 ```
 
@@ -393,19 +393,19 @@ QueryOffsetResponse => Key Version CorrelationId ResponseCode Offset
 
 ```
 Unsubscribe => Key Version CorrelationId SubscriptionId
-  Key => int16 // 12
-  Version => int16
-  CorrelationId => int32
-  SubscriptionId => int8
+  Key => uint16 // 12
+  Version => uint16
+  CorrelationId => uint32
+  SubscriptionId => uint8
 ```
 
 === Create
 
 ```
 Create => Key Version CorrelationId Stream Arguments
-  Key => int16 // 13
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 13
+  Version => uint16
+  CorrelationId => uint32
   Stream => string
   Arguments => [Argument]
   Argument => Key Value
@@ -417,9 +417,9 @@ Create => Key Version CorrelationId Stream Arguments
 
 ```
 Delete => Key Version CorrelationId Stream
-  Key => int16 // 14
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 14
+  Version => uint16
+  CorrelationId => uint32
   Stream => string
 ```
 
@@ -427,34 +427,34 @@ Delete => Key Version CorrelationId Stream
 
 ```
 MetadataQuery => Key Version CorrelationId [Stream]
-  Key => int16 // 15
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 15
+  Version => uint16
+  CorrelationId => uint32
   Stream => string
 
 MetadataResponse => Key Version CorrelationId [Broker] [StreamMetadata]
-  Key => int16 // 15
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 15
+  Version => uint16
+  CorrelationId => uint32
   Broker => Reference Host Port
-    Reference => int16
+    Reference => uint16
     Host => string
-    Port => int32
+    Port => uint32
   StreamMetadata => StreamName LeaderReference ReplicasReferences
      StreamName => string
-     ResponseCode => int16
-     LeaderReference => int16
-     ReplicasReferences => [int16]
+     ResponseCode => uint16
+     LeaderReference => uint16
+     ReplicasReferences => [uint16]
 ```
 
 === MetadataUpdate
 
 ```
 MetadataUpdate => Key Version MetadataInfo
-  Key => int16 // 16
-  Version => int16
+  Key => uint16 // 16
+  Version => uint16
   MetadataInfo => Code Stream
-  Code => int16 // code to identify the information
+  Code => uint16 // code to identify the information
   Stream => string // the stream implied
 ```
 
@@ -462,19 +462,19 @@ MetadataUpdate => Key Version MetadataInfo
 
 ```
 PeerPropertiesRequest => Key Version PeerProperties
-  Key => int16 // 17
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 17
+  Version => uint16
+  CorrelationId => uint32
   PeerProperties => [PeerProperty]
   PeerProperty => Key Value
   Key => string
   Value => string
 
 PeerPropertiesResponse => Key Version CorrelationId ResponseCode PeerProperties
-  Key => int16 // 17
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16 // 17
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
   PeerProperties => [PeerProperty]
   PeerProperty => Key Value
   Key => string
@@ -485,15 +485,15 @@ PeerPropertiesResponse => Key Version CorrelationId ResponseCode PeerProperties
 
 ```
 SaslHandshakeRequest => Key Version CorrelationId Mechanism
-  Key => int16 // 18
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 18
+  Version => uint16
+  CorrelationId => uint32
 
 SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanism]
-  Key => int16 // 18
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16 // 18
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
   Mechanism => string
 ```
 
@@ -501,17 +501,17 @@ SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanism]
 
 ```
 SaslAuthenticateRequest => Key Version CorrelationId Mechanism SaslOpaqueData
-  Key => int16 // 19
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 19
+  Version => uint16
+  CorrelationId => uint32
   Mechanism => string
   SaslOpaqueData => bytes
 
 SaslAuthenticateResponse => Key Version CorrelationId ResponseCode SaslOpaqueData
-  Key => int16 // 19
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16 // 19
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
   SaslOpaqueData => bytes
 ```
 
@@ -519,10 +519,10 @@ SaslAuthenticateResponse => Key Version CorrelationId ResponseCode SaslOpaqueDat
 
 ```
 TuneRequest => Key Version FrameMax Heartbeat
-  Key => int16 // 20
-  Version => int16
-  FrameMax => int32 // in bytes, 0 means no limit
-  Heartbeat => int32 // in seconds, 0 means no heartbeat
+  Key => uint16 // 20
+  Version => uint16
+  FrameMax => uint32 // in bytes, 0 means no limit
+  Heartbeat => uint32 // in seconds, 0 means no heartbeat
 
 TuneResponse => TuneRequest
 ```
@@ -531,41 +531,41 @@ TuneResponse => TuneRequest
 
 ```
 OpenRequest => Key Version CorrelationId VirtualHost
-  Key => int16 // 21
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 21
+  Version => uint16
+  CorrelationId => uint32
   VirtualHost => string
 
 OpenResponse => Key Version CorrelationId ResponseCode
-  Key => int16 // 21
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16 // 21
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 === Close
 
 ```
 CloseRequest => Key Version CorrelationId ClosingCode ClosingReason
-  Key => int16 // 22
-  Version => int16
-  CorrelationId => int32
-  ClosingCode => int16
+  Key => uint16 // 22
+  Version => uint16
+  CorrelationId => uint32
+  ClosingCode => uint16
   ClosingReason => string
 
 CloseResponse => Key Version CorrelationId ResponseCode
-  Key => int16 // 22
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16 // 22
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
 === Heartbeat
 
 ```
 Heartbeat => Key Version
-  Key => int16 // 23
-  Version => int16
+  Key => uint16 // 23
+  Version => uint16
 ```
 
 === Route
@@ -574,16 +574,16 @@ _Experimental_
 
 ```
 RouteQuery => Key Version CorrelationId RoutingKey SuperStream
-  Key => int16 // 24
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 24
+  Version => uint16
+  CorrelationId => uint32
   RoutingKey => string
   SuperStream => string
 
 RouteResponse => Key Version CorrelationId Stream
-  Key => int16 // 24
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 24
+  Version => uint16
+  CorrelationId => uint32
   Stream => string
 ```
 
@@ -593,15 +593,15 @@ _Experimental_
 
 ```
 PartitionsQuery => Key Version CorrelationId SuperStream
-  Key => int16 // 25
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 25
+  Version => uint16
+  CorrelationId => uint32
   SuperStream => string
 
 PartitionsResponse => Key Version CorrelationId [Stream]
-  Key => int16 // 25
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 25
+  Version => uint16
+  CorrelationId => uint32
   Stream => string
 ```
 
