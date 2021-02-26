@@ -301,7 +301,14 @@
 ## =====================================================
 ##
 
-## Set the default AMQP 0-9-1 heartbeat interval (in seconds).
+## Set the server AMQP 0-9-1 heartbeat timeout in seconds.
+## RabbitMQ nodes will send heartbeat frames at roughly
+## the (timeout / 2) interval. Two missed heartbeats from
+## a client will close its connection.
+##
+## Values lower than 6 seconds are very likely to produce
+## false positives and are not recommended.
+##
 ## Related doc guides:
 ##
 ## * https://rabbitmq.com/heartbeats.html
