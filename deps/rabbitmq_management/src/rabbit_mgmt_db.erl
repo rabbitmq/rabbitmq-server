@@ -731,7 +731,7 @@ created_stats_delegated(Type) ->
 
 -spec delegate_invoke(mfargs()) -> [any()].
 delegate_invoke(FunOrMFA) ->
-    MemberPids = [P || P <- pg:get_members(?MANAGEMENT_PG_SCOPE, management_db)],
+    MemberPids = [P || P <- pg:get_members(?MANAGEMENT_PG_SCOPE, ?MANAGEMENT_PG_GROUP)],
     {Results, Errors} = delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA),
     case Errors of
         [] -> ok;
