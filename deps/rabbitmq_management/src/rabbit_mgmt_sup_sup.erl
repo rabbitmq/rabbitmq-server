@@ -23,7 +23,7 @@ sup() ->
         id      => rabbit_mgmt_sup,
         start   => {rabbit_mgmt_sup, start_link, []},
         restart => temporary,
-        wait    => ?SUPERVISOR_WAIT,
+        shutdown => ?SUPERVISOR_WAIT,
         type    => supervisor,
         modules => [rabbit_mgmt_sup]
     }.
