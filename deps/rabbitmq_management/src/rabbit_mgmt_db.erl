@@ -7,13 +7,12 @@
 
 -module(rabbit_mgmt_db).
 
-%% pg2 is deprecated in OTP 23.
--compile(nowarn_deprecated_function).
-
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
+
+-include("rabbit_mgmt.hrl").
 
 -behaviour(gen_server2).
 
@@ -732,7 +731,7 @@ created_stats_delegated(Type) ->
 
 -spec delegate_invoke(mfargs()) -> [any()].
 delegate_invoke(FunOrMFA) ->
-    MemberPids = [P || P <- pg2:get_members(management_db)],
+    MemberPids = [P || P <- pg:get_members(?MANAGEMENT_PG_SCOPE, management_db)],
     {Results, Errors} = delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA),
     case Errors of
         [] -> ok;

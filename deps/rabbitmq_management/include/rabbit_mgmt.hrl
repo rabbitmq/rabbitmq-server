@@ -8,3 +8,5 @@
 -define(AUTH_REALM, "Basic realm=\"RabbitMQ Management\"").
 
 -define(HEALTH_CHECK_FAILURE_STATUS, 503).
+
+-define(MANAGEMENT_PG_SCOPE, rabbit_mgmt).
