@@ -23,7 +23,7 @@ sup() ->
         id      => rabbit_mgmt_agent_sup,
         start   => {rabbit_mgmt_agent_sup, start_link, []},
         restart => temporary,
-        wait    => ?SUPERVISOR_WAIT,
+        shutdown => ?SUPERVISOR_WAIT,
         type    => supervisor,
         modules => [rabbit_mgmt_agent_sup]
     }.
@@ -38,7 +38,7 @@ init([]) ->
         id      => ?MANAGEMENT_PG_SCOPE,
         start   => {pg, start_link, [?MANAGEMENT_PG_SCOPE]},
         restart => temporary,
-        wait    => ?SUPERVISOR_WAIT,
+        shutdown => ?SUPERVISOR_WAIT,
         type    => supervisor,
         modules => []
     },
