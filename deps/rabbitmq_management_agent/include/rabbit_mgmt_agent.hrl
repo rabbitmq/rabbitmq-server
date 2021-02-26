@@ -15,3 +15,4 @@
 %%
 
 -define(MANAGEMENT_PG_SCOPE, rabbit_mgmt).
+-define(MANAGEMENT_PG_GROUP, management_db).
