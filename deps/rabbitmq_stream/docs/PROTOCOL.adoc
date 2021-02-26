@@ -63,24 +63,24 @@ used to make the difference between a request (0) and a response (1). Example fo
 |===
 |Response|Code
 
-|OK|0
-|Stream does not exist|1
-|Subscription ID already exists|2
-|Subscription ID does not exist|3
-|Stream already exists|4
-|Stream not available|5
-|SASL mechanism not supported|6
-|Authentication failure|7
-|SASL error|8
-|SASL challenge|9
-|SASL authentication failure loopback|10
-|Virtual host access failure|11
-|Unknown frame|12
-|Frame too large|13
-|Internal error|14
-|Access refused|15
-|Precondition failed|16
-|Publisher does not exist|17
+|OK|1
+|Stream does not exist|2
+|Subscription ID already exists|3
+|Subscription ID does not exist|4
+|Stream already exists|5
+|Stream not available|6
+|SASL mechanism not supported|7
+|Authentication failure|8
+|SASL error|9
+|SASL challenge|10
+|SASL authentication failure loopback|11
+|Virtual host access failure|12
+|Unknown frame|13
+|Frame too large|14
+|Internal error|15
+|Access refused|16
+|Precondition failed|17
+|Publisher does not exist|18
 
 |===
 
@@ -92,127 +92,127 @@ used to make the difference between a request (0) and a response (1). Example fo
 
 |<<declarepublisher>>
 |Client
-|0
+|1
 |Yes
 
 |<<publish>>
 |Client
-|1
+|2
 |No
 
 |<<publishconfirm>>
 |Server
-|2
+|3
 |No
 
 |<<publisherror>>
 |Server
-|3
+|4
 |No
 
 |<<querypublishersequence>>
 |Client
-|4
+|5
 |Yes
 
 |<<deletepublisher>>
 |Client
-|5
+|6
 |Yes
 
 |<<subscribe>>
 |Client
-|6
+|7
 |Yes
 
 |<<deliver>>
 |Server
-|7
+|8
 |No
 
 |<<credit>>
 |Client
-|8
+|9
 |No
 
 |<<commitoffset>>
 |Client
-|9
+|10
 |No
 
 |<<queryoffset>>
 |Client
-|10
+|11
 |Yes
 
 |<<unsubscribe>>
 |Client
-|11
+|12
 |Yes
 
 |<<create>>
 |Client
-|12
+|13
 |Yes
 
 |<<delete>>
 |Client
-|13
+|14
 |Yes
 
 |<<metadata>>
 |Client
-|14
+|15
 |Yes
 
 |<<metadataupdate>>
 |Server
-|15
+|16
 |No
 
 |<<peerproperties>>
 |Client
-|16
+|17
 |Yes
 
 |<<saslhandshake>>
 |Client
-|17
+|18
 |Yes
 
 |<<saslauthenticate>>
 |Client
-|18
+|19
 |Yes
 
 |<<tune>>
 |Server
-|19
+|20
 |Yes
 
 |<<open>>
 |Server
-|20
+|21
 |Yes
 
 |<<close>>
 |Client & Server
-|21
+|22
 |Yes
 
 |<<heartbeat>>
 |Client & Server
-|22
+|23
 |No
 
 |<<route>> (experimental)
 |Client
-|23
+|24
 |Yes
 
 |<<partitions>> (experimental)
 |Client
-|24
+|25
 |Yes
 |===
 
@@ -220,7 +220,7 @@ used to make the difference between a request (0) and a response (1). Example fo
 
 ```
 DeclarePublisherRequest => Key Version CorrelationId PublisherId [PublisherReference] Stream
-  Key => int16 // 0
+  Key => int16 // 1
   Version => int16
   CorrelationId => int32
   PublisherId => uint8
@@ -228,7 +228,7 @@ DeclarePublisherRequest => Key Version CorrelationId PublisherId [PublisherRefer
   Stream => string
 
 DeclarePublisherResponse => Key Version CorrelationId ResponseCode PublisherId
-  Key => int16 // 18
+  Key => int16 // 1
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
@@ -238,7 +238,7 @@ DeclarePublisherResponse => Key Version CorrelationId ResponseCode PublisherId
 
 ```
 Publish => Key Version Stream PublishedMessages
-  Key => int16 // 1
+  Key => int16 // 2
   Version => int16
   PublisherId => uint8
   PublishedMessages => [PublishedMessage]
@@ -251,7 +251,7 @@ Publish => Key Version Stream PublishedMessages
 
 ```
 PublishConfirm => Key Version PublishingIds
-  Key => int16 // 2
+  Key => int16 // 3
   Version => int16
   PublisherId => uint8
   PublishingIds => [int64] // to correlate with the messages sent
@@ -261,7 +261,7 @@ PublishConfirm => Key Version PublishingIds
 
 ```
 PublishError => Key Version [PublishingError]
-  Key => int16 // 3
+  Key => int16 // 4
   Version => int16
   PublisherId => uint8
   PublishingError => PublishingId Code
@@ -273,14 +273,14 @@ PublishError => Key Version [PublishingError]
 
 ```
 QueryPublisherRequest => Key Version CorrelationId PublisherReference Stream
-  Key => int16 // 4
+  Key => int16 // 5
   Version => int16
   CorrelationId => int32
   PublisherReference => string // max 256 characters
   Stream => string
 
 QueryPublisherResponse => Key Version CorrelationId ResponseCode Sequence
-  Key => int16 // 4
+  Key => int16 // 5
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
@@ -291,13 +291,13 @@ QueryPublisherResponse => Key Version CorrelationId ResponseCode Sequence
 
 ```
 DeletePublisherRequest => Key Version CorrelationId PublisherId
-  Key => int16 // 5
+  Key => int16 // 6
   Version => int16
   CorrelationId => int32
   PublisherId => uint8
 
 DeletePublisherResponse => Key Version CorrelationId ResponseCode
-  Key => int16 // 5
+  Key => int16 // 6
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
@@ -307,13 +307,13 @@ DeletePublisherResponse => Key Version CorrelationId ResponseCode
 
 ```
 Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification Credit
-  Key => int16 // 6
+  Key => int16 // 7
   Version => int16
   CorrelationId => int32 // correlation id to correlate the response
   SubscriptionId => uint8 // client-supplied id to identify the subscription
   Stream => string // the name of the stream
   OffsetSpecification => OffsetType Offset
-  OffsetType => int16 // 0 (first), 1 (last), 2 (next), 3 (offset), 4 (timestamp)
+  OffsetType => int16 // 1 (first), 2 (last), 3 (next), 4 (offset), 5 (timestamp)
   Offset => uint64 (for offset) | int64 (for timestamp)
   Credit => int16
 ```
@@ -322,7 +322,7 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
 
 ```
 Deliver => Key Version SubscriptionId OsirisChunk
-  Key => int16 // 7
+  Key => int16 // 8
   Version => int32
   SubscriptionId => uint8
   OsirisChunk => MagicVersion NumEntries NumRecords Epoch ChunkFirstOffset ChunkCrc DataLength Messages
@@ -345,13 +345,13 @@ for details on the structure of messages.
 
 ```
 Credit => Key Version SubscriptionId Credit
-  Key => int16 // 8
+  Key => int16 // 9
   Version => int16
   SubscriptionId => int8
   Credit => int16 // the number of chunks that can be sent
 
 CreditResponse => Key Version ResponseCode SubscriptionId
-  Key => int16 // 8
+  Key => int16 // 9
   Version => int16
   ResponseCode => int16
   SubscriptionId => int8
@@ -363,7 +363,7 @@ NB: the server sent a response only in case of problem, e.g. crediting an unknow
 
 ```
 CommitOffset => Key Version Reference Stream Offset
-  Key => int16 // 9
+  Key => int16 // 10
   Version => int16
   CorrelationId => int32 // not used yet
   Reference => string // max 256 characters
@@ -375,14 +375,14 @@ CommitOffset => Key Version Reference Stream Offset
 
 ```
 QueryOffsetRequest => Key Version CorrelationId Reference Stream
-  Key => int16 // 10
+  Key => int16 // 11
   Version => int16
   CorrelationId => int32
   Reference => string // max 256 characters
   Stream => string
 
 QueryOffsetResponse => Key Version CorrelationId ResponseCode Offset
-  Key => int16 // 10
+  Key => int16 // 11
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
@@ -393,7 +393,7 @@ QueryOffsetResponse => Key Version CorrelationId ResponseCode Offset
 
 ```
 Unsubscribe => Key Version CorrelationId SubscriptionId
-  Key => int16 // 11
+  Key => int16 // 12
   Version => int16
   CorrelationId => int32
   SubscriptionId => int8
@@ -403,7 +403,7 @@ Unsubscribe => Key Version CorrelationId SubscriptionId
 
 ```
 Create => Key Version CorrelationId Stream Arguments
-  Key => int16 // 12
+  Key => int16 // 13
   Version => int16
   CorrelationId => int32
   Stream => string
@@ -417,7 +417,7 @@ Create => Key Version CorrelationId Stream Arguments
 
 ```
 Delete => Key Version CorrelationId Stream
-  Key => int16 // 13
+  Key => int16 // 14
   Version => int16
   CorrelationId => int32
   Stream => string
@@ -427,13 +427,13 @@ Delete => Key Version CorrelationId Stream
 
 ```
 MetadataQuery => Key Version CorrelationId [Stream]
-  Key => int16 // 14
+  Key => int16 // 15
   Version => int16
   CorrelationId => int32
   Stream => string
 
 MetadataResponse => Key Version CorrelationId [Broker] [StreamMetadata]
-  Key => int16 // 14
+  Key => int16 // 15
   Version => int16
   CorrelationId => int32
   Broker => Reference Host Port
@@ -451,7 +451,7 @@ MetadataResponse => Key Version CorrelationId [Broker] [StreamMetadata]
 
 ```
 MetadataUpdate => Key Version MetadataInfo
-  Key => int16 // 15
+  Key => int16 // 16
   Version => int16
   MetadataInfo => Code Stream
   Code => int16 // code to identify the information
@@ -462,7 +462,7 @@ MetadataUpdate => Key Version MetadataInfo
 
 ```
 PeerPropertiesRequest => Key Version PeerProperties
-  Key => int16 // 16
+  Key => int16 // 17
   Version => int16
   CorrelationId => int32
   PeerProperties => [PeerProperty]
@@ -471,7 +471,7 @@ PeerPropertiesRequest => Key Version PeerProperties
   Value => string
 
 PeerPropertiesResponse => Key Version CorrelationId ResponseCode PeerProperties
-  Key => int16 // 16
+  Key => int16 // 17
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
@@ -485,12 +485,12 @@ PeerPropertiesResponse => Key Version CorrelationId ResponseCode PeerProperties
 
 ```
 SaslHandshakeRequest => Key Version CorrelationId Mechanism
-  Key => int16 // 17
+  Key => int16 // 18
   Version => int16
   CorrelationId => int32
 
 SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanism]
-  Key => int16 // 17
+  Key => int16 // 18
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
@@ -501,14 +501,14 @@ SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanism]
 
 ```
 SaslAuthenticateRequest => Key Version CorrelationId Mechanism SaslOpaqueData
-  Key => int16 // 18
+  Key => int16 // 19
   Version => int16
   CorrelationId => int32
   Mechanism => string
   SaslOpaqueData => bytes
 
 SaslAuthenticateResponse => Key Version CorrelationId ResponseCode SaslOpaqueData
-  Key => int16 // 18
+  Key => int16 // 19
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
@@ -519,7 +519,7 @@ SaslAuthenticateResponse => Key Version CorrelationId ResponseCode SaslOpaqueDat
 
 ```
 TuneRequest => Key Version FrameMax Heartbeat
-  Key => int16 // 19
+  Key => int16 // 20
   Version => int16
   FrameMax => int32 // in bytes, 0 means no limit
   Heartbeat => int32 // in seconds, 0 means no heartbeat
@@ -531,13 +531,13 @@ TuneResponse => TuneRequest
 
 ```
 OpenRequest => Key Version CorrelationId VirtualHost
-  Key => int16 // 20
+  Key => int16 // 21
   Version => int16
   CorrelationId => int32
   VirtualHost => string
 
 OpenResponse => Key Version CorrelationId ResponseCode
-  Key => int16 // 20
+  Key => int16 // 21
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
@@ -547,14 +547,14 @@ OpenResponse => Key Version CorrelationId ResponseCode
 
 ```
 CloseRequest => Key Version CorrelationId ClosingCode ClosingReason
-  Key => int16 // 21
+  Key => int16 // 22
   Version => int16
   CorrelationId => int32
   ClosingCode => int16
   ClosingReason => string
 
 CloseResponse => Key Version CorrelationId ResponseCode
-  Key => int16 // 21
+  Key => int16 // 22
   Version => int16
   CorrelationId => int32
   ResponseCode => int16
@@ -564,7 +564,7 @@ CloseResponse => Key Version CorrelationId ResponseCode
 
 ```
 Heartbeat => Key Version
-  Key => int16 // 22
+  Key => int16 // 23
   Version => int16
 ```
 
@@ -574,32 +574,32 @@ _Experimental_
 
 ```
 RouteQuery => Key Version CorrelationId RoutingKey SuperStream
-  Key => int16 // 23
+  Key => int16 // 24
   Version => int16
   CorrelationId => int32
   RoutingKey => string
   SuperStream => string
 
 RouteResponse => Key Version CorrelationId Stream
-  Key => int16 // 14
+  Key => int16 // 24
   Version => int16
   CorrelationId => int32
   Stream => string
 ```
 
-=== Partitions (experimental)
+=== Partitions
 
 _Experimental_
 
 ```
 PartitionsQuery => Key Version CorrelationId SuperStream
-  Key => int16 // 24
+  Key => int16 // 25
   Version => int16
   CorrelationId => int32
   SuperStream => string
 
 PartitionsResponse => Key Version CorrelationId [Stream]
-  Key => int16 // 23
+  Key => int16 // 25
   Version => int16
   CorrelationId => int32
   Stream => string

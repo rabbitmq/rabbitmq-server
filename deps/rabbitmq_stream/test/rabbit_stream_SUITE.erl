@@ -185,7 +185,7 @@ test_peer_properties(S) ->
     PeerPropertiesFrame =
         <<?REQUEST:1,
           ?COMMAND_PEER_PROPERTIES:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           1:32,
           0:32>>,
     PeerPropertiesFrameSize = byte_size(PeerPropertiesFrame),
@@ -195,7 +195,7 @@ test_peer_properties(S) ->
      <<_Size:32,
        ?RESPONSE:1,
        ?COMMAND_PEER_PROPERTIES:15,
-       ?VERSION_0:16,
+       ?VERSION_1:16,
        1:32,
        ?RESPONSE_CODE_OK:16,
        _Rest/binary>>} =
@@ -203,7 +203,7 @@ test_peer_properties(S) ->
 
 test_authenticate(S) ->
     SaslHandshakeFrame =
-        <<?REQUEST:1, ?COMMAND_SASL_HANDSHAKE:15, ?VERSION_0:16, 1:32>>,
+        <<?REQUEST:1, ?COMMAND_SASL_HANDSHAKE:15, ?VERSION_1:16, 1:32>>,
     SaslHandshakeFrameSize = byte_size(SaslHandshakeFrame),
     gen_tcp:send(S,
                  <<SaslHandshakeFrameSize:32, SaslHandshakeFrame/binary>>),
@@ -216,7 +216,7 @@ test_authenticate(S) ->
             <<31:32,
               ?RESPONSE:1,
               ?COMMAND_SASL_HANDSHAKE:15,
-              ?VERSION_0:16,
+              ?VERSION_1:16,
               1:32,
               ?RESPONSE_CODE_OK:16,
               2:32,
@@ -228,7 +228,7 @@ test_authenticate(S) ->
             <<31:32,
               ?RESPONSE:1,
               ?COMMAND_SASL_HANDSHAKE:15,
-              ?VERSION_0:16,
+              ?VERSION_1:16,
               1:32,
               ?RESPONSE_CODE_OK:16,
               2:32,
@@ -250,7 +250,7 @@ test_authenticate(S) ->
     SaslAuthenticateFrame =
         <<?REQUEST:1,
           ?COMMAND_SASL_AUTHENTICATE:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           2:32,
           5:16,
           Plain/binary,
@@ -266,7 +266,7 @@ test_authenticate(S) ->
      <<10:32,
        ?RESPONSE:1,
        ?COMMAND_SASL_AUTHENTICATE:15,
-       ?VERSION_0:16,
+       ?VERSION_1:16,
        2:32,
        ?RESPONSE_CODE_OK:16,
        RestTune/binary>>} =
@@ -276,7 +276,7 @@ test_authenticate(S) ->
         <<12:32,
           ?REQUEST:1,
           ?COMMAND_TUNE:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           ?DEFAULT_FRAME_MAX:32,
           ?DEFAULT_HEARTBEAT:32>>,
     case RestTune of
@@ -289,7 +289,7 @@ test_authenticate(S) ->
     TuneFrame =
         <<?RESPONSE:1,
           ?COMMAND_TUNE:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           ?DEFAULT_FRAME_MAX:32,
           0:32>>,
     TuneFrameSize = byte_size(TuneFrame),
@@ -300,7 +300,7 @@ test_authenticate(S) ->
     OpenFrame =
         <<?REQUEST:1,
           ?COMMAND_OPEN:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           3:32,
           VirtualHostLength:16,
           VirtualHost/binary>>,
@@ -310,7 +310,7 @@ test_authenticate(S) ->
      <<10:32,
        ?RESPONSE:1,
        ?COMMAND_OPEN:15,
-       ?VERSION_0:16,
+       ?VERSION_1:16,
        3:32,
        ?RESPONSE_CODE_OK:16>>} =
         gen_tcp:recv(S, 0, 5000).
@@ -320,7 +320,7 @@ test_create_stream(S, Stream) ->
     CreateStreamFrame =
         <<?REQUEST:1,
           ?COMMAND_CREATE_STREAM:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           1:32,
           StreamSize:16,
           Stream:StreamSize/binary,
@@ -331,7 +331,7 @@ test_create_stream(S, Stream) ->
      <<_Size:32,
        ?RESPONSE:1,
        ?COMMAND_CREATE_STREAM:15,
-       ?VERSION_0:16,
+       ?VERSION_1:16,
        1:32,
        ?RESPONSE_CODE_OK:16>>} =
         gen_tcp:recv(S, 0, 5000).
@@ -341,7 +341,7 @@ test_delete_stream(S, Stream) ->
     DeleteStreamFrame =
         <<?REQUEST:1,
           ?COMMAND_DELETE_STREAM:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           1:32,
           StreamSize:16,
           Stream:StreamSize/binary>>,
@@ -352,7 +352,7 @@ test_delete_stream(S, Stream) ->
      <<ResponseFrameSize:32,
        ?RESPONSE:1,
        ?COMMAND_DELETE_STREAM:15,
-       ?VERSION_0:16,
+       ?VERSION_1:16,
        1:32,
        ?RESPONSE_CODE_OK:16>>} =
         gen_tcp:recv(S, 4 + 10, 5000).
@@ -362,7 +362,7 @@ test_declare_publisher(S, PublisherId, Stream) ->
     DeclarePublisherFrame =
         <<?REQUEST:1,
           ?COMMAND_DECLARE_PUBLISHER:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           1:32,
           PublisherId:8,
           0:16, %% empty publisher reference
@@ -375,7 +375,7 @@ test_declare_publisher(S, PublisherId, Stream) ->
      <<_Size:32,
        ?RESPONSE:1,
        ?COMMAND_DECLARE_PUBLISHER:15,
-       ?VERSION_0:16,
+       ?VERSION_1:16,
        1:32,
        ?RESPONSE_CODE_OK:16,
        Rest/binary>>} =
@@ -387,7 +387,7 @@ test_publish_confirm(S, PublisherId, Body) ->
     PublishFrame =
         <<?REQUEST:1,
           ?COMMAND_PUBLISH:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           PublisherId:8,
           1:32,
           1:64,
@@ -399,7 +399,7 @@ test_publish_confirm(S, PublisherId, Body) ->
      <<_Size:32,
        ?REQUEST:1,
        ?COMMAND_PUBLISH_CONFIRM:15,
-       ?VERSION_0:16,
+       ?VERSION_1:16,
        PublisherId:8,
        1:32,
        1:64>>} =
@@ -410,7 +410,7 @@ test_subscribe(S, SubscriptionId, Stream) ->
     SubscribeFrame =
         <<?REQUEST:1,
           ?COMMAND_SUBSCRIBE:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           1:32,
           SubscriptionId:8,
           StreamSize:16,
@@ -425,7 +425,7 @@ test_subscribe(S, SubscriptionId, Stream) ->
      <<_Size:32,
        ?RESPONSE:1,
        ?COMMAND_SUBSCRIBE:15,
-       ?VERSION_0:16,
+       ?VERSION_1:16,
        1:32,
        ?RESPONSE_CODE_OK:16,
        Rest/binary>>} =
@@ -438,7 +438,7 @@ test_deliver(S, Rest, SubscriptionId, Body) ->
     <<58:32,
       ?REQUEST:1,
       ?COMMAND_DELIVER:15,
-      ?VERSION_0:16,
+      ?VERSION_1:16,
       SubscriptionId:8,
       5:4/unsigned,
       0:4/unsigned,
@@ -463,7 +463,7 @@ test_metadata_update_stream_deleted(S, Stream) ->
      <<FrameSize:32,
        ?REQUEST:1,
        ?COMMAND_METADATA_UPDATE:15,
-       ?VERSION_0:16,
+       ?VERSION_1:16,
        ?RESPONSE_CODE_STREAM_NOT_AVAILABLE:16,
        StreamSize:16,
        Stream/binary>>} =
@@ -475,7 +475,7 @@ test_close(S) ->
     CloseFrame =
         <<?REQUEST:1,
           ?COMMAND_CLOSE:15,
-          ?VERSION_0:16,
+          ?VERSION_1:16,
           1:32,
           ?RESPONSE_CODE_OK:16,
           CloseReasonSize:16,
@@ -486,7 +486,7 @@ test_close(S) ->
      <<10:32,
        ?RESPONSE:1,
        ?COMMAND_CLOSE:15,
-       ?VERSION_0:16,
+       ?VERSION_1:16,
        1:32,
        ?RESPONSE_CODE_OK:16>>} =
         gen_tcp:recv(S, 0, 5000).
