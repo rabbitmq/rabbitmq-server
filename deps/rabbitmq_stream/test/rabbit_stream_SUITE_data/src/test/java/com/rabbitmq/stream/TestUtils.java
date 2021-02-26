@@ -41,7 +41,7 @@ public class TestUtils {
   }
 
   static int streamPortNode2() {
-    String port = System.getProperty("node2.stream.port", "5556");
+    String port = System.getProperty("node2.stream.port", "5552");
     return Integer.valueOf(port);
   }
 
