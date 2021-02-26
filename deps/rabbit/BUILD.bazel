@@ -385,3 +385,12 @@ rabbitmq_integration_suite(
     suite_name = "list_queues_online_and_offline_SUITE",
     deps = DEPS,
 )
+
+rabbitmq_integration_suite(
+    size = "medium",
+    additional_beam = [
+        ":quorum_queue_utils",
+    ],
+    suite_name = "maintenance_mode_SUITE",
+    deps = DEPS,
+)
