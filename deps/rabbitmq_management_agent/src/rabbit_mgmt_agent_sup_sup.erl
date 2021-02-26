@@ -13,16 +13,40 @@
 -export([start_link/0, start_child/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_mgmt_agent.hrl").
 
 start_child() ->
     supervisor2:start_child(?MODULE, sup()).
 
 sup() ->
-    {rabbit_mgmt_agent_sup, {rabbit_mgmt_agent_sup, start_link, []},
-     temporary, ?SUPERVISOR_WAIT, supervisor, [rabbit_mgmt_agent_sup]}.
+    #{
+        id      => rabbit_mgmt_agent_sup,
+        start   => {rabbit_mgmt_agent_sup, start_link, []},
+        restart => temporary,
+        wait    => ?SUPERVISOR_WAIT,
+        type    => supervisor,
+        modules => [rabbit_mgmt_agent_sup]
+    }.
 
 init([]) ->
-    {ok, {{one_for_one, 0, 1}, [sup()]}}.
+    Flags = #{
+        strategy  => one_for_one,
+        intensity => 0,
+        period    => 1
+    },
+    PgScope = #{
+        id      => ?MANAGEMENT_PG_SCOPE,
+        start   => {pg, start_link, [?MANAGEMENT_PG_SCOPE]},
+        restart => temporary,
+        wait    => ?SUPERVISOR_WAIT,
+        type    => supervisor,
+        modules => []
+    },
+    Specs = [
+        PgScope,
+        sup()
+    ],
+    {ok, {Flags, Specs}}.
 
 start_link() ->
     supervisor2:start_link({local, ?MODULE}, ?MODULE, []).
