@@ -7,7 +7,7 @@
 
 -module(rabbit_mgmt_agent_sup_sup).
 
--behaviour(supervisor2).
+-behaviour(supervisor).
 
 -export([init/1]).
 -export([start_link/0, start_child/0]).
@@ -16,7 +16,7 @@
 -include("rabbit_mgmt_agent.hrl").
 
 start_child() ->
-    supervisor2:start_child(?MODULE, sup()).
+    supervisor:start_child(?MODULE, sup()).
 
 sup() ->
     #{
@@ -49,4 +49,4 @@ init([]) ->
     {ok, {Flags, Specs}}.
 
 start_link() ->
-    supervisor2:start_link({local, ?MODULE}, ?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
