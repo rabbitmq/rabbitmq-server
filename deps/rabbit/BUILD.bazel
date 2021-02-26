@@ -317,13 +317,71 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     size = "large",
-    suite_name = "dynamic_ha_SUITE",
     groups = [
         "cluster_size_5",
         "cluster_size_2",
         "cluster_size_3",
     ],
+    suite_name = "dynamic_ha_SUITE",
     deps = DEPS + [
         "@proper//:bazel_erlang_lib",
     ],
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    additional_beam = [
+        ":quorum_queue_utils",
+    ],
+    suite_name = "dynamic_qq_SUITE",
+    deps = DEPS + [
+        "@proper//:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    additional_beam = [
+        ":sync_detection_SUITE_beam_files",
+    ],
+    suite_name = "eager_sync_SUITE",
+    deps = DEPS,
+)
+
+# The feature_flags_SUITE compiles a plugin on the fly for tests, so we'll skip this one for now
+# rabbitmq_integration_suite(
+#     size = "medium",
+#     groups = [
+#         "registry",
+#         "enabling_on_single_node",
+#         "enabling_in_cluster",
+#         "clustering",
+#         "activating_plugin",
+#     ],
+#     suite_name = "feature_flags_SUITE",
+#     deps = DEPS,
+# )
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "sync_detection_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "lazy_queue_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "list_consumers_sanity_check_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "list_queues_online_and_offline_SUITE",
+    deps = DEPS,
 )

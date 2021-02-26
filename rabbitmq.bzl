@@ -78,6 +78,7 @@ def rabbitmq_lib(
     test_erlc_opts = RABBITMQ_ERLC_OPTS + extra_erlc_opts + [
         "-DTEST",
         "+debug_info",
+        "+nowarn_export_all",
     ]
 
     all_test_beam = []
