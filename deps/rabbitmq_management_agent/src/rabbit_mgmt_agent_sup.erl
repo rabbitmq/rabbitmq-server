@@ -36,7 +36,7 @@ start_link() ->
 maybe_enable_metrics_collector() ->
     case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
         false ->
-            ok = pg:join(?MANAGEMENT_PG_SCOPE, management_db, self()),
+            ok = pg:join(?MANAGEMENT_PG_SCOPE, ?MANAGEMENT_PG_GROUP, self()),
             ST = {rabbit_mgmt_storage, {rabbit_mgmt_storage, start_link, []},
                   permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_storage]},
             MD = {delegate_management_sup, {delegate_sup, start_link, [5, ?DELEGATE_PREFIX]},
