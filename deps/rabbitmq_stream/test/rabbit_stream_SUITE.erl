@@ -183,13 +183,18 @@ test_server(Port) ->
 
 test_peer_properties(S) ->
     PeerPropertiesFrame =
-        <<?COMMAND_PEER_PROPERTIES:16, ?VERSION_0:16, 1:32, 0:32>>,
+        <<?REQUEST:1,
+          ?COMMAND_PEER_PROPERTIES:15,
+          ?VERSION_0:16,
+          1:32,
+          0:32>>,
     PeerPropertiesFrameSize = byte_size(PeerPropertiesFrame),
     gen_tcp:send(S,
                  <<PeerPropertiesFrameSize:32, PeerPropertiesFrame/binary>>),
     {ok,
      <<_Size:32,
-       ?COMMAND_PEER_PROPERTIES:16,
+       ?RESPONSE:1,
+       ?COMMAND_PEER_PROPERTIES:15,
        ?VERSION_0:16,
        1:32,
        ?RESPONSE_CODE_OK:16,
@@ -198,7 +203,7 @@ test_peer_properties(S) ->
 
 test_authenticate(S) ->
     SaslHandshakeFrame =
-        <<?COMMAND_SASL_HANDSHAKE:16, ?VERSION_0:16, 1:32>>,
+        <<?REQUEST:1, ?COMMAND_SASL_HANDSHAKE:15, ?VERSION_0:16, 1:32>>,
     SaslHandshakeFrameSize = byte_size(SaslHandshakeFrame),
     gen_tcp:send(S,
                  <<SaslHandshakeFrameSize:32, SaslHandshakeFrame/binary>>),
@@ -209,7 +214,8 @@ test_authenticate(S) ->
     ok =
         case SaslAvailable of
             <<31:32,
-              ?COMMAND_SASL_HANDSHAKE:16,
+              ?RESPONSE:1,
+              ?COMMAND_SASL_HANDSHAKE:15,
               ?VERSION_0:16,
               1:32,
               ?RESPONSE_CODE_OK:16,
@@ -220,7 +226,8 @@ test_authenticate(S) ->
               AmqPlain:8/binary>> ->
                 ok;
             <<31:32,
-              ?COMMAND_SASL_HANDSHAKE:16,
+              ?RESPONSE:1,
+              ?COMMAND_SASL_HANDSHAKE:15,
               ?VERSION_0:16,
               1:32,
               ?RESPONSE_CODE_OK:16,
@@ -241,7 +248,8 @@ test_authenticate(S) ->
     PlainSaslSize = byte_size(PlainSasl),
 
     SaslAuthenticateFrame =
-        <<?COMMAND_SASL_AUTHENTICATE:16,
+        <<?REQUEST:1,
+          ?COMMAND_SASL_AUTHENTICATE:15,
           ?VERSION_0:16,
           2:32,
           5:16,
@@ -256,7 +264,8 @@ test_authenticate(S) ->
                    SaslAuthenticateFrame/binary>>),
     {ok,
      <<10:32,
-       ?COMMAND_SASL_AUTHENTICATE:16,
+       ?RESPONSE:1,
+       ?COMMAND_SASL_AUTHENTICATE:15,
        ?VERSION_0:16,
        2:32,
        ?RESPONSE_CODE_OK:16,
@@ -265,7 +274,8 @@ test_authenticate(S) ->
 
     TuneExpected =
         <<12:32,
-          ?COMMAND_TUNE:16,
+          ?REQUEST:1,
+          ?COMMAND_TUNE:15,
           ?VERSION_0:16,
           ?DEFAULT_FRAME_MAX:32,
           ?DEFAULT_HEARTBEAT:32>>,
@@ -277,14 +287,19 @@ test_authenticate(S) ->
     end,
 
     TuneFrame =
-        <<?COMMAND_TUNE:16, ?VERSION_0:16, ?DEFAULT_FRAME_MAX:32, 0:32>>,
+        <<?RESPONSE:1,
+          ?COMMAND_TUNE:15,
+          ?VERSION_0:16,
+          ?DEFAULT_FRAME_MAX:32,
+          0:32>>,
     TuneFrameSize = byte_size(TuneFrame),
     gen_tcp:send(S, <<TuneFrameSize:32, TuneFrame/binary>>),
 
     VirtualHost = <<"/">>,
     VirtualHostLength = byte_size(VirtualHost),
     OpenFrame =
-        <<?COMMAND_OPEN:16,
+        <<?REQUEST:1,
+          ?COMMAND_OPEN:15,
           ?VERSION_0:16,
           3:32,
           VirtualHostLength:16,
@@ -293,7 +308,8 @@ test_authenticate(S) ->
     gen_tcp:send(S, <<OpenFrameSize:32, OpenFrame/binary>>),
     {ok,
      <<10:32,
-       ?COMMAND_OPEN:16,
+       ?RESPONSE:1,
+       ?COMMAND_OPEN:15,
        ?VERSION_0:16,
        3:32,
        ?RESPONSE_CODE_OK:16>>} =
@@ -302,7 +318,8 @@ test_authenticate(S) ->
 test_create_stream(S, Stream) ->
     StreamSize = byte_size(Stream),
     CreateStreamFrame =
-        <<?COMMAND_CREATE_STREAM:16,
+        <<?REQUEST:1,
+          ?COMMAND_CREATE_STREAM:15,
           ?VERSION_0:16,
           1:32,
           StreamSize:16,
@@ -312,7 +329,8 @@ test_create_stream(S, Stream) ->
     gen_tcp:send(S, <<FrameSize:32, CreateStreamFrame/binary>>),
     {ok,
      <<_Size:32,
-       ?COMMAND_CREATE_STREAM:16,
+       ?RESPONSE:1,
+       ?COMMAND_CREATE_STREAM:15,
        ?VERSION_0:16,
        1:32,
        ?RESPONSE_CODE_OK:16>>} =
@@ -321,7 +339,8 @@ test_create_stream(S, Stream) ->
 test_delete_stream(S, Stream) ->
     StreamSize = byte_size(Stream),
     DeleteStreamFrame =
-        <<?COMMAND_DELETE_STREAM:16,
+        <<?REQUEST:1,
+          ?COMMAND_DELETE_STREAM:15,
           ?VERSION_0:16,
           1:32,
           StreamSize:16,
@@ -331,7 +350,8 @@ test_delete_stream(S, Stream) ->
     ResponseFrameSize = 10,
     {ok,
      <<ResponseFrameSize:32,
-       ?COMMAND_DELETE_STREAM:16,
+       ?RESPONSE:1,
+       ?COMMAND_DELETE_STREAM:15,
        ?VERSION_0:16,
        1:32,
        ?RESPONSE_CODE_OK:16>>} =
@@ -340,7 +360,8 @@ test_delete_stream(S, Stream) ->
 test_declare_publisher(S, PublisherId, Stream) ->
     StreamSize = byte_size(Stream),
     DeclarePublisherFrame =
-        <<?COMMAND_DECLARE_PUBLISHER:16,
+        <<?REQUEST:1,
+          ?COMMAND_DECLARE_PUBLISHER:15,
           ?VERSION_0:16,
           1:32,
           PublisherId:8,
@@ -352,7 +373,8 @@ test_declare_publisher(S, PublisherId, Stream) ->
     Res = gen_tcp:recv(S, 0, 5000),
     {ok,
      <<_Size:32,
-       ?COMMAND_DECLARE_PUBLISHER:16,
+       ?RESPONSE:1,
+       ?COMMAND_DECLARE_PUBLISHER:15,
        ?VERSION_0:16,
        1:32,
        ?RESPONSE_CODE_OK:16,
@@ -363,7 +385,8 @@ test_declare_publisher(S, PublisherId, Stream) ->
 test_publish_confirm(S, PublisherId, Body) ->
     BodySize = byte_size(Body),
     PublishFrame =
-        <<?COMMAND_PUBLISH:16,
+        <<?REQUEST:1,
+          ?COMMAND_PUBLISH:15,
           ?VERSION_0:16,
           PublisherId:8,
           1:32,
@@ -374,7 +397,8 @@ test_publish_confirm(S, PublisherId, Body) ->
     gen_tcp:send(S, <<FrameSize:32, PublishFrame/binary>>),
     {ok,
      <<_Size:32,
-       ?COMMAND_PUBLISH_CONFIRM:16,
+       ?REQUEST:1,
+       ?COMMAND_PUBLISH_CONFIRM:15,
        ?VERSION_0:16,
        PublisherId:8,
        1:32,
@@ -384,7 +408,8 @@ test_publish_confirm(S, PublisherId, Body) ->
 test_subscribe(S, SubscriptionId, Stream) ->
     StreamSize = byte_size(Stream),
     SubscribeFrame =
-        <<?COMMAND_SUBSCRIBE:16,
+        <<?REQUEST:1,
+          ?COMMAND_SUBSCRIBE:15,
           ?VERSION_0:16,
           1:32,
           SubscriptionId:8,
@@ -398,7 +423,8 @@ test_subscribe(S, SubscriptionId, Stream) ->
     Res = gen_tcp:recv(S, 0, 5000),
     {ok,
      <<_Size:32,
-       ?COMMAND_SUBSCRIBE:16,
+       ?RESPONSE:1,
+       ?COMMAND_SUBSCRIBE:15,
        ?VERSION_0:16,
        1:32,
        ?RESPONSE_CODE_OK:16,
@@ -410,7 +436,8 @@ test_deliver(S, Rest, SubscriptionId, Body) ->
     BodySize = byte_size(Body),
     Frame = read_frame(S, Rest),
     <<58:32,
-      ?COMMAND_DELIVER:16,
+      ?REQUEST:1,
+      ?COMMAND_DELIVER:15,
       ?VERSION_0:16,
       SubscriptionId:8,
       5:4/unsigned,
@@ -434,7 +461,8 @@ test_metadata_update_stream_deleted(S, Stream) ->
     FrameSize = 2 + 2 + 2 + 2 + StreamSize,
     {ok,
      <<FrameSize:32,
-       ?COMMAND_METADATA_UPDATE:16,
+       ?REQUEST:1,
+       ?COMMAND_METADATA_UPDATE:15,
        ?VERSION_0:16,
        ?RESPONSE_CODE_STREAM_NOT_AVAILABLE:16,
        StreamSize:16,
@@ -445,7 +473,8 @@ test_close(S) ->
     CloseReason = <<"OK">>,
     CloseReasonSize = byte_size(CloseReason),
     CloseFrame =
-        <<?COMMAND_CLOSE:16,
+        <<?REQUEST:1,
+          ?COMMAND_CLOSE:15,
           ?VERSION_0:16,
           1:32,
           ?RESPONSE_CODE_OK:16,
@@ -455,7 +484,8 @@ test_close(S) ->
     gen_tcp:send(S, <<CloseFrameSize:32, CloseFrame/binary>>),
     {ok,
      <<10:32,
-       ?COMMAND_CLOSE:16,
+       ?RESPONSE:1,
+       ?COMMAND_CLOSE:15,
        ?VERSION_0:16,
        1:32,
        ?RESPONSE_CODE_OK:16>>} =
