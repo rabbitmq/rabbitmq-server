@@ -34,8 +34,8 @@ rabbitmq_lib(
 ct_suite(
     size = "large",
     data = [
-        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
-        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
+        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     suite_name = "system_SUITE",
     test_env = {
@@ -53,7 +53,7 @@ ct_suite(
         "@goldrush//:bazel_erlang_lib",
         "@jsx//:bazel_erlang_lib",
         "@meck//:bazel_erlang_lib",
-        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
         "@ranch//:bazel_erlang_lib",
         "@recon//:bazel_erlang_lib",
     ],

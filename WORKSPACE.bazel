@@ -134,7 +134,7 @@ github_bazel_erlang_lib(
 )
 
 http_archive(
-    name = "rabbitmq-ct-helpers",
+    name = "rabbitmq_ct_helpers",
     urls = ["https://github.com/rabbitmq/rabbitmq-ct-helpers/archive/bazel.zip"],
     strip_prefix = "rabbitmq-ct-helpers-bazel",
     repo_mapping = {
@@ -143,7 +143,7 @@ http_archive(
 )
 
 http_archive(
-    name = "rabbitmq-ct-client-helpers",
+    name = "rabbitmq_ct_client_helpers",
     urls = ["https://github.com/rabbitmq/rabbitmq-ct-client-helpers/archive/bazel.zip"],
     strip_prefix = "rabbitmq-ct-client-helpers-bazel",
     repo_mapping = {

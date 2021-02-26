@@ -52,8 +52,8 @@ rabbitmq_home(
     name = "broker-for-tests-home",
     escripts = ["//deps/rabbitmq_cli:rabbitmqctl"],
     plugins = REQUIRED_PLUGINS + [
-        # "@rabbitmq-ct-helpers//:bazel_erlang_lib",
-        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
+        # "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
         "//deps/amqp_client:bazel_erlang_lib",
     ],
 )

@@ -200,8 +200,8 @@ ct_suite(
 ct_suite(
     size = "large",
     data = [
-        "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
-        "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
+        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     suite_name = "backing_queue_SUITE",
     test_env = {
@@ -215,8 +215,8 @@ ct_suite(
     runtime_deps = [
         "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
         "//deps/rabbitmq_cli:rabbitmqctl",
-        "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
-        "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
     ],
     deps = DEPS + [
         "//deps/amqp_client:bazel_erlang_lib",

@@ -126,8 +126,8 @@ def rabbitmq_integration_suite(
         **kwargs):
     ct_suite(
         data = [
-            "@rabbitmq-ct-helpers//tools/tls-certs:Makefile",
-            "@rabbitmq-ct-helpers//tools/tls-certs:openssl.cnf.in",
+            "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
+            "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
         ] + data,
         test_env = dict({
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
@@ -143,12 +143,12 @@ def rabbitmq_integration_suite(
             "@credentials-obfuscation//:bazel_erlang_lib",
             "@goldrush//:bazel_erlang_lib",
             "@jsx//:bazel_erlang_lib",
-            "@rabbitmq-ct-client-helpers//:bazel_erlang_lib",
-            "@rabbitmq-ct-helpers//:bazel_erlang_lib",
+            "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
             "@recon//:bazel_erlang_lib",
         ] + runtime_deps,
         deps = [
             "//deps/amqp_client:bazel_erlang_lib",
+            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
         ] + deps,
         **kwargs
     )
