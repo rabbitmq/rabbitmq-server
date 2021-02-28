@@ -53,6 +53,7 @@ OCF_RESKEY_rmq_feature_health_check_default=true
 OCF_RESKEY_rmq_feature_local_list_queues_default=true
 OCF_RESKEY_limit_nofile_default=65535
 OCF_RESKEY_avoid_using_iptables_default=false
+OCF_RESKEY_allowed_cluster_nodes_default=""
 
 : ${HA_LOGTAG="lrmd"}
 : ${HA_LOGFACILITY="daemon"}
@@ -80,6 +81,7 @@ OCF_RESKEY_avoid_using_iptables_default=false
 : ${OCF_RESKEY_rmq_feature_local_list_queues=${OCF_RESKEY_rmq_feature_local_list_queues_default}}
 : ${OCF_RESKEY_limit_nofile=${OCF_RESKEY_limit_nofile_default}}
 : ${OCF_RESKEY_avoid_using_iptables=${OCF_RESKEY_avoid_using_iptables_default}}
+: ${OCF_RESKEY_allowed_cluster_nodes=${OCF_RESKEY_allowed_cluster_nodes_default}}
 
 #######################################################################
 
@@ -366,6 +368,18 @@ noops. This is useful when we run inside containers.
 </longdesc>
 <shortdesc lang="en">Disable iptables use entirely</shortdesc>
 <content type="boolean" default="${OCF_RESKEY_avoid_using_iptables_default}" />
+</parameter>
+
+<parameter name="allowed_cluster_nodes" unique="0" required="0">
+<longdesc lang="en">
+When set to anything other than the empty string it must container the list of
+cluster node names, separated by spaces, where the rabbitmq resource is allowed to run.
+Tis is needed when rabbitmq is running on a subset of nodes part of a larger
+cluster. The default ("") is to assume that all nodes part of the cluster will
+run the rabbitmq resource.
+</longdesc>
+<shortdesc lang="en">List of cluster nodes where rabbitmq is allowed to run</shortdesc>
+<content type="string" default="${OCF_RESKEY_allowed_cluster_nodes}" />
 </parameter>
 
 $EXTENDED_OCF_PARAMS
@@ -854,10 +868,18 @@ get_running_nodes() {
 get_alive_pacemaker_nodes_but()
 {
     if [ -z "$1" ]; then
-        echo `crm_node -l -p | sed -e '/(null)/d'`
+        tmp_pcmk_node_list=`crm_node -l -p | sed -e '/(null)/d'`
     else
-        echo `crm_node -l -p | sed -e "s/${1}//g" | sed -e '/(null)/d'`
+        tmp_pcmk_node_list=`crm_node -l -p | sed -e "s/${1}//g" | sed -e '/(null)/d'`
     fi
+    # If OCF_RESKEY_allowed_cluster_nodes is set then we only want the intersection
+    # of the cluster node output and the allowed_cluster_nodes list
+    if [ -z "${OCF_RESKEY_allowed_cluster_nodes}" ]; then
+      pcmk_node_list=$tmp_pcmk_node_list
+    else
+      pcmk_node_list=`for i in $tmp_pcmk_node_list ${OCF_RESKEY_allowed_cluster_nodes}; do echo $i; done | sort | uniq -d`
+    fi
+    echo $pcmk_node_list
 }
 
 # Get current master. If a parameter is provided,
