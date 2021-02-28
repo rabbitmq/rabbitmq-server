@@ -95,7 +95,9 @@ all_tests() ->
      max_age_policy,
      max_segment_size_policy,
      purge,
-     update_retention_policy
+     update_retention_policy,
+     competing_consumers,
+     competing_consumers_resend
     ].
 
 %% -------------------------------------------------------------------
@@ -255,8 +257,8 @@ declare_queue(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    ?assertMatch([_], rpc:call(Server, supervisor, which_children,
-                               [osiris_server_sup])),
+    [{_, Sup, _, _}] = rpc:call(Server, supervisor, which_children, [osiris_server_sup_sup]),
+    ?assertMatch([_, _], rpc:call(Server, supervisor, which_children, [Sup])),
 
     %% Test declare an existing queue with different arguments
     ?assertExit(_, declare(Ch, Q, [])).
@@ -1143,7 +1145,8 @@ max_age(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                  {<<"x-max-age">>, longstr, <<"10s">>},
-                                 {<<"x-max-segment-size">>, long, 250}])),
+                                 {<<"x-max-segment-size">>, long, 250}
+                                ])),
 
     Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
 
@@ -1157,8 +1160,6 @@ max_age(Config) ->
     %% Let's publish again so the new segments will trigger the retention policy
     [publish(Ch, Q, Payload) || _ <- lists:seq(1, 100)],
     amqp_channel:wait_for_confirms(Ch, 5),
-
-    timer:sleep(5000),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 200, false),
@@ -1452,7 +1453,7 @@ leader_locator_policy(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
 
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"leader-locator">>, <<"leader_locator_.*">>, <<"queues">>,
+           Config, 0, <<"leader-locator">>, <<"leader_locator_policy.*">>, <<"queues">>,
            [{<<"queue-leader-locator">>, <<"random">>}]),
 
     Q = ?config(queue_name, Config),
@@ -1601,13 +1602,103 @@ max_segment_size_policy(Config) ->
 purge(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
                 amqp_channel:call(Ch, #'queue.purge'{queue = Q})).
+
+competing_consumers(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-max-segment-size">>, long, 10000}
+                                ])),
+    
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+
+    Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
+    [publish(Ch, Q, Payload) || _ <- lists:seq(1, 10000)],
+
+    amqp_channel:wait_for_confirms(Ch, 5),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    qos(Ch1, 10, false),
+
+    subscribe(Ch1, Q, false, 0, <<"ctag1">>, [{<<"x-competing-consumers">>, bool, true}]),
+    subscribe(Ch1, Q, false, 0, <<"ctag2">>, [{<<"x-competing-consumers">>, bool, true}]),
+
+    receive
+        {#'basic.deliver'{consumer_tag = <<"ctag1">>},
+         #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, S1_1}]}}} ->
+            receive
+                %% This is the first message, and we should receive two chunks. We can thus
+                %% guarantee we get the next message on the stream in order, as nothing should
+                %% have crashed!
+                {#'basic.deliver'{consumer_tag = <<"ctag1">>},
+                 #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, S1_2}]}}} ->
+                    ?assert((S1_1 + 1) == S1_2),
+                    receive
+                        {#'basic.deliver'{consumer_tag = <<"ctag2">>},
+                         #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, S2_3}]}}} ->
+                            %% Probably chunks have more than 1 message, but at least we can assert this
+                            ?assert(S1_2 < S2_3)
+                    after 5000 ->
+                            exit(timeout2_1)
+                    end
+            after 5000 ->
+                    exit(timeout1_2)
+            end
+    after 5000 ->
+            exit(timeout1_1)
+    end.
+
+competing_consumers_resend(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-max-segment-size">>, long, 10000}
+                                ])),
+
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+
+    Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
+    [publish(Ch, Q, Payload) || _ <- lists:seq(1, 10000)],
+
+    amqp_channel:wait_for_confirms(Ch, 5),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    qos(Ch1, 10, false),
+
+    subscribe(Ch1, Q, false, 0, <<"ctag1">>, [{<<"x-competing-consumers">>, bool, true}]),
+
+    receive
+        {#'basic.deliver'{consumer_tag = <<"ctag1">>},
+         #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, S1}]}}} ->
+            rabbit_ct_client_helpers:close_channel(Ch1),
+            Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+            qos(Ch2, 10, false),
+            subscribe(Ch2, Q, false, 0, <<"ctag2">>, [{<<"x-competing-consumers">>, bool, true}]),
+            receive
+                {#'basic.deliver'{consumer_tag = <<"ctag2">>},
+                 #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, S1}]}}} ->
+                    ok
+            after 5000 ->
+                    exit(timeout2_1)
+            end
+    after 5000 ->
+            exit(timeout1_1)
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -1654,13 +1745,16 @@ publish(Ch, Queue, Msg) ->
                                      payload = Msg}).
 
 subscribe(Ch, Queue, NoAck, Offset) ->
+    subscribe(Ch, Queue, NoAck, Offset, <<"ctag">>, []).
+
+subscribe(Ch, Queue, NoAck, Offset, CTag, ExtraArgs) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Queue,
                                                 no_ack = NoAck,
-                                                consumer_tag = <<"ctag">>,
-                                                arguments = [{<<"x-stream-offset">>, long, Offset}]},
+                                                consumer_tag = CTag,
+                                                arguments = [{<<"x-stream-offset">>, long, Offset}] ++ ExtraArgs},
                            self()),
     receive
-        #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
+        #'basic.consume_ok'{consumer_tag = CTag} ->
              ok
     end.
 
