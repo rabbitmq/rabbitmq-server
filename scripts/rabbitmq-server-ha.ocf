@@ -820,6 +820,10 @@ block_client_access()
 
 unblock_client_access()
 {
+    local lhtext="none"
+    if [ -z $1 ] ; then
+        lhtext=$1
+    fi
     # When OCF_RESKEY_avoid_using_iptables is true iptables calls are noops
     if [ "${OCF_RESKEY_avoid_using_iptables}" == 'true' ] ; then
         return
@@ -829,6 +833,7 @@ unblock_client_access()
       iptables --wait -D INPUT -p tcp -m tcp --dport ${OCF_RESKEY_node_port} -m state --state NEW,RELATED,ESTABLISHED \
       -m comment --comment 'temporary RMQ block' -j REJECT --reject-with tcp-reset
     done
+    ocf_log info "${lhtext} unblocked access to RMQ port"
 }
 
 get_nodes__base(){
@@ -1378,7 +1383,7 @@ start_rmq_server_app() {
 
     ocf_log info "${LH} begin."
     # Safe-unblock the rules, if there are any
-    unblock_client_access
+    unblock_client_access "${LH}"
     # Apply the blocking rule
     block_client_access
     rc=$?
@@ -1395,8 +1400,7 @@ start_rmq_server_app() {
         start_beam_process
         rc=$?
         if [ $rc -ne $OCF_SUCCESS ]; then
-            unblock_client_access
-            ocf_log info "${LH} unblocked access to RMQ port"
+            unblock_client_access "${LH}"
             return $OCF_ERR_GENERIC
         fi
     fi
@@ -1412,8 +1416,7 @@ start_rmq_server_app() {
         if [ $rc -ne 0 ] ; then
             ocf_log err "${LH} RMQ-server app can't be stopped. Beam will be killed."
             kill_rmq_and_remove_pid
-            unblock_client_access
-            ocf_log info "${LH} unblocked access to RMQ port"
+            unblock_client_access "${LH}"
             return $OCF_ERR_GENERIC
         fi
     else
@@ -1435,8 +1438,7 @@ start_rmq_server_app() {
                 else
                     ocf_log err "${LH} RMQ-server app can't be stopped during Mnesia cleaning. Beam will be killed."
                     kill_rmq_and_remove_pid
-                    unblock_client_access
-                    ocf_log info "${LH} unblocked access to RMQ port"
+                    unblock_client_access "${LH}"
                     return $OCF_ERR_GENERIC
                 fi
             fi
@@ -1447,8 +1449,7 @@ start_rmq_server_app() {
          kill_rmq_and_remove_pid
     fi
     ocf_log info "${LH} end."
-    unblock_client_access
-    ocf_log info "${LH} unblocked access to RMQ port"
+    unblock_client_access "${LH}"
     return $rc
 }
 
