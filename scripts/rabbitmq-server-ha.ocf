@@ -702,7 +702,9 @@ rmq_setup_env() {
     local dir
     H="$(get_hostname)"
     export RABBITMQ_NODENAME=$(rabbit_node_name $H)
-    export RABBITMQ_NODE_PORT=$OCF_RESKEY_node_port
+    if [ "$OCF_RESKEY_node_port" != "$OCF_RESKEY_node_port_default" ]; then
+        export RABBITMQ_NODE_PORT=$OCF_RESKEY_node_port
+    fi
     export RABBITMQ_PID_FILE=$OCF_RESKEY_pid_file
     MNESIA_FILES="${OCF_RESKEY_mnesia_base}/$(rabbit_node_name $H)"
     RMQ_START_TIME="${MNESIA_FILES}/ocf_server_start_time.txt"
