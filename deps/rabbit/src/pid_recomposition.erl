@@ -19,6 +19,7 @@
 -define(TTB_PREFIX, 131).
 
 -define(NEW_PID_EXT, 88).
+-define(PID_EXT, 103).
 -define(ATOM_UTF8_EXT, 118).
 -define(SMALL_ATOM_UTF8_EXT, 119).
 
@@ -32,14 +33,26 @@ decompose(Pid) ->
 
 -spec from_binary(binary()) -> #{atom() => any()}.
 from_binary(Bin) ->
-    <<?TTB_PREFIX, ?NEW_PID_EXT, PidData/binary>> = Bin,
+    PidData = case Bin of
+        %% Erlang 23+
+        <<?TTB_PREFIX, ?NEW_PID_EXT, Val0/binary>> -> Val0;
+        %% Erlang 22
+        <<?TTB_PREFIX, ?PID_EXT, Val1/binary>> -> Val1
+    end,
     {Node, Rest2} = case PidData of
         <<?ATOM_UTF8_EXT, AtomLen:16/integer, Node0:AtomLen/binary, Rest1/binary>> ->
             {Node0, Rest1};
         <<?SMALL_ATOM_UTF8_EXT, AtomLen/integer, Node0:AtomLen/binary, Rest1/binary>> ->
             {Node0, Rest1}
     end,
-    <<ID:32/integer, Serial:32/integer, Creation:32/integer>> = Rest2,
+    {ID, Serial, Creation} = case Rest2 of
+        %% NEW_PID_EXT on Erlang 23+
+        <<ID0:32/integer, Serial0:32/integer, Creation0:32/integer>> ->
+            {ID0, Serial0, Creation0};
+        %% PID_EXT on Erlang 22
+        <<ID1:32/integer, Serial1:32/integer, Creation1:8/integer>> ->
+            {ID1, Serial1, Creation1}
+    end,
     #{
         node     => binary_to_atom(Node, utf8),
         id       => ID,
