@@ -364,12 +364,6 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     size = "medium",
-    suite_name = "sync_detection_SUITE",
-    deps = DEPS,
-)
-
-rabbitmq_integration_suite(
-    size = "medium",
     suite_name = "lazy_queue_SUITE",
     deps = DEPS,
 )
@@ -392,5 +386,66 @@ rabbitmq_integration_suite(
         ":quorum_queue_utils",
     ],
     suite_name = "maintenance_mode_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    additional_srcs = [
+        "test/rabbit_ha_test_consumer.erl",
+        "test/rabbit_ha_test_producer.erl",
+    ],
+    suite_name = "many_node_ha_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "message_size_limit_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "metrics_SUITE",
+    deps = DEPS + [
+        "@proper//:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = [
+        "+nowarn_export_all",
+    ],
+    additional_srcs = [
+        "test/mirrored_supervisor_SUITE_gs.erl",
+    ],
+    suite_name = "mirrored_supervisor_SUITE",
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+    },
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = [
+        "+nowarn_export_all",
+    ],
+    suite_name = "msg_store_SUITE",
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+    },
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "sync_detection_SUITE",
     deps = DEPS,
 )

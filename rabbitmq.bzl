@@ -126,6 +126,9 @@ def rabbitmq_integration_suite(
         deps = [],
         **kwargs):
     ct_suite(
+        erlc_opts = [
+            "+nowarn_export_all",
+        ],
         data = [
             "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
             "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
