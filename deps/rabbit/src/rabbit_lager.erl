@@ -225,7 +225,6 @@ configure_lager() ->
     %% difference.
     case application:get_env(rabbit, lager_log_root) of
         {ok, Value} ->
-            io:format("Setting lager.log_root to '~s'~n", [Value]),
             ok = application:set_env(lager, log_root, Value);
         _ ->
             ok
