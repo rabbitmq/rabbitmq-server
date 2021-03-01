@@ -88,6 +88,14 @@ github_bazel_erlang_lib(
 )
 
 github_bazel_erlang_lib(
+    name = "inet_tcp_proxy",
+    org = "rabbitmq",
+    version = "master",
+    tag = "master",
+    sha256 = "680362b97b65bff446eb029e3b42461b75249c9876bb7c9ac802b0ff543b9394",
+)
+
+github_bazel_erlang_lib(
     name = "jsx",
     org = "talentdeficit",
     version = "3.0.0",
