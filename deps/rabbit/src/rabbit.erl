@@ -257,7 +257,7 @@
 
 -define(APPS, [os_mon, mnesia, rabbit_common, rabbitmq_prelaunch, ra, sysmon_handler, rabbit]).
 
--define(ASYNC_THREADS_WARNING_THRESHOLD, 8).
+-define(DIRTY_IO_SCHEDULERS_WARNING_THRESHOLD, 10).
 
 %% 1 minute
 -define(BOOT_START_TIMEOUT,     1 * 60 * 1000).
@@ -1214,11 +1214,11 @@ warn_if_kernel_config_dubious() ->
                            "and CPU utilization may worsen.~n")
             end
     end,
-    AsyncThreads = erlang:system_info(thread_pool_size),
-    case AsyncThreads < ?ASYNC_THREADS_WARNING_THRESHOLD of
+    DirtyIOSchedulers = erlang:system_info(dirty_io_schedulers),
+    case DirtyIOSchedulers < ?DIRTY_IO_SCHEDULERS_WARNING_THRESHOLD of
         true  -> rabbit_log:warning(
-                   "Erlang VM is running with ~b I/O threads, "
-                   "file I/O performance may worsen~n", [AsyncThreads]);
+                   "Erlang VM is running with ~b dirty I/O schedulers, "
+                   "file I/O performance may worsen~n", [DirtyIOSchedulers]);
         false -> ok
     end,
     IDCOpts = case application:get_env(kernel, inet_default_connect_options) of
