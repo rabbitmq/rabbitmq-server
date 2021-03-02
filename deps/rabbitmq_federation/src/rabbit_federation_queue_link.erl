@@ -7,9 +7,6 @@
 
 -module(rabbit_federation_queue_link).
 
-%% pg2 is deprecated in OTP 23.
--compile(nowarn_deprecated_function).
-
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
@@ -33,7 +30,9 @@ start_link(Args) ->
 
 run(QName)   -> cast(QName, run).
 pause(QName) -> cast(QName, pause).
-go()         -> cast(go).
+go()         ->
+    rabbit_federation_pg:start_scope(),
+    cast(go).
 
 %%----------------------------------------------------------------------------
 %%call(QName, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- q(QName)].
@@ -41,15 +40,13 @@ cast(Msg)        -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
 cast(QName, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- q(QName)].
 
 join(Name) ->
-    pg2:create(pgname(Name)),
-    ok = pg2:join(pgname(Name), self()).
+    ok = pg:join(?FEDERATION_PG_SCOPE, pgname(Name), self()).
 
 all() ->
-    pg2:create(pgname(rabbit_federation_queues)),
-    pg2:get_members(pgname(rabbit_federation_queues)).
+    pg:get_members(pgname(rabbit_federation_queues)).
 
 q(QName) ->
-    case pg2:get_members(pgname({rabbit_federation_queue, QName})) of
+    case pg:get_members(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_queue, QName})) of
         {error, {no_such_group, _}} ->
             [];
         Members ->
@@ -184,7 +181,7 @@ terminate(Reason, #not_started{upstream        = Upstream,
                                queue           = Q}) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
-    pg2:delete(pgname({rabbit_federation_queue, QName})),
+    _ = pg:leave(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_queue, QName}), self()),
     ok;
 
 terminate(Reason, #state{dconn           = DConn,
@@ -196,7 +193,7 @@ terminate(Reason, #state{dconn           = DConn,
     rabbit_federation_link_util:ensure_connection_closed(DConn),
     rabbit_federation_link_util:ensure_connection_closed(Conn),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
-    pg2:delete(pgname({rabbit_federation_queue, QName})),
+    _ = pg:leave(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_queue, QName}), self()),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

@@ -274,6 +274,7 @@ dynamic_plugin_stop_start(Config) ->
           expect_federation(Ch, UpQ, DownQ2, ?EXPECT_FEDERATION_TIMEOUT),
 
           %% Disable the plugin, the link disappears
+          ct:pal("Stopping rabbitmq_federation"),
           ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, "rabbitmq_federation"),
 
           expect_no_federation(Ch, UpQ, DownQ1),
@@ -281,7 +282,9 @@ dynamic_plugin_stop_start(Config) ->
 
           declare_queue(Ch, q(DownQ1, Args)),
           declare_queue(Ch, q(DownQ2, Args)),
+          ct:pal("Re-starting rabbitmq_federation"),
           ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_federation"),
+          timer:sleep(?INITIAL_WAIT),
 
           %% Declare a queue then re-enable the plugin, the links appear
           wait_for_federation(
