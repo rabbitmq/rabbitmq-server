@@ -96,7 +96,7 @@ ci-base-image-%:
 		--build-arg ERLANG_VERSION=$*
 
 .PHONY: ci-base-images
-ci-base-images: ci-base-image-22.3 ci-base-image-23.1
+ci-base-images: ci-base-image-23.1
 
 PUSHES = $(foreach v,$(ERLANG_VERSIONS),push-base-image-$(v))
 .PHONY: $(PUSHES)
