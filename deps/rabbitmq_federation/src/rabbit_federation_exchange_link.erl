@@ -62,6 +62,9 @@ list_routing_keys(XN) -> call(XN, list_routing_keys).
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
+federation_up() ->
+    is_pid(whereis(rabbit_federation_app)).
+
 init({Upstream, XName}) ->
     %% If we are starting up due to a policy change then it's possible
     %% for the exchange to have been deleted before we got here, in which
@@ -88,10 +91,12 @@ handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast(maybe_go, S0 = {not_started, _Args}) ->
+handle_cast(maybe_go, State = {not_started, _Args}) ->
     case federation_up() of
-        true  -> go(S0);
-        false -> {noreply, S0}
+        true  -> go(State);
+        false ->
+            _ = timer:apply_after(1000, ?MODULE, go, []),
+            {noreply, State}
     end;
 
 handle_cast(go, S0 = {not_started, _Args}) ->
@@ -255,9 +260,6 @@ x(XName) ->
     pg:get_members(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_exchange, XName})).
 
 %%----------------------------------------------------------------------------
-
-federation_up() ->
-    is_pid(whereis(rabbit_federation_app)).
 
 handle_command({add_binding, Binding}, State) ->
     add_binding(Binding, State);
