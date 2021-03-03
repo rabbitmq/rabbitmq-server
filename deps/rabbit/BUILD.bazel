@@ -365,10 +365,9 @@ rabbitmq_integration_suite(
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
         "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:bazel_erlang_lib",
     ],
-    # Local for now -
     # The enabling_* tests chmod files and then expect writes to be blocked.
     # This probably doesn't work because we are root in the remote docker image.
-    local = True,
+    tags = ["exclusive"],
 )
 
 rabbitmq_integration_suite(
