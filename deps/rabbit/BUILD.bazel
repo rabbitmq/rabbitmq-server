@@ -351,7 +351,7 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    size = "medium",
+    size = "large",
     groups = [
         "registry",
         "enabling_on_single_node",
