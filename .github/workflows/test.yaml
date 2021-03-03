@@ -48,7 +48,7 @@ jobs:
 
           build --build_metadata=ROLE=CI
           build --remote_instance_name=buildbuddy-io/buildbuddy/ci
-
+          build --spawn_strategy=remote
           build --jobs=50
         EOF
     #! - name: Setup tmate session
