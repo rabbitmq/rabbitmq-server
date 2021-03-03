@@ -5,6 +5,7 @@ load("//:rabbitmq.bzl", "rabbitmq_integration_suite", "rabbitmq_lib")
 exports_files([
     "scripts/rabbitmq-defaults",
     "scripts/rabbitmq-env",
+    "scripts/rabbitmq-plugins",
     "scripts/rabbitmq-server",
     "scripts/rabbitmqctl",
 ])
@@ -208,6 +209,7 @@ ct_suite(
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
         "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
+        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmq-plugins",
     },
     tools = [
         "//:rabbitmq-for-tests-run",
@@ -348,19 +350,26 @@ rabbitmq_integration_suite(
     deps = DEPS,
 )
 
-# The feature_flags_SUITE compiles a plugin on the fly for tests, so we'll skip this one for now
-# rabbitmq_integration_suite(
-#     size = "medium",
-#     groups = [
-#         "registry",
-#         "enabling_on_single_node",
-#         "enabling_in_cluster",
-#         "clustering",
-#         "activating_plugin",
-#     ],
-#     suite_name = "feature_flags_SUITE",
-#     deps = DEPS,
-# )
+rabbitmq_integration_suite(
+    size = "medium",
+    groups = [
+        "registry",
+        "enabling_on_single_node",
+        "enabling_in_cluster",
+        "clustering",
+        "activating_plugin",
+    ],
+    suite_name = "feature_flags_SUITE",
+    deps = DEPS,
+    runtime_deps = [
+        "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
+        "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:bazel_erlang_lib",
+    ],
+    # Local for now -
+    # The enabling_* tests chmod files and then expect writes to be blocked.
+    # This probably doesn't work because we are root in the remote docker image.
+    local = True,
+)
 
 rabbitmq_integration_suite(
     size = "medium",
@@ -456,14 +465,11 @@ rabbitmq_integration_suite(
     deps = DEPS,
 )
 
-# The per_user_connection_channel_limit_partitions_SUITE compiles a plugin on the fly for tests, so we'll skip this one for now
-# rabbitmq_integration_suite(
-#     size = "large",
-#     suite_name = "per_user_connection_channel_limit_partitions_SUITE",
-#     deps = DEPS + [
-#         "@inet_tcp_proxy//:bazel_erlang_lib",
-#     ],
-# )
+rabbitmq_integration_suite(
+    size = "large",
+    suite_name = "per_user_connection_channel_limit_partitions_SUITE",
+    deps = DEPS,
+)
 
 rabbitmq_integration_suite(
     size = "medium",

@@ -23,8 +23,8 @@ def _copy_script(ctx, script):
     return dest
 
 def _link_escript(ctx, escript):
-    e = escript.files_to_run.executable
-    s = ctx.actions.declare_file(path_join(ctx.label.name, "escript", e.basename))
+    e = ctx.attr._rabbitmqctl_escript.files_to_run.executable
+    s = ctx.actions.declare_file(path_join(ctx.label.name, "escript", escript))
     ctx.actions.symlink(
         output = s,
         target_file = e,
@@ -85,7 +85,7 @@ def _impl(ctx):
 
     scripts = [_copy_script(ctx, script) for script in ctx.files._scripts]
 
-    escripts = [_link_escript(ctx, escript) for escript in ctx.attr.escripts]
+    escripts = [_link_escript(ctx, escript) for escript in ["rabbitmq-plugins", "rabbitmqctl"]]
 
     plugins = _flatten([_plugins_dir_links(ctx, plugin) for plugin in ctx.attr.plugins])
 
@@ -106,15 +106,16 @@ rabbitmq_home = rule(
     attrs = {
         "_scripts": attr.label_list(
             default = [
-                "//deps/rabbit:scripts/rabbitmq-env",
                 "//deps/rabbit:scripts/rabbitmq-defaults",
+                "//deps/rabbit:scripts/rabbitmq-env",
+                "//deps/rabbit:scripts/rabbitmq-plugins",
                 "//deps/rabbit:scripts/rabbitmq-server",
                 "//deps/rabbit:scripts/rabbitmqctl",
             ],
             allow_files = True,
         ),
+        "_rabbitmqctl_escript": attr.label(default = "//deps/rabbitmq_cli:rabbitmqctl"),
         "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
-        "escripts": attr.label_list(),
         # Maybe we should not have to declare the deps here that rabbit/rabbit_common declare
         "plugins": attr.label_list(),
     },

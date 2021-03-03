@@ -24,28 +24,13 @@ RABBITMQ_ERLC_OPTS = [
     "+{lager_extra_sinks,[" + ",".join(_LAGER_EXTRA_SINKS) + "]}",
 ]
 
-APP_VERSION = "3.9.0"
-
-REQUIRED_PLUGINS = [
-    "@cuttlefish//:bazel_erlang_lib",
-    "@ranch//:bazel_erlang_lib",
-    "@lager//:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "@ra//:bazel_erlang_lib",
-    "@sysmon-handler//:bazel_erlang_lib",
-    "@stdout_formatter//:bazel_erlang_lib",
-    "@recon//:bazel_erlang_lib",
-    "@observer_cli//:bazel_erlang_lib",
-    "@osiris//:bazel_erlang_lib",
-    "//deps/amqp10_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
-    "@goldrush//:bazel_erlang_lib",
-    "@jsx//:bazel_erlang_lib",
-    "@credentials-obfuscation//:bazel_erlang_lib",
-    "@aten//:bazel_erlang_lib",
-    "@gen-batch-server//:bazel_erlang_lib",
+RABBITMQ_TEST_ERLC_OPTS = [
+    "-DTEST",
+    "+debug_info",
+    "+nowarn_export_all",
 ]
+
+APP_VERSION = "3.9.0"
 
 def rabbitmq_lib(
         app_name = "",
@@ -75,11 +60,7 @@ def rabbitmq_lib(
         runtime_deps = runtime_deps,
     )
 
-    test_erlc_opts = RABBITMQ_ERLC_OPTS + extra_erlc_opts + [
-        "-DTEST",
-        "+debug_info",
-        "+nowarn_export_all",
-    ]
+    test_erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS + extra_erlc_opts
 
     all_test_beam = []
 
@@ -115,7 +96,9 @@ def rabbitmq_lib(
         hdrs = native.glob(["include/*.hrl"]),
         app = ":app_file",
         beam = all_test_beam,
+        priv = priv,
         testonly = True,
+        visibility = ["//:__subpackages__"],
     )
 
 def rabbitmq_integration_suite(
@@ -126,9 +109,7 @@ def rabbitmq_integration_suite(
         deps = [],
         **kwargs):
     ct_suite(
-        erlc_opts = [
-            "+nowarn_export_all",
-        ],
+        erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
         data = [
             "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
             "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
@@ -137,6 +118,7 @@ def rabbitmq_integration_suite(
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
             "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
+            "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmq-plugins",
         }.items() + test_env.items()),
         tools = [
             "//:rabbitmq-for-tests-run",

@@ -1,6 +1,6 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 load("@bazel-erlang//:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "RABBITMQ_TEST_ERLC_OPTS")
 
 py_binary(
     name = "codegen",
@@ -124,12 +124,6 @@ bazel_erlang_lib(
     visibility = ["//visibility:public"],
 )
 
-RABBITMQ_TEST_ERLC_OPTS = [
-    "-DTEST",
-    "+debug_info",
-    "+nowarn_export_all",
-]
-
 erlc(
     name = "first_test_beam_files",
     testonly = True,
@@ -168,6 +162,7 @@ bazel_erlang_lib(
         ":first_test_beam_files",
         ":test_beam_files",
     ],
+    visibility = ["//:__subpackages__"],
 )
 
 erlc(

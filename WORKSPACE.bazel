@@ -87,12 +87,11 @@ github_bazel_erlang_lib(
     sha256 = "9e82214dea7909f9068ae15ee1fbb13ccc622a4bb2b7cdb2c87b5dd8f9be3a6d",
 )
 
-github_bazel_erlang_lib(
+http_archive(
     name = "inet_tcp_proxy",
-    org = "rabbitmq",
-    version = "master",
-    tag = "master",
-    sha256 = "680362b97b65bff446eb029e3b42461b75249c9876bb7c9ac802b0ff543b9394",
+    urls = ["https://github.com/rabbitmq/inet_tcp_proxy/archive/master.zip"],
+    strip_prefix = "inet_tcp_proxy-master",
+    build_file = "@//:BUILD.inet_tcp_proxy",
 )
 
 github_bazel_erlang_lib(
