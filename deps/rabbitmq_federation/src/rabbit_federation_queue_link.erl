@@ -43,7 +43,7 @@ join(Name) ->
     ok = pg:join(?FEDERATION_PG_SCOPE, pgname(Name), self()).
 
 all() ->
-    pg:get_members(pgname(rabbit_federation_queues)).
+    pg:get_members(?FEDERATION_PG_SCOPE, pgname(rabbit_federation_queues)).
 
 q(QName) ->
     case pg:get_members(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_queue, QName})) of
