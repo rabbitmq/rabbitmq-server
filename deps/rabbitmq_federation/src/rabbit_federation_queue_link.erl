@@ -54,8 +54,7 @@ q(QName) ->
     end.
 
 federation_up() ->
-    proplists:is_defined(rabbitmq_federation,
-                         application:which_applications(infinity)).
+    is_pid(whereis(rabbit_federation_app)).
 
 %%----------------------------------------------------------------------------
 

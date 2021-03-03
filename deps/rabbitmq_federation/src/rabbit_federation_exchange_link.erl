@@ -256,7 +256,8 @@ x(XName) ->
 
 %%----------------------------------------------------------------------------
 
-federation_up() -> is_pid(whereis(rabbit_federation_app)).
+federation_up() ->
+    is_pid(whereis(rabbit_federation_app)).
 
 handle_command({add_binding, Binding}, State) ->
     add_binding(Binding, State);
