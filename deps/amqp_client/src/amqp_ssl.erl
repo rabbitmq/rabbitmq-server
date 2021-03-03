@@ -58,11 +58,6 @@ maybe_add_verify(Options) ->
                     "Please see https://rabbitmq.com/ssl.html for more information.~n", [self()]),
             Options
     end.
-    % TODO FUTURE 3.8.x
-    % verify_peer will become the default in RabbitMQ 3.8.0
-    %     false ->
-    %         [{verify, verify_peer} | Options]
-    % end.
 
 add_verify_fun_to_opts(Host, Options) ->
     add_verify_fun_to_opts(false, Host, Options).
@@ -72,15 +67,10 @@ add_verify_fun_to_opts({verify, verify_none}, _Host, Options) ->
     % certificate chain verification so there's not much sense
     % in adding verify_fun
     Options;
-add_verify_fun_to_opts(_, Host, Options) ->
+add_verify_fun_to_opts(_, _Host, Options) ->
     % NB: this is the case where the user either did not
     % set the verify option or set it to verify_peer
-    case erlang:system_info(otp_release) of
-        "19" ->
-            F = fun ?MODULE:verify_fun/3,
-            [{verify_fun, {F, Host}} | Options];
-        _ -> Options
-    end.
+    Options.
 
 -type hostname() :: nonempty_string() | binary().
 
