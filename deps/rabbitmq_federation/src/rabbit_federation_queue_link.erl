@@ -53,10 +53,10 @@ q(QName) ->
             Members
     end.
 
+%%----------------------------------------------------------------------------
+
 federation_up() ->
     is_pid(whereis(rabbit_federation_app)).
-
-%%----------------------------------------------------------------------------
 
 init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
     QName = amqqueue:get_name(Queue),
@@ -85,7 +85,9 @@ handle_call(Msg, _From, State) ->
 handle_cast(maybe_go, State) ->
     case federation_up() of
         true  -> go(State);
-        false -> {noreply, State}
+        false ->
+            _ = timer:apply_after(1000, ?MODULE, go, []),
+            {noreply, State}
     end;
 
 handle_cast(go, State = #not_started{}) ->
