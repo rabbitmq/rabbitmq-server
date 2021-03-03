@@ -1051,7 +1051,8 @@ single_active_consumer_state_enter_eol_include_waiting_consumers_test(_) ->
     Effects = rabbit_fifo:state_enter(eol, State1),
     %% 1 effect for each consumer process (channel process),
     %% 1 effect for file handle reservation
-    ?assertEqual(4, length(Effects)).
+    %% 1 effect for eol to handle rabbit_fifo_usage entries
+    ?assertEqual(5, length(Effects)).
 
 query_consumers_test(_) ->
     State0 = init(#{name => ?FUNCTION_NAME,
