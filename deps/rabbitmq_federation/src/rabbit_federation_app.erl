@@ -10,7 +10,7 @@
 -include("rabbit_federation.hrl").
 
 -behaviour(application).
--export([start/2, stop/1, start_federation_links/0]).
+-export([start/2, stop/1]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
 %% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
@@ -29,16 +29,11 @@
 -export([init/1]).
 
 start(_Type, _StartArgs) ->
-    _ = timer:apply_after(500, ?MODULE, start_federation_links, []),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
     rabbit_federation_pg:stop_scope(),
     ok.
-
-start_federation_links() ->
-    rabbit_federation_exchange_link:go(),
-    rabbit_federation_queue_link:go().
 
 %%----------------------------------------------------------------------------
 
