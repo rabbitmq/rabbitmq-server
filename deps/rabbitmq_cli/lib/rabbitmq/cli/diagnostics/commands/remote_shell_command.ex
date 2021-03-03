@@ -6,13 +6,8 @@
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.RemoteShellCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  use RabbitMQ.CLI.DefaultOutput
 
-  def merge_defaults(args, opts) do
-    {args, opts}
-  end
-
-
+  use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
 
   def run([], %{node: node_name}) do
@@ -26,13 +21,15 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RemoteShellCommand do
     end
   end
 
+  use RabbitMQ.CLI.DefaultOutput
+
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Starts a shell on the target node"
+  def description(), do: "Starts an interactive Erlang shell on the target node"
 
   def usage, do: "remote_shell"
 
   def banner(_, %{node: node_name}) do
-    "Starting a shell on node #{node_name}... Press 'Ctrl+G' then 'q' to exit."
+    "Starting an interactive Erlang shell on node #{node_name}... Press 'Ctrl+G' then 'q' to exit."
   end
 end
