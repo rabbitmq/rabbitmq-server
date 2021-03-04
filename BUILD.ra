@@ -1,0 +1,59 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "bazel_erlang_lib", "erlc", "erlang_lib")
+
+DEPS = [
+    "@gen-batch-server//:bazel_erlang_lib",
+]
+
+NAME = "ra"
+VERSION = "master"
+
+FIRST_SRCS = [
+    "src/ra_machine.erl",
+    "src/ra_snapshot.erl",
+]
+
+erlang_lib(
+    app_name = NAME,
+    app_version = VERSION,
+    first_srcs = FIRST_SRCS,
+    deps = DEPS,
+)
+
+TEST_ERLC_OPTS = [
+    "+debug_info",
+]
+
+erlc(
+    name = "first_test_beam_files",
+    hdrs = glob(["include/*.hrl", "src/*.hrl"]),
+    srcs = FIRST_SRCS,
+    erlc_opts = TEST_ERLC_OPTS,
+    dest = "src",
+    deps = DEPS,
+    testonly = True,
+)
+
+erlc(
+    name = "test_beam_files",
+    hdrs = glob(["include/*.hrl", "src/*.hrl"]),
+    srcs = glob(["src/*.erl"], exclude = FIRST_SRCS),
+    beam = [":first_test_beam_files"],
+    erlc_opts = TEST_ERLC_OPTS,
+    dest = "src",
+    deps = DEPS,
+    testonly = True,
+)
+
+bazel_erlang_lib(
+    name = "test_bazel_erlang_lib",
+    app_name = NAME,
+    app_version = VERSION,
+    hdrs = glob(["include/*.hrl"]),
+    app = ":app_file",
+    beam = [
+        ":first_test_beam_files",
+        ":test_beam_files",
+    ],
+    testonly = True,
+    visibility = ["//visibility:public"],
+)
