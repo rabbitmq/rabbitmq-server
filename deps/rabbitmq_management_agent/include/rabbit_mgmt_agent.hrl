@@ -14,5 +14,5 @@
 %% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--define(MANAGEMENT_PG_SCOPE, rabbit_mgmt).
+-define(MANAGEMENT_PG_SCOPE, rabbitmq_management).
 -define(MANAGEMENT_PG_GROUP, management_db).

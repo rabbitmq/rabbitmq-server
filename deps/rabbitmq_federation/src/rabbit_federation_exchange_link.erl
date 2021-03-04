@@ -7,9 +7,6 @@
 
 -module(rabbit_federation_exchange_link).
 
-%% pg2 is deprecated in OTP 23.
--compile(nowarn_deprecated_function).
-
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
@@ -51,7 +48,9 @@
 %% start during exchange recovery, when rabbit is not fully started
 %% and the Erlang client is not running. This then gets invoked when
 %% the federation app is started.
-go() -> cast(go).
+go() ->
+    rabbit_federation_pg:start_scope(),
+    cast(go).
 
 add_binding(S, XN, B)      -> cast(XN, {enqueue, S, {add_binding, B}}).
 remove_bindings(S, XN, Bs) -> cast(XN, {enqueue, S, {remove_bindings, Bs}}).
@@ -62,6 +61,9 @@ list_routing_keys(XN) -> call(XN, list_routing_keys).
 
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
+
+federation_up() ->
+    is_pid(whereis(rabbit_federation_app)).
 
 init({Upstream, XName}) ->
     %% If we are starting up due to a policy change then it's possible
@@ -89,10 +91,12 @@ handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast(maybe_go, S0 = {not_started, _Args}) ->
+handle_cast(maybe_go, State = {not_started, _Args}) ->
     case federation_up() of
-        true  -> go(S0);
-        false -> {noreply, S0}
+        true  -> go(State);
+        false ->
+            _ = timer:apply_after(1000, ?MODULE, go, []),
+            {noreply, State}
     end;
 
 handle_cast(go, S0 = {not_started, _Args}) ->
@@ -247,20 +251,15 @@ cast(Msg)        -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
 cast(XName, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- x(XName)].
 
 join(Name) ->
-    pg2:create(pgname(Name)),
-    ok = pg2:join(pgname(Name), self()).
+    ok = pg:join(?FEDERATION_PG_SCOPE, pgname(Name), self()).
 
 all() ->
-    pg2:create(pgname(rabbit_federation_exchanges)),
-    pg2:get_members(pgname(rabbit_federation_exchanges)).
+    pg:get_members(?FEDERATION_PG_SCOPE, pgname(rabbit_federation_exchanges)).
 
 x(XName) ->
-    pg2:create(pgname({rabbit_federation_exchange, XName})),
-    pg2:get_members(pgname({rabbit_federation_exchange, XName})).
+    pg:get_members(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_exchange, XName})).
 
 %%----------------------------------------------------------------------------
-
-federation_up() -> is_pid(whereis(rabbit_federation_app)).
 
 handle_command({add_binding, Binding}, State) ->
     add_binding(Binding, State);
