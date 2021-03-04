@@ -92,12 +92,7 @@ handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
 handle_cast(maybe_go, State = {not_started, _Args}) ->
-    case federation_up() of
-        true  -> go(State);
-        false ->
-            _ = timer:apply_after(1000, ?MODULE, go, []),
-            {noreply, State}
-    end;
+    go(State);
 
 handle_cast(go, S0 = {not_started, _Args}) ->
     go(S0);
