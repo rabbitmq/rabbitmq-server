@@ -74,7 +74,8 @@ log(Category, Level, Fmt, Args) when is_list(Args) ->
         default -> ?LAGER_SINK;
         _       -> make_internal_sink_name(Category)
     end,
-    lager:log(Sink, Level, self(), Fmt, Args).
+    lager:log(Sink, Level, self(), Fmt, Args),
+    ok.
 
 %% logger(3) handler.
 log(#{level := Level,
@@ -100,7 +101,8 @@ log(#{level := Level,
             lager:log(?LAGER_SINK, Level, Pid, "~ts", [String]);
         {Format, Args} when is_list(Format) ->
             lager:log(?LAGER_SINK, Level, Pid, Format, Args)
-    end.
+    end,
+    ok.
 
 make_internal_sink_name(channel)    -> rabbit_log_channel_lager_event;
 make_internal_sink_name(connection) -> rabbit_log_connection_lager_event;
