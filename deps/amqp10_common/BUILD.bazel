@@ -11,17 +11,27 @@ py_binary(
     imports = ["../../deps/rabbitmq_codegen"],
 )
 
+AMQP_SPEC_1_0 = [
+    "//deps/rabbitmq_codegen:amqp-1.0/messaging.xml",
+    "//deps/rabbitmq_codegen:amqp-1.0/security.xml",
+    "//deps/rabbitmq_codegen:amqp-1.0/transport.xml",
+    "//deps/rabbitmq_codegen:amqp-1.0/transactions.xml",
+]
+
 genrule(
     name = "generated_headers",
-    srcs = [
-        "//deps/rabbitmq_codegen:amqp-1.0/messaging.xml",
-        "//deps/rabbitmq_codegen:amqp-1.0/security.xml",
-        "//deps/rabbitmq_codegen:amqp-1.0/transport.xml",
-        "//deps/rabbitmq_codegen:amqp-1.0/transactions.xml",
-    ],
+    srcs = AMQP_SPEC_1_0,
     outs = ["include/amqp10_framing.hrl"],
     tools = [":codegen"],
     cmd = "$(location :codegen) hrl $(SRCS) > $@",
+)
+
+genrule(
+    name = "generated_sources",
+    srcs = AMQP_SPEC_1_0,
+    outs = ["src/amqp10_framing0.erl"],
+    tools = [":codegen"],
+    cmd = "$(location :codegen) erl $(SRCS) > $@",
 )
 
 app_file(
@@ -35,7 +45,7 @@ app_file(
 erlc(
     name = "beam_files",
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
-    srcs = glob(["src/*.erl"]),
+    srcs = ["src/amqp10_framing0.erl"] + glob(["src/*.erl"]),
     dest = "ebin",
 )
 
