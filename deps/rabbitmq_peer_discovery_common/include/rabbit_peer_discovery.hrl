@@ -5,6 +5,10 @@
 %% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
+-include_lib("rabbit_common/include/logging.hrl").
+
+-define(RMQLOG_DOMAIN_PEER_DIS, ?DEFINE_RMQLOG_DOMAIN(peer_discovery)).
+
 % rabbitmq/rabbitmq-peer-discovery-aws#25
 % Note: this timeout must not be greater than the default
 % gen_server:call timeout of 5000ms. This `timeout`,
