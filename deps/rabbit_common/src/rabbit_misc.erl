@@ -328,7 +328,7 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
 %%
 %% Fixes rabbitmq/rabbitmq-common#341
 %%
-assert_field_equivalence(_Orig, _Orig, _Name, _Key) ->
+assert_field_equivalence(Current, Current, _Name, _Key) ->
     ok;
 assert_field_equivalence(undefined, {longstr, <<"classic">>}, _Name, <<"x-queue-type">>) ->
     ok;
