@@ -117,12 +117,12 @@ dep_accept = hex 0.3.5
 dep_cowboy = hex 2.8.0
 dep_cowlib = hex 2.9.1
 dep_jsx = hex 2.11.0
-dep_lager = hex 3.8.2
+dep_lager = hex 3.9.1
 dep_prometheus = git https://github.com/deadtrickster/prometheus.erl.git master
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
 dep_recon = hex 2.5.1
-dep_observer_cli = hex 1.5.4
+dep_observer_cli = hex 1.6.1
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
 
