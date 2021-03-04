@@ -564,6 +564,26 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    size = "large",
+    suite_name = "queue_parallel_SUITE",
+    groups = [
+        "classic_queue",
+        "mirrored_queue",
+        "quorum_queue",
+        "quorum_queue_in_memory_limit",
+        "quorum_queue_in_memory_bytes",
+        "stream_queue",
+    ],
+    additional_beam = [
+        ":quorum_queue_utils",
+    ],
+    deps = DEPS,
+    runtime_deps = [
+        "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_integration_suite(
     size = "medium",
     suite_name = "queue_type_SUITE",
     deps = DEPS,
@@ -575,10 +595,24 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
+    deps = DEPS,
     runtime_deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
     ],
-    deps = DEPS,
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = [
+        "+nowarn_export_all",
+    ],
+    suite_name = "rabbit_confirms_SUITE",
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+    },
+    deps = [
+        # "//deps/rabbit_common:bazel_erlang_lib",
+    ],
 )
 
 rabbitmq_integration_suite(
