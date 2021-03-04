@@ -611,7 +611,7 @@ ct_suite(
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
     deps = [
-        # "//deps/rabbit_common:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
