@@ -62,9 +62,6 @@ list_routing_keys(XN) -> call(XN, list_routing_keys).
 start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
-federation_up() ->
-    is_pid(whereis(rabbit_federation_app)).
-
 init({Upstream, XName}) ->
     %% If we are starting up due to a policy change then it's possible
     %% for the exchange to have been deleted before we got here, in which
