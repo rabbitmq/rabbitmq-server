@@ -205,6 +205,7 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     suite_name = "backing_queue_SUITE",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
@@ -715,6 +716,39 @@ ct_suite(
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
         "@ra//:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    size = "medium",
+    suite_name = "rabbit_msg_record_SUITE",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+    },
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "//deps/amqp10_common:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_integration_suite(
+    size = "large",
+    suite_name = "rabbit_stream_queue_SUITE",
+    groups = [
+        "single_node",
+        "cluster_size_2",
+        "cluster_size_3",
+        "unclustered_size_3_1",
+        "unclustered_size_3_2",
+        "unclustered_size_3_3",
+        "cluster_size_3_1",
+    ],
+    additional_beam = [
+        ":quorum_queue_utils",
+    ],
+    deps = DEPS + [
+        "@proper//:bazel_erlang_lib",
     ],
 )
 
