@@ -55,9 +55,6 @@ q(QName) ->
 
 %%----------------------------------------------------------------------------
 
-federation_up() ->
-    is_pid(whereis(rabbit_federation_app)).
-
 init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
     QName = amqqueue:get_name(Queue),
     case rabbit_amqqueue:lookup(QName) of
