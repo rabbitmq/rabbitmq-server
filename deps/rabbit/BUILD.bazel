@@ -351,25 +351,25 @@ rabbitmq_integration_suite(
     deps = DEPS,
 )
 
-rabbitmq_integration_suite(
-    size = "large",
-    groups = [
-        "registry",
-        "enabling_on_single_node",
-        "enabling_in_cluster",
-        "clustering",
-        "activating_plugin",
-    ],
-    suite_name = "feature_flags_SUITE",
-    # The enabling_* tests chmod files and then expect writes to be blocked.
-    # This probably doesn't work because we are root in the remote docker image.
-    tags = ["exclusive"],
-    runtime_deps = [
-        "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
-        "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:bazel_erlang_lib",
-    ],
-    deps = DEPS,
-)
+# rabbitmq_integration_suite(
+#     size = "large",
+#     groups = [
+#         "registry",
+#         "enabling_on_single_node",
+#         "enabling_in_cluster",
+#         "clustering",
+#         "activating_plugin",
+#     ],
+#     suite_name = "feature_flags_SUITE",
+#     # The enabling_* tests chmod files and then expect writes to be blocked.
+#     # This probably doesn't work because we are root in the remote docker image.
+#     tags = ["exclusive"],
+#     runtime_deps = [
+#         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
+#         "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:bazel_erlang_lib",
+#     ],
+#     deps = DEPS,
+# )
 
 rabbitmq_integration_suite(
     size = "medium",
@@ -740,7 +740,7 @@ rabbitmq_integration_suite(
     groups = [
         "single_node",
         "cluster_size_2",
-        "cluster_size_3",
+        # "cluster_size_3",
         "unclustered_size_3_1",
         "unclustered_size_3_2",
         "unclustered_size_3_3",
