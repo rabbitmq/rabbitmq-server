@@ -3,10 +3,10 @@ load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
 RabbitmqHomeInfo = provider(
     doc = "An assembled RABBITMQ_HOME dir",
     fields = {
-        'sbin': 'Files making up the sbin dir',
-        'escript': 'Files making up the escript dir',
-        'plugins': 'Files making up the plugins dir',
-        'erlang_version': 'Version of the Erlang compiler used',
+        "sbin": "Files making up the sbin dir",
+        "escript": "Files making up the escript dir",
+        "plugins": "Files making up the plugins dir",
+        "erlang_version": "Version of the Erlang compiler used",
     },
 )
 
@@ -44,7 +44,7 @@ def _plugins_dir_links(ctx, plugin):
         o = ctx.actions.declare_file(path_join(plugin_path, "include", f.basename))
         ctx.actions.symlink(
             output = o,
-            target_file = f
+            target_file = f,
         )
         links.append(o)
 
@@ -52,7 +52,7 @@ def _plugins_dir_links(ctx, plugin):
         o = ctx.actions.declare_file(path_join(plugin_path, "ebin", f.basename))
         ctx.actions.symlink(
             output = o,
-            target_file = f
+            target_file = f,
         )
         links.append(o)
 
@@ -61,7 +61,7 @@ def _plugins_dir_links(ctx, plugin):
         o = ctx.actions.declare_file(path_join(plugin_path, p))
         ctx.actions.symlink(
             output = o,
-            target_file = f
+            target_file = f,
         )
         links.append(o)
 

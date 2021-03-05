@@ -12,28 +12,36 @@ elixir(
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
     name = "rabbitmqctl",
+    srcs = glob([
+        "mix.exs",
+        "config/config.exs",
+        "lib/**/*.ex",
+    ]),
     version = APP_VERSION,
-    srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex"]),
+    visibility = ["//visibility:public"],
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
         "@goldrush//:bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
     ],
-    visibility = ["//visibility:public"],
 )
-
 
 rabbitmqctl_test(
     name = "rabbitmqctl_tests",
-    srcs = glob(["mix.exs", "config/config.exs", "lib/**/*.ex", "test/**/*.exs"]),
+    size = "large",
+    srcs = glob([
+        "mix.exs",
+        "config/config.exs",
+        "lib/**/*.ex",
+        "test/**/*.exs",
+    ]),
     data = glob(["test/fixtures/**/*"]),
+    rabbitmq_run = "//:rabbitmq-for-cli-tests-run",
     deps = [
+        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
         "//deps/rabbit_common:bazel_erlang_lib",
         "@goldrush//:bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
-        "//deps/amqp_client:bazel_erlang_lib",
-        "//deps/rabbit:bazel_erlang_lib",
     ],
-    rabbitmq_run = "//:rabbitmq-for-cli-tests-run",
-    size = "large",
 )

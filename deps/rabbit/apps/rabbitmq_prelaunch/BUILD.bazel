@@ -6,8 +6,8 @@ DEPS = [
 ]
 
 rabbitmq_lib(
-    app_name = "rabbitmq_prelaunch",
     app_description = "RabbitMQ prelaunch setup",
     app_module = "rabbit_prelaunch_app",
+    app_name = "rabbitmq_prelaunch",
     deps = DEPS,
 )

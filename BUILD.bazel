@@ -68,6 +68,7 @@ rabbitmq_home(
 
 rabbitmq_home(
     name = "broker-for-tests-home",
+    testonly = True,
     plugins = [
         "@cuttlefish//:bazel_erlang_lib",
         "@ranch//:bazel_erlang_lib",
@@ -92,7 +93,6 @@ rabbitmq_home(
         "@inet_tcp_proxy//:bazel_erlang_lib",
         "//deps/amqp_client:bazel_erlang_lib",
     ],
-    testonly = True,
 )
 
 rabbitmq_home(

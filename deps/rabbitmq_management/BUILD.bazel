@@ -1,5 +1,5 @@
 load("@bazel-erlang//:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "rabbitmq_lib")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "rabbitmq_lib")
 
 APP_ENV = """[
 	    {http_log_dir,      none},
@@ -14,10 +14,10 @@ APP_ENV = """[
 	  ]"""
 
 rabbitmq_lib(
-    app_name = "rabbitmq_management",
     app_description = "RabbitMQ Management Console",
-    app_module = "rabbit_mgmt_app",
     app_env = APP_ENV,
+    app_module = "rabbit_mgmt_app",
+    app_name = "rabbitmq_management",
     extra_apps = [
         "mnesia",
         "ranch",
@@ -27,13 +27,13 @@ rabbitmq_lib(
     ],
     priv = glob(["priv/**/*"]),
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "//deps/rabbit:bazel_erlang_lib",
         "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+        "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
         "@cowboy//:bazel_erlang_lib",
         "@cowlib//:bazel_erlang_lib",
-        "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
-        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib", # again this should probably come via rabbit_common
+        "@lager//:bazel_erlang_lib",  # again this should probably come via rabbit_common
     ],
 )

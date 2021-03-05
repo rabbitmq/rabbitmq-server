@@ -11,10 +11,10 @@ APP_ENV = """[
 	  ]"""
 
 rabbitmq_lib(
-    app_name = "rabbitmq_management_agent",
     app_description = "RabbitMQ Management Agent",
-    app_module = "rabbit_mgmt_agent_app",
     app_env = APP_ENV,
+    app_module = "rabbit_mgmt_agent_app",
+    app_name = "rabbitmq_management_agent",
     extra_apps = [
         "xmerl",
         "mnesia",
@@ -25,8 +25,8 @@ rabbitmq_lib(
     ],
     priv = glob(["priv/**/*"]),
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
         "//deps/rabbit:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib", # again this should probably come via rabbit_common
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",  # again this should probably come via rabbit_common
     ],
 )

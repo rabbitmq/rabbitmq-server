@@ -1,6 +1,6 @@
 load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
 load("@bazel-erlang//:elixir_home.bzl", "ElixirHomeProvider")
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "BEGINS_WITH_FUN", "QUERY_ERL_VERSION", "path_join")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "BEGINS_WITH_FUN", "ErlangLibInfo", "QUERY_ERL_VERSION", "path_join")
 load("@bazel-erlang//:ct.bzl", "code_paths")
 load(":rabbitmqctl.bzl", "MIX_DEPS_DIR")
 
@@ -21,31 +21,31 @@ def _impl(ctx):
 
         dest_dir = path_join("${TEST_UNDECLARED_OUTPUTS_DIR}", MIX_DEPS_DIR, lib_info.lib_name)
         copy_compiled_deps_commands.append(
-            "mkdir {}".format(dest_dir)
+            "mkdir {}".format(dest_dir),
         )
         copy_compiled_deps_commands.append(
-            "mkdir {}".format(path_join(dest_dir, "include"))
+            "mkdir {}".format(path_join(dest_dir, "include")),
         )
         copy_compiled_deps_commands.append(
-            "mkdir {}".format(path_join(dest_dir, "ebin"))
+            "mkdir {}".format(path_join(dest_dir, "ebin")),
         )
         for hdr in lib_info.include:
             copy_compiled_deps_commands.append(
                 "cp ${{PWD}}/{source} {target}".format(
                     source = hdr.short_path,
-                    target = path_join(dest_dir, "include", hdr.basename)
-                )
+                    target = path_join(dest_dir, "include", hdr.basename),
+                ),
             )
         for beam in lib_info.beam:
             copy_compiled_deps_commands.append(
                 "cp ${{PWD}}/{source} {target}".format(
                     source = beam.short_path,
-                    target = path_join(dest_dir, "ebin", beam.basename)
-                )
+                    target = path_join(dest_dir, "ebin", beam.basename),
+                ),
             )
 
     erl_libs = ":".join(
-        [path_join("${TEST_SRCDIR}/${TEST_WORKSPACE}", d) for dep in ctx.attr.deps for d in _lib_dirs(dep)]
+        [path_join("${TEST_SRCDIR}/${TEST_WORKSPACE}", d) for dep in ctx.attr.deps for d in _lib_dirs(dep)],
     )
 
     script = """
@@ -107,16 +107,16 @@ def _impl(ctx):
         # run the actual tests
         mix test --trace --max-failures 1
     """.format(
-        begins_with_fun=BEGINS_WITH_FUN,
-        query_erlang_version=QUERY_ERL_VERSION,
-        erlang_version=erlang_version,
-        erlang_home=erlang_home,
-        elixir_home=elixir_home,
-        package_dir=ctx.label.package,
-        copy_compiled_deps_command=" && ".join(copy_compiled_deps_commands),
-        mix_deps_dir=MIX_DEPS_DIR,
-        erl_libs=erl_libs,
-        rabbitmq_run_cmd=ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
+        begins_with_fun = BEGINS_WITH_FUN,
+        query_erlang_version = QUERY_ERL_VERSION,
+        erlang_version = erlang_version,
+        erlang_home = erlang_home,
+        elixir_home = elixir_home,
+        package_dir = ctx.label.package,
+        copy_compiled_deps_command = " && ".join(copy_compiled_deps_commands),
+        mix_deps_dir = MIX_DEPS_DIR,
+        erl_libs = erl_libs,
+        rabbitmq_run_cmd = ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
     )
 
     ctx.actions.write(

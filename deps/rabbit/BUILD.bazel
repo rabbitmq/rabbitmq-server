@@ -1,6 +1,6 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
-load("//:rabbitmq.bzl", "rabbitmq_integration_suite", "rabbitmq_lib", "RABBITMQ_TEST_ERLC_OPTS")
+load("//:rabbitmq.bzl", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_integration_suite", "rabbitmq_lib")
 
 exports_files([
     "scripts/rabbitmq-defaults",
@@ -204,8 +204,8 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    suite_name = "backing_queue_SUITE",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "backing_queue_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
@@ -361,14 +361,14 @@ rabbitmq_integration_suite(
         "activating_plugin",
     ],
     suite_name = "feature_flags_SUITE",
-    deps = DEPS,
+    # The enabling_* tests chmod files and then expect writes to be blocked.
+    # This probably doesn't work because we are root in the remote docker image.
+    tags = ["exclusive"],
     runtime_deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
         "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:bazel_erlang_lib",
     ],
-    # The enabling_* tests chmod files and then expect writes to be blocked.
-    # This probably doesn't work because we are root in the remote docker image.
-    tags = ["exclusive"],
+    deps = DEPS,
 )
 
 rabbitmq_integration_suite(
@@ -424,10 +424,10 @@ rabbitmq_integration_suite(
 
 ct_suite(
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     additional_srcs = [
         "test/mirrored_supervisor_SUITE_gs.erl",
     ],
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "mirrored_supervisor_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
@@ -541,10 +541,10 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     size = "medium",
-    suite_name = "publisher_confirms_parallel_SUITE",
     additional_beam = [
         ":quorum_queue_utils",
     ],
+    suite_name = "publisher_confirms_parallel_SUITE",
     deps = DEPS,
 )
 
@@ -562,7 +562,9 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     size = "large",
-    suite_name = "queue_parallel_SUITE",
+    additional_beam = [
+        ":quorum_queue_utils",
+    ],
     groups = [
         "classic_queue",
         "mirrored_queue",
@@ -571,13 +573,11 @@ rabbitmq_integration_suite(
         "quorum_queue_in_memory_bytes",
         "stream_queue",
     ],
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-    deps = DEPS,
+    suite_name = "queue_parallel_SUITE",
     runtime_deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
     ],
+    deps = DEPS,
 )
 
 rabbitmq_integration_suite(
@@ -588,19 +588,19 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     size = "large",
-    suite_name = "quorum_queue_SUITE",
+    additional_beam = [
+        ":quorum_queue_utils",
+    ],
     groups = [
         "single_node",
         "unclustered",
         "clustered",
     ],
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-    deps = DEPS,
+    suite_name = "quorum_queue_SUITE",
     runtime_deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
     ],
+    deps = DEPS,
 )
 
 ct_suite(
@@ -628,14 +628,14 @@ ct_suite(
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
     runtime_deps = [
         "@aten//:bazel_erlang_lib",
         "@gen-batch-server//:bazel_erlang_lib",
         "@meck//:bazel_erlang_lib",
         "@ra//:test_bazel_erlang_lib",
+    ],
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
@@ -648,93 +648,95 @@ erlc(
 
 ct_suite(
     size = "medium",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
-        "-I deps/rabbit", # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-    ],
-    suite_name = "rabbit_fifo_prop_SUITE",
-    additional_hdrs = [
-        "src/rabbit_fifo.hrl",
-    ],
     additional_beam = [
         ":test_util",
     ],
+    additional_hdrs = [
+        "src/rabbit_fifo.hrl",
+    ],
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
+        "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
+    ],
+    suite_name = "rabbit_fifo_prop_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
+    runtime_deps = [
+        "@ra//:bazel_erlang_lib",
+    ],
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
     ],
-    runtime_deps = [
-        "@ra//:bazel_erlang_lib",
-    ],
 )
 
 ct_suite(
     size = "medium",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
-        "-I deps/rabbit", # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-    ],
-    suite_name = "rabbit_fifo_SUITE",
-    additional_hdrs = [
-        "src/rabbit_fifo.hrl",
-    ],
     additional_beam = [
         ":test_util",
         ":rabbit_fifo_v0_SUITE_beam_files",
     ],
+    additional_hdrs = [
+        "src/rabbit_fifo.hrl",
+    ],
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
+        "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
+    ],
+    suite_name = "rabbit_fifo_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
         "@ra//:bazel_erlang_lib",
+    ],
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
 ct_suite(
     size = "medium",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
-        "-I deps/rabbit", # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-    ],
-    suite_name = "rabbit_fifo_v0_SUITE",
-    additional_hdrs = [
-        "src/rabbit_fifo_v0.hrl",
-    ],
     additional_beam = [
         ":test_util",
     ],
+    additional_hdrs = [
+        "src/rabbit_fifo_v0.hrl",
+    ],
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
+        "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
+    ],
+    suite_name = "rabbit_fifo_v0_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
         "@ra//:bazel_erlang_lib",
+    ],
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
 ct_suite(
     size = "medium",
-    suite_name = "rabbit_msg_record_SUITE",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "rabbit_msg_record_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
         "//deps/amqp10_common:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
 rabbitmq_integration_suite(
     size = "large",
-    suite_name = "rabbit_stream_queue_SUITE",
+    additional_beam = [
+        ":quorum_queue_utils",
+    ],
     groups = [
         "single_node",
         "cluster_size_2",
@@ -744,9 +746,7 @@ rabbitmq_integration_suite(
         "unclustered_size_3_3",
         "cluster_size_3_1",
     ],
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
+    suite_name = "rabbit_stream_queue_SUITE",
     deps = DEPS + [
         "@proper//:bazel_erlang_lib",
     ],

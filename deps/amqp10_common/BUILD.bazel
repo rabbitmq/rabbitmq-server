@@ -5,10 +5,10 @@ py_binary(
     srcs = [
         "codegen.py",
     ],
+    imports = ["../../deps/rabbitmq_codegen"],
     deps = [
         "//deps/rabbitmq_codegen:amqp_codegen",
     ],
-    imports = ["../../deps/rabbitmq_codegen"],
 )
 
 AMQP_SPEC_1_0 = [
@@ -22,39 +22,39 @@ genrule(
     name = "generated_headers",
     srcs = AMQP_SPEC_1_0,
     outs = ["include/amqp10_framing.hrl"],
-    tools = [":codegen"],
     cmd = "$(location :codegen) hrl $(SRCS) > $@",
+    tools = [":codegen"],
 )
 
 genrule(
     name = "generated_sources",
     srcs = AMQP_SPEC_1_0,
     outs = ["src/amqp10_framing0.erl"],
-    tools = [":codegen"],
     cmd = "$(location :codegen) erl $(SRCS) > $@",
+    tools = [":codegen"],
 )
 
 app_file(
     name = "app_file",
+    app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",
     app_name = "amqp10_common",
     app_version = "3.9.0",
-    app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",
     modules = [":beam_files"],
 )
 
 erlc(
     name = "beam_files",
-    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     srcs = ["src/amqp10_framing0.erl"] + glob(["src/*.erl"]),
+    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     dest = "ebin",
 )
 
 bazel_erlang_lib(
     name = "bazel_erlang_lib",
-    app_name = "amqp10_common",
-    app_version = "3.9.0",
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     app = ":app_file",
+    app_name = "amqp10_common",
+    app_version = "3.9.0",
     beam = [":beam_files"],
     visibility = ["//visibility:public"],
 )

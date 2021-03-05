@@ -6,8 +6,8 @@ DEPS = [
 ]
 
 erlang_lib(
+    app_description = "Plugin to test feature flags",
     app_name = "my_plugin",
     app_version = "1.0.0",
-    app_description = "Plugin to test feature flags",
     deps = DEPS,
 )

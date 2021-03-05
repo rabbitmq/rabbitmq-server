@@ -1,17 +1,17 @@
 load("@bazel-erlang//:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "rabbitmq_lib")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "rabbitmq_lib")
 
 rabbitmq_lib(
-    app_name = "rabbitmq_web_dispatch",
     app_description = "RabbitMQ Web Dispatcher",
     app_module = "rabbit_web_dispatch_app",
+    app_name = "rabbitmq_web_dispatch",
     extra_apps = [
         "inets",
     ],
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
         "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
         "@cowboy//:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib", # again this should probably come via rabbit_common
+        "@lager//:bazel_erlang_lib",  # again this should probably come via rabbit_common
     ],
 )

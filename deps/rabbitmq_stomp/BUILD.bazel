@@ -1,6 +1,6 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 load("@bazel-erlang//:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS")
 
 APP_ENV = """[
 	    {default_user,
@@ -33,29 +33,29 @@ DEPS = [
 
 app_file(
     name = "app_file",
-    app_name = "rabbitmq_stomp",
     app_description = "RabbitMQ STOMP plugin",
-    app_version = APP_VERSION,
-    app_module = "rabbit_stomp",
     app_env = APP_ENV,
+    app_module = "rabbit_stomp",
+    app_name = "rabbitmq_stomp",
+    app_version = APP_VERSION,
     modules = [":beam_files"],
     deps = DEPS,
 )
 
 erlc(
     name = "beam_files",
-    hdrs = glob(["include/*.hrl"]),
     srcs = glob(["src/*.erl"]),
+    hdrs = glob(["include/*.hrl"]),
     dest = "ebin",
     deps = DEPS,
 )
 
 bazel_erlang_lib(
     name = "bazel_erlang_lib",
-    app_name = "rabbitmq_stomp",
-    app_version = APP_VERSION,
     hdrs = glob(["include/*.hrl"]),
     app = ":app_file",
+    app_name = "rabbitmq_stomp",
+    app_version = APP_VERSION,
     beam = [":beam_files"],
     visibility = ["//visibility:public"],
 )

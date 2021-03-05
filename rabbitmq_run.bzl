@@ -17,7 +17,7 @@ def _impl(ctx):
         fail("Mismatched erlang versions", erlang_version, rabbitmq_home.erlang_version)
 
     erl_libs = ":".join(
-        [p.short_path for p in rabbitmq_home.plugins]
+        [p.short_path for p in rabbitmq_home.plugins],
     )
 
     ctx.actions.expand_template(
@@ -45,7 +45,7 @@ rabbitmq_run = rule(
         ),
         "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
         "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
-        "home": attr.label(providers=[RabbitmqHomeInfo]),
+        "home": attr.label(providers = [RabbitmqHomeInfo]),
     },
     executable = True,
 )
@@ -56,7 +56,7 @@ def _run_command_impl(ctx):
         content = "exec ./{} {} $@".format(
             ctx.attr.rabbitmq_run[DefaultInfo].files_to_run.executable.short_path,
             ctx.attr.subcommand,
-        )
+        ),
     )
 
     return [DefaultInfo(

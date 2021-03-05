@@ -1,6 +1,6 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 load("@bazel-erlang//:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "RABBITMQ_ERLC_OPTS", "APP_VERSION", "rabbitmq_lib")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "rabbitmq_lib")
 
 APP_ENV = """[
 	    {pgroup_name_cluster_id, false},
@@ -19,10 +19,10 @@ DEPS = [
 ]
 
 rabbitmq_lib(
-    app_name = "rabbitmq_federation",
     app_description = "RabbitMQ Federation",
-    app_version = APP_VERSION,
-    app_module = "rabbit_federation_app",
     app_env = APP_ENV,
+    app_module = "rabbit_federation_app",
+    app_name = "rabbitmq_federation",
+    app_version = APP_VERSION,
     deps = DEPS,
 )

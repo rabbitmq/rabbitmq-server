@@ -26,7 +26,7 @@ rabbitmqctl = rule(
     implementation = _impl,
     attrs = {
         "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
-        "home": attr.label(providers=[RabbitmqHomeInfo]),
+        "home": attr.label(providers = [RabbitmqHomeInfo]),
     },
     executable = True,
 )
