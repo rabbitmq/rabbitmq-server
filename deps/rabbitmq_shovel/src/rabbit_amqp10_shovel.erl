@@ -175,7 +175,8 @@ dest_endpoint(#{shovel_type := dynamic,
 handle_source({amqp10_msg, _LinkRef, Msg}, State) ->
     Tag = amqp10_msg:delivery_id(Msg),
     Payload = amqp10_msg:body_bin(Msg),
-    rabbit_shovel_behaviour:forward(Tag, #{}, Payload, State);
+    Subject = amqp10_msg:subject(Msg),
+    rabbit_shovel_behaviour:forward(Tag, #{routing_key => Subject}, Payload, State);
 handle_source({amqp10_event, {connection, Conn, opened}},
               State = #{source := #{current := #{conn := Conn}}}) ->
     State;

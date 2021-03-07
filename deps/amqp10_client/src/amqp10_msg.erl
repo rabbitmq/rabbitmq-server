@@ -11,6 +11,7 @@
          % "read" api
          delivery_id/1,
          delivery_tag/1,
+         subject/1,
          handle/1,
          settled/1,
          message_format/1,
@@ -124,6 +125,10 @@ to_amqp_records(#amqp10_msg{transfer = T,
 -spec delivery_tag(amqp10_msg()) -> delivery_tag().
 delivery_tag(#amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = Tag}}) ->
     unpack(Tag).
+
+-spec subject(amqp10_msg()) -> string().
+subject(#amqp10_msg{properties = #'v1_0.properties'{subject = Subject}}) ->
+    unpack(Subject).
 
 -spec delivery_id(amqp10_msg()) -> non_neg_integer().
 delivery_id(#amqp10_msg{transfer = #'v1_0.transfer'{delivery_id = Id}}) ->

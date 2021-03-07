@@ -84,8 +84,10 @@ amqp_encoded_data_list(_Config) ->
 amqp_encoded_amqp_value(_Config) ->
     meck:new(rabbit_shovel_behaviour, [passthrough]),
     meck:expect(rabbit_shovel_behaviour, forward,
-                fun (_, _, Pay, S) ->
+                fun (_, Props, Pay, S) ->
+                        RoutingKey = maps:get(routing_key, Props, undefined),
                         ?assert(erlang:is_binary(Pay)),
+                        ?assertNot(RoutingKey, undefined),
                         S
                 end),
     %% fake some shovel state

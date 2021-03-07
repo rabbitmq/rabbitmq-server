@@ -155,7 +155,12 @@ forward(IncomingTag, Props, Payload,
     SrcUri = rabbit_shovel_behaviour:source_uri(State0),
     % do publish
     Exchange = maps:get(exchange, Props, undefined),
-    RoutingKey = maps:get(routing_key, Props, undefined),
+    % If no routing key is set or routing key is undefined, use an empty string.
+    RoutingKey = case maps:get(routing_key, Props, undefined) of
+        undefined -> <<"">>;
+        Value     -> Value
+    end,
+
     Method = #'basic.publish'{exchange = Exchange, routing_key = RoutingKey},
     Method1 = FieldsFun(SrcUri, DstUri, Method),
     Msg1 = #amqp_msg{props = PropsFun(SrcUri, DstUri, props_from_map(Props)),
