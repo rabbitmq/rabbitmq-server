@@ -1404,14 +1404,10 @@ channel_death(Config) ->
     {ok, Connection} = new_connection(Config),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     try
-        Ret = amqp_channel:call(Channel, bogus_message),
+        Ret = amqp_channel:call(Channel, {bogus_message, 123}),
         throw({unexpected_success, Ret})
     catch
-        exit:{{badarg,
-               [{amqp_channel, is_connection_method, 1, _} | _]}, _} -> ok;
-        exit:{{badarg,
-               [{erlang, element, [1, bogus_message], []},
-                {amqp_channel, is_connection_method, 1, _} | _]}, _} -> ok
+        exit:{{unknown_method_name, bogus_message}, _} -> ok
     end,
     wait_for_death(Channel),
     wait_for_death(Connection).
