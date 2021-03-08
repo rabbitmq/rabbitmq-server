@@ -1271,43 +1271,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -1432,43 +1432,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -1594,43 +1594,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -1755,43 +1755,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -1931,43 +1931,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -2076,43 +2076,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -2235,43 +2235,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -2380,43 +2380,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -2525,43 +2525,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -2670,43 +2670,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -3065,43 +3065,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -3210,43 +3210,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -3372,43 +3372,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -3517,43 +3517,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -3662,43 +3662,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -4176,43 +4176,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -4322,43 +4322,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -4484,43 +4484,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -4646,43 +4646,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -4822,43 +4822,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -4967,43 +4967,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -5129,43 +5129,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -5305,43 +5305,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -5450,43 +5450,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -5613,43 +5613,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -5808,5 +5808,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 20210118
+  "version": 20210308
 }
