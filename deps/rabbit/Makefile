@@ -137,7 +137,7 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck prop
 
 PLT_APPS += mnesia
 
-dep_cuttlefish = hex 2.7.0
+dep_cuttlefish = git https://github.com/Kyorai/cuttlefish master
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris master
 
