@@ -32,6 +32,38 @@ RABBITMQ_TEST_ERLC_OPTS = [
 
 APP_VERSION = "3.9.0"
 
+def required_plugins(rabbitmq_workspace = "@rabbitmq-server"):
+    return [
+        "@cuttlefish//:bazel_erlang_lib",
+        "@ranch//:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+        rabbitmq_workspace + "//deps/rabbit_common:bazel_erlang_lib",
+        "@ra//:bazel_erlang_lib",
+        "@sysmon-handler//:bazel_erlang_lib",
+        "@stdout_formatter//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+        "@observer_cli//:bazel_erlang_lib",
+        "@osiris//:bazel_erlang_lib",
+        rabbitmq_workspace + "//deps/amqp10_common:bazel_erlang_lib",
+        rabbitmq_workspace + "//deps/rabbit:bazel_erlang_lib",
+        rabbitmq_workspace + "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
+        "@goldrush//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@aten//:bazel_erlang_lib",
+        "@gen-batch-server//:bazel_erlang_lib",
+    ]
+
+def management_plugins(rabbitmq_workspace = "@rabbitmq-server"):
+    return [
+        rabbitmq_workspace + "//deps/rabbitmq_management:bazel_erlang_lib",
+        rabbitmq_workspace + "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+        rabbitmq_workspace + "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
+        rabbitmq_workspace + "//deps/amqp_client:bazel_erlang_lib",
+        "@cowboy//:bazel_erlang_lib",
+        "@cowlib//:bazel_erlang_lib",
+    ]
+
 def rabbitmq_lib(
         app_name = "",
         app_version = APP_VERSION,

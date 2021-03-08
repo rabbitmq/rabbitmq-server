@@ -1,6 +1,11 @@
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
+load(":rabbitmq.bzl", "management_plugins", "required_plugins")
+
+exports_files([
+    "scripts/bazel/rabbitmq-run.sh",
+])
 
 platform(
     name = "erlang_22_platform",
@@ -28,42 +33,14 @@ platform(
     },
 )
 
-REQUIRED_PLUGINS = [
-    "@cuttlefish//:bazel_erlang_lib",
-    "@ranch//:bazel_erlang_lib",
-    "@lager//:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "@ra//:bazel_erlang_lib",
-    "@sysmon-handler//:bazel_erlang_lib",
-    "@stdout_formatter//:bazel_erlang_lib",
-    "@recon//:bazel_erlang_lib",
-    "@observer_cli//:bazel_erlang_lib",
-    "@osiris//:bazel_erlang_lib",
-    "//deps/amqp10_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
-    "@goldrush//:bazel_erlang_lib",
-    "@jsx//:bazel_erlang_lib",
-    "@credentials-obfuscation//:bazel_erlang_lib",
-    "@aten//:bazel_erlang_lib",
-    "@gen-batch-server//:bazel_erlang_lib",
-]
-
 rabbitmq_home(
     name = "broker-home",
-    plugins = REQUIRED_PLUGINS,
+    plugins = required_plugins(rabbitmq_workspace = "@"),
 )
 
 rabbitmq_home(
     name = "broker-management-home",
-    plugins = REQUIRED_PLUGINS + [
-        "//deps/rabbitmq_management:bazel_erlang_lib",
-        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
-        "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
-        "//deps/amqp_client:bazel_erlang_lib",
-        "@cowboy//:bazel_erlang_lib",
-        "@cowlib//:bazel_erlang_lib",
-    ],
+    plugins = required_plugins(rabbitmq_workspace = "@") + management_plugins(rabbitmq_workspace = "@"),
 )
 
 rabbitmq_home(
@@ -97,7 +74,7 @@ rabbitmq_home(
 
 rabbitmq_home(
     name = "broker-for-cli-tests-home",
-    plugins = REQUIRED_PLUGINS + [
+    plugins = required_plugins(rabbitmq_workspace = "@") + [
         "//deps/rabbitmq_federation:bazel_erlang_lib",
         "//deps/rabbitmq_stomp:bazel_erlang_lib",
         "//deps/amqp_client:bazel_erlang_lib",

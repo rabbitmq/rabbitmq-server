@@ -31,6 +31,15 @@ def _link_escript(ctx, escript):
     )
     return s
 
+def _priv_file_dest_relative_path(plugin_label, f):
+    rel_base = plugin_label.package
+    if plugin_label.workspace_root != "":
+        rel_base = path_join(plugin_label.workspace_root, rel_base)
+    if rel_base == "":
+        return f.path
+    else:
+        return f.path.replace(rel_base + "/", "")
+
 def _plugins_dir_links(ctx, plugin):
     lib_info = plugin[ErlangLibInfo]
     plugin_path = path_join(
@@ -57,7 +66,7 @@ def _plugins_dir_links(ctx, plugin):
         links.append(o)
 
     for f in lib_info.priv:
-        p = f.short_path.replace(plugin.label.package + "/", "")
+        p = _priv_file_dest_relative_path(plugin.label, f)
         o = ctx.actions.declare_file(path_join(plugin_path, p))
         ctx.actions.symlink(
             output = o,

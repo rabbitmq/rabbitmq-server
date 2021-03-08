@@ -44,6 +44,12 @@ def _impl(ctx):
                 ),
             )
 
+    mix_invocation_dir = ctx.actions.declare_directory("{}_mix".format(ctx.label.name))
+
+    package_dir = ctx.label.package
+    if ctx.label.workspace_root != "":
+        package_dir = path_join(ctx.label.workspace_root, package_dir)
+
     script = """
         set -euo pipefail
 
@@ -53,7 +59,7 @@ def _impl(ctx):
         # In github actions, there is an erl at /usr/bin/erl...
         export PATH={elixir_home}/bin:{erlang_home}/bin:${{PATH}}
 
-        MIX_INVOCATION_DIR="$(mktemp -d)"
+        MIX_INVOCATION_DIR="{mix_invocation_dir}"
 
         cp -R ${{PWD}}/{package_dir}/config ${{MIX_INVOCATION_DIR}}/config
         # cp -R ${{PWD}}/{package_dir}/include ${{MIX_INVOCATION_DIR}}/include # rabbitmq_cli's include directory is empty
@@ -85,13 +91,16 @@ def _impl(ctx):
         mv ${{MIX_INVOCATION_DIR}}/_build/dev/lib/rabbitmqctl/consolidated/* {ebin_dir}
 
         rm -dR ${{MIX_INVOCATION_DIR}}
+        mkdir ${{MIX_INVOCATION_DIR}}
+        touch ${{MIX_INVOCATION_DIR}}/placeholder
     """.format(
         begins_with_fun = BEGINS_WITH_FUN,
         query_erlang_version = QUERY_ERL_VERSION,
         erlang_version = erlang_version,
         erlang_home = erlang_home,
         elixir_home = elixir_home,
-        package_dir = ctx.label.package,
+        mix_invocation_dir = mix_invocation_dir.path,
+        package_dir = package_dir,
         copy_compiled_deps_command = " && ".join(copy_compiled_deps_commands),
         mix_deps_dir = MIX_DEPS_DIR,
         escript_path = escript.path,
@@ -107,7 +116,7 @@ def _impl(ctx):
 
     ctx.actions.run_shell(
         inputs = inputs,
-        outputs = [escript, ebin],
+        outputs = [escript, ebin, mix_invocation_dir],
         command = script,
     )
 
