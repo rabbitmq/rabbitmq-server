@@ -136,7 +136,6 @@ BUILD_DEPS = rabbitmq_cli
 DEPS = cuttlefish ranch rabbit_common ra sysmon_handler stdout_formatter recon observer_cli osiris amqp10_common syslog
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
-EUNIT_OPTS = no_tty, {report, {eunit_progress, [colored, profile]}}
 PLT_APPS += mnesia
 
 dep_cuttlefish = git https://github.com/Kyorai/cuttlefish master

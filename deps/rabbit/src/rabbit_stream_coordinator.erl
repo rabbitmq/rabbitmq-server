@@ -27,7 +27,6 @@
          tick/2]).
 
 -export([recover/0,
-         start_cluster/1,
          add_replica/2,
          delete_replica/2,
          register_listener/1]).
@@ -37,8 +36,10 @@
 
 -export([policy_changed/1]).
 
--export([local_pid/1]).
--export([query_local_pid/3]).
+-export([local_pid/1,
+         members/1]).
+-export([query_local_pid/3,
+         query_members/2]).
 
 
 -export([log_overview/1]).
@@ -56,31 +57,32 @@
 
 
 -type state() :: #?MODULE{}.
--type command() :: {policy_changed, #{stream_id := stream_id()}} |
-                   {start_cluster, #{queue := amqqueue:amqqueue()}} |
-                   {start_cluster_reply, amqqueue:amqqueue()} |
-                   {start_replica, #{stream_id := stream_id(),
-                                     node := node(),
-                                     retries := non_neg_integer()}} |
-                   {start_replica_failed, #{stream_id := stream_id(),
-                                            node := node(),
-                                            retries := non_neg_integer()},
-                    Reply :: term()} |
-                   {start_replica_reply, stream_id(), pid()} |
+-type args() :: #{index := ra:index(),
+                  node := node(),
+                  epoch := osiris:epoch()}.
 
-                   {delete_replica, #{stream_id := stream_id(),
-                                      node := node()}} |
-                   {start_leader_election, stream_id(), osiris:epoch(),
-                    Offsets :: term()} |
-                   {leader_elected, stream_id(), NewLeaderPid :: pid()} |
-                   {replicas_stopped, stream_id()} |
-                   {phase_finished, stream_id(), Reply :: term()} |
-                   {stream_updated, stream()} |
+-type command() :: {new_stream, stream_id(), #{leader_node := node(),
+                                               queue := amqqueue:amqqueue()}} |
+                   {delete_stream, stream_id(), #{}} |
+                   {add_replica, stream_id(), #{node := node()}} |
+                   {delete_replica, stream_id(), #{node := node()}} |
+                   {policy_changed, stream_id(), #{queue := amqqueue:amqueue()}} |
                    {register_listener, #{pid := pid(),
                                          stream_id := stream_id(),
                                          queue_ref := queue_ref()}} |
+                   {action_failed, stream_id(), #{index := ra:index(),
+                                                  node := node(),
+                                                  epoch := osiris:epoch(),
+                                                  action := atom(), %% TODO: refine
+                                                  term() => term()}} |
+                   {member_started, stream_id(), #{index := ra:index(),
+                                                   node := node(),
+                                                   epoch := osiris:epoch(),
+                                                   pid := pid()}} |
+                   {member_stopped, stream_id(), args()} |
+                   {retention_updated, stream_id(), args()} |
+                   {mnesia_updated, stream_id(), args()} |
                    ra_machine:effect().
-
 
 -export_type([command/0]).
 
@@ -89,7 +91,7 @@ start() ->
     ServerId = {?MODULE, node()},
     case ra:restart_server(ServerId) of
         {error, Reason} when Reason == not_started orelse
-                             Reason == name_not_registered -> 
+                             Reason == name_not_registered ->
             case ra:start_server(make_ra_conf(node(), Nodes)) of
                 ok ->
                     global:set_lock(?STREAM_COORDINATOR_STARTUP),
@@ -113,18 +115,8 @@ start() ->
             exit(Error)
     end.
 
-find_members([]) ->
-    [];
-find_members([Node | Nodes]) ->
-    case ra:members({?MODULE, Node}) of
-        {_, Members, _} ->
-            Members;
-        {error, noproc} ->
-            find_members(Nodes);
-        {timeout, _} ->
-            %% not sure what to do here
-            find_members(Nodes)
-    end.
+recover() ->
+    ra:restart_server({?MODULE, node()}).
 
 %% new api
 
@@ -141,7 +133,7 @@ new_stream(Q, LeaderNode)
 delete_stream(Q, ActingUser)
   when ?is_amqqueue(Q) ->
     #{name := StreamId} = amqqueue:get_type_state(Q),
-    case process_command({delete_stream, StreamId, #{acting_user => ActingUser}}) of
+    case process_command({delete_stream, StreamId, #{}}) of
         {ok, ok, _} ->
             QName = amqqueue:get_name(Q),
               _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
@@ -149,14 +141,6 @@ delete_stream(Q, ActingUser)
         Err ->
             Err
     end.
-
-%% end new api
-
-recover() ->
-    ra:restart_server({?MODULE, node()}).
-
-start_cluster(Q) ->
-    process_command({start_cluster, #{queue => Q}}).
 
 add_replica(StreamId, Node) ->
     process_command({add_replica, StreamId, #{node => Node}}).
@@ -177,6 +161,34 @@ local_pid(StreamId) when is_list(StreamId) ->
             Err;
         {timeout, _} ->
             {error, timeout}
+    end.
+
+-spec members(stream_id()) ->
+    {ok, #{node() := {pid() | undefined, writer | replica}}} |
+    {error, not_found}.
+members(StreamId) when is_list(StreamId) ->
+    MFA = {?MODULE, query_members, [StreamId]},
+    case ra:local_query({?MODULE, node()}, MFA) of
+        {ok, {_, Result}, _} ->
+            Result;
+        {error, _} = Err ->
+            Err;
+        {timeout, _} ->
+            {error, timeout}
+    end.
+
+query_members(StreamId, #?MODULE{streams = Streams}) ->
+    case Streams of
+        #{StreamId := #stream{members = Members}} ->
+            {ok, maps:map(
+                   fun (_, #member{state = {running, _, Pid},
+                                   role = {Role, _}}) ->
+                           {Pid, Role};
+                       (_, #member{role = {Role, _}}) ->
+                           {undefined, Role}
+                   end, Members)};
+        _ ->
+            {error, not_found}
     end.
 
 query_local_pid(StreamId, Node, #?MODULE{streams = Streams}) ->
@@ -409,7 +421,6 @@ tick(_Ts, _State) ->
 
 maybe_resize_coordinator_cluster() ->
     spawn(fun() ->
-                  rabbit_log:info("resizing coordinator cluster", []),
                   case ra:members({?MODULE, node()}) of
                       {_, Members, _} ->
                           MemberNodes = [Node || {_, Node} <- Members],
@@ -419,16 +430,17 @@ maybe_resize_coordinator_cluster() ->
                               [] ->
                                   ok;
                               New ->
-                                  rabbit_log:warning("New rabbit node(s) detected, "
-                                                     "adding stream coordinator in: ~p", [New]),
+                                  rabbit_log:warning("~s: New rabbit node(s) detected, "
+                                                     "adding : ~w",
+                                                     [?MODULE, New]),
                                   add_members(Members, New)
                           end,
                           case MemberNodes -- All of
                               [] ->
                                   ok;
                               Old ->
-                                  rabbit_log:warning("Rabbit node(s) removed from the cluster, "
-                                                     "deleting stream coordinator in: ~p", [Old]),
+                                  rabbit_log:warning("~s: Rabbit node(s) removed from the cluster, "
+                                                     "deleting: ~w", [?MODULE, Old]),
                                   remove_members(Members, Old)
                           end;
                       _ ->
@@ -596,12 +608,14 @@ phase_start_replica(StreamId, #{epoch := Epoch,
                       send_self_command({member_started, StreamId,
                                          Args#{pid => Pid}});
                   {error, Reason} ->
+                      maybe_sleep(Reason),
                       rabbit_log:warning("~s: Error while starting replica for ~s : ~W",
                                          [?MODULE, maps:get(name, Conf0), Reason, 10]),
                       send_action_failed(StreamId, starting, Args)
               catch _:E ->
                         rabbit_log:warning("~s: Error while starting replica for ~s : ~p",
                                            [?MODULE, maps:get(name, Conf0), E]),
+                        maybe_sleep(E),
                         send_action_failed(StreamId, starting, Args)
               end
       end).
@@ -623,9 +637,10 @@ phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
                   _ ->
                       send_action_failed(StreamId, deleting, Arg)
               catch _:E ->
-                      rabbit_log:warning("~s: Error while deleting member for ~s : on node ~s ~p",
-                                         [?MODULE, StreamId, Node, E]),
-                      send_action_failed(StreamId, deleting, Arg)
+                        rabbit_log:warning("~s: Error while deleting member for ~s : on node ~s ~p",
+                                           [?MODULE, StreamId, Node, E]),
+                        maybe_sleep(E),
+                        send_action_failed(StreamId, deleting, Arg)
               end
       end).
 
@@ -661,8 +676,9 @@ phase_stop_member(StreamId, #{node := Node,
                       send_action_failed(StreamId, stopping, Arg0)
               catch _:Err ->
                         rabbit_log:warning("Stream coordinator failed to stop
-                                          member ~s ~w Error: ~w",
+                                            member ~s ~w Error: ~w",
                                            [StreamId, Node, Err]),
+                        maybe_sleep(Err),
                         send_action_failed(StreamId, stopping, Arg0)
               end
       end).
@@ -678,14 +694,15 @@ phase_start_writer(StreamId, #{epoch := Epoch,
                                          [?MODULE, StreamId, Node, Epoch]),
                       send_self_command({member_started, StreamId, Args});
                   Err ->
+                      %% no sleep for writer failures
                       rabbit_log:warning("~s: failed to start
                                           writer ~s ~w Error: ~w",
                                          [?MODULE, StreamId, Node, Err]),
-                        send_action_failed(StreamId, starting, Args0)
+                      send_action_failed(StreamId, starting, Args0)
               catch _:Err ->
-                      rabbit_log:warning("~s: failed to start
+                        rabbit_log:warning("~s: failed to start
                                           writer ~s ~w Error: ~w",
-                                         [?MODULE, StreamId, Node, Err]),
+                                           [?MODULE, StreamId, Node, Err]),
                         send_action_failed(StreamId, starting, Args0)
 
               end
@@ -704,10 +721,11 @@ phase_update_retention(StreamId, #{pid := Pid,
                                          [?MODULE, StreamId, node(Pid), Err]),
                       send_action_failed(StreamId, update_retention, Args)
               catch _:Err ->
-                      rabbit_log:warning("~s: failed to update
+                        rabbit_log:warning("~s: failed to update
                                           retention for ~s ~w Error: ~w",
-                                         [?MODULE, StreamId, node(Pid), Err]),
-                      send_action_failed(StreamId, update_retention, Args)
+                                           [?MODULE, StreamId, node(Pid), Err]),
+                        maybe_sleep(Err),
+                        send_action_failed(StreamId, update_retention, Args)
               end
       end).
 
@@ -755,8 +773,6 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
                                  rabbit_amqqueue:update(QName, Fun)
                          end) of
                       not_found ->
-                          rabbit_log:debug("~s: mnesia update for ~s: not_found",
-                                           [?MODULE, StreamId]),
                           %% This can happen during recovery
                           [Q] = mnesia:dirty_read(rabbit_durable_queue, QName),
                           %% TODO: what is the possible return type here?
@@ -1175,6 +1191,7 @@ evaluate_stream(#{index := Idx} = Meta,
              Stream = Stream0#stream{reply_to = undefined},
              eval_replicas(Meta, Writer, Replicas, Stream, Effs);
          {#member{state = {down, Epoch},
+                  target = stopped,
                   node = LeaderNode,
                   current = undefined} = Writer0, Replicas} ->
              %% leader is down - all replicas need to be stopped
@@ -1202,7 +1219,6 @@ evaluate_stream(#{index := Idx} = Meta,
              {Stream0#stream{members = Members}, Actions};
          {#member{state = {running, Epoch, LeaderPid},
                   target = running} = Writer, Replicas} ->
-
              Effs1 = case From of
                          undefined ->
                              Effs0;
@@ -1411,6 +1427,25 @@ select_leader(Offsets) ->
                                          true
                                  end, Offsets),
     Node.
+
+maybe_sleep({{nodedown, _}, _}) ->
+    timer:sleep(5000);
+maybe_sleep(_) ->
+    ok.
+
+find_members([]) ->
+    [];
+find_members([Node | Nodes]) ->
+    case ra:members({?MODULE, Node}) of
+        {_, Members, _} ->
+            Members;
+        {error, noproc} ->
+            find_members(Nodes);
+        {timeout, _} ->
+            %% not sure what to do here
+            find_members(Nodes)
+    end.
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.

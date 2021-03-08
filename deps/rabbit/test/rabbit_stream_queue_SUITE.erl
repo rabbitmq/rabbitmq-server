@@ -510,11 +510,6 @@ recover(Config) ->
     publish(Ch, Q),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
 
-    % [A, B, C] = Servers0,
-    % Servers = [A, C, B],
-    % [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers],
-    % [rabbit_ct_broker_helpers:start_node(Config, S) || S <- lists:reverse(Servers)],
-    % quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
     [begin
          ct:pal("recover: running stop start for permuation ~w", [Servers]),
          [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers],
@@ -671,7 +666,7 @@ consume_timestamp_last_offset(Config) ->
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
-   
+
     %% Subscribe from now/future
     Offset = erlang:system_time(second) + 60,
     amqp_channel:subscribe(
@@ -709,7 +704,7 @@ basic_get(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    
+
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
                 amqp_channel:call(Ch, #'basic.get'{queue = Q})).
 

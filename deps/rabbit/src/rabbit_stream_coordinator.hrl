@@ -8,7 +8,7 @@
 -type stream_id() :: string().
 -type stream() :: #{conf := osiris:config(),
                     atom() => term()}.
--type stream_role() :: leader | follower | listener.
+-type monitor_role() :: member | listener.
 -type queue_ref() :: rabbit_types:r(queue).
 -type tail() :: {osiris:offset(), osiris:epoch()} | empty.
 
@@ -28,7 +28,6 @@
                      starting |
                      deleting, ra:index()} |
                     {sleeping, nodeup | non_neg_integer()},
-         % current_ts :: integer(),
          %% record the "current" config used
          conf :: undefined | osiris:config(),
          target = running :: running | stopped | deleted}).
@@ -55,7 +54,7 @@
                 }).
 
 -record(?MODULE, {streams = #{} :: #{stream_id() => #stream{}},
-                  monitors = #{} :: #{pid() => {stream_id(), stream_role()}},
+                  monitors = #{} :: #{pid() => {stream_id(), monitor_role()}},
                   listeners = #{} :: #{stream_id() =>
                                        #{pid() := queue_ref()}},
                   %% future extensibility
