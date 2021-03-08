@@ -10,16 +10,10 @@
 %% API
 -export([headers/1, request_hash/5]).
 
-%% Transitional step until we can require Erlang/OTP 22 and
-%% use crypto:mac/4 instead of crypto:hmac/3.
--compile(nowarn_deprecated_function).
-
 %% Export all for unit tests
 -ifdef(TEST).
 -compile(export_all).
 -endif.
-
--ignore_xref([{crypto, hmac, 3}]).
 
 -include("rabbitmq_aws.hrl").
 
@@ -162,7 +156,7 @@ header_value(Key, Headers, Default) ->
 %% @doc Return the SHA-256 hash for the specified value.
 %% @end
 hmac_sign(Key, Message) ->
-  SignedValue = crypto:hmac(sha256, Key, Message),
+  SignedValue = crypto:mac(hmac, sha256, Key, Message),
   binary_to_list(SignedValue).
 
 
@@ -248,7 +242,7 @@ signed_headers([{Key,_}|T], SignedHeaders) ->
 %% @doc Create the request signature.
 %% @end
 signature(StringToSign, SigningKey) ->
-  SignedValue = crypto:hmac(sha256, SigningKey, StringToSign),
+  SignedValue = crypto:mac(hmac, sha256, SigningKey, StringToSign),
   lists:flatten(io_lib:format("~64.16.0b", [binary:decode_unsigned(SignedValue)])).
 
 
