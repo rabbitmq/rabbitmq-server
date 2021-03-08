@@ -39,7 +39,7 @@ ensure_listener(Listener) ->
                                 [rabbit_cowboy_middleware, cowboy_router, cowboy_handler],
                              stream_handlers => StreamHandlers},
                            ProtoOptsMap),
-            Child = ranch:child_spec(rabbit_networking:ranch_ref(Listener), 100,
+            Child = ranch:child_spec(rabbit_networking:ranch_ref(Listener),
                 Transport, TransportOpts,
                 cowboy_clear, CowboyOptsMap),
             case supervisor:start_child(?SUP, Child) of

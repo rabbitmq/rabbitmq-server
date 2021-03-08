@@ -11,9 +11,9 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/4, init/1]).
+-export([start_link/3, init/1]).
 
-start_link(Ref, _Sock, _Transport, Configuration) ->
+start_link(Ref, _Transport, Configuration) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, HelperPid} =
         supervisor2:start_child(SupPid,

@@ -12,11 +12,9 @@
 
 execute(Req, Env) ->
     #{keepalive_sup := KeepaliveSup} = Env,
-    Sock = maps:get(socket, Env),
     case maps:get(handler_opts, Env, undefined) of
         undefined -> {ok, Req, Env};
         Opts when is_list(Opts) ->
-            {ok, Req, Env#{handler_opts => [{keepalive_sup, KeepaliveSup},
-                                            {socket, Sock}
+            {ok, Req, Env#{handler_opts => [{keepalive_sup, KeepaliveSup}
                                             |Opts]}}
     end.

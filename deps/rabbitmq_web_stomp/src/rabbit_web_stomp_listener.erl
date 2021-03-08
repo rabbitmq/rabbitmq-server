@@ -32,7 +32,8 @@
 init() ->
     WsFrame = get_env(ws_frame, text),
     CowboyOpts0 = maps:from_list(get_env(cowboy_opts, [])),
-    CowboyOpts = CowboyOpts0#{proxy_header => get_env(proxy_protocol, false)},
+    CowboyOpts = CowboyOpts0#{proxy_header => get_env(proxy_protocol, false),
+                              stream_handlers => [rabbit_web_stomp_stream_handler, cowboy_stream_h]},
     CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
 
     VhostRoutes = [

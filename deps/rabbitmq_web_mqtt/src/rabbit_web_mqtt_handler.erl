@@ -7,6 +7,7 @@
 
 -module(rabbit_web_mqtt_handler).
 -behaviour(cowboy_websocket).
+-behaviour(cowboy_sub_protocol).
 
 -export([
     init/2,
@@ -16,6 +17,11 @@
     terminate/3
 ]).
 -export([close_connection/2]).
+
+%% cowboy_sub_protocol
+-export([upgrade/4,
+         upgrade/5,
+         takeover/7]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -33,54 +39,69 @@
     connection
 }).
 
+%% cowboy_sub_protcol
+upgrade(Req, Env, Handler, HandlerState) ->
+    upgrade(Req, Env, Handler, HandlerState, #{}).
+
+upgrade(Req, Env, Handler, HandlerState, Opts) ->
+    cowboy_websocket:upgrade(Req, Env, Handler, HandlerState, Opts).
+
+takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) ->
+    Sock = case HandlerState#state.socket of
+               undefined ->
+                   Socket;
+               ProxyInfo ->
+                   {rabbit_proxy_socket, Socket, ProxyInfo}
+           end,
+    cowboy_websocket:takeover(Parent, Ref, Socket, Transport, Opts, Buffer,
+                              {Handler, HandlerState#state{socket = Sock}}).
+
+%% cowboy_websocket
 init(Req, Opts) ->
     {PeerAddr, _PeerPort} = maps:get(peer, Req),
     {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
-    {_, Sock0} = lists:keyfind(socket, 1, Opts),
-    Sock = case maps:get(proxy_header, Req, undefined) of
-        undefined ->
-            Sock0;
-        ProxyInfo ->
-            {rabbit_proxy_socket, Sock0, ProxyInfo}
-    end,
+    SockInfo = maps:get(proxy_header, Req, undefined),
+    WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
+    WsOpts  = maps:merge(#{compress => true}, WsOpts0),
+    Req2 = case cowboy_req:header(<<"sec-websocket-protocol">>, Req) of
+               undefined -> Req;
+               SecWsProtocol ->
+                   cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req)
+           end,
+    {?MODULE, Req2, #state{
+                       keepalive          = {none, none},
+                       keepalive_sup      = KeepaliveSup,
+                       parse_state        = rabbit_mqtt_frame:initial_state(),
+                       state              = running,
+                       conserve_resources = false,
+                       socket             = SockInfo,
+                       peername           = PeerAddr
+                      }, WsOpts}.
+
+websocket_init(State0 = #state{socket = Sock, peername = PeerAddr}) ->
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
-            Req2 = case cowboy_req:header(<<"sec-websocket-protocol">>, Req) of
-                undefined -> Req;
-                SecWsProtocol ->
-                    cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, SecWsProtocol, Req)
-            end,
-            WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
-            WsOpts  = maps:merge(#{compress => true}, WsOpts0),
-            {cowboy_websocket, Req2, #state{
-                conn_name          = ConnStr,
-                keepalive          = {none, none},
-                keepalive_sup      = KeepaliveSup,
-                parse_state        = rabbit_mqtt_frame:initial_state(),
-                state              = running,
-                conserve_resources = false,
-                socket             = Sock,
-                peername           = PeerAddr
-            }, WsOpts};
+            State = State0#state{
+                      conn_name          = ConnStr,
+                      socket             = Sock
+                     },
+            rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
+            AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
+            RealSocket = rabbit_net:unwrap_socket(Sock),
+            ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
+                                                                 rabbit_mqtt_reader:ssl_login_name(RealSocket),
+                                                                 AdapterInfo,
+                                                                 fun send_reply/2,
+                                                                 PeerAddr),
+            process_flag(trap_exit, true),
+            {ok,
+             rabbit_event:init_stats_timer(
+               State#state{proc_state = ProcessorState},
+               #state.stats_timer),
+             hibernate};
         _ ->
-            {stop, Req}
+            {stop, State0}
     end.
-
-websocket_init(State = #state{conn_name = ConnStr, socket = Sock, peername = PeerAddr}) ->
-    rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
-    AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
-    RealSocket = rabbit_net:unwrap_socket(Sock),
-    ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
-        rabbit_mqtt_reader:ssl_login_name(RealSocket),
-        AdapterInfo,
-        fun send_reply/2,
-        PeerAddr),
-    process_flag(trap_exit, true),
-    {ok,
-     rabbit_event:init_stats_timer(
-         State#state{proc_state = ProcessorState},
-         #state.stats_timer),
-     hibernate}.
 
 -spec close_connection(pid(), string()) -> 'ok'.
 close_connection(Pid, Reason) ->

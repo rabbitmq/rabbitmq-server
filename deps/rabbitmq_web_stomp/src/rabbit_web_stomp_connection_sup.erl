@@ -12,12 +12,12 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/4, start_keepalive_link/0]).
+-export([start_link/3, start_keepalive_link/0]).
 -export([init/1]).
 
 %%----------------------------------------------------------------------------
 
-start_link(Ref, Sock, Transport, CowboyOpts0) ->
+start_link(Ref, Transport, CowboyOpts0) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, KeepaliveSup} = supervisor2:start_child(
                           SupPid,
@@ -29,8 +29,8 @@ start_link(Ref, Sock, Transport, CowboyOpts0) ->
     %% then have the middleware rabbit_web_mqtt_middleware place it
     %% in the initial handler state.
     Env = maps:get(env, CowboyOpts0),
-    CowboyOpts = CowboyOpts0#{env => Env#{keepalive_sup => KeepaliveSup,
-                                          socket => Sock}},
+    CowboyOpts = CowboyOpts0#{env => Env#{keepalive_sup => KeepaliveSup},
+                              stream_handlers => [rabbit_web_stomp_stream_handler, cowboy_stream_h]},
     Protocol = case Transport of
         ranch_tcp -> cowboy_clear;
         ranch_ssl -> cowboy_tls
@@ -38,7 +38,7 @@ start_link(Ref, Sock, Transport, CowboyOpts0) ->
     {ok, ReaderPid} = supervisor2:start_child(
                         SupPid,
                         {Protocol,
-                         {Protocol, start_link, [Ref, Sock, Transport, CowboyOpts]},
+                         {Protocol, start_link, [Ref, Transport, CowboyOpts]},
                          intrinsic, ?WORKER_WAIT, worker, [Protocol]}),
     {ok, SupPid, ReaderPid}.
 
