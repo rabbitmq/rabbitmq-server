@@ -51,8 +51,8 @@ ensure_listener(Listener) ->
 
 stop_listener(Listener) ->
     Name = rabbit_networking:ranch_ref(Listener),
-    ok = supervisor:terminate_child(?SUP, {ranch_listener_sup, Name}),
-    ok = supervisor:delete_child(?SUP, {ranch_listener_sup, Name}).
+    ok = supervisor:terminate_child(?SUP, {ranch_embedded_sup, Name}),
+    ok = supervisor:delete_child(?SUP, {ranch_embedded_sup, Name}).
 
 %% @spec init([[instance()]]) -> SupervisorTree
 %% @doc supervisor callback.
