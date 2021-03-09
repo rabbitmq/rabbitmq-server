@@ -277,7 +277,7 @@ listen_loop_pre_auth(Transport,
                      #configuration{frame_max = FrameMax,
                                     heartbeat = Heartbeat} =
                          Configuration) ->
-    {OK, Closed, Error} = Transport:messages(),
+   {OK, Closed, Error, _Passive} = Transport:messages(),
     %% FIXME introduce timeout to complete the connection opening (after block should be enough)
     receive
         {OK, S, Data} ->
@@ -379,7 +379,7 @@ listen_loop_post_auth(Transport,
                                          CreditsRequiredForUnblocking} =
                           Configuration) ->
     Connection = ensure_stats_timer(Connection0),
-    {OK, Closed, Error} = Transport:messages(),
+    {OK, Closed, Error, _Passive} = Transport:messages(),
     receive
         {OK, S, Data} ->
             {Connection1, State1} =
@@ -719,7 +719,7 @@ listen_loop_post_close(Transport,
                        #stream_connection{socket = S} = Connection,
                        State,
                        Configuration) ->
-    {OK, Closed, Error} = Transport:messages(),
+    {OK, Closed, Error, _Passive} = Transport:messages(),
     %% FIXME demonitor streams
     %% FIXME introduce timeout to complete the connection closing (after block should be enough)
     receive
