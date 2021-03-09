@@ -34,7 +34,7 @@ do_info(StreamID, Info, State = #state{next = Next0}) ->
     {Commands, Next} = cowboy_stream:info(StreamID, Info, Next0),
     {Commands, State#state{next = Next}}.
 
-terminate(StreamID, Reason, State = #state{next = Next}) ->
+terminate(StreamID, Reason, #state{next = Next}) ->
     cowboy_stream:terminate(StreamID, Reason, Next).
 
 early_error(StreamID, Reason, PartialReq, Resp, Opts) ->
