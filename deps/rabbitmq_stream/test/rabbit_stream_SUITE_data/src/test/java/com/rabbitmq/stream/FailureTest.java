@@ -371,6 +371,11 @@ public class FailureTest {
     Client.StreamMetadata streamMetadata = metadata.get(stream);
     assertThat(streamMetadata).isNotNull();
 
+    TestUtils.waitUntil(
+        () -> metadataClient.metadata(stream).get(stream).getReplicas().size() == 2);
+
+    metadata = metadataClient.metadata(stream);
+    streamMetadata = metadata.get(stream);
     assertThat(streamMetadata.getLeader()).isNotNull();
     assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
 
@@ -516,7 +521,7 @@ public class FailureTest {
 
     // wait until all the replicas are there
     TestUtils.waitAtMost(
-        Duration.ofSeconds(5),
+        Duration.ofSeconds(10),
         () -> {
           Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
           return m.getReplicas().size() == 2;
