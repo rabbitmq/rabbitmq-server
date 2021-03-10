@@ -159,6 +159,6 @@ list(VHost) ->
         {{ranch_listener_sup, _}, RanchListSup, _, _} <- supervisor:which_children(RanchEmbeddedSup),
         {ranch_conns_sup_sup, RanchConnsSup, supervisor, _} <- supervisor2:which_children(RanchListSup),
         {_, RanchConnSup, supervisor, _} <- supervisor2:which_children(RanchConnsSup),
-        {_, StompClientSup, supervisor, _} <- supervisor2:which_children(RanchConnSup),
-        {rabbit_stream_reader, Client, _, _} <- supervisor:which_children(StompClientSup),
+        {_, StreamClientSup, supervisor, _} <- supervisor2:which_children(RanchConnSup),
+        {rabbit_stream_reader, Client, _, _} <- supervisor:which_children(StreamClientSup),
         rabbit_stream_reader:in_vhost(Client, VHost)].
