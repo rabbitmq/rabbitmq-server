@@ -393,7 +393,11 @@ start-brokers start-cluster: $(DIST_TARGET)
 		  -rabbit loopback_users [] \
 		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
 		  -rabbitmq_mqtt tcp_listeners [$$((1883 + $$n - 1))] \
+		  -rabbitmq_web_mqtt tcp_config [{port,$$((1893 + $$n - 1))}] \
+		  -rabbitmq_web_mqtt_examples listener [{port,$$((1903 + $$n - 1))}] \
 		  -rabbitmq_stomp tcp_listeners [$$((61613 + $$n - 1))] \
+		  -rabbitmq_web_stomp tcp_config [{port,$$((61623 + $$n - 1))}] \
+		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
 		  -rabbitmq_stream tcp_listeners [$$((5551 + $$n - 1))] \
 		  "; \
