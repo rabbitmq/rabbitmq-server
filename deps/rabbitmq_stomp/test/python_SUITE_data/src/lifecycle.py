@@ -60,7 +60,6 @@ class TestLifecycle(base.BaseTest):
             self.assertTrue(new_conn.is_connected())
         finally:
             new_conn.disconnect()
-            self.assertFalse(new_conn.is_connected())
 
     def test_connect_version_1_1(self):
         ''' Test CONNECT with version 1.1'''
@@ -70,7 +69,6 @@ class TestLifecycle(base.BaseTest):
             self.assertTrue(new_conn.is_connected())
         finally:
             new_conn.disconnect()
-            self.assertFalse(new_conn.is_connected())
 
     def test_connect_version_1_2(self):
         ''' Test CONNECT with version 1.2'''
@@ -80,21 +78,9 @@ class TestLifecycle(base.BaseTest):
             self.assertTrue(new_conn.is_connected())
         finally:
             new_conn.disconnect()
+            # connections are closed asynchronously, e.g. a few seconds later
+            time.sleep(6)
             self.assertFalse(new_conn.is_connected())
-
-    def test_heartbeat_disconnects_client(self):
-        ''' Test heart-beat disconnection'''
-        self.conn.disconnect()
-        new_conn = self.create_connection(version='1.1', heartbeats=(1500, 0))
-        try:
-            self.assertTrue(new_conn.is_connected())
-            time.sleep(1)
-            self.assertTrue(new_conn.is_connected())
-            time.sleep(3)
-            self.assertFalse(new_conn.is_connected())
-        finally:
-            if new_conn.is_connected():
-                new_conn.disconnect()
 
     def test_unsupported_version(self):
         ''' Test unsupported version on CONNECT command'''
@@ -118,7 +104,6 @@ class TestLifecycle(base.BaseTest):
         listener = base.WaitableListener()
         new_conn.set_listener('', listener)
         try:
-            new_conn.start()
             new_conn.connect(user, passcode)
             self.assertTrue(listener.wait())
             self.assertEquals(expected, listener.errors[0]['message'])
@@ -151,6 +136,8 @@ class TestLifecycle(base.BaseTest):
     def test_disconnect(self):
         ''' Test DISCONNECT command'''
         self.conn.disconnect()
+        # connections are closed asynchronously, e.g. a few seconds later
+        time.sleep(7)
         self.assertFalse(self.conn.is_connected())
 
     def test_disconnect_with_receipt(self):
