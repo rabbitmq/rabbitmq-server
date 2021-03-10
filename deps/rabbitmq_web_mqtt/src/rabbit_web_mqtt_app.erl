@@ -86,7 +86,8 @@ mqtt_init() ->
   ]}]),
   CowboyOpts = CowboyOpts0#{env          => #{dispatch => Routes},
                             middlewares  => [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler],
-                            proxy_header => get_env(proxy_protocol, false)},
+                            proxy_header => get_env(proxy_protocol, false),
+                            stream_handlers => [rabbit_web_mqtt_stream_handler, cowboy_stream_h]},
   case get_env(tcp_config, []) of
       []       -> ok;
       TCPConf0 -> start_tcp_listener(TCPConf0, CowboyOpts)

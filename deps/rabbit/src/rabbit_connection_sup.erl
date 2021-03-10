@@ -19,7 +19,7 @@
 -behaviour(supervisor2).
 -behaviour(ranch_protocol).
 
--export([start_link/4, reader/1]).
+-export([start_link/3, reader/1]).
 
 -export([init/1]).
 
@@ -27,10 +27,10 @@
 
 %%----------------------------------------------------------------------------
 
--spec start_link(any(), rabbit_net:socket(), module(), any()) ->
+-spec start_link(any(), module(), any()) ->
           {'ok', pid(), pid()}.
 
-start_link(Ref, _Sock, _Transport, _Opts) ->
+start_link(Ref, _Transport, _Opts) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     %% We need to get channels in the hierarchy here so they get shut
     %% down after the reader, so the reader gets a chance to terminate

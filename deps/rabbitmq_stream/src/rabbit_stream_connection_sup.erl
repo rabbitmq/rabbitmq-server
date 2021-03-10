@@ -21,11 +21,11 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/4,
+-export([start_link/3,
          start_keepalive_link/0]).
 -export([init/1]).
 
-start_link(Ref, _Sock, Transport, Opts) ->
+start_link(Ref, Transport, Opts) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     {ok, KeepaliveSup} =
         supervisor2:start_child(SupPid,

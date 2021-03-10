@@ -153,14 +153,12 @@ emit_publisher_info_local(VHost, Items, Ref, AggregatorPid) ->
                                                        list(VHost)).
 
 list(VHost) ->
-    [Client
-     || {_, ListSupPid, _, _}
-            <- supervisor2:which_children(rabbit_stream_sup),
-        {_, RanchSup, supervisor, _}
-            <- supervisor2:which_children(ListSupPid),
-        {ranch_conns_sup, ConnSup, _, _}
-            <- supervisor:which_children(RanchSup),
-        {_, CliSup, _, _} <- supervisor:which_children(ConnSup),
-        {rabbit_stream_reader, Client, _, _}
-            <- supervisor:which_children(CliSup),
+    [Client ||
+        {_, ListSup, _, _} <- supervisor2:which_children(rabbit_stream_sup),
+        {_, RanchEmbeddedSup, supervisor, _} <- supervisor2:which_children(ListSup),
+        {{ranch_listener_sup, _}, RanchListSup, _, _} <- supervisor:which_children(RanchEmbeddedSup),
+        {ranch_conns_sup_sup, RanchConnsSup, supervisor, _} <- supervisor2:which_children(RanchListSup),
+        {_, RanchConnSup, supervisor, _} <- supervisor2:which_children(RanchConnsSup),
+        {_, StompClientSup, supervisor, _} <- supervisor2:which_children(RanchConnSup),
+        {rabbit_stream_reader, Client, _, _} <- supervisor:which_children(StompClientSup),
         rabbit_stream_reader:in_vhost(Client, VHost)].
