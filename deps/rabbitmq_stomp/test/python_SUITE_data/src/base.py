@@ -33,7 +33,6 @@ class BaseTest(unittest.TestCase):
 
    def create_connection(self, user='guest', passcode='guest', wait=True, **kwargs):
        conn = self.create_connection_obj(**kwargs)
-       conn.start()
        conn.connect(user, passcode, wait=wait)
        return conn
 
@@ -105,8 +104,10 @@ class BaseTest(unittest.TestCase):
 
    def tearDown(self):
         if self.conn.is_connected():
-            self.conn.disconnect()
-            self.conn.stop()
+            try:
+                self.conn.disconnect()
+            except:
+                pass
 
    def simple_test_send_rec(self, dest, headers={}):
         self.listener.reset()

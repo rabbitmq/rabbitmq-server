@@ -21,7 +21,6 @@ class TestSslClient(unittest.TestCase):
                                 ssl_cert_file = ssl_cert_file,
                                 ssl_ca_certs = ssl_ca_certs)
         print("FILE: ".format(ssl_cert_file))
-        conn.start()
         conn.connect("guest", "guest")
         return conn
 
@@ -30,7 +29,6 @@ class TestSslClient(unittest.TestCase):
                                 use_ssl = True, ssl_key_file = ssl_key_file,
                                 ssl_cert_file = ssl_cert_file,
                                 ssl_ca_certs = ssl_ca_certs)
-        conn.start()
         conn.connect()
         return conn
 

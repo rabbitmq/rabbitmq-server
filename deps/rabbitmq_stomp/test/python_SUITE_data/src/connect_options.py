@@ -14,7 +14,8 @@ class TestConnectOptions(base.BaseTest):
         new_conn = stomp.Connection(host_and_ports=[('localhost', int(os.environ["STOMP_PORT"]))])
         new_conn.set_listener('', listener)
 
-        new_conn.start() # not going to issue connect
+        new_conn.transport.start()
+
         self.subscribe_dest(new_conn, "/topic/implicit", 'sub_implicit',
                             receipt='implicit')
 
@@ -34,7 +35,6 @@ class TestConnectOptions(base.BaseTest):
         listener = base.WaitableListener()
         new_conn = stomp.Connection(host_and_ports=[('localhost', int(os.environ["STOMP_PORT"]))])
         new_conn.set_listener('', listener)
-        new_conn.start()
         new_conn.connect()
         try:
             self.assertFalse(listener.wait(3)) # no error back
