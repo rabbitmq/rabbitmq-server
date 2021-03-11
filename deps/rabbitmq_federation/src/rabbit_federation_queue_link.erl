@@ -72,7 +72,7 @@ init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
                               upstream        = Upstream,
                               upstream_params = UParams}};
         {error, not_found} ->
-            rabbit_federation_link_util:log_warning(QName, "not found, stopping link~n", []),
+            rabbit_federation_link_util:log_warning(QName, "not found, stopping link", []),
             {stop, gone}
     end.
 

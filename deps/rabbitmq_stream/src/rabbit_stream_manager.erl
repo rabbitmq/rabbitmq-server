@@ -185,19 +185,19 @@ handle_call({create, VirtualHost, Reference, Arguments, Username},
                                 {reply, {error, reference_already_exists},
                                  State};
                             {error, Err} ->
-                                rabbit_log:warning("Error while creating ~p stream, ~p~n",
+                                rabbit_log:warning("Error while creating ~p stream, ~p",
                                                    [Reference, Err]),
                                 {reply, {error, internal_error}, State}
                         end
                     catch
                         exit:Error ->
-                            rabbit_log:info("Error while creating ~p stream, ~p~n",
-                                            [Reference, Error]),
+                            rabbit_log:error("Error while creating ~p stream, ~p",
+                                             [Reference, Error]),
                             {reply, {error, internal_error}, State}
                     end;
                 {error, {absent, _, Reason}} ->
-                    rabbit_log:warning("Error while creating ~p stream, ~p~n",
-                                       [Reference, Reason]),
+                    rabbit_log:error("Error while creating ~p stream, ~p",
+                                     [Reference, Reason]),
                     {reply, {error, internal_error}, State}
             end;
         error ->
@@ -209,27 +209,25 @@ handle_call({delete, VirtualHost, Reference, Username}, _From,
         #resource{virtual_host = VirtualHost,
                   kind = queue,
                   name = Reference},
-    rabbit_log:debug("Trying to delete stream ~p~n", [Reference]),
+    rabbit_log:debug("Trying to delete stream ~p", [Reference]),
     case rabbit_amqqueue:lookup(Name) of
         {ok, Q} ->
-            rabbit_log:debug("Found queue record ~p, checking if it is a stream~n",
+            rabbit_log:debug("Found queue record ~p, checking if it is a stream",
                              [Reference]),
             case is_stream_queue(Q) of
                 true ->
-                    rabbit_log:debug("Queue record ~p is a stream, trying to delete "
-                                     "it~n",
+                    rabbit_log:debug("Queue record ~p is a stream, trying to delete it",
                                      [Reference]),
-                    {ok, _} =
-                        rabbit_stream_queue:delete(Q, false, false, Username),
-                    rabbit_log:debug("Stream ~p deleted~n", [Reference]),
+                    {ok, _} = rabbit_stream_queue:delete(Q, false, false, Username),
+                    rabbit_log:debug("Stream ~p deleted", [Reference]),
                     {reply, {ok, deleted}, State};
                 _ ->
-                    rabbit_log:debug("Queue record ~p is NOT a stream, returning error~n",
+                    rabbit_log:debug("Queue record ~p is NOT a stream, returning error",
                                      [Reference]),
                     {reply, {error, reference_not_found}, State}
             end;
         {error, not_found} ->
-            rabbit_log:debug("Stream ~p not found, cannot delete it~n",
+            rabbit_log:debug("Stream ~p not found, cannot delete it",
                              [Reference]),
             {reply, {error, reference_not_found}, State}
     end;
@@ -361,8 +359,8 @@ handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
               end
           catch
               exit:Error ->
-                  rabbit_log:info("Error while looking up exchange ~p, ~p~n",
-                                  [ExchangeName, Error]),
+                  rabbit_log:error("Error while looking up exchange ~p, ~p",
+                                   [ExchangeName, Error]),
                   {error, stream_not_found}
           end,
     {reply, Res, State};
@@ -384,8 +382,8 @@ handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
                            [], rabbit_binding:list_for_source(ExchangeName))}
           catch
               exit:Error ->
-                  rabbit_log:info("Error while looking up exchange ~p, ~p~n",
-                                  [ExchangeName, Error]),
+                  rabbit_log:error("Error while looking up exchange ~p, ~p",
+                                   [ExchangeName, Error]),
                   {error, stream_not_found}
           end,
     {reply, Res, State};
@@ -396,7 +394,7 @@ handle_cast(_, State) ->
     {noreply, State}.
 
 handle_info(Info, State) ->
-    rabbit_log:info("Received info ~p~n", [Info]),
+    rabbit_log:info("Received info ~p", [Info]),
     {noreply, State}.
 
 is_stream_queue(Q) ->

@@ -199,7 +199,7 @@ delivery(Deliver = #'basic.deliver'{delivery_tag = DeliveryTag,
                             batchable = false},
     Msg1_0 = rabbit_amqp1_0_message:annotated_message(
                RKey, Deliver, Msg),
-    ?DEBUG("Outbound content:~n  ~p~n",
+    ?DEBUG("Outbound content:~n  ~p",
            [[amqp10_framing:pprint(Section) ||
                 Section <- amqp10_framing:decode_bin(
                              iolist_to_binary(Msg1_0))]]),

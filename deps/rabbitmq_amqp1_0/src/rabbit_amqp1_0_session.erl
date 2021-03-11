@@ -253,7 +253,7 @@ settle(Disp = #'v1_0.disposition'{first   = First0,
                                           Map;
                                       {value, Entry} ->
                                           #outgoing_delivery{delivery_tag = DeliveryTag } = Entry,
-                                          ?DEBUG("Settling ~p with ~p~n", [Delivery, _Outcome]),
+                                          ?DEBUG("Settling ~p with ~p", [Delivery, _Outcome]),
                                           UpstreamAckFun(DeliveryTag),
                                           gb_trees:delete(Delivery, Map)
                                   end

@@ -682,7 +682,6 @@ maybe_add_action(Action, Acc, State) ->
     {[Action | Acc], State}.
 
 do_resends(From, To, State) when From =< To ->
-    % ?INFO("rabbit_fifo_client: doing resends From ~w  To ~w~n", [From, To]),
     lists:foldl(fun resend/2, State, lists:seq(From, To));
 do_resends(_, _, State) ->
     State.

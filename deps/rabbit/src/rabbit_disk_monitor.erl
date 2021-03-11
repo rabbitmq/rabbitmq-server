@@ -199,7 +199,7 @@ dir() -> rabbit_mnesia:dir().
 set_disk_limits(State, Limit0) ->
     Limit = interpret_limit(Limit0),
     State1 = State#state { limit = Limit },
-    rabbit_log:info("Disk free limit set to ~pMB~n",
+    rabbit_log:info("Disk free limit set to ~pMB",
                     [trunc(Limit / 1000000)]),
     internal_update(State1).
 
@@ -283,7 +283,7 @@ interpret_limit(Absolute) ->
 
 emit_update_info(StateStr, CurrentFree, Limit) ->
     rabbit_log:info(
-      "Free disk space is ~s. Free bytes: ~p. Limit: ~p~n",
+      "Free disk space is ~s. Free bytes: ~p. Limit: ~p",
       [StateStr, CurrentFree, Limit]).
 
 start_timer(State) ->
@@ -306,11 +306,11 @@ enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries}
     case {catch get_disk_free(Dir),
           vm_memory_monitor:get_total_memory()} of
         {N1, N2} when is_integer(N1), is_integer(N2) ->
-            rabbit_log:info("Enabling free disk space monitoring~n", []),
+            rabbit_log:info("Enabling free disk space monitoring", []),
             start_timer(set_disk_limits(State, Limit));
         Err ->
             rabbit_log:info("Free disk space monitor encountered an error "
-                            "(e.g. failed to parse output from OS tools): ~p, retries left: ~b~n",
+                            "(e.g. failed to parse output from OS tools): ~p, retries left: ~b",
                             [Err, Retries]),
             erlang:send_after(Interval, self(), try_enable),
             State#state{enabled = false}

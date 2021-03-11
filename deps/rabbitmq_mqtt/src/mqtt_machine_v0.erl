@@ -110,7 +110,7 @@ apply(Meta, {leave, Node}, #machine_state{client_ids = Ids} = State0) ->
     {State, ok, Effects ++ snapshot_effects(Meta, State)};
 
 apply(_Meta, Unknown, State) ->
-    error_logger:error_msg("MQTT Raft state machine received unknown command ~p~n", [Unknown]),
+    logger:error("MQTT Raft state machine received an unknown command ~p", [Unknown]),
     {State, {error, {unknown_command, Unknown}}, []}.
 
 state_enter(leader, State) ->

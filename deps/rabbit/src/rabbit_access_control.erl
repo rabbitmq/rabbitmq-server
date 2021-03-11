@@ -85,7 +85,7 @@ try_authenticate(Module, Username, AuthProps) ->
     case Module:user_login_authentication(Username, AuthProps) of
         {ok, AuthUser}  -> {ok, AuthUser};
         {error, E}      -> {refused, Username,
-                            "~s failed authenticating ~s: ~p~n",
+                            "~s failed authenticating ~s: ~p",
                             [Module, Username, E]};
         {refused, F, A} -> {refused, Username, F, A}
     end.
@@ -97,7 +97,7 @@ try_authorize(Modules, Username, AuthProps) ->
                   {ok, Impl, Tags}-> {ok, [{Module, Impl} | ModsImpls], ModsTags ++ Tags};
                   {ok, Impl}      -> {ok, [{Module, Impl} | ModsImpls], ModsTags};
                   {error, E}      -> {refused, Username,
-                                        "~s failed authorizing ~s: ~p~n",
+                                        "~s failed authorizing ~s: ~p",
                                         [Module, Username, E]};
                   {refused, F, A} -> {refused, Username, F, A}
               end;
@@ -215,7 +215,7 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
         false ->
             rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs);
         {error, E}  ->
-            FullErrStr = ErrStr ++ ", backend ~s returned an error: ~p~n",
+            FullErrStr = ErrStr ++ ", backend ~s returned an error: ~p",
             FullErrArgs = ErrArgs ++ [Module, E],
             rabbit_log:error(FullErrStr, FullErrArgs),
             rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs)

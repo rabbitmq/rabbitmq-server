@@ -65,9 +65,7 @@ start_link(IPAddress, Port,
 
 init({IPAddress, Port, {M,F,A} = OnStartup, OnShutdown, Label}) ->
     process_flag(trap_exit, true),
-    error_logger:info_msg(
-      "started ~s on ~s:~p~n",
-      [Label, rabbit_misc:ntoab(IPAddress), Port]),
+    logger:info("started ~s on ~s:~p", [Label, rabbit_misc:ntoab(IPAddress), Port]),
     apply(M, F, A ++ [IPAddress, Port]),
     {ok, #state{on_startup = OnStartup, on_shutdown = OnShutdown,
                 label = Label, ip=IPAddress, port=Port}}.
@@ -82,8 +80,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, #state{on_shutdown = {M,F,A}, label=Label, ip=IPAddress, port=Port}) ->
-    error_logger:info_msg("stopped ~s on ~s:~p~n",
-                          [Label, rabbit_misc:ntoab(IPAddress), Port]),
+    logger:info("stopped ~s on ~s:~p", [Label, rabbit_misc:ntoab(IPAddress), Port]),
     apply(M, F, A ++ [IPAddress, Port]).
 
 code_change(_OldVsn, State, _Extra) ->

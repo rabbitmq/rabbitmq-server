@@ -116,12 +116,12 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
       {error, ErrTCP}               ->
           rabbit_log_connection:error(
               "Failed to start a WebSocket (HTTP) listener. Error: ~p,"
-              " listener settings: ~p~n",
+              " listener settings: ~p",
               [ErrTCP, TCPConf]),
           throw(ErrTCP)
   end,
   listener_started(?TCP_PROTOCOL, TCPConf),
-  rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w~n",
+  rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w",
                   [IpStr, Port]).
 
 start_tls_listener(TLSConf0, CowboyOpts) ->
@@ -143,12 +143,12 @@ start_tls_listener(TLSConf0, CowboyOpts) ->
       {error, ErrTLS}               ->
           rabbit_log_connection:error(
               "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~p,"
-              " listener settings: ~p~n",
+              " listener settings: ~p",
               [ErrTLS, TLSConf]),
           throw(ErrTLS)
   end,
   listener_started(?TLS_PROTOCOL, TLSConf),
-  rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w~n",
+  rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w",
                   [TLSIpStr, TLSPort]).
 
 listener_started(Protocol, Listener) ->

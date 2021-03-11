@@ -203,7 +203,7 @@ handle_cast(channels_terminated, State) ->
 handle_cast({hard_error_in_channel, _Pid, Reason}, State) ->
     server_initiated_close(Reason, State);
 handle_cast({channel_internal_error, Pid, Reason}, State) ->
-    ?LOG_WARN("Connection (~p) closing: internal error in channel (~p): ~p~n",
+    ?LOG_WARN("Connection (~p) closing: internal error in channel (~p): ~p",
               [self(), Pid, Reason]),
     internal_error(Pid, Reason, State);
 handle_cast({server_misbehaved, AmqpError}, State) ->
@@ -218,12 +218,12 @@ handle_cast({register_blocked_handler, HandlerPid}, State) ->
 handle_info({'DOWN', _, process, BlockHandler, Reason},
             State = #state{block_handler = {BlockHandler, _Ref}}) ->
     ?LOG_WARN("Connection (~p): Unregistering connection.{blocked,unblocked} handler ~p because it died. "
-              "Reason: ~p~n", [self(), BlockHandler, Reason]),
+              "Reason: ~p", [self(), BlockHandler, Reason]),
     {noreply, State#state{block_handler = none}};
 handle_info({'EXIT', BlockHandler, Reason},
             State = #state{block_handler = {BlockHandler, Ref}}) ->
     ?LOG_WARN("Connection (~p): Unregistering connection.{blocked,unblocked} handler ~p because it died. "
-              "Reason: ~p~n", [self(), BlockHandler, Reason]),
+              "Reason: ~p", [self(), BlockHandler, Reason]),
     erlang:demonitor(Ref, [flush]),
     {noreply, State#state{block_handler = none}};
 %% propagate the exit to the module that will stop with a sensible reason logged
@@ -329,12 +329,12 @@ internal_error(Pid, Reason, State) ->
 
 server_initiated_close(Close, State) ->
     ?LOG_WARN("Connection (~p) closing: received hard error ~p "
-              "from server~n", [self(), Close]),
+              "from server", [self(), Close]),
     set_closing_state(abrupt, #closing{reason = server_initiated_close,
                                        close = Close}, State).
 
 server_misbehaved_close(AmqpError, State) ->
-    ?LOG_WARN("Connection (~p) closing: server misbehaved: ~p~n",
+    ?LOG_WARN("Connection (~p) closing: server misbehaved: ~p",
               [self(), AmqpError]),
     {0, Close} = rabbit_binary_generator:map_exception(0, AmqpError, ?PROTOCOL),
     set_closing_state(abrupt, #closing{reason = server_misbehaved,

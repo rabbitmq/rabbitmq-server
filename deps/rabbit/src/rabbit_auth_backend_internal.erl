@@ -197,7 +197,7 @@ validate_and_alternate_credentials(Username, Password, ActingUser, Fun) ->
         ok           ->
             Fun(Username, Password, ActingUser);
         {error, Err} ->
-            rabbit_log:error("Credential validation for '~s' failed!~n", [Username]),
+            rabbit_log:error("Credential validation for '~s' failed!", [Username]),
             {error, Err}
     end.
 
@@ -334,7 +334,7 @@ change_password_sans_validation(Username, Password, ActingUser) ->
 -spec clear_password(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
 
 clear_password(Username, ActingUser) ->
-    rabbit_log:info("Clearing password for '~s'~n", [Username]),
+    rabbit_log:info("Clearing password for '~s'", [Username]),
     R = change_password_hash(Username, <<"">>),
     rabbit_event:notify(user_password_cleared,
                         [{name, Username},

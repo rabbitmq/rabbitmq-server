@@ -948,7 +948,7 @@ handle_exception(Reason, State = #ch{cfg = #conf{protocol = Protocol,
         {Channel, CloseMethod} ->
             rabbit_log_channel:error(
                 "Channel error on connection ~p (~s, vhost: '~s',"
-                " user: '~s'), channel ~p:~n~s~n",
+                " user: '~s'), channel ~p:~n~s",
                 [ConnPid, ConnName, VHost, User#user.username,
                  Channel, format_soft_error(Reason)]),
             ok = rabbit_writer:send_command(WriterPid, CloseMethod),

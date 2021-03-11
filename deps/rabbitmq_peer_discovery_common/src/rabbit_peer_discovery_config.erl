@@ -9,7 +9,8 @@
 
 -module(rabbit_peer_discovery_config).
 
--include("rabbit_peer_discovery.hrl").
+-include_lib("kernel/include/logger.hrl").
+-include("include/rabbit_peer_discovery.hrl").
 
 -export([get/3, get_integer/3, config_map/1]).
 
@@ -24,7 +25,10 @@
 get(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
         false ->
-            rabbit_log:error("Key ~s is not found in peer discovery config mapping ~p!", [Key, Mapping]),
+            ?LOG_ERROR(
+               "Key ~s is not found in peer discovery config mapping ~p!",
+               [Key, Mapping],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             throw({badkey, Key});
         true  ->
             get_with_entry_meta(Key, maps:get(Key, Mapping), Config)
@@ -37,7 +41,10 @@ get(Key, Mapping, Config) ->
 get_integer(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
         false ->
-            rabbit_log:error("Key ~s is not found in peer discovery config mapping ~p!", [Key, Mapping]),
+            ?LOG_ERROR(
+               "Key ~s is not found in peer discovery config mapping ~p!",
+               [Key, Mapping],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             throw({badkey, Key});
         true  ->
             get_integer_with_entry_meta(Key, maps:get(Key, Mapping), Config)

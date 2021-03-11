@@ -198,8 +198,8 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 !RABBITMQ_SERVER_START_ARGS! ^
 !RABBITMQ_DIST_ARG! ^
--lager crash_log false ^
--lager handlers "[]" ^
+-syslog logger [] ^
+-syslog syslog_error_logger false ^
 !STARVAR!
 
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:\=\\!

@@ -426,9 +426,9 @@ cluster_name_tx() ->
                   case Tl of
                       [] -> ok;
                       _  -> {VHost, _, _} = K,
-                            error_logger:warning_msg(
+                            logger:warning(
                               "Multiple local-nodenames found, picking '~s' "
-                              "from '~s' for cluster name~n", [Name, VHost])
+                              "from '~s' for cluster name", [Name, VHost])
                   end
     end,
     [mnesia:delete(T, K, write) || K <- Ks],

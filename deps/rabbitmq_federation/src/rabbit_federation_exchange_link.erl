@@ -78,7 +78,7 @@ init({Upstream, XName}) ->
             gen_server2:cast(self(), maybe_go),
             {ok, {not_started, {Upstream, UParams, XName}}};
         {error, not_found} ->
-            rabbit_federation_link_util:log_warning(XName, "not found, stopping link~n", []),
+            rabbit_federation_link_util:log_warning(XName, "not found, stopping link", []),
             {stop, gone}
     end.
 
@@ -110,7 +110,7 @@ handle_cast({enqueue, Serial, Cmd},
         {noreply, play_back_commands(State#state{waiting_cmds = Waiting1})}
     catch exit:{{shutdown, {server_initiated_close, 404, Text}}, _} ->
             rabbit_federation_link_util:log_warning(
-              XName, "detected upstream changes, restarting link: ~p~n", [Text]),
+              XName, "detected upstream changes, restarting link: ~p", [Text]),
             {stop, {shutdown, restart}, State}
     end;
 
@@ -629,11 +629,11 @@ check_internal_exchange(IntXNameBin,
       Params, XFU, fun(404, Text) ->
                            rabbit_federation_link_util:log_warning(
                              XName, "detected internal upstream exchange changes,"
-                             " restarting link: ~p~n", [Text]),
+                             " restarting link: ~p", [Text]),
                            upstream_not_found;
                       (Code, Text) ->
                            rabbit_federation_link_util:log_warning(
-                             XName, "internal upstream exchange check failed: ~p ~p~n",
+                             XName, "internal upstream exchange check failed: ~p ~p",
                              [Code, Text]),
                            error
                    end).

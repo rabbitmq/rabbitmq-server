@@ -1,60 +1,126 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2019-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%%
+
 -module(rabbit_prelaunch_early_logging).
 
--include_lib("rabbit_common/include/rabbit_log.hrl").
+-include_lib("kernel/include/logger.hrl").
 
--export([setup_early_logging/2,
+-include_lib("rabbit_common/include/logging.hrl").
+
+-export([setup_early_logging/1,
+         default_formatter/1,
+         default_console_formatter/1,
+         default_file_formatter/1,
+         default_syslog_formatter/1,
          enable_quick_dbg/1,
          use_colored_logging/0,
-         use_colored_logging/1,
-         list_expected_sinks/0]).
+         use_colored_logging/1]).
+-export([filter_log_event/2]).
 
-setup_early_logging(#{log_levels := undefined} = Context,
-                         LagerEventToStdout) ->
-    setup_early_logging(Context#{log_levels => get_default_log_level()},
-                             LagerEventToStdout);
-setup_early_logging(Context, LagerEventToStdout) ->
-    Configured = lists:member(
-                   lager_util:make_internal_sink_name(rabbit_log_prelaunch),
-                   lager:list_all_sinks()),
-    case Configured of
+-define(CONFIGURED_KEY, {?MODULE, configured}).
+
+setup_early_logging(#{log_levels := undefined} = Context) ->
+    setup_early_logging(Context#{log_levels => get_default_log_level()});
+setup_early_logging(Context) ->
+    case is_configured() of
         true  -> ok;
-        false -> do_setup_early_logging(Context, LagerEventToStdout)
+        false -> do_setup_early_logging(Context)
     end.
 
 get_default_log_level() ->
-    #{"prelaunch" => warning}.
+    #{"prelaunch" => notice}.
 
-do_setup_early_logging(#{log_levels := LogLevels} = Context,
-                       LagerEventToStdout) ->
-    redirect_logger_messages_to_lager(),
-    Colored = use_colored_logging(Context),
-    application:set_env(lager, colored, Colored),
-    ConsoleBackend = lager_console_backend,
-    case LagerEventToStdout of
-        true ->
-            GLogLevel = case LogLevels of
-                            #{global := Level} -> Level;
-                            _                  -> warning
-                        end,
-            _ = lager_app:start_handler(
-                  lager_event, ConsoleBackend, [{level, GLogLevel}]),
-            ok;
-        false ->
-            ok
-    end,
-    lists:foreach(
-      fun(Sink) ->
-              CLogLevel = get_log_level(LogLevels, Sink),
-              lager_app:configure_sink(
-                Sink,
-                [{handlers, [{ConsoleBackend, [{level, CLogLevel}]}]}])
-      end, list_expected_sinks()),
+do_setup_early_logging(#{log_levels := LogLevels} = Context) ->
+    add_rmqlog_filter(LogLevels),
+    ok = logger:update_handler_config(
+           default, main_handler_config(Context)).
+
+is_configured() ->
+    persistent_term:get(?CONFIGURED_KEY, false).
+
+add_rmqlog_filter(LogLevels) ->
+    add_erlang_specific_filters(LogLevels),
+    FilterConfig0 = lists:foldl(
+                      fun
+                          ({_, V}, FC) when is_boolean(V) -> FC;
+                          ({K, V}, FC) when is_atom(K) -> FC#{K => V};
+                          ({K, V}, FC) -> FC#{list_to_atom(K) => V}
+                      end, #{}, maps:to_list(LogLevels)),
+    FilterConfig1 = case maps:is_key(global, FilterConfig0) of
+                        true  -> FilterConfig0;
+                        false -> FilterConfig0#{global => ?DEFAULT_LOG_LEVEL}
+                    end,
+    ok = logger:add_handler_filter(
+           default, ?FILTER_NAME, {fun filter_log_event/2, FilterConfig1}),
+    ok = logger:set_primary_config(level, all),
+    ok = persistent_term:put(?CONFIGURED_KEY, true).
+
+add_erlang_specific_filters(_) ->
+    _ = logger:add_handler_filter(
+          default, progress_reports, {fun logger_filters:progress/2, stop}),
     ok.
 
-redirect_logger_messages_to_lager() ->
-    io:format(standard_error, "Configuring logger redirection~n", []),
-    ok = logger:add_handler(rabbit_log, rabbit_log, #{}),
-    ok = logger:set_primary_config(level, all).
+filter_log_event(
+  #{meta := #{domain := ?RMQLOG_DOMAIN_GLOBAL}} = LogEvent,
+  FilterConfig) ->
+    MinLevel = get_min_level(global, FilterConfig),
+    do_filter_log_event(LogEvent, MinLevel);
+filter_log_event(
+  #{meta := #{domain := [?RMQLOG_SUPER_DOMAIN_NAME, CatName | _]}} = LogEvent,
+  FilterConfig) ->
+    MinLevel = get_min_level(CatName, FilterConfig),
+    do_filter_log_event(LogEvent, MinLevel);
+filter_log_event(
+  #{meta := #{domain := [CatName | _]}} = LogEvent,
+  FilterConfig) ->
+    MinLevel = get_min_level(CatName, FilterConfig),
+    do_filter_log_event(LogEvent, MinLevel);
+filter_log_event(LogEvent, FilterConfig) ->
+    MinLevel = get_min_level(global, FilterConfig),
+    do_filter_log_event(LogEvent, MinLevel).
+
+get_min_level(global, FilterConfig) ->
+    maps:get(global, FilterConfig, none);
+get_min_level(CatName, FilterConfig) ->
+    case maps:is_key(CatName, FilterConfig) of
+        true  -> maps:get(CatName, FilterConfig);
+        false -> get_min_level(global, FilterConfig)
+    end.
+
+do_filter_log_event(_, none) ->
+    stop;
+do_filter_log_event(#{level := Level} = LogEvent, MinLevel) ->
+    case logger:compare_levels(Level, MinLevel) of
+        lt -> stop;
+        _  -> LogEvent
+    end.
+
+main_handler_config(Context) ->
+    #{filter_default => log,
+      formatter => default_formatter(Context)}.
+
+default_formatter(#{log_levels := #{json := true}}) ->
+    {rabbit_logger_json_fmt, #{}};
+default_formatter(Context) ->
+    Color = use_colored_logging(Context),
+    {rabbit_logger_text_fmt, #{color => Color}}.
+
+default_console_formatter(Context) ->
+    default_formatter(Context).
+
+default_file_formatter(Context) ->
+    default_formatter(Context#{output_supports_colors => false}).
+
+default_syslog_formatter(Context) ->
+    {Module, Config} = default_file_formatter(Context),
+    case Module of
+        rabbit_logger_text_fmt -> {Module, Config#{prefix => false}};
+        rabbit_logger_json_fmt -> {Module, Config}
+    end.
 
 use_colored_logging() ->
     use_colored_logging(rabbit_prelaunch:get_context()).
@@ -64,45 +130,6 @@ use_colored_logging(#{log_levels := #{color := true},
     true;
 use_colored_logging(_) ->
     false.
-
-list_expected_sinks() ->
-    Key = {?MODULE, lager_extra_sinks},
-    case persistent_term:get(Key, undefined) of
-        undefined ->
-            CompileOptions = proplists:get_value(options,
-                                                 module_info(compile),
-                                                 []),
-            AutoList = [lager_util:make_internal_sink_name(M)
-                        || M <- proplists:get_value(lager_extra_sinks,
-                                                    CompileOptions, [])],
-            List = case lists:member(?LAGER_SINK, AutoList) of
-                true  -> AutoList;
-                false -> [?LAGER_SINK | AutoList]
-            end,
-            %% Store the list in the application environment. If this
-            %% module is later cover-compiled, the compile option will
-            %% be lost, so we will be able to retrieve the list from the
-            %% application environment.
-            persistent_term:put(Key, List),
-            List;
-        List ->
-            List
-    end.
-
-sink_to_category(Sink) when is_atom(Sink) ->
-    re:replace(
-      atom_to_list(Sink),
-      "^rabbit_log_(.+)_lager_event$",
-      "\\1",
-      [{return, list}]).
-
-get_log_level(LogLevels, Sink) ->
-    Category = sink_to_category(Sink),
-    case LogLevels of
-        #{Category := Level} -> Level;
-        #{global := Level}   -> Level;
-        _                    -> warning
-    end.
 
 enable_quick_dbg(#{dbg_output := Output, dbg_mods := Mods}) ->
     case Output of

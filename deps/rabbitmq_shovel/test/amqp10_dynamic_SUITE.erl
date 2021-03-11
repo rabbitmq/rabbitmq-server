@@ -45,9 +45,7 @@ groups() ->
 init_per_suite(Config0) ->
     {ok, _} = application:ensure_all_started(amqp10_client),
     rabbit_ct_helpers:log_environment(),
-    Config = rabbit_ct_helpers:merge_app_env(Config0,
-                                             [{lager, [{error_logger_hwm, 200}]}]),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
+    Config1 = rabbit_ct_helpers:set_config(Config0, [
         {rmq_nodename_suffix, ?MODULE}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,

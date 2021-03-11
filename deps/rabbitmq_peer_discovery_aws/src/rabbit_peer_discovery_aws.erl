@@ -247,7 +247,7 @@ get_next_token(Value) ->
 api_get_request(Service, Path) ->
     case rabbitmq_aws:get(Service, Path) of
         {ok, {_Headers, Payload}} ->
-            rabbit_log:debug("AWS request: ~s~nResponse: ~p~n",
+            rabbit_log:debug("AWS request: ~s~nResponse: ~p",
                              [Path, Payload]),
             {ok, Payload};
         {error, {credentials, _}} -> {error, credentials};

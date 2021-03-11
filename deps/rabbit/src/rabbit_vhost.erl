@@ -43,7 +43,7 @@ recover() ->
 
 recover(VHost) ->
     VHostDir = msg_store_dir_path(VHost),
-    rabbit_log:info("Making sure data directory '~ts' for vhost '~s' exists~n",
+    rabbit_log:info("Making sure data directory '~ts' for vhost '~s' exists",
                     [VHostDir, VHost]),
     VHostStubFile = filename:join(VHostDir, ".vhost"),
     ok = rabbit_file:ensure_dir(VHostStubFile),
@@ -147,7 +147,7 @@ delete(VHost, ActingUser) ->
     %% process, which in turn results in further mnesia actions and
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
-    rabbit_log:info("Deleting vhost '~s'~n", [VHost]),
+    rabbit_log:info("Deleting vhost '~s'", [VHost]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
     [begin
          Name = amqqueue:get_name(Q),
@@ -257,7 +257,7 @@ vhost_down(VHost) ->
 
 delete_storage(VHost) ->
     VhostDir = msg_store_dir_path(VHost),
-    rabbit_log:info("Deleting message store directory for vhost '~s' at '~s'~n", [VHost, VhostDir]),
+    rabbit_log:info("Deleting message store directory for vhost '~s' at '~s'", [VHost, VhostDir]),
     %% Message store should be closed when vhost supervisor is closed.
     case rabbit_file:recursive_delete([VhostDir]) of
         ok                   -> ok;

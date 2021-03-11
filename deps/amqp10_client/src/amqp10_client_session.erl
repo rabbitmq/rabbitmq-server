@@ -372,7 +372,7 @@ mapped(cast, {#'v1_0.transfer'{handle = {uint, InHandle},
             ok = notify_link(Link, credit_exhausted),
             {next_state, mapped, State};
         {transfer_limit_exceeded, State} ->
-            error_logger:info_msg("transfer_limit_exceeded for link ~p~n", [Link]),
+            logger:warning("transfer_limit_exceeded for link ~p", [Link]),
             Link1 = detach_with_error_cond(Link, State,
                                            ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED),
             {next_state, mapped, update_link(Link1, State)}
@@ -403,7 +403,7 @@ mapped(cast, #'v1_0.disposition'{role = true, settled = true, first = {uint, Fir
 
     {next_state, mapped, State#state{unsettled = Unsettled}};
 mapped(cast, Frame, State) ->
-    error_logger:warning_msg("Unhandled session frame ~p in state ~p~n",
+    logger:warning("Unhandled session frame ~p in state ~p",
                              [Frame, State]),
     {next_state, mapped, State};
 mapped({call, From},
@@ -490,7 +490,7 @@ mapped({call, From}, Msg, State) ->
     {keep_state, State1, [{reply, From, Reply}]};
 
 mapped(_EvtType, Msg, _State) ->
-    error_logger:info_msg("amqp10_session: unhandled msg in mapped state ~W",
+    logger:warning("amqp10_session: unhandled msg in mapped state ~W",
                           [Msg, 10]),
     keep_state_and_data.
 

@@ -695,7 +695,7 @@ merge_data(_, D1, D2) -> % we assume if we get here both values a maps
        maps_merge(fun merge_data/3, D1, D2)
    catch
        error:Err ->
-           rabbit_log:debug("merge_data err ~p got: ~p ~p ~n", [Err, D1, D2]),
+           rabbit_log:debug("merge_data err ~p got: ~p ~p", [Err, D1, D2]),
            case is_map(D1) of
                true -> D1;
                false -> D2

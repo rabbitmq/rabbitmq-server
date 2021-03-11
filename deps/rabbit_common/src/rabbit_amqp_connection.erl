@@ -14,11 +14,11 @@ amqp_params(ConnPid, Timeout) ->
     P = try
             gen_server:call(ConnPid, {info, [amqp_params]}, Timeout)
         catch exit:{noproc, Error} ->
-                rabbit_log:debug("file ~p, line ~p - connection process ~p not alive: ~p~n",
+                rabbit_log:debug("file ~p, line ~p - connection process ~p not alive: ~p",
                                  [?FILE, ?LINE, ConnPid, Error]),
             [];
               _:Error ->
-                rabbit_log:debug("file ~p, line ~p - failed to get amqp_params from connection process ~p: ~p~n",
+                rabbit_log:debug("file ~p, line ~p - failed to get amqp_params from connection process ~p: ~p",
                                  [?FILE, ?LINE, ConnPid, Error]),
             []
         end,

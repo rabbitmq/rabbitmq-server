@@ -1478,7 +1478,7 @@ move_to_per_vhost_stores(#resource{virtual_host = VHost} = QueueName) ->
             ok = rabbit_file:rename(OldQueueDir, NewQueueDir),
             ok = ensure_queue_name_stub_file(NewQueueDir, QueueName);
         false ->
-            Msg  = "Queue index directory '~s' not found for ~s~n",
+            Msg  = "Queue index directory '~s' not found for ~s",
             Args = [OldQueueDir, rabbit_misc:rs(QueueName)],
             rabbit_log_upgrade:error(Msg, Args),
             rabbit_log:error(Msg, Args)

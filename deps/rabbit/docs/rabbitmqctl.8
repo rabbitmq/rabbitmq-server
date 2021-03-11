@@ -146,25 +146,6 @@ For example, to reset the RabbitMQ node:
 .sp
 .Dl rabbitmqctl reset
 .\" ------------------------------------------------------------------
-.It Cm rotate_logs
-.Pp
-Instructs the RabbitMQ node to perform internal log rotation.
-.Pp
-Log rotation is performed according to lager settings specified in
-configuration file.
-.Pp
-Note that there is no need to call this command in case of external log
-rotation (e.g. from logrotate(8)), because lager detects renames and
-automatically reopens log files.
-.Pp
-For example, this command starts internal log rotation
-process:
-.sp
-.Dl rabbitmqctl rotate_logs
-.Pp
-Rotation is performed asynchronously, so there is no guarantee that it
-will be completed when this command returns.
-.\" ------------------------------------------------------------------
 .It Cm shutdown
 .Pp
 Shuts down the node, both RabbitMQ and its runtime.

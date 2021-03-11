@@ -141,20 +141,7 @@ init_per_testcase(Testcase, Config) ->
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
     case ?config(tc_group_properties, Config) of
         [{name, registry} | _] ->
-            application:set_env(lager, colored, true),
-            application:set_env(
-              lager,
-              handlers, [{lager_console_backend, [{level, debug}]}]),
-            application:set_env(
-              lager,
-              extra_sinks,
-              [{rabbit_log_lager_event,
-                [{handlers, [{lager_console_backend, [{level, debug}]}]}]
-               },
-               {rabbit_log_feature_flags_lager_event,
-                [{handlers, [{lager_console_backend, [{level, debug}]}]}]
-               }]),
-            lager:start(),
+            logger:set_primary_config(level, debug),
             FeatureFlagsFile = filename:join(?config(priv_dir, Config),
                                              rabbit_misc:format(
                                                "feature_flags-~s",

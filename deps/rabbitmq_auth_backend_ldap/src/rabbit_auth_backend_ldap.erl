@@ -483,7 +483,7 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                 network ->
                     Pre = "    LDAP network traffic: ",
                     rabbit_log_ldap:info(
-                      "    LDAP connecting to servers: ~p~n", [Servers]),
+                      "    LDAP connecting to servers: ~p", [Servers]),
                     [{log, fun(1, S, A) -> rabbit_log_ldap:warning(Pre ++ S, A);
                               (2, S, A) ->
                                    rabbit_log_ldap:info(Pre ++ S, scrub_creds(A, []))
@@ -491,7 +491,7 @@ with_ldap({ok, Creds}, Fun, Servers) ->
                 network_unsafe ->
                     Pre = "    LDAP network traffic: ",
                     rabbit_log_ldap:info(
-                      "    LDAP connecting to servers: ~p~n", [Servers]),
+                      "    LDAP connecting to servers: ~p", [Servers]),
                     [{log, fun(1, S, A) -> rabbit_log_ldap:warning(Pre ++ S, A);
                               (2, S, A) -> rabbit_log_ldap:info(   Pre ++ S, A)
                            end} | Opts0];
@@ -737,7 +737,7 @@ get_expected_env_str(Key, Default) ->
     V = case env(Key) of
             Default ->
                 rabbit_log_ldap:warning("rabbitmq_auth_backend_ldap configuration key '~p' is set to "
-                                        "the default value of '~p', expected to get a non-default value~n",
+                                        "the default value of '~p', expected to get a non-default value",
                                         [Key, Default]),
                 Default;
             V0 ->
@@ -833,7 +833,7 @@ dn_lookup(Username, LDAP) ->
             ?L1("DN lookup: ~s -> ~s", [Username, DN]),
             DN;
         {ok, #eldap_search_result{entries = Entries}} ->
-            rabbit_log_ldap:warning("Searching for DN for ~s, got back ~p~n",
+            rabbit_log_ldap:warning("Searching for DN for ~s, got back ~p",
                                [Filled, Entries]),
             Filled;
         {error, _} = E ->
@@ -911,7 +911,7 @@ is_dn(_S) -> false.
 
 log(Fmt,  Args) -> case env(log) of
                        false -> ok;
-                       _     -> rabbit_log_ldap:info(Fmt ++ "~n", Args)
+                       _     -> rabbit_log_ldap:info(Fmt ++ "", Args)
                    end.
 
 fill(Fmt, Args) ->

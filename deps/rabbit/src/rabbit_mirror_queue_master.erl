@@ -150,7 +150,7 @@ sync_mirrors(HandleInfo, EmitStats,
                               backing_queue_state = BQS }) ->
     Log = fun (Fmt, Params) ->
                   rabbit_mirror_queue_misc:log_info(
-                    QName, "Synchronising: " ++ Fmt ++ "~n", Params)
+                    QName, "Synchronising: " ++ Fmt ++ "", Params)
           end,
     Log("~p messages to synchronise", [BQ:len(BQS)]),
     {ok, Q} = rabbit_amqqueue:lookup(QName),
@@ -198,7 +198,7 @@ terminate(Reason,
         true  -> %% Remove the whole queue to avoid data loss
                  rabbit_mirror_queue_misc:log_warning(
                    QName, "Stopping all nodes on master shutdown since no "
-                   "synchronised mirror (replica) is available~n", []),
+                   "synchronised mirror (replica) is available", []),
                  stop_all_slaves(Reason, State);
         false -> %% Just let some other mirror take over.
                  ok

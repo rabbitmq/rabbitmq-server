@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
 
   def run([log_level], %{node: node_name}) do
     arg = String.to_atom(log_level)
-    :rabbit_misc.rpc_call(node_name, :rabbit_lager, :set_log_level, [arg])
+    :rabbit_misc.rpc_call(node_name, :rabbit, :set_log_level, [arg])
   end
 
   def usage, do: "set_log_level <log_level>"

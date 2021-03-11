@@ -620,25 +620,24 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                                 connection = Connection,
                                 version    = Version});
         {error, {auth_failure, _}} ->
-            rabbit_log:warning("STOMP login failed for user ~p~n",
-                               [binary_to_list(Username)]),
+            rabbit_log:warning("STOMP login failed for user '~s': authentication failed", [Username]),
             error("Bad CONNECT", "Access refused for user '" ++
                   binary_to_list(Username) ++ "'~n", [], State);
         {error, not_allowed} ->
-            rabbit_log:warning("STOMP login failed - not_allowed "
-                               "(vhost access not allowed)~n"),
+            rabbit_log:warning("STOMP login failed for user '~s': "
+                               "virtual host access not allowed", [Username]),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
                                  "' access denied", State);
         {error, access_refused} ->
-            rabbit_log:warning("STOMP login failed - access_refused "
-                               "(vhost access not allowed)~n"),
+            rabbit_log:warning("STOMP login failed for user '~s': "
+                               "virtual host access not allowed", [Username]),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
                                  "' access denied", State);
         {error, not_loopback} ->
-            rabbit_log:warning("STOMP login failed - access_refused "
-                               "(user must access over loopback)~n"),
+            rabbit_log:warning("STOMP login failed for user '~s': "
+                               "this user's access is restricted to localhost", [Username]),
             error("Bad CONNECT", "non-loopback access denied", State)
     end.
 
@@ -1135,12 +1134,12 @@ ok(Command, Headers, BodyFragments, State) ->
                       body_iolist = BodyFragments}, State}.
 
 amqp_death(access_refused = ErrorName, Explanation, State) ->
-    ErrorDesc = rabbit_misc:format("~s~n", [Explanation]),
+    ErrorDesc = rabbit_misc:format("~s", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
     {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))};
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = amqp_connection:error_atom(ReplyCode),
-    ErrorDesc = rabbit_misc:format("~s~n", [Explanation]),
+    ErrorDesc = rabbit_misc:format("~s", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
     {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))}.
 
@@ -1162,7 +1161,7 @@ log_error(Message, Detail, ServerPrivateDetail) ->
     rabbit_log:error("STOMP error frame sent:~n"
                      "Message: ~p~n"
                      "Detail: ~p~n"
-                     "Server private detail: ~p~n",
+                     "Server private detail: ~p",
                      [Message, Detail, ServerPrivateDetail]).
 
 %%----------------------------------------------------------------------------

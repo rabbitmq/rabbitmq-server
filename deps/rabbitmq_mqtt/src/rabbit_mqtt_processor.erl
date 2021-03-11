@@ -120,7 +120,7 @@ process_request(?CONNECT,
                 case creds(Username, Password, SSLLoginName) of
                     nocreds ->
                         rabbit_core_metrics:auth_attempt_failed(Ip, <<>>, mqtt),
-                        rabbit_log_connection:error("MQTT login failed: no credentials provided~n"),
+                        rabbit_log_connection:error("MQTT login failed: no credentials provided"),
                         {?CONNACK_CREDENTIALS, PState1};
                     {invalid_creds, {undefined, Pass}} when is_list(Pass) ->
                         rabbit_core_metrics:auth_attempt_failed(Ip, <<>>, mqtt),
@@ -552,7 +552,7 @@ process_login(UserBin, PassBin, ProtoVersion,
     {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
     rabbit_log_connection:info(
-        "MQTT vhost picked using ~s~n",
+        "MQTT vhost picked using ~s",
         [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
     RemoteAddress = list_to_binary(inet:ntoa(Addr)),
     case rabbit_vhost:exists(VHost) of
@@ -578,34 +578,34 @@ process_login(UserBin, PassBin, ProtoVersion,
                                                                     mqtt),
                             amqp_connection:close(Connection),
                             rabbit_log_connection:warning(
-                                "MQTT login failed for ~p access_refused "
-                                "(access must be from localhost)~n",
+                                "MQTT login failed for user ~s: "
+                                "this user's access is restricted to localhost",
                                 [binary_to_list(UsernameBin)]),
                             ?CONNACK_AUTH
                     end;
                 {error, {auth_failure, Explanation}} ->
                     rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin, mqtt),
-                    rabbit_log_connection:error("MQTT login failed for user '~p' auth_failure: ~s~n",
+                    rabbit_log_connection:error("MQTT login failed for user '~s', authentication failed: ~s",
                         [binary_to_list(UserBin), Explanation]),
                     ?CONNACK_CREDENTIALS;
                 {error, access_refused} ->
                     rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin, mqtt),
-                    rabbit_log_connection:warning("MQTT login failed for user '~p': access_refused "
-                    "(vhost access not allowed)~n",
+                    rabbit_log_connection:warning("MQTT login failed for user '~s': "
+                        "virtual host access not allowed",
                         [binary_to_list(UserBin)]),
                     ?CONNACK_AUTH;
                 {error, not_allowed} ->
                     rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin, mqtt),
                     %% when vhost allowed for TLS connection
-                    rabbit_log_connection:warning("MQTT login failed for ~p access_refused "
-                    "(vhost access not allowed)~n",
+                    rabbit_log_connection:warning("MQTT login failed for user '~s': "
+                        "virtual host access not allowed",
                         [binary_to_list(UserBin)]),
                     ?CONNACK_AUTH
             end;
         false ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, UsernameBin, mqtt),
-            rabbit_log_connection:error("MQTT login failed for user '~p' auth_failure: vhost ~s does not exist~n",
-                [binary_to_list(UserBin), VHost]),
+            rabbit_log_connection:error("MQTT login failed for user '~s': virtual host '~s' does not exist",
+                [UserBin, VHost]),
             ?CONNACK_CREDENTIALS
     end.
 
@@ -819,7 +819,7 @@ send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain,
             end;
         Error  ->
             rabbit_log:warning(
-                "Could not send last will: ~p~n",
+                "Could not send last will: ~p",
                 [Error])
     end,
     case ChQos1 of
@@ -941,7 +941,7 @@ handle_ra_event(register_timeout, PState) ->
     PState;
 handle_ra_event(Evt, PState) ->
     %% log these?
-    rabbit_log:debug("unhandled ra_event: ~w ~n", [Evt]),
+    rabbit_log:debug("unhandled ra_event: ~w ", [Evt]),
     PState.
 
 %% NB: check_*: MQTT spec says we should ack normally, ie pretend there
@@ -1003,10 +1003,10 @@ check_topic_access(TopicName, Access,
                     R
             catch
                 _:{amqp_error, access_refused, Msg, _} ->
-                    rabbit_log:error("operation resulted in an error (access_refused): ~p~n", [Msg]),
+                    rabbit_log:error("operation resulted in an error (access_refused): ~p", [Msg]),
                     {error, access_refused};
                 _:Error ->
-                    rabbit_log:error("~p~n", [Error]),
+                    rabbit_log:error("~p", [Error]),
                     {error, access_refused}
             end
     end.

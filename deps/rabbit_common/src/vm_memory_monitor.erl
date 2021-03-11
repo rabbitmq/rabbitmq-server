@@ -88,7 +88,7 @@ get_total_memory() ->
                 {error, parse_error} ->
                     rabbit_log:warning(
                       "The override value for the total memmory available is "
-                      "not a valid value: ~p, getting total from the system.~n",
+                      "not a valid value: ~p, getting total from the system.",
                       [Value]),
                     get_total_memory_from_os()
             end;
@@ -249,7 +249,7 @@ get_cached_process_memory_and_limit() ->
     try
         gen_server:call(?MODULE, get_cached_process_memory_and_limit, infinity)
     catch exit:{noproc, Error} ->
-        rabbit_log:warning("Memory monitor process not yet started: ~p~n", [Error]),
+        rabbit_log:warning("Memory monitor process not yet started: ~p", [Error]),
         ProcessMemory = get_process_memory_uncached(),
         {ProcessMemory, infinity}
     end.
@@ -304,7 +304,7 @@ get_total_memory_from_os() ->
         get_total_memory(os:type())
     catch _:Error:Stacktrace ->
             rabbit_log:warning(
-              "Failed to get total system memory: ~n~p~n~p~n",
+              "Failed to get total system memory: ~n~p~n~p",
               [Error, Stacktrace]),
             unknown
     end.
@@ -327,7 +327,7 @@ set_mem_limits(State, MemLimit) ->
                              memory_limit = undefined } ->
                         rabbit_log:warning(
                           "Unknown total memory size for your OS ~p. "
-                          "Assuming memory size is ~p MiB (~p bytes).~n",
+                          "Assuming memory size is ~p MiB (~p bytes).",
                           [os:type(),
                            trunc(?MEMORY_SIZE_FOR_UNKNOWN_OS/?ONE_MiB),
                            ?MEMORY_SIZE_FOR_UNKNOWN_OS]);
@@ -344,7 +344,7 @@ set_mem_limits(State, MemLimit) ->
                   "Only ~p MiB (~p bytes) of ~p MiB (~p bytes) memory usable due to "
                   "limited address space.~n"
                   "Crashes due to memory exhaustion are possible - see~n"
-                  "https://www.rabbitmq.com/memory.html#address-space~n",
+                  "https://www.rabbitmq.com/memory.html#address-space",
                   [trunc(Limit/?ONE_MiB), Limit, trunc(TotalMemory/?ONE_MiB),
                    TotalMemory]),
                 Limit;
@@ -354,7 +354,7 @@ set_mem_limits(State, MemLimit) ->
     MemLim = interpret_limit(parse_mem_limit(MemLimit), UsableMemory),
     rabbit_log:info(
         "Memory high watermark set to ~p MiB (~p bytes)"
-        " of ~p MiB (~p bytes) total~n",
+        " of ~p MiB (~p bytes) total",
         [trunc(MemLim/?ONE_MiB), MemLim,
          trunc(TotalMemory/?ONE_MiB), TotalMemory]
     ),
@@ -380,13 +380,13 @@ parse_mem_limit(MemLimit) when is_float(MemLimit), MemLimit =< ?MAX_VM_MEMORY_HI
     MemLimit;
 parse_mem_limit(MemLimit) when is_float(MemLimit), MemLimit > ?MAX_VM_MEMORY_HIGH_WATERMARK ->
     rabbit_log:warning(
-      "Memory high watermark of ~p is above the allowed maximum, falling back to ~p~n",
+      "Memory high watermark of ~p is above the allowed maximum, falling back to ~p",
       [MemLimit, ?MAX_VM_MEMORY_HIGH_WATERMARK]
     ),
     ?MAX_VM_MEMORY_HIGH_WATERMARK;
 parse_mem_limit(MemLimit) ->
     rabbit_log:warning(
-      "Memory high watermark of ~p is invalid, defaulting to ~p~n",
+      "Memory high watermark of ~p is invalid, defaulting to ~p",
       [MemLimit, ?DEFAULT_VM_MEMORY_HIGH_WATERMARK]
     ),
     ?DEFAULT_VM_MEMORY_HIGH_WATERMARK.
@@ -408,7 +408,7 @@ internal_update(State0 = #state{memory_limit = MemLimit,
 
 emit_update_info(AlarmState, MemUsed, MemLimit) ->
     rabbit_log:info(
-      "vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
+      "vm_memory_high_watermark ~p. Memory used:~p allowed:~p",
       [AlarmState, MemUsed, MemLimit]).
 
 %% According to https://msdn.microsoft.com/en-us/library/aa366778(VS.85).aspx
