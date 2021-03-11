@@ -107,7 +107,7 @@ sd_notify_socat(Socket) ->
     case sd_current_unit() of
         {ok, Unit} ->
             ?LOG_DEBUG(
-              ?LOG_PREFIX "systemd unit for activation check: \"~s\"~n",
+              ?LOG_PREFIX "systemd unit for activation check: \"~s\"",
               [Unit],
               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             sd_notify_socat(Socket, Unit);
@@ -125,7 +125,7 @@ sd_notify_socat(Socket, Unit) ->
     catch
         Class:Reason ->
             ?LOG_DEBUG(
-              ?LOG_PREFIX "Failed to start socat(1): ~p:~p~n",
+              ?LOG_PREFIX "Failed to start socat(1): ~p:~p",
               [Class, Reason],
               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             false
@@ -157,7 +157,7 @@ sd_wait_activation(Port, Unit) ->
     case os:find_executable("systemctl") of
         false ->
             ?LOG_DEBUG(
-              ?LOG_PREFIX "systemctl(1) unavailable, falling back to sleep~n",
+              ?LOG_PREFIX "systemctl(1) unavailable, falling back to sleep",
               [],
               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             timer:sleep(5000),
@@ -168,7 +168,7 @@ sd_wait_activation(Port, Unit) ->
 
 sd_wait_activation(_, _, 0) ->
     ?LOG_DEBUG(
-      ?LOG_PREFIX "service still in 'activating' state, bailing out~n",
+      ?LOG_PREFIX "service still in 'activating' state, bailing out",
       [],
       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok;
@@ -182,7 +182,7 @@ sd_wait_activation(Port, Unit, AttemptsLeft) ->
             ok;
         _ = Err ->
             ?LOG_DEBUG(
-              ?LOG_PREFIX "unexpected status from systemd: ~p~n", [Err],
+              ?LOG_PREFIX "unexpected status from systemd: ~p", [Err],
               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             ok
     end.

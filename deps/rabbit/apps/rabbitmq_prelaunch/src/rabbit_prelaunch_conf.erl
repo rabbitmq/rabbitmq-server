@@ -204,7 +204,7 @@ generate_config_from_cuttlefish_files(Context,
     case SchemaFiles of
         [] ->
             ?LOG_ERROR(
-              "No configuration schema found~n", [],
+              "No configuration schema found", [],
               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             throw({error, no_configuration_schema_found});
         _ ->

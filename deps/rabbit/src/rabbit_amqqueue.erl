@@ -111,7 +111,7 @@ warn_file_limit() ->
     case file_handle_cache:get_limit() < L of
         true ->
             rabbit_log:warning(
-              "Recovering ~p queues, available file handles: ~p. Please increase max open file handles limit to at least ~p!~n",
+              "Recovering ~p queues, available file handles: ~p. Please increase max open file handles limit to at least ~p!",
               [L, file_handle_cache:get_limit(), L]);
         false ->
             ok
@@ -626,7 +626,7 @@ retry_wait(Q, F, E, RetriesLeft) ->
                     % The old check would have crashed here,
                     % instead, log it and run the exit fun. absent & alive is weird,
                     % but better than crashing with badmatch,true
-                    rabbit_log:debug("Unexpected alive queue process ~p~n", [QPid]),
+                    rabbit_log:debug("Unexpected alive queue process ~p", [QPid]),
                     E({absent, Q, alive});
                 false ->
                     ok % Expected result
@@ -1234,7 +1234,7 @@ count(VHost) ->
     %% that requires a proper consensus algorithm.
     length(list_for_count(VHost))
   catch _:Err ->
-    rabbit_log:error("Failed to fetch number of queues in vhost ~p:~n~p~n",
+    rabbit_log:error("Failed to fetch number of queues in vhost ~p:~n~p",
                      [VHost, Err]),
     0
   end.

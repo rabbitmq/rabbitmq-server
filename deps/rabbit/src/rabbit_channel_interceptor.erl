@@ -53,8 +53,7 @@ check_no_overlap1(Sets) ->
                     case sets:size(Is) of
                         0 -> ok;
                         _ ->
-                            internal_error("Interceptor: more than one "
-                                                "module handles ~p~n", [Is])
+                            internal_error("Interceptor: more than one module handles ~p", [Is])
                       end,
                     sets:union(Set, Union)
                 end,

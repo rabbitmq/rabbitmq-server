@@ -132,7 +132,7 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
                         send_settle_mode = SSM,
                         recv_settle_mode = RSM} = Link, BCh) ->
     MsgBin = iolist_to_binary(lists:reverse([MsgPart | MsgAcc])),
-    ?DEBUG("Inbound content:~n  ~p~n",
+    ?DEBUG("Inbound content:~n  ~p",
            [[amqp10_framing:pprint(Section) ||
                 Section <- amqp10_framing:decode_bin(MsgBin)]]),
     {MsgRKey, Msg} = rabbit_amqp1_0_message:assemble(MsgBin),

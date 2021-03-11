@@ -36,7 +36,7 @@
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_data_coercion, [to_binary/1]).
 
--define(INFO(Text, Args), error_logger:info_msg(Text, Args)).
+-define(INFO(Text, Args), rabbit_log_shovel:info(Text, Args)).
 -define(LINK_CREDIT_TIMEOUT, 5000).
 
 -type state() :: rabbit_shovel_behaviour:state().
@@ -182,7 +182,7 @@ handle_source({amqp10_event, {connection, Conn, opened}},
 handle_source({amqp10_event, {connection, Conn, {closed, Why}}},
               #{source := #{current := #{conn := Conn}},
                 name := Name}) ->
-    ?INFO("Shovel ~s source connection closed. Reason: ~p~n", [Name, Why]),
+    ?INFO("Shovel ~s source connection closed. Reason: ~p", [Name, Why]),
     {stop, {inbound_conn_closed, Why}};
 handle_source({amqp10_event, {session, Sess, begun}},
               State = #{source := #{current := #{session := Sess}}}) ->
@@ -215,9 +215,8 @@ handle_dest({amqp10_disposition, {Result, Tag}},
             {#{Tag := IncomingTag}, rejected} ->
                 {1, rabbit_shovel_behaviour:nack(IncomingTag, false, State1)};
             _ -> % not found - this should ideally not happen
-                error_logger:warning_msg("Shovel ~s amqp10 destination "
-                                         "disposition tag not found: ~p~n",
-                                         [Name, Tag]),
+                rabbit_log_shovel:warning("Shovel ~s amqp10 destination disposition tag not found: ~p",
+                                          [Name, Tag]),
                 {0, State1}
         end,
     rabbit_shovel_behaviour:decr_remaining(Decr, State);
@@ -227,7 +226,7 @@ handle_dest({amqp10_event, {connection, Conn, opened}},
 handle_dest({amqp10_event, {connection, Conn, {closed, Why}}},
             #{name := Name,
               dest := #{current := #{conn := Conn}}}) ->
-    ?INFO("Shovel ~s destination connection closed. Reason: ~p~n", [Name, Why]),
+    ?INFO("Shovel ~s destination connection closed. Reason: ~p", [Name, Why]),
     {stop, {outbound_conn_died, Why}};
 handle_dest({amqp10_event, {session, Sess, begun}},
             State = #{dest := #{current := #{session := Sess}}}) ->

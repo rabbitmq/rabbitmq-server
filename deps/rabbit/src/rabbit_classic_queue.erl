@@ -437,7 +437,7 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
         gen_server2:mcall(
           [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q, recovery),
             {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
-    [rabbit_log:error("Queue ~p failed to initialise: ~p~n",
+    [rabbit_log:error("Queue ~p failed to initialise: ~p",
                       [Pid, Error]) || {Pid, Error} <- Failures],
     [Q || {_, {new, Q}} <- Results].
 

@@ -211,7 +211,7 @@ drop_mirror(QName, MirrorNode) ->
                 [PrimaryPid] when MirrorPids =:= [] ->
                     {error, cannot_drop_only_mirror};
                 [Pid] ->
-                    log_info(Name, "Dropping queue mirror on node ~p~n",
+                    log_info(Name, "Dropping queue mirror on node ~p",
                              [MirrorNode]),
                     exit(Pid, {shutdown, dropped}),
                     {ok, dropped}
@@ -238,7 +238,7 @@ add_mirror(QName, MirrorNode, SyncMode) ->
                         {ok, _} ->
                             try
                                 MirrorPid = rabbit_amqqueue_sup_sup:start_queue_process(MirrorNode, Q, slave),
-                                log_info(QName, "Adding mirror on node ~p: ~p~n", [MirrorNode, MirrorPid]),
+                                log_info(QName, "Adding mirror on node ~p: ~p", [MirrorNode, MirrorPid]),
                                 rabbit_mirror_queue_slave:go(MirrorPid, SyncMode)
                             of
                                 _ -> ok
@@ -246,13 +246,13 @@ add_mirror(QName, MirrorNode, SyncMode) ->
                                 error:QError ->
                                     log_warning(QName,
                                         "Unable to start queue mirror on node '~p'. "
-                                        "Target queue supervisor is not running: ~p~n",
+                                        "Target queue supervisor is not running: ~p",
                                         [MirrorNode, QError])
                             end;
                         {error, Error} ->
                             log_warning(QName,
                                         "Unable to start queue mirror on node '~p'. "
-                                        "Target virtual host is not running: ~p~n",
+                                        "Target virtual host is not running: ~p",
                                         [MirrorNode, Error]),
                             ok
                     end
@@ -264,7 +264,7 @@ add_mirror(QName, MirrorNode, SyncMode) ->
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
 report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
-    log_info(QueueName, "~s replica of queue ~s detected replica ~s to be down~n",
+    log_info(QueueName, "~s replica of queue ~s detected replica ~s to be down",
                     [case IsMaster of
                          true  -> "Primary";
                          false -> "Secondary"
@@ -342,7 +342,7 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
                 after WaitTimeout ->
                         rabbit_mirror_queue_misc:log_warning(
                           QName, "Missing 'DOWN' message from ~p in"
-                          " node ~p~n", [Pid, node(Pid)]),
+                          " node ~p", [Pid, node(Pid)]),
                         [Pid | Acc]
                 end;
             false ->

@@ -717,7 +717,7 @@ init([Type, BaseDir, ClientRefs, StartupFunState]) ->
     Name = filename:join(filename:basename(BaseDir), atom_to_list(Type)),
 
     {ok, IndexModule} = application:get_env(rabbit, msg_store_index_module),
-    rabbit_log:info("Message store ~tp: using ~p to provide index~n", [Name, IndexModule]),
+    rabbit_log:info("Message store ~tp: using ~p to provide index", [Name, IndexModule]),
 
     AttemptFileSummaryRecovery =
         case ClientRefs of
@@ -794,11 +794,11 @@ init([Type, BaseDir, ClientRefs, StartupFunState]) ->
                       true -> "clean";
                       false -> "unclean"
                   end,
-    rabbit_log:debug("Rebuilding message location index after ~s shutdown...~n",
+    rabbit_log:debug("Rebuilding message location index after ~s shutdown...",
                      [Cleanliness]),
     {Offset, State1 = #msstate { current_file = CurFile }} =
         build_index(CleanShutdown, StartupFunState, State),
-    rabbit_log:debug("Finished rebuilding index~n", []),
+    rabbit_log:debug("Finished rebuilding index", []),
     %% read is only needed so that we can seek
     {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
                              [read | ?WRITE_MODE]),
@@ -999,7 +999,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
         {error, FSErr} ->
             rabbit_log:error("Unable to store file summary"
                              " for vhost message store for directory ~p~n"
-                             "Error: ~p~n",
+                             "Error: ~p",
                              [Dir, FSErr])
     end,
     [true = ets:delete(T) || T <- [FileSummaryEts, FileHandlesEts,
@@ -1012,7 +1012,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
             ok;
         {error, RTErr} ->
             rabbit_log:error("Unable to save message store recovery terms"
-                             " for directory ~p~nError: ~p~n",
+                             " for directory ~p~nError: ~p",
                              [Dir, RTErr])
     end,
     State3 #msstate { index_state         = undefined,
@@ -1574,12 +1574,12 @@ index_clean_up_temporary_reference_count_entries(
 recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir, _Name) ->
     {false, IndexModule:new(Dir), []};
 recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Name) ->
-    rabbit_log:warning("Message store ~tp: rebuilding indices from scratch~n", [Name]),
+    rabbit_log:warning("Message store ~tp: rebuilding indices from scratch", [Name]),
     {false, IndexModule:new(Dir), []};
 recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Name) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
                     rabbit_log:warning("Message store ~tp : " ++ ErrorMsg ++ "~n"
-                                       "rebuilding indices from scratch~n",
+                                       "rebuilding indices from scratch",
                                        [Name | ErrorArgs]),
                     {false, IndexModule:new(Dir), []}
             end,
@@ -1741,9 +1741,9 @@ build_index(true, _StartupFunState,
       end, {0, State}, FileSummaryEts);
 build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
             State = #msstate { dir = Dir }) ->
-    rabbit_log:debug("Rebuilding message refcount...~n", []),
+    rabbit_log:debug("Rebuilding message refcount...", []),
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
-    rabbit_log:debug("Done rebuilding message refcount~n", []),
+    rabbit_log:debug("Done rebuilding message refcount", []),
     {ok, Pid} = gatherer:start_link(),
     case [filename_to_num(FileName) ||
              FileName <- list_sorted_filenames(Dir, ?FILE_EXTENSION)] of
@@ -1757,7 +1757,7 @@ build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
 build_index_worker(Gatherer, State = #msstate { dir = Dir },
                    Left, File, Files) ->
     FileName = filenum_to_name(File),
-    rabbit_log:debug("Rebuilding message location index from ~p (~B file(s) remaining)~n",
+    rabbit_log:debug("Rebuilding message location index from ~p (~B file(s) remaining)",
                      [form_filename(Dir, FileName), length(Files)]),
     {ok, Messages, FileSize} =
         scan_file_for_valid_messages(Dir, FileName),

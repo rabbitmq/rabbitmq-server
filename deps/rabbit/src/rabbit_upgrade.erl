@@ -91,9 +91,9 @@ ensure_backup_taken() ->
 
 take_backup() ->
     BackupDir = backup_dir(),
-    info("upgrades: Backing up mnesia dir to ~p~n", [BackupDir]),
+    info("upgrades: Backing up mnesia dir to ~p", [BackupDir]),
     case rabbit_mnesia:copy_db(BackupDir) of
-        ok         -> info("upgrades: Mnesia dir backed up to ~p~n",
+        ok         -> info("upgrades: Mnesia dir backed up to ~p",
                            [BackupDir]);
         {error, E} -> throw({could_not_back_up_mnesia_dir, E, BackupDir})
     end.
@@ -106,7 +106,7 @@ ensure_backup_removed() ->
 
 remove_backup() ->
     ok = rabbit_file:recursive_delete([backup_dir()]),
-    info("upgrades: Mnesia backup removed~n", []).
+    info("upgrades: Mnesia backup removed", []).
 
 -spec maybe_upgrade_mnesia() -> 'ok'.
 
@@ -216,7 +216,7 @@ primary_upgrade(Upgrades, Nodes) ->
                    rabbit_table:force_load(),
                    case Others of
                        [] -> ok;
-                       _  -> info("mnesia upgrades: Breaking cluster~n", []),
+                       _  -> info("mnesia upgrades: Breaking cluster", []),
                              [{atomic, ok} = mnesia:del_table_copy(schema, Node)
                               || Node <- Others]
                    end
@@ -280,16 +280,16 @@ maybe_migrate_queues_to_per_vhost_storage() ->
 
 apply_upgrades(Scope, Upgrades, Fun) ->
     ok = rabbit_file:lock_file(lock_filename()),
-    info("~s upgrades: ~w to apply~n", [Scope, length(Upgrades)]),
+    info("~s upgrades: ~w to apply", [Scope, length(Upgrades)]),
     rabbit_misc:ensure_ok(mnesia:start(), cannot_start_mnesia),
     Fun(),
     [apply_upgrade(Scope, Upgrade) || Upgrade <- Upgrades],
-    info("~s upgrades: All upgrades applied successfully~n", [Scope]),
+    info("~s upgrades: All upgrades applied successfully", [Scope]),
     ok = rabbit_version:record_desired_for_scope(Scope),
     ok = file:delete(lock_filename()).
 
 apply_upgrade(Scope, {M, F}) ->
-    info("~s upgrades: Applying ~w:~w~n", [Scope, M, F]),
+    info("~s upgrades: Applying ~w:~w", [Scope, M, F]),
     ok = apply(M, F, []).
 
 %% -------------------------------------------------------------------

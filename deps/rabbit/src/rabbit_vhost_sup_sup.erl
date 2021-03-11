@@ -79,7 +79,7 @@ stop_and_delete_vhost(VHost) ->
                 false -> ok;
                 true  ->
                     rabbit_log:info("Stopping vhost supervisor ~p"
-                                    " for vhost '~s'~n",
+                                    " for vhost '~s'",
                                     [VHostSupPid, VHost]),
                     case supervisor2:terminate_child(?MODULE, WrapperPid) of
                         ok ->

@@ -140,7 +140,7 @@ update_x_death_header(Info, Headers) ->
               [{table, rabbit_misc:sort_field_table(Info1)} | Others]);
         {<<"x-death">>, InvalidType, Header} ->
             rabbit_log:warning("Message has invalid x-death header (type: ~p)."
-                               " Resetting header ~p~n",
+                               " Resetting header ~p",
                                [InvalidType, Header]),
             %% if x-death is something other than an array (list)
             %% then we reset it: this happens when some clients consume
@@ -247,7 +247,7 @@ log_cycle_once(Queues) ->
         true      -> ok;
         undefined -> rabbit_log:warning(
                        "Message dropped. Dead-letter queues cycle detected" ++
-                           ": ~p~nThis cycle will NOT be reported again.~n",
+                           ": ~p~nThis cycle will NOT be reported again.",
                        [Queues]),
                      put(Key, true)
     end.

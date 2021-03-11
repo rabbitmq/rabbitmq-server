@@ -419,7 +419,7 @@ handle_tick(QName,
                           [] ->
                               ok;
                           Stale ->
-                              rabbit_log:info("~s: stale nodes detected. Purging ~w~n",
+                              rabbit_log:info("~s: stale nodes detected. Purging ~w",
                                               [rabbit_misc:rs(QName), Stale]),
                               %% pipeline purge command
                               {ok, Q} = rabbit_amqqueue:lookup(QName),
@@ -618,7 +618,7 @@ force_delete_queue(Servers) ->
              Err ->
                  rabbit_log:warning(
                    "Force delete of ~w failed with: ~w"
-                   "This may require manual data clean up~n",
+                   "This may require manual data clean up",
                    [S, Err]),
                  ok
          end

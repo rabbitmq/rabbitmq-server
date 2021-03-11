@@ -52,7 +52,7 @@ count_tracked_items(TableNameFun, CountRecPosition, Key, ContextMsg) ->
                             Acc + N
                         catch _:Err  ->
                                 rabbit_log:error(
-                                  "Failed to fetch number of ~p ~p on node ~p:~n~p~n",
+                                  "Failed to fetch number of ~p ~p on node ~p:~n~p",
                                   [ContextMsg, Key, Node, Err]),
                                 Acc
                         end

@@ -368,7 +368,7 @@ decode_body(?CONTENT_JSON, Body) ->
         {error, Err}  ->
             ?LOG_ERROR(
                "HTTP client could not decode a JSON payload "
-               "(JSON parser returned an error): ~p.~n",
+               "(JSON parser returned an error): ~p.",
                [Err],
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             []

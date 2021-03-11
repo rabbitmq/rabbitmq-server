@@ -41,7 +41,7 @@ description() ->
 user_login_authentication(Username, AuthProps) ->
     case authenticate(Username, AuthProps) of
 	{refused, Msg, Args} = AuthResult ->
-	    rabbit_log:debug(Msg ++ "~n", Args),
+	    rabbit_log:debug(Msg, Args),
 	    AuthResult;
 	_ = AuthResult ->
 	    AuthResult

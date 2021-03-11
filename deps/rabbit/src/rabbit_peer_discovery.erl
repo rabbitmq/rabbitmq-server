@@ -84,7 +84,7 @@ lock_acquisition_failure_mode() ->
 -spec log_configured_backend() -> ok.
 
 log_configured_backend() ->
-  rabbit_log:info("Configured peer discovery backend: ~s~n", [backend()]).
+  rabbit_log:info("Configured peer discovery backend: ~s", [backend()]).
 
 maybe_init() ->
     Backend = backend(),

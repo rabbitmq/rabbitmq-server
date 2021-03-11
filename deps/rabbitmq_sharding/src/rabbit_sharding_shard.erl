@@ -91,7 +91,7 @@ declare_queue(XName, Durable, N, Node) ->
     catch
         _Error:Reason ->
             rabbit_log:error("sharding failed to declare queue for exchange ~p"
-                             " - soft error:~n~p~n",
+                             " - soft error:~n~p",
                              [exchange_bin(XName), Reason]),
             error
     end.

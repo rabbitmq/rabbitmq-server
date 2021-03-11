@@ -238,7 +238,7 @@ refresh_provider_certs(Provider, Config, ProviderState) ->
             NewProviderState;
         {error, Reason} ->
             rabbit_log:error("Unable to load certificate list for provider ~p,"
-                             " reason: ~p~n",
+                             " reason: ~p",
                              [Provider, Reason]),
             ProviderState
     end.
@@ -317,7 +317,7 @@ providers(Config) ->
                 {module, Provider} -> true;
                 {error, Error} ->
                     rabbit_log:warning("Unable to load trust store certificates"
-                                       " with provider module ~p. Reason: ~p~n",
+                                       " with provider module ~p. Reason: ~p",
                                        [Provider, Error]),
                     false
             end

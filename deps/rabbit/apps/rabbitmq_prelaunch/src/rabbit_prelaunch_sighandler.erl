@@ -69,13 +69,13 @@ handle_event(Signal, State) ->
         %% which should stop RabbitMQ.
         %
         %#{Signal := stop} ->
-        %    error_logger:info_msg(
-        %      "~s received - shutting down~n",
+        %    logger:info(
+        %      "~s received - shutting down",
         %      [string:uppercase(atom_to_list(Signal))]),
         %    ok = init:stop();
         _ ->
-            error_logger:info_msg(
-              "~s received - unhandled signal~n",
+            logger:info(
+              "~s received - unhandled signal",
               [string:uppercase(atom_to_list(Signal))])
     end,
     {ok, State}.

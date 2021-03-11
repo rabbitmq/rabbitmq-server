@@ -150,7 +150,7 @@ log_poodle_fail(Context) ->
       "better.~n~n"
       "If you cannot upgrade now and want to re-enable SSL listeners, you can~n"
       "set the config item 'ssl_allow_poodle_attack' to 'true' in the~n"
-      "'rabbit' section of your configuration file.~n",
+      "'rabbit' section of your configuration file.",
       [rabbit_misc:otp_release(), Context]).
 
 fix_ssl_options(Config) ->
@@ -171,7 +171,7 @@ tcp_listener_addresses({Host, Port, Family0})
     [{IPAddress, Port, Family} ||
         {IPAddress, Family} <- getaddr(Host, Family0)];
 tcp_listener_addresses({_Host, Port, _Family0}) ->
-    rabbit_log:error("invalid port ~p - not 0..65535~n", [Port]),
+    rabbit_log:error("invalid port ~p - not 0..65535", [Port]),
     throw({error, {invalid_port, Port}}).
 
 tcp_listener_addresses_auto(Port) ->
@@ -371,11 +371,11 @@ on_node_down(Node) ->
     case lists:member(Node, nodes()) of
         false ->
             rabbit_log:info(
-                   "Node ~s is down, deleting its listeners~n", [Node]),
+                   "Node ~s is down, deleting its listeners", [Node]),
             ok = mnesia:dirty_delete(rabbit_listener, Node);
         true  ->
             rabbit_log:info(
-                   "Keeping ~s listeners: the node is already back~n", [Node])
+                   "Keeping ~s listeners: the node is already back", [Node])
     end.
 
 -spec register_connection(pid()) -> ok.
@@ -457,11 +457,11 @@ close_connection(Pid, Explanation) ->
     case lists:member(Pid, connections()) of
         true  ->
             Res = rabbit_reader:shutdown(Pid, Explanation),
-            rabbit_log:info("Closing connection ~p because ~p~n", [Pid, Explanation]),
+            rabbit_log:info("Closing connection ~p because ~p", [Pid, Explanation]),
             Res;
         false ->
             rabbit_log:warning("Asked to close connection ~p (reason: ~p) "
-                               "but no running cluster node reported it as an active connection. Was it already closed? ~n",
+                               "but no running cluster node reported it as an active connection. Was it already closed? ",
                                [Pid, Explanation]),
             ok
     end.
@@ -578,7 +578,7 @@ gethostaddr(Host, Family) ->
 
 -spec host_lookup_error(_, _) -> no_return().
 host_lookup_error(Host, Reason) ->
-    rabbit_log:error("invalid host ~p - ~p~n", [Host, Reason]),
+    rabbit_log:error("invalid host ~p - ~p", [Host, Reason]),
     throw({error, {invalid_host, Host, Reason}}).
 
 resolve_family({_,_,_,_},         auto) -> inet;

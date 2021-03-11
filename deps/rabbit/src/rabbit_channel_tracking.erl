@@ -117,7 +117,7 @@ handle_cast({user_deleted, Details}) ->
     ok;
 handle_cast({node_deleted, Details}) ->
     Node = pget(node, Details),
-    rabbit_log_connection:info(
+    rabbit_log_channel:info(
         "Node '~s' was removed from the cluster, deleting"
         " its channel tracking tables...", [Node]),
     delete_tracked_channels_table_for_node(Node),

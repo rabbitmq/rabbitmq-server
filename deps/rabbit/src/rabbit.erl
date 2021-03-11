@@ -830,14 +830,14 @@ start(normal, []) ->
               product_base_name := BaseName,
               product_base_version := BaseVersion} ->
                 ?LOG_INFO(
-                   "~n Starting ~s ~s on Erlang ~s~n Based on ~s ~s~n ~s~n ~s~n",
+                   "~n Starting ~s ~s on Erlang ~s~n Based on ~s ~s~n ~s~n ~s",
                    [product_name(), product_version(), rabbit_misc:otp_release(),
                     BaseName, BaseVersion,
                     ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE],
                    #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
             _ ->
                 ?LOG_INFO(
-                   "~n Starting ~s ~s on Erlang ~s~n ~s~n ~s~n",
+                   "~n Starting ~s ~s on Erlang ~s~n ~s~n ~s",
                    [product_name(), product_version(), rabbit_misc:otp_release(),
                     ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE],
                    #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
@@ -1230,7 +1230,7 @@ warn_if_kernel_config_dubious() ->
                 true  -> ok;
                 false -> ?LOG_WARNING(
                            "Kernel poll (epoll, kqueue, etc) is disabled. "
-                           "Throughput and CPU utilization may worsen.~n",
+                           "Throughput and CPU utilization may worsen.",
                            #{domain => ?RMQLOG_DOMAIN_GLOBAL})
             end
     end,
@@ -1238,7 +1238,7 @@ warn_if_kernel_config_dubious() ->
     case DirtyIOSchedulers < ?DIRTY_IO_SCHEDULERS_WARNING_THRESHOLD of
         true  -> ?LOG_WARNING(
                    "Erlang VM is running with ~b dirty I/O schedulers, "
-                   "file I/O performance may worsen~n", [DirtyIOSchedulers],
+                   "file I/O performance may worsen", [DirtyIOSchedulers],
                    #{domain => ?RMQLOG_DOMAIN_GLOBAL});
         false -> ok
     end,
@@ -1248,7 +1248,7 @@ warn_if_kernel_config_dubious() ->
               end,
     case proplists:get_value(nodelay, IDCOpts, false) of
         false -> ?LOG_WARNING("Nagle's algorithm is enabled for sockets, "
-                              "network I/O latency will be higher~n",
+                              "network I/O latency will be higher",
                               #{domain => ?RMQLOG_DOMAIN_GLOBAL});
         true  -> ok
     end.
@@ -1278,7 +1278,7 @@ validate_msg_store_io_batch_size_and_credit_disc_bound(CreditDiscBound,
             if IoBatchSize < ?IO_BATCH_SIZE ->
                     throw({error,
                      {"io_batch_size of ~b lower than recommended value ~b, "
-                      "paging performance may worsen~n",
+                      "paging performance may worsen",
                       [IoBatchSize, ?IO_BATCH_SIZE]}});
                true ->
                     ok
@@ -1299,7 +1299,7 @@ validate_msg_store_io_batch_size_and_credit_disc_bound(CreditDiscBound,
                     throw({error,
                      {"msg_store_credit_disc_bound {~b, ~b} lower than"
                       "recommended value {~b, ~b},"
-                      " paging performance may worsen~n",
+                      " paging performance may worsen",
                       [IC, MCA, RIC, RMCA]}});
                true ->
                     ok
@@ -1327,7 +1327,7 @@ validate_msg_store_io_batch_size_and_credit_disc_bound(CreditDiscBound,
                       {error,
                        {"msg_store_io_batch_size ~b should be bigger than the initial "
                         "credit value from msg_store_credit_disc_bound ~b,"
-                        " paging performance may worsen~n",
+                        " paging performance may worsen",
                         [IoBatchSize, InitialCredit]}});
                true ->
                     ok
@@ -1505,9 +1505,9 @@ ensure_working_fhc() ->
             {ok, true}  -> "ON";
             {ok, false} -> "OFF"
         end,
-        ?LOG_INFO("FHC read buffering:  ~s~n", [ReadBuf],
+        ?LOG_INFO("FHC read buffering: ~s", [ReadBuf],
                   #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-        ?LOG_INFO("FHC write buffering: ~s~n", [WriteBuf],
+        ?LOG_INFO("FHC write buffering: ~s", [WriteBuf],
                   #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
         Filename = filename:join(code:lib_dir(kernel, ebin), "kernel.app"),
         {ok, Fd} = file_handle_cache:open(Filename, [raw, binary, read], []),

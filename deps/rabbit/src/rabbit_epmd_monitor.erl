@@ -86,10 +86,10 @@ check_epmd(State = #state{mod  = Mod,
     {ok, State#state{port = Port1}}.
 
 handle_port_please(init, noport, Me, Port) ->
-    rabbit_log:info("epmd does not know us, re-registering as ~s~n", [Me]),
+    rabbit_log:info("epmd does not know us, re-registering as ~s", [Me]),
     {ok, Port};
 handle_port_please(check, noport, Me, Port) ->
-    rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b~n", [Me, Port]),
+    rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b", [Me, Port]),
     {ok, Port};
 handle_port_please(_, closed, _Me, Port) ->
     rabbit_log:error("epmd monitor failed to retrieve our port from epmd: closed"),
