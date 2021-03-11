@@ -16,6 +16,8 @@
 
 -module(rabbit_stomp_processor).
 
+-compile({no_auto_import, [error/3]}).
+
 -export([initial_state/2, process_frame/2, flush_and_die/1]).
 -export([flush_pending_receipts/3,
          handle_exit/3,
