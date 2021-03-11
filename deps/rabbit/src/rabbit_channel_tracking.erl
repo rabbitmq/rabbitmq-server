@@ -99,7 +99,7 @@ handle_cast({connection_closed, ConnDetails}) ->
     case pget(node, ConnDetails) of
         ThisNode ->
             TrackedChs = get_tracked_channels_by_connection_pid(ConnPid),
-            rabbit_log_connection:info(
+            rabbit_log_channel:info(
                 "Closing all channels from connection '~s' "
                 "because it has been closed", [pget(name, ConnDetails)]),
             %% Shutting down channels will take care of unregistering the
