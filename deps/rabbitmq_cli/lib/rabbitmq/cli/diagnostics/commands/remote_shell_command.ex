@@ -16,7 +16,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.RemoteShellCommand do
     user_drv = :user_drv.start(['tty_sl -c -e', {node_name, :shell, :start, []}])
     Process.link(user_drv)
     receive do
-        {'EXIT', user_drv, _} ->
+        {'EXIT', _user_drv, _} ->
             {:ok, "Disconnected from #{node_name}."}
     end
   end
