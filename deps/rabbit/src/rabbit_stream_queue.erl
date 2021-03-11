@@ -427,9 +427,14 @@ i(members, Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
     Nodes;
 i(online, Q) ->
-    #{replica_pids := ReplicaPids,
-      leader_pid := LeaderPid} = amqqueue:get_type_state(Q),
-    [node(P) || P <- ReplicaPids ++ [LeaderPid], rabbit_misc:is_process_alive(P)];
+    #{name := StreamId} = amqqueue:get_type_state(Q),
+    {ok, Members} = rabbit_stream_coordinator:members(StreamId),
+    rabbit_log:warning("MEMBERS ~p", [Members]),
+    maps:fold(fun(_, {undefined, _}, Acc) ->
+                      Acc;
+                 (Key, _, Acc) ->
+                      [Key | Acc]
+              end, [], Members);
 i(state, Q) when ?is_amqqueue(Q) ->
     %% TODO the coordinator should answer this, I guess??
     running;

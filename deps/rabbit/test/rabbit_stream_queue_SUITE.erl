@@ -96,7 +96,8 @@ all_tests() ->
      max_age_policy,
      max_segment_size_policy,
      purge,
-     update_retention_policy
+     update_retention_policy,
+     queue_info
     ].
 
 %% -------------------------------------------------------------------
@@ -319,7 +320,6 @@ add_replica(Config) ->
                           [<<"/">>, Q, Server1])),
     %% replicas must be recorded on the state, and if we publish messages then they must
     %% be stored on disk
-    timer:sleep(2000),
     check_leader_and_replicas(Config, Q, [Server0, Server1]),
     %% And if we try again? Idempotent
     ?assertEqual(ok, rpc:call(Server0, rabbit_stream_queue, add_replica,
@@ -330,7 +330,6 @@ add_replica(Config) ->
     rabbit_control_helper:command(start_app, Server2),
     ?assertEqual(ok, rpc:call(Server0, rabbit_stream_queue, add_replica,
                               [<<"/">>, Q, Server2])),
-    timer:sleep(2000),
     check_leader_and_replicas(Config, Q, [Server0, Server1, Server2]).
 
 delete_replica(Config) ->
@@ -348,7 +347,6 @@ delete_replica(Config) ->
     ?assertEqual(ok,
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
                           [<<"/">>, Q, Server1])),
-    timer:sleep(2000),
     %% check it's gone
     check_leader_and_replicas(Config, Q, [Server0, Server2]),
     %% And if we try again? Idempotent
@@ -357,7 +355,6 @@ delete_replica(Config) ->
     %% Delete the last replica
     ?assertEqual(ok, rpc:call(Server0, rabbit_stream_queue, delete_replica,
                               [<<"/">>, Q, Server2])),
-    timer:sleep(2000),
     check_leader_and_replicas(Config, Q, [Server0]).
 
 grow_coordinator_cluster(Config) ->
@@ -452,10 +449,11 @@ delete_down_replica(Config) ->
     %% check it isn't gone
     check_leader_and_replicas(Config, Q, [Server0, Server1, Server2]),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
-    timer:sleep(5000),
-    ?assertEqual(ok,
-                 rpc:call(Server0, rabbit_stream_queue, delete_replica,
-                          [<<"/">>, Q, Server1])).
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              ok == rpc:call(Server0, rabbit_stream_queue, delete_replica,
+                             [<<"/">>, Q, Server1])
+      end).
 
 publish(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1222,15 +1220,19 @@ leader_failover(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
     timer:sleep(30000),
 
-    [Info] = lists:filter(
-               fun(Props) ->
-                       QName = rabbit_misc:r(<<"/">>, queue, Q),
-                       lists:member({name, QName}, Props)
-               end,
-               rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_amqqueue,
-                                            info_all, [<<"/">>, [name, leader, members]])),
-    NewLeader = proplists:get_value(leader, Info),
-    ?assert(NewLeader =/= Server1),
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              [Info] =
+                  lists:filter(
+                    fun(Props) ->
+                            QName = rabbit_misc:r(<<"/">>, queue, Q),
+                            lists:member({name, QName}, Props)
+                    end,
+                    rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_amqqueue,
+                                                 info_all, [<<"/">>, [name, leader, members]])),
+              NewLeader = proplists:get_value(leader, Info),
+              NewLeader =/= Server1
+      end),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1).
 
 leader_failover_dedupe(Config) ->
@@ -1281,19 +1283,21 @@ leader_failover_dedupe(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, DownNode),
     %% this should cause a new leader to be elected and the channel on node 2
     %% to have to resend any pending messages to ensure none is lost
-    timer:sleep(30000),
     ct:pal("preinfo", []),
-    [Info] = lists:filter(
-               fun(Props) ->
-                       QName = rabbit_misc:r(<<"/">>, queue, Q),
-                       lists:member({name, QName}, Props)
-               end,
-               rabbit_ct_broker_helpers:rpc(Config, PubNode, rabbit_amqqueue,
-                                            info_all,
-                                            [<<"/">>, [name, leader, members]])),
-    ct:pal("info ~p", [Info]),
-    NewLeader = proplists:get_value(leader, Info),
-    ?assert(NewLeader =/= DownNode),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              [Info] = lists:filter(
+                         fun(Props) ->
+                                 QName = rabbit_misc:r(<<"/">>, queue, Q),
+                                 lists:member({name, QName}, Props)
+                         end,
+                         rabbit_ct_broker_helpers:rpc(Config, PubNode, rabbit_amqqueue,
+                                                      info_all,
+                                                      [<<"/">>, [name, leader, members]])),
+              ct:pal("info ~p", [Info]),
+              NewLeader = proplists:get_value(leader, Info),
+              NewLeader =/= DownNode
+      end),
     flush(),
     ?assert(erlang:is_process_alive(Pid)),
     ct:pal("stopping"),
@@ -1625,6 +1629,23 @@ update_retention_policy(Config) ->
 
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"retention">>).
 
+queue_info(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              [Info] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                                    info_all, [<<"/">>, [name, leader, online, members]]),
+              lists:member(proplists:get_value(leader, Info), Servers) andalso
+                  (lists:sort(Servers) == lists:sort(proplists:get_value(members, Info))) andalso
+                  (lists:sort(Servers) == lists:sort(proplists:get_value(online, Info)))
+      end).
+
 max_segment_size_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1682,16 +1703,19 @@ get_queue_type(Server, Q0) ->
 
 check_leader_and_replicas(Config, Name, Members) ->
     QNameRes = rabbit_misc:r(<<"/">>, queue, Name),
-    [Info] = lists:filter(
-               fun(Props) ->
-                       lists:member({name, QNameRes}, Props)
-               end,
-               rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
-                                            info_all, [<<"/">>, [name, leader,
-                                                                 members]])),
-    ct:pal("~s members ~w ~p", [?FUNCTION_NAME, Members, Info]),
-    ?assert(lists:member(proplists:get_value(leader, Info), Members)),
-    ?assertEqual(lists:sort(Members), lists:sort(proplists:get_value(members, Info))).
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              [Info] = lists:filter(
+                         fun(Props) ->
+                                 lists:member({name, QNameRes}, Props)
+                         end,
+                         rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                                      info_all, [<<"/">>, [name, leader,
+                                                                           members]])),
+              ct:pal("~s members ~w ~p", [?FUNCTION_NAME, Members, Info]),
+              lists:member(proplists:get_value(leader, Info), Members)
+                  andalso (lists:sort(Members) == lists:sort(proplists:get_value(members, Info)))
+      end).
 
 publish(Ch, Queue) ->
     publish(Ch, Queue, <<"msg">>).
