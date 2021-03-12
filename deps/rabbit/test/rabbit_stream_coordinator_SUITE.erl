@@ -714,6 +714,8 @@ delete_stream(_) ->
     S7 = update_stream(meta(?LINE), {member_deleted, StreamId, #{node => N3}},
                        S6),
     ?assertEqual(undefined, S7),
+    %% idempotency test
+    _ = update_stream(Meta1, {delete_stream, StreamId, #{}}, S7),
     ok.
 
 add_replica(_) ->

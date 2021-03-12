@@ -1121,7 +1121,9 @@ update_stream(#{system_time := _Ts},
               #stream{conf = Conf0,
                       members = _Members0} = Stream0) ->
     Conf = rabbit_stream_queue:update_stream_conf(Q, Conf0),
-    Stream0#stream{conf = Conf}.
+    Stream0#stream{conf = Conf};
+update_stream(_Meta, _Cmd, undefined) ->
+    undefined.
 
 eval_listeners(#stream{listeners = Listeners0,
                        queue_ref = QRef,
