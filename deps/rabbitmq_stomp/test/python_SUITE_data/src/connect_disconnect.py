@@ -2,50 +2,12 @@ import unittest
 import stomp
 import base
 import time
+import os
 import threading
 
-class TestLifecycle(base.BaseTest):
+import test_util
 
-    def test_unsubscribe_exchange_destination(self):
-        ''' Test UNSUBSCRIBE command with exchange'''
-        d = "/exchange/amq.fanout"
-        self.unsub_test(d, self.sub_and_send(d))
-
-    def test_unsubscribe_exchange_destination_with_receipt(self):
-        ''' Test receipted UNSUBSCRIBE command with exchange'''
-        d = "/exchange/amq.fanout"
-        self.unsub_test(d, self.sub_and_send(d, receipt="unsub.rct"), numRcts=1)
-
-    def test_unsubscribe_queue_destination(self):
-        ''' Test UNSUBSCRIBE command with queue'''
-        d = "/queue/test_unsubscribe_queue_destination"
-        self.unsub_test(d, self.sub_and_send(d))
-
-    def test_unsubscribe_queue_destination_with_receipt(self):
-        ''' Test receipted UNSUBSCRIBE command with queue'''
-        d = "/queue/test_unsubscribe_queue_destination_with_receipt"
-        self.unsub_test(d, self.sub_and_send(d, receipt="unsub.rct"), numRcts=1)
-
-    def test_unsubscribe_exchange_id(self):
-        ''' Test UNSUBSCRIBE command with exchange by id'''
-        d = "/exchange/amq.fanout"
-        self.unsub_test(d, self.sub_and_send(d, subid="exchid"))
-
-    def test_unsubscribe_exchange_id_with_receipt(self):
-        ''' Test receipted UNSUBSCRIBE command with exchange by id'''
-        d = "/exchange/amq.fanout"
-        self.unsub_test(d, self.sub_and_send(d, subid="exchid", receipt="unsub.rct"), numRcts=1)
-
-    def test_unsubscribe_queue_id(self):
-        ''' Test UNSUBSCRIBE command with queue by id'''
-        d = "/queue/test_unsubscribe_queue_id"
-        self.unsub_test(d, self.sub_and_send(d, subid="queid"))
-
-    def test_unsubscribe_queue_id_with_receipt(self):
-        ''' Test receipted UNSUBSCRIBE command with queue by id'''
-        d = "/queue/test_unsubscribe_queue_id_with_receipt"
-        self.unsub_test(d, self.sub_and_send(d, subid="queid", receipt="unsub.rct"), numRcts=1)
-
+class TestConnectDisconnect(base.BaseTest):
     def test_connect_version_1_0(self):
         ''' Test CONNECT with version 1.0'''
         self.conn.disconnect()
@@ -72,6 +34,22 @@ class TestLifecycle(base.BaseTest):
             self.assertTrue(new_conn.is_connected())
         finally:
             new_conn.disconnect()
+
+    def test_default_user(self):
+        ''' Default user connection '''
+        self.conn.disconnect()
+        test_util.enable_default_user()
+        listener = base.WaitableListener()
+        new_conn = stomp.Connection(host_and_ports=[('localhost', int(os.environ["STOMP_PORT"]))])
+        new_conn.set_listener('', listener)
+        new_conn.connect()
+        try:
+            self.assertFalse(listener.wait(3)) # no error back
+            self.assertTrue(new_conn.is_connected())
+        finally:
+            new_conn.disconnect()
+            test_util.disable_default_user()
+
 
     def test_unsupported_version(self):
         ''' Test unsupported version on CONNECT command'''
@@ -127,7 +105,9 @@ class TestLifecycle(base.BaseTest):
     def test_disconnect(self):
         ''' Test DISCONNECT command'''
         self.conn.disconnect()
-        self.await_condition(lambda: not self.conn.is_connected())
+        # Note: with modern-ish stomp.py versions, connection does not transition
+        #       to the disconnected state immediately, and asserting on it in this test
+        #       without a receipt makes no sense
 
     def test_disconnect_with_receipt(self):
         ''' Test the DISCONNECT command with receipts '''
@@ -139,29 +119,6 @@ class TestLifecycle(base.BaseTest):
         receiptReceived = self.listener.receipts[0]['headers']['receipt-id']
         self.assertEqual("test", receiptReceived
                          , "Wrong receipt received: '" + receiptReceived + "'")
-
-    def unsub_test(self, dest, verbs, numRcts=0):
-        def afterfun():
-            self.conn.send(dest, "after-test")
-        subverb, unsubverb = verbs
-        self.assertListenerAfter(subverb, numMsgs=1,
-                           errMsg="FAILED to subscribe and send")
-        self.assertListenerAfter(unsubverb, numRcts=numRcts,
-                           errMsg="Incorrect responses from UNSUBSCRIBE")
-        self.assertListenerAfter(afterfun,
-                           errMsg="Still receiving messages")
-
-    def sub_and_send(self, dest, subid=None, receipt=None):
-        def subfun():
-            self.subscribe_dest(self.conn, dest, subid)
-            time.sleep(1)
-            self.conn.send(dest, "test")
-        def unsubfun():
-            headers = {}
-            if receipt != None:
-                headers['receipt'] = receipt
-            self.unsubscribe_dest(self.conn, dest, subid, **headers)
-        return subfun, unsubfun
 
 if __name__ == '__main__':
     import test_runner

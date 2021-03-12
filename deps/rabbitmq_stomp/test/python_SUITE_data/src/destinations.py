@@ -51,6 +51,19 @@ class TestQueue(base.BaseTest):
         destination = '/queue/test'
         self.simple_test_send_rec(destination)
 
+    def test_send_recv_header(self):
+        ''' Test sending a custom header and receiving it back '''
+        dest = '/queue/custom-header'
+        hdrs = {'x-custom-header-1': 'value1',
+                'x-custom-header-2': 'value2',
+                'custom-header-3': 'value3'}
+        self.listener.reset(1)
+        recv_hdrs = self.simple_test_send_rec(dest, headers=hdrs)
+        self.assertEqual('value1', recv_hdrs['x-custom-header-1'])
+        self.assertEqual('value2', recv_hdrs['x-custom-header-2'])
+        self.assertEqual('value3', recv_hdrs['custom-header-3'])
+
+
     def test_send_receive_in_other_conn(self):
         ''' Test send in one connection, receive in another '''
         destination = '/queue/test2'

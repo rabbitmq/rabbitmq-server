@@ -258,7 +258,7 @@ class Latch(object):
         self.cond.release()
 
     def countdown(self):
-        self.cond.acquire()
+        self.cond.acquire(blocking=False)
         if self.count > 0:
             self.count -= 1
         if self.count == 0:
@@ -267,7 +267,7 @@ class Latch(object):
 
     def wait(self, timeout=None):
         try:
-            self.cond.acquire()
+            self.cond.acquire(blocking=False)
             if self.count == 0:
                 return True
             else:

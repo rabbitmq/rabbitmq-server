@@ -13,7 +13,7 @@ ssl_key_file = os.path.join(os.getenv('SSL_CERTS_PATH'), 'client', 'key.pem')
 ssl_cert_file = os.path.join(os.getenv('SSL_CERTS_PATH'), 'client', 'cert.pem')
 ssl_ca_certs = os.path.join(os.getenv('SSL_CERTS_PATH'), 'testca', 'cacert.pem')
 
-class TestSslClient(unittest.TestCase):
+class TestTLSConnection(unittest.TestCase):
 
     def __ssl_connect(self):
         conn = stomp.Connection(host_and_ports = [ ('localhost', int(os.environ["STOMP_PORT_TLS"])) ],
@@ -70,3 +70,10 @@ class TestSslClient(unittest.TestCase):
             self.assertEqual("Hello SSL!", listener.messages[0]['message'])
         finally:
             conn.disconnect()
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)
