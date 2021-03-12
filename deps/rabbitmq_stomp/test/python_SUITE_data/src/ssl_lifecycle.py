@@ -66,7 +66,7 @@ class TestSslClient(unittest.TestCase):
 
             self.assertTrue(listener.wait(1))
 
-            self.assertEquals("sub",
+            self.assertEqual("sub",
                               listener.receipts[0]['headers']['receipt-id'])
 
             listener.reset(1)
@@ -74,6 +74,6 @@ class TestSslClient(unittest.TestCase):
 
             self.assertTrue(listener.wait())
 
-            self.assertEquals("Hello SSL!", listener.messages[0]['message'])
+            self.assertEqual("Hello SSL!", listener.messages[0]['message'])
         finally:
             conn.disconnect()

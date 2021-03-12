@@ -37,7 +37,7 @@ class TestUserGeneratedQueueName(base.BaseTest):
 
         # check if we receive the message from the STOMP subscription
         self.assertTrue(self.listener.wait(2), "initial message not received")
-        self.assertEquals(1, len(self.listener.messages))
+        self.assertEqual(1, len(self.listener.messages))
 
         self.conn.disconnect()
         connection.close()
@@ -65,7 +65,15 @@ class TestUserGeneratedQueueName(base.BaseTest):
 
         # check if we receive the message from the STOMP subscription
         self.assertTrue(self.listener.wait(2), "initial message not received")
-        self.assertEquals(1, len(self.listener.messages))
+        self.assertEqual(1, len(self.listener.messages))
 
         self.conn.disconnect()
         connection.close()
+
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)

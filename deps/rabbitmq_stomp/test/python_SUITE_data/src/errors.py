@@ -20,10 +20,10 @@ class TestErrorsAndCloseConnection(base.BaseTest):
 
         self.assertTrue(self.listener.wait())
 
-        self.assertEquals(1, len(self.listener.errors))
+        self.assertEqual(1, len(self.listener.errors))
         errorReceived = self.listener.errors[0]
-        self.assertEquals("Duplicated subscription identifier", errorReceived['headers']['message'])
-        self.assertEquals("A subscription identified by 'T_1' already exists.", errorReceived['message'])
+        self.assertEqual("Duplicated subscription identifier", errorReceived['headers']['message'])
+        self.assertEqual("A subscription identified by 'T_1' already exists.", errorReceived['message'])
         time.sleep(2)
         self.assertFalse(self.conn.is_connected())
 
@@ -66,10 +66,10 @@ class TestErrors(base.BaseTest):
         self.conn.send("/something/interesting", 'test_unknown_destination')
 
         self.assertTrue(self.listener.wait())
-        self.assertEquals(1, len(self.listener.errors))
+        self.assertEqual(1, len(self.listener.errors))
 
         err = self.listener.errors[0]
-        self.assertEquals("Unknown destination", err['headers']['message'])
+        self.assertEqual("Unknown destination", err['headers']['message'])
 
     def test_send_missing_destination(self):
         self.__test_missing_destination("SEND")
@@ -82,20 +82,28 @@ class TestErrors(base.BaseTest):
         self.conn.send_frame(command)
 
         self.assertTrue(self.listener.wait())
-        self.assertEquals(1, len(self.listener.errors))
+        self.assertEqual(1, len(self.listener.errors))
 
         err = self.listener.errors[0]
-        self.assertEquals("Missing destination", err['headers']['message'])
+        self.assertEqual("Missing destination", err['headers']['message'])
 
     def __test_invalid_destination(self, dtype, content):
         self.listener.reset()
         self.conn.send("/" + dtype + content, '__test_invalid_destination:' + dtype + content)
 
         self.assertTrue(self.listener.wait())
-        self.assertEquals(1, len(self.listener.errors))
+        self.assertEqual(1, len(self.listener.errors))
 
         err = self.listener.errors[0]
-        self.assertEquals("Invalid destination", err['headers']['message'])
-        self.assertEquals("'" + content + "' is not a valid " +
+        self.assertEqual("Invalid destination", err['headers']['message'])
+        self.assertEqual("'" + content + "' is not a valid " +
                               dtype + " destination\n",
                           err['message'])
+
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)

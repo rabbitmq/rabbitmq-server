@@ -85,3 +85,11 @@ class TestQueueProperties(base.BaseTest):
 
         self.conn.disconnect()
         connection.close()
+
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)

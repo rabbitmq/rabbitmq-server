@@ -28,9 +28,9 @@ class TestConnectOptions(base.BaseTest):
 
         try:
             self.assertTrue(listener.wait(5))
-            self.assertEquals(1, len(listener.receipts),
+            self.assertEqual(1, len(listener.receipts),
                               'Missing receipt. Likely not connected')
-            self.assertEquals('implicit', listener.receipts[0]['headers']['receipt-id'])
+            self.assertEqual('implicit', listener.receipts[0]['headers']['receipt-id'])
         finally:
             new_conn.disconnect()
             test_util.disable_implicit_connect()

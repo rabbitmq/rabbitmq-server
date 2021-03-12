@@ -9,6 +9,7 @@ import unittest
 import stomp
 import base
 import time
+import threading
 
 class TestLifecycle(base.BaseTest):
 
@@ -24,12 +25,12 @@ class TestLifecycle(base.BaseTest):
 
     def test_unsubscribe_queue_destination(self):
         ''' Test UNSUBSCRIBE command with queue'''
-        d = "/queue/unsub01"
+        d = "/queue/test_unsubscribe_queue_destination"
         self.unsub_test(d, self.sub_and_send(d))
 
     def test_unsubscribe_queue_destination_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with queue'''
-        d = "/queue/unsub02"
+        d = "/queue/test_unsubscribe_queue_destination_with_receipt"
         self.unsub_test(d, self.sub_and_send(d, receipt="unsub.rct"), numRcts=1)
 
     def test_unsubscribe_exchange_id(self):
@@ -44,12 +45,12 @@ class TestLifecycle(base.BaseTest):
 
     def test_unsubscribe_queue_id(self):
         ''' Test UNSUBSCRIBE command with queue by id'''
-        d = "/queue/unsub03"
+        d = "/queue/test_unsubscribe_queue_id"
         self.unsub_test(d, self.sub_and_send(d, subid="queid"))
 
     def test_unsubscribe_queue_id_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with queue by id'''
-        d = "/queue/unsub04"
+        d = "/queue/unsutest_unsubscribe_queue_id_with_receiptb04"
         self.unsub_test(d, self.sub_and_send(d, subid="queid", receipt="unsub.rct"), numRcts=1)
 
     def test_connect_version_1_0(self):
@@ -78,9 +79,6 @@ class TestLifecycle(base.BaseTest):
             self.assertTrue(new_conn.is_connected())
         finally:
             new_conn.disconnect()
-            # connections are closed asynchronously, e.g. a few seconds later
-            time.sleep(6)
-            self.assertFalse(new_conn.is_connected())
 
     def test_unsupported_version(self):
         ''' Test unsupported version on CONNECT command'''
@@ -106,7 +104,7 @@ class TestLifecycle(base.BaseTest):
         try:
             new_conn.connect(user, passcode)
             self.assertTrue(listener.wait())
-            self.assertEquals(expected, listener.errors[0]['message'])
+            self.assertEqual(expected, listener.errors[0]['message'])
         finally:
             if new_conn.is_connected():
                 new_conn.disconnect()
@@ -116,10 +114,10 @@ class TestLifecycle(base.BaseTest):
         self.listener.reset(1)
         self.conn.send_frame("SEND", {"destination":"a", "message-id":"1"})
         self.assertTrue(self.listener.wait())
-        self.assertEquals(1, len(self.listener.errors))
+        self.assertEqual(1, len(self.listener.errors))
         errorReceived = self.listener.errors[0]
-        self.assertEquals("Invalid header", errorReceived['headers']['message'])
-        self.assertEquals("'message-id' is not allowed on 'SEND'.\n", errorReceived['message'])
+        self.assertEqual("Invalid header", errorReceived['headers']['message'])
+        self.assertEqual("'message-id' is not allowed on 'SEND'.\n", errorReceived['message'])
 
     def test_send_recv_header(self):
         ''' Test sending a custom header and receiving it back '''
@@ -129,16 +127,14 @@ class TestLifecycle(base.BaseTest):
                 'custom-header-3': 'value3'}
         self.listener.reset(1)
         recv_hdrs = self.simple_test_send_rec(dest, headers=hdrs)
-        self.assertEquals('value1', recv_hdrs['x-custom-header-1'])
-        self.assertEquals('value2', recv_hdrs['x-custom-header-2'])
-        self.assertEquals('value3', recv_hdrs['custom-header-3'])
+        self.assertEqual('value1', recv_hdrs['x-custom-header-1'])
+        self.assertEqual('value2', recv_hdrs['x-custom-header-2'])
+        self.assertEqual('value3', recv_hdrs['custom-header-3'])
 
     def test_disconnect(self):
         ''' Test DISCONNECT command'''
         self.conn.disconnect()
-        # connections are closed asynchronously, e.g. a few seconds later
-        time.sleep(7)
-        self.assertFalse(self.conn.is_connected())
+        self.await_condition(lambda: not self.conn.is_connected())
 
     def test_disconnect_with_receipt(self):
         ''' Test the DISCONNECT command with receipts '''
@@ -146,9 +142,9 @@ class TestLifecycle(base.BaseTest):
         self.listener.reset(1)
         self.conn.send_frame("DISCONNECT", {"receipt": "test"})
         self.assertTrue(self.listener.wait())
-        self.assertEquals(1, len(self.listener.receipts))
+        self.assertEqual(1, len(self.listener.receipts))
         receiptReceived = self.listener.receipts[0]['headers']['receipt-id']
-        self.assertEquals("test", receiptReceived
+        self.assertEqual("test", receiptReceived
                          , "Wrong receipt received: '" + receiptReceived + "'")
 
     def unsub_test(self, dest, verbs, numRcts=0):
@@ -165,6 +161,7 @@ class TestLifecycle(base.BaseTest):
     def sub_and_send(self, dest, subid=None, receipt=None):
         def subfun():
             self.subscribe_dest(self.conn, dest, subid)
+            time.sleep(1)
             self.conn.send(dest, "test")
         def unsubfun():
             headers = {}
@@ -172,3 +169,10 @@ class TestLifecycle(base.BaseTest):
                 headers['receipt'] = receipt
             self.unsubscribe_dest(self.conn, dest, subid, **headers)
         return subfun, unsubfun
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)
