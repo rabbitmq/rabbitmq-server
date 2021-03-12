@@ -168,7 +168,7 @@ apply(_Meta, {machine_version, 0, 1}, {machine_state, Ids}) ->
     {#machine_state{client_ids = Ids,
                     pids = Pids}, ok, []};
 apply(_Meta, Unknown, State) ->
-    logger:error_("MQTT Raft state machine v1 received unknown command ~p", [Unknown]),
+    logger:error("MQTT Raft state machine v1 received unknown command ~p", [Unknown]),
     {State, {error, {unknown_command, Unknown}}, []}.
 
 state_enter(leader, State) ->
