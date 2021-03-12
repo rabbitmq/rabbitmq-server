@@ -18,16 +18,16 @@ class TestTransactions(base.BaseTest):
 
         ## should see the second message
         self.assertTrue(self.listener.wait(3))
-        self.assertEquals(1, len(self.listener.messages))
-        self.assertEquals("again!", self.listener.messages[0]['message'])
+        self.assertEqual(1, len(self.listener.messages))
+        self.assertEqual("again!", self.listener.messages[0]['message'])
 
         ## now look for the first message
         self.listener.reset()
         self.conn.commit(transaction=tx)
         self.assertTrue(self.listener.wait(3))
-        self.assertEquals(1, len(self.listener.messages),
+        self.assertEqual(1, len(self.listener.messages),
                           "Missing committed message")
-        self.assertEquals("hello!", self.listener.messages[0]['message'])
+        self.assertEqual("hello!", self.listener.messages[0]['message'])
 
     def test_tx_abort(self):
         ''' Test TX with an ABORT and ensure messages are discarded '''
@@ -42,13 +42,13 @@ class TestTransactions(base.BaseTest):
 
         ## should see the second message
         self.assertTrue(self.listener.wait(3))
-        self.assertEquals(1, len(self.listener.messages))
-        self.assertEquals("again!", self.listener.messages[0]['message'])
+        self.assertEqual(1, len(self.listener.messages))
+        self.assertEqual("again!", self.listener.messages[0]['message'])
 
         ## now look for the first message to be discarded
         self.listener.reset()
         self.conn.abort(transaction=tx)
         self.assertFalse(self.listener.wait(3))
-        self.assertEquals(0, len(self.listener.messages),
+        self.assertEqual(0, len(self.listener.messages),
                           "Unexpected committed message")
 

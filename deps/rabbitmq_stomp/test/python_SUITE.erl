@@ -4,16 +4,14 @@
 
 all() ->
     [
-    common,
-    ssl,
-    connect_options
+        common,
+        ssl,
+        connect_options
     ].
 
-init_per_testcase(TestCase, Config) ->
-    Suffix = rabbit_ct_helpers:testcase_absname(Config, TestCase, "-"),
+init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
-                                           [{rmq_certspwd, "bunnychow"},
-                                            {rmq_nodename_suffix, Suffix}]),
+                                           [{rmq_certspwd, "bunnychow"}]),
     rabbit_ct_helpers:log_environment(),
     Config2 = rabbit_ct_helpers:run_setup_steps(
         Config1,
@@ -25,9 +23,15 @@ init_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:make(Config2, StomppyDir, []),
     Config2.
 
-end_per_testcase(_, Config) ->
+end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
         rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_testcase(Test, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Test).
+
+end_per_testcase(Test, Config) ->
+    rabbit_ct_helpers:testcase_finished(Config, Test).
 
 
 common(Config) ->
