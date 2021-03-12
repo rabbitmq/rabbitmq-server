@@ -1056,8 +1056,8 @@ list_local_names() ->
 
 list_local_names_down() ->
     [ amqqueue:get_name(Q) || Q <- list(),
-                              is_down(Q),
-                              is_local_to_node(amqqueue:get_pid(Q), node())].
+                              is_local_to_node(amqqueue:get_pid(Q), node()),
+                              is_down(Q)].
 
 is_down(Q) ->
     try
