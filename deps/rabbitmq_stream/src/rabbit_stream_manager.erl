@@ -240,8 +240,18 @@ handle_call({lookup_leader, VirtualHost, Stream}, _From, State) ->
               {ok, Q} ->
                   case is_stream_queue(Q) of
                       true ->
-                          % FIXME check if pid is alive in case of stale information
-                          amqqueue:get_pid(Q);
+                          LeaderPid = amqqueue:get_pid(Q),
+                          case process_alive(LeaderPid) of
+                              true ->
+                                  LeaderPid;
+                              false ->
+                                  case leader_from_members(Q) of
+                                      {ok, Pid} ->
+                                          Pid;
+                                      _ ->
+                                          cluster_not_found
+                                  end
+                          end;
                       _ ->
                           cluster_not_found
                   end;
@@ -389,6 +399,32 @@ handle_cast(_, State) ->
 handle_info(Info, State) ->
     rabbit_log:info("Received info ~p", [Info]),
     {noreply, State}.
+
+leader_from_members(Q) ->
+    QState = amqqueue:get_type_state(Q),
+    #{name := StreamName} = QState,
+    case rabbit_stream_coordinator:members(StreamName) of
+        {ok, Members} ->
+            maps:fold(fun (_LeaderNode, {Pid, writer}, _Acc) ->
+                              {ok, Pid};
+                          (_Node, _, Acc) ->
+                              Acc
+                      end,
+                      {error, not_found}, Members);
+        _ ->
+            {error, not_found}
+    end.
+
+process_alive(Pid) ->
+    CurrentNode = node(),
+    case node(Pid) of
+        nonode@nohost ->
+            false;
+        CurrentNode ->
+            is_process_alive(Pid);
+        OtherNode ->
+            rpc:call(OtherNode, erlang, is_process_alive, [Pid], 10000)
+    end.
 
 is_stream_queue(Q) ->
     case amqqueue:get_type(Q) of

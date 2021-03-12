@@ -29,7 +29,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
@@ -59,17 +58,21 @@ public class FailureTest {
     }
   }
 
-  @Disabled
   @Test
   void leaderFailureWhenPublisherConnectedToReplica() throws Exception {
+    System.out.println("stream " + stream);
     Set<String> messages = new HashSet<>();
     Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
     Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
     Client.StreamMetadata streamMetadata = metadata.get(stream);
     assertThat(streamMetadata).isNotNull();
 
+    TestUtils.waitUntil(() -> client.metadata(stream).get(stream).getReplicas().size() == 2);
+
+    streamMetadata = client.metadata(stream).get(stream);
     assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
     assertThat(streamMetadata.getReplicas()).isNotEmpty();
+
     Client.Broker replica = streamMetadata.getReplicas().get(0);
     assertThat(replica.getPort()).isNotEqualTo(TestUtils.streamPortNode1());
 
@@ -104,7 +107,7 @@ public class FailureTest {
 
       assertThat(metadataLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
-      //   wait until there's a new leader
+      // wait until there's a new leader
       TestUtils.waitAtMost(
           Duration.ofSeconds(10),
           () -> {
@@ -173,7 +176,6 @@ public class FailureTest {
     assertThat(bodies).hasSameSizeAs(messages).containsAll(messages);
   }
 
-  @Disabled
   @Test
   void noLostConfirmedMessagesWhenLeaderGoesAway() throws Exception {
     executorService = Executors.newCachedThreadPool();

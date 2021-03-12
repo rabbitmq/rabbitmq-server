@@ -155,6 +155,20 @@ policy_changed(Q) when ?is_amqqueue(Q) ->
 local_pid(StreamId) when is_list(StreamId) ->
     MFA = {?MODULE, query_local_pid, [StreamId, node()]},
     case ra:local_query({?MODULE, node()}, MFA) of
+        {ok, {_, {ok, Pid}}, _} ->
+            case is_process_alive(Pid) of
+                true ->
+                    {ok, Pid};
+                false ->
+                    case ra:consistent_query({?MODULE, node()}, MFA) of
+                        {ok, Result, _} ->
+                            Result;
+                        {error, _} = Err ->
+                            Err;
+                        {timeout, _} ->
+                            {error, timeout}
+                    end
+            end;
         {ok, {_, Result}, _} ->
             Result;
         {error, _} = Err ->
