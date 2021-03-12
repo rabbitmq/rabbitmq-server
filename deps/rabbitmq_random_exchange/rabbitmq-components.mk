@@ -117,6 +117,7 @@ dep_accept = hex 0.3.5
 dep_cowboy = hex 2.8.0
 dep_cowlib = hex 2.9.1
 dep_jsx = hex 2.11.0
+dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
 dep_prometheus = git https://github.com/deadtrickster/prometheus.erl.git master
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 2.0.0
