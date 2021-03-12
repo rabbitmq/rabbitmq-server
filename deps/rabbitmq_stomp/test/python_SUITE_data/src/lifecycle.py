@@ -43,7 +43,7 @@ class TestLifecycle(base.BaseTest):
 
     def test_unsubscribe_queue_id_with_receipt(self):
         ''' Test receipted UNSUBSCRIBE command with queue by id'''
-        d = "/queue/unsutest_unsubscribe_queue_id_with_receiptb04"
+        d = "/queue/test_unsubscribe_queue_id_with_receipt"
         self.unsub_test(d, self.sub_and_send(d, subid="queid", receipt="unsub.rct"), numRcts=1)
 
     def test_connect_version_1_0(self):
