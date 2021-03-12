@@ -8,10 +8,16 @@
 import unittest
 import stomp
 import base
-import test_util
+import time
 import os
+import threading
 
-class TestConnectOptions(base.BaseTest):
+import test_util
+
+class TestImplicitConnect(base.BaseTest):
+    """
+    Relies on implicit connect being enabled on the node
+    """
 
     def test_implicit_connect(self):
         ''' Implicit connect with receipt on first command '''
@@ -35,17 +41,10 @@ class TestConnectOptions(base.BaseTest):
             new_conn.disconnect()
             test_util.disable_implicit_connect()
 
-    def test_default_user(self):
-        ''' Default user connection '''
-        self.conn.disconnect()
-        test_util.enable_default_user()
-        listener = base.WaitableListener()
-        new_conn = stomp.Connection(host_and_ports=[('localhost', int(os.environ["STOMP_PORT"]))])
-        new_conn.set_listener('', listener)
-        new_conn.connect()
-        try:
-            self.assertFalse(listener.wait(3)) # no error back
-            self.assertTrue(new_conn.is_connected())
-        finally:
-            new_conn.disconnect()
-            test_util.disable_default_user()
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)

@@ -11,14 +11,31 @@
 
 all() ->
     [
-        common,
-        ssl,
-        connect_options
+        %% This must use a dedicated node as they mess with plugin configuration in incompatible ways
+        {group, tls},
+        {group, implicit_connect},
+        {group, main}
     ].
 
-init_per_suite(Config) ->
+groups() ->
+    [
+        {main, [], [
+            main
+        ]},
+        {implicit_connect, [], [
+            implicit_connect
+        ]},
+        {tls, [], [
+            tls_connections
+        ]}
+    ].
+
+init_per_group(_, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
-                                           [{rmq_certspwd, "bunnychow"}]),
+                                           [
+                                               {rmq_nodename_suffix, ?MODULE},
+                                               {rmq_certspwd, "bunnychow"}
+                                            ]),
     rabbit_ct_helpers:log_environment(),
     Config2 = rabbit_ct_helpers:run_setup_steps(
         Config1,
@@ -30,7 +47,7 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:make(Config2, StomppyDir, []),
     Config2.
 
-end_per_suite(Config) ->
+end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
         rabbit_ct_broker_helpers:teardown_steps()).
 
@@ -41,14 +58,15 @@ end_per_testcase(Test, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Test).
 
 
-common(Config) ->
-    run(Config, filename:join("src", "test.py")).
+main(Config) ->
+    run(Config, filename:join("src", "main_runner.py")).
 
-connect_options(Config) ->
-    run(Config, filename:join("src", "test_connect_options.py")).
+implicit_connect(Config) ->
+    run(Config, filename:join("src", "implicit_connect_runner.py")).
 
-ssl(Config) ->
-    run(Config, filename:join("src", "test_ssl.py")).
+tls_connections(Config) ->
+    run(Config, filename:join("src", "tls_runner.py")).
+
 
 run(Config, Test) ->
     DataDir = ?config(data_dir, Config),

@@ -6,7 +6,7 @@ if __name__ == '__main__':
     modules = [
         'parsing',
         'errors',
-        'lifecycle',
+        'connect_disconnect',
         'ack',
         'amqp_headers',
         'queue_properties',
@@ -16,6 +16,7 @@ if __name__ == '__main__':
         'destinations',
         'redelivered',
         'topic_permissions',
+        'unsubscribe',
         'x_queue_type_quorum',
         'x_queue_type_stream'
     ]
