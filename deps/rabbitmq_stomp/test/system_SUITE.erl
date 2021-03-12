@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(amqqueue_SUITE).
+-module(system_SUITE).
 
 -compile(export_all).
 
