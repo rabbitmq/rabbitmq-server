@@ -516,6 +516,14 @@ recover(Config) ->
          quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 120)
      end || Servers <- permute(Servers0)],
 
+
+    [begin
+         ct:pal("recover: running app stop start for permuation ~w", [Servers]),
+         [rabbit_control_helper:command(stop_app, S) || S <- Servers],
+         [rabbit_control_helper:command(start_app, S) || S <- lists:reverse(Servers)],
+         ct:pal("recover: running app stop waiting for messages ~w", [Servers]),
+         quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 120)
+     end || Servers <- permute(Servers0)],
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     publish(Ch1, Q),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]),
@@ -1177,28 +1185,43 @@ max_age(Config) ->
     ?assertEqual(100, length(receive_batch())).
 
 replica_recovery(Config) ->
-    [Server1, Server2 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1 | _] = lists:reverse(Nodes),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
-
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-
     #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch1, self()),
     [publish(Ch1, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
     amqp_channel:wait_for_confirms(Ch1, 5),
+    amqp_channel:close(Ch1),
 
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
-    timer:sleep(2000),
+    [begin
+         [DownNode | _] = PNodes,
+         rabbit_control_helper:command(stop_app, DownNode),
+         rabbit_control_helper:command(start_app, DownNode),
+         timer:sleep(6000),
+         Ch2 = rabbit_ct_client_helpers:open_channel(Config, DownNode),
+         qos(Ch2, 10, false),
+         subscribe(Ch2, Q, false, 0),
+         receive_batch(Ch2, 0, 99),
+         amqp_channel:close(Ch2)
+     end || PNodes <- permute(Nodes)],
 
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
-    qos(Ch2, 10, false),
+    [begin
+         [DownNode | _] = PNodes,
+         ok = rabbit_ct_broker_helpers:stop_node(Config, DownNode),
+         ok = rabbit_ct_broker_helpers:start_node(Config, DownNode),
+         timer:sleep(6000),
+         Ch2 = rabbit_ct_client_helpers:open_channel(Config, DownNode),
+         qos(Ch2, 10, false),
+         subscribe(Ch2, Q, false, 0),
+         receive_batch(Ch2, 0, 99),
+         amqp_channel:close(Ch2)
+     end || PNodes <- permute(Nodes)],
 
-    subscribe(Ch2, Q, false, 0),
-    receive_batch(Ch2, 0, 99),
     ok.
 
 leader_failover(Config) ->

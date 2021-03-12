@@ -161,7 +161,8 @@ start_cluster(Q) ->
     NewQ0 = amqqueue:set_pid(Q, Id),
     NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => Nodes}),
 
-    rabbit_log:debug("Will start up to ~p replicas for quorum queue ~s", [QuorumSize, rabbit_misc:rs(QName)]),
+    rabbit_log:debug("Will start up to ~w replicas for quorum queue ~s",
+                     [QuorumSize, rabbit_misc:rs(QName)]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval, ?TICK_TIMEOUT),
@@ -169,12 +170,14 @@ start_cluster(Q) ->
                        || ServerId <- members(NewQ)],
             case ra:start_cluster(RaConfs) of
                 {ok, _, _} ->
+                    %% ensure the latest config is evaluated properly
+                    %% even when running the machine version from 0
+                    %% as earlier versions may not understand all the config
+                    %% keys
                     %% TODO: handle error - what should be done if the
                     %% config cannot be updated
                     ok = rabbit_fifo_client:update_machine_state(Id,
                                                                  ra_machine_config(NewQ)),
-                    %% force a policy change to ensure the latest config is
-                    %% updated even when running the machine version from 0
                     notify_decorators(QName, startup),
                     rabbit_event:notify(queue_created,
                                         [{name, QName},

@@ -312,8 +312,6 @@ apply(Meta, {down, Pid, Reason} = Cmd,
     Effects0 = case Reason of
                    noconnection ->
                        [{monitor, node, node(Pid)}];
-                   shutdown ->
-                       [{monitor, node, node(Pid)}];
                    _ ->
                        []
                end,
@@ -407,14 +405,23 @@ return(#{index := Idx}, State, Reply, Effects) ->
 state_enter(recover, _) ->
     put('$rabbit_vm_category', ?MODULE),
     [];
-state_enter(leader, #?MODULE{monitors = Monitors}) ->
+state_enter(leader, #?MODULE{streams = Streams,
+                             monitors = Monitors}) ->
     Pids = maps:keys(Monitors),
-    Nodes = maps:from_list([{node(P), ok} || P <- Pids]),
-    NodeMons = [{monitor, node, N} || N <- maps:keys(Nodes)],
+    %% monitor all the known nodes
+    Nodes = all_member_nodes(Streams),
+    NodeMons = [{monitor, node, N} || N <- Nodes],
     NodeMons ++ [{aux, fail_active_actions} |
                  [{monitor, process, P} || P <- Pids]];
 state_enter(_S, _) ->
     [].
+
+all_member_nodes(Streams) ->
+    maps:keys(
+      maps:fold(
+        fun (_, #stream{members = M}, Acc) ->
+                maps:merge(Acc, M)
+        end, #{}, Streams)).
 
 tick(_Ts, _State) ->
     [{aux, maybe_resize_coordinator_cluster}].
@@ -430,17 +437,17 @@ maybe_resize_coordinator_cluster() ->
                               [] ->
                                   ok;
                               New ->
-                                  rabbit_log:warning("~s: New rabbit node(s) detected, "
-                                                     "adding : ~w",
-                                                     [?MODULE, New]),
+                                  rabbit_log:info("~s: New rabbit node(s) detected, "
+                                                  "adding : ~w",
+                                                  [?MODULE, New]),
                                   add_members(Members, New)
                           end,
                           case MemberNodes -- All of
                               [] ->
                                   ok;
                               Old ->
-                                  rabbit_log:warning("~s: Rabbit node(s) removed from the cluster, "
-                                                     "deleting: ~w", [?MODULE, Old]),
+                                  rabbit_log:info("~s: Rabbit node(s) removed from the cluster, "
+                                                  "deleting: ~w", [?MODULE, Old]),
                                   remove_members(Members, Old)
                           end;
                       _ ->
@@ -592,8 +599,8 @@ phase_start_replica(StreamId, #{epoch := Epoch,
       fun() ->
               try osiris_replica:start(Node, Conf0) of
                   {ok, Pid} ->
-                      rabbit_log:debug("~s: ~s: replica started on ~s in ~b",
-                                       [?MODULE, StreamId, Node, Epoch]),
+                      rabbit_log:debug("~s: ~s: replica started on ~s in ~b pid ~w",
+                                       [?MODULE, StreamId, Node, Epoch, Pid]),
                       send_self_command({member_started, StreamId,
                                          Args#{pid => Pid}});
                   {error, already_present} ->
@@ -1078,8 +1085,7 @@ update_stream(#{system_time := _Ts},
             Stream0#stream{members = Members};
         #{DownNode := #member{role = {replica, _},
                               state = {running, _, Pid}} = Member}
-          when Reason == noconnection orelse
-               Reason == shutdown ->
+          when Reason == noconnection ->
             %% mark process as disconnected such that we don't set it to down until
             %% the node is back and we can re-monitor
             Members = Members0#{DownNode =>
@@ -1375,10 +1381,13 @@ fail_action(StreamId, #member{role = {_, E},
 ensure_monitors(#stream{id = StreamId,
                         members = Members}, Monitors, Effects) ->
     maps:fold(
-      fun (_, #member{state = {running, _, Pid}}, {M, E})
+      fun
+          (_, #member{state = {running, _, Pid}}, {M, E})
             when not is_map_key(Pid, M) ->
               {M#{Pid => {StreamId, member}},
-               [{monitor, process, Pid} | E]};
+               [{monitor, process, Pid},
+                %% ensure we're always monitoring the node as well
+                {monitor, node, node(Pid)} | E]};
           (_, _, Acc) ->
               Acc
       end, {Monitors, Effects}, Members).
