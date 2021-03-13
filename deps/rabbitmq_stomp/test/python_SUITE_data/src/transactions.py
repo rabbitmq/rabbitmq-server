@@ -59,3 +59,9 @@ class TestTransactions(base.BaseTest):
         self.assertEqual(0, len(self.listener.messages),
                           "Unexpected committed message")
 
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)
