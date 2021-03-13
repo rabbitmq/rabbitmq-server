@@ -13,6 +13,8 @@ import os
 import time
 import random
 
+from stomp.listener import ConnectionListener
+
 
 class BaseTest(unittest.TestCase):
     def await_condition(self, condition, timeout=5):
@@ -179,7 +181,7 @@ class BaseTest(unittest.TestCase):
                             numErrs=numErrs, numRcts=numRcts, timeout=timeout)
 
 
-class WaitableListener(object):
+class WaitableListener(ConnectionListener):
 
     def __init__(self):
         self.debug = False
@@ -191,29 +193,24 @@ class WaitableListener(object):
         self.latch = Latch(1)
         self.msg_no = 0
 
-    def _next_msg_no(self):
-        self.msg_no += 1
-        return self.msg_no
+    ##
+    ## API
+    ##
 
-    def _append(self, array, msg, hdrs):
-        mno = self._next_msg_no()
-        array.append({'message': msg, 'headers' : hdrs, 'msg_no' : mno})
-        self.latch.countdown()
-
-    def on_receipt(self, headers, message):
+    def on_receipt(self, frame):
         if self.debug:
-            print('(on_receipt) message: {}, headers: {}'.format(message, headers))
-        self._append(self.receipts, message, headers)
+            print('(on_receipt) frame: {}, headers: {}'.format(frame.body, frame.headers))
+        self._append(self.receipts, frame.body, frame.headers)
 
-    def on_error(self, headers, message):
+    def on_error(self, frame):
         if self.debug:
-            print('(on_error) message: {}, headers: {}'.format(message, headers))
-        self._append(self.errors, message, headers)
+            print('(on_error) frame: {}, headers: {}'.format(frame.body, frame.headers))
+        self._append(self.errors, frame.body, frame.headers)
 
-    def on_message(self, headers, message):
+    def on_message(self, frame):
         if self.debug:
-            print('(on_message) message: {}, headers: {}'.format(message, headers))
-        self._append(self.messages, message, headers)
+            print('(on_message) message: {}, headers: {}'.format(frame.body, frame.headers))
+        self._append(self.messages, frame.body, frame.headers)
 
     def reset(self, count=1):
         if self.debug:
@@ -235,6 +232,8 @@ class WaitableListener(object):
     def wait_for_complete_countdown(self, timeout=5):
         return self.latch.wait_for_complete_countdown(timeout)
 
+    ## Implementation
+
     def print_state(self, hdr="", full=False):
         print(hdr)
         print('#messages: {}'.format(len(self.messages)))
@@ -247,6 +246,15 @@ class WaitableListener(object):
             if len(self.errors) != 0: print('Messages: {}'.format(self.errors))
             if len(self.receipts) != 0:
                 print('Messages: {}'.format(self.receipts))
+
+    def _next_msg_no(self):
+        self.msg_no += 1
+        return self.msg_no
+
+    def _append(self, array, msg, hdrs):
+        mno = self._next_msg_no()
+        array.append({'message': msg, 'headers' : hdrs, 'msg_no' : mno})
+        self.latch.countdown()
 
 
 class Latch(object):
