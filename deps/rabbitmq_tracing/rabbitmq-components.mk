@@ -115,6 +115,7 @@ dep_cowboy = hex 2.8.0
 dep_cowlib = hex 2.9.1
 dep_jsx = hex 2.11.0
 dep_lager = hex 3.8.2
+dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
 dep_prometheus = hex 4.6.0
 dep_ra = hex 1.1.8
 dep_ranch = hex 1.7.1
