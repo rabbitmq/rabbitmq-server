@@ -6,23 +6,23 @@ refs="$@"
 
 for version in ${refs}; do
   umbrella="umbrellas/$version"
-  if ! test -d "$umbrella"  ||
+  if ! test -d "$umbrella" ||
      ! make -C "$umbrella/deps/rabbit" test-dist; then
     rm -rf "$umbrella"
-
-    # Fetch the master Umbrella; the final umbrellas are created from
-    # the master copy.
-    if ! test -d umbrellas/master; then
-      git config --global advice.detachedHead false
-      git clone \
-        https://github.com/rabbitmq/rabbitmq-public-umbrella.git \
-        umbrellas/master
-      make -C umbrellas/master co # To get RabbitMQ components.
-    fi
-
-    # We copy the master Umbrella and checkout the appropriate tag.
-    cp -a umbrellas/master "$umbrella"
-    git -C "$umbrella" checkout "master"
+    git config --global advice.detachedHead false
+    git clone \
+      https://github.com/rabbitmq/rabbitmq-public-umbrella.git \
+      "$umbrella"
+    # `make co` in the public umbrella will use files from rabbitmq-server
+    # to know what to fetch, and these are now different post monorepo. So,
+    # we must clone rabbitmq-server manually and check out $version before
+    # we run `make co`
+    mkdir -p "$umbrella"/deps
+    git clone \
+      https://github.com/rabbitmq/rabbitmq-server.git \
+      "$umbrella"/deps/rabbit
+    git -C "$umbrella"/deps/rabbit checkout "$version"
+    make -C "$umbrella" co
     make -C "$umbrella" up BRANCH="$version"
     # To remove third-party deps which were checked out when the
     # projects were on the `master` branch. Thus, possibly not the
