@@ -183,6 +183,18 @@ local_pid(StreamId) when is_list(StreamId) ->
 members(StreamId) when is_list(StreamId) ->
     MFA = {?MODULE, query_members, [StreamId]},
     case ra:local_query({?MODULE, node()}, MFA) of
+        {ok, {_, {ok, _} = Result}, _} ->
+            Result;
+        {ok, {_, {error, not_found} = Result}, _} ->
+            %% fall back to consistent query
+            case ra:consistent_query({?MODULE, node()}, MFA) of
+                {ok, Result, _} ->
+                    Result;
+                {error, _} = Err ->
+                    Err;
+                {timeout, _} ->
+                    {error, timeout}
+            end;
         {ok, {_, Result}, _} ->
             Result;
         {error, _} = Err ->
