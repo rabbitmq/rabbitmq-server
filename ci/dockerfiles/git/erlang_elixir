@@ -179,7 +179,7 @@ RUN apt-get update && \
     apt-get install -y -V --fix-missing --no-install-recommends \
     gettext \
     libunwind8 \
-    dotnet-sdk-2.0.0
+    dotnet-sdk-5.*
 
 # .NET Core 2.0 warmup
 RUN mkdir warmup \
