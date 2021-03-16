@@ -46,7 +46,8 @@ public class ClusterSizeTest {
 
   @ParameterizedTest
   @CsvSource({"1,1", "2,2", "3,3", "5,3"})
-  void clusterSizeShouldReflectOnMetadata(String requestedClusterSize, int expectedClusterSize) {
+  void clusterSizeShouldReflectOnMetadata(String requestedClusterSize, int expectedClusterSize)
+      throws InterruptedException {
     Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
     String s = UUID.randomUUID().toString();
     try {
@@ -56,8 +57,13 @@ public class ClusterSizeTest {
       StreamMetadata metadata = client.metadata(s).get(s);
       assertThat(metadata).isNotNull();
       assertThat(metadata.getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_OK);
-      int actualClusterSize = metadata.getLeader() == null ? 0 : 1 + metadata.getReplicas().size();
-      assertThat(actualClusterSize).isEqualTo(expectedClusterSize);
+      TestUtils.waitUntil(
+          () -> {
+            StreamMetadata m = client.metadata(s).get(s);
+            assertThat(metadata).isNotNull();
+            int actualClusterSize = m.getLeader() == null ? 0 : 1 + m.getReplicas().size();
+            return actualClusterSize == expectedClusterSize;
+          });
     } finally {
       client.delete(s);
     }

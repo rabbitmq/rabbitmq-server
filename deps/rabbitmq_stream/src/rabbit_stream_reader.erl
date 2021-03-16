@@ -1814,9 +1814,10 @@ handle_frame_post_auth(Transport,
                                                       Username)
                     of
                         {ok,
-                         #{leader_pid := LeaderPid,
-                           replica_pids := ReturnedReplicas}} ->
-                            rabbit_log:info("Created cluster with leader ~p and replicas ~p",
+                         #{leader_node := LeaderPid,
+                           replica_nodes := ReturnedReplicas}} ->
+                            rabbit_log:info("Created cluster with leader on ~p and replicas "
+                                            "on ~p~n",
                                             [LeaderPid, ReturnedReplicas]),
                             response_ok(Transport,
                                         Connection,
@@ -1942,11 +1943,18 @@ handle_frame_post_auth(Transport,
                        Rest) ->
     Streams = rabbit_stream_utils:extract_stream_list(BinaryStreams, []),
 
+    Topology =
+        lists:foldl(fun(Stream, Acc) ->
+                       Acc#{Stream =>
+                                rabbit_stream_manager:topology(VirtualHost,
+                                                               Stream)}
+                    end,
+                    #{}, Streams),
+
     %% get the nodes involved in the streams
     NodesMap =
         lists:foldl(fun(Stream, Acc) ->
-                       case rabbit_stream_manager:topology(VirtualHost, Stream)
-                       of
+                       case maps:get(Stream, Topology) of
                            {ok,
                             #{leader_node := undefined,
                               replica_nodes := ReplicaNodes}} ->
@@ -2004,8 +2012,7 @@ handle_frame_post_auth(Transport,
     MetadataBin =
         lists:foldl(fun(Stream, Acc) ->
                        StreamLength = byte_size(Stream),
-                       case rabbit_stream_manager:topology(VirtualHost, Stream)
-                       of
+                       case maps:get(Stream, Topology) of
                            {error, stream_not_found} ->
                                <<Acc/binary,
                                  StreamLength:16,

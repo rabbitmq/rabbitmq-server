@@ -82,7 +82,10 @@ public class StreamTest {
     Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
     Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
     assertThat(metadata).hasSize(1).containsKey(stream);
-    Client.StreamMetadata streamMetadata = metadata.get(stream);
+
+    TestUtils.waitUntil(() -> client.metadata(stream).get(stream).getReplicas().size() == 2);
+
+    Client.StreamMetadata streamMetadata = client.metadata(stream).get(stream);
 
     CountDownLatch publishingLatch = new CountDownLatch(messageCount);
     Client publisher =
@@ -129,19 +132,21 @@ public class StreamTest {
   }
 
   @Test
-  void metadataOnClusterShouldReturnLeaderAndReplicas() {
+  void metadataOnClusterShouldReturnLeaderAndReplicas() throws InterruptedException {
     Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
     Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
     assertThat(metadata).hasSize(1).containsKey(stream);
-    Client.StreamMetadata streamMetadata = metadata.get(stream);
-    assertThat(streamMetadata.getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_OK);
-    assertThat(streamMetadata.getReplicas()).hasSize(2);
+    assertThat(metadata.get(stream).getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_OK);
+
+    TestUtils.waitUntil(() -> client.metadata(stream).get(stream).getReplicas().size() == 2);
 
     BiConsumer<Client.Broker, Client.Broker> assertNodesAreDifferent =
         (node, anotherNode) -> {
           assertThat(node.getHost()).isEqualTo(anotherNode.getHost());
           assertThat(node.getPort()).isNotEqualTo(anotherNode.getPort());
         };
+
+    Client.StreamMetadata streamMetadata = client.metadata(stream).get(stream);
 
     streamMetadata
         .getReplicas()

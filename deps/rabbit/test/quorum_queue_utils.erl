@@ -7,6 +7,7 @@
          wait_for_messages_pending_ack/3,
          wait_for_messages_total/3,
          wait_for_messages/2,
+         wait_for_messages/3,
          wait_for_min_messages/3,
          wait_for_max_messages/3,
          dirty_query/3,

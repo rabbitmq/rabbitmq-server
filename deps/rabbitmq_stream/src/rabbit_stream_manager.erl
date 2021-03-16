@@ -240,10 +240,18 @@ handle_call({lookup_leader, VirtualHost, Stream}, _From, State) ->
               {ok, Q} ->
                   case is_stream_queue(Q) of
                       true ->
-                          #{leader_pid := LeaderPid} =
-                              amqqueue:get_type_state(Q),
-                          % FIXME check if pid is alive in case of stale information
-                          LeaderPid;
+                          LeaderPid = amqqueue:get_pid(Q),
+                          case process_alive(LeaderPid) of
+                              true ->
+                                  LeaderPid;
+                              false ->
+                                  case leader_from_members(Q) of
+                                      {ok, Pid} ->
+                                          Pid;
+                                      _ ->
+                                          cluster_not_found
+                                  end
+                          end;
                       _ ->
                           cluster_not_found
                   end;
@@ -261,24 +269,16 @@ handle_call({lookup_local_member, VirtualHost, Stream}, _From,
               {ok, Q} ->
                   case is_stream_queue(Q) of
                       true ->
-                          #{leader_pid := LeaderPid,
-                            replica_pids := ReplicaPids} =
-                              amqqueue:get_type_state(Q),
-                          LocalMember =
-                              lists:foldl(fun(Pid, Acc) ->
-                                             case node(Pid) =:= node() of
-                                                 true -> Pid;
-                                                 false -> Acc
-                                             end
-                                          end,
-                                          undefined,
-                                          [LeaderPid] ++ ReplicaPids),
+                          #{name := StreamName} = amqqueue:get_type_state(Q),
                           % FIXME check if pid is alive in case of stale information
-                          case LocalMember of
-                              undefined ->
+                          case rabbit_stream_coordinator:local_pid(StreamName)
+                          of
+                              {ok, Pid} when is_pid(Pid) ->
+                                  {ok, Pid};
+                              {error, timeout} ->
                                   {error, not_available};
-                              Pid ->
-                                  {ok, Pid}
+                              _ ->
+                                  {error, not_available}
                           end;
                       _ ->
                           {error, not_found}
@@ -302,33 +302,36 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
                   case is_stream_queue(Q) of
                       true ->
                           QState = amqqueue:get_type_state(Q),
-                          ProcessAliveFun =
-                              fun(Pid) ->
-                                 rpc:call(node(Pid),
-                                          erlang,
-                                          is_process_alive,
-                                          [Pid],
-                                          10000)
-                              end,
-                          LeaderNode =
-                              case ProcessAliveFun(maps:get(leader_pid, QState))
+                          #{name := StreamName} = QState,
+                          StreamMembers =
+                              case rabbit_stream_coordinator:members(StreamName)
                               of
-                                  true ->
-                                      maps:get(leader_node, QState);
+                                  {ok, Members} ->
+                                      maps:fold(fun (_Node, {undefined, _Role},
+                                                     Acc) ->
+                                                        Acc;
+                                                    (LeaderNode, {_Pid, writer},
+                                                     Acc) ->
+                                                        Acc#{leader_node =>
+                                                                 LeaderNode};
+                                                    (ReplicaNode,
+                                                     {_Pid, replica}, Acc) ->
+                                                        #{replica_nodes :=
+                                                              ReplicaNodes} =
+                                                            Acc,
+                                                        Acc#{replica_nodes =>
+                                                                 ReplicaNodes
+                                                                 ++ [ReplicaNode]};
+                                                    (_Node, _, Acc) ->
+                                                        Acc
+                                                end,
+                                                #{leader_node => undefined,
+                                                  replica_nodes => []},
+                                                Members);
                                   _ ->
-                                      undefined
+                                      {error, stream_not_found}
                               end,
-                          ReplicaNodes =
-                              lists:foldl(fun(Pid, Acc) ->
-                                             case ProcessAliveFun(Pid) of
-                                                 true -> Acc ++ [node(Pid)];
-                                                 _ -> Acc
-                                             end
-                                          end,
-                                          [], maps:get(replica_pids, QState)),
-                          {ok,
-                           #{leader_node => LeaderNode,
-                             replica_nodes => ReplicaNodes}};
+                          {ok, StreamMembers};
                       _ ->
                           {error, stream_not_found}
                   end;
@@ -396,6 +399,32 @@ handle_cast(_, State) ->
 handle_info(Info, State) ->
     rabbit_log:info("Received info ~p", [Info]),
     {noreply, State}.
+
+leader_from_members(Q) ->
+    QState = amqqueue:get_type_state(Q),
+    #{name := StreamName} = QState,
+    case rabbit_stream_coordinator:members(StreamName) of
+        {ok, Members} ->
+            maps:fold(fun (_LeaderNode, {Pid, writer}, _Acc) ->
+                              {ok, Pid};
+                          (_Node, _, Acc) ->
+                              Acc
+                      end,
+                      {error, not_found}, Members);
+        _ ->
+            {error, not_found}
+    end.
+
+process_alive(Pid) ->
+    CurrentNode = node(),
+    case node(Pid) of
+        nonode@nohost ->
+            false;
+        CurrentNode ->
+            is_process_alive(Pid);
+        OtherNode ->
+            rpc:call(OtherNode, erlang, is_process_alive, [Pid], 10000)
+    end.
 
 is_stream_queue(Q) ->
     case amqqueue:get_type(Q) of

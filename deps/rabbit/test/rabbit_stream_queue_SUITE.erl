@@ -46,6 +46,7 @@ groups() ->
            delete_classic_replica,
            delete_quorum_replica,
            consume_from_replica,
+           replica_recovery,
            leader_failover,
            leader_failover_dedupe,
            initial_cluster_size_one,
@@ -95,7 +96,8 @@ all_tests() ->
      max_age_policy,
      max_segment_size_policy,
      purge,
-     update_retention_policy
+     update_retention_policy,
+     queue_info
     ].
 
 %% -------------------------------------------------------------------
@@ -253,13 +255,15 @@ declare_queue(Config) ->
 
     %% Test declare an existing queue
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     ?assertMatch([_], rpc:call(Server, supervisor, which_children,
                                [osiris_server_sup])),
 
     %% Test declare an existing queue with different arguments
-    ?assertExit(_, declare(Ch, Q, [])).
+    ?assertExit(_, declare(Ch, Q, [])),
+    ok.
+
 
 delete_queue(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -316,7 +320,7 @@ add_replica(Config) ->
                           [<<"/">>, Q, Server1])),
     %% replicas must be recorded on the state, and if we publish messages then they must
     %% be stored on disk
-    check_leader_and_replicas(Config, Q, Server0, [Server1]),
+    check_leader_and_replicas(Config, Q, [Server0, Server1]),
     %% And if we try again? Idempotent
     ?assertEqual(ok, rpc:call(Server0, rabbit_stream_queue, add_replica,
                               [<<"/">>, Q, Server1])),
@@ -326,7 +330,7 @@ add_replica(Config) ->
     rabbit_control_helper:command(start_app, Server2),
     ?assertEqual(ok, rpc:call(Server0, rabbit_stream_queue, add_replica,
                               [<<"/">>, Q, Server2])),
-    check_leader_and_replicas(Config, Q, Server0, [Server1, Server2]).
+    check_leader_and_replicas(Config, Q, [Server0, Server1, Server2]).
 
 delete_replica(Config) ->
     [Server0, Server1, Server2] =
@@ -335,7 +339,7 @@ delete_replica(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    check_leader_and_replicas(Config, Q, Server0, [Server1, Server2]),
+    check_leader_and_replicas(Config, Q, [Server0, Server1, Server2]),
     %% Not a member of the cluster, what would happen?
     ?assertEqual({error, node_not_running},
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
@@ -344,14 +348,14 @@ delete_replica(Config) ->
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
                           [<<"/">>, Q, Server1])),
     %% check it's gone
-    check_leader_and_replicas(Config, Q, Server0, [Server2]),
+    check_leader_and_replicas(Config, Q, [Server0, Server2]),
     %% And if we try again? Idempotent
     ?assertEqual(ok, rpc:call(Server0, rabbit_stream_queue, delete_replica,
                               [<<"/">>, Q, Server1])),
     %% Delete the last replica
     ?assertEqual(ok, rpc:call(Server0, rabbit_stream_queue, delete_replica,
                               [<<"/">>, Q, Server2])),
-    check_leader_and_replicas(Config, Q, Server0, []).
+    check_leader_and_replicas(Config, Q, [Server0]).
 
 grow_coordinator_cluster(Config) ->
     [Server0, Server1, _Server2] =
@@ -437,17 +441,19 @@ delete_down_replica(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    check_leader_and_replicas(Config, Q, Server0, [Server1, Server2]),
+    check_leader_and_replicas(Config, Q, [Server0, Server1, Server2]),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
     ?assertEqual({error, node_not_running},
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
                           [<<"/">>, Q, Server1])),
     %% check it isn't gone
-    check_leader_and_replicas(Config, Q, Server0, [Server1, Server2]),
+    check_leader_and_replicas(Config, Q, [Server0, Server1, Server2]),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
-    ?assertEqual(ok,
-                 rpc:call(Server0, rabbit_stream_queue, delete_replica,
-                          [<<"/">>, Q, Server1])).
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              ok == rpc:call(Server0, rabbit_stream_queue, delete_replica,
+                             [<<"/">>, Q, Server1])
+      end).
 
 publish(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -493,7 +499,7 @@ restart_single_node(Config) ->
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]).
 
 recover(Config) ->
-    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers0 = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
@@ -502,13 +508,26 @@ recover(Config) ->
     publish(Ch, Q),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
 
-    [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers],
-    [rabbit_ct_broker_helpers:start_node(Config, S) || S <- lists:reverse(Servers)],
+    [begin
+         ct:pal("recover: running stop start for permuation ~w", [Servers]),
+         [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers],
+         [rabbit_ct_broker_helpers:start_node(Config, S) || S <- lists:reverse(Servers)],
+         ct:pal("recover: running stop waiting for messages ~w", [Servers]),
+         quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 120)
+     end || Servers <- permute(Servers0)],
 
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
+
+    [begin
+         ct:pal("recover: running app stop start for permuation ~w", [Servers]),
+         [rabbit_control_helper:command(stop_app, S) || S <- Servers],
+         [rabbit_control_helper:command(start_app, S) || S <- lists:reverse(Servers)],
+         ct:pal("recover: running app stop waiting for messages ~w", [Servers]),
+         quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 120)
+     end || Servers <- permute(Servers0)],
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     publish(Ch1, Q),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]).
+    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]),
+    ok.
 
 consume_without_qos(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -517,7 +536,7 @@ consume_without_qos(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    
+
     ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
                 amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q, consumer_tag = <<"ctag">>},
                                        self())).
@@ -653,7 +672,7 @@ consume_timestamp_last_offset(Config) ->
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
-   
+
     %% Subscribe from now/future
     Offset = erlang:system_time(second) + 60,
     amqp_channel:subscribe(
@@ -691,7 +710,7 @@ basic_get(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    
+
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
                 amqp_channel:call(Ch, #'basic.get'{queue = Q})).
 
@@ -941,7 +960,7 @@ consume_from_replica(Config) ->
 
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
     qos(Ch2, 10, false),
-    
+
     subscribe(Ch2, Q, false, 0),
     receive_batch(Ch2, 0, 99).
 
@@ -1165,6 +1184,46 @@ max_age(Config) ->
     subscribe(Ch1, Q, false, 0),
     ?assertEqual(100, length(receive_batch())).
 
+replica_recovery(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1 | _] = lists:reverse(Nodes),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch1, self()),
+    [publish(Ch1, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
+    amqp_channel:wait_for_confirms(Ch1, 5),
+    amqp_channel:close(Ch1),
+
+    [begin
+         [DownNode | _] = PNodes,
+         rabbit_control_helper:command(stop_app, DownNode),
+         rabbit_control_helper:command(start_app, DownNode),
+         timer:sleep(6000),
+         Ch2 = rabbit_ct_client_helpers:open_channel(Config, DownNode),
+         qos(Ch2, 10, false),
+         subscribe(Ch2, Q, false, 0),
+         receive_batch(Ch2, 0, 99),
+         amqp_channel:close(Ch2)
+     end || PNodes <- permute(Nodes)],
+
+    [begin
+         [DownNode | _] = PNodes,
+         ok = rabbit_ct_broker_helpers:stop_node(Config, DownNode),
+         ok = rabbit_ct_broker_helpers:start_node(Config, DownNode),
+         timer:sleep(6000),
+         Ch2 = rabbit_ct_client_helpers:open_channel(Config, DownNode),
+         qos(Ch2, 10, false),
+         subscribe(Ch2, Q, false, 0),
+         receive_batch(Ch2, 0, 99),
+         amqp_channel:close(Ch2)
+     end || PNodes <- permute(Nodes)],
+
+    ok.
+
 leader_failover(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1179,35 +1238,45 @@ leader_failover(Config) ->
     [publish(Ch1, Q, <<"msg">>) || _ <- lists:seq(1, 100)],
     amqp_channel:wait_for_confirms(Ch1, 5),
 
-    check_leader_and_replicas(Config, Q, Server1, [Server2, Server3]),
+    check_leader_and_replicas(Config, Q, [Server1, Server2, Server3]),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
     timer:sleep(30000),
 
-    [Info] = lists:filter(
-               fun(Props) ->
-                       QName = rabbit_misc:r(<<"/">>, queue, Q),
-                       lists:member({name, QName}, Props)
-               end,
-               rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_amqqueue,
-                                            info_all, [<<"/">>, [name, leader, members]])),
-    NewLeader = proplists:get_value(leader, Info),
-    ?assert(NewLeader =/= Server1),
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              [Info] =
+                  lists:filter(
+                    fun(Props) ->
+                            QName = rabbit_misc:r(<<"/">>, queue, Q),
+                            lists:member({name, QName}, Props)
+                    end,
+                    rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_amqqueue,
+                                                 info_all, [<<"/">>, [name, leader, members]])),
+              NewLeader = proplists:get_value(leader, Info),
+              NewLeader =/= Server1
+      end),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1).
 
 leader_failover_dedupe(Config) ->
     %% tests that in-flight messages are automatically handled in the case where
     %% a leader change happens during publishing
-    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    PermNodes = permute(
+                  rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
+    %% pick a random node order for this test
+    %% realle we should run all permuations
+    Nodes = lists:nth(rand:uniform(length(PermNodes)), PermNodes),
+    ct:pal("~s running with nodes ~w", [?FUNCTION_NAME, Nodes]),
+    [_Server1, DownNode, PubNode] = Nodes,
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, DownNode),
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    check_leader_and_replicas(Config, Q, Server1, [Server2, Server3]),
+    check_leader_and_replicas(Config, Q, Nodes),
 
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, PubNode),
     #'confirm.select_ok'{} = amqp_channel:call(Ch2, #'confirm.select'{}),
 
     Self= self(),
@@ -1234,23 +1303,29 @@ leader_failover_dedupe(Config) ->
     erlang:monitor(process, Pid),
     Pid ! go,
     timer:sleep(10),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, DownNode),
     %% this should cause a new leader to be elected and the channel on node 2
     %% to have to resend any pending messages to ensure none is lost
-    timer:sleep(30000),
-    [Info] = lists:filter(
-               fun(Props) ->
-                       QName = rabbit_misc:r(<<"/">>, queue, Q),
-                       lists:member({name, QName}, Props)
-               end,
-               rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_amqqueue,
-                                            info_all, [<<"/">>, [name, leader, members]])),
-    NewLeader = proplists:get_value(leader, Info),
-    ?assert(NewLeader =/= Server1),
+    ct:pal("preinfo", []),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              [Info] = lists:filter(
+                         fun(Props) ->
+                                 QName = rabbit_misc:r(<<"/">>, queue, Q),
+                                 lists:member({name, QName}, Props)
+                         end,
+                         rabbit_ct_broker_helpers:rpc(Config, PubNode, rabbit_amqqueue,
+                                                      info_all,
+                                                      [<<"/">>, [name, leader, members]])),
+              ct:pal("info ~p", [Info]),
+              NewLeader = proplists:get_value(leader, Info),
+              NewLeader =/= DownNode
+      end),
     flush(),
     ?assert(erlang:is_process_alive(Pid)),
+    ct:pal("stopping"),
     Pid ! stop,
-    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:start_node(Config, DownNode),
 
     N = receive
             {last_msg, X} -> X
@@ -1274,7 +1349,7 @@ initial_cluster_size_one(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                   {<<"x-initial-cluster-size">>, long, 1}])),
-    check_leader_and_replicas(Config, Q, Server1, []),
+    check_leader_and_replicas(Config, Q, [Server1]),
 
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})).
@@ -1296,7 +1371,7 @@ initial_cluster_size_two(Config) ->
                rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
                                             info_all, [<<"/">>, [name, leader, members]])),
     ?assertEqual(Server1, proplists:get_value(leader, Info)),
-    ?assertEqual(1, length(proplists:get_value(members, Info))),
+    ?assertEqual(2, length(proplists:get_value(members, Info))),
 
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})).
@@ -1314,7 +1389,7 @@ initial_cluster_size_one_policy(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                   {<<"x-initial-cluster-size">>, long, 1}])),
-    check_leader_and_replicas(Config, Q, Server1, []),
+    check_leader_and_replicas(Config, Q, [Server1]),
 
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
@@ -1577,6 +1652,23 @@ update_retention_policy(Config) ->
 
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"retention">>).
 
+queue_info(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              [Info] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                                    info_all, [<<"/">>, [name, leader, online, members]]),
+              lists:member(proplists:get_value(leader, Info), Servers) andalso
+                  (lists:sort(Servers) == lists:sort(proplists:get_value(members, Info))) andalso
+                  (lists:sort(Servers) == lists:sort(proplists:get_value(online, Info)))
+      end).
+
 max_segment_size_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1632,17 +1724,21 @@ get_queue_type(Server, Q0) ->
     {ok, Q1} = rpc:call(Server, rabbit_amqqueue, lookup, [QNameRes]),
     amqqueue:get_type(Q1).
 
-check_leader_and_replicas(Config, Name, Leader, Replicas0) -> 
+check_leader_and_replicas(Config, Name, Members) ->
     QNameRes = rabbit_misc:r(<<"/">>, queue, Name),
-    [Info] = lists:filter(
-               fun(Props) ->
-                       lists:member({name, QNameRes}, Props)
-               end,
-               rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
-                                            info_all, [<<"/">>, [name, leader, members]])),
-    ?assertEqual(Leader, proplists:get_value(leader, Info)),
-    Replicas = lists:sort(Replicas0),
-    ?assertEqual(Replicas, lists:sort(proplists:get_value(members, Info))).
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              [Info] = lists:filter(
+                         fun(Props) ->
+                                 lists:member({name, QNameRes}, Props)
+                         end,
+                         rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
+                                                      info_all, [<<"/">>, [name, leader,
+                                                                           members]])),
+              ct:pal("~s members ~w ~p", [?FUNCTION_NAME, Members, Info]),
+              lists:member(proplists:get_value(leader, Info), Members)
+                  andalso (lists:sort(Members) == lists:sort(proplists:get_value(members, Info)))
+      end).
 
 publish(Ch, Queue) ->
     publish(Ch, Queue, <<"msg">>).
@@ -1678,7 +1774,8 @@ validate_dedupe(Ch, N, N) ->
             ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                     multiple     = false})
     after 60000 ->
-            exit({missing_record, N})
+              flush(),
+              exit({missing_record, N})
     end;
 validate_dedupe(Ch, N, M) ->
     receive
@@ -1690,7 +1787,8 @@ validate_dedupe(Ch, N, M) ->
                                                     multiple     = false}),
             validate_dedupe(Ch, N + 1, M)
     after 60000 ->
-            exit({missing_record, N})
+              flush(),
+              exit({missing_record, N})
     end.
 
 receive_batch(Ch, N, N) ->
@@ -1700,7 +1798,8 @@ receive_batch(Ch, N, N) ->
             ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                     multiple     = false})
     after 60000 ->
-            exit({missing_offset, N})
+              flush(),
+              exit({missing_offset, N})
     end;
 receive_batch(Ch, N, M) ->
     receive
@@ -1714,7 +1813,8 @@ receive_batch(Ch, N, M) ->
                                                     multiple     = false}),
             receive_batch(Ch, N + 1, M)
     after 60000 ->
-            exit({missing_offset, N})
+              flush(),
+              exit({missing_offset, N})
     end.
 
 receive_batch() ->
@@ -1746,3 +1846,6 @@ flush() ->
     after 0 ->
               ok
     end.
+
+permute([]) -> [[]];
+permute(L)  -> [[H|T] || H <- L, T <- permute(L--[H])].

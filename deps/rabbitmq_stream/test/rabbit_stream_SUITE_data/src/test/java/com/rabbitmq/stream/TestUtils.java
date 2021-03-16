@@ -45,6 +45,10 @@ public class TestUtils {
     return Integer.valueOf(port);
   }
 
+  static void waitUntil(BooleanSupplier condition) throws InterruptedException {
+    waitAtMost(Duration.ofSeconds(10), condition);
+  }
+
   static void waitAtMost(Duration duration, BooleanSupplier condition) throws InterruptedException {
     if (condition.getAsBoolean()) {
       return;
