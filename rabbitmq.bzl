@@ -75,6 +75,7 @@ def rabbitmq_lib(
         extra_erlc_opts = [],
         first_srcs = [],
         priv = [],
+        build_deps = [],
         deps = [],
         runtime_deps = []):
     erlang_lib(
@@ -88,6 +89,7 @@ def rabbitmq_lib(
         erlc_opts = RABBITMQ_ERLC_OPTS + extra_erlc_opts,
         first_srcs = first_srcs,
         priv = priv,
+        build_deps = build_deps,
         deps = deps,
         runtime_deps = runtime_deps,
     )
@@ -104,7 +106,7 @@ def rabbitmq_lib(
             srcs = native.glob(first_srcs),
             erlc_opts = test_erlc_opts,
             dest = "src",
-            deps = deps,
+            deps = build_deps + deps,
             testonly = True,
         )
 
@@ -115,7 +117,7 @@ def rabbitmq_lib(
         beam = all_test_beam,
         erlc_opts = test_erlc_opts,
         dest = "src",
-        deps = deps,
+        deps = build_deps + deps,
         testonly = True,
     )
 
@@ -137,8 +139,8 @@ def rabbitmq_integration_suite(
         data = [],
         test_env = {},
         tools = [],
-        runtime_deps = [],
         deps = [],
+        runtime_deps = [],
         **kwargs):
     ct_suite(
         erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,

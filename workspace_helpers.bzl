@@ -146,6 +146,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     github_bazel_erlang_lib(
         name = "stdout_formatter",
+        org = "rabbitmq",
         sha256 = "9eb27075c25006f86da0168597d7e4914ecc41e2493c0b3cba14c07f4be53267",
         version = "0.2.4",
     )
@@ -153,6 +154,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     github_bazel_erlang_lib(
         repo = "sysmon-handler",
         name = "sysmon_handler",
+        org = "rabbitmq",
         sha256 = "0fd50afe194dd071e7afc31c4bdfdcc789652edc72c2defff1e5206f5d4f43ee",
         version = "1.3.0",
     )

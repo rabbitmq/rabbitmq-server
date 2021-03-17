@@ -15,6 +15,9 @@ rabbitmq_lib(
     app_env = APP_ENV,
     app_module = "rabbit_mgmt_agent_app",
     app_name = "rabbitmq_management_agent",
+    build_deps = [
+        "//deps/rabbitmq_cli:rabbitmqctl",
+    ],
     extra_apps = [
         "xmerl",
         "mnesia",
