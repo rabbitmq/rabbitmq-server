@@ -391,7 +391,7 @@ info(Pid) ->
         end
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("Timed out getting channel ~p info", [Pid]),
+            _ = rabbit_log:error("Timed out getting channel ~p info", [Pid]),
             throw(timeout)
     end.
 
@@ -406,7 +406,7 @@ info(Pid, Items) ->
         end
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("Timed out getting channel ~p info", [Pid]),
+            _ = rabbit_log:error("Timed out getting channel ~p info", [Pid]),
             throw(timeout)
     end.
 
@@ -442,7 +442,7 @@ refresh_config_local() ->
         try
           gen_server2:call(C, refresh_config, infinity)
         catch _:Reason ->
-          rabbit_log:error("Failed to refresh channel config "
+          _ = rabbit_log:error("Failed to refresh channel config "
                            "for channel ~p. Reason ~p",
                            [C, Reason])
         end
@@ -456,7 +456,7 @@ refresh_interceptors() ->
         try
           gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
         catch _:Reason ->
-          rabbit_log:error("Failed to refresh channel interceptors "
+          _ = rabbit_log:error("Failed to refresh channel interceptors "
                            "for channel ~p. Reason ~p",
                            [C, Reason])
         end

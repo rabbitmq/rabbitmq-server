@@ -1293,7 +1293,7 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
         %% Any secret update errors coming from the authz backend will be handled in the other branch.
         %% Therefore we optimistically do no error handling here. MK.
         lists:foreach(fun(Ch) ->
-          rabbit_log:debug("Updating user/auth backend state for channel ~p", [Ch]),
+          _ = rabbit_log:debug("Updating user/auth backend state for channel ~p", [Ch]),
           _ = rabbit_channel:update_user_state(Ch, User1)
         end, all_channels()),
         ok = send_on_channel0(Sock, #'connection.update_secret_ok'{}, Protocol),
@@ -1413,7 +1413,7 @@ auth_phase(Response,
                                        auth_mechanism = {Name, AuthMechanism},
                                        auth_state     = AuthState},
                        sock = Sock}) ->
-    rabbit_log:debug("Raw client connection hostname during authN phase: ~p", [Connection#connection.host]),
+    _ = rabbit_log:debug("Raw client connection hostname during authN phase: ~p", [Connection#connection.host]),
     RemoteAddress = case Connection#connection.host of
         %% the hostname was already resolved, e.g. by reverse DNS lookups
         Bin when is_binary(Bin) -> Bin;
@@ -1422,7 +1422,7 @@ auth_phase(Response,
             rabbit_data_coercion:to_binary(inet:ntoa(Connection#connection.host));
         Other -> rabbit_data_coercion:to_binary(Other)
     end,
-    rabbit_log:debug("Resolved client hostname during authN phase: ~s", [RemoteAddress]),
+    _ = rabbit_log:debug("Resolved client hostname during authN phase: ~s", [RemoteAddress]),
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Username, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, amqp091),

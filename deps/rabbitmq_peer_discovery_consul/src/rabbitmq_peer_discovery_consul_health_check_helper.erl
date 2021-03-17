@@ -88,7 +88,7 @@ set_up_periodic_health_check() ->
             %% notifications
 
             IntervalInMs = Interval * 500, % note this is 1/2
-            rabbit_log:info("Starting Consul health check notifier (effective interval: ~p milliseconds)", [IntervalInMs]),
+            _ = rabbit_log:info("Starting Consul health check notifier (effective interval: ~p milliseconds)", [IntervalInMs]),
             {ok, TRef} = timer:apply_interval(IntervalInMs, rabbit_peer_discovery_consul,
                                               send_health_check_pass, []),
             {ok, #state{timer_ref = TRef}}

@@ -362,7 +362,7 @@ handle_cast({gm_deaths, DeadGMPids}, State = #state{q = Q}) when ?amqqueue_pid_r
         {error, not_found} ->
             {stop, normal, State};
         {error, {not_synced, _}} ->
-            rabbit_log:error("Mirror queue ~p in unexpected state."
+            _ = rabbit_log:error("Mirror queue ~p in unexpected state."
                              " Promoted to master but already a master.",
                              [QueueName]),
             error(unexpected_mirrored_state)

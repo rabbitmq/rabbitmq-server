@@ -79,7 +79,7 @@ init(Q0, restart) when ?is_amqqueue(Q0) ->
 
 crash_restart(Q0) when ?is_amqqueue(Q0) ->
     QueueName = amqqueue:get_name(Q0),
-    rabbit_log:error("Restarting crashed ~s.~n", [rabbit_misc:rs(QueueName)]),
+    _ = rabbit_log:error("Restarting crashed ~s.~n", [rabbit_misc:rs(QueueName)]),
     gen_server2:cast(self(), init),
     Q1 = amqqueue:set_pid(Q0, self()),
     rabbit_amqqueue_process:init(Q1).

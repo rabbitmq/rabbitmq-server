@@ -74,7 +74,7 @@
 boot() ->
     ok = record_distribution_listener(),
     _ = application:start(ranch),
-    rabbit_log:debug("Started Ranch"),
+    _ = rabbit_log:debug("Started Ranch"),
     %% Failures will throw exceptions
     _ = boot_listeners(fun boot_tcp/1, application:get_env(rabbit, num_tcp_acceptors, 10), "TCP"),
     _ = boot_listeners(fun boot_tls/1, application:get_env(rabbit, num_ssl_acceptors, 10), "TLS"),
@@ -85,7 +85,7 @@ boot_listeners(Fun, NumAcceptors, Type) ->
         ok                                                                  ->
             ok;
         {error, {could_not_start_listener, Address, Port, Details}} = Error ->
-            rabbit_log:error("Failed to start ~s listener [~s]:~p, error: ~p",
+            _ = rabbit_log:error("Failed to start ~s listener [~s]:~p, error: ~p",
                              [Type, Address, Port, Details]),
             throw(Error)
     end.
@@ -137,7 +137,7 @@ poodle_check(Context) ->
     end.
 
 log_poodle_fail(Context) ->
-    rabbit_log:error(
+    _ = rabbit_log:error(
       "The installed version of Erlang (~s) contains the bug OTP-10905,~n"
       "which makes it impossible to disable SSLv3. This makes the system~n"
       "vulnerable to the POODLE attack. SSL listeners for ~s have therefore~n"
@@ -168,7 +168,7 @@ tcp_listener_addresses({Host, Port, Family0})
     [{IPAddress, Port, Family} ||
         {IPAddress, Family} <- getaddr(Host, Family0)];
 tcp_listener_addresses({_Host, Port, _Family0}) ->
-    rabbit_log:error("invalid port ~p - not 0..65535~n", [Port]),
+    _ = rabbit_log:error("invalid port ~p - not 0..65535~n", [Port]),
     throw({error, {invalid_port, Port}}).
 
 tcp_listener_addresses_auto(Port) ->
@@ -231,7 +231,7 @@ stop_ranch_listener_of_protocol(Protocol) ->
     case rabbit_networking:ranch_ref_of_protocol(Protocol) of
         undefined -> ok;
         Ref       ->
-            rabbit_log:debug("Stopping Ranch listener for protocol ~s", [Protocol]),
+            _ = rabbit_log:debug("Stopping Ranch listener for protocol ~s", [Protocol]),
             ranch:stop_listener(Ref)
     end.
 
@@ -367,11 +367,11 @@ node_client_listeners(Node) ->
 on_node_down(Node) ->
     case lists:member(Node, nodes()) of
         false ->
-            rabbit_log:info(
+            _ = rabbit_log:info(
                    "Node ~s is down, deleting its listeners~n", [Node]),
             ok = mnesia:dirty_delete(rabbit_listener, Node);
         true  ->
-            rabbit_log:info(
+            _ = rabbit_log:info(
                    "Keeping ~s listeners: the node is already back~n", [Node])
     end.
 
@@ -436,10 +436,10 @@ close_connection(Pid, Explanation) ->
     case lists:member(Pid, connections()) of
         true  ->
             Res = rabbit_reader:shutdown(Pid, Explanation),
-            rabbit_log:info("Closing connection ~p because ~p~n", [Pid, Explanation]),
+            _ = rabbit_log:info("Closing connection ~p because ~p~n", [Pid, Explanation]),
             Res;
         false ->
-            rabbit_log:warning("Asked to close connection ~p (reason: ~p) "
+            _ = rabbit_log:warning("Asked to close connection ~p (reason: ~p) "
                                "but no running cluster node reported it as an active connection. Was it already closed? ~n",
                                [Pid, Explanation]),
             ok
@@ -474,7 +474,7 @@ failed_to_recv_proxy_header(Ref, Error) ->
         closed -> "error when receiving proxy header: TCP socket was ~p prematurely";
         _Other -> "error when receiving proxy header: ~p"
     end,
-    rabbit_log:debug(Msg, [Error]),
+    _ = rabbit_log:debug(Msg, [Error]),
     % The following call will clean up resources then exit
     _ = ranch:handshake(Ref),
     exit({shutdown, failed_to_recv_proxy_header}).
@@ -552,7 +552,7 @@ gethostaddr(Host, Family) ->
 
 -spec host_lookup_error(_, _) -> no_return().
 host_lookup_error(Host, Reason) ->
-    rabbit_log:error("invalid host ~p - ~p~n", [Host, Reason]),
+    _ = rabbit_log:error("invalid host ~p - ~p~n", [Host, Reason]),
     throw({error, {invalid_host, Host, Reason}}).
 
 resolve_family({_,_,_,_},         auto) -> inet;

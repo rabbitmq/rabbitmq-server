@@ -84,24 +84,24 @@ lock_acquisition_failure_mode() ->
 -spec log_configured_backend() -> ok.
 
 log_configured_backend() ->
-  rabbit_log:info("Configured peer discovery backend: ~s~n", [backend()]).
+  _ = rabbit_log:info("Configured peer discovery backend: ~s~n", [backend()]).
 
 maybe_init() ->
     Backend = backend(),
     code:ensure_loaded(Backend),
     case erlang:function_exported(Backend, init, 0) of
         true  ->
-            rabbit_log:debug("Peer discovery backend supports initialisation"),
+            _ = rabbit_log:debug("Peer discovery backend supports initialisation"),
             case Backend:init() of
                 ok ->
-                    rabbit_log:debug("Peer discovery backend initialisation succeeded"),
+                    _ = rabbit_log:debug("Peer discovery backend initialisation succeeded"),
                     ok;
                 {error, Error} ->
-                    rabbit_log:warning("Peer discovery backend initialisation failed: ~p.", [Error]),
+                    _ = rabbit_log:warning("Peer discovery backend initialisation failed: ~p.", [Error]),
                     ok
             end;
         false ->
-            rabbit_log:debug("Peer discovery backend does not support initialisation"),
+            _ = rabbit_log:debug("Peer discovery backend does not support initialisation"),
             ok
     end.
 
@@ -130,7 +130,7 @@ maybe_register() ->
       register(),
       Backend:post_registration();
     false ->
-      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping registration.", [Backend]),
+      _ = rabbit_log:info("Peer discovery backend ~s does not support registration, skipping registration.", [Backend]),
       ok
   end.
 
@@ -143,7 +143,7 @@ maybe_unregister() ->
     true  ->
       unregister();
     false ->
-      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping unregistration.", [Backend]),
+      _ = rabbit_log:info("Peer discovery backend ~s does not support registration, skipping unregistration.", [Backend]),
       ok
   end.
 
@@ -165,10 +165,10 @@ maybe_inject_randomized_delay() ->
   Backend = backend(),
   case Backend:supports_registration() of
     true  ->
-      rabbit_log:info("Peer discovery backend ~s supports registration.", [Backend]),
+      _ = rabbit_log:info("Peer discovery backend ~s supports registration.", [Backend]),
       inject_randomized_delay();
     false ->
-      rabbit_log:info("Peer discovery backend ~s does not support registration, skipping randomized startup delay.", [Backend]),
+      _ = rabbit_log:info("Peer discovery backend ~s does not support registration, skipping randomized startup delay.", [Backend]),
       ok
   end.
 
@@ -181,18 +181,18 @@ inject_randomized_delay() ->
         %% In addition, `rand:uniform/1` will fail with a "no function clause"
         %% when the argument is 0.
         {_, 0} ->
-            rabbit_log:info("Randomized delay range's upper bound is set to 0. Considering it disabled."),
+            _ = rabbit_log:info("Randomized delay range's upper bound is set to 0. Considering it disabled."),
             ok;
         {_, N} when is_number(N) ->
             rand:seed(exsplus),
             RandomVal  = rand:uniform(round(N)),
-            rabbit_log:debug("Randomized startup delay: configured range is from ~p to ~p milliseconds, PRNG pick: ~p...",
+            _ = rabbit_log:debug("Randomized startup delay: configured range is from ~p to ~p milliseconds, PRNG pick: ~p...",
                              [Min, Max, RandomVal]),
             Effective  = case RandomVal < Min of
                              true  -> Min;
                              false -> RandomVal
                          end,
-            rabbit_log:info("Will wait for ~p milliseconds before proceeding with registration...", [Effective]),
+            _ = rabbit_log:info("Will wait for ~p milliseconds before proceeding with registration...", [Effective]),
             timer:sleep(Effective),
             ok
     end.
@@ -218,11 +218,11 @@ randomized_delay_range_in_ms() ->
 
 register() ->
   Backend = backend(),
-  rabbit_log:info("Will register with peer discovery backend ~s", [Backend]),
+  _ = rabbit_log:info("Will register with peer discovery backend ~s", [Backend]),
   case Backend:register() of
     ok             -> ok;
     {error, Error} ->
-      rabbit_log:error("Failed to register with peer discovery backend ~s: ~p",
+      _ = rabbit_log:error("Failed to register with peer discovery backend ~s: ~p",
         [Backend, Error]),
       ok
   end.
@@ -232,11 +232,11 @@ register() ->
 
 unregister() ->
   Backend = backend(),
-  rabbit_log:info("Will unregister with peer discovery backend ~s", [Backend]),
+  _ = rabbit_log:info("Will unregister with peer discovery backend ~s", [Backend]),
   case Backend:unregister() of
     ok             -> ok;
     {error, Error} ->
-      rabbit_log:error("Failed to unregister with peer discovery backend ~s: ~p",
+      _ = rabbit_log:error("Failed to unregister with peer discovery backend ~s: ~p",
         [Backend, Error]),
       ok
   end.
@@ -245,10 +245,10 @@ unregister() ->
 
 lock() ->
     Backend = backend(),
-    rabbit_log:info("Will try to lock with peer discovery backend ~s", [Backend]),
+    _ = rabbit_log:info("Will try to lock with peer discovery backend ~s", [Backend]),
     case Backend:lock(node()) of
         {error, Reason} = Error ->
-            rabbit_log:error("Failed to lock with peer discovery backend ~s: ~p",
+            _ = rabbit_log:error("Failed to lock with peer discovery backend ~s: ~p",
                              [Backend, Reason]),
             Error;
         Any ->
@@ -259,10 +259,10 @@ lock() ->
 
 unlock(Data) ->
     Backend = backend(),
-    rabbit_log:info("Will try to unlock with peer discovery backend ~s", [Backend]),
+    _ = rabbit_log:info("Will try to unlock with peer discovery backend ~s", [Backend]),
     case Backend:unlock(Data) of
         {error, Reason} = Error ->
-            rabbit_log:error("Failed to unlock with peer discovery backend ~s: ~p, "
+            _ = rabbit_log:error("Failed to unlock with peer discovery backend ~s: ~p, "
                              "lock data: ~p",
                              [Backend, Reason, Data]),
             Error;

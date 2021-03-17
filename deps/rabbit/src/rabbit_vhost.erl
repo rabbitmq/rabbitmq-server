@@ -43,7 +43,7 @@ recover() ->
 
 recover(VHost) ->
     VHostDir = msg_store_dir_path(VHost),
-    rabbit_log:info("Making sure data directory '~ts' for vhost '~s' exists~n",
+    _ = rabbit_log:info("Making sure data directory '~ts' for vhost '~s' exists~n",
                     [VHostDir, VHost]),
     VHostStubFile = filename:join(VHostDir, ".vhost"),
     ok = rabbit_file:ensure_dir(VHostStubFile),
@@ -98,16 +98,16 @@ add(Name, Description, Tags, ActingUser) ->
 do_add(Name, Description, Tags, ActingUser) ->
     case Description of
         undefined ->
-            rabbit_log:info("Adding vhost '~s' without a description", [Name]);
+            _ = rabbit_log:info("Adding vhost '~s' without a description", [Name]);
         Value ->
-            rabbit_log:info("Adding vhost '~s' (description: '~s', tags: ~p)", [Name, Value, Tags])
+            _ = rabbit_log:info("Adding vhost '~s' (description: '~s', tags: ~p)", [Name, Value, Tags])
     end,
     VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_vhost, Name}) of
                       [] ->
                         Row = vhost:new(Name, [], #{description => Description, tags => Tags}),
-                        rabbit_log:debug("Inserting a virtual host record ~p", [Row]),
+                        _ = rabbit_log:debug("Inserting a virtual host record ~p", [Row]),
                         ok = mnesia:write(rabbit_vhost, Row, write),
                         Row;
                       %% the vhost already exists
@@ -120,7 +120,7 @@ do_add(Name, Description, Tags, ActingUser) ->
               (VHost1, false) ->
                   [begin
                     Resource = rabbit_misc:r(Name, exchange, ExchangeName),
-                    rabbit_log:debug("Will declare an exchange ~p", [Resource]),
+                    _ = rabbit_log:debug("Will declare an exchange ~p", [Resource]),
                     _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
                   end || {ExchangeName, Type, Internal} <-
                           [{<<"">>,                   direct,  false},
@@ -155,7 +155,7 @@ delete(VHost, ActingUser) ->
     %% process, which in turn results in further mnesia actions and
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
-    rabbit_log:info("Deleting vhost '~s'~n", [VHost]),
+    _ = rabbit_log:info("Deleting vhost '~s'~n", [VHost]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
     [begin
          Name = amqqueue:get_name(Q),
@@ -268,16 +268,16 @@ vhost_down(VHost) ->
 
 delete_storage(VHost) ->
     VhostDir = msg_store_dir_path(VHost),
-    rabbit_log:info("Deleting message store directory for vhost '~s' at '~s'~n", [VHost, VhostDir]),
+    _ = rabbit_log:info("Deleting message store directory for vhost '~s' at '~s'~n", [VHost, VhostDir]),
     %% Message store should be closed when vhost supervisor is closed.
     case rabbit_file:recursive_delete([VhostDir]) of
         ok                   -> ok;
         {error, {_, enoent}} ->
             %% a concurrent delete did the job for us
-            rabbit_log:warning("Tried to delete storage directories for vhost '~s', it failed with an ENOENT", [VHost]),
+            _ = rabbit_log:warning("Tried to delete storage directories for vhost '~s', it failed with an ENOENT", [VHost]),
             ok;
         Other                ->
-            rabbit_log:warning("Tried to delete storage directories for vhost '~s': ~p", [VHost, Other]),
+            _ = rabbit_log:warning("Tried to delete storage directories for vhost '~s': ~p", [VHost, Other]),
             Other
     end.
 
@@ -403,7 +403,7 @@ i(description, VHost) -> vhost:get_description(VHost);
 i(tags, VHost) -> vhost:get_tags(VHost);
 i(metadata, VHost) -> vhost:get_metadata(VHost);
 i(Item, VHost)     ->
-  rabbit_log:error("Don't know how to compute a virtual host info item '~s' for virtual host '~p'", [Item, VHost]),
+  _ = rabbit_log:error("Don't know how to compute a virtual host info item '~s' for virtual host '~p'", [Item, VHost]),
   throw({bad_argument, Item}).
 
 -spec info(vhost:vhost() | vhost:name()) -> rabbit_types:infos().

@@ -78,27 +78,27 @@ check_epmd(State = #state{mod  = Mod,
                           me   = Me,
                           host = Host,
                           port = Port0}) ->
-    rabbit_log:debug("Asked to [re-]register this node (~s@~s) with epmd...", [Me, Host]),
+    _ = rabbit_log:debug("Asked to [re-]register this node (~s@~s) with epmd...", [Me, Host]),
     {ok, Port1} = handle_port_please(check, Mod:port_please(Me, Host), Me, Port0),
     rabbit_nodes:ensure_epmd(),
     Mod:register_node(Me, Port1),
-    rabbit_log:debug("[Re-]registered this node (~s@~s) with epmd at port ~p", [Me, Host, Port1]),
+    _ = rabbit_log:debug("[Re-]registered this node (~s@~s) with epmd at port ~p", [Me, Host, Port1]),
     {ok, State#state{port = Port1}}.
 
 handle_port_please(init, noport, Me, Port) ->
-    rabbit_log:info("epmd does not know us, re-registering as ~s~n", [Me]),
+    _ = rabbit_log:info("epmd does not know us, re-registering as ~s~n", [Me]),
     {ok, Port};
 handle_port_please(check, noport, Me, Port) ->
-    rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b~n", [Me, Port]),
+    _ = rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b~n", [Me, Port]),
     {ok, Port};
 handle_port_please(_, closed, _Me, Port) ->
-    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: closed"),
+    _ = rabbit_log:error("epmd monitor failed to retrieve our port from epmd: closed"),
     {ok, Port};
 handle_port_please(init, {port, NewPort, _Version}, _Me, _Port) ->
-    rabbit_log:info("epmd monitor knows us, inter-node communication (distribution) port: ~p", [NewPort]),
+    _ = rabbit_log:info("epmd monitor knows us, inter-node communication (distribution) port: ~p", [NewPort]),
     {ok, NewPort};
 handle_port_please(check, {port, NewPort, _Version}, _Me, _Port) ->
     {ok, NewPort};
 handle_port_please(_, {error, Error}, _Me, Port) ->
-    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: ~p", [Error]),
+    _ = rabbit_log:error("epmd monitor failed to retrieve our port from epmd: ~p", [Error]),
     {ok, Port}.

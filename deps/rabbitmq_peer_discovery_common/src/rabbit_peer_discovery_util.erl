@@ -90,7 +90,7 @@ as_atom(Value) when is_binary(Value) ->
 as_atom(Value) when is_list(Value) ->
   list_to_atom(Value);
 as_atom(Value) ->
-  rabbit_log:error("Unexpected data type for atom value: ~p~n",
+  _ = rabbit_log:error("Unexpected data type for atom value: ~p~n",
                    [Value]),
   Value.
 
@@ -109,7 +109,7 @@ as_integer(Value) when is_list(Value) ->
 as_integer(Value) when is_integer(Value) ->
   Value;
 as_integer(Value) ->
-  rabbit_log:error("Unexpected data type for integer value: ~p~n",
+  _ = rabbit_log:error("Unexpected data type for integer value: ~p~n",
                    [Value]),
   Value.
 
@@ -131,7 +131,7 @@ as_string(Value) when is_integer(Value) ->
 as_string(Value) when is_list(Value) ->
   lists:flatten(Value);
 as_string(Value) ->
-  rabbit_log:error("Unexpected data type for list value: ~p~n",
+  _ = rabbit_log:error("Unexpected data type for list value: ~p~n",
                         [Value]),
   Value.
 
@@ -310,12 +310,12 @@ as_proplist(List) when is_list(List) ->
             [{binary_to_list(K), binary_to_list(V)}
              || {K, V} <- maps:to_list(Map)];
         {error, Error} ->
-            rabbit_log:error("Unexpected data type for proplist value: ~p. JSON parser returned an error: ~p!~n",
+            _ = rabbit_log:error("Unexpected data type for proplist value: ~p. JSON parser returned an error: ~p!~n",
                                   [Value, Error]),
             []
     end;
 as_proplist(Value) ->
-    rabbit_log:error("Unexpected data type for proplist value: ~p.~n",
+    _ = rabbit_log:error("Unexpected data type for proplist value: ~p.~n",
                           [Value]),
     [].
 
@@ -337,14 +337,14 @@ as_map(List) when is_list(List) ->
         {ok, Map} ->
             Map;
         {error, Error} ->
-            rabbit_log:error("Unexpected data type for map value: ~p. JSON parser returned an error: ~p!~n",
+            _ = rabbit_log:error("Unexpected data type for map value: ~p. JSON parser returned an error: ~p!~n",
                              [Value, Error]),
             []
     end;
 as_map(Map) when is_map(Map) ->
     Map;
 as_map(Value) ->
-    rabbit_log:error("Unexpected data type for map value: ~p.~n",
+    _ = rabbit_log:error("Unexpected data type for map value: ~p.~n",
                           [Value]),
     [].
 
@@ -397,6 +397,6 @@ as_list(Value) when is_list(Value) ->
     false -> Value
   end;
 as_list(Value) ->
-  rabbit_log:error("Unexpected data type for list value: ~p~n",
+  _ = rabbit_log:error("Unexpected data type for list value: ~p~n",
                         [Value]),
   Value.

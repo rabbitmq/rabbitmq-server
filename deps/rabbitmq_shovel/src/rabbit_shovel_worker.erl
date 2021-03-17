@@ -57,7 +57,7 @@ init([Type, Name, Config0]) ->
                                                                 Config0),
                     Conf
             end,
-    rabbit_log_shovel:debug("Initialising a Shovel ~s of type '~s'", [human_readable_name(Name), Type]),
+    _ = rabbit_log_shovel:debug("Initialising a Shovel ~s of type '~s'", [human_readable_name(Name), Type]),
     gen_server2:cast(self(), init),
     {ok, #state{name = Name, type = Type, config = Config}}.
 
@@ -67,24 +67,24 @@ handle_call(_Msg, _From, State) ->
 handle_cast(init, State = #state{config = Config0}) ->
     try rabbit_shovel_behaviour:connect_source(Config0) of
       Config ->
-        rabbit_log_shovel:debug("Shovel ~s connected to source", [human_readable_name(maps:get(name, Config))]),
+        _ = rabbit_log_shovel:debug("Shovel ~s connected to source", [human_readable_name(maps:get(name, Config))]),
         %% this makes sure that connection pid is updated in case
         %% any of the subsequent connection/init steps fail. See
         %% rabbitmq/rabbitmq-shovel#54 for context.
         gen_server2:cast(self(), connect_dest),
         {noreply, State#state{config = Config}}
     catch _:_ ->
-      rabbit_log_shovel:error("Shovel ~s could not connect to source", [human_readable_name(maps:get(name, Config0))]),
+      _ = rabbit_log_shovel:error("Shovel ~s could not connect to source", [human_readable_name(maps:get(name, Config0))]),
       {stop, shutdown, State}
     end;
 handle_cast(connect_dest, State = #state{config = Config0}) ->
     try rabbit_shovel_behaviour:connect_dest(Config0) of
       Config ->
-        rabbit_log_shovel:debug("Shovel ~s connected to destination", [human_readable_name(maps:get(name, Config))]),
+        _ = rabbit_log_shovel:debug("Shovel ~s connected to destination", [human_readable_name(maps:get(name, Config))]),
         gen_server2:cast(self(), init_shovel),
         {noreply, State#state{config = Config}}
     catch _:_ ->
-      rabbit_log_shovel:error("Shovel ~s could not connect to destination", [human_readable_name(maps:get(name, Config0))]),
+      _ = rabbit_log_shovel:error("Shovel ~s could not connect to destination", [human_readable_name(maps:get(name, Config0))]),
       {stop, shutdown, State}
     end;
 handle_cast(init_shovel, State = #state{config = Config}) ->
@@ -94,7 +94,7 @@ handle_cast(init_shovel, State = #state{config = Config}) ->
     process_flag(trap_exit, true),
     Config1 = rabbit_shovel_behaviour:init_dest(Config),
     Config2 = rabbit_shovel_behaviour:init_source(Config1),
-    rabbit_log_shovel:debug("Shovel ~s has finished setting up its topology", [human_readable_name(maps:get(name, Config2))]),
+    _ = rabbit_log_shovel:debug("Shovel ~s has finished setting up its topology", [human_readable_name(maps:get(name, Config2))]),
     State1 = State#state{config = Config2},
     ok = report_running(State1),
     {noreply, State1}.
@@ -105,28 +105,28 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
         not_handled ->
             case rabbit_shovel_behaviour:handle_dest(Msg, Config) of
                 not_handled ->
-                    rabbit_log_shovel:warning("Shovel ~s could not handle a destination message ~p", [human_readable_name(Name), Msg]),
+                    _ = rabbit_log_shovel:warning("Shovel ~s could not handle a destination message ~p", [human_readable_name(Name), Msg]),
                     {noreply, State};
                 {stop, {outbound_conn_died, heartbeat_timeout}} ->
-                    rabbit_log_shovel:error("Shovel ~s detected missed heartbeats on destination connection", [human_readable_name(Name)]),
+                    _ = rabbit_log_shovel:error("Shovel ~s detected missed heartbeats on destination connection", [human_readable_name(Name)]),
                     {stop, {shutdown, heartbeat_timeout}, State};
                 {stop, {outbound_conn_died, Reason}} ->
-                    rabbit_log_shovel:error("Shovel ~s detected destination connection failure: ~p", [human_readable_name(Name), Reason]),
+                    _ = rabbit_log_shovel:error("Shovel ~s detected destination connection failure: ~p", [human_readable_name(Name), Reason]),
                     {stop, Reason, State};
                 {stop, Reason} ->
-                    rabbit_log_shovel:debug("Shovel ~s decided to stop due a message from destination: ~p", [human_readable_name(Name), Reason]),
+                    _ = rabbit_log_shovel:debug("Shovel ~s decided to stop due a message from destination: ~p", [human_readable_name(Name), Reason]),
                     {stop, Reason, State};
                 Config1 ->
                     {noreply, State#state{config = Config1}}
             end;
         {stop, {inbound_conn_died, heartbeat_timeout}} ->
-            rabbit_log_shovel:error("Shovel ~s detected missed heartbeats on source connection", [human_readable_name(Name)]),
+            _ = rabbit_log_shovel:error("Shovel ~s detected missed heartbeats on source connection", [human_readable_name(Name)]),
             {stop, {shutdown, heartbeat_timeout}, State};
         {stop, {inbound_conn_died, Reason}} ->
-            rabbit_log_shovel:error("Shovel ~s detected source connection failure: ~p", [human_readable_name(Name), Reason]),
+            _ = rabbit_log_shovel:error("Shovel ~s detected source connection failure: ~p", [human_readable_name(Name), Reason]),
             {stop, Reason, State};
         {stop, Reason} ->
-            rabbit_log_shovel:error("Shovel ~s decided to stop due a message from source: ~p", [human_readable_name(Name), Reason]),
+            _ = rabbit_log_shovel:error("Shovel ~s decided to stop due a message from source: ~p", [human_readable_name(Name), Reason]),
             {stop, Reason, State};
         Config1 ->
             {noreply, State#state{config = Config1}}
@@ -135,7 +135,7 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
 terminate({shutdown, autodelete}, State = #state{name = Name,
                                                  type = dynamic}) ->
     {VHost, ShovelName} = Name,
-    rabbit_log_shovel:info("Shovel '~s' is stopping (it was configured to autodelete and transfer is completed)",
+    _ = rabbit_log_shovel:info("Shovel '~s' is stopping (it was configured to autodelete and transfer is completed)",
                            [human_readable_name(Name)]),
     close_connections(State),
     %% See rabbit_shovel_dyn_worker_sup_sup:stop_child/1
@@ -150,37 +150,37 @@ terminate(socket_closed_unexpectedly, State) ->
     close_connections(State),
     ok;
 terminate({'EXIT', heartbeat_timeout}, State = #state{name = Name}) ->
-    rabbit_log_shovel:error("Shovel ~s is stopping because of a heartbeat timeout", [human_readable_name(Name)]),
+    _ = rabbit_log_shovel:error("Shovel ~s is stopping because of a heartbeat timeout", [human_readable_name(Name)]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "heartbeat timeout"}),
     close_connections(State),
     ok;
 terminate({'EXIT', outbound_conn_died}, State = #state{name = Name}) ->
-    rabbit_log_shovel:error("Shovel ~s is stopping because destination connection failed", [human_readable_name(Name)]),
+    _ = rabbit_log_shovel:error("Shovel ~s is stopping because destination connection failed", [human_readable_name(Name)]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "destination connection failed"}),
     close_connections(State),
     ok;
 terminate({'EXIT', inbound_conn_died}, State = #state{name = Name}) ->
-    rabbit_log_shovel:error("Shovel ~s is stopping because destination connection failed", [human_readable_name(Name)]),
+    _ = rabbit_log_shovel:error("Shovel ~s is stopping because destination connection failed", [human_readable_name(Name)]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "source connection failed"}),
     close_connections(State),
     ok;
 terminate({shutdown, heartbeat_timeout}, State = #state{name = Name}) ->
-    rabbit_log_shovel:error("Shovel ~s is stopping because of a heartbeat timeout", [human_readable_name(Name)]),
+    _ = rabbit_log_shovel:error("Shovel ~s is stopping because of a heartbeat timeout", [human_readable_name(Name)]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "heartbeat timeout"}),
     close_connections(State),
     ok;
 terminate({shutdown, restart}, State = #state{name = Name}) ->
-    rabbit_log_shovel:error("Shovel ~s is stopping to restart", [human_readable_name(Name)]),
+    _ = rabbit_log_shovel:error("Shovel ~s is stopping to restart", [human_readable_name(Name)]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "needed a restart"}),
     close_connections(State),
     ok;
 terminate({{shutdown, {server_initiated_close, Code, Reason}}, _}, State = #state{name = Name}) ->
-    rabbit_log_shovel:error("Shovel ~s is stopping: one of its connections closed "
+    _ = rabbit_log_shovel:error("Shovel ~s is stopping: one of its connections closed "
                             "with code ~b, reason: ~s",
                             [human_readable_name(Name), Code, Reason]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
@@ -188,7 +188,7 @@ terminate({{shutdown, {server_initiated_close, Code, Reason}}, _}, State = #stat
     close_connections(State),
     ok;
 terminate(Reason, State = #state{name = Name}) ->
-    rabbit_log_shovel:error("Shovel ~s is stopping, reason: ~p", [human_readable_name(Name), Reason]),
+    _ = rabbit_log_shovel:error("Shovel ~s is stopping, reason: ~p", [human_readable_name(Name), Reason]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, Reason}),
     close_connections(State),

@@ -85,7 +85,7 @@ websocket_init(State0 = #state{socket = Sock, peername = PeerAddr}) ->
                       conn_name          = ConnStr,
                       socket             = Sock
                      },
-            rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
+            _ = rabbit_log_connection:info("accepting Web MQTT connection ~p (~s)~n", [self(), ConnStr]),
             AdapterInfo = amqp_connection:socket_adapter_info(Sock, {'Web MQTT', "N/A"}),
             RealSocket = rabbit_net:unwrap_socket(Sock),
             ProcessorState = rabbit_mqtt_processor:initial_state(Sock,
@@ -105,7 +105,7 @@ websocket_init(State0 = #state{socket = Sock, peername = PeerAddr}) ->
 
 -spec close_connection(pid(), string()) -> 'ok'.
 close_connection(Pid, Reason) ->
-    rabbit_log_connection:info("Web MQTT: will terminate connection process ~p, reason: ~s",
+    _ = rabbit_log_connection:info("Web MQTT: will terminate connection process ~p, reason: ~s",
                                [Pid, Reason]),
     sys:terminate(Pid, Reason),
     ok.
@@ -119,7 +119,7 @@ websocket_handle(Ping, State) when Ping =:= ping; Ping =:= pong ->
     {ok, State, hibernate};
 %% Log any other unexpected frames.
 websocket_handle(Frame, State) ->
-    rabbit_log_connection:info("Web MQTT: unexpected WebSocket frame ~p~n",
+    _ = rabbit_log_connection:info("Web MQTT: unexpected WebSocket frame ~p~n",
                     [Frame]),
     {ok, State, hibernate}.
 
@@ -154,12 +154,12 @@ websocket_info({'EXIT', _, _}, State) ->
     stop(State);
 websocket_info({'$gen_cast', duplicate_id}, State = #state{ proc_state = ProcState,
                                                                  conn_name = ConnName }) ->
-    rabbit_log_connection:warning("Web MQTT disconnecting a client with duplicate ID '~s' (~p)~n",
+    _ = rabbit_log_connection:warning("Web MQTT disconnecting a client with duplicate ID '~s' (~p)~n",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName]),
     stop(State);
 websocket_info({'$gen_cast', {close_connection, Reason}}, State = #state{ proc_state = ProcState,
                                                                  conn_name = ConnName }) ->
-    rabbit_log_connection:warning("Web MQTT disconnecting client with ID '~s' (~p), reason: ~s~n",
+    _ = rabbit_log_connection:warning("Web MQTT disconnecting client with ID '~s' (~p), reason: ~s~n",
                  [rabbit_mqtt_processor:info(client_id, ProcState), ConnName, Reason]),
     stop(State);
 websocket_info({start_keepalives, Keepalive},
@@ -172,14 +172,14 @@ websocket_info({start_keepalives, Keepalive},
                     KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
     {ok, State #state { keepalive = Heartbeater }, hibernate};
 websocket_info(keepalive_timeout, State = #state{conn_name = ConnStr}) ->
-    rabbit_log_connection:error("closing Web MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
+    _ = rabbit_log_connection:error("closing Web MQTT connection ~p (keepalive timeout)~n", [ConnStr]),
     stop(State);
 websocket_info(emit_stats, State) ->
     {ok, emit_stats(State), hibernate};
 websocket_info({ra_event, _, _}, State) ->
     {ok, State, hibernate};
 websocket_info(Msg, State) ->
-    rabbit_log_connection:info("Web MQTT: unexpected message ~p~n",
+    _ = rabbit_log_connection:info("Web MQTT: unexpected message ~p~n",
                     [Msg]),
     {ok, State, hibernate}.
 
@@ -220,7 +220,7 @@ handle_data1(Data, State = #state{ parse_state = ParseState,
                                     proc_state = ProcState1,
                                     connection = ConnPid });
                 {error, Reason, _} ->
-                    rabbit_log_connection:info("MQTT protocol error ~p for connection ~p~n",
+                    _ = rabbit_log_connection:info("MQTT protocol error ~p for connection ~p~n",
                         [Reason, ConnStr]),
                     stop(State, 1002, Reason);
                 {error, Error} ->
@@ -242,7 +242,7 @@ stop(State, CloseCode, Error0) ->
 
 stop_with_framing_error(State, Error0, ConnStr) ->
     Error1 = rabbit_misc:format("~p", [Error0]),
-    rabbit_log_connection:error("MQTT detected framing error '~s' for connection ~p~n",
+    _ = rabbit_log_connection:error("MQTT detected framing error '~s' for connection ~p~n",
                                 [Error1, ConnStr]),
     stop(State, 1007, Error1).
 
@@ -250,7 +250,7 @@ stop_rabbit_mqtt_processor(State = #state{state = running,
                                           proc_state = ProcState,
                                           conn_name = ConnName}) ->
     maybe_emit_stats(State),
-    rabbit_log_connection:info("closing Web MQTT connection ~p (~s)~n", [self(), ConnName]),
+    _ = rabbit_log_connection:info("closing Web MQTT connection ~p (~s)~n", [self(), ConnName]),
     rabbit_mqtt_processor:send_will(ProcState),
     rabbit_mqtt_processor:close_connection(ProcState).
 

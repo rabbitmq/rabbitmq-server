@@ -1480,7 +1480,7 @@ move_to_per_vhost_stores(#resource{} = QueueName) ->
             Msg  = "Queue index directory '~s' not found for ~s~n",
             Args = [OldQueueDir, rabbit_misc:rs(QueueName)],
             rabbit_log_upgrade:error(Msg, Args),
-            rabbit_log:error(Msg, Args)
+            _ = rabbit_log:error(Msg, Args)
     end,
     ok.
 

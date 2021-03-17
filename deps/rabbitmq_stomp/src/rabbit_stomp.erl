@@ -87,7 +87,7 @@ parse_default_user([{passcode, Passcode} | Rest], Configuration) ->
     parse_default_user(Rest, Configuration#stomp_configuration{
                                default_passcode = Passcode});
 parse_default_user([Unknown | Rest], Configuration) ->
-    rabbit_log:warning("rabbit_stomp: ignoring invalid default_user "
+    _ = rabbit_log:warning("rabbit_stomp: ignoring invalid default_user "
                        "configuration option: ~p~n", [Unknown]),
     parse_default_user(Rest, Configuration).
 
@@ -97,17 +97,17 @@ report_configuration(#stomp_configuration{
                         ssl_cert_login   = SSLCertLogin}) ->
     case Login of
         undefined -> ok;
-        _         -> rabbit_log:info("rabbit_stomp: default user '~s' "
+        _         -> _ = rabbit_log:info("rabbit_stomp: default user '~s' "
                                      "enabled~n", [Login])
     end,
 
     case ImplicitConnect of
-        true  -> rabbit_log:info("rabbit_stomp: implicit connect enabled~n");
+        true  -> _ = rabbit_log:info("rabbit_stomp: implicit connect enabled~n");
         false -> ok
     end,
 
     case SSLCertLogin of
-        true  -> rabbit_log:info("rabbit_stomp: ssl_cert_login enabled~n");
+        true  -> _ = rabbit_log:info("rabbit_stomp: ssl_cert_login enabled~n");
         false -> ok
     end,
 

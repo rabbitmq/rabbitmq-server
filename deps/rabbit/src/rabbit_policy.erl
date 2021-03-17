@@ -243,7 +243,7 @@ parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo, ActingUser) ->
                       {<<"priority">>,   Priority},
                       {<<"apply-to">>,   ApplyTo}],
                      ActingUser),
-            rabbit_log:info("Successfully set policy '~s' matching ~s names in virtual host '~s' using pattern '~s'",
+            _ = rabbit_log:info("Successfully set policy '~s' matching ~s names in virtual host '~s' using pattern '~s'",
                             [Name, ApplyTo, VHost, Pattern]),
             R;
         {error, Reason} ->

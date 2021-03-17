@@ -200,11 +200,11 @@ init_exchange(true) ->
     try
         %% durable
         #exchange{} = rabbit_exchange:declare(Exchange, topic, true, false, true, [], ?INTERNAL_USER),
-        rabbit_log:info("Declared exchange '~s' in vhost '~s'", [?LOG_EXCH_NAME, DefaultVHost]),
+        _ = rabbit_log:info("Declared exchange '~s' in vhost '~s'", [?LOG_EXCH_NAME, DefaultVHost]),
         {ok, Exchange}
     catch
         ErrType:Err ->
-            rabbit_log:error("Could not declare exchange '~s' in vhost '~s', reason: ~p:~p",
+            _ = rabbit_log:error("Could not declare exchange '~s' in vhost '~s', reason: ~p:~p",
                              [?LOG_EXCH_NAME, DefaultVHost, ErrType, Err]),
             {ok, undefined}
     end;

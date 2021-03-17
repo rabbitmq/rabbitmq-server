@@ -143,7 +143,7 @@ finish(FromNode, ToNode, AllNodes) ->
                 _  -> finish_secondary(FromNode, ToNode, AllNodes)
             end;
         FromNode ->
-            rabbit_log:info(
+            _ = rabbit_log:info(
               "Abandoning rename from ~s to ~s since we are still ~s~n",
               [FromNode, ToNode, FromNode]),
             [{ok, _} = file:copy(backup_of_conf(F), F) || F <- config_files()],
@@ -154,19 +154,19 @@ finish(FromNode, ToNode, AllNodes) ->
         _ ->
             %% Boot will almost certainly fail but we might as
             %% well just log this
-            rabbit_log:info(
+            _ = rabbit_log:info(
               "Rename attempted from ~s to ~s but we are ~s - ignoring.~n",
               [FromNode, ToNode, node()])
     end.
 
 finish_primary(FromNode, ToNode) ->
-    rabbit_log:info("Restarting as primary after rename from ~s to ~s~n",
+    _ = rabbit_log:info("Restarting as primary after rename from ~s to ~s~n",
                     [FromNode, ToNode]),
     delete_rename_files(),
     ok.
 
 finish_secondary(FromNode, ToNode, AllNodes) ->
-    rabbit_log:info("Restarting as secondary after rename from ~s to ~s~n",
+    _ = rabbit_log:info("Restarting as secondary after rename from ~s to ~s~n",
                     [FromNode, ToNode]),
     rabbit_upgrade:secondary_upgrade(AllNodes),
     rename_in_running_mnesia(FromNode, ToNode),

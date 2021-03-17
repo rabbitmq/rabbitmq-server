@@ -106,7 +106,7 @@
 -ifdef(DEBUG_QUORUM_QUEUE_FF).
 -define(enable_quorum_queue_if_debug,
         begin
-            rabbit_log:info(
+            _ = rabbit_log:info(
               "---- ENABLING quorum_queue as part of "
               "?try_mnesia_tx_or_upgrade_amqqueue_and_retry() ----"),
             ok = rabbit_feature_flags:enable(quorum_queue)

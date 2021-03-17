@@ -80,7 +80,7 @@ route(#exchange {name      = Name,
 
                     case maps:get(SelectedBucket, BM, undefined) of
                         undefined ->
-                            rabbit_log:warning("Bucket ~p not found", [SelectedBucket]),
+                            _ = rabbit_log:warning("Bucket ~p not found", [SelectedBucket]),
                             [];
                         Queue     -> [Queue]
                     end
@@ -124,7 +124,7 @@ maybe_initialise_hash_ring_state(transaction, X = #resource{}) ->
     case mnesia:read(?HASH_RING_STATE_TABLE, X) of
         [_] -> ok;
         []  ->
-            rabbit_log:debug("Consistent hashing exchange: will initialise hashing ring schema database record"),
+            _ = rabbit_log:debug("Consistent hashing exchange: will initialise hashing ring schema database record"),
             mnesia:write_lock_table(?HASH_RING_STATE_TABLE),
             ok = mnesia:write(?HASH_RING_STATE_TABLE, #chx_hash_ring{
                                                          exchange = X,
@@ -142,10 +142,10 @@ recover() ->
     %% starting with RabbitMQ 3.8.4
     case list_exchanges() of
         {ok, Xs} ->
-            rabbit_log:debug("Consistent hashing exchange: have ~b durable exchanges to recover", [length(Xs)]),
+            _ = rabbit_log:debug("Consistent hashing exchange: have ~b durable exchanges to recover", [length(Xs)]),
             [recover_exchange_and_bindings(X) || X <- lists:usort(Xs)];
         {aborted, Reason} ->
-            rabbit_log:error(
+            _ = rabbit_log:error(
                 "Consistent hashing exchange: failed to recover durable exchange ring state, reason: ~p",
                 [Reason])
     end.
@@ -165,14 +165,14 @@ list_exchanges() ->
 recover_exchange_and_bindings(#exchange{name = XName} = X) ->
     mnesia:transaction(
         fun () ->
-            rabbit_log:debug("Consistent hashing exchange: will recover exchange ~s", [rabbit_misc:rs(XName)]),
+            _ = rabbit_log:debug("Consistent hashing exchange: will recover exchange ~s", [rabbit_misc:rs(XName)]),
             create(transaction, X),
-            rabbit_log:debug("Consistent hashing exchange: recovered exchange ~s", [rabbit_misc:rs(XName)]),
+            _ = rabbit_log:debug("Consistent hashing exchange: recovered exchange ~s", [rabbit_misc:rs(XName)]),
             Bindings = rabbit_binding:list_for_source(XName),
-            rabbit_log:debug("Consistent hashing exchange: have ~b bindings to recover for exchange ~s",
+            _ = rabbit_log:debug("Consistent hashing exchange: have ~b bindings to recover for exchange ~s",
                              [length(Bindings), rabbit_misc:rs(XName)]),
             [add_binding(transaction, X, B) || B <- lists:usort(Bindings)],
-            rabbit_log:debug("Consistent hashing exchange: recovered bindings for exchange ~s",
+            _ = rabbit_log:debug("Consistent hashing exchange: recovered bindings for exchange ~s",
                              [rabbit_misc:rs(XName)])
     end).
 
@@ -193,7 +193,7 @@ policy_changed(_X1, _X2) -> ok.
 add_binding(transaction, X,
             B = #binding{source = S, destination = D, key = K}) ->
     Weight = rabbit_data_coercion:to_integer(K),
-    rabbit_log:debug("Consistent hashing exchange: adding binding from "
+    _ = rabbit_log:debug("Consistent hashing exchange: adding binding from "
                      "exchange ~s to destination ~s with routing key '~s'", [rabbit_misc:rs(S), rabbit_misc:rs(D), K]),
 
     case mnesia:read(?HASH_RING_STATE_TABLE, S) of
@@ -228,7 +228,7 @@ remove_bindings(none, X, Bindings) ->
 
 remove_binding(#binding{source = S, destination = D, key = RK}) ->
     Weight = rabbit_data_coercion:to_integer(RK),
-    rabbit_log:debug("Consistent hashing exchange: removing binding "
+    _ = rabbit_log:debug("Consistent hashing exchange: removing binding "
                      "from exchange '~p' to destination '~p' with routing key '~s'",
                      [rabbit_misc:rs(S), rabbit_misc:rs(D), RK]),
 
@@ -261,7 +261,7 @@ remove_binding(#binding{source = S, destination = D, key = RK}) ->
                     ok = mnesia:write(?HASH_RING_STATE_TABLE, State, write)
             end;
         [] ->
-            rabbit_log:warning("Can't remove binding: hash ring state for exchange ~s wasn't found",
+            _ = rabbit_log:warning("Can't remove binding: hash ring state for exchange ~s wasn't found",
                                [rabbit_misc:rs(S)]),
             ok
     end.

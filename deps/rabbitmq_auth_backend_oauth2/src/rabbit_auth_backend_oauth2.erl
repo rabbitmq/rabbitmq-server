@@ -41,7 +41,7 @@ description() ->
 user_login_authentication(Username, AuthProps) ->
     case authenticate(Username, AuthProps) of
 	{refused, Msg, Args} = AuthResult ->
-	    rabbit_log:debug(Msg ++ "~n", Args),
+	    _ = rabbit_log:debug(Msg ++ "~n", Args),
 	    AuthResult;
 	_ = AuthResult ->
 	    AuthResult
@@ -59,7 +59,7 @@ check_vhost_access(#auth_user{impl = DecodedToken},
         fun() ->
             Scopes      = get_scopes(DecodedToken),
             ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
-            rabbit_log:debug("Matching virtual host '~s' against the following scopes: ~s", [VHost, ScopeString]),
+            _ = rabbit_log:debug("Matching virtual host '~s' against the following scopes: ~s", [VHost, ScopeString]),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
 
@@ -129,7 +129,7 @@ with_decoded_token(DecodedToken, Fun) ->
     case validate_token_expiry(DecodedToken) of
         ok               -> Fun();
         {error, Msg} = Err ->
-            rabbit_log:error(Msg),
+            _ = rabbit_log:error(Msg),
             Err
     end.
 
@@ -282,7 +282,7 @@ username_from(ClientProvidedUsername, DecodedToken) ->
     ClientId = uaa_jwt:client_id(DecodedToken, undefined),
     Sub      = uaa_jwt:sub(DecodedToken, undefined),
 
-    rabbit_log:debug("Computing username from client's JWT token, client ID: '~s', sub: '~s'",
+    _ = rabbit_log:debug("Computing username from client's JWT token, client ID: '~s', sub: '~s'",
                      [ClientId, Sub]),
 
     case uaa_jwt:client_id(DecodedToken, Sub) of

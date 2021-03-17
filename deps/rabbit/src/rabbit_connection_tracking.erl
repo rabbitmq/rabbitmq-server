@@ -71,13 +71,13 @@
 %% node.
 boot() ->
     ensure_tracked_connections_table_for_this_node(),
-    rabbit_log:info("Setting up a table for connection tracking on this node: ~p",
+    _ = rabbit_log:info("Setting up a table for connection tracking on this node: ~p",
                     [tracked_connection_table_name_for(node())]),
     ensure_per_vhost_tracked_connections_table_for_this_node(),
-    rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~p",
+    _ = rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~p",
                     [tracked_connection_per_vhost_table_name_for(node())]),
     ensure_per_user_tracked_connections_table_for_this_node(),
-    rabbit_log:info("Setting up a table for per-user connection counting on this node: ~p",
+    _ = rabbit_log:info("Setting up a table for per-user connection counting on this node: ~p",
                     [tracked_connection_per_user_table_name_for(node())]),
     clear_tracking_tables(),
     ok.
@@ -250,7 +250,7 @@ ensure_tracked_connections_table_for_node(Node) ->
         {atomic, ok}                   -> ok;
         {aborted, {already_exists, _}} -> ok;
         {aborted, Error}               ->
-            rabbit_log:error("Failed to create a tracked connection table for node ~p: ~p", [Node, Error]),
+            _ = rabbit_log:error("Failed to create a tracked connection table for node ~p: ~p", [Node, Error]),
             ok
     end.
 
@@ -263,7 +263,7 @@ ensure_per_vhost_tracked_connections_table_for_node(Node) ->
         {atomic, ok}                   -> ok;
         {aborted, {already_exists, _}} -> ok;
         {aborted, Error}               ->
-            rabbit_log:error("Failed to create a per-vhost tracked connection table for node ~p: ~p", [Node, Error]),
+            _ = rabbit_log:error("Failed to create a per-vhost tracked connection table for node ~p: ~p", [Node, Error]),
             ok
     end.
 
@@ -276,7 +276,7 @@ ensure_per_user_tracked_connections_table_for_node(Node) ->
         {atomic, ok}                   -> ok;
         {aborted, {already_exists, _}} -> ok;
         {aborted, Error}               ->
-            rabbit_log:error("Failed to create a per-user tracked connection table for node ~p: ~p", [Node, Error]),
+            _ = rabbit_log:error("Failed to create a per-user tracked connection table for node ~p: ~p", [Node, Error]),
             ok
     end.
 
@@ -506,7 +506,7 @@ close_connection(#tracked_connection{pid = Pid, type = network}, Message) ->
             ok;
           _:Err ->
             %% ignore, don't terminate
-            rabbit_log:warning("Could not close connection ~p: ~p", [Pid, Err]),
+            _ = rabbit_log:warning("Could not close connection ~p: ~p", [Pid, Err]),
             ok
     end;
 close_connection(#tracked_connection{pid = Pid, type = direct}, Message) ->

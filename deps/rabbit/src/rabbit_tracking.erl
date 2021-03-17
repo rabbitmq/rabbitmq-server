@@ -51,7 +51,7 @@ count_tracked_items(TableNameFun, CountRecPosition, Key, ContextMsg) ->
                                 end,
                             Acc + N
                         catch _:Err  ->
-                                rabbit_log:error(
+                                _ = rabbit_log:error(
                                   "Failed to fetch number of ~p ~p on node ~p:~n~p~n",
                                   [ContextMsg, Key, Node, Err]),
                                 Acc
@@ -84,7 +84,7 @@ delete_tracking_table(TableName, Node, ContextMsg) ->
         {atomic, ok}              -> ok;
         {aborted, {no_exists, _}} -> ok;
         {aborted, Error} ->
-            rabbit_log:error("Failed to delete a ~p table for node ~p: ~p",
+            _ = rabbit_log:error("Failed to delete a ~p table for node ~p: ~p",
                 [ContextMsg, Node, Error]),
             ok
     end.

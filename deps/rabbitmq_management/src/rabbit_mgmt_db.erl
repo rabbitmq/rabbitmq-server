@@ -222,7 +222,7 @@ get_overview(User, Ranges) ->
 
 init([]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    rabbit_log:info("Statistics database started."),
+    _ = rabbit_log:info("Statistics database started."),
     {ok, #state{interval = Interval}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -694,7 +694,7 @@ merge_data(_, D1, D2) -> % we assume if we get here both values a maps
        maps_merge(fun merge_data/3, D1, D2)
    catch
        error:Err ->
-           rabbit_log:debug("merge_data err ~p got: ~p ~p ~n", [Err, D1, D2]),
+           _ = rabbit_log:debug("merge_data err ~p got: ~p ~p ~n", [Err, D1, D2]),
            case is_map(D1) of
                true -> D1;
                false -> D2
@@ -735,7 +735,7 @@ delegate_invoke(FunOrMFA) ->
     {Results, Errors} = delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA),
     case Errors of
         [] -> ok;
-        _ -> rabbit_log:warning("Management delegate query returned errors:~n~p", [Errors])
+        _ -> _ = rabbit_log:warning("Management delegate query returned errors:~n~p", [Errors])
     end,
     [R || {_, R} <- Results].
 

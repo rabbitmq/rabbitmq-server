@@ -15,7 +15,7 @@
 %% Definition import functionality is now a core server feature.
 
 boot() ->
-    rabbit_log:debug("Will import definitions file from management.load_definitions"),
+    _ = rabbit_log:debug("Will import definitions file from management.load_definitions"),
     rabbit_definitions:maybe_load_definitions(rabbitmq_management, load_definitions).
 
 maybe_load_definitions() ->

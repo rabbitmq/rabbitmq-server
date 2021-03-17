@@ -1190,7 +1190,7 @@ record_new_member_in_group(NewMember, Left, GroupName, TxnFun) ->
                         true ->
                             %% This avois duplicates during partial partitions,
                             %% as inconsistent views might happen during them
-                            rabbit_log:warning("(~p) GM avoiding duplicate of ~p",
+                            _ = rabbit_log:warning("(~p) GM avoiding duplicate of ~p",
                                                [self(), NewMember]),
                             Group;
                         false ->

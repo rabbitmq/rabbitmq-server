@@ -518,7 +518,7 @@ apply(_Meta, {machine_version, 0, 1}, V0State) ->
     {State, ok, []};
 apply(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
-    rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
+    _ = rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
 convert_v0_to_v1(V0State0) ->
@@ -821,7 +821,7 @@ eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}} = MacState,
                Mem > ?GC_MEM_LIMIT_B ->
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
-            rabbit_log:debug("~s: full GC sweep complete. "
+            _ = rabbit_log:debug("~s: full GC sweep complete. "
                             "Process memory changed from ~.2fMB to ~.2fMB.",
                             [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};
@@ -837,7 +837,7 @@ force_eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}},
         true ->
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
-            rabbit_log:debug("~s: full GC sweep complete. "
+            _ = rabbit_log:debug("~s: full GC sweep complete. "
                             "Process memory changed from ~.2fMB to ~.2fMB.",
                              [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};

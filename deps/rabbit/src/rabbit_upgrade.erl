@@ -82,7 +82,7 @@ ensure_backup_taken() ->
                      _     -> ok
                  end;
         true  ->
-          rabbit_log:error("Found lock file at ~s.
+          _ = rabbit_log:error("Found lock file at ~s.
             Either previous upgrade is in progress or has failed.
             Database backup path: ~s",
             [lock_filename(), backup_dir()]),
@@ -197,7 +197,7 @@ die(Msg, Args) ->
     %% We don't throw or exit here since that gets thrown
     %% straight out into do_boot, generating an erl_crash.dump
     %% and displaying any error message in a confusing way.
-    rabbit_log:error(Msg, Args),
+    _ = rabbit_log:error(Msg, Args),
     Str = rabbit_misc:format(
             "~n~n****~n~n" ++ Msg ++ "~n~n****~n~n~n", Args),
     io:format(Str),
@@ -311,4 +311,4 @@ node_type_legacy() ->
         false -> ram
     end.
 
-info(Msg, Args) -> rabbit_log:info(Msg, Args).
+info(Msg, Args) -> _ = rabbit_log:info(Msg, Args).

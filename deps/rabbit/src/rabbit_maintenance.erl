@@ -68,7 +68,7 @@ drain() ->
     case is_enabled() of
         true  -> do_drain();
         false ->
-            rabbit_log:error("Feature flag '~s' is not enabled, cannot put this node under maintenance", [?FEATURE_FLAG]),
+            _ = rabbit_log:error("Feature flag '~s' is not enabled, cannot put this node under maintenance", [?FEATURE_FLAG]),
             {error, rabbit_misc:format("Feature flag '~s' is not enabled, cannot put this node under maintenance", [?FEATURE_FLAG])}
     end.
 
@@ -76,7 +76,7 @@ drain() ->
 do_drain() ->
     rabbit_log:alert("This node is being put into maintenance (drain) mode"),
     mark_as_being_drained(),
-    rabbit_log:info("Marked this node as undergoing maintenance"),
+    _ = rabbit_log:info("Marked this node as undergoing maintenance"),
     suspend_all_client_listeners(),
     rabbit_log:alert("Suspended all listeners and will no longer accept client connections"),
     {ok, NConnections} = close_all_client_connections(),
@@ -105,7 +105,7 @@ revive() ->
     case is_enabled() of
         true  -> do_revive();
         false ->
-            rabbit_log:error("Feature flag '~s' is not enabled, cannot put this node out of maintenance", [?FEATURE_FLAG]),
+            _ = rabbit_log:error("Feature flag '~s' is not enabled, cannot put this node out of maintenance", [?FEATURE_FLAG]),
             {error, rabbit_misc:format("Feature flag '~s' is not enabled, cannot put this node out of maintenance", [?FEATURE_FLAG])}
     end.
 
@@ -117,7 +117,7 @@ do_revive() ->
     resume_all_client_listeners(),
     rabbit_log:alert("Resumed all listeners and will accept client connections again"),
     unmark_as_being_drained(),
-    rabbit_log:info("Marked this node as back from maintenance and ready to serve clients"),
+    _ = rabbit_log:info("Marked this node as back from maintenance and ready to serve clients"),
 
     %% allow plugins to react
     rabbit_event:notify(maintenance_revived, #{}),
@@ -126,12 +126,12 @@ do_revive() ->
 
 -spec mark_as_being_drained() -> boolean().
 mark_as_being_drained() ->
-    rabbit_log:debug("Marking the node as undergoing maintenance"),
+    _ = rabbit_log:debug("Marking the node as undergoing maintenance"),
     set_maintenance_status_status(?DRAINING_STATUS).
 
 -spec unmark_as_being_drained() -> boolean().
 unmark_as_being_drained() ->
-    rabbit_log:debug("Unmarking the node as undergoing maintenance"),
+    _ = rabbit_log:debug("Unmarking the node as undergoing maintenance"),
     set_maintenance_status_status(?DEFAULT_STATUS).
 
 set_maintenance_status_status(Status) ->
@@ -201,7 +201,7 @@ filter_out_drained_nodes_consistent_read(Nodes) ->
  %% but previously established connections won't be interrupted.
 suspend_all_client_listeners() ->
     Listeners = rabbit_networking:node_client_listeners(node()),
-    rabbit_log:info("Asked to suspend ~b client connection listeners. "
+    _ = rabbit_log:info("Asked to suspend ~b client connection listeners. "
                     "No new client connections will be accepted until these listeners are resumed!", [length(Listeners)]),
     Results = lists:foldl(local_listener_fold_fun(fun ranch:suspend_listener/1), [], Listeners),
     lists:foldl(fun ok_or_first_error/2, ok, Results).
@@ -212,7 +212,7 @@ suspend_all_client_listeners() ->
  %% A resumed listener will accept new client connections.
 resume_all_client_listeners() ->
     Listeners = rabbit_networking:node_client_listeners(node()),
-    rabbit_log:info("Asked to resume ~b client connection listeners. "
+    _ = rabbit_log:info("Asked to resume ~b client connection listeners. "
                     "New client connections will be accepted from now on", [length(Listeners)]),
     Results = lists:foldl(local_listener_fold_fun(fun ranch:resume_listener/1), [], Listeners),
     lists:foldl(fun ok_or_first_error/2, ok, Results).
@@ -225,29 +225,29 @@ close_all_client_connections() ->
 
 -spec transfer_leadership_of_quorum_queues([node()]) -> ok.
 transfer_leadership_of_quorum_queues([]) ->
-    rabbit_log:warning("Skipping leadership transfer of quorum queues: no candidate "
+    _ = rabbit_log:warning("Skipping leadership transfer of quorum queues: no candidate "
                        "(online, not under maintenance) nodes to transfer to!");
 transfer_leadership_of_quorum_queues(_TransferCandidates) ->
     %% we only transfer leadership for QQs that have local leaders
     Queues = rabbit_amqqueue:list_local_leaders(),
-    rabbit_log:info("Will transfer leadership of ~b quorum queues with current leader on this node",
+    _ = rabbit_log:info("Will transfer leadership of ~b quorum queues with current leader on this node",
                     [length(Queues)]),
     [begin
         Name = amqqueue:get_name(Q),
-        rabbit_log:debug("Will trigger a leader election for local quorum queue ~s",
+        _ = rabbit_log:debug("Will trigger a leader election for local quorum queue ~s",
                          [rabbit_misc:rs(Name)]),
         %% we trigger an election and exclude this node from the list of candidates
         %% by simply shutting its local QQ replica (Ra server)
         RaLeader = amqqueue:get_pid(Q),
-        rabbit_log:debug("Will stop Ra server ~p", [RaLeader]),
+        _ = rabbit_log:debug("Will stop Ra server ~p", [RaLeader]),
         case ra:stop_server(RaLeader) of
             ok     ->
-                rabbit_log:debug("Successfully stopped Ra server ~p", [RaLeader]);
+                _ = rabbit_log:debug("Successfully stopped Ra server ~p", [RaLeader]);
             {error, nodedown} ->
-                rabbit_log:error("Failed to stop Ra server ~p: target node was reported as down")
+                _ = rabbit_log:error("Failed to stop Ra server ~p: target node was reported as down")
         end
      end || Q <- Queues],
-    rabbit_log:info("Leadership transfer for quorum queues hosted on this node has been initiated").
+    _ = rabbit_log:info("Leadership transfer for quorum queues hosted on this node has been initiated").
 
 -spec transfer_leadership_of_classic_mirrored_queues([node()]) -> ok.
 %% This function is no longer used by maintanence mode. We retain it in case
@@ -256,58 +256,58 @@ transfer_leadership_of_quorum_queues(_TransferCandidates) ->
 %% With a lot of CMQs in a cluster, the transfer procedure can take prohibitively long
 %% for a pre-upgrade task.
 transfer_leadership_of_classic_mirrored_queues([]) ->
-    rabbit_log:warning("Skipping leadership transfer of classic mirrored queues: no candidate "
+    _ = rabbit_log:warning("Skipping leadership transfer of classic mirrored queues: no candidate "
                        "(online, not under maintenance) nodes to transfer to!");
 transfer_leadership_of_classic_mirrored_queues(TransferCandidates) ->
     Queues = rabbit_amqqueue:list_local_mirrored_classic_queues(),
     ReadableCandidates = readable_candidate_list(TransferCandidates),
-    rabbit_log:info("Will transfer leadership of ~b classic mirrored queues hosted on this node to these peer nodes: ~s",
+    _ = rabbit_log:info("Will transfer leadership of ~b classic mirrored queues hosted on this node to these peer nodes: ~s",
                     [length(Queues), ReadableCandidates]),
     [begin
          Name = amqqueue:get_name(Q),
          ExistingReplicaNodes = [node(Pid) || Pid <- amqqueue:get_sync_slave_pids(Q)],
-         rabbit_log:debug("Local ~s has replicas on nodes ~s",
+         _ = rabbit_log:debug("Local ~s has replicas on nodes ~s",
                           [rabbit_misc:rs(Name), readable_candidate_list(ExistingReplicaNodes)]),
          case random_primary_replica_transfer_candidate_node(TransferCandidates, ExistingReplicaNodes) of
              {ok, Pick} ->
-                 rabbit_log:debug("Will transfer leadership of local ~s to node ~s",
+                 _ = rabbit_log:debug("Will transfer leadership of local ~s to node ~s",
                           [rabbit_misc:rs(Name), Pick]),
                  case rabbit_mirror_queue_misc:migrate_leadership_to_existing_replica(Q, Pick) of
                      {migrated, _} ->
-                         rabbit_log:debug("Successfully transferred leadership of queue ~s to node ~s",
+                         _ = rabbit_log:debug("Successfully transferred leadership of queue ~s to node ~s",
                                           [rabbit_misc:rs(Name), Pick]);
                      Other ->
-                         rabbit_log:warning("Could not transfer leadership of queue ~s to node ~s: ~p",
+                         _ = rabbit_log:warning("Could not transfer leadership of queue ~s to node ~s: ~p",
                                             [rabbit_misc:rs(Name), Pick, Other])
                  end;
              undefined ->
-                 rabbit_log:warning("Could not transfer leadership of queue ~s: no suitable candidates?",
+                 _ = rabbit_log:warning("Could not transfer leadership of queue ~s: no suitable candidates?",
                                     [Name])
          end
      end || Q <- Queues],
-    rabbit_log:info("Leadership transfer for local classic mirrored queues is complete").
+    _ = rabbit_log:info("Leadership transfer for local classic mirrored queues is complete").
 
 -spec stop_local_quorum_queue_followers() -> ok.
 stop_local_quorum_queue_followers() ->
     Queues = rabbit_amqqueue:list_local_followers(),
-    rabbit_log:info("Will stop local follower replicas of ~b quorum queues on this node",
+    _ = rabbit_log:info("Will stop local follower replicas of ~b quorum queues on this node",
                     [length(Queues)]),
     [begin
         Name = amqqueue:get_name(Q),
-        rabbit_log:debug("Will stop a local follower replica of quorum queue ~s",
+        _ = rabbit_log:debug("Will stop a local follower replica of quorum queue ~s",
                          [rabbit_misc:rs(Name)]),
         %% shut down Ra nodes so that they are not considered for leader election
         {RegisteredName, _LeaderNode} = amqqueue:get_pid(Q),
         RaNode = {RegisteredName, node()},
-        rabbit_log:debug("Will stop Ra server ~p", [RaNode]),
+        _ = rabbit_log:debug("Will stop Ra server ~p", [RaNode]),
         case ra:stop_server(RaNode) of
             ok     ->
-                rabbit_log:debug("Successfully stopped Ra server ~p", [RaNode]);
+                _ = rabbit_log:debug("Successfully stopped Ra server ~p", [RaNode]);
             {error, nodedown} ->
-                rabbit_log:error("Failed to stop Ra server ~p: target node was reported as down")
+                _ = rabbit_log:error("Failed to stop Ra server ~p: target node was reported as down")
         end
      end || Q <- Queues],
-    rabbit_log:info("Stopped all local replicas of quorum queues hosted on this node").
+    _ = rabbit_log:info("Stopped all local replicas of quorum queues hosted on this node").
 
 -spec primary_replica_transfer_candidate_nodes() -> [node()].
 primary_replica_transfer_candidate_nodes() ->
@@ -337,22 +337,22 @@ revive_local_quorum_queue_replicas() ->
     Queues = rabbit_amqqueue:list_local_followers(),
     [begin
         Name = amqqueue:get_name(Q),
-        rabbit_log:debug("Will trigger a leader election for local quorum queue ~s",
+        _ = rabbit_log:debug("Will trigger a leader election for local quorum queue ~s",
                          [rabbit_misc:rs(Name)]),
         %% start local QQ replica (Ra server) of this queue
         {Prefix, _Node} = amqqueue:get_pid(Q),
         RaServer = {Prefix, node()},
-        rabbit_log:debug("Will start Ra server ~p", [RaServer]),
+        _ = rabbit_log:debug("Will start Ra server ~p", [RaServer]),
         case ra:restart_server(RaServer) of
             ok     ->
-                rabbit_log:debug("Successfully restarted Ra server ~p", [RaServer]);
+                _ = rabbit_log:debug("Successfully restarted Ra server ~p", [RaServer]);
             {error, {already_started, _Pid}} ->
-                rabbit_log:debug("Ra server ~p is already running", [RaServer]);
+                _ = rabbit_log:debug("Ra server ~p is already running", [RaServer]);
             {error, nodedown} ->
-                rabbit_log:error("Failed to restart Ra server ~p: target node was reported as down")
+                _ = rabbit_log:error("Failed to restart Ra server ~p: target node was reported as down")
         end
      end || Q <- Queues],
-    rabbit_log:info("Restart of local quorum queue replicas is complete").
+    _ = rabbit_log:info("Restart of local quorum queue replicas is complete").
 
 %%
 %% Implementation

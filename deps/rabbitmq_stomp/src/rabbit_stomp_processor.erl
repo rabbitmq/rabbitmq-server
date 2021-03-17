@@ -7,6 +7,8 @@
 
 -module(rabbit_stomp_processor).
 
+-compile({no_auto_import, [error/3]}).
+
 -export([initial_state/2, process_frame/2, flush_and_die/1]).
 -export([flush_pending_receipts/3,
          handle_exit/3,
@@ -609,24 +611,24 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                                 connection = Connection,
                                 version    = Version});
         {error, {auth_failure, _}} ->
-            rabbit_log:warning("STOMP login failed for user ~p~n",
+            _ = rabbit_log:warning("STOMP login failed for user ~p~n",
                                [binary_to_list(Username)]),
             error("Bad CONNECT", "Access refused for user '" ++
                   binary_to_list(Username) ++ "'~n", [], State);
         {error, not_allowed} ->
-            rabbit_log:warning("STOMP login failed - not_allowed "
+            _ = rabbit_log:warning("STOMP login failed - not_allowed "
                                "(vhost access not allowed)~n"),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
                                  "' access denied", State);
         {error, access_refused} ->
-            rabbit_log:warning("STOMP login failed - access_refused "
+            _ = rabbit_log:warning("STOMP login failed - access_refused "
                                "(vhost access not allowed)~n"),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
                                  "' access denied", State);
         {error, not_loopback} ->
-            rabbit_log:warning("STOMP login failed - access_refused "
+            _ = rabbit_log:warning("STOMP login failed - access_refused "
                                "(user must access over loopback)~n"),
             error("Bad CONNECT", "non-loopback access denied", State)
     end.
@@ -852,7 +854,7 @@ close_connection(State = #proc_state{connection = Connection}) ->
     catch amqp_connection:close(Connection),
     State#proc_state{channel = none, connection = none, subscriptions = none};
 close_connection(undefined) ->
-    rabbit_log:debug("~s:close_connection: undefined state", [?MODULE]),
+    _ = rabbit_log:debug("~s:close_connection: undefined state", [?MODULE]),
     #proc_state{channel = none, connection = none, subscriptions = none}.
 
 %%----------------------------------------------------------------------------
@@ -1148,7 +1150,7 @@ priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
                State).
 
 log_error(Message, Detail, ServerPrivateDetail) ->
-    rabbit_log:error("STOMP error frame sent:~n"
+    _ = rabbit_log:error("STOMP error frame sent:~n"
                      "Message: ~p~n"
                      "Detail: ~p~n"
                      "Server private detail: ~p~n",

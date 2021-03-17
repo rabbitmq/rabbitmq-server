@@ -41,7 +41,7 @@ start_child(X) ->
         {ok, _Pid}               -> ok;
         {error, {already_started, _Pid}} ->
           #exchange{name = ExchangeName} = X,
-          rabbit_log_federation:debug("Federation link for exchange ~p was already started",
+          _ = rabbit_log_federation:debug("Federation link for exchange ~p was already started",
                                       [rabbit_misc:rs(ExchangeName)]),
           ok;
         %% A link returned {stop, gone}, the link_sup shut down, that's OK.
@@ -63,7 +63,7 @@ stop_child(X) ->
       ok -> ok;
       {error, Err} ->
         #exchange{name = ExchangeName} = X,
-        rabbit_log_federation:warning(
+        _ = rabbit_log_federation:warning(
           "Attempt to stop a federation link for exchange ~p failed: ~p",
           [rabbit_misc:rs(ExchangeName), Err]),
         ok

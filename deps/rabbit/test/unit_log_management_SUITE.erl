@@ -175,7 +175,7 @@ log_management1(_Config) ->
     application:unset_env(lager, extra_sinks),
     ok = rabbit:start(),
     timer:sleep(200),
-    rabbit_log:info("test info"),
+    _ = rabbit_log:info("test info"),
 
     %% rotate logs when logging is turned off
     ok = rabbit:stop(),
@@ -186,7 +186,7 @@ log_management1(_Config) ->
     application:unset_env(lager, extra_sinks),
     ok = rabbit:start(),
     timer:sleep(200),
-    rabbit_log:error("test error"),
+    _ = rabbit_log:error("test error"),
     timer:sleep(200),
     ?assertEqual([{error,enoent}], empty_files([LogFile])),
 
@@ -354,7 +354,7 @@ non_empty_files(Files) ->
      end || EmptyFile <- empty_files(Files)].
 
 test_logs_working(LogFiles) ->
-    ok = rabbit_log:error("Log a test message"),
+    ok = _ = rabbit_log:error("Log a test message"),
     %% give the error loggers some time to catch up
     timer:sleep(1000),
     lists:all(fun(LogFile) -> [true] =:= non_empty_files([LogFile]) end, LogFiles),

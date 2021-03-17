@@ -64,7 +64,7 @@ maybe_load_definitions() ->
 
 -spec import_raw(Body :: binary() | iolist()) -> ok | {error, term()}.
 import_raw(Body) ->
-    rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
+    _ = rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
     case decode([], Body) of
         {error, E}   -> {error, E};
         {ok, _, Map} -> apply_defs(Map, ?INTERNAL_USER)
@@ -72,7 +72,7 @@ import_raw(Body) ->
 
 -spec import_raw(Body :: binary() | iolist(), VHost :: vhost:name()) -> ok | {error, term()}.
 import_raw(Body, VHost) ->
-    rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
+    _ = rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
     case decode([], Body) of
         {error, E}   -> {error, E};
         {ok, _, Map} -> apply_defs(Map, ?INTERNAL_USER, fun() -> ok end, VHost)
@@ -82,7 +82,7 @@ import_raw(Body, VHost) ->
 import_parsed(Body0) when is_list(Body0) ->
     import_parsed(maps:from_list(Body0));
 import_parsed(Body0) when is_map(Body0) ->
-    rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
+    _ = rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
     Body = atomise_map_keys(Body0),
     apply_defs(Body, ?INTERNAL_USER).
 
@@ -90,7 +90,7 @@ import_parsed(Body0) when is_map(Body0) ->
 import_parsed(Body0, VHost) when is_list(Body0) ->
     import_parsed(maps:from_list(Body0), VHost);
 import_parsed(Body0, VHost) ->
-    rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
+    _ = rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
     Body = atomise_map_keys(Body0),
     apply_defs(Body, ?INTERNAL_USER, fun() -> ok end, VHost).
 
@@ -140,19 +140,19 @@ has_configured_definitions_to_load() ->
 maybe_load_definitions(App, Key) ->
     case application:get_env(App, Key) of
         undefined  ->
-            rabbit_log:debug("No definition file configured to import via load_definitions"),
+            _ = rabbit_log:debug("No definition file configured to import via load_definitions"),
             ok;
         {ok, none} ->
-            rabbit_log:debug("No definition file configured to import via load_definitions"),
+            _ = rabbit_log:debug("No definition file configured to import via load_definitions"),
             ok;
         {ok, FileOrDir} ->
-            rabbit_log:debug("Will import definitions file from load_definitions"),
+            _ = rabbit_log:debug("Will import definitions file from load_definitions"),
             IsDir = filelib:is_dir(FileOrDir),
             maybe_load_definitions_from(IsDir, FileOrDir)
     end.
 
 maybe_load_definitions_from(true, Dir) ->
-    rabbit_log:info("Applying definitions from directory ~s", [Dir]),
+    _ = rabbit_log:info("Applying definitions from directory ~s", [Dir]),
     load_definitions_from_files(file:list_dir(Dir), Dir);
 maybe_load_definitions_from(false, File) ->
     load_definitions_from_file(File).
@@ -162,7 +162,7 @@ load_definitions_from_files({ok, Filenames0}, Dir) ->
     Filenames2 = [filename:join(Dir, F) || F <- Filenames1],
     load_definitions_from_filenames(Filenames2);
 load_definitions_from_files({error, E}, Dir) ->
-    rabbit_log:error("Could not read definitions from directory ~s, Error: ~p", [Dir, E]),
+    _ = rabbit_log:error("Could not read definitions from directory ~s, Error: ~p", [Dir, E]),
     {error, {could_not_read_defs, E}}.
 
 load_definitions_from_filenames([]) ->
@@ -176,10 +176,10 @@ load_definitions_from_filenames([File|Rest]) ->
 load_definitions_from_file(File) ->
     case file:read_file(File) of
         {ok, Body} ->
-            rabbit_log:info("Applying definitions from file at '~s'", [File]),
+            _ = rabbit_log:info("Applying definitions from file at '~s'", [File]),
             import_raw(Body);
         {error, E} ->
-            rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [File, E]),
+            _ = rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [File, E]),
             {error, {could_not_read_defs, {File, E}}}
     end.
 
@@ -259,7 +259,7 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
                 VHost :: vhost:name()) -> 'ok' | {error, term()}.
 
 apply_defs(Map, ActingUser, SuccessFun, VHost) when is_binary(VHost) ->
-    rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
+    _ = rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
                     [VHost, ActingUser]),
     try
         validate_limits(Map, VHost),
@@ -285,7 +285,7 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_binary(VHost) ->
                 VHost :: vhost:name()) -> 'ok' | {error, term()}.
 
 apply_defs(Map, ActingUser, SuccessFun, ErrorFun, VHost) ->
-    rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
+    _ = rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
                     [VHost, ActingUser]),
     try
         validate_limits(Map, VHost),
@@ -310,7 +310,7 @@ sequential_for_all(Category, ActingUser, Definitions, Fun) ->
         List      ->
             case length(List) of
                 0 -> ok;
-                N -> rabbit_log:info("Importing sequentially ~p ~s...", [N, human_readable_category_name(Category)])
+                N -> _ = rabbit_log:info("Importing sequentially ~p ~s...", [N, human_readable_category_name(Category)])
             end,
             [begin
                  %% keys are expected to be atoms
@@ -330,7 +330,7 @@ concurrent_for_all(Category, ActingUser, Definitions, Fun) ->
         List      ->
             case length(List) of
                 0 -> ok;
-                N -> rabbit_log:info("Importing concurrently ~p ~s...", [N, human_readable_category_name(Category)])
+                N -> _ = rabbit_log:info("Importing concurrently ~p ~s...", [N, human_readable_category_name(Category)])
             end,
             WorkPoolFun = fun(M) ->
                                   Fun(atomize_keys(M), ActingUser)
@@ -493,7 +493,7 @@ add_queue(VHost, Queue, ActingUser) ->
 add_queue_int(_Queue, R = #resource{kind = queue,
                                     name = <<"amq.", _/binary>>}, ActingUser) ->
     Name = R#resource.name,
-    rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
+    _ = rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
                        "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_queue_int(Queue, Name, ActingUser) ->
     rabbit_amqqueue:declare(Name,
@@ -510,11 +510,11 @@ add_exchange(VHost, Exchange, ActingUser) ->
     add_exchange_int(Exchange, rv(VHost, exchange, Exchange), ActingUser).
 
 add_exchange_int(_Exchange, #resource{kind = exchange, name = <<"">>}, ActingUser) ->
-    rabbit_log:warning("Not importing the default exchange, acting user: ~s", [ActingUser]);
+    _ = rabbit_log:warning("Not importing the default exchange, acting user: ~s", [ActingUser]);
 add_exchange_int(_Exchange, R = #resource{kind = exchange,
                                           name = <<"amq.", _/binary>>}, ActingUser) ->
     Name = R#resource.name,
-    rabbit_log:warning("Skipping import of an exchange whose name begins with 'amq.', "
+    _ = rabbit_log:warning("Skipping import of an exchange whose name begins with 'amq.', "
                        "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_exchange_int(Exchange, Name, ActingUser) ->
     Internal = case maps:get(internal, Exchange, undefined) of

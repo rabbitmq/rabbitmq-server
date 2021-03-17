@@ -190,7 +190,7 @@ validate_params_user(#amqp_params_direct{virtual_host = VHost},
     VHostAccess = case catch rabbit_access_control:check_vhost_access(User, VHost, undefined, #{}) of
                       ok -> ok;
                       NotOK ->
-                          rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~p", [NotOK]),
+                          _ = rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~p", [NotOK]),
                           NotOK
                   end,
     case rabbit_vhost:exists(VHost) andalso VHostAccess of

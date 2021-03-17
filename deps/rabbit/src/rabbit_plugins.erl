@@ -56,13 +56,13 @@ ensure1(FileJustChanged0) ->
                 {[], []} ->
                     ok;
                 {[], _} ->
-                    rabbit_log:info("Plugins changed; disabled ~p~n",
+                    _ = rabbit_log:info("Plugins changed; disabled ~p~n",
                                     [Stop]);
                 {_, []} ->
-                    rabbit_log:info("Plugins changed; enabled ~p~n",
+                    _ = rabbit_log:info("Plugins changed; enabled ~p~n",
                                     [Start]);
                 {_, _} ->
-                    rabbit_log:info("Plugins changed; enabled ~p, disabled ~p~n",
+                    _ = rabbit_log:info("Plugins changed; enabled ~p, disabled ~p~n",
                                     [Start, Stop])
             end,
             {ok, Start, Stop};
@@ -273,7 +273,7 @@ maybe_warn_about_invalid_plugins([]) ->
     ok;
 maybe_warn_about_invalid_plugins(InvalidPlugins) ->
     %% TODO: error message formatting
-    rabbit_log:warning(format_invalid_plugins(InvalidPlugins)).
+    _ = rabbit_log:warning(format_invalid_plugins(InvalidPlugins)).
 
 
 format_invalid_plugins(InvalidPlugins) ->
@@ -328,7 +328,7 @@ validate_plugins(Plugins, BrokerVersion) ->
                 true  ->
                     case BrokerVersion of
                         "0.0.0" ->
-                            rabbit_log:warning(
+                            _ = rabbit_log:warning(
                                 "Running development version of the broker."
                                 " Requirement ~p for plugin ~p is ignored.",
                                 [BrokerVersionReqs, Name]);
@@ -358,7 +358,7 @@ check_plugins_versions(PluginName, AllPlugins, RequiredVersions) ->
                         true  ->
                             case Version of
                                 "" ->
-                                    rabbit_log:warning(
+                                    _ = rabbit_log:warning(
                                         "~p plugin version is not defined."
                                         " Requirement ~p for plugin ~p is ignored",
                                         [Versions, PluginName]);
@@ -426,7 +426,7 @@ prepare_dir_plugin(PluginAppDescPath) ->
                 {module, _} ->
                     ok;
                 {error, badfile} ->
-                    rabbit_log:error("Failed to enable plugin \"~s\": "
+                    _ = rabbit_log:error("Failed to enable plugin \"~s\": "
                                      "it may have been built with an "
                                      "incompatible (more recent?) "
                                      "version of Erlang~n", [Plugin]),
@@ -459,11 +459,11 @@ prepare_plugin(#plugin{type = ez, name = Name, location = Location}, ExpandDir) 
                 [PluginAppDescPath|_] ->
                     prepare_dir_plugin(PluginAppDescPath);
                 _ ->
-                    rabbit_log:error("Plugin archive '~s' doesn't contain an .app file~n", [Location]),
+                    _ = rabbit_log:error("Plugin archive '~s' doesn't contain an .app file~n", [Location]),
                     throw({app_file_missing, Name, Location})
             end;
         {error, Reason} ->
-            rabbit_log:error("Could not unzip plugin archive '~s': ~p~n", [Location, Reason]),
+            _ = rabbit_log:error("Could not unzip plugin archive '~s': ~p~n", [Location, Reason]),
             throw({failed_to_unzip_plugin, Name, Location, Reason})
     end;
 prepare_plugin(#plugin{type = dir, location = Location, name = Name},
@@ -472,7 +472,7 @@ prepare_plugin(#plugin{type = dir, location = Location, name = Name},
         [PluginAppDescPath|_] ->
             prepare_dir_plugin(PluginAppDescPath);
         _ ->
-            rabbit_log:error("Plugin directory '~s' doesn't contain an .app file~n", [Location]),
+            _ = rabbit_log:error("Plugin directory '~s' doesn't contain an .app file~n", [Location]),
             throw({app_file_missing, Name, Location})
     end.
 
@@ -668,12 +668,12 @@ remove_plugins(Plugins) ->
               lists:member(Name, PluginDeps),
               if
                   IsOTPApp ->
-                      rabbit_log:debug(
+                      _ = rabbit_log:debug(
                         "Plugins discovery: "
                         "ignoring ~s, Erlang/OTP application",
                         [Name]);
                   not IsAPlugin ->
-                      rabbit_log:debug(
+                      _ = rabbit_log:debug(
                         "Plugins discovery: "
                         "ignoring ~s, not a RabbitMQ plugin",
                         [Name]);

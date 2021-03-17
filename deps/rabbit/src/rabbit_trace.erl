@@ -74,13 +74,13 @@ tap_out({#resource{name = QName, virtual_host = VHost},
 -spec start(rabbit_types:vhost()) -> 'ok'.
 
 start(VHost) ->
-    rabbit_log:info("Enabling tracing for vhost '~s'~n", [VHost]),
+    _ = rabbit_log:info("Enabling tracing for vhost '~s'~n", [VHost]),
     update_config(fun (VHosts) -> [VHost | VHosts -- [VHost]] end).
 
 -spec stop(rabbit_types:vhost()) -> 'ok'.
 
 stop(VHost) ->
-    rabbit_log:info("Disabling tracing for vhost '~s'~n", [VHost]),
+    _ = rabbit_log:info("Disabling tracing for vhost '~s'~n", [VHost]),
     update_config(fun (VHosts) -> VHosts -- [VHost] end).
 
 update_config(Fun) ->

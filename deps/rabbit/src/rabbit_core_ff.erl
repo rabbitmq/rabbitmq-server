@@ -137,12 +137,12 @@ virtual_host_metadata_migration(_FeatureName, _FeatureProps, is_enabled) ->
 
 maintenance_mode_status_migration(FeatureName, _FeatureProps, enable) ->
     TableName = rabbit_maintenance:status_table_name(),
-    rabbit_log:info("Creating table ~s for feature flag `~s`", [TableName, FeatureName]),
+    _ = rabbit_log:info("Creating table ~s for feature flag `~s`", [TableName, FeatureName]),
     try
         _ = rabbit_table:create(TableName, rabbit_maintenance:status_table_definition()),
         _ = rabbit_table:ensure_table_copy(TableName, node())
     catch throw:Reason  ->
-        rabbit_log:error("Failed to create maintenance status table: ~p", [Reason])
+        _ = rabbit_log:error("Failed to create maintenance status table: ~p", [Reason])
     end;
 maintenance_mode_status_migration(_FeatureName, _FeatureProps, is_enabled) ->
     rabbit_table:exists(rabbit_maintenance:status_table_name()).

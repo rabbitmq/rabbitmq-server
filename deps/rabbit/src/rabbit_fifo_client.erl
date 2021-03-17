@@ -695,7 +695,7 @@ resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
 
 resend_all_pending(#state{pending = Pend} = State) ->
     Seqs = lists:sort(maps:keys(Pend)),
-    rabbit_log:info("rabbit_fifo_client: resend all pending ~w", [Seqs]),
+    _ = rabbit_log:info("rabbit_fifo_client: resend all pending ~w", [Seqs]),
     lists:foldl(fun resend/2, State, Seqs).
 
 handle_delivery(From, {delivery, Tag, [{FstId, _} | _] = IdMsgs} = Del0,

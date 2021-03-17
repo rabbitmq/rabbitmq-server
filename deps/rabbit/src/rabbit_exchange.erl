@@ -149,7 +149,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
                       Err
               end);
         _ ->
-            rabbit_log:warning("ignoring exchange.declare for exchange ~p,
+            _ = rabbit_log:warning("ignoring exchange.declare for exchange ~p,
                                 exchange.delete in progress~n.", [XName]),
             X
     end.
@@ -574,7 +574,7 @@ peek_serial(XName, LockType) ->
     end.
 
 invalid_module(T) ->
-    rabbit_log:warning("Could not find exchange type ~s.~n", [T]),
+    _ = rabbit_log:warning("Could not find exchange type ~s.~n", [T]),
     put({xtype_to_module, T}, rabbit_exchange_type_invalid),
     rabbit_exchange_type_invalid.
 

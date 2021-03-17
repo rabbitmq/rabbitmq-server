@@ -52,7 +52,7 @@ parse_pattern(Pattern) ->
     Parts = binary:split(Pattern, <<"*">>, [global]),
     try lists:map(fun(Part) -> cow_qs:urldecode(Part) end, Parts)
     catch Type:Error ->
-        rabbit_log:warning("Invalid pattern ~p : ~p~n",
+        _ = rabbit_log:warning("Invalid pattern ~p : ~p~n",
                            [Pattern, {Type, Error}]),
         invalid
     end.

@@ -121,7 +121,7 @@ parse_set_global(Name, String, ActingUser) ->
 
 set_global(Name, Term, ActingUser)  ->
     NameAsAtom = rabbit_data_coercion:to_atom(Name),
-    rabbit_log:debug("Setting global parameter '~s' to ~p", [NameAsAtom, Term]),
+    _ = rabbit_log:debug("Setting global parameter '~s' to ~p", [NameAsAtom, Term]),
     mnesia_update(NameAsAtom, Term),
     event_notify(parameter_set, none, global, [{name,  NameAsAtom},
                                                {value, Term},
@@ -138,7 +138,7 @@ set_any(VHost, Component, Name, Term, User) ->
     end.
 
 set_any0(VHost, Component, Name, Term, User) ->
-    rabbit_log:debug("Asked to set or update runtime parameter '~s' in vhost '~s' "
+    _ = rabbit_log:debug("Asked to set or update runtime parameter '~s' in vhost '~s' "
                      "for component '~s', value: ~p",
                      [Name, VHost, Component, Term]),
     case lookup_component(Component) of

@@ -41,7 +41,7 @@ create() ->
 
 create(TableName, TableDefinition) ->
     TableDefinition1 = proplists:delete(match, TableDefinition),
-    rabbit_log:debug("Will create a schema database table '~s'", [TableName]),
+    _ = rabbit_log:debug("Will create a schema database table '~s'", [TableName]),
     case mnesia:create_table(TableName, TableDefinition1) of
         {atomic, ok}                              -> ok;
         {aborted,{already_exists, TableName}}     -> ok;
@@ -67,7 +67,7 @@ ensure_secondary_index(Table, Field) ->
 
 -spec ensure_table_copy(mnesia_table(), node()) -> ok | {error, any()}.
 ensure_table_copy(TableName, Node) ->
-    rabbit_log:debug("Will add a local schema database copy for table '~s'", [TableName]),
+    _ = rabbit_log:debug("Will add a local schema database copy for table '~s'", [TableName]),
     case mnesia:add_table_copy(TableName, Node, disc_copies) of
         {atomic, ok}                              -> ok;
         {aborted,{already_exists, TableName}}     -> ok;
@@ -101,7 +101,7 @@ wait(TableNames, Retry) ->
 wait(TableNames, Timeout, Retries) ->
     %% We might be in ctl here for offline ops, in which case we can't
     %% get_env() for the rabbit app.
-    rabbit_log:info("Waiting for Mnesia tables for ~p ms, ~p retries left~n",
+    _ = rabbit_log:info("Waiting for Mnesia tables for ~p ms, ~p retries left~n",
                     [Timeout, Retries - 1]),
     Result = case mnesia:wait_for_tables(TableNames, Timeout) of
                  ok ->
@@ -115,12 +115,12 @@ wait(TableNames, Timeout, Retries) ->
              end,
     case {Retries, Result} of
         {_, ok} ->
-            rabbit_log:info("Successfully synced tables from a peer"),
+            _ = rabbit_log:info("Successfully synced tables from a peer"),
             ok;
         {1, {error, _} = Error} ->
             throw(Error);
         {_, {error, Error}} ->
-            rabbit_log:warning("Error while waiting for Mnesia tables: ~p~n", [Error]),
+            _ = rabbit_log:warning("Error while waiting for Mnesia tables: ~p~n", [Error]),
             wait(TableNames, Timeout, Retries - 1)
     end.
 

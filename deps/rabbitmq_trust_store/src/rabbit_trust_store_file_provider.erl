@@ -38,7 +38,7 @@ list_certs(Config, _) ->
 load_cert({FileName, _, _}, _, Config) ->
     Path = directory_path(Config),
     Cert = extract_cert(Path, FileName),
-    rabbit_log:info(
+    _ = rabbit_log:info(
       "trust store: loading certificate '~s'", [FileName]),
     {ok, Cert}.
 

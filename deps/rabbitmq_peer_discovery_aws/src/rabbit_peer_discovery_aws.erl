@@ -67,7 +67,7 @@
 %%
 
 init() ->
-    rabbit_log:debug("Peer discovery AWS: initialising..."),
+    _ = rabbit_log:debug("Peer discovery AWS: initialising..."),
     ok = application:ensure_started(inets),
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
@@ -81,15 +81,16 @@ init() ->
 list_nodes() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     {ok, _} = application:ensure_all_started(rabbitmq_aws),
-    rabbit_log:debug("Will use AWS access key of '~s'", [get_config_key(aws_access_key, M)]),
+    _ = rabbit_log:debug("Will use AWS access key of '~s'", [get_config_key(aws_access_key, M)]),
     ok = maybe_set_region(get_config_key(aws_ec2_region, M)),
     ok = maybe_set_credentials(get_config_key(aws_access_key, M),
                                get_config_key(aws_secret_key, M)),
     case get_config_key(aws_autoscaling, M) of
         true ->
             case rabbitmq_aws_config:instance_id() of
-                {ok, InstanceId} -> rabbit_log:debug("EC2 instance ID is determined from metadata service: ~p", [InstanceId]),
-                                    get_autoscaling_group_node_list(InstanceId, get_tags());
+                {ok, InstanceId} ->
+                    _ = rabbit_log:debug("EC2 instance ID is determined from metadata service: ~p", [InstanceId]),
+                    get_autoscaling_group_node_list(InstanceId, get_tags());
                 _                -> {error, "Failed to determine EC2 instance ID from metadata service"}
             end;
         false ->
@@ -144,7 +145,7 @@ get_config_key(Key, Map) ->
 maybe_set_credentials("undefined", _) -> ok;
 maybe_set_credentials(_, "undefined") -> ok;
 maybe_set_credentials(AccessKey, SecretKey) ->
-    rabbit_log:debug("Setting AWS credentials, access key: '~s'", [AccessKey]),
+    _ = rabbit_log:debug("Setting AWS credentials, access key: '~s'", [AccessKey]),
     rabbitmq_aws:set_credentials(AccessKey, SecretKey).
 
 
@@ -159,32 +160,32 @@ maybe_set_region("undefined") ->
         _            -> ok
     end;
 maybe_set_region(Value) ->
-    rabbit_log:debug("Setting AWS region to ~p", [Value]),
+    _ = rabbit_log:debug("Setting AWS region to ~p", [Value]),
     rabbitmq_aws:set_region(Value).
 
 get_autoscaling_group_node_list(error, _) ->
-    rabbit_log:warning("Cannot discover any nodes: failed to fetch this node's EC2 "
-                       "instance id from ~s", [rabbitmq_aws_config:instance_id_url()]),
+    _ = rabbit_log:warning("Cannot discover any nodes: failed to fetch this node's EC2 "
+                           "instance id from ~s", [rabbitmq_aws_config:instance_id_url()]),
     {ok, {[], disc}};
 get_autoscaling_group_node_list(Instance, Tag) ->
     case get_all_autoscaling_instances([]) of
         {ok, Instances} ->
             case find_autoscaling_group(Instances, Instance) of
                 {ok, Group} ->
-                    rabbit_log:debug("Performing autoscaling group discovery, group: ~p", [Group]),
+                    _ = rabbit_log:debug("Performing autoscaling group discovery, group: ~p", [Group]),
                     Values = get_autoscaling_instances(Instances, Group, []),
-                    rabbit_log:debug("Performing autoscaling group discovery, found instances: ~p", [Values]),
+                    _ = rabbit_log:debug("Performing autoscaling group discovery, found instances: ~p", [Values]),
                     case get_hostname_by_instance_ids(Values, Tag) of
                         error ->
                             Msg = "Cannot discover any nodes: DescribeInstances API call failed",
-                            rabbit_log:error(Msg),
+                            _ = rabbit_log:error(Msg),
                             {error, Msg};
                         Names ->
-                            rabbit_log:debug("Performing autoscaling group-based discovery, hostnames: ~p", [Names]),
+                            _ = rabbit_log:debug("Performing autoscaling group-based discovery, hostnames: ~p", [Names]),
                             {ok, {[?UTIL_MODULE:node_name(N) || N <- Names], disc}}
                     end;
                 error ->
-                    rabbit_log:warning("Cannot discover any nodes because no AWS "
+                    _ = rabbit_log:warning("Cannot discover any nodes because no AWS "
                                        "autoscaling group could be found in "
                                        "the instance description. Make sure that this instance"
                                        " belongs to an autoscaling group.", []),
@@ -192,7 +193,7 @@ get_autoscaling_group_node_list(Instance, Tag) ->
             end;
         _ ->
             Msg = "Cannot discover any nodes because AWS autoscaling group description API call failed",
-            rabbit_log:warning(Msg),
+            _ = rabbit_log:warning(Msg),
             {error, Msg}
     end.
 
@@ -225,7 +226,7 @@ fetch_all_autoscaling_instances(QArgs, Accum) ->
             NextToken = get_next_token(Payload),
             get_all_autoscaling_instances(lists:append(Instances, Accum), NextToken);
         {error, Reason} = Error ->
-            rabbit_log:error("Error fetching autoscaling group instance list: ~p", [Reason]),
+            _ = rabbit_log:error("Error fetching autoscaling group instance list: ~p", [Reason]),
             Error
     end.
 
@@ -290,7 +291,7 @@ maybe_add_tag_filters(Tags, QArgs, Num) ->
 
 -spec get_node_list_from_tags(tags()) -> {ok, {[node()], disc}}.
 get_node_list_from_tags([]) ->
-    rabbit_log:warning("Cannot discover any nodes because AWS tags are not configured!", []),
+    _ = rabbit_log:warning("Cannot discover any nodes because AWS tags are not configured!", []),
     {ok, {[], disc}};
 get_node_list_from_tags(Tags) ->
     {ok, {[?UTIL_MODULE:node_name(N) || N <- get_hostname_by_tags(Tags)], disc}}.
@@ -313,7 +314,7 @@ get_hostname_names(Path) ->
             ReservationSet = proplists:get_value("reservationSet", Response),
             get_hostname_name_from_reservation_set(ReservationSet, []);
         {error, Reason} ->
-            rabbit_log:error("Error fetching node list via EC2 API, request path: ~s, error: ~p", [Path, Reason]),
+            _ = rabbit_log:error("Error fetching node list via EC2 API, request path: ~s, error: ~p", [Path, Reason]),
             error
     end.
 
@@ -323,7 +324,7 @@ get_hostname_by_tags(Tags) ->
     Path = "/?" ++ rabbitmq_aws_urilib:build_query_string(QArgs2),
     case get_hostname_names(Path) of
         error ->
-            rabbit_log:warning("Cannot discover any nodes because AWS "
+            _ = rabbit_log:warning("Cannot discover any nodes because AWS "
                                "instance description with tags ~p failed", [Tags]),
             [];
         Names ->
