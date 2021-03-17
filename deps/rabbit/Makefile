@@ -240,7 +240,7 @@ ct-slow: CT_SUITES = $(SLOW_CT_SUITES)
 # Compilation.
 # --------------------------------------------------------------------
 
-RMQ_ERLC_OPTS += -I $(DEPS_DIR)/rabbit_common/include
+RMQ_ERLC_OPTS += -I $(DEPS_DIR)/rabbit_common/include +nowarn_ignored
 
 ifdef INSTRUMENT_FOR_QC
 RMQ_ERLC_OPTS += -DINSTR_MOD=gm_qc
