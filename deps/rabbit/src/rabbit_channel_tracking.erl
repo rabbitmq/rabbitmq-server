@@ -74,11 +74,11 @@ handle_cast({channel_created, Details}) ->
                 error:{no_exists, _} ->
                     Msg = "Could not register channel ~p for tracking, "
                           "its table is not ready yet or the channel terminated prematurely",
-                    rabbit_log_connection:warning(Msg, [TrackedChId]),
+                    _ = rabbit_log_connection:warning(Msg, [TrackedChId]),
                     ok;
                 error:Err ->
                     Msg = "Could not register channel ~p for tracking: ~p",
-                    rabbit_log_connection:warning(Msg, [TrackedChId, Err]),
+                    _ = rabbit_log_connection:warning(Msg, [TrackedChId, Err]),
                     ok
             end;
         _OtherNode ->
@@ -99,7 +99,7 @@ handle_cast({connection_closed, ConnDetails}) ->
     case pget(node, ConnDetails) of
         ThisNode ->
             TrackedChs = get_tracked_channels_by_connection_pid(ConnPid),
-            rabbit_log_channel:info(
+            _ = rabbit_log_channel:info(
                 "Closing all channels from connection '~s' "
                 "because it has been closed", [pget(name, ConnDetails)]),
             %% Shutting down channels will take care of unregistering the
@@ -117,7 +117,7 @@ handle_cast({user_deleted, Details}) ->
     ok;
 handle_cast({node_deleted, Details}) ->
     Node = pget(node, Details),
-    rabbit_log_connection:info(
+    _ = rabbit_log_connection:info(
         "Node '~s' was removed from the cluster, deleting"
         " its channel tracking tables...", [Node]),
     delete_tracked_channels_table_for_node(Node),

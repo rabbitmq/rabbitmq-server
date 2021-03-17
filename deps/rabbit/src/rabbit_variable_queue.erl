@@ -3001,7 +3001,7 @@ log_upgrade_verbose(Msg) ->
     log_upgrade_verbose(Msg, []).
 
 log_upgrade_verbose(Msg, Args) ->
-    rabbit_log_upgrade:info(Msg, Args).
+    _ = rabbit_log_upgrade:info(Msg, Args).
 
 maybe_client_terminate(MSCStateP) ->
     %% Queue might have been asked to stop by the supervisor, it needs a clean

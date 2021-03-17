@@ -105,7 +105,7 @@ log_message(Message) ->
               all),
     lists:foreach(
       fun(Line) ->
-              rabbit_log_prelaunch:error("~s", [Line]),
+              _ = rabbit_log_prelaunch:error("~s", [Line]),
               io:format(standard_error, "~s~n", [Line])
       end, Lines),
     timer:sleep(1000),

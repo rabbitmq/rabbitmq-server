@@ -12,8 +12,8 @@
 -export([setup/1]).
 
 setup(Context) ->
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Enabled plugins file =="),
+    _ = rabbit_log_prelaunch:debug(""),
+    _ = rabbit_log_prelaunch:debug("== Enabled plugins file =="),
     update_enabled_plugins_file(Context).
 
 %% -------------------------------------------------------------------
@@ -33,19 +33,19 @@ do_update_enabled_plugins_file(#{enabled_plugins_file := File}, List) ->
     SortedList = lists:usort(List),
     case SortedList of
         [] ->
-            rabbit_log_prelaunch:debug("Marking all plugins as disabled");
+            _ = rabbit_log_prelaunch:debug("Marking all plugins as disabled");
         _ ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "Marking the following plugins as enabled:"),
-            [rabbit_log_prelaunch:debug("  - ~s", [P]) || P <- SortedList]
+            [_ = rabbit_log_prelaunch:debug("  - ~s", [P]) || P <- SortedList]
     end,
     Content = io_lib:format("~p.~n", [SortedList]),
     case file:write_file(File, Content) of
         ok ->
-            rabbit_log_prelaunch:debug("Wrote plugins file: ~ts", [File]),
+            _ = rabbit_log_prelaunch:debug("Wrote plugins file: ~ts", [File]),
             ok;
         {error, Reason} ->
-            rabbit_log_prelaunch:error(
+            _ = rabbit_log_prelaunch:error(
               "Failed to update enabled plugins file \"~ts\" "
               "from $RABBITMQ_ENABLED_PLUGINS: ~ts",
               [File, file:format_error(Reason)]),

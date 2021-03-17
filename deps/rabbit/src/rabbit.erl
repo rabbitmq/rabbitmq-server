@@ -321,12 +321,12 @@ run_prelaunch_second_phase() ->
 
     case IsInitialPass of
         true ->
-            rabbit_log_prelaunch:debug(""),
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(""),
+            _ = rabbit_log_prelaunch:debug(
               "== Prelaunch phase [2/2] (initial pass) ==");
         false ->
-            rabbit_log_prelaunch:debug(""),
-            rabbit_log_prelaunch:debug("== Prelaunch phase [2/2] =="),
+            _ = rabbit_log_prelaunch:debug(""),
+            _ = rabbit_log_prelaunch:debug("== Prelaunch phase [2/2] =="),
             ok
     end,
 
@@ -343,11 +343,11 @@ run_prelaunch_second_phase() ->
     ok = rabbit_prelaunch_cluster:setup(Context),
 
     %% Start Mnesia now that everything is ready.
-    rabbit_log_prelaunch:debug("Starting Mnesia"),
+    _ = rabbit_log_prelaunch:debug("Starting Mnesia"),
     ok = mnesia:start(),
 
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Prelaunch DONE =="),
+    _ = rabbit_log_prelaunch:debug(""),
+    _ = rabbit_log_prelaunch:debug("== Prelaunch DONE =="),
 
     case IsInitialPass of
         true  -> rabbit_prelaunch:initial_pass_finished();
@@ -368,7 +368,7 @@ start_it(StartType) ->
                 ok = wait_for_ready_or_stopped(),
 
                 T1 = erlang:timestamp(),
-                rabbit_log_prelaunch:debug(
+                _ = rabbit_log_prelaunch:debug(
                   "Time to start RabbitMQ: ~p µs",
                   [timer:now_diff(T1, T0)]),
                 stop_boot_marker(Marker),
@@ -846,7 +846,7 @@ start(normal, []) ->
         %%
         %% Note that plugins were not taken care of at this point
         %% either.
-        rabbit_log_prelaunch:debug(
+        _ = rabbit_log_prelaunch:debug(
           "Register `rabbit` process (~p) for rabbit_node_monitor",
           [self()]),
         true = register(rabbit, self()),
@@ -856,15 +856,15 @@ start(normal, []) ->
         warn_if_kernel_config_dubious(),
         warn_if_disc_io_options_dubious(),
 
-        rabbit_log_prelaunch:debug(""),
-        rabbit_log_prelaunch:debug("== Plugins (prelaunch phase) =="),
+        _ = rabbit_log_prelaunch:debug(""),
+        _ = rabbit_log_prelaunch:debug("== Plugins (prelaunch phase) =="),
 
-        rabbit_log_prelaunch:debug("Setting plugins up"),
+        _ = rabbit_log_prelaunch:debug("Setting plugins up"),
         %% `Plugins` contains all the enabled plugins, plus their
         %% dependencies. The order is important: dependencies appear
         %% before plugin which depend on them.
         Plugins = rabbit_plugins:setup(),
-        rabbit_log_prelaunch:debug(
+        _ = rabbit_log_prelaunch:debug(
           "Loading the following plugins: ~p", [Plugins]),
         %% We can load all plugins and refresh their feature flags at
         %% once, because it does not involve running code from the
@@ -873,8 +873,8 @@ start(normal, []) ->
         ok = rabbit_feature_flags:refresh_feature_flags_after_app_load(
                Plugins),
 
-        rabbit_log_prelaunch:debug(""),
-        rabbit_log_prelaunch:debug("== Boot steps =="),
+        _ = rabbit_log_prelaunch:debug(""),
+        _ = rabbit_log_prelaunch:debug("== Boot steps =="),
 
         ok = rabbit_boot_steps:run_boot_steps([rabbit | Plugins]),
         run_postlaunch_phase(Plugins),
@@ -903,22 +903,22 @@ run_postlaunch_phase(Plugins) ->
 do_run_postlaunch_phase(Plugins) ->
     %% Once RabbitMQ itself is started, we need to run a few more steps,
     %% in particular start plugins.
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Postlaunch phase =="),
+    _ = rabbit_log_prelaunch:debug(""),
+    _ = rabbit_log_prelaunch:debug("== Postlaunch phase =="),
 
     try
         %% Successful boot resets node maintenance state.
-        rabbit_log_prelaunch:debug(""),
-        rabbit_log_prelaunch:info("Resetting node maintenance status"),
+        _ = rabbit_log_prelaunch:debug(""),
+        _ = rabbit_log_prelaunch:info("Resetting node maintenance status"),
         _ = rabbit_maintenance:unmark_as_being_drained(),
 
-        rabbit_log_prelaunch:debug(""),
-        rabbit_log_prelaunch:debug("== Plugins (postlaunch phase) =="),
+        _ = rabbit_log_prelaunch:debug(""),
+        _ = rabbit_log_prelaunch:debug("== Plugins (postlaunch phase) =="),
 
         %% However, we want to run their boot steps and actually start
         %% them one by one, to ensure a dependency is fully started
         %% before a plugin which depends on it gets a chance to start.
-        rabbit_log_prelaunch:debug(
+        _ = rabbit_log_prelaunch:debug(
           "Starting the following plugins: ~p", [Plugins]),
         lists:foreach(
           fun(Plugin) ->
@@ -937,7 +937,7 @@ do_run_postlaunch_phase(Plugins) ->
 
         %% Start listeners after all plugins have been enabled,
         %% see rabbitmq/rabbitmq-server#2405.
-        rabbit_log_prelaunch:info(
+        _ = rabbit_log_prelaunch:info(
           "Ready to start client connection listeners"),
         ok = rabbit_networking:boot(),
 
@@ -948,10 +948,10 @@ do_run_postlaunch_phase(Plugins) ->
         StrictlyPlugins = rabbit_plugins:strictly_plugins(ActivePlugins),
         ok = log_broker_started(StrictlyPlugins),
 
-        rabbit_log_prelaunch:info("Resetting node maintenance status"),
+        _ = rabbit_log_prelaunch:info("Resetting node maintenance status"),
         %% successful boot resets node maintenance state
         rabbit_maintenance:unmark_as_being_drained(),
-        rabbit_log_prelaunch:debug("Marking ~s as running", [product_name()]),
+        _ = rabbit_log_prelaunch:debug("Marking ~s as running", [product_name()]),
         rabbit_boot_state:set(ready)
     catch
         throw:{error, _} = Error ->

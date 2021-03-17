@@ -103,11 +103,11 @@ handle_cast({connection_created, Details}) ->
                 error:{no_exists, _} ->
                     Msg = "Could not register connection ~p for tracking, "
                           "its table is not ready yet or the connection terminated prematurely",
-                    rabbit_log_connection:warning(Msg, [ConnId]),
+                    _ = rabbit_log_connection:warning(Msg, [ConnId]),
                     ok;
                 error:Err ->
                     Msg = "Could not register connection ~p for tracking: ~p",
-                    rabbit_log_connection:warning(Msg, [ConnId, Err]),
+                    _ = rabbit_log_connection:warning(Msg, [ConnId, Err]),
                     ok
             end;
         _OtherNode ->
@@ -132,7 +132,7 @@ handle_cast({vhost_deleted, Details}) ->
     %% Schedule vhost entry deletion, allowing time for connections to close
     _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_connection_vhost_entry, [VHost]),
-    rabbit_log_connection:info("Closing all connections in vhost '~s' because it's being deleted", [VHost]),
+    _ = rabbit_log_connection:info("Closing all connections in vhost '~s' because it's being deleted", [VHost]),
     shutdown_tracked_items(
         rabbit_connection_tracking:list(VHost),
         rabbit_misc:format("vhost '~s' is deleted", [VHost]));
@@ -142,7 +142,7 @@ handle_cast({vhost_deleted, Details}) ->
 handle_cast({vhost_down, Details}) ->
     VHost = pget(name, Details),
     Node = pget(node, Details),
-    rabbit_log_connection:info("Closing all connections in vhost '~s' on node '~s'"
+    _ = rabbit_log_connection:info("Closing all connections in vhost '~s' on node '~s'"
                                " because the vhost is stopping",
                                [VHost, Node]),
     shutdown_tracked_items(
@@ -153,14 +153,14 @@ handle_cast({user_deleted, Details}) ->
     %% Schedule user entry deletion, allowing time for connections to close
     _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_connection_user_entry, [Username]),
-    rabbit_log_connection:info("Closing all connections from user '~s' because it's being deleted", [Username]),
+    _ = rabbit_log_connection:info("Closing all connections from user '~s' because it's being deleted", [Username]),
     shutdown_tracked_items(
         rabbit_connection_tracking:list_of_user(Username),
         rabbit_misc:format("user '~s' is deleted", [Username]));
 %% A node had been deleted from the cluster.
 handle_cast({node_deleted, Details}) ->
     Node = pget(node, Details),
-    rabbit_log_connection:info("Node '~s' was removed from the cluster, deleting its connection tracking tables...", [Node]),
+    _ = rabbit_log_connection:info("Node '~s' was removed from the cluster, deleting its connection tracking tables...", [Node]),
     delete_tracked_connections_table_for_node(Node),
     delete_per_vhost_tracked_connections_table_for_node(Node),
     delete_per_user_tracked_connections_table_for_node(Node).

@@ -890,7 +890,7 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 handle_info({{Ref, Node}, LateAnswer},
             State = #ch{cfg = #conf{channel = Channel}})
   when is_reference(Ref) ->
-    rabbit_log_channel:warning("Channel ~p ignoring late answer ~p from ~p",
+    _ = rabbit_log_channel:warning("Channel ~p ignoring late answer ~p from ~p",
         [Channel, LateAnswer, Node]),
     noreply(State);
 
@@ -1004,7 +1004,7 @@ handle_exception(Reason, State = #ch{cfg = #conf{protocol = Protocol,
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log_channel:error(
+            _ = rabbit_log_channel:error(
                 "Channel error on connection ~p (~s, vhost: '~s',"
                 " user: '~s'), channel ~p:~n~s~n",
                 [ConnPid, ConnName, VHost, User#user.username,
@@ -2823,7 +2823,7 @@ evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
         {value, {_DTag, ConsumerTag, Time, {_QPid, _Msg}}}
           when is_integer(Timeout)
                andalso Time < Now - Timeout ->
-            rabbit_log_channel:warning("Consumer ~s on channel ~w has timed out "
+            _ = rabbit_log_channel:warning("Consumer ~s on channel ~w has timed out "
                                        "waiting on consumer acknowledgement. Timeout used: ~p ms",
                                        [rabbit_data_coercion:to_binary(ConsumerTag),
                                        Channel, Timeout]),

@@ -72,14 +72,14 @@ do_run() ->
     IsInitialPass = is_initial_pass(),
     case IsInitialPass of
         true ->
-            rabbit_log_prelaunch:debug(""),
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(""),
+            _ = rabbit_log_prelaunch:debug(
               "== Prelaunch phase [1/2] (initial pass) =="),
-            rabbit_log_prelaunch:debug("");
+            _ = rabbit_log_prelaunch:debug("");
         false ->
-            rabbit_log_prelaunch:debug(""),
-            rabbit_log_prelaunch:debug("== Prelaunch phase [1/2] =="),
-            rabbit_log_prelaunch:debug("")
+            _ = rabbit_log_prelaunch:debug(""),
+            _ = rabbit_log_prelaunch:debug("== Prelaunch phase [1/2] =="),
+            _ = rabbit_log_prelaunch:debug("")
     end,
     rabbit_env:log_process_env(),
 
@@ -111,7 +111,7 @@ do_run() ->
     ok = rabbit_prelaunch_dist:setup(Context),
 
     %% 4. Write PID file.
-    rabbit_log_prelaunch:debug(""),
+    _ = rabbit_log_prelaunch:debug(""),
     _ = write_pid_file(Context),
     ignore.
 
@@ -138,7 +138,7 @@ get_stop_reason() ->
 set_stop_reason(Reason) ->
     case get_stop_reason() of
         undefined ->
-            rabbit_log_prelaunch:debug("Set stop reason to: ~p", [Reason]),
+            _ = rabbit_log_prelaunch:debug("Set stop reason to: ~p", [Reason]),
             persistent_term:put(?PT_KEY_STOP_REASON, Reason);
         _ ->
             ok
@@ -161,7 +161,7 @@ setup_shutdown_func() ->
         {ok, {ThisMod, ThisFunc}} ->
             ok;
         {ok, {ExistingMod, ExistingFunc}} ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "Setting up kernel shutdown function: ~s:~s/1 "
               "(chained with ~s:~s/1)",
               [ThisMod, ThisFunc, ExistingMod, ExistingFunc]),
@@ -170,7 +170,7 @@ setup_shutdown_func() ->
                    ExistingShutdownFunc),
             ok = record_kernel_shutdown_func(ThisMod, ThisFunc);
         _ ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "Setting up kernel shutdown function: ~s:~s/1",
               [ThisMod, ThisFunc]),
             ok = record_kernel_shutdown_func(ThisMod, ThisFunc)
@@ -182,7 +182,7 @@ record_kernel_shutdown_func(Mod, Func) ->
       [{persistent, true}]).
 
 shutdown_func(Reason) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Running ~s:shutdown_func() as part of `kernel` shutdown", [?MODULE]),
     Context = get_context(),
     remove_pid_file(Context),
@@ -195,7 +195,7 @@ shutdown_func(Reason) ->
     end.
 
 write_pid_file(#{pid_file := PidFile}) ->
-    rabbit_log_prelaunch:debug("Writing PID file: ~s", [PidFile]),
+    _ = rabbit_log_prelaunch:debug("Writing PID file: ~s", [PidFile]),
     case filelib:ensure_dir(PidFile) of
         ok ->
             OSPid = os:getpid(),
@@ -203,13 +203,13 @@ write_pid_file(#{pid_file := PidFile}) ->
                 ok ->
                     ok;
                 {error, Reason} = Error ->
-                    rabbit_log_prelaunch:warning(
+                    _ = rabbit_log_prelaunch:warning(
                       "Failed to write PID file \"~s\": ~s",
                       [PidFile, file:format_error(Reason)]),
                     Error
             end;
         {error, Reason} = Error ->
-            rabbit_log_prelaunch:warning(
+            _ = rabbit_log_prelaunch:warning(
               "Failed to create PID file \"~s\" directory: ~s",
               [PidFile, file:format_error(Reason)]),
             Error
@@ -218,10 +218,10 @@ write_pid_file(_) ->
     ok.
 
 remove_pid_file(#{pid_file := PidFile, keep_pid_file_on_exit := true}) ->
-    rabbit_log_prelaunch:debug("Keeping PID file: ~s", [PidFile]),
+    _ = rabbit_log_prelaunch:debug("Keeping PID file: ~s", [PidFile]),
     ok;
 remove_pid_file(#{pid_file := PidFile}) ->
-    rabbit_log_prelaunch:debug("Deleting PID file: ~s", [PidFile]),
+    _ = rabbit_log_prelaunch:debug("Deleting PID file: ~s", [PidFile]),
     _ = file:delete(PidFile),
     ok;
 remove_pid_file(_) ->

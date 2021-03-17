@@ -10,8 +10,8 @@
 -export([setup/1]).
 
 setup(Context) ->
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Logging =="),
+    _ = rabbit_log_prelaunch:debug(""),
+    _ = rabbit_log_prelaunch:debug("== Logging =="),
     ok = set_ERL_CRASH_DUMP_envvar(Context),
     ok = configure_lager(Context).
 
@@ -19,13 +19,13 @@ set_ERL_CRASH_DUMP_envvar(#{log_base_dir := LogBaseDir}) ->
     case os:getenv("ERL_CRASH_DUMP") of
         false ->
             ErlCrashDump = filename:join(LogBaseDir, "erl_crash.dump"),
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "Setting $ERL_CRASH_DUMP environment variable to \"~ts\"",
               [ErlCrashDump]),
             os:putenv("ERL_CRASH_DUMP", ErlCrashDump),
             ok;
         ErlCrashDump ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "$ERL_CRASH_DUMP environment variable already set to \"~ts\"",
               [ErlCrashDump]),
             ok
@@ -39,15 +39,15 @@ configure_lager(#{log_base_dir := LogBaseDir,
      UpgradeLagerHandler} = case MainLog of
                                 "-" ->
                                     %% Log to STDOUT.
-                                    rabbit_log_prelaunch:debug(
+                                    _ = rabbit_log_prelaunch:debug(
                                       "Logging to stdout"),
                                     {tty,
                                      tty,
                                      tty};
                                 _ ->
-                                    rabbit_log_prelaunch:debug(
+                                    _ = rabbit_log_prelaunch:debug(
                                       "Logging to:"),
-                                    [rabbit_log_prelaunch:debug(
+                                    [_ = rabbit_log_prelaunch:debug(
                                        "  - ~ts", [Log])
                                      || Log <- [MainLog, UpgradeLog]],
                                     %% Log to file.
