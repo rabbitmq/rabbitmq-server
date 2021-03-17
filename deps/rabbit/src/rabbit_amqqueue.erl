@@ -458,12 +458,11 @@ maybe_rebalance(false, _Type, _VhostSpec, _QueueSpec) ->
     rabbit_log:warning("Queue rebalance operation is in progress, please wait."),
     {error, rebalance_in_progress}.
 
-filter_per_type(all, _) ->
-    true;
+%% Stream queues don't yet support rebalance
+filter_per_type(all, Q)  ->
+    ?amqqueue_is_quorum(Q) or ?amqqueue_is_classic(Q);
 filter_per_type(quorum, Q) ->
     ?amqqueue_is_quorum(Q);
-filter_per_type(stream, Q) ->
-    ?amqqueue_is_stream(Q);
 filter_per_type(classic, Q) ->
     ?amqqueue_is_classic(Q).
 
@@ -554,7 +553,7 @@ group_by_node(Queues) ->
                                  Module = rebalance_module(Q),
                                  Length = Module:queue_length(Q),
                                  maps:update_with(amqqueue:qnode(Q),
-                                                   fun(L) -> [{Length, Q, false} | L] end,
+                                                  fun(L) -> [{Length, Q, false} | L] end,
                                                   [{Length, Q, false}], Acc)
                          end, #{}, Queues),
     maps:map(fun(_K, V) -> lists:keysort(1, V) end, ByNode).
