@@ -67,7 +67,7 @@ of the number of shards (covered below) is not needed or desired, consider using
 instead of this plugin.
 
 
-## Auto-scaling
+## Auto-scaling When Nodes are Added
 
 One of the main properties of this plugin is that when a new node
 is added to the RabbitMQ cluster, then the plugin will automatically create
@@ -115,16 +115,10 @@ queues in an uneven way.
 
 ## Load Distribution and Consumer Balancing
 
-This plugin can be affected by [queue master locator policy used](https://www.rabbitmq.com/ha.html) in
-the cluster as well as client connection load balancing strategy.
+Shard queues declaration by this plugin will ignore queue master locator policy, if any.
 
-"Minimum masters" is a queue master locator that is most in line with the goals of
-this plugin.
 
-For load balancers, the "least connections" strategy is more likely to produce an even distribution compared
-to round robin and other strategies.
-
-### How Evenly Will Messages Be Distributed?
+## How Evenly Will Messages Be Distributed?
 
 As with many data distribution approaches based on a hashing function,
 even distribution between shards depends on the distribution (variability) of inputs,
@@ -133,37 +127,18 @@ the more even will message distribution between shareds be. If all messages had
 the same routing key, they would all end up on the same shard.
 
 
+## Installation
 
-## Installing ##
+This plugin ships with modern versions of RabbitMQ.
+Like all plugins, it [must be enabled](https://www.rabbitmq.com/plugins.html) before it can be used:
 
-### RabbitMQ 3.6.0 or later
-
-As of RabbitMQ `3.6.0` this plugin is included into the RabbitMQ distribution.
-
-Like any other [RabbitMQ plugin](https://www.rabbitmq.com/plugins.html) it has to be enabled before it can be used:
-
-```bash
+``` bash
+# this might require sudo
 rabbitmq-plugins enable rabbitmq_sharding
 ```
 
-You'd probably want to also enable the Consistent Hash Exchange
-plugin, too.
 
-### With Earlier Versions
-
-Install the corresponding .ez files from our
-[Community Plugins archive](https://www.rabbitmq.com/community-plugins/).
-
-Then run the following command:
-
-```bash
-rabbitmq-plugins enable rabbitmq_sharding
-```
-
-You'd probably want to also enable the Consistent Hash Exchange
-plugin, too.
-
-## Usage ##
+## Usage
 
 Once the plugin is installed you can define an exchange as sharded by
 setting up a policy that matches the exchange name. For example if we
