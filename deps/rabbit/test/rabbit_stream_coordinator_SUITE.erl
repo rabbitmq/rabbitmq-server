@@ -30,6 +30,7 @@ all_tests() ->
      delete_stream,
      delete_replica_leader,
      delete_replica,
+     delete_replica_2,
      leader_start_failed
     ].
 
@@ -904,6 +905,102 @@ delete_replica(_) ->
     ?assertMatch([{aux, {start_writer, StreamId, _Args, #{nodes := [N1, N2]}}}
                   ], lists:sort(Actions5)),
     {S4, []} = evaluate_stream(meta(?LINE), S4, []),
+    ok.
+
+delete_replica_2(_) ->
+    %% replica is deleted before it has been fully started
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = [fake_pid(n2), fake_pid(n3)],
+    N1 = node(LeaderPid),
+    N2 = node(Replica1),
+    %% this is to be added
+    N3 = node(Replica2),
+    %% set replicas back to starting state
+    #stream{id = StreamId,
+            members = Members00} = S00 = started_stream(StreamId, LeaderPid,
+                                                        [Replica1, Replica2]),
+    Members = maps:map(fun (_, #member{role = {replica, _}} = M) ->
+                               M#member{state = {ready, 1},
+                                        current = {starting, 1}};
+                           (_, M) ->
+                               M
+                       end, Members00),
+    S0 = S00#stream{members = Members},
+    From = {self(), make_ref()},
+    Idx1 = ?LINE,
+    Meta1 = (meta(Idx1))#{from => From},
+    %% DELETE REPLICA
+    S1 = update_stream(Meta1, {delete_replica, StreamId, #{node => N3}}, S0),
+    ?assertMatch(#stream{target = running,
+                         nodes = [N1, N2],
+                         members = #{N1 := #member{target = stopped,
+                                                   current = undefined,
+                                                   state = {running, _, _}},
+                                     N2 := #member{target = stopped,
+                                                   current = {starting, _},
+                                                   state = {ready, _}},
+                                     N3 := #member{target = deleted,
+                                                   current = {starting, _},
+                                                   state = {ready, _}}
+                                    }},
+                 S1),
+    Idx2 = ?LINE,
+    {S2, Actions1} = evaluate_stream(meta(Idx2), S1, []),
+    ?assertMatch([
+                  % {aux, {delete_member, StreamId, #{node := N3}, _}},
+                  {aux, {stop, StreamId, #{node := N1, epoch := E}, _}}],
+                 lists:sort(Actions1)),
+    %% LEADER DOWN
+    Meta3 = #{index := _Idx3} = meta(?LINE),
+    S3 = update_stream(Meta3, {down, LeaderPid, normal}, S2),
+    ?assertMatch(#stream{target = running,
+                         members = #{N1 := #member{target = stopped,
+                                                   current = {stopping, _},
+                                                   state = {down, _}},
+                                     N2 := #member{target = stopped,
+                                                   current = {starting, _},
+                                                   state = {ready, _}},
+                                     N3 := #member{target = deleted,
+                                                   current = {starting, _},
+                                                   state = {ready, _}}
+                                    }},
+                 S3),
+    {S4, Actions4} = evaluate_stream(meta(?LINE), S3, []),
+    ?assertMatch([], Actions4),
+    %% LEADER STOPPED
+    Idx4 = ?LINE,
+    S5 = update_stream(meta(Idx4),
+                       {member_stopped, StreamId, #{node => N1,
+                                                    index => Idx2,
+                                                    epoch => E,
+                                                    tail => {E, 100}}},
+                       S4),
+    ?assertMatch(#stream{members = #{N1 := #member{target = running,
+                                                   current = undefined,
+                                                   state = {stopped, _, _}}}},
+                 S5),
+    {S6, Actions6} = evaluate_stream(meta(?LINE), S5, []),
+    ?assertMatch([], Actions6),
+    %% DELETED REPLICA START FAIL
+    Meta7 = meta(?LINE),
+    S7 = update_stream(Meta7, {action_failed, StreamId,
+                               #{action => starting,
+                                 index => 1,
+                                 node => N3,
+                                 epoch => E}}, S6),
+    {S8, Actions8} = evaluate_stream(Meta7, S7, []),
+    ?assertMatch([{aux, {delete_member, _, #{node := N3}, _}}], Actions8),
+    %% OTHER REPLICA START FAIL
+    Meta9 = meta(?LINE),
+    S9 = update_stream(Meta9, {action_failed, StreamId,
+                               #{action => starting,
+                                 index => 1,
+                                 node => N2,
+                                 epoch => E}}, S8),
+    {_S10, Actions10} = evaluate_stream(Meta9, S9, []),
+    ?assertMatch([{aux, {stop, _, _, _}} ], Actions10),
     ok.
 
 delete_replica_leader(_) ->

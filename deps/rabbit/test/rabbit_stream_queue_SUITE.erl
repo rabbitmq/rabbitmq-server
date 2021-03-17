@@ -1733,8 +1733,9 @@ check_leader_and_replicas(Config, Name, Members) ->
                                  lists:member({name, QNameRes}, Props)
                          end,
                          rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue,
-                                                      info_all, [<<"/">>, [name, leader,
-                                                                           members]])),
+                                                      info_all, [<<"/">>,
+                                                                 [name, leader,
+                                                                  members]])),
               ct:pal("~s members ~w ~p", [?FUNCTION_NAME, Members, Info]),
               lists:member(proplists:get_value(leader, Info), Members)
                   andalso (lists:sort(Members) == lists:sort(proplists:get_value(members, Info)))

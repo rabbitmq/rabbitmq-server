@@ -887,12 +887,10 @@ update_stream(#{system_time := _Ts} = _Meta,
         true ->
             Stream0;
         false ->
-            Members = maps:map(
-                        fun (_, M) ->
-                                M#member{target = stopped}
-                        end, Members0#{Node => #member{role = {replica, Epoch},
-                                                       node = Node,
-                                                       target = stopped}}),
+            Members1 = Members0#{Node => #member{role = {replica, Epoch},
+                                                 node = Node,
+                                                 target = stopped}},
+            Members = set_running_to_stopped(Members1),
             Stream0#stream{members = Members,
                            nodes = lists:sort([Node | Nodes])}
     end;
@@ -908,8 +906,10 @@ update_stream(#{system_time := _Ts} = _Meta,
             Members = maps:map(
                         fun (K, M) when K == Node ->
                                 M#member{target = deleted};
+                            (_, #member{target = running} = M) ->
+                                M#member{target = stopped};
                             (_, M) ->
-                                M#member{target = stopped}
+                                M
                         end, Members0),
             Stream0#stream{members = Members,
                            nodes = lists:delete(Node, Nodes)};
@@ -1088,9 +1088,7 @@ update_stream(#{system_time := _Ts},
           when Action == starting ->
             %% the leader failed to start = we need a new election
             %% stop all members
-            Members = maps:map(fun (_K, M) ->
-                                       M#member{target = stopped}
-                               end, Members1),
+            Members = set_running_to_stopped(Members1),
             Stream0#stream{members = Members};
         _ ->
             Stream0#stream{members = Members1}
@@ -1104,9 +1102,11 @@ update_stream(#{system_time := _Ts},
         #{DownNode := #member{role = {writer, E},
                               state = {running, E, Pid}} = Member} ->
             Members1 = Members0#{DownNode => Member#member{state = {down, E}}},
-            %% leader is down, set all members to stop
-            Members = maps:map(fun (_, M) ->
-                                       M#member{target = stopped}
+            %% leader is down, set all members that should be running to stopped
+            Members = maps:map(fun (_, #member{target = running} = M) ->
+                                       M#member{target = stopped};
+                                   (_, M) ->
+                                       M
                                end, Members1),
             Stream0#stream{members = Members};
         #{DownNode := #member{role = {replica, _},
@@ -1483,6 +1483,12 @@ find_members([Node | Nodes]) ->
             find_members(Nodes)
     end.
 
+set_running_to_stopped(Members) ->
+    maps:map(fun (_, #member{target = running} = M) ->
+                     M#member{target = stopped};
+                 (_, M) ->
+                     M
+             end, Members).
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
