@@ -91,7 +91,7 @@ handle_call({remove, Name}, _From,
             undefined) ->
     case listener_by_name(Name) of
         {error, not_found} ->
-            rabbit_log:warning("HTTP listener registry could not find context ~p",
+            _ = rabbit_log:warning("HTTP listener registry could not find context ~p",
                                [Name]),
             {reply, ok, undefined};
         {ok, Listener} ->
@@ -116,7 +116,7 @@ handle_call(list_all, _From, undefined) ->
     {reply, list(), undefined};
 
 handle_call(Req, _From, State) ->
-    rabbit_log:error("Unexpected call to ~p: ~p~n", [?MODULE, Req]),
+    _ = rabbit_log:error("Unexpected call to ~p: ~p~n", [?MODULE, Req]),
     {stop, unknown_request, State}.
 
 handle_cast(_, State) ->
