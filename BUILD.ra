@@ -1,7 +1,7 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "bazel_erlang_lib", "erlc", "erlang_lib")
 
 DEPS = [
-    "@gen-batch-server//:bazel_erlang_lib",
+    "@gen_batch_server//:bazel_erlang_lib",
 ]
 
 NAME = "ra"

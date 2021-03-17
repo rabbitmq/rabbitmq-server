@@ -39,7 +39,7 @@ def required_plugins(rabbitmq_workspace = "@rabbitmq-server"):
         "@lager//:bazel_erlang_lib",
         rabbitmq_workspace + "//deps/rabbit_common:bazel_erlang_lib",
         "@ra//:bazel_erlang_lib",
-        "@sysmon-handler//:bazel_erlang_lib",
+        "@sysmon_handler//:bazel_erlang_lib",
         "@stdout_formatter//:bazel_erlang_lib",
         "@recon//:bazel_erlang_lib",
         "@observer_cli//:bazel_erlang_lib",
@@ -49,9 +49,9 @@ def required_plugins(rabbitmq_workspace = "@rabbitmq-server"):
         rabbitmq_workspace + "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
         "@goldrush//:bazel_erlang_lib",
         "@jsx//:bazel_erlang_lib",
-        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@credentials_obfuscation//:bazel_erlang_lib",
         "@aten//:bazel_erlang_lib",
-        "@gen-batch-server//:bazel_erlang_lib",
+        "@gen_batch_server//:bazel_erlang_lib",
     ]
 
 def management_plugins(rabbitmq_workspace = "@rabbitmq-server"):
@@ -158,7 +158,7 @@ def rabbitmq_integration_suite(
         runtime_deps = [
             "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
             "//deps/rabbitmq_cli:rabbitmqctl",
-            "@credentials-obfuscation//:bazel_erlang_lib",
+            "@credentials_obfuscation//:bazel_erlang_lib",
             "@goldrush//:bazel_erlang_lib",
             "@jsx//:bazel_erlang_lib",
             "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",

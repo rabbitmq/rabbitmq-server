@@ -52,7 +52,7 @@ rabbitmq_home(
         "@lager//:bazel_erlang_lib",
         "//deps/rabbit_common:test_bazel_erlang_lib",  # <- compiled with test erlc_opts
         "@ra//:bazel_erlang_lib",
-        "@sysmon-handler//:bazel_erlang_lib",
+        "@sysmon_handler//:bazel_erlang_lib",
         "@stdout_formatter//:bazel_erlang_lib",
         "@recon//:bazel_erlang_lib",
         "@observer_cli//:bazel_erlang_lib",
@@ -62,9 +62,9 @@ rabbitmq_home(
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",  # <- compiled with test erlc_opts
         "@goldrush//:bazel_erlang_lib",
         "@jsx//:bazel_erlang_lib",
-        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@credentials_obfuscation//:bazel_erlang_lib",
         "@aten//:bazel_erlang_lib",
-        "@gen-batch-server//:bazel_erlang_lib",
+        "@gen_batch_server//:bazel_erlang_lib",
         # "@rabbitmq_ct_helpers//:bazel_erlang_lib",
         "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
         "@inet_tcp_proxy//:bazel_erlang_lib",

@@ -6,7 +6,7 @@ APP_ENV = """[
 ]"""
 
 DEPS = [
-    "@gen-batch-server//:bazel_erlang_lib",
+    "@gen_batch_server//:bazel_erlang_lib",
 ]
 
 erlang_lib(

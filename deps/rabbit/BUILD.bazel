@@ -136,7 +136,7 @@ DEPS = [
 
 RUNTIME_DEPS = [
     "@cuttlefish//:bazel_erlang_lib",
-    "@sysmon-handler//:bazel_erlang_lib",
+    "@sysmon_handler//:bazel_erlang_lib",
     "@recon//:bazel_erlang_lib",
     "@observer_cli//:bazel_erlang_lib",
     "@osiris//:bazel_erlang_lib",
@@ -630,7 +630,7 @@ ct_suite(
     },
     runtime_deps = [
         "@aten//:bazel_erlang_lib",
-        "@gen-batch-server//:bazel_erlang_lib",
+        "@gen_batch_server//:bazel_erlang_lib",
         "@meck//:bazel_erlang_lib",
         "@ra//:test_bazel_erlang_lib",
     ],

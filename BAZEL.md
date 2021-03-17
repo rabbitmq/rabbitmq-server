@@ -29,6 +29,7 @@ Additionally, create a `.bazelrc` file with at least:
 build --@bazel-erlang//:erlang_home=/path/to/erlang/installation
 build --@bazel-erlang//:erlang_version=23.1
 build --@bazel-erlang//:elixir_home=/path/to/elixir/installation
+build --test_strategy=exclusive
 ```
 
 Additionally, on **macOS**, you will likely need to add
@@ -45,7 +46,7 @@ for certain `rabbitmq_cli` tests to pass. This is because `rabbitmqctl wait` she
 
 ## Running tests
 
-Many rabbit tests spawn single or clustered rabbit nodes, and therefore it's best to run test suites sequentially on a single machine. Hence the `--jobs=1` flag used in the commands below. Naturally that restriction does not hold if utilizing remote execution (as is the case for RabbitMQ's CI pipelines).
+Many rabbit tests spawn single or clustered rabbit nodes, and therefore it's best to run test suites sequentially on a single machine. Hence the `--test_strategy=exclusive` flag used in `.bazelrc` above. Naturally that restriction does not hold if utilizing remote execution (as is the case for RabbitMQ's CI pipelines).
 
 Erlang Common Test logs will not be placed in the logs directory when run with bazel. They can be found under `bazel-testlogs`. For instance, those of the rabbit application's backing_queue suite will be under `bazel-testlogs/deps/rabbit/backing_queue_SUITE/test.outputs/`.
 
@@ -53,17 +54,17 @@ Erlang Common Test logs will not be placed in the logs directory when run with b
 
 Note: This takes quite some time on a single machine.
 
-`bazel test //... --jobs=1`
+`bazel test //...`
 
 ### Run tests in a 'package' and its 'subpackages'
 
 **rabbit** is an appropriate example because it encloses the **rabbitmq_prelaunch** application.
 
-`bazel test deps/rabbit/... --jobs=1`
+`bazel test deps/rabbit/...`
 
 ### Run tests for a specific 'package'
 
-`bazel test deps/rabbit_common:all --jobs=1`
+`bazel test deps/rabbit_common:all`
 
 ### Run an individual common test suite
 

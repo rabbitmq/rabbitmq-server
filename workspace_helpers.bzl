@@ -1,35 +1,6 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel-erlang//:github.bzl", "github_bazel_erlang_lib")
 load("//:rabbitmq.bzl", "APP_VERSION")
-
-def github_bazel_erlang_lib(name, org = "rabbitmq", version = APP_VERSION, tag = None, sha256 = None, app_name = None, first_srcs = [], deps = [], **kwargs):
-    if not ("build_file" in kwargs.keys() or "build_file_content" in kwargs.keys()):
-        kwargs.update(build_file_content = _BUILD_FILE_TEMPLATE.format(
-            app_name = app_name if app_name != None else name,
-            version = version,
-            first_srcs = first_srcs,
-            deps = deps,
-        ))
-
-    tag = "v{}".format(version) if tag == None else tag
-
-    http_archive(
-        name = name,
-        urls = ["https://github.com/{}/{}/archive/{}.zip".format(org, name, tag)],
-        sha256 = sha256,
-        strip_prefix = "{}-{}".format(name, version),
-        **kwargs
-    )
-
-_BUILD_FILE_TEMPLATE = """
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
-
-erlang_lib(
-    app_name = "{app_name}",
-    app_version = "{version}",
-    first_srcs = {first_srcs},
-    deps = {deps},
-)
-"""
 
 def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     github_bazel_erlang_lib(
@@ -65,8 +36,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     )
 
     github_bazel_erlang_lib(
-        name = "credentials-obfuscation",
-        app_name = "credentials_obfuscation",
+        repo = "credentials-obfuscation",
+        name = "credentials_obfuscation",
         org = "rabbitmq",
         sha256 = "20890287379005d277465d9a705b3c79e906cb19825b422350c519bbc7c6c273",
         version = "2.3.0",
@@ -81,8 +52,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     )
 
     github_bazel_erlang_lib(
-        name = "gen-batch-server",
-        app_name = "gen_batch_server",
+        repo = "gen-batch-server",
+        name = "gen_batch_server",
         org = "rabbitmq",
         sha256 = "9e9f2aa6ee8e3354f03a3f78283fde93bbe5b1d6f6732caa05d3e43efe02e42c",
         version = "0.8.4",
@@ -180,8 +151,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     )
 
     github_bazel_erlang_lib(
-        name = "sysmon-handler",
-        app_name = "sysmon_handler",
+        repo = "sysmon-handler",
+        name = "sysmon_handler",
         sha256 = "0fd50afe194dd071e7afc31c4bdfdcc789652edc72c2defff1e5206f5d4f43ee",
         version = "1.3.0",
     )

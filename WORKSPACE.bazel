@@ -21,11 +21,7 @@ http_archive(
     urls = ["https://github.com/rabbitmq/bazel-erlang/archive/master.zip"],
 )
 
-load(
-    "//:workspace_helpers.bzl",
-    "github_bazel_erlang_lib",
-    "rabbitmq_external_deps",
-)
+load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
 
 rabbitmq_external_deps(rabbitmq_workspace = "@")
 

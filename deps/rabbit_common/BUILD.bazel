@@ -53,7 +53,7 @@ RUNTIME_DEPS = [
     "@jsx//:bazel_erlang_lib",
     "@ranch//:bazel_erlang_lib",
     "@recon//:bazel_erlang_lib",
-    "@credentials-obfuscation//:bazel_erlang_lib",
+    "@credentials_obfuscation//:bazel_erlang_lib",
 ]
 
 APP_NAME = "rabbit_common"
@@ -247,7 +247,7 @@ ct_test(
     compiled_suites = [":unit_SUITE_beam_files"],
     deps = [
         ":test_bazel_erlang_lib",
-        "@credentials-obfuscation//:bazel_erlang_lib",
+        "@credentials_obfuscation//:bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
     ],
