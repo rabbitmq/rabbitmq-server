@@ -3270,13 +3270,6 @@ rates_test(Config) ->
     http_put(Config, "/queues/%2F/myqueue", none, {group, '2xx'}),
     {Conn, Ch} = open_connection_and_channel(Config),
     Pid = spawn_link(fun() -> publish(Ch) end),
-    Fun = fun() ->
-                  Overview = http_get(Config, "/overview"),
-                  MsgStats = maps:get(message_stats, Overview, #{}),
-                  HasPub = maps:get(rate, maps:get(publish_details, MsgStats, #{}), 0) > 0,
-                  QueueTotals = maps:get(queue_totals, Overview, #{}),
-                  HasPub andalso maps:get(messages_ready, QueueTotals, 0) > 0
-          end,
 
     Condition = fun() ->
         Overview = http_get(Config, "/overview"),
