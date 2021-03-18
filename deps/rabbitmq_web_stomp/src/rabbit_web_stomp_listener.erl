@@ -98,7 +98,8 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
     socket_opts     => TCPConf,
     connection_type => supervisor,
     max_connections => get_max_connections(),
-    num_acceptors   => NumTcpAcceptors
+    num_acceptors   => NumTcpAcceptors,
+    num_conns_sups => 1
   },
   CowboyOpts = CowboyOpts0#{env => #{dispatch => Routes},
                             middlewares => [cowboy_router,
@@ -136,7 +137,8 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
     socket_opts     => TLSConf,
     connection_type => supervisor,
     max_connections => get_max_connections(),
-    num_acceptors   => NumSslAcceptors
+    num_acceptors   => NumSslAcceptors,
+    num_conns_sups => 1
   },
   CowboyOpts = CowboyOpts0#{env => #{dispatch => Routes},
                             middlewares => [cowboy_router,
