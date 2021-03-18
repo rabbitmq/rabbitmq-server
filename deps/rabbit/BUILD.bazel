@@ -189,6 +189,30 @@ erlc(
     dest = "test",
 )
 
+erlc(
+    name = "rabbit_ha_test_consumer",
+    srcs = [
+        "test/rabbit_ha_test_consumer.erl",
+    ],
+    dest = "test",
+    deps = [
+        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)
+
+erlc(
+    name = "rabbit_ha_test_producer",
+    srcs = [
+        "test/rabbit_ha_test_producer.erl",
+    ],
+    dest = "test",
+    deps = [
+        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)
+
 ct_suite(
     size = "small",
     suite_name = "amqqueue_backward_compatibility_SUITE",
@@ -400,9 +424,9 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     size = "medium",
-    additional_srcs = [
-        "test/rabbit_ha_test_consumer.erl",
-        "test/rabbit_ha_test_producer.erl",
+    additional_beam = [
+        ":rabbit_ha_test_consumer",
+        ":rabbit_ha_test_producer",
     ],
     suite_name = "many_node_ha_SUITE",
     deps = DEPS,
@@ -754,6 +778,83 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     size = "medium",
+    suite_name = "rabbitmq_queues_cli_integration_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "rabbitmqctl_integration_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "rabbitmqctl_shutdown_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "signal_handling_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "large",
+    additional_beam = [
+        ":rabbit_ha_test_consumer",
+        ":rabbit_ha_test_producer",
+    ],
+    groups = [
+        "cluster_size_2",
+        "cluster_size_3",
+    ],
+    suite_name = "simple_ha_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    additional_beam = [
+        ":quorum_queue_utils",
+    ],
+    groups = [
+        "classic_queue",
+        "quorum_queue",
+    ],
+    suite_name = "single_active_consumer_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
     suite_name = "sync_detection_SUITE",
+    deps = DEPS,
+)
+
+ct_suite(
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "term_to_binary_compat_prop_SUITE",
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@proper//:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "topic_permission_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    additional_srcs = [
+        "test/rabbit_auth_backend_context_propagation_mock.erl",
+        "test/rabbit_foo_protocol_connection_info.erl",
+    ],
+    suite_name = "unit_access_control_authn_authz_context_propagation_SUITE",
     deps = DEPS,
 )
