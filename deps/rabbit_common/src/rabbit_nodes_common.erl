@@ -56,6 +56,9 @@ names(Hostname, RetriesLeft) ->
     {ok, R } -> {ok, R};
     noport ->
       names(Hostname, RetriesLeft - 1);
+    {error, nxdomain} ->
+      timer:sleep(3000),
+      names(Hostname, RetriesLeft - 1);
     {error, _} ->
       names(Hostname, RetriesLeft - 1)
   end.
