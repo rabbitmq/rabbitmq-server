@@ -284,6 +284,8 @@
 %% 100 ms
 -define(BOOT_STATUS_CHECK_INTERVAL, 100).
 
+-define(COORD_WAL_MAX_SIZE_B, 64_000_000).
+
 %%----------------------------------------------------------------------------
 
 -type restart_type() :: 'permanent' | 'transient' | 'temporary'.
@@ -375,6 +377,7 @@ run_prelaunch_second_phase() ->
     Coord = Default#{name => coordination,
                      data_dir => CoordDataDir,
                      wal_data_dir => CoordDataDir,
+                     wal_max_size_bytes => ?COORD_WAL_MAX_SIZE_B,
                      names => ra_system:derive_names(coordination)},
 
     {ok, _} = ra_system:start(Quorum),

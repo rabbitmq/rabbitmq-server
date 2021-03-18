@@ -1617,8 +1617,8 @@ cleanup_data_dir(Config) ->
 
     UId1 = proplists:get_value(ra_name(QQ), rpc:call(Server1, ra_directory, list_registered, [quorum])),
     UId2 = proplists:get_value(ra_name(QQ), rpc:call(Server2, ra_directory, list_registered, [quorum])),
-    DataDir1 = rpc:call(Server1, ra_env, server_data_dir, [UId1]),
-    DataDir2 = rpc:call(Server2, ra_env, server_data_dir, [UId2]),
+    DataDir1 = rpc:call(Server1, ra_env, server_data_dir, [quorum, UId1]),
+    DataDir2 = rpc:call(Server2, ra_env, server_data_dir, [quorum, UId2]),
     ?assert(filelib:is_dir(DataDir1)),
     ?assert(filelib:is_dir(DataDir2)),
 

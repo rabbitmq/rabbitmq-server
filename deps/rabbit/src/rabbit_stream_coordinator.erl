@@ -116,7 +116,7 @@ start() ->
     end.
 
 recover() ->
-    ra:restart_server({?MODULE, node()}).
+    ra:restart_server(?RA_SYSTEM, {?MODULE, node()}).
 
 %% new api
 
