@@ -858,3 +858,20 @@ rabbitmq_integration_suite(
     suite_name = "unit_access_control_authn_authz_context_propagation_SUITE",
     deps = DEPS,
 )
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "unit_access_control_credential_validation_SUITE",
+    deps = DEPS + [
+        "@proper//:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    additional_srcs = [
+        "test/rabbit_dummy_protocol_connection_info.erl",
+    ],
+    suite_name = "unit_access_control_SUITE",
+    deps = DEPS,
+)
