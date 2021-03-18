@@ -12,10 +12,6 @@ DEPS = [
     "//deps/rabbit:bazel_erlang_lib",
     "//deps/amqp_client:bazel_erlang_lib",
     "@lager//:bazel_erlang_lib",
-    # "@cowboy//:cowboy",
-    # "@cowlib//:cowlib",
-    # "//deps/rabbitmq_web_dispatch:rabbitmq_web_dispatch",
-    # "//deps/rabbitmq_management_agent:rabbitmq_management_agent",
 ]
 
 rabbitmq_lib(
@@ -24,5 +20,8 @@ rabbitmq_lib(
     app_module = "rabbit_federation_app",
     app_name = "rabbitmq_federation",
     app_version = APP_VERSION,
+    build_deps = [
+        "//deps/rabbitmq_cli:rabbitmqctl",
+    ],
     deps = DEPS,
 )
