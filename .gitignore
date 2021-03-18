@@ -57,6 +57,7 @@
 /sbin/
 /sbin.lock
 .envrc
+*.plt
 
 /topic-branch-scratch/
 
