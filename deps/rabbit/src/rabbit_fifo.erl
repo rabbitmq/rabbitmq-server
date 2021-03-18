@@ -775,11 +775,11 @@ init_aux(Name) when is_atom(Name) ->
     #aux{name = Name,
          capacity = {inactive, Now, 1, 1.0}}.
 
-handle_aux(leader, _, garbage_collection, State, Log, _MacState) ->
-    ra_log_wal:force_roll_over(ra_log_wal),
-    {no_reply, State, Log};
+handle_aux(leader, _, garbage_collection, State, Log, MacState) ->
+    % ra_log_wal:force_roll_over(ra_log_wal),
+    {no_reply, force_eval_gc(Log, MacState, State), Log};
 handle_aux(follower, _, garbage_collection, State, Log, MacState) ->
-    ra_log_wal:force_roll_over(ra_log_wal),
+    % ra_log_wal:force_roll_over(ra_log_wal),
     {no_reply, force_eval_gc(Log, MacState, State), Log};
 handle_aux(_RaState, cast, eval, Aux0, Log, _MacState) ->
     {no_reply, Aux0, Log};

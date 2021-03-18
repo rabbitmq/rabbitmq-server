@@ -4,6 +4,7 @@
 -define(RESTART_TIMEOUT, 1000).
 -define(PHASE_RETRY_TIMEOUT, 10000).
 -define(CMD_TIMEOUT, 30000).
+-define(RA_SYSTEM, coordination).
 
 -type stream_id() :: string().
 -type stream() :: #{conf := osiris:config(),

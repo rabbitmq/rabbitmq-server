@@ -141,6 +141,7 @@ memory_tests() ->
      memory_alarm_rolls_wal
     ].
 
+-define(SUPNAME, ra_server_sup_sup).
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
@@ -281,7 +282,7 @@ end_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publi
       rabbit_ct_broker_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(Testcase, Config) ->
-    catch delete_queues(),
+    % catch delete_queues(),
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
                 rabbit_ct_client_helpers:teardown_steps()),
@@ -352,7 +353,7 @@ start_queue(Config) ->
     LQ = ?config(queue_name, Config),
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
@@ -362,7 +363,7 @@ start_queue(Config) ->
                                            rpc:call(Server, application, which_applications, []))),
     Expected = Children + 1,
     ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
+                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
 
     %% Test declare an existing queue
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
@@ -379,7 +380,7 @@ start_queue(Config) ->
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
     ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))).
+                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))).
 
 start_queue_concurrent(Config) ->
     Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -439,7 +440,7 @@ stop_queue(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
@@ -451,13 +452,13 @@ stop_queue(Config) ->
                                            rpc:call(Server, application, which_applications, []))),
     Expected = Children + 1,
     ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
+                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
 
     %% Delete the quorum queue
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = LQ})),
     %% Check that the application and process are down
     wait_until(fun() ->
-                       Children == length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))
+                       Children == length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))
                end),
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))).
@@ -467,7 +468,7 @@ restart_queue(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
@@ -482,7 +483,7 @@ restart_queue(Config) ->
                                            rpc:call(Server, application, which_applications, []))),
     Expected = Children + 1,
     ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
+                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     delete_queues(Ch2, [LQ]).
 
@@ -530,11 +531,11 @@ vhost_with_quorum_queue_is_deleted(Config) ->
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    UId = rpc:call(Node, ra_directory, where_is, [RaName]),
+    UId = rpc:call(Node, ra_directory, where_is, [quorum, RaName]),
     ?assert(UId =/= undefined),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
     %% validate quorum queues got deleted
-    undefined = rpc:call(Node, ra_directory, where_is, [RaName]),
+    undefined = rpc:call(Node, ra_directory, where_is, [quorum, RaName]),
     ok.
 
 restart_all_types(Config) ->
@@ -544,7 +545,7 @@ restart_all_types(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]),
+    Children = rpc:call(Server, supervisor, which_children, [?SUPNAME]),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ1 = <<"restart_all_types-qq1">>,
@@ -577,7 +578,7 @@ restart_all_types(Config) ->
                                     Server,
                                     supervisor,
                                     which_children,
-                                    [ra_server_sup_sup]))
+                                    [?SUPNAME]))
            end, 60000),
     %% Check the classic queues restarted correctly
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -598,7 +599,7 @@ stop_start_rabbit_app(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ1 = <<"stop_start_rabbit_app-qq">>,
@@ -627,7 +628,7 @@ stop_start_rabbit_app(Config) ->
                                            rpc:call(Server, application, which_applications, []))),
     Expected = Children + 2,
     ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
+                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
     %% Check the classic queues restarted correctly
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
@@ -947,7 +948,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -970,7 +971,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
                  amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
                        Children == length(rpc:call(Server, supervisor, which_children,
-                                                   [ra_server_sup_sup]))
+                                                   [?SUPNAME]))
                end),
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Server, NCh2, 0),
@@ -983,7 +984,7 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -1011,7 +1012,7 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
     wait_for_cleanup(Server, NCh2, 1),
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
-                       Children == length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))
+                       Children == length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))
                end),
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Server, NCh1, 0),
@@ -1614,8 +1615,8 @@ cleanup_data_dir(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     timer:sleep(100),
 
-    UId1 = proplists:get_value(ra_name(QQ), rpc:call(Server1, ra_directory, list_registered, [])),
-    UId2 = proplists:get_value(ra_name(QQ), rpc:call(Server2, ra_directory, list_registered, [])),
+    UId1 = proplists:get_value(ra_name(QQ), rpc:call(Server1, ra_directory, list_registered, [quorum])),
+    UId2 = proplists:get_value(ra_name(QQ), rpc:call(Server2, ra_directory, list_registered, [quorum])),
     DataDir1 = rpc:call(Server1, ra_env, server_data_dir, [UId1]),
     DataDir2 = rpc:call(Server2, ra_env, server_data_dir, [UId2]),
     ?assert(filelib:is_dir(DataDir1)),
@@ -1769,7 +1770,7 @@ delete_immediately_by_resource(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
@@ -1779,7 +1780,7 @@ delete_immediately_by_resource(Config) ->
 
     %% Check that the application and process are down
     wait_until(fun() ->
-                       Children == length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))
+                       Children == length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))
                end),
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))).
@@ -2082,7 +2083,7 @@ message_bytes_metrics(Config) ->
 
 memory_alarm_rolls_wal(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    WalDataDir = rpc:call(Server, ra_env, wal_data_dir, []),
+    #{wal_data_dir := WalDataDir} = ra_system:fetch(quorum, Server),
     [Wal0] = filelib:wildcard(WalDataDir ++ "/*.wal"),
     rabbit_ct_broker_helpers:set_alarm(Config, Server, memory),
     rabbit_ct_helpers:await_condition(

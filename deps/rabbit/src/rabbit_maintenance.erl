@@ -236,7 +236,7 @@ transfer_leadership_of_quorum_queues(_TransferCandidates) ->
         %% by simply shutting its local QQ replica (Ra server)
         RaLeader = amqqueue:get_pid(Q),
         rabbit_log:debug("Will stop Ra server ~p", [RaLeader]),
-        case ra:stop_server(RaLeader) of
+        case rabbit_quorum_queue:stop_server(RaLeader) of
             ok     ->
                 rabbit_log:debug("Successfully stopped Ra server ~p", [RaLeader]);
             {error, nodedown} ->
@@ -296,7 +296,7 @@ stop_local_quorum_queue_followers() ->
         {RegisteredName, _LeaderNode} = amqqueue:get_pid(Q),
         RaNode = {RegisteredName, node()},
         rabbit_log:debug("Will stop Ra server ~p", [RaNode]),
-        case ra:stop_server(RaNode) of
+        case rabbit_quorum_queue:stop_server(RaNode) of
             ok     ->
                 rabbit_log:debug("Successfully stopped Ra server ~p", [RaNode]);
             {error, nodedown} ->
@@ -339,7 +339,7 @@ revive_local_quorum_queue_replicas() ->
         {Prefix, _Node} = amqqueue:get_pid(Q),
         RaServer = {Prefix, node()},
         rabbit_log:debug("Will start Ra server ~p", [RaServer]),
-        case ra:restart_server(RaServer) of
+        case rabbit_quorum_queue:restart_server(RaServer) of
             ok     ->
                 rabbit_log:debug("Successfully restarted Ra server ~p", [RaServer]);
             {error, {already_started, _Pid}} ->

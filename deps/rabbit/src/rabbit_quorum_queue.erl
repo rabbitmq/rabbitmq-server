@@ -13,7 +13,14 @@
          close/1,
          update/2,
          handle_event/2]).
--export([is_recoverable/1, recover/2, stop/1, delete/4, delete_immediately/2]).
+-export([is_recoverable/1,
+         recover/2,
+         stop/1,
+         start_server/1,
+         restart_server/1,
+         stop_server/1,
+         delete/4,
+         delete_immediately/2]).
 -export([state_info/1, info/2, stat/1, infos/1]).
 -export([settle/4, dequeue/4, consume/3, cancel/5]).
 -export([credit/4]).
@@ -38,16 +45,20 @@
 -export([shrink_all/1,
          grow/4]).
 -export([transfer_leadership/2, get_replicas/1, queue_length/1]).
--export([file_handle_leader_reservation/1, file_handle_other_reservation/0]).
+-export([file_handle_leader_reservation/1,
+         file_handle_other_reservation/0]).
 -export([file_handle_release_reservation/0]).
--export([list_with_minimum_quorum/0, list_with_minimum_quorum_for_cli/0,
-         filter_quorum_critical/1, filter_quorum_critical/2,
+-export([list_with_minimum_quorum/0,
+         list_with_minimum_quorum_for_cli/0,
+         filter_quorum_critical/1,
+         filter_quorum_critical/2,
          all_replica_states/0]).
 -export([capabilities/0]).
 -export([repair_amqqueue_nodes/1,
          repair_amqqueue_nodes/2
          ]).
--export([reclaim_memory/2]).
+-export([reclaim_memory/2,
+         wal_force_roll_over/1]).
 -export([notify_decorators/1,
          notify_decorators/3,
          spawn_notify_decorators/3]).
@@ -64,6 +75,9 @@
 
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(), rabbit_types:message()}.
+
+-define(RA_SYSTEM, quorum).
+-define(RA_WAL_NAME, ra_log_wal).
 
 -define(STATISTICS_KEYS,
         [policy,
@@ -168,7 +182,7 @@ start_cluster(Q) ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval, ?TICK_TIMEOUT),
             RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout)
                        || ServerId <- members(NewQ)],
-            case ra:start_cluster(RaConfs) of
+            case ra:start_cluster(?RA_SYSTEM, RaConfs) of
                 {ok, _, _} ->
                     %% ensure the latest config is evaluated properly
                     %% even when running the machine version from 0
@@ -506,7 +520,7 @@ recover(_Vhost, Queues) ->
          QName = amqqueue:get_name(Q0),
          Nodes = get_nodes(Q0),
          Formatter = {?MODULE, format_ra_event, [QName]},
-         Res = case ra:restart_server({Name, node()},
+         Res = case ra:restart_server(?RA_SYSTEM, {Name, node()},
                                       #{ra_event_formatter => Formatter}) of
                    ok ->
                        % queue was restarted, good
@@ -518,7 +532,8 @@ recover(_Vhost, Queues) ->
                        % so needs to be started from scratch.
                        Machine = ra_machine(Q0),
                        RaNodes = [{Name, Node} || Node <- Nodes],
-                       case ra:start_server(Name, {Name, node()}, Machine, RaNodes) of
+                       case ra:start_server(?RA_SYSTEM, Name, {Name, node()},
+                                            Machine, RaNodes) of
                            ok -> ok;
                            Err2 ->
                                rabbit_log:warning("recover: quorum queue ~w could not"
@@ -553,9 +568,21 @@ recover(_Vhost, Queues) ->
 stop(VHost) ->
     _ = [begin
              Pid = amqqueue:get_pid(Q),
-             ra:stop_server(Pid)
+             ra:stop_server(?RA_SYSTEM, Pid)
          end || Q <- find_quorum_queues(VHost)],
     ok.
+
+-spec stop_server({atom(), node()}) -> ok | {error, term()}.
+stop_server({_, _} = Ref) ->
+    ra:stop_server(?RA_SYSTEM, Ref).
+
+-spec start_server(map()) -> ok | {error, term()}.
+start_server(Conf) when is_map(Conf) ->
+    ra:start_server(?RA_SYSTEM, Conf).
+
+-spec restart_server({atom(), node()}) -> ok | {error, term()}.
+restart_server({_, _} = Ref) ->
+    ra:restart_server(?RA_SYSTEM, Ref).
 
 -spec delete(amqqueue:amqqueue(),
              boolean(), boolean(),
@@ -617,7 +644,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
 
 force_delete_queue(Servers) ->
     [begin
-         case catch(ra:force_delete_server(S)) of
+         case catch(ra:force_delete_server(?RA_SYSTEM, S)) of
              ok -> ok;
              Err ->
                  rabbit_log:warning(
@@ -877,19 +904,19 @@ cleanup_data_dir() ->
              || Q <- rabbit_amqqueue:list_by_type(?MODULE),
                 lists:member(node(), get_nodes(Q))],
     NoQQClusters = rabbit_ra_registry:list_not_quorum_clusters(),
-    Registered = ra_directory:list_registered(),
+    Registered = ra_directory:list_registered(?RA_SYSTEM),
     Running = Names ++ NoQQClusters,
     _ = [maybe_delete_data_dir(UId) || {Name, UId} <- Registered,
                                        not lists:member(Name, Running)],
     ok.
 
 maybe_delete_data_dir(UId) ->
-    Dir = ra_env:server_data_dir(UId),
+    Dir = ra_env:server_data_dir(?RA_SYSTEM, UId),
     {ok, Config} = ra_log:read_config(Dir),
     case maps:get(machine, Config) of
         {module, rabbit_fifo, _} ->
             ra_lib:recursive_delete(Dir),
-            ra_directory:unregister_name(UId);
+            ra_directory:unregister_name(?RA_SYSTEM, UId);
         _ ->
             ok
     end.
@@ -999,7 +1026,7 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                       ?TICK_TIMEOUT),
     Conf = make_ra_conf(Q, ServerId, TickTimeout),
-    case ra:start_server(Conf) of
+    case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             case ra:add_member(Members, ServerId, Timeout) of
                 {ok, _, Leader} ->
@@ -1014,11 +1041,11 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
                       fun() -> rabbit_amqqueue:update(QName, Fun) end),
                     ok;
                 {timeout, _} ->
-                    _ = ra:force_delete_server(ServerId),
+                    _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
                     _ = ra:remove_member(Members, ServerId),
                     {error, timeout};
                 E ->
-                    _ = ra:force_delete_server(ServerId),
+                    _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
                     E
             end;
         E ->
@@ -1065,7 +1092,7 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                           end,
                     rabbit_misc:execute_mnesia_transaction(
                       fun() -> rabbit_amqqueue:update(QName, Fun) end),
-                    case ra:force_delete_server(ServerId) of
+                    case ra:force_delete_server(?RA_SYSTEM, ServerId) of
                         ok ->
                             ok;
                         {error, {badrpc, nodedown}} ->
@@ -1198,6 +1225,10 @@ reclaim_memory(Vhost, QueueName) ->
         {error, not_found} = E ->
             E
     end.
+
+-spec wal_force_roll_over(node()) -> ok.
+ wal_force_roll_over(Node) ->
+    ra_log_wal:force_roll_over({?RA_WAL_NAME, Node}).
 
 %%----------------------------------------------------------------------------
 dlx_mfa(Q) ->
