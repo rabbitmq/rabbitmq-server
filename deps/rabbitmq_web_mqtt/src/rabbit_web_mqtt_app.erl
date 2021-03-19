@@ -104,7 +104,8 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
     socket_opts => TCPConf,
     connection_type => supervisor,
     max_connections => get_max_connections(),
-    num_acceptors => get_env(num_tcp_acceptors, 10)
+    num_acceptors => get_env(num_tcp_acceptors, 10),
+    num_conns_sups => get_env(num_conns_sup, 1)
   },
   case ranch:start_listener(rabbit_networking:ranch_ref(TCPConf),
                             ranch_tcp,
@@ -131,7 +132,8 @@ start_tls_listener(TLSConf0, CowboyOpts) ->
     socket_opts => TLSConf,
     connection_type => supervisor,
     max_connections => get_max_connections(),
-    num_acceptors => get_env(num_ssl_acceptors, 10)
+    num_acceptors => get_env(num_ssl_acceptors, 10),
+    num_conns_sups => get_env(num_conns_sup, 1)
   },
   case ranch:start_listener(rabbit_networking:ranch_ref(TLSConf),
                             ranch_ssl,

@@ -16,26 +16,27 @@
 
 -behaviour(supervisor).
 
--export([start_link/10]).
+-export([start_link/11]).
 -export([init/1]).
 
 -type mfargs() :: {atom(), atom(), [any()]}.
 
 -spec start_link
         (inet:ip_address(), inet:port_number(), module(), [gen_tcp:listen_option()],
-         module(), any(), mfargs(), mfargs(), integer(), string()) ->
+         module(), any(), mfargs(), mfargs(), integer(), integer(), string()) ->
                            rabbit_types:ok_pid_or_error().
 
 start_link(IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-           ConcurrentAcceptorCount, Label) ->
+           ConcurrentAcceptorCount, ConcurrentConnsSups, Label) ->
     supervisor:start_link(
       ?MODULE, {IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-                ConcurrentAcceptorCount, Label}).
+                ConcurrentAcceptorCount, ConcurrentConnsSups, Label}).
 
 init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, OnShutdown,
-      ConcurrentAcceptorCount, Label}) ->
+      ConcurrentAcceptorCount, ConcurrentConnsSups, Label}) ->
     {ok, AckTimeout} = application:get_env(rabbit, ssl_handshake_timeout),
-    MaxConnections = rabbit_misc:get_env(rabbit, connection_max, infinity),
+    MaxConnections = max_conn(rabbit_misc:get_env(rabbit, connection_max, infinity),
+                              ConcurrentConnsSups),
     RanchListenerOpts = #{
       num_acceptors => ConcurrentAcceptorCount,
       max_connections => MaxConnections,
@@ -43,7 +44,8 @@ init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, On
       connection_type => supervisor,
       socket_opts => [{ip, IPAddress},
                       {port, Port} |
-                      SocketOpts]
+                      SocketOpts],
+      num_conns_sups => ConcurrentConnsSups
      },
     Flags = {one_for_all, 10, 10},
     OurChildSpecStart = {tcp_listener, start_link, [IPAddress, Port, OnStartup, OnShutdown, Label]},
@@ -52,3 +54,9 @@ init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, On
         Transport, RanchListenerOpts,
         ProtoSup, ProtoOpts),
     {ok, {Flags, [RanchChildSpec, OurChildSpec]}}.
+
+max_conn(infinity, _) ->
+    infinity;
+max_conn(Max, Sups) ->
+  %% connection_max in Ranch is per connection supervisor
+  Max div Sups.
