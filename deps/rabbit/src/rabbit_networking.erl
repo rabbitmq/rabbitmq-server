@@ -19,7 +19,8 @@
 %%
 %% See also tcp_listener_sup and tcp_listener.
 
--export([boot/0, start_tcp_listener/2, start_ssl_listener/3,
+-export([boot/0, start_tcp_listener/2, start_tcp_listener/3,
+         start_ssl_listener/3, start_ssl_listener/4,
          stop_tcp_listener/1, on_node_down/1, active_listeners/0,
          node_listeners/1, node_client_listeners/1,
          register_connection/1, unregister_connection/1,
@@ -34,7 +35,8 @@
          listener_of_protocol/1, stop_ranch_listener_of_protocol/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
--export([tcp_listener_addresses/1, tcp_listener_spec/9,
+-export([tcp_listener_addresses/1,
+         tcp_listener_spec/9, tcp_listener_spec/10,
          ensure_ssl/0, fix_ssl_options/1, poodle_check/1]).
 
 -export([tcp_listener_started/4, tcp_listener_stopped/4]).
@@ -76,12 +78,14 @@ boot() ->
     _ = application:start(ranch),
     _ = rabbit_log:debug("Started Ranch"),
     %% Failures will throw exceptions
-    _ = boot_listeners(fun boot_tcp/1, application:get_env(rabbit, num_tcp_acceptors, 10), "TCP"),
-    _ = boot_listeners(fun boot_tls/1, application:get_env(rabbit, num_ssl_acceptors, 10), "TLS"),
+    _ = boot_listeners(fun boot_tcp/2, application:get_env(rabbit, num_tcp_acceptors, 10),
+                       application:get_env(rabbit, num_conns_sups, 1), "TCP"),
+    _ = boot_listeners(fun boot_tls/2, application:get_env(rabbit, num_ssl_acceptors, 10),
+                       application:get_env(rabbit, num_conns_sups, 1), "TLS"),
     ok.
 
-boot_listeners(Fun, NumAcceptors, Type) ->
-    case Fun(NumAcceptors) of
+boot_listeners(Fun, NumAcceptors, ConcurrentConnsSupsCount, Type) ->
+    case Fun(NumAcceptors, ConcurrentConnsSupsCount) of
         ok                                                                  ->
             ok;
         {error, {could_not_start_listener, Address, Port, Details}} = Error ->
@@ -90,10 +94,10 @@ boot_listeners(Fun, NumAcceptors, Type) ->
             throw(Error)
     end.
 
-boot_tcp(NumAcceptors) ->
+boot_tcp(NumAcceptors, ConcurrentConnsSupsCount) ->
     {ok, TcpListeners} = application:get_env(tcp_listeners),
     case lists:foldl(fun(Listener, ok) ->
-                             start_tcp_listener(Listener, NumAcceptors);
+                             start_tcp_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount);
                         (_Listener, Error) ->
                              Error
                      end,
@@ -102,14 +106,15 @@ boot_tcp(NumAcceptors) ->
         {error, _} = Error -> Error
     end.
 
-boot_tls(NumAcceptors) ->
+boot_tls(NumAcceptors, ConcurrentConnsSupsCount) ->
     case application:get_env(ssl_listeners) of
         {ok, []} ->
             ok;
         {ok, SslListeners} ->
             SslOpts = ensure_ssl(),
             case poodle_check('AMQP') of
-                ok     -> [start_ssl_listener(L, SslOpts, NumAcceptors) || L <- SslListeners];
+                ok     -> [start_ssl_listener(L, SslOpts, NumAcceptors, ConcurrentConnsSupsCount)
+                           || L <- SslListeners];
                 danger -> ok
             end,
             ok
@@ -177,15 +182,21 @@ tcp_listener_addresses_auto(Port) ->
 
 -spec tcp_listener_spec
         (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(),
-         any(), protocol(), non_neg_integer(), label()) ->
+         any(), protocol(), non_neg_integer(), non_neg_integer(), label()) ->
             supervisor:child_spec().
 
+tcp_listener_spec(NamePrefix, Address, SocketOpts, Transport, ProtoSup, ProtoOpts,
+                  Protocol, NumAcceptors, Label) ->
+    tcp_listener_spec(NamePrefix, Address, SocketOpts, Transport, ProtoSup, ProtoOpts,
+                      Protocol, NumAcceptors, 1, Label).
+
 tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
-                  Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors, Label) ->
+                  Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors,
+                  ConcurrentConnsSupsCount, Label) ->
     Args = [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
             {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
             {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
-            NumAcceptors, Label],
+            NumAcceptors, ConcurrentConnsSupsCount, Label],
     {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
      {tcp_listener_sup, start_link, Args},
      transient, infinity, supervisor, [tcp_listener_sup]}.
@@ -239,29 +250,44 @@ stop_ranch_listener_of_protocol(Protocol) ->
         listener_config(), integer()) -> 'ok' | {'error', term()}.
 
 start_tcp_listener(Listener, NumAcceptors) ->
-    start_listener(Listener, NumAcceptors, amqp, "TCP listener", tcp_opts()).
+    start_tcp_listener(Listener, NumAcceptors, 1).
+
+-spec start_tcp_listener(
+        listener_config(), integer(), integer()) -> 'ok' | {'error', term()}.
+
+start_tcp_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount) ->
+    start_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount, amqp,
+                   "TCP listener", tcp_opts()).
 
 -spec start_ssl_listener(
         listener_config(), rabbit_types:infos(), integer()) -> 'ok' | {'error', term()}.
 
 start_ssl_listener(Listener, SslOpts, NumAcceptors) ->
-    start_listener(Listener, NumAcceptors, 'amqp/ssl', "TLS (SSL) listener", tcp_opts() ++ SslOpts).
+    start_ssl_listener(Listener, SslOpts, NumAcceptors, 1).
 
+-spec start_ssl_listener(
+        listener_config(), rabbit_types:infos(), integer(), integer()) -> 'ok' | {'error', term()}.
+
+start_ssl_listener(Listener, SslOpts, ConcurrentConnsSupsCount, NumAcceptors) ->
+    start_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount, 'amqp/ssl',
+                   "TLS (SSL) listener", tcp_opts() ++ SslOpts).
 
 -spec start_listener(
-        listener_config(), integer(), protocol(), label(), list()) -> 'ok' | {'error', term()}.
-start_listener(Listener, NumAcceptors, Protocol, Label, Opts) ->
+        listener_config(), integer(), integer(), protocol(), label(), list()) ->
+          'ok' | {'error', term()}.
+start_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount, Protocol, Label, Opts) ->
     lists:foldl(fun (Address, ok) ->
-                        start_listener0(Address, NumAcceptors, Protocol, Label, Opts);
+                        start_listener0(Address, NumAcceptors, ConcurrentConnsSupsCount, Protocol,
+                                        Label, Opts);
                     (_Address, {error, _} = Error) ->
                         Error
                 end, ok, tcp_listener_addresses(Listener)).
 
-start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
+start_listener0(Address, NumAcceptors, ConcurrentConnsSupsCount, Protocol, Label, Opts) ->
     Transport = transport(Protocol),
     Spec = tcp_listener_spec(rabbit_tcp_listener_sup, Address, Opts,
                              Transport, rabbit_connection_sup, [], Protocol,
-                             NumAcceptors, Label),
+                             NumAcceptors, ConcurrentConnsSupsCount, Label),
     case supervisor:start_child(rabbit_sup, Spec) of
         {ok, _}          -> ok;
         {error, {{shutdown, {failed_to_start_child, _,

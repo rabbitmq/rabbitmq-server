@@ -212,7 +212,7 @@ validation_success_for_AMQP_client1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Certificate2},
-                                                     {key, Key2} | cfg()], 1),
+                                                     {key, Key2} | cfg()], 1, 1),
 
     %% Then: a client presenting a certifcate rooted at the same
     %% authority connects successfully.
@@ -245,7 +245,7 @@ validation_failure_for_AMQP_client1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Cert},
-                                                     {key, Key} | cfg()], 1),
+                                                     {key, Key} | cfg()], 1, 1),
 
     %% Then: a client presenting a certificate rooted with another
     %% authority is REJECTED.
@@ -297,7 +297,7 @@ validate_chain1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Cert},
-                                                     {key, Key} | cfg()], 1),
+                                                     {key, Key} | cfg()], 1, 1),
 
     %% When: a client connects and present `RootTrusted` as well as the `CertTrusted`
     %% Then: the connection is successful.
@@ -341,7 +341,7 @@ validate_longer_chain1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Cert},
-                                                     {key, Key} | cfg()], 1),
+                                                     {key, Key} | cfg()], 1, 1),
 
     %% When: a client connects and present `CertInter` as well as the `CertTrusted`
     %% Then: the connection is successful.
@@ -439,7 +439,7 @@ validate_chain_without_whitelisted1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Cert},
-                                                     {key, Key} | cfg()], 1),
+                                                     {key, Key} | cfg()], 1, 1),
 
     %% When: Rabbit validates paths
     %% Then: a client presenting the non-whitelisted certificate `CertUntrusted` and `RootUntrusted`
@@ -487,7 +487,7 @@ whitelisted_certificate_accepted_from_AMQP_client_regardless_of_validation_to_ro
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                      {cert, Cert},
-                                                     {key, Key} | cfg()], 1),
+                                                     {key, Key} | cfg()], 1, 1),
 
     %% Then: a client presenting the whitelisted certificate `C`
     %% is allowed.
@@ -521,7 +521,7 @@ removed_certificate_denied_from_AMQP_client1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
-                                                      {key, Key} | cfg()], 1),
+                                                      {key, Key} | cfg()], 1, 1),
 
     wait_for_file_system_time(),
     ok = delete("bob.pem", Config),
@@ -572,7 +572,7 @@ installed_certificate_accepted_from_AMQP_client1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
-                                                      {key, Key} | cfg()], 1),
+                                                      {key, Key} | cfg()], 1, 1),
 
     wait_for_file_system_time(),
     ok = whitelist(Config, "charlie", CertOther,  KeyOther),
@@ -619,7 +619,7 @@ whitelist_directory_DELTA1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
-                                                      {key, Key} | cfg()], 1),
+                                                      {key, Key} | cfg()], 1, 1),
 
     wait_for_file_system_time(),
     ok = delete("bar.pem", Config),
@@ -680,7 +680,7 @@ replaced_whitelisted_certificate_should_be_accepted1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                     {cert, Cert},
-                                                    {key, Key} | cfg()], 1),
+                                                    {key, Key} | cfg()], 1, 1),
     %% And: the first certificate has been whitelisted
     ok = whitelist(Config, "bart", CertFirst,  KeyFirst),
     rabbit_trust_store:refresh(),
@@ -789,7 +789,7 @@ ignore_corrupt_cert1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
-                                                      {key, Key} | cfg()], 1),
+                                                      {key, Key} | cfg()], 1, 1),
 
     %% Then: the trust store should keep functioning
     %% And: a client presenting the whitelisted certificate `CertTrusted`
@@ -825,7 +825,7 @@ ignore_same_cert_with_different_name1(Config) ->
     catch rabbit_networking:stop_tcp_listener(Port),
     ok = rabbit_networking:start_ssl_listener(Port, [{cacerts, [Root]},
                                                       {cert, Cert},
-                                                      {key, Key} | cfg()], 1),
+                                                      {key, Key} | cfg()], 1, 1),
 
     %% Then: the trust store should keep functioning.
     %% And: a client presenting the whitelisted certificate `CertTrusted`
