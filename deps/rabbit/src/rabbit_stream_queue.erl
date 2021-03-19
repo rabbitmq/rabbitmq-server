@@ -428,13 +428,16 @@ i(members, Q) when ?is_amqqueue(Q) ->
     Nodes;
 i(online, Q) ->
     #{name := StreamId} = amqqueue:get_type_state(Q),
-    {ok, Members} = rabbit_stream_coordinator:members(StreamId),
-    rabbit_log:warning("MEMBERS ~p", [Members]),
-    maps:fold(fun(_, {undefined, _}, Acc) ->
-                      Acc;
-                 (Key, _, Acc) ->
-                      [Key | Acc]
-              end, [], Members);
+    case rabbit_stream_coordinator:members(StreamId) of
+        {ok, Members} ->
+            maps:fold(fun(_, {undefined, _}, Acc) ->
+                              Acc;
+                         (Key, _, Acc) ->
+                              [Key | Acc]
+                      end, [], Members);
+        {error, not_found} ->
+            []
+    end;
 i(state, Q) when ?is_amqqueue(Q) ->
     %% TODO the coordinator should answer this, I guess??
     running;
@@ -464,9 +467,11 @@ i(messages_unacknowledged, Q) when ?is_amqqueue(Q) ->
     end;
 i(committed_offset, Q) ->
     %% TODO should it be on a metrics table?
+    %% The queue could be removed between the list() and this call
+    %% to retrieve the overview. Let's default to '' if it's gone.
     Data = osiris_counters:overview(),
     maps:get(committed_offset,
-             maps:get({osiris_writer, amqqueue:get_name(Q)}, Data));
+             maps:get({osiris_writer, amqqueue:get_name(Q)}, Data, #{}), '');
 i(policy, Q) ->
     case rabbit_policy:name(Q) of
         none   -> '';

@@ -236,9 +236,7 @@ register_listener(Q) when ?is_amqqueue(Q)->
                        stream_id => StreamId}}).
 
 process_command(Cmd) ->
-    global:set_lock(?STREAM_COORDINATOR_STARTUP),
     Servers = ensure_coordinator_started(),
-    global:del_lock(?STREAM_COORDINATOR_STARTUP),
     process_command(Servers, Cmd).
 
 process_command([], _Cmd) ->
@@ -260,24 +258,29 @@ ensure_coordinator_started() ->
     AllNodes = all_coord_members(),
     case whereis(?MODULE) of
         undefined ->
-            case ra:restart_server(Local) of
-                {error, Reason} when Reason == not_started orelse
-                                     Reason == name_not_registered ->
-                    OtherNodes = all_coord_members() -- [Local],
-                    %% We can't use find_members/0 here as a process that timeouts means the cluster is up
-                    case lists:filter(fun(N) -> global:whereis_name(N) =/= undefined end, OtherNodes) of
-                        [] ->
-                            start_coordinator_cluster();
-                        _ ->
-                            OtherNodes
-                    end;
-                ok ->
-                    AllNodes;
-                {error, {already_started, _}} ->
-                    AllNodes;
-                _ ->
-                    AllNodes
-            end;
+            global:set_lock(?STREAM_COORDINATOR_STARTUP),
+            Nodes =
+                case ra:restart_server(Local) of
+                    {error, Reason} when Reason == not_started orelse
+                                         Reason == name_not_registered ->
+                        OtherNodes = all_coord_members() -- [Local],
+                        %% We can't use find_members/0 here as a process that timeouts means the cluster is up
+                        case lists:filter(fun(N) -> global:whereis_name(N) =/= undefined end,
+                                          OtherNodes) of
+                            [] ->
+                                start_coordinator_cluster();
+                            _ ->
+                                OtherNodes
+                        end;
+                    ok ->
+                        AllNodes;
+                    {error, {already_started, _}} ->
+                        AllNodes;
+                    _ ->
+                        AllNodes
+                end,
+            global:del_lock(?STREAM_COORDINATOR_STARTUP),
+            Nodes;
         _ ->
             AllNodes
     end.
