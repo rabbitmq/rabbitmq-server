@@ -58,4 +58,5 @@ init({IPAddress, Port, Transport, SocketOpts, ProtoSup, ProtoOpts, OnStartup, On
 max_conn(infinity, _) ->
     infinity;
 max_conn(Max, Sups) ->
-    Max * Sups.
+  %% connection_max in Ranch is per connection supervisor
+  Max div Sups.
