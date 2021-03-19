@@ -680,7 +680,10 @@ handle_default_main_output(
     Overridden = rabbit_env:has_var_been_overridden(Context, main_log_file),
     Outputs1 = if
                    NoOutputsConfigured orelse Overridden ->
-                       log_file_var_to_outputs(MainLogFile);
+                       Output0 = log_file_var_to_output(MainLogFile),
+                       Output1 = keep_log_level_from_equivalent_output(
+                                   Output0, Outputs),
+                       [Output1];
                    true ->
                        [case Output of
                             #{module := Mod,
@@ -719,7 +722,10 @@ handle_default_upgrade_cat_output(
                    Context, upgrade_log_file),
     Outputs1 = if
                    NoOutputsConfigured orelse Overridden ->
-                       log_file_var_to_outputs(UpgLogFile);
+                       Output0 = log_file_var_to_output(UpgLogFile),
+                       Output1 = keep_log_level_from_equivalent_output(
+                                   Output0, Outputs),
+                       [Output1];
                    true ->
                       Outputs
                end,
@@ -731,25 +737,65 @@ handle_default_upgrade_cat_output(
                                                     outputs => Outputs1}}}
     end.
 
--spec log_file_var_to_outputs(file:filename() | string()) ->
-    [logger:handler_config()].
+-spec log_file_var_to_output(file:filename() | string()) ->
+    logger:handler_config().
 
-log_file_var_to_outputs("-") ->
-    [#{module => rabbit_logger_std_h,
-       config => #{type => standard_io}}];
-log_file_var_to_outputs("-stderr") ->
-    [#{module => rabbit_logger_std_h,
-       config => #{type => standard_error}}];
-log_file_var_to_outputs("exchange:" ++ _) ->
-    [#{module => rabbit_logger_exchange_h,
-       config => #{}}];
-log_file_var_to_outputs("syslog:" ++ _) ->
-    [#{module => syslog_logger_h,
-       config => #{}}];
-log_file_var_to_outputs(Filename) ->
-    [#{module => rabbit_logger_std_h,
-       config => #{type => file,
-                   file => Filename}}].
+log_file_var_to_output("-") ->
+    #{module => rabbit_logger_std_h,
+      config => #{type => standard_io}};
+log_file_var_to_output("-stderr") ->
+    #{module => rabbit_logger_std_h,
+      config => #{type => standard_error}};
+log_file_var_to_output("exchange:" ++ _) ->
+    #{module => rabbit_logger_exchange_h,
+      config => #{}};
+log_file_var_to_output("syslog:" ++ _) ->
+    #{module => syslog_logger_h,
+      config => #{}};
+log_file_var_to_output(Filename) ->
+    #{module => rabbit_logger_std_h,
+      config => #{type => file,
+                  file => Filename}}.
+
+-spec keep_log_level_from_equivalent_output(
+        logger:handler_config(), [logger:handler_config()]) ->
+    logger:handler_config().
+%% @doc
+%% Keeps the log level from the equivalent output if found in the given list of
+%% outputs.
+%%
+%% If the output is overridden from the environment, or if no output is
+%% configured at all (and the default output is used), we should still keep the
+%% log level set in the configuration. The idea is that the $RABBITMQ_LOGS
+%% environment variable only overrides the output, not its log level (which
+%% would be set in $RABBITMQ_LOG).
+%%
+%% Here is an example of when it is used:
+%% * "$RABBITMQ_LOGS=-" is set in the environment
+%% * "log.console.level = debug" is set in the configuration file
+
+keep_log_level_from_equivalent_output(
+  #{module := Mod, config := #{type := Type}} = Output,
+  [#{module := Mod, config := #{type := Type}} = OverridenOutput | _])
+  when ?IS_STD_H_COMPAT(Mod) ->
+    keep_log_level_from_equivalent_output1(Output, OverridenOutput);
+keep_log_level_from_equivalent_output(
+  #{module := Mod} = Output,
+  [#{module := Mod} = OverridenOutput | _]) ->
+    keep_log_level_from_equivalent_output1(Output, OverridenOutput);
+keep_log_level_from_equivalent_output(Output, [_ | Rest]) ->
+    keep_log_level_from_equivalent_output(Output, Rest);
+keep_log_level_from_equivalent_output(Output, []) ->
+    Output.
+
+-spec keep_log_level_from_equivalent_output1(
+        logger:handler_config(), logger:handler_config()) ->
+    logger:handler_config().
+
+keep_log_level_from_equivalent_output1(Output, #{level := Level}) ->
+    Output#{level => Level};
+keep_log_level_from_equivalent_output1(Output, _) ->
+    Output.
 
 -spec apply_log_levels_from_env(log_config(), rabbit_env:context()) ->
     log_config().
