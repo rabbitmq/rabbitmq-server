@@ -29,6 +29,7 @@
          logging_to_exchange_works/1,
          setting_log_levels_in_env_works/1,
          setting_log_levels_in_config_works/1,
+         setting_log_levels_in_config_with_output_overridden_in_env_works/1,
          format_messages_as_json_works/1]).
 
 all() ->
@@ -39,6 +40,7 @@ all() ->
      logging_to_exchange_works,
      setting_log_levels_in_env_works,
      setting_log_levels_in_config_works,
+     setting_log_levels_in_config_with_output_overridden_in_env_works,
      format_messages_as_json_works].
 
 init_per_suite(Config) ->
@@ -433,6 +435,55 @@ setting_log_levels_in_config_works(Config) ->
                      #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
     ?assertNot(ping_log(rmq_1_file_2, GlobalLevel,
                         #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
+    ok.
+
+setting_log_levels_in_config_with_output_overridden_in_env_works(Config) ->
+    #{var_origins := Origins0} = Context0 = default_context(Config),
+    Context = Context0#{main_log_file => "-",
+                        var_origins => Origins0#{
+                                         main_log_file => environment}},
+    ok = application:set_env(
+           rabbit, log,
+           [{console, [{level, debug}]}],
+           [{persistent, true}]),
+    rabbit_prelaunch_logging:clear_config_run_number(),
+    rabbit_prelaunch_logging:setup(Context),
+
+    Handlers = logger:get_handler_config(),
+
+    StddevHandler = get_handler_by_id(Handlers, rmq_1_stdout),
+    ?assertNotEqual(undefined, StddevHandler),
+    ?assertMatch(
+       #{level := debug,
+         module := rabbit_logger_std_h,
+         filter_default := log,
+         filters := [{progress_reports, {_, log}},
+                     {rmqlog_filter, {_, #{global := debug,
+                                           upgrade := none}}}],
+         formatter := {rabbit_logger_text_fmt, _},
+         config := #{type := standard_io}},
+       StddevHandler),
+
+    UpgradeFileHandler = get_handler_by_id(Handlers, rmq_1_file_1),
+    UpgradeFile = upgrade_log_file_in_context(Context),
+    ?assertNotEqual(undefined, UpgradeFileHandler),
+    ?assertMatch(
+       #{level := info,
+         module := rabbit_logger_std_h,
+         filter_default := stop,
+         filters := [{rmqlog_filter, {_, #{upgrade := info}}}],
+         formatter := {rabbit_logger_text_fmt, _},
+         config := #{type := file,
+                     file := UpgradeFile}},
+       UpgradeFileHandler),
+
+    ?assert(ping_log(rmq_1_stdout, debug, Config)),
+    ?assert(ping_log(rmq_1_stdout, debug,
+                     #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config)),
+    ?assert(ping_log(rmq_1_stdout, debug,
+                     #{domain => ['3rd_party']}, Config)),
+    ?assertNot(ping_log(rmq_1_stdout, debug,
+                        #{domain => ?RMQLOG_DOMAIN_UPGRADE}, Config)),
     ok.
 
 format_messages_as_json_works(Config) ->
