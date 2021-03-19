@@ -1,6 +1,4 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
-load("@bazel-erlang//:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "rabbitmq_lib")
 
 APP_ENV = """[
 	    {default_user,
@@ -25,37 +23,21 @@ APP_ENV = """[
 	  ]"""
 
 DEPS = [
+    "@lager//:bazel_erlang_lib",
     "@ranch//:bazel_erlang_lib",
     "//deps/rabbit_common:bazel_erlang_lib",
     "//deps/rabbit:bazel_erlang_lib",
     "//deps/amqp_client:bazel_erlang_lib",
 ]
 
-app_file(
-    name = "app_file",
+rabbitmq_lib(
     app_description = "RabbitMQ STOMP plugin",
     app_env = APP_ENV,
     app_module = "rabbit_stomp",
     app_name = "rabbitmq_stomp",
     app_version = APP_VERSION,
-    modules = [":beam_files"],
+    build_deps = [
+        "//deps/rabbitmq_cli:rabbitmqctl",
+    ],
     deps = DEPS,
-)
-
-erlc(
-    name = "beam_files",
-    srcs = glob(["src/*.erl"]),
-    hdrs = glob(["include/*.hrl"]),
-    dest = "ebin",
-    deps = DEPS,
-)
-
-bazel_erlang_lib(
-    name = "bazel_erlang_lib",
-    hdrs = glob(["include/*.hrl"]),
-    app = ":app_file",
-    app_name = "rabbitmq_stomp",
-    app_version = APP_VERSION,
-    beam = [":beam_files"],
-    visibility = ["//visibility:public"],
 )

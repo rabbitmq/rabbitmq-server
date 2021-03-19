@@ -1,3 +1,4 @@
+load("elixir_home.bzl", "elixir_home")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
@@ -6,6 +7,15 @@ load(":rabbitmq.bzl", "management_plugins", "required_plugins")
 exports_files([
     "scripts/bazel/rabbitmq-run.sh",
 ])
+
+# This allows us to
+# `bazel build //my/target \
+#    --@bazel-erlang//:elixir_home=/path/to/elixir/installation`
+elixir_home(
+    name = "elixir_home",
+    build_setting_default = "~/.kiex/elixirs/elixir-1.10.4",
+    visibility = ["//visibility:public"],
+)
 
 platform(
     name = "erlang_22_platform",
@@ -65,10 +75,10 @@ rabbitmq_home(
         "@credentials_obfuscation//:bazel_erlang_lib",
         "@aten//:bazel_erlang_lib",
         "@gen_batch_server//:bazel_erlang_lib",
-        # "@rabbitmq_ct_helpers//:bazel_erlang_lib",
         "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
         "@inet_tcp_proxy//:bazel_erlang_lib",
         "//deps/amqp_client:bazel_erlang_lib",
+        "@meck//:bazel_erlang_lib",
     ],
 )
 

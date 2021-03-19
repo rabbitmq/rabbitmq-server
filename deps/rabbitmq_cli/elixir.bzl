@@ -1,6 +1,6 @@
 load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
-load("@bazel-erlang//:elixir_home.bzl", "ElixirHomeProvider")
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
+load("//:elixir_home.bzl", "ElixirHomeProvider")
 
 def _impl(ctx):
     erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
@@ -39,6 +39,6 @@ elixir = rule(
     attrs = {
         "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
         "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
-        "_elixir_home": attr.label(default = "@bazel-erlang//:elixir_home"),
+        "_elixir_home": attr.label(default = "//:elixir_home"),
     },
 )

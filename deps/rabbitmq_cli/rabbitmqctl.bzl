@@ -1,6 +1,6 @@
 load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
-load("@bazel-erlang//:elixir_home.bzl", "ElixirHomeProvider")
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "BEGINS_WITH_FUN", "ErlangLibInfo", "QUERY_ERL_VERSION", "path_join")
+load("//:elixir_home.bzl", "ElixirHomeProvider")
 
 MIX_DEPS_DIR = "mix_deps"
 
@@ -143,7 +143,7 @@ rabbitmqctl = rule(
         "deps": attr.label_list(providers = [ErlangLibInfo]),
         "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
         "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
-        "_elixir_home": attr.label(default = "@bazel-erlang//:elixir_home"),
+        "_elixir_home": attr.label(default = "//:elixir_home"),
     },
     executable = True,
 )

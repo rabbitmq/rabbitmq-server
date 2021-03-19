@@ -37,7 +37,7 @@ jobs:
 
           build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@bazel-erlang//:erlang_home=/usr/local/lib/erlang
-          build --@bazel-erlang//:elixir_home=/usr/local/lib/elixir
+          build --//:elixir_home=/usr/local/lib/elixir
 
           build --bes_results_url=https://app.buildbuddy.io/invocation/
           build --bes_backend=grpcs://cloud.buildbuddy.io

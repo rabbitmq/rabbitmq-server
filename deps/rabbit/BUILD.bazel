@@ -875,3 +875,78 @@ rabbitmq_integration_suite(
     suite_name = "unit_access_control_SUITE",
     deps = DEPS,
 )
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_amqp091_content_framing_SUITE",
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_amqp091_server_properties_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_app_management_SUITE",
+    deps = DEPS,
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_cluster_formation_locking_mocks_SUITE",
+    runtime_deps = [
+        "@lager//:bazel_erlang_lib",
+        "@meck//:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_collections_SUITE",
+    runtime_deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)
+
+# ct_suite(
+#     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+#     size = "small",
+#     suite_name = "unit_config_value_encryption_SUITE",
+#     runtime_deps = [
+#         "//deps/rabbit_common:test_bazel_erlang_lib",
+#         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
+#         "@credentials_obfuscation//:bazel_erlang_lib",
+#     ],
+# )
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_connection_tracking_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_credit_flow_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_disk_monitor_mocks_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_disk_monitor_SUITE",
+    deps = DEPS,
+)
