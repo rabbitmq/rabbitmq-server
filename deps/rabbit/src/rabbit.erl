@@ -371,7 +371,7 @@ run_prelaunch_second_phase() ->
 
     ?LOG_DEBUG("Starting Ra Systems"),
     Default = ra_system:default_config(),
-    Quorum = Default#{name => quorum},
+    Quorum = Default#{name => quorum_queues},
                       % names => ra_system:derive_names(quorum)},
     CoordDataDir = filename:join([rabbit_mnesia:dir(), "coordination", node()]),
     Coord = Default#{name => coordination,

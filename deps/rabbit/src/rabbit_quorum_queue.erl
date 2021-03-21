@@ -76,7 +76,7 @@
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(), rabbit_types:message()}.
 
--define(RA_SYSTEM, quorum).
+-define(RA_SYSTEM, quorum_queues).
 -define(RA_WAL_NAME, ra_log_wal).
 
 -define(STATISTICS_KEYS,

@@ -531,11 +531,11 @@ vhost_with_quorum_queue_is_deleted(Config) ->
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    UId = rpc:call(Node, ra_directory, where_is, [quorum, RaName]),
+    UId = rpc:call(Node, ra_directory, where_is, [quorum_queues, RaName]),
     ?assert(UId =/= undefined),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
     %% validate quorum queues got deleted
-    undefined = rpc:call(Node, ra_directory, where_is, [quorum, RaName]),
+    undefined = rpc:call(Node, ra_directory, where_is, [quorum_queues, RaName]),
     ok.
 
 restart_all_types(Config) ->
@@ -1615,10 +1615,10 @@ cleanup_data_dir(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     timer:sleep(100),
 
-    UId1 = proplists:get_value(ra_name(QQ), rpc:call(Server1, ra_directory, list_registered, [quorum])),
-    UId2 = proplists:get_value(ra_name(QQ), rpc:call(Server2, ra_directory, list_registered, [quorum])),
-    DataDir1 = rpc:call(Server1, ra_env, server_data_dir, [quorum, UId1]),
-    DataDir2 = rpc:call(Server2, ra_env, server_data_dir, [quorum, UId2]),
+    UId1 = proplists:get_value(ra_name(QQ), rpc:call(Server1, ra_directory, list_registered, [quorum_queues])),
+    UId2 = proplists:get_value(ra_name(QQ), rpc:call(Server2, ra_directory, list_registered, [quorum_queues])),
+    DataDir1 = rpc:call(Server1, ra_env, server_data_dir, [quorum_queues, UId1]),
+    DataDir2 = rpc:call(Server2, ra_env, server_data_dir, [quorum_queues, UId2]),
     ?assert(filelib:is_dir(DataDir1)),
     ?assert(filelib:is_dir(DataDir2)),
 
@@ -2083,7 +2083,7 @@ message_bytes_metrics(Config) ->
 
 memory_alarm_rolls_wal(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    #{wal_data_dir := WalDataDir} = ra_system:fetch(quorum, Server),
+    #{wal_data_dir := WalDataDir} = ra_system:fetch(quorum_queues, Server),
     [Wal0] = filelib:wildcard(WalDataDir ++ "/*.wal"),
     rabbit_ct_broker_helpers:set_alarm(Config, Server, memory),
     rabbit_ct_helpers:await_condition(
