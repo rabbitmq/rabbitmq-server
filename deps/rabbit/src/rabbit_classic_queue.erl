@@ -442,9 +442,9 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
     [Q || {_, {new, Q}} <- Results].
 
 capabilities() ->
-    #{policies => [ %% Stream policies
-                    <<"max-age">>, <<"max-segment-size">>,
-                    <<"queue-leader-locator">>, <<"initial-cluster-size">>],
+    #{unsupported_policies => [ %% Stream policies
+                                <<"max-age">>, <<"max-segment-size">>,
+                                <<"queue-leader-locator">>, <<"initial-cluster-size">>],
       queue_arguments => [<<"x-expires">>, <<"x-message-ttl">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
                           <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,

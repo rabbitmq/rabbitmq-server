@@ -786,15 +786,16 @@ msg_to_iodata(#basic_message{exchange_name = #resource{name = Exchange},
     rabbit_msg_record:to_iodata(R).
 
 capabilities() ->
-    #{policies => [ %% Classic policies
-                    <<"expires">>, <<"message-ttl">>, <<"dead-letter-exchange">>,
-                    <<"dead-letter-routing-key">>, <<"max-length">>,
-                    <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
-                    <<"max-priority">>, <<"overflow">>, <<"queue-mode">>,
-                    <<"single-active-consumer">>, <<"delivery-limit">>,
-                    <<"ha-mode">>, <<"ha-params">>, <<"ha-sync-mode">>,
-                    <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
-                    <<"queue-master-locator">>],
+    #{unsupported_policies =>
+          [ %% Classic policies
+            <<"expires">>, <<"message-ttl">>, <<"dead-letter-exchange">>,
+            <<"dead-letter-routing-key">>, <<"max-length">>,
+            <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
+            <<"max-priority">>, <<"overflow">>, <<"queue-mode">>,
+            <<"single-active-consumer">>, <<"delivery-limit">>,
+            <<"ha-mode">>, <<"ha-params">>, <<"ha-sync-mode">>,
+            <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
+            <<"queue-master-locator">>],
       queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
                           <<"x-max-length">>, <<"x-max-length-bytes">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,

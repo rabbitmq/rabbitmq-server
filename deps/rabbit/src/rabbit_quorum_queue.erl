@@ -353,14 +353,15 @@ filter_quorum_critical(Queues, ReplicaStates) ->
                  end, Queues).
 
 capabilities() ->
-    #{policies => [ %% Classic policies
-                    <<"message-ttl">>, <<"max-priority">>, <<"queue-mode">>,
-                    <<"single-active-consumer">>, <<"ha-mode">>, <<"ha-params">>,
-                    <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
-                    <<"queue-master-locator">>,
-                    %% Stream policies
-                    <<"max-age">>, <<"max-segment-size">>,
-                    <<"queue-leader-locator">>, <<"initial-cluster-size">>],
+    #{unsupported_policies =>
+          [ %% Classic policies
+            <<"message-ttl">>, <<"max-priority">>, <<"queue-mode">>,
+            <<"single-active-consumer">>, <<"ha-mode">>, <<"ha-params">>,
+            <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
+            <<"queue-master-locator">>,
+            %% Stream policies
+            <<"max-age">>, <<"max-segment-size">>,
+            <<"queue-leader-locator">>, <<"initial-cluster-size">>],
       queue_arguments => [<<"x-expires">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
                           <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
