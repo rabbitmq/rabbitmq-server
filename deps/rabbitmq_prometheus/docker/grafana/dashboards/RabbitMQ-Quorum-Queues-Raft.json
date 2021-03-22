@@ -698,6 +698,24 @@
   "templating": {
     "list": [
       {
+        "current": {
+          "selected": false,
+          "text": "default",
+          "value": "default"
+        },
+        "hide": 2,
+        "includeAll": false,
+        "label": "datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
         "allValue": null,
         "current": {},
         "datasource": null,
@@ -773,5 +791,5 @@
   "timezone": "",
   "title": "RabbitMQ-Quorum-Queues-Raft",
   "uid": "f1Mee9nZz",
-  "version": 20210308
+  "version": 20210322
 }
