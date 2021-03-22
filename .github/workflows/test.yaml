@@ -12,12 +12,6 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
-    - name: INSTALL BAZELISK
-      run: |
-        curl -LO "https://github.com/bazelbuild/bazelisk/releases/download/v1.1.0/bazelisk-linux-amd64"
-        mkdir -p "${GITHUB_WORKSPACE}/bin/"
-        mv bazelisk-linux-amd64 "${GITHUB_WORKSPACE}/bin/bazel"
-        chmod +x "${GITHUB_WORKSPACE}/bin/bazel"
     - name: CONFIGURE BAZEL
       run: |
         echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
@@ -55,5 +49,5 @@ jobs:
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
       run: |
-        "${GITHUB_WORKSPACE}/bin/bazel" test //... \
+        bazelisk test //... \
           --verbose_failures
