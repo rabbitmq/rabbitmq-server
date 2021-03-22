@@ -302,7 +302,7 @@ i_down(_K, _Q, _DownReason) -> ''.
 is_policy_applicable(Q, Policy) ->
     Mod = amqqueue:get_type(Q),
     Capabilities = Mod:capabilities(),
-    NotApplicable = maps:get(policies, Capabilities, []),
+    NotApplicable = maps:get(unsupported_policies, Capabilities, []),
     lists:all(fun({P, _}) ->
                       not lists:member(P, NotApplicable)
               end, Policy).
