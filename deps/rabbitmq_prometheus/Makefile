@@ -42,8 +42,8 @@ RABBITMQ_CONFIG_FILE = $(CURDIR)/rabbitmq-disable-metrics-collector.conf
 export RABBITMQ_CONFIG_FILE
 endif
 
-include rabbitmq-components.mk
-include erlang.mk
+include ../../rabbitmq-components.mk
+include ../../erlang.mk
 
 define MAKE_TARGETS
   awk -F: '/^[^\.%\t][a-zA-Z\._\-]*:+.*$$/ { printf "%s\n", $$1 }' $(MAKEFILE_LIST)

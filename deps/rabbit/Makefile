@@ -163,8 +163,8 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-include rabbitmq-components.mk
-include erlang.mk
+include ../../rabbitmq-components.mk
+include ../../erlang.mk
 
 # See above why we mess with `$(APPS_DIR)`.
 unexport APPS_DIR
