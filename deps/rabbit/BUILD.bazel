@@ -916,16 +916,16 @@ ct_suite(
     ],
 )
 
-# ct_suite(
-#     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-#     size = "small",
-#     suite_name = "unit_config_value_encryption_SUITE",
-#     runtime_deps = [
-#         "//deps/rabbit_common:test_bazel_erlang_lib",
-#         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
-#         "@credentials_obfuscation//:bazel_erlang_lib",
-#     ],
-# )
+ct_suite(
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    size = "small",
+    suite_name = "unit_config_value_encryption_SUITE",
+    runtime_deps = [
+        "//deps/rabbit_common:test_bazel_erlang_lib",
+        "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
+        "@credentials_obfuscation//:bazel_erlang_lib",
+    ],
+)
 
 rabbitmq_integration_suite(
     size = "small",
