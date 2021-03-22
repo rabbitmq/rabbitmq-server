@@ -10,7 +10,7 @@ exports_files([
 
 # This allows us to
 # `bazel build //my/target \
-#    --@bazel-erlang//:elixir_home=/path/to/elixir/installation`
+#    --//:elixir_home=/path/to/elixir/installation`
 elixir_home(
     name = "elixir_home",
     build_setting_default = "~/.kiex/elixirs/elixir-1.10.4",
