@@ -101,10 +101,10 @@ format_exception(Class, Exception, Stacktrace) ->
     StacktraceStrs = [case proplists:get_value(line, Props) of
                           undefined ->
                               io_lib:format("    ~ts:~ts/~b",
-                                            [Mod, Fun, Arity]);
+                                            [Mod, Fun, format_arity(Arity)]);
                           Line ->
                               io_lib:format("    ~ts:~ts/~b, line ~b",
-                                            [Mod, Fun, Arity, Line])
+                                            [Mod, Fun, format_arity(Arity), Line])
                       end
                       || {Mod, Fun, Arity, Props} <- Stacktrace],
     ExceptionStr = io_lib:format("~ts:~0p", [Class, Exception]),
@@ -128,3 +128,6 @@ log_message(Message) ->
       end, Lines),
     timer:sleep(1000),
     ok.
+
+format_arity(N) when is_integer(N) -> N;
+format_arity(Args) when is_list(Args) -> length(Args).
