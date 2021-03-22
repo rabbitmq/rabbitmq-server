@@ -50,8 +50,8 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 WITHOUT = plugins/proper
 
-include rabbitmq-components.mk
-include erlang.mk
+include ../../rabbitmq-components.mk
+include ../../erlang.mk
 
 # --------------------------------------------------------------------
 # Distribution.

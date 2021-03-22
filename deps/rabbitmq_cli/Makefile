@@ -36,8 +36,8 @@ WITHOUT = plugins/cover \
 	  plugins/proper \
 	  plugins/triq
 
-include rabbitmq-components.mk
-include erlang.mk
+include ../../rabbitmq-components.mk
+include ../../erlang.mk
 
 # rabbitmq-mix.mk is generated during the creation of the RabbitMQ
 # source archive. It sets some environment variables to allow

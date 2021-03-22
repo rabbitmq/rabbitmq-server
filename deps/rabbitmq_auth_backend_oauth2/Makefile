@@ -16,5 +16,5 @@ dep_jose = hex 1.11.1
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-include rabbitmq-components.mk
-include erlang.mk
+include ../../rabbitmq-components.mk
+include ../../erlang.mk

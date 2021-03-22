@@ -47,7 +47,7 @@ WITHOUT = plugins/proper
 
 PLT_APPS += mnesia crypto ssl
 
-include mk/rabbitmq-components.mk
-include erlang.mk
+include ../../rabbitmq-components.mk
+include ../../erlang.mk
 
 -include development.post.mk
