@@ -98,15 +98,31 @@ log_exception(Class, Exception, Stacktrace) ->
     log_message(Message).
 
 format_exception(Class, Exception, Stacktrace) ->
-    StacktraceStrs = [case proplists:get_value(line, Props) of
-                          undefined ->
-                              io_lib:format("    ~ts:~ts/~b",
-                                            [Mod, Fun, format_arity(Arity)]);
-                          Line ->
-                              io_lib:format("    ~ts:~ts/~b, line ~b",
-                                            [Mod, Fun, format_arity(Arity), Line])
+    StacktraceStrs = [begin
+                          case proplists:get_value(line, Props) of
+                              undefined when is_list(ArgListOrArity) ->
+                                  io_lib:format(
+                                    "    ~ts:~ts/~b~n"
+                                    "        args: ~p",
+                                    [Mod, Fun, length(ArgListOrArity),
+                                     ArgListOrArity]);
+                              undefined when is_integer(ArgListOrArity) ->
+                                  io_lib:format(
+                                    "    ~ts:~ts/~b",
+                                    [Mod, Fun, ArgListOrArity]);
+                              Line when is_list(ArgListOrArity) ->
+                                  io_lib:format(
+                                    "    ~ts:~ts/~b, line ~b~n"
+                                    "        args: ~p",
+                                    [Mod, Fun, length(ArgListOrArity), Line,
+                                     ArgListOrArity]);
+                              Line when is_integer(ArgListOrArity) ->
+                                  io_lib:format(
+                                    "    ~ts:~ts/~b, line ~b",
+                                    [Mod, Fun, ArgListOrArity, Line])
+                          end
                       end
-                      || {Mod, Fun, Arity, Props} <- Stacktrace],
+                      || {Mod, Fun, ArgListOrArity, Props} <- Stacktrace],
     ExceptionStr = io_lib:format("~ts:~0p", [Class, Exception]),
     rabbit_misc:format(
       "Exception during startup:~n~n~s~n~n~s",
@@ -128,6 +144,3 @@ log_message(Message) ->
       end, Lines),
     timer:sleep(1000),
     ok.
-
-format_arity(N) when is_integer(N) -> N;
-format_arity(Args) when is_list(Args) -> length(Args).
