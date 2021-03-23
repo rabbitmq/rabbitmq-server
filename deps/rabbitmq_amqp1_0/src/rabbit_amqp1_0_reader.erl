@@ -78,6 +78,7 @@ shutdown(Pid, Explanation) ->
 system_continue(Parent, Deb, State) ->
     ?MODULE:mainloop(Deb, State#v1{parent = Parent}).
 
+-spec system_terminate(term(), term(), term(), term()) -> no_return().
 system_terminate(Reason, _Parent, _Deb, _State) ->
     exit(Reason).
 
@@ -207,8 +208,8 @@ switch_callback(State, Callback, Length) ->
 
 terminate(Reason, State) when ?IS_RUNNING(State) ->
     {normal, handle_exception(State, 0,
-                              {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                               "Connection forced: ~p", [Reason]})};
+                              error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                          "Connection forced: ~p", [Reason]))};
 terminate(_Reason, State) ->
     {force, State}.
 
@@ -250,8 +251,8 @@ handle_dependent_exit(ChPid, Reason, State) ->
             maybe_close(control_throttle(State));
         {Channel, uncontrolled} ->
             {RealReason, Trace} = Reason,
-            R = {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                 "Session error: ~p~n~p", [RealReason, Trace]},
+            R = error_frame(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                            "Session error: ~p~n~p", [RealReason, Trace]),
             maybe_close(handle_exception(control_throttle(State), Channel, R))
     end.
 

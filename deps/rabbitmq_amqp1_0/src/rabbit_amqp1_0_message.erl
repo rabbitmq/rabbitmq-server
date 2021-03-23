@@ -23,25 +23,26 @@ assemble(MsgBin) ->
     {RKey, #amqp_msg{props = Props, payload = Content}}.
 
 assemble(header, {R, P, C}, {H = #'v1_0.header'{}, Rest}, _Uneaten) ->
-    assemble(message_annotations, {R, translate_header(H, P), C},
+    assemble(delivery_annotations, {R, translate_header(H, P), C},
              decode_section(Rest), Rest);
 assemble(header, {R, P, C}, Else, Uneaten) ->
-    assemble(message_annotations, {R, P, C}, Else, Uneaten);
+    assemble(delivery_annotations, {R, P, C}, Else, Uneaten);
 
 assemble(delivery_annotations, RPC, {#'v1_0.delivery_annotations'{}, Rest},
          Uneaten) ->
     %% ignore delivery annotations for now
     %% TODO: handle "rejected" error
-    assemble(message_annotations, RPC, Rest, Uneaten);
+    assemble(message_annotations, RPC, decode_section(Rest), Uneaten);
 assemble(delivery_annotations, RPC, Else, Uneaten) ->
     assemble(message_annotations, RPC, Else, Uneaten);
 
 assemble(message_annotations, {R, P = #'P_basic'{headers = Headers}, C},
          {#'v1_0.message_annotations'{}, Rest}, Uneaten) ->
     MsgAnnoBin = chunk(Rest, Uneaten),
-    assemble(properties, {R, P#'P_basic'{
-                               headers = set_header(?MESSAGE_ANNOTATIONS_HEADER,
-                                                    MsgAnnoBin, Headers)}, C},
+    assemble(properties,
+             {R, P#'P_basic'{
+                     headers = set_header(?MESSAGE_ANNOTATIONS_HEADER,
+                                          MsgAnnoBin, Headers)}, C},
              decode_section(Rest), Rest);
 assemble(message_annotations, {R, P, C}, Else, Uneaten) ->
     assemble(properties, {R, P, C}, Else, Uneaten);
@@ -100,8 +101,6 @@ assemble(footer, {R, P = #'P_basic'{headers = Headers}, C},
     {R, P#'P_basic'{headers = set_header(?FOOTER, Uneaten, Headers)}, C};
 assemble(footer, {R, P, C}, none, _) ->
     {R, P, C};
-assemble(footer, _, Else, _) ->
-    exit({unexpected_trailing_sections, Else});
 
 assemble(Expected, _, Actual, _) ->
     exit({expected_section, Expected, Actual}).
@@ -166,8 +165,6 @@ to_expiration(undefined) ->
 to_expiration({uint, Num}) ->
     list_to_binary(integer_to_list(Num)).
 
-from_expiration(undefined) ->
-    undefined;
 from_expiration(PBasic) ->
     case rabbit_basic:parse_expiration(PBasic) of
         {ok, undefined} -> undefined;
