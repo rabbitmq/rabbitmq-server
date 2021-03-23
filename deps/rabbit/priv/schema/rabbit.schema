@@ -1192,6 +1192,78 @@ end}.
 {mapping, "log.console.level", "rabbit.log.console.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
+{mapping, "log.console.stdio", "rabbit.log.console.stdio", [
+    {default, stdout},
+    {datatype, {enum, [stdout, stderr]}}
+]}.
+{mapping, "log.console.use_colors", "rabbit.log.console.formatter", [
+    {default, on},
+    {datatype, flag}
+]}.
+{mapping, "log.console.color_esc_seqs.debug", "rabbit.log.console.formatter", [
+    {default, "\033[38;5;246m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.info", "rabbit.log.console.formatter", [
+    {default, ""},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.notice", "rabbit.log.console.formatter", [
+    {default, "\033[38;5;87m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.warning", "rabbit.log.console.formatter", [
+    {default, "\033[38;5;214m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.error", "rabbit.log.console.formatter", [
+    {default, "\033[38;5;160m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.critical", "rabbit.log.console.formatter", [
+    {default, "\033[1;37m\033[48;5;20m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.alert", "rabbit.log.console.formatter", [
+    {default, "\033[1;37m\033[48;5;93m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.emergency", "rabbit.log.console.formatter", [
+    {default, "\033[1;37m\033[48;5;196m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.formatter", "rabbit.log.console.formatter", [
+    {default, plaintext},
+    {datatype, {enum, [plaintext, json]}}
+]}.
+{mapping, "log.console.formatter.time_format", "rabbit.log.console.formatter", [
+    {default, rfc3339_space},
+    {datatype, {enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}}
+]}.
+{mapping, "log.console.formatter.level_format", "rabbit.log.console.formatter", [
+    {default, lc},
+    {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
+]}.
+{mapping, "log.console.formatter.single_line", "rabbit.log.file.formatter", [
+    {default, off},
+    {datatype, flag}
+]}.
+{mapping, "log.console.formatter.plaintext.format", "rabbit.log.console.formatter", [
+    {default, "$time [$level] $pid $msg"},
+    {datatype, string}
+]}.
+{mapping, "log.console.formatter.json.field_map", "rabbit.log.console.formatter", [
+    {default, "time level msg gl:- logger_formatter:- report_cb:- error_logger:-"},
+    {datatype, string}
+]}.
+{mapping, "log.console.formatter.json.verbosity_map", "rabbit.log.console.formatter", [
+    {default, ""},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.console.formatter",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_formatter_conf("log.console.formatter", Conf)
+ end}.
 
 {mapping, "log.exchange", "rabbit.log.exchange.enabled", [
     {datatype, {enum, [true, false]}}
@@ -1199,6 +1271,38 @@ end}.
 {mapping, "log.exchange.level", "rabbit.log.exchange.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
+{mapping, "log.exchange.formatter", "rabbit.log.exchange.formatter", [
+    {default, plaintext},
+    {datatype, {enum, [plaintext, json]}}
+]}.
+{mapping, "log.exchange.formatter.time_format", "rabbit.log.console.formatter", [
+    {default, rfc3339_space},
+    {datatype, [{enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}, string]}
+]}.
+{mapping, "log.exchange.formatter.level_format", "rabbit.log.exchange.formatter", [
+    {default, lc},
+    {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
+]}.
+{mapping, "log.exchange.formatter.single_line", "rabbit.log.file.formatter", [
+    {default, off},
+    {datatype, flag}
+]}.
+{mapping, "log.exchange.formatter.plaintext.format", "rabbit.log.exchange.formatter", [
+    {default, "$time [$level] $pid $msg"},
+    {datatype, string}
+]}.
+{mapping, "log.exchange.formatter.json.field_map", "rabbit.log.exchange.formatter", [
+    {default, "time level msg gl:- logger_formatter:- report_cb:- error_logger:-"},
+    {datatype, string}
+]}.
+{mapping, "log.exchange.formatter.json.verbosity_map", "rabbit.log.exchange.formatter", [
+    {default, ""},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.exchange.formatter",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_formatter_conf("log.exchange.formatter", Conf)
+ end}.
 
 {mapping, "log.syslog", "rabbit.log.syslog.enabled", [
     {datatype, {enum, [true, false]}}
@@ -1207,6 +1311,38 @@ end}.
 {mapping, "log.syslog.level", "rabbit.log.syslog.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
+{mapping, "log.syslog.formatter", "rabbit.log.syslog.formatter", [
+    {default, plaintext},
+    {datatype, {enum, [plaintext, json]}}
+]}.
+{mapping, "log.syslog.formatter.time_format", "rabbit.log.console.formatter", [
+    {default, rfc3339_space},
+    {datatype, [{enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}, string]}
+]}.
+{mapping, "log.syslog.formatter.level_format", "rabbit.log.syslog.formatter", [
+    {default, lc},
+    {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
+]}.
+{mapping, "log.syslog.formatter.single_line", "rabbit.log.file.formatter", [
+    {default, off},
+    {datatype, flag}
+]}.
+{mapping, "log.syslog.formatter.plaintext.format", "rabbit.log.syslog.formatter", [
+    {default, "$msg"},
+    {datatype, string}
+]}.
+{mapping, "log.syslog.formatter.json.field_map", "rabbit.log.syslog.formatter", [
+    {default, "time level msg gl:- logger_formatter:- report_cb:- error_logger:-"},
+    {datatype, string}
+]}.
+{mapping, "log.syslog.formatter.json.verbosity_map", "rabbit.log.syslog.formatter", [
+    {default, ""},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.syslog.formatter",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_formatter_conf("log.syslog.formatter", Conf)
+ end}.
 
 {mapping, "log.syslog.identity", "syslog.app_name", [
     {datatype, string}
@@ -1413,6 +1549,38 @@ end}.
 {mapping, "log.file.rotation.count", "rabbit.log.file.count", [
     {datatype, integer}
 ]}.
+{mapping, "log.file.formatter", "rabbit.log.file.formatter", [
+    {default, plaintext},
+    {datatype, {enum, [plaintext, json]}}
+]}.
+{mapping, "log.file.formatter.time_format", "rabbit.log.console.formatter", [
+    {default, rfc3339_space},
+    {datatype, [{enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}, string]}
+]}.
+{mapping, "log.file.formatter.level_format", "rabbit.log.file.formatter", [
+    {default, lc},
+    {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
+]}.
+{mapping, "log.file.formatter.single_line", "rabbit.log.file.formatter", [
+    {default, off},
+    {datatype, flag}
+]}.
+{mapping, "log.file.formatter.plaintext.format", "rabbit.log.file.formatter", [
+    {default, "$time [$level] $pid $msg"},
+    {datatype, string}
+]}.
+{mapping, "log.file.formatter.json.field_map", "rabbit.log.file.formatter", [
+    {default, "time level msg gl:- logger_formatter:- report_cb:- error_logger:-"},
+    {datatype, string}
+]}.
+{mapping, "log.file.formatter.json.verbosity_map", "rabbit.log.file.formatter", [
+    {default, ""},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.file.formatter",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_formatter_conf("log.file.formatter", Conf)
+ end}.
 
 %% Log categories
 

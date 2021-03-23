@@ -12,79 +12,42 @@
 format(
   #{msg := Msg,
     level := Level,
-    meta := #{time := Timestamp} = Meta},
+    meta := Meta},
   Config) ->
-    FormattedTimestamp = unicode:characters_to_binary(
-                           format_time(Timestamp, Config)),
-    FormattedMsg = unicode:characters_to_binary(
-                     format_msg(Msg, Meta, Config)),
+    FormattedLevel = unicode:characters_to_binary(
+                       rabbit_logger_fmt_helpers:format_level(Level, Config)),
     FormattedMeta = format_meta(Meta, Config),
-    Json = jsx:encode(
-             [{time, FormattedTimestamp},
-              {level, Level},
-              {msg, FormattedMsg},
-              {meta, FormattedMeta}]),
+    %% We need to call `unicode:characters_to_binary()' here and several other
+    %% places because `jsx:encode()' will format a string as a list of
+    %% integers (we don't blame it for that, it makes sense).
+    FormattedMsg = unicode:characters_to_binary(
+                     rabbit_logger_fmt_helpers:format_msg(Msg, Meta, Config)),
+    InitialDoc0 = FormattedMeta#{level => FormattedLevel,
+                                 msg => FormattedMsg},
+    InitialDoc = case level_to_verbosity(Level, Config) of
+                     undefined -> InitialDoc0;
+                     Verbosity -> InitialDoc0#{verbosity => Verbosity}
+                 end,
+    DocAfterMapping = apply_mapping_and_ordering(InitialDoc, Config),
+    Json = jsx:encode(DocAfterMapping),
     [Json, $\n].
 
-format_time(Timestamp, _) ->
-    Options = [{unit, microsecond}],
-    calendar:system_time_to_rfc3339(Timestamp, Options).
-
-format_msg({string, Chardata}, Meta, Config) ->
-    format_msg({"~ts", [Chardata]}, Meta, Config);
-format_msg({report, Report}, Meta, Config) ->
-    FormattedReport = format_report(Report, Meta, Config),
-    format_msg(FormattedReport, Meta, Config);
-format_msg({Format, Args}, _, _) ->
-    io_lib:format(Format, Args).
-
-format_report(
-  #{label := {application_controller, _}} = Report, Meta, Config) ->
-    format_application_progress(Report, Meta, Config);
-format_report(
-  #{label := {supervisor, progress}} = Report, Meta, Config) ->
-    format_supervisor_progress(Report, Meta, Config);
-format_report(
-  Report, #{report_cb := Cb} = Meta, Config) ->
-    try
-        case erlang:fun_info(Cb, arity) of
-            {arity, 1} -> Cb(Report);
-            {arity, 2} -> {"~ts", [Cb(Report, #{})]}
-        end
-    catch
-        _:_:_ ->
-            format_report(Report, maps:remove(report_cb, Meta), Config)
+level_to_verbosity(Level, #{verbosity_map := Mapping}) ->
+    case maps:is_key(Level, Mapping) of
+        true  -> maps:get(Level, Mapping);
+        false -> undefined
     end;
-format_report(Report, _, _) ->
-    logger:format_report(Report).
+level_to_verbosity(_, _) ->
+    undefined.
 
-format_application_progress(#{label := {_, progress},
-                              report := InternalReport}, _, _) ->
-    Application = proplists:get_value(application, InternalReport),
-    StartedAt = proplists:get_value(started_at, InternalReport),
-    {"Application ~w started on ~0p",
-     [Application, StartedAt]};
-format_application_progress(#{label := {_, exit},
-                              report := InternalReport}, _, _) ->
-    Application = proplists:get_value(application, InternalReport),
-    Exited = proplists:get_value(exited, InternalReport),
-    {"Application ~w exited with reason: ~0p",
-     [Application, Exited]}.
-
-format_supervisor_progress(#{report := InternalReport}, _, _) ->
-    Supervisor = proplists:get_value(supervisor, InternalReport),
-    Started = proplists:get_value(started, InternalReport),
-    Id = proplists:get_value(id, Started),
-    Pid = proplists:get_value(pid, Started),
-    Mfa = proplists:get_value(mfargs, Started),
-    {"Supervisor ~w: child ~w started (~w): ~0p",
-     [Supervisor, Id, Pid, Mfa]}.
-
-format_meta(Meta, _) ->
+format_meta(Meta, Config) ->
     maps:fold(
       fun
-          (time, _, Acc) ->
-              Acc;
+          (time, Timestamp, Acc) ->
+              FormattedTime = unicode:characters_to_binary(
+                                rabbit_logger_fmt_helpers:format_time(
+                                  Timestamp, Config)),
+              Acc#{time => FormattedTime};
           (domain = Key, Components, Acc) ->
               Term = unicode:characters_to_binary(
                        string:join(
@@ -125,3 +88,28 @@ convert_to_types_accepted_by_jsx(Term) when is_reference(Term) ->
     unicode:characters_to_binary(String);
 convert_to_types_accepted_by_jsx(Term) ->
     Term.
+
+apply_mapping_and_ordering(Doc, #{field_map := Mapping}) ->
+    apply_mapping_and_ordering(Mapping, Doc, []);
+apply_mapping_and_ordering(Doc, _) ->
+    maps:to_list(Doc).
+
+apply_mapping_and_ordering([{'$REST', false} | Rest], _, Result) ->
+    apply_mapping_and_ordering(Rest, #{}, Result);
+apply_mapping_and_ordering([{Old, false} | Rest], Doc, Result)
+  when is_atom(Old) ->
+    Doc1 = maps:remove(Old, Doc),
+    apply_mapping_and_ordering(Rest, Doc1, Result);
+apply_mapping_and_ordering([{Old, New} | Rest], Doc, Result)
+  when is_atom(Old) andalso is_atom(New) ->
+    case maps:is_key(Old, Doc) of
+        true ->
+            Value = maps:get(Old, Doc),
+            Doc1 = maps:remove(Old, Doc),
+            Result1 = [{New, Value} | Result],
+            apply_mapping_and_ordering(Rest, Doc1, Result1);
+        false ->
+            apply_mapping_and_ordering(Rest, Doc, Result)
+    end;
+apply_mapping_and_ordering([], Doc, Result) ->
+    lists:reverse(Result) ++ maps:to_list(Doc).
