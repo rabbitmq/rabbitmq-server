@@ -60,7 +60,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 force_roll_over(State) ->
-    ra_log_wal:force_roll_over(ra_log_wal),
+    rabbit_quorum_queue:wal_force_roll_over(node()),
     State#state{last_roll_over = erlang:system_time(millisecond)}.
 
 interval() ->

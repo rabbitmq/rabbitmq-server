@@ -89,10 +89,10 @@
 start() ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
     ServerId = {?MODULE, node()},
-    case ra:restart_server(ServerId) of
+    case ra:restart_server(?RA_SYSTEM, ServerId) of
         {error, Reason} when Reason == not_started orelse
                              Reason == name_not_registered ->
-            case ra:start_server(make_ra_conf(node(), Nodes)) of
+            case ra:start_server(?RA_SYSTEM, make_ra_conf(node(), Nodes)) of
                 ok ->
                     global:set_lock(?STREAM_COORDINATOR_STARTUP),
                     case find_members(Nodes) of
@@ -116,7 +116,7 @@ start() ->
     end.
 
 recover() ->
-    ra:restart_server({?MODULE, node()}).
+    ra:restart_server(?RA_SYSTEM, {?MODULE, node()}).
 
 %% new api
 
@@ -259,26 +259,24 @@ ensure_coordinator_started() ->
     case whereis(?MODULE) of
         undefined ->
             global:set_lock(?STREAM_COORDINATOR_STARTUP),
-            Nodes =
-                case ra:restart_server(Local) of
-                    {error, Reason} when Reason == not_started orelse
-                                         Reason == name_not_registered ->
-                        OtherNodes = all_coord_members() -- [Local],
-                        %% We can't use find_members/0 here as a process that timeouts means the cluster is up
-                        case lists:filter(fun(N) -> global:whereis_name(N) =/= undefined end,
-                                          OtherNodes) of
-                            [] ->
-                                start_coordinator_cluster();
-                            _ ->
-                                OtherNodes
-                        end;
-                    ok ->
-                        AllNodes;
-                    {error, {already_started, _}} ->
-                        AllNodes;
-                    _ ->
-                        AllNodes
-                end,
+            Nodes = case ra:restart_server(?RA_SYSTEM, Local) of
+                {error, Reason} when Reason == not_started orelse
+                                     Reason == name_not_registered ->
+                    OtherNodes = all_coord_members() -- [Local],
+                    %% We can't use find_members/0 here as a process that timeouts means the cluster is up
+                    case lists:filter(fun(N) -> global:whereis_name(N) =/= undefined end, OtherNodes) of
+                        [] ->
+                            start_coordinator_cluster();
+                        _ ->
+                            OtherNodes
+                    end;
+                ok ->
+                    AllNodes;
+                {error, {already_started, _}} ->
+                    AllNodes;
+                _ ->
+                    AllNodes
+            end,
             global:del_lock(?STREAM_COORDINATOR_STARTUP),
             Nodes;
         _ ->
@@ -288,7 +286,7 @@ ensure_coordinator_started() ->
 start_coordinator_cluster() ->
     Nodes = rabbit_mnesia:cluster_nodes(running),
     rabbit_log:debug("Starting stream coordinator on nodes: ~w", [Nodes]),
-    case ra:start_cluster([make_ra_conf(Node, Nodes) || Node <-  Nodes]) of
+    case ra:start_cluster(?RA_SYSTEM, [make_ra_conf(Node, Nodes) || Node <-  Nodes]) of
         {ok, Started, _} ->
             rabbit_log:debug("Started stream coordinator on ~w", [Started]),
             Started;
@@ -488,7 +486,7 @@ add_members(_, []) ->
     ok;
 add_members(Members, [Node | Nodes]) ->
     Conf = make_ra_conf(Node, [N || {_, N} <- Members]),
-    case ra:start_server(Conf) of
+    case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             case ra:add_member(Members, {?MODULE, Node}) of
                 {ok, NewMembers, _} ->
