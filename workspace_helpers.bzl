@@ -113,7 +113,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         first_srcs = ["src/vararg.erl"],
         org = "proper-testing",
         sha256 = "b2fb969604ae71b0ea0ab7d8cedca78cef5f46181aba433c1ea493db0eaf81c6",
-        ref = "1.3",
+        ref = "v1.3",
+        version = "1.3",
     )
 
     http_archive(
