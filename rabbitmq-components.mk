@@ -306,18 +306,19 @@ define dep_fetch_git_rmq
 endef
 
 define dep_fetch_git_rmq-subfolder
-	mkdir -p $(ERLANG_MK_TMP)/git-subfolder; \
 	fetch_url1='https://github.com/rabbitmq/rabbitmq-server.git'; \
 	fetch_url2='git@github.com:rabbitmq/rabbitmq-server.git'; \
-	if test "$$$$fetch_url1" != '$(RABBITMQ_CURRENT_FETCH_URL)' && \
-	 git clone -q -n -- "$$$$fetch_url1" $(ERLANG_MK_TMP)/git-subfolder/$(call dep_name,$(1)); then \
-	    fetch_url="$$$$fetch_url1"; \
-	    push_url='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_PUSH_URL),rabbitmq-server)'; \
-	elif git clone -q -n -- "$$$$fetch_url2" $(ERLANG_MK_TMP)/git-subfolder/$(call dep_name,$(1)); then \
-	    fetch_url="$$$$fetch_url2"; \
-	    push_url='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_PUSH_URL),rabbitmq-server)'; \
+	if [ ! -d $(ERLANG_MK_TMP)/rabbitmq-server ]; then \
+	  if test "$$$$fetch_url1" != '$(RABBITMQ_CURRENT_FETCH_URL)' && \
+	   git clone -q -n -- "$$$$fetch_url1" $(ERLANG_MK_TMP)/rabbitmq-server; then \
+	      fetch_url="$$$$fetch_url1"; \
+	      push_url='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_PUSH_URL),rabbitmq-server)'; \
+	  elif git clone -q -n -- "$$$$fetch_url2" $(ERLANG_MK_TMP)/rabbitmq-server; then \
+	      fetch_url="$$$$fetch_url2"; \
+	      push_url='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_PUSH_URL),rabbitmq-server)'; \
+	  fi; \
 	fi; \
-	cd $(ERLANG_MK_TMP)/git-subfolder/$(call dep_name,$(1)) && ( \
+	cd $(ERLANG_MK_TMP)/rabbitmq-server && ( \
 	$(foreach ref,$(call dep_rmq_commits,$(1)), \
 	  git checkout -q $(ref) >/dev/null 2>&1 || \
 	  ) \
@@ -325,7 +326,7 @@ define dep_fetch_git_rmq-subfolder
 	  1>&2 && false) ) && \
 	(test "$$$$fetch_url" = "$$$$push_url" || \
 	 git remote set-url --push origin "$$$$push_url")
-	ln -s $(ERLANG_MK_TMP)/git-subfolder/$(call dep_name,$(1))/deps/$(call dep_name,$(1)) \
+	ln -s $(ERLANG_MK_TMP)/rabbitmq-server/deps/$(call dep_name,$(1)) \
 		$(DEPS_DIR)/$(call dep_name,$(1));
 endef
 
