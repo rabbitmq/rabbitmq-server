@@ -1,4 +1,4 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "flat_deps", "path_join")
 
 RabbitmqHomeInfo = provider(
     doc = "An assembled RABBITMQ_HOME dir",
@@ -45,7 +45,7 @@ def _plugins_dir_links(ctx, plugin):
     plugin_path = path_join(
         ctx.label.name,
         "plugins",
-        "{}-{}".format(lib_info.lib_name, lib_info.lib_version),
+        lib_info.lib_name,
     )
 
     links = []
@@ -58,7 +58,12 @@ def _plugins_dir_links(ctx, plugin):
         links.append(o)
 
     for f in lib_info.beam:
-        o = ctx.actions.declare_file(path_join(plugin_path, "ebin", f.basename))
+        if f.is_directory:
+            if f.basename != "ebin":
+                fail("{} contains a directory in 'beam' that is not an ebin dir".format(lib_info.lib_name))
+            o = ctx.actions.declare_file(path_join(plugin_path, "ebin"))
+        else:
+            o = ctx.actions.declare_file(path_join(plugin_path, "ebin", f.basename))
         ctx.actions.symlink(
             output = o,
             target_file = f,
@@ -88,7 +93,9 @@ def _flatten(list_of_lists):
     return [item for sublist in list_of_lists for item in sublist]
 
 def _impl(ctx):
-    erlang_versions = _unique_versions(ctx.attr.plugins)
+    plugins = flat_deps(ctx.attr.plugins)
+
+    erlang_versions = _unique_versions(plugins)
     if len(erlang_versions) > 1:
         fail("plugins do not have a unified erlang version", erlang_versions)
 
@@ -96,7 +103,7 @@ def _impl(ctx):
 
     escripts = [_link_escript(ctx, escript) for escript in ["rabbitmq-plugins", "rabbitmqctl"]]
 
-    plugins = _flatten([_plugins_dir_links(ctx, plugin) for plugin in ctx.attr.plugins])
+    plugins = _flatten([_plugins_dir_links(ctx, plugin) for plugin in plugins])
 
     return [
         RabbitmqHomeInfo(
@@ -125,7 +132,6 @@ rabbitmq_home = rule(
         ),
         "_rabbitmqctl_escript": attr.label(default = "//deps/rabbitmq_cli:rabbitmqctl"),
         "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
-        # Maybe we should not have to declare the deps here that rabbit/rabbit_common declare
         "plugins": attr.label_list(),
     },
 )

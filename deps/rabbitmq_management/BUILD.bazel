@@ -25,6 +25,9 @@ rabbitmq_lib(
         "crypto",
         "public_key",
     ],
+    first_srcs = [
+        "src/rabbit_mgmt_extension.erl",
+    ],
     priv = glob(["priv/**/*"]),
     deps = [
         "//deps/amqp_client:bazel_erlang_lib",
@@ -34,6 +37,5 @@ rabbitmq_lib(
         "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
         "@cowboy//:bazel_erlang_lib",
         "@cowlib//:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",  # again this should probably come via rabbit_common
     ],
 )

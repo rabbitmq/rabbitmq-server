@@ -23,14 +23,15 @@ def _impl(ctx):
     return [
         DefaultInfo(
             files = depset([ebin]),
+            runfiles = ctx.runfiles([ebin]),
         ),
         ErlangLibInfo(
             lib_name = ctx.attr.name,
-            lib_version = "0.0.0",
             erlang_version = erlang_version,
             include = [],
             beam = [ebin],
             priv = [],
+            deps = [],
         ),
     ]
 

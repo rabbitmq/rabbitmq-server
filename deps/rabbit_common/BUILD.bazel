@@ -45,9 +45,7 @@ genrule(
     tools = [":codegen"],
 )
 
-DEPS = [
-    "@lager//:bazel_erlang_lib",
-]
+DEPS = []
 
 RUNTIME_DEPS = [
     "@jsx//:bazel_erlang_lib",
@@ -116,12 +114,12 @@ bazel_erlang_lib(
     hdrs = HDRS,
     app = ":app_file",
     app_name = APP_NAME,
-    app_version = APP_VERSION,
     beam = [
         ":first_beam_files",
         ":beam_files",
     ],
     visibility = ["//visibility:public"],
+    deps = DEPS + RUNTIME_DEPS,
 )
 
 erlc(
@@ -157,12 +155,12 @@ bazel_erlang_lib(
     hdrs = HDRS,
     app = ":app_file",
     app_name = APP_NAME,
-    app_version = APP_VERSION,
     beam = [
         ":first_test_beam_files",
         ":test_beam_files",
     ],
     visibility = ["//:__subpackages__"],
+    deps = DEPS + RUNTIME_DEPS,
 )
 
 erlc(
@@ -172,7 +170,9 @@ erlc(
     hdrs = HDRS,
     dest = "test",
     erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
-    deps = [":test_bazel_erlang_lib"] + DEPS,
+    deps = [
+        ":test_bazel_erlang_lib",
+    ],
 )
 
 ct_test(
@@ -181,8 +181,7 @@ ct_test(
     compiled_suites = [":rabbit_env_SUITE_beam_files"],
     deps = [
         ":test_bazel_erlang_lib",
-        "//deps/rabbit:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
+        "//deps/rabbit:test_bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
     ],
 )
@@ -194,7 +193,9 @@ erlc(
     hdrs = HDRS,
     dest = "test",
     erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
-    deps = [":test_bazel_erlang_lib"] + DEPS,
+    deps = [
+        ":test_bazel_erlang_lib",
+    ],
 )
 
 ct_test(
@@ -213,7 +214,9 @@ erlc(
     hdrs = HDRS,
     dest = "test",
     erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
-    deps = [":test_bazel_erlang_lib"] + DEPS,
+    deps = [
+        ":test_bazel_erlang_lib",
+    ],
 )
 
 ct_test(
@@ -235,7 +238,7 @@ erlc(
     hdrs = HDRS,
     dest = "test",
     erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
-    deps = DEPS + [
+    deps = [
         ":test_bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
     ],
@@ -248,7 +251,6 @@ ct_test(
     deps = [
         ":test_bazel_erlang_lib",
         "@credentials_obfuscation//:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
     ],
 )
@@ -260,7 +262,9 @@ erlc(
     hdrs = HDRS,
     dest = "test",
     erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
-    deps = [":test_bazel_erlang_lib"] + DEPS,
+    deps = [
+        ":test_bazel_erlang_lib",
+    ],
 )
 
 ct_test(
@@ -269,6 +273,5 @@ ct_test(
     compiled_suites = [":worker_pool_SUITE_beam_files"],
     deps = [
         ":test_bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
     ],
 )

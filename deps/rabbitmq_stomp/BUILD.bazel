@@ -23,7 +23,6 @@ APP_ENV = """[
 	  ]"""
 
 DEPS = [
-    "@lager//:bazel_erlang_lib",
     "@ranch//:bazel_erlang_lib",
     "//deps/rabbit_common:bazel_erlang_lib",
     "//deps/rabbit:bazel_erlang_lib",

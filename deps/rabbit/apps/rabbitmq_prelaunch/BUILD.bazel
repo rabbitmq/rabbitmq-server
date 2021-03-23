@@ -2,12 +2,16 @@ load("//:rabbitmq.bzl", "rabbitmq_lib")
 
 DEPS = [
     "//deps/rabbit_common:bazel_erlang_lib",
-    "@lager//:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "@jsx//:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
     app_description = "RabbitMQ prelaunch setup",
     app_module = "rabbit_prelaunch_app",
     app_name = "rabbitmq_prelaunch",
+    runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )

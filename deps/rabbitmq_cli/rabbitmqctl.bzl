@@ -1,5 +1,6 @@
 load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "BEGINS_WITH_FUN", "ErlangLibInfo", "QUERY_ERL_VERSION", "path_join")
+load("@bazel-erlang//:bazel_erlang_lib.bzl",
+ "BEGINS_WITH_FUN", "ErlangLibInfo", "QUERY_ERL_VERSION", "path_join", "flat_deps")
 load("//:elixir_home.bzl", "ElixirHomeProvider")
 
 MIX_DEPS_DIR = "mix_deps"
@@ -120,25 +121,31 @@ def _impl(ctx):
         command = script,
     )
 
+    deps = flat_deps(ctx.attr.deps)
+    
+    runfiles = ctx.runfiles([ebin])
+    for dep in ctx.attr.deps:
+        runfiles = runfiles.merge(dep[DefaultInfo].default_runfiles)
+
     return [
         DefaultInfo(
             executable = escript,
             files = depset([ebin]),
+            runfiles = runfiles,
         ),
         ErlangLibInfo(
             lib_name = ctx.attr.name,
-            lib_version = ctx.attr.version,
             erlang_version = erlang_version,
             include = [],
             beam = [ebin],
             priv = [],
+            deps = deps,
         ),
     ]
 
 rabbitmqctl = rule(
     implementation = _impl,
     attrs = {
-        "version": attr.string(mandatory = True),
         "srcs": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [ErlangLibInfo]),
         "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),

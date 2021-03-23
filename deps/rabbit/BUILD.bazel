@@ -1,6 +1,12 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib", "erlc", "test_erlang_lib")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
-load("//:rabbitmq.bzl", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_integration_suite", "rabbitmq_lib")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "rabbitmq_integration_suite",
+)
 
 exports_files([
     "scripts/rabbitmq-defaults",
@@ -126,56 +132,81 @@ _APP_ENV = """[
 """
 
 DEPS = [
-    "@lager//:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "@stdout_formatter//:bazel_erlang_lib",
     "//deps/amqp10_common:bazel_erlang_lib",
-    "@ranch//:bazel_erlang_lib",
+    "//deps/rabbit_common:bazel_erlang_lib",
     "@ra//:bazel_erlang_lib",
+    "@ranch//:bazel_erlang_lib",
+    "@stdout_formatter//:bazel_erlang_lib",
+    "@syslog//:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
+    "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
     "@cuttlefish//:bazel_erlang_lib",
-    "@sysmon_handler//:bazel_erlang_lib",
-    "@recon//:bazel_erlang_lib",
     "@observer_cli//:bazel_erlang_lib",
     "@osiris//:bazel_erlang_lib",
+    "@recon//:bazel_erlang_lib",
+    "@sysmon_handler//:bazel_erlang_lib",
 ]
 
-rabbitmq_lib(
+APP_REGISTERED = [
+    "rabbit_amqqueue_sup",
+    "rabbit_direct_client_sup",
+    "rabbit_log",
+    "rabbit_node_monitor",
+    "rabbit_router",
+]
+
+EXTRA_APPS = [
+    "sasl",
+    "rabbitmq_prelaunch",
+    "os_mon",
+    "inets",
+    "compiler",
+    "public_key",
+    "crypto",
+    "ssl",
+    "syntax_tools",
+    "xmerl",
+]
+
+FIRST_SRCS = [
+    "src/rabbit_tracking.erl",
+    "src/rabbit_queue_type.erl",
+    "src/rabbit_credential_validator.erl",
+    "src/rabbit_policy_merge_strategy.erl",
+    "src/rabbit_queue_master_locator.erl",
+]
+
+ERLC_OPTS = RABBITMQ_ERLC_OPTS + [
+    "-DINSTR_MOD=gm",
+]
+
+erlang_lib(
     app_description = "RabbitMQ",
     app_env = _APP_ENV,
     app_module = "rabbit",
     app_name = "rabbit",
-    app_registered = [
-        "rabbit_amqqueue_sup",
-        "rabbit_direct_client_sup",
-        "rabbit_log",
-        "rabbit_node_monitor",
-        "rabbit_router",
-    ],
-    extra_apps = [
-        "sasl",
-        "rabbitmq_prelaunch",
-        "os_mon",
-        "inets",
-        "compiler",
-        "public_key",
-        "crypto",
-        "ssl",
-        "syntax_tools",
-        "xmerl",
-    ],
-    extra_erlc_opts = [
-        "-DINSTR_MOD=gm",
-    ],
-    first_srcs = [
-        "src/rabbit_tracking.erl",
-        "src/rabbit_queue_type.erl",
-        "src/rabbit_credential_validator.erl",
-        "src/rabbit_policy_merge_strategy.erl",
-        "src/rabbit_queue_master_locator.erl",
-    ],
+    app_registered = APP_REGISTERED,
+    app_version = APP_VERSION,
+    erlc_opts = ERLC_OPTS,
+    extra_apps = EXTRA_APPS,
+    first_srcs = FIRST_SRCS,
+    priv = glob(["priv/schema/rabbit.schema"]),
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+test_erlang_lib(
+    app_description = "RabbitMQ",
+    app_env = _APP_ENV,
+    app_module = "rabbit",
+    app_name = "rabbit",
+    app_registered = APP_REGISTERED,
+    app_version = APP_VERSION,
+    erlc_opts = ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    extra_apps = EXTRA_APPS,
+    first_srcs = FIRST_SRCS,
     priv = glob(["priv/schema/rabbit.schema"]),
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
@@ -902,7 +933,6 @@ ct_suite(
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_cluster_formation_locking_mocks_SUITE",
     runtime_deps = [
-        "@lager//:bazel_erlang_lib",
         "@meck//:bazel_erlang_lib",
     ],
 )
@@ -917,12 +947,12 @@ ct_suite(
 )
 
 ct_suite(
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_config_value_encryption_SUITE",
     runtime_deps = [
-        "//deps/rabbit_common:test_bazel_erlang_lib",
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
+        "//deps/rabbit_common:test_bazel_erlang_lib",
         "@credentials_obfuscation//:bazel_erlang_lib",
     ],
 )
