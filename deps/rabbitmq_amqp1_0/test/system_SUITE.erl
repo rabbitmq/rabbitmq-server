@@ -43,7 +43,6 @@ groups() ->
           roundtrip
         ]},
       {streams, [], [
-          stream_interop_basics
         ]}
     ].
 
@@ -182,20 +181,38 @@ redelivery(Config) ->
       ]).
 
 routing(Config) ->
+
+    StreamQT =
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, stream_queue) of
+        ok ->
+            <<"stream">>;
+        _ ->
+            %% if the feature flag could not be enabled we run the stream
+            %% routing test using a classc quue instead
+            ct:pal("stream feature flag could not be enabled"
+                   "running stream tests against classic"),
+            <<"classic">>
+    end,
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.declare'{queue   = <<"transient_q">>,
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"transient_q">>,
                                            durable = false}),
-    amqp_channel:call(Ch, #'queue.declare'{queue   = <<"durable_q">>,
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"durable_q">>,
                                            durable = true}),
-    amqp_channel:call(Ch, #'queue.declare'{queue   = <<"stream_q">>,
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"quorum_q">>,
                                            durable = true,
-                                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
-    amqp_channel:call(Ch, #'queue.declare'{queue       = <<"autodel_q">>,
+                                           arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q">>,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, StreamQT}]}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"autodel_q">>,
                                            auto_delete = true}),
     run(Config, [
         {dotnet, "routing"}
       ]).
 
+%% TODO: this tests doesn't test anything that the standard routing test
+%% already does. We should test stream specific things here like attaching
+%% to a given offset
 stream_interop_basics(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
     amqp_channel:call(Ch, #'queue.declare'{queue   = <<"stream_q">>,
