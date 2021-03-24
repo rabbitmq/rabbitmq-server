@@ -67,7 +67,9 @@ is_enabled() ->
 drain() ->
     case is_enabled() of
         true  -> do_drain();
-        false -> rabbit_log:warning("Feature flag `~s` is not enabled, draining is a no-op", [?FEATURE_FLAG])
+        false ->
+            rabbit_log:error("Feature flag '~s' is not enabled, cannot put this node under maintenance", [?FEATURE_FLAG]),
+            {error, rabbit_misc:format("Feature flag '~s' is not enabled, cannot put this node under maintenance", [?FEATURE_FLAG])}
     end.
 
 -spec do_drain() -> ok.
@@ -102,7 +104,9 @@ do_drain() ->
 revive() ->
     case is_enabled() of
         true  -> do_revive();
-        false -> rabbit_log:warning("Feature flag `~s` is not enabled, reviving is a no-op", [?FEATURE_FLAG])
+        false ->
+            rabbit_log:error("Feature flag '~s' is not enabled, cannot put this node out of maintenance", [?FEATURE_FLAG]),
+            {error, rabbit_misc:format("Feature flag '~s' is not enabled, cannot put this node out of maintenance", [?FEATURE_FLAG])}
     end.
 
 -spec do_revive() -> ok.
