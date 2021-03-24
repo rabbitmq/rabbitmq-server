@@ -208,8 +208,22 @@ test_erlang_lib(
     extra_apps = EXTRA_APPS,
     first_srcs = FIRST_SRCS,
     priv = glob(["priv/schema/rabbit.schema"]),
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
+    runtime_deps = [
+        "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
+        "@cuttlefish//:bazel_erlang_lib",
+        "@observer_cli//:bazel_erlang_lib",
+        "@osiris//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+        "@sysmon_handler//:bazel_erlang_lib",
+    ],
+    deps = [
+        "//deps/amqp10_common:bazel_erlang_lib",
+        "//deps/rabbit_common:test_bazel_erlang_lib",
+        "@ra//:bazel_erlang_lib",
+        "@ranch//:bazel_erlang_lib",
+        "@stdout_formatter//:bazel_erlang_lib",
+        "@syslog//:bazel_erlang_lib",
+    ],
 )
 
 erlc(
@@ -947,7 +961,7 @@ ct_suite(
 )
 
 ct_suite(
-    size = "small",
+    size = "medium",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_config_value_encryption_SUITE",
     runtime_deps = [
