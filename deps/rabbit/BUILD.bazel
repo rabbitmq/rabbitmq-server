@@ -994,3 +994,121 @@ rabbitmq_integration_suite(
     suite_name = "unit_disk_monitor_SUITE",
     deps = DEPS,
 )
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_file_handle_cache_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_gen_server2_SUITE",
+    deps = DEPS,
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_gm_SUITE",
+    runtime_deps = [
+        "@meck//:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_log_management_SUITE",
+    deps = DEPS,
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_operator_policy_SUITE",
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_pg_local_SUITE",
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_plugin_directories_SUITE",
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_plugin_versioning_SUITE",
+    deps = [
+        "//deps/rabbit_common:test_bazel_erlang_lib",
+    ],
+    runtime_deps = [
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_policy_validators_SUITE",
+    deps = DEPS,
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_priority_queue_SUITE",
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_queue_consumers_SUITE",
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_stats_and_metrics_SUITE",
+    additional_srcs = [
+        "test/dummy_event_receiver.erl",
+    ],
+    deps = DEPS,
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_supervisor2_SUITE",
+    additional_srcs = [
+        "test/dummy_supervisor2.erl"
+    ],
+)
+
+rabbitmq_integration_suite(
+    size = "small",
+    suite_name = "unit_vm_memory_monitor_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "upgrade_preparation_SUITE",
+    deps = DEPS,
+)
+
+rabbitmq_integration_suite(
+    size = "medium",
+    suite_name = "vhost_SUITE",
+    groups = [
+        "cluster_size_1_network",
+        "cluster_size_2_network",
+        "cluster_size_1_direct",
+        "cluster_size_2_direct",
+    ],
+    deps = DEPS,
+)
