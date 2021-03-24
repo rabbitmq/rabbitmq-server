@@ -1045,11 +1045,11 @@ ct_suite(
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_plugin_versioning_SUITE",
-    deps = [
-        "//deps/rabbit_common:test_bazel_erlang_lib",
-    ],
     runtime_deps = [
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+    deps = [
+        "//deps/rabbit_common:test_bazel_erlang_lib",
     ],
 )
 
@@ -1073,20 +1073,20 @@ ct_suite(
 
 rabbitmq_integration_suite(
     size = "small",
-    suite_name = "unit_stats_and_metrics_SUITE",
     additional_srcs = [
         "test/dummy_event_receiver.erl",
     ],
+    suite_name = "unit_stats_and_metrics_SUITE",
     deps = DEPS,
 )
 
 ct_suite(
     size = "small",
+    additional_srcs = [
+        "test/dummy_supervisor2.erl",
+    ],
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_supervisor2_SUITE",
-    additional_srcs = [
-        "test/dummy_supervisor2.erl"
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -1103,12 +1103,12 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     size = "medium",
-    suite_name = "vhost_SUITE",
     groups = [
         "cluster_size_1_network",
         "cluster_size_2_network",
         "cluster_size_1_direct",
         "cluster_size_2_direct",
     ],
+    suite_name = "vhost_SUITE",
     deps = DEPS,
 )
