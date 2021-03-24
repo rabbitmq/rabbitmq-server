@@ -59,7 +59,6 @@ def rabbitmq_lib(
         build_deps = [],
         deps = [],
         runtime_deps = []):
-
     erlang_lib(
         app_name = app_name,
         app_version = app_version,

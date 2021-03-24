@@ -1,6 +1,12 @@
 load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
-load("@bazel-erlang//:bazel_erlang_lib.bzl",
- "BEGINS_WITH_FUN", "ErlangLibInfo", "QUERY_ERL_VERSION", "path_join", "flat_deps")
+load(
+    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "BEGINS_WITH_FUN",
+    "ErlangLibInfo",
+    "QUERY_ERL_VERSION",
+    "flat_deps",
+    "path_join",
+)
 load("//:elixir_home.bzl", "ElixirHomeProvider")
 
 MIX_DEPS_DIR = "mix_deps"
@@ -122,7 +128,7 @@ def _impl(ctx):
     )
 
     deps = flat_deps(ctx.attr.deps)
-    
+
     runfiles = ctx.runfiles([ebin])
     for dep in ctx.attr.deps:
         runfiles = runfiles.merge(dep[DefaultInfo].default_runfiles)
