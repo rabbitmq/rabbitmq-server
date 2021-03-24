@@ -57,27 +57,9 @@ rabbitmq_home(
     name = "broker-for-tests-home",
     testonly = True,
     plugins = [
-        # "@cuttlefish//:bazel_erlang_lib",
-        # "@ranch//:bazel_erlang_lib",
-        "//deps/rabbit_common:test_bazel_erlang_lib",  # <- compiled with test erlc_opts
-        # "@ra//:bazel_erlang_lib",
-        # "@sysmon_handler//:bazel_erlang_lib",
-        # "@stdout_formatter//:bazel_erlang_lib",
-        # "@recon//:bazel_erlang_lib",
-        # "@observer_cli//:bazel_erlang_lib",
-        # "@osiris//:bazel_erlang_lib",
-        # "//deps/amqp10_common:bazel_erlang_lib",
         "//deps/rabbit:test_bazel_erlang_lib",  # <- compiled with test erlc_opts
-        # "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",  # <- compiled with test erlc_opts
-        # "@goldrush//:bazel_erlang_lib",
-        # "@jsx//:bazel_erlang_lib",
-        # "@credentials_obfuscation//:bazel_erlang_lib",
-        # "@aten//:bazel_erlang_lib",
-        # "@gen_batch_server//:bazel_erlang_lib",
-        # "@syslog//:bazel_erlang_lib",
         "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
         "@inet_tcp_proxy//:bazel_erlang_lib",
-        # "//deps/amqp_client:bazel_erlang_lib",
         "@meck//:bazel_erlang_lib",
     ],
 )

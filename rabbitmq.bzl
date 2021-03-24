@@ -15,34 +15,12 @@ APP_VERSION = "3.9.0"
 
 def required_plugins(rabbitmq_workspace = "@rabbitmq-server"):
     return [
-        # "@cuttlefish//:bazel_erlang_lib",
-        # "@ranch//:bazel_erlang_lib",
-        # rabbitmq_workspace + "//deps/rabbit_common:bazel_erlang_lib",
-        # "@ra//:bazel_erlang_lib",
-        # "@sysmon_handler//:bazel_erlang_lib",
-        # "@stdout_formatter//:bazel_erlang_lib",
-        # "@recon//:bazel_erlang_lib",
-        # "@observer_cli//:bazel_erlang_lib",
-        # "@osiris//:bazel_erlang_lib",
-        # rabbitmq_workspace + "//deps/amqp10_common:bazel_erlang_lib",
         rabbitmq_workspace + "//deps/rabbit:bazel_erlang_lib",
-        # rabbitmq_workspace + "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
-        # "@goldrush//:bazel_erlang_lib",
-        # "@jsx//:bazel_erlang_lib",
-        # "@credentials_obfuscation//:bazel_erlang_lib",
-        # "@aten//:bazel_erlang_lib",
-        # "@gen_batch_server//:bazel_erlang_lib",
-        # "@syslog//:bazel_erlang_lib",
     ]
 
 def management_plugins(rabbitmq_workspace = "@rabbitmq-server"):
     return [
         rabbitmq_workspace + "//deps/rabbitmq_management:bazel_erlang_lib",
-        # rabbitmq_workspace + "//deps/rabbitmq_management_agent:bazel_erlang_lib",
-        # rabbitmq_workspace + "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
-        # rabbitmq_workspace + "//deps/amqp_client:bazel_erlang_lib",
-        # "@cowboy//:bazel_erlang_lib",
-        # "@cowlib//:bazel_erlang_lib",
     ]
 
 def rabbitmq_lib(
@@ -116,11 +94,7 @@ def rabbitmq_integration_suite(
         runtime_deps = [
             "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
             "//deps/rabbitmq_cli:rabbitmqctl",
-            # "@credentials_obfuscation//:bazel_erlang_lib",
-            # "@goldrush//:bazel_erlang_lib",
-            # "@jsx//:bazel_erlang_lib",
             "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
-            # "@recon//:bazel_erlang_lib",
         ] + runtime_deps,
         deps = [
             "//deps/amqp_client:bazel_erlang_lib",
