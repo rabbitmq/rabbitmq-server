@@ -1,12 +1,11 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib", "test_erlang_lib")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "TEST_ERLC_OPTS", "erlang_lib", "test_erlang_lib")
 load("@bazel-erlang//:ct.bzl", "ct_suite", "ct_test")
 load("//deps/rabbitmq_cli:rabbitmqctl.bzl", "rabbitmqctl")
 load("//deps/rabbitmq_cli:rabbitmqctl_test.bzl", "rabbitmqctl_test")
 
 RABBITMQ_ERLC_OPTS = []
 
-RABBITMQ_TEST_ERLC_OPTS = [
-    "-DTEST",
+RABBITMQ_TEST_ERLC_OPTS = TEST_ERLC_OPTS + [
     "+debug_info",
     "+nowarn_export_all",
 ]
