@@ -49,7 +49,6 @@ DEPS = []
 
 RUNTIME_DEPS = [
     "@jsx//:bazel_erlang_lib",
-    "@ranch//:bazel_erlang_lib",
     "@recon//:bazel_erlang_lib",
     "@credentials_obfuscation//:bazel_erlang_lib",
 ]

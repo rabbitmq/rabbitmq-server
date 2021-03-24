@@ -54,11 +54,6 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         version = "0.8.4",
     )
 
-    hex_pm_bazel_erlang_lib(
-        name = "goldrush",
-        version = "0.1.9",
-    )
-
     http_archive(
         name = "inet_tcp_proxy",
         build_file = rabbitmq_workspace + "//:BUILD.inet_tcp_proxy",
@@ -69,12 +64,10 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_bazel_erlang_lib(
         name = "jsx",
         version = "2.11.0",
-    )
-
-    hex_pm_bazel_erlang_lib(
-        name = "lager",
-        first_srcs = ["src/lager_rotator_behaviour.erl"],
-        version = "3.8.1",
+        erlc_opts = [
+            "+debug_info",
+            "-Dmaps_support=1",
+        ],
     )
 
     github_bazel_erlang_lib(
