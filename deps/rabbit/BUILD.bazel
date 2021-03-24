@@ -1039,6 +1039,9 @@ ct_suite(
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_plugin_directories_SUITE",
+    deps = [
+        "//deps/rabbit_common:test_bazel_erlang_lib",
+    ],
 )
 
 ct_suite(
