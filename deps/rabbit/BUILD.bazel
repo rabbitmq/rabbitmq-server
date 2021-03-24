@@ -1094,6 +1094,9 @@ ct_suite(
     ],
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_supervisor2_SUITE",
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
 )
 
 rabbitmq_integration_suite(
