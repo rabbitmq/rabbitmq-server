@@ -42,7 +42,7 @@ ERLC_OPTS += -Dnowarn_deprecated_gen_fsm
 endif
 
 # Dialyze the tests.
-DIALYZER_OPTS += --src -r test
+DIALYZER_OPTS += -r test
 
 # --------------------------------------------------------------------
 # ActiveMQ for the testsuite.
