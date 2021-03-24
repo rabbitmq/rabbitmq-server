@@ -9,6 +9,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(RA_EVENT_TIMEOUT, 5000).
+-define(RA_SYSTEM, quorum_queues).
 
 all() ->
     [
@@ -48,6 +49,8 @@ init_per_group(_, Config) ->
     ok = application:set_env(ra, data_dir, PrivDir),
     application:ensure_all_started(ra),
     application:ensure_all_started(lg),
+    SysCfg = ra_system:default_config(),
+    ra_system:start(SysCfg#{name => ?RA_SYSTEM}),
     Config.
 
 end_per_group(_, Config) ->
@@ -61,7 +64,7 @@ init_per_testcase(TestCase, Config) ->
     meck:expect(rabbit_quorum_queue, file_handle_other_reservation, fun () -> ok end),
     meck:expect(rabbit_quorum_queue, cancel_consumer_handler,
                 fun (_, _) -> ok end),
-    ra_server_sup_sup:remove_all(),
+    ra_server_sup_sup:remove_all(?RA_SYSTEM),
     ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
     ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
     ClusterName = rabbit_misc:r("/", queue, atom_to_binary(TestCase, utf8)),
@@ -641,7 +644,8 @@ validate_process_down(Name, Num) ->
     end.
 
 start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
-    {ok, Started, _} = ra:start_cluster(ClusterName#resource.name,
+    {ok, Started, _} = ra:start_cluster(?RA_SYSTEM,
+                                        ClusterName#resource.name,
                                         {module, rabbit_fifo, RaFifoConfig},
                                         ServerIds),
     ?assertEqual(length(Started), length(ServerIds)),
