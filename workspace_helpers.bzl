@@ -20,6 +20,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
             "src/cowboy_sub_protocol.erl",
         ],
         version = "2.8.0",
+        sha256 = "4643e4fba74ac96d4d152c75803de6fad0b3fa5df354c71afdd6cbeeb15fac8a",
         deps = [
             "@cowlib//:bazel_erlang_lib",
             "@ranch//:bazel_erlang_lib",
@@ -29,6 +30,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_bazel_erlang_lib(
         name = "cowlib",
         version = "2.9.1",
+        sha256 = "e4175dc240a70d996156160891e1c62238ede1729e45740bdd38064dad476170",
     )
 
     github_bazel_erlang_lib(
