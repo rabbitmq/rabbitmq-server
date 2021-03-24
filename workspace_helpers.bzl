@@ -64,6 +64,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_bazel_erlang_lib(
         name = "jsx",
         version = "2.11.0",
+        sha256 = "eed26a0d04d217f9eecefffb89714452556cf90eb38f290a27a4d45b9988f8c0",
         erlc_opts = [
             "+debug_info",
             "-Dmaps_support=1",
@@ -78,6 +79,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_bazel_erlang_lib(
         name = "observer_cli",
         version = "1.6.1",
+        sha256 = "3418e319764b9dff1f469e43cbdffd7fd54ea47cbf765027c557abd146a19fb3",
     )
 
     http_archive(
@@ -106,16 +108,19 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
             "src/ranch_transport.erl",
         ],
         version = "2.0.0",
+        sha256 = "c20a4840c7d6623c19812d3a7c828b2f1bd153ef0f124cb69c54fe51d8a42ae0",
     )
 
     hex_pm_bazel_erlang_lib(
         name = "recon",
         version = "2.5.1",
+        sha256 = "5721c6b6d50122d8f68cccac712caa1231f97894bab779eff5ff0f886cb44648",
     )
 
     hex_pm_bazel_erlang_lib(
         name = "stdout_formatter",
         version = "0.2.4",
+        sha256 = "51f1df921b0477275ea712763042155dbc74acc75d9648dbd54985c45c913b29",
     )
 
     github_bazel_erlang_lib(
@@ -132,4 +137,5 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_bazel_erlang_lib(
         name = "sysmon_handler",
         version = "1.3.0",
+        sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
     )
