@@ -114,4 +114,6 @@ ct_suite(
         "//deps/rabbitmq_cli:rabbitmqctl",
         "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
     ],
+    # does not pass remotely. marking exclusive until we have logs from remote runs
+    tags = ["exclusive"],
 )
