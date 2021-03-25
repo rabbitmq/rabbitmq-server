@@ -46,6 +46,9 @@
 -export([format_osiris_event/2]).
 -export([update_stream_conf/2]).
 
+-export([status/2,
+         tracking_status/2]).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
@@ -491,6 +494,50 @@ i(type, _) ->
     stream;
 i(_, _) ->
     ''.
+-spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
+    [[{binary(), term()}]] | {error, term()}.
+status(Vhost, QueueName) ->
+    %% Handle not found queues
+    QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {error, quorum_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_stream(Q) ->
+            Data = osiris_counters:overview(),
+            case maps:get({osiris_writer, QName}, Data, undefined) of
+                undefined ->
+                    #{};
+                #{segments := Segments} = Map ->
+                    Conf = amqqueue:get_type_state(Q),
+                    Max = maps:get(max_segment_size, Conf, osiris_log:get_default_max_segment_size()),
+                    Map#{max_disk_size => Segments * Max}
+            end;
+        {error, not_found} = E->
+            E
+    end.
+
+-spec tracking_status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
+    [[{atom(), term()}]] | {error, term()}.
+tracking_status(Vhost, QueueName) ->
+    %% Handle not found queues
+    QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {error, quorum_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_stream(Q) ->
+            Leader = amqqueue:get_pid(Q),
+            Map = osiris:read_tracking(Leader),
+            maps:fold(fun(K, V, Acc) ->
+                              [[{reference, K},
+                                {offset, V}] | Acc]
+                      end, [], Map);
+        {error, not_found} = E->
+            E
+    end.
 
 init(Q) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
