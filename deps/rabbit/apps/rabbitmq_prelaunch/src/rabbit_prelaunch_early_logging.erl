@@ -15,11 +15,13 @@
          default_formatter/1,
          default_console_formatter/1,
          default_file_formatter/1,
+         default_journald_formatter/1,
          default_syslog_formatter/1,
          enable_quick_dbg/1,
          use_colored_logging/0,
          use_colored_logging/1,
-         translate_formatter_conf/2]).
+         translate_formatter_conf/2,
+         translate_journald_fields_conf/2]).
 -export([filter_log_event/2]).
 
 -ifdef(TEST).
@@ -121,6 +123,10 @@ default_console_formatter(Context) ->
 default_file_formatter(Context) ->
     default_formatter(Context#{output_supports_colors => false}).
 
+default_journald_formatter(_Context) ->
+    {rabbit_logger_text_fmt, #{prefix_format => [],
+                               use_colors => false}}.
+
 default_syslog_formatter(Context) ->
     {Module, Config} = default_file_formatter(Context),
     case Module of
@@ -155,8 +161,8 @@ enable_quick_dbg(#{dbg_output := Output, dbg_mods := Mods}) ->
     {rabbit_logger_text_fmt, formatter_plaintext_conf()} |
     {rabbit_logger_json_fmt, formatter_json_conf()}.
 %% @doc
-%% Called from the Cuttlefish schema to derive the actual configuration from
-%% several Cuttlefish variables.
+%% Called from the Cuttlefish schema to derive the actual formatter
+%% configuration from several Cuttlefish variables.
 
 translate_formatter_conf(Var, Conf) when is_list(Var) ->
     try
@@ -404,7 +410,7 @@ translate_json_formatter_conf(Var, Conf, GenericConfig) ->
 
 -spec parse_json_field_mapping(string()) -> json_field_map().
 %% @doc
-%% Parses the field_map pattern.
+%% Parses the JSON formatter field_map pattern.
 %%
 %% The pattern is of the form: `time:ts level msg *:-'.
 %%
@@ -495,6 +501,74 @@ parse_json_verbosity_mapping([], #{'$REST' := Default} = Mapping) ->
       maps:remove('$REST', Mapping));
 parse_json_verbosity_mapping([], Mapping) ->
     Mapping.
+
+-spec translate_journald_fields_conf(string(), cuttlefish_conf:conf()) ->
+    proplists:proplist().
+%% @doc
+%% Called from the Cuttlefish schema to create the actual journald handler
+%% configuration.
+
+translate_journald_fields_conf(Var, Conf) when is_list(Var) ->
+    try
+        RawFieldMapping = cuttlefish:conf_get(Var, Conf),
+        parse_journald_field_mapping(RawFieldMapping)
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_ERROR(
+               rabbit_prelaunch_errors:format_exception(
+                 Class, Reason, Stacktrace),
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+            throw({configuration_translation_failure, Reason})
+    end.
+
+-spec parse_journald_field_mapping(string()) ->
+    [atom() | {atom(), atom()}].
+%% @doc
+%% Parses the journald fields pattern.
+%%
+%% The pattern is of the form: `SYSLOG_IDENTIFIER="rabbitmq-server" pid
+%% CODE_FILE=file'.
+%%
+%% `SYSLOG_IDENTIFIER="rabbitmq"' means the `SYSLOG_IDENTIFIER' field should
+%% be set to the string `rabbitmq-server'.
+%%
+%% `pid' means that field should be kept as-is.
+%%
+%% `CODE_FILE=file' means the `CODE_FILE' field should be set to the value of
+%% the `pid' field.
+
+parse_journald_field_mapping(RawMapping) ->
+    parse_journald_field_mapping(string:split(RawMapping, " ", all), []).
+
+parse_journald_field_mapping([Entry | Rest], Mapping) ->
+    Mapping1 = case string:split(Entry, "=", leading) of
+                   [[$_ | _], _] ->
+                       throw({bad_journald_mapping,
+                              leading_underscore_forbidden,
+                              Entry});
+                   [Name, Value] ->
+                       case re:run(Name, "^[A-Z0-9_]+$", [{capture, none}]) of
+                           match ->
+                               ReOpts = [{capture, all_but_first, list}],
+                               case re:run(Value, "^\"(.+)\"$", ReOpts) of
+                                   {match, [Data]} ->
+                                       [{Name, Data} | Mapping];
+                                   nomatch ->
+                                       Field = list_to_atom(Value),
+                                       [{Name, Field} | Mapping]
+                               end;
+                           nomatch ->
+                               throw({bad_journald_mapping,
+                                      name_with_invalid_characters,
+                                      Entry})
+                       end;
+                   [FieldS] ->
+                       Field = list_to_atom(FieldS),
+                       [Field | Mapping]
+               end,
+    parse_journald_field_mapping(Rest, Mapping1);
+parse_journald_field_mapping([], Mapping) ->
+    lists:reverse(Mapping).
 
 levels() ->
     [debug, info, notice, warning, error, critical, alert, emergency].
