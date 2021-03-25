@@ -71,6 +71,12 @@
 %%       {count, RotationCount},
 %%     ]},
 %%
+%%     {journald, [
+%%       {level, Level},
+%%       {enabled, boolean()},
+%%       {fields, proplists:proplist()}
+%%     ]}
+%%
 %%     {syslog, [
 %%       {level, Level},
 %%       {enabled, boolean()}
@@ -115,6 +121,8 @@
 %%
 %% If the output is a file, the location is the absolute filename.
 %%
+%% If the output is journald, the location is `"<journald>"'.
+%%
 %% If the output is syslog, the location is the string `"syslog:"' with the
 %% syslog server hostname appended.
 
@@ -147,6 +155,12 @@
 %% File properties are the parameters in the configuration file for a
 %% file-based handler.
 
+-type journald_props() :: [{level, logger:level()} |
+                           {enabled, boolean()} |
+                           {fields, proplists:proplist()}].
+%% journald properties are the parameters in the configuration file for a
+%% journald-based handler.
+
 -type syslog_props() :: [{level, logger:level()} |
                          {enabled, boolean()} |
                          {formatter, {atom(), term()}}].
@@ -156,6 +170,7 @@
 -type main_log_env() :: [{console, console_props()} |
                          {exchange, exchange_props()} |
                          {file, file_props()} |
+                         {journald, journald_props()} |
                          {syslog, syslog_props()}].
 %% The main log environment is the parameters in the configuration file for
 %% the main log handler (i.e. where all messages go by default).
@@ -309,13 +324,15 @@ set_log_level(Level) ->
 %% For console-based handlers, a string literal is returned; either
 %% `"<stdout>"' or `"<stderr>"'.
 %%
+%% For exchange-based handlers, a string of the form `"exchange:Exchange"' is
+%% returned, where `Exchange' is the name of the exchange.
+%%
+%% For journald-based handlers, a string literal is returned; `"<journald>"'.
+%%
 %% For syslog-based handlers, a string of the form `"syslog:Hostname"' is
 %% returned, where `Hostname' is either the hostname of the remote syslog
 %% server, or an empty string if none were configured (which means log to
 %% localhost).
-%%
-%% For exchange-based handlers, a string of the form `"exchange:Exchange"' is
-%% returned, where `Exchange' is the name of the exchange.
 %%
 %% @returns the list of output locations.
 %%
@@ -343,6 +360,10 @@ log_locations([#{module := Mod,
               Locations)
   when ?IS_STD_H_COMPAT(Mod) ->
     Locations1 = add_once(Locations, "<stderr>"),
+    log_locations(Rest, Locations1);
+log_locations([#{module := systemd_journal_h} | Rest],
+              Locations) ->
+    Locations1 = add_once(Locations, "<journald>"),
     log_locations(Rest, Locations1);
 log_locations([#{module := syslog_logger_h} | Rest],
               Locations) ->
@@ -538,24 +559,29 @@ compute_implicitly_enabled_output(Props) ->
                                  console, Props),
     {ExchangeEnabled, Props2} = compute_implicitly_enabled_output(
                                   exchange, Props1),
-    {SyslogEnabled, Props3} = compute_implicitly_enabled_output(
-                                syslog, Props2),
+    {JournaldEnabled, Props3} = compute_implicitly_enabled_output(
+                                  journald, Props2),
+    {SyslogEnabled, Props4} = compute_implicitly_enabled_output(
+                                syslog, Props3),
     FileDisabledByDefault =
-    ConsoleEnabled orelse ExchangeEnabled orelse SyslogEnabled,
+    ConsoleEnabled orelse
+    ExchangeEnabled orelse
+    JournaldEnabled orelse
+    SyslogEnabled,
 
-    FileProps = proplists:get_value(file, Props3, []),
+    FileProps = proplists:get_value(file, Props4, []),
     case is_output_explicitely_enabled(FileProps) of
         true ->
-            Props3;
+            Props4;
         false ->
             case FileDisabledByDefault of
                 true ->
                     FileProps1 = lists:keystore(
                                    file, 1, FileProps, {file, false}),
                     lists:keystore(
-                      file, 1, Props3, {file, FileProps1});
+                      file, 1, Props4, {file, FileProps1});
                 false ->
-                    Props3
+                    Props4
             end
     end.
 
@@ -598,31 +624,39 @@ normalize_main_log_config1([], LogConfig) ->
     [logger:handler_config()];
 (file, file_props(), [logger:handler_config()]) ->
     [logger:handler_config()];
+(journald, journald_props(), [logger:handler_config()]) ->
+    [logger:handler_config()];
 (syslog, syslog_props(), [logger:handler_config()]) ->
     [logger:handler_config()].
 
-normalize_main_output(file, Props, Outputs) ->
-    normalize_main_file_output(
-      Props,
-      #{module => rabbit_logger_std_h,
-        config => #{type => file}},
-      Outputs);
 normalize_main_output(console, Props, Outputs) ->
     normalize_main_console_output(
       Props,
       #{module => rabbit_logger_std_h,
         config => #{type => standard_io}},
       Outputs);
-normalize_main_output(syslog, Props, Outputs) ->
-    normalize_main_syslog_output(
-      Props,
-      #{module => syslog_logger_h,
-        config => #{}},
-      Outputs);
 normalize_main_output(exchange, Props, Outputs) ->
     normalize_main_exchange_output(
       Props,
       #{module => rabbit_logger_exchange_h,
+        config => #{}},
+      Outputs);
+normalize_main_output(file, Props, Outputs) ->
+    normalize_main_file_output(
+      Props,
+      #{module => rabbit_logger_std_h,
+        config => #{type => file}},
+      Outputs);
+normalize_main_output(journald, Props, Outputs) ->
+    normalize_main_journald_output(
+      Props,
+      #{module => systemd_journal_h,
+        config => #{}},
+      Outputs);
+normalize_main_output(syslog, Props, Outputs) ->
+    normalize_main_syslog_output(
+      Props,
+      #{module => syslog_logger_h,
         config => #{}},
       Outputs).
 
@@ -789,6 +823,53 @@ remove_main_exchange_output(
           (_)                                     -> true
       end, Outputs).
 
+-spec normalize_main_journald_output(journald_props(), logger:handler_config(),
+                                     [logger:handler_config()]) ->
+    [logger:handler_config()].
+
+normalize_main_journald_output(Props, Output, Outputs) ->
+    Enabled = proplists:get_value(enabled, Props),
+    case Enabled of
+        true  -> normalize_main_journald_output1(Props, Output, Outputs);
+        false -> remove_main_journald_output(Output, Outputs)
+    end.
+
+normalize_main_journald_output1(
+  [{enabled, true} | Rest],
+  Output, Outputs) ->
+    normalize_main_journald_output1(Rest, Output, Outputs);
+normalize_main_journald_output1(
+  [{level, Level} | Rest],
+  Output, Outputs) ->
+    Output1 = Output#{level => Level},
+    normalize_main_journald_output1(Rest, Output1, Outputs);
+normalize_main_journald_output1(
+  [{fields, FieldMapping} | Rest],
+  #{config := Config} = Output, Outputs) ->
+    Config1 = Config#{fields => FieldMapping},
+    Output1 = Output#{config => Config1},
+    normalize_main_journald_output1(Rest, Output1, Outputs);
+normalize_main_journald_output1(
+  [{formatter, undefined} | Rest],
+  Output, Outputs) ->
+    normalize_main_journald_output1(Rest, Output, Outputs);
+normalize_main_journald_output1(
+  [{formatter, Formatter} | Rest],
+  Output, Outputs) ->
+    Output1 = Output#{formatter => Formatter},
+    normalize_main_journald_output1(Rest, Output1, Outputs);
+normalize_main_journald_output1([], Output, Outputs) ->
+    [Output | Outputs].
+
+remove_main_journald_output(
+  #{module := systemd_journal_h},
+  Outputs) ->
+    lists:filter(
+      fun
+          (#{module := systemd_journal_h}) -> false;
+          (_)                              -> true
+      end, Outputs).
+
 -spec normalize_main_syslog_output(
         syslog_props(), logger:handler_config(),
         [logger:handler_config()]) ->
@@ -939,6 +1020,9 @@ log_file_var_to_output("-stderr") ->
 log_file_var_to_output("exchange:" ++ _) ->
     #{module => rabbit_logger_exchange_h,
       config => #{}};
+log_file_var_to_output("journald:" ++ _) ->
+    #{module => systemd_journal_h,
+      config => #{}};
 log_file_var_to_output("syslog:" ++ _) ->
     #{module => syslog_logger_h,
       config => #{}};
@@ -1067,6 +1151,8 @@ configure_formatters1(#{outputs := Outputs} = Config, Context) ->
     rabbit_prelaunch_early_logging:default_console_formatter(Context),
     FileFormatter =
     rabbit_prelaunch_early_logging:default_file_formatter(Context),
+    JournaldFormatter =
+    rabbit_prelaunch_early_logging:default_journald_formatter(Context),
     SyslogFormatter =
     rabbit_prelaunch_early_logging:default_syslog_formatter(Context),
     Outputs1 = lists:map(
@@ -1078,6 +1164,11 @@ configure_formatters1(#{outputs := Outputs} = Config, Context) ->
                          case maps:is_key(formatter, Output) of
                              true  -> Output;
                              false -> Output#{formatter => ConsFormatter}
+                         end;
+                     (#{module := systemd_journal_h} = Output) ->
+                         case maps:is_key(formatter, Output) of
+                             true  -> Output;
+                             false -> Output#{formatter => JournaldFormatter}
                          end;
                      (#{module := syslog_logger_h} = Output) ->
                          case maps:is_key(formatter, Output) of
@@ -1187,11 +1278,14 @@ create_handler_key(
   when ?IS_STD_H_COMPAT(Mod) ->
     {console, standard_error};
 create_handler_key(
-  #{module := syslog_logger_h}) ->
-    syslog;
-create_handler_key(
   #{module := rabbit_logger_exchange_h}) ->
-    exchange.
+    exchange;
+create_handler_key(
+  #{module := systemd_journal_h}) ->
+    journald;
+create_handler_key(
+  #{module := syslog_logger_h}) ->
+    syslog.
 
 -spec create_handler_conf(
         logger:handler_config(), global | category_name(),
@@ -1375,19 +1469,27 @@ assign_handler_ids(
     Handler1 = Handler#{id => Id},
     assign_handler_ids(Rest, State, [Handler1 | Result]);
 assign_handler_ids(
-  [#{module := syslog_logger_h} = Handler
-   | Rest],
-  State,
-  Result) ->
-    Id = format_id("syslog", [], State),
-    Handler1 = Handler#{id => Id},
-    assign_handler_ids(Rest, State, [Handler1 | Result]);
-assign_handler_ids(
   [#{module := rabbit_logger_exchange_h} = Handler
    | Rest],
   State,
   Result) ->
     Id = format_id("exchange", [], State),
+    Handler1 = Handler#{id => Id},
+    assign_handler_ids(Rest, State, [Handler1 | Result]);
+assign_handler_ids(
+  [#{module := systemd_journal_h} = Handler
+   | Rest],
+  State,
+  Result) ->
+    Id = format_id("journald", [], State),
+    Handler1 = Handler#{id => Id},
+    assign_handler_ids(Rest, State, [Handler1 | Result]);
+assign_handler_ids(
+  [#{module := syslog_logger_h} = Handler
+   | Rest],
+  State,
+  Result) ->
+    Id = format_id("syslog", [], State),
     Handler1 = Handler#{id => Id},
     assign_handler_ids(Rest, State, [Handler1 | Result]);
 assign_handler_ids([], _, Result) ->
