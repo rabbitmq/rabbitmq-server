@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(rabbit_ct_broker_helpers, [
     cluster_members_online/2
@@ -145,35 +146,41 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %%
 successful_discovery(Config) ->
-    Condition = fun() ->
-                    3 =:= length(cluster_members_online(Config, 0)) andalso
-                    3 =:= length(cluster_members_online(Config, 1))
-                end,
-    await_cluster(Config, Condition, [1, 2]).
+    % with_retry(Config, [1, 2], fun () ->
+        ?awaitMatch(
+            {M1, M2} when length(M1) =:= 3; length(M2) =:= 3,
+            {cluster_members_online(Config, 0),
+            cluster_members_online(Config, 1)},
+            30000).
+    % end).
 
 successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
-    Condition = fun() ->
-                    2 =:= length(cluster_members_online(Config, 0)) andalso
-                    2 =:= length(cluster_members_online(Config, 1))
-                end,
-    await_cluster(Config, Condition, [1]).
+    with_retry(Config, [1], fun () ->
+        ?awaitMatch(
+            {M1, M2} when length(M1) =:= 2; length(M2) =:= 2,
+            {cluster_members_online(Config, 0),
+            cluster_members_online(Config, 1)},
+            30000)
+    end).
 
 no_nodes_configured(Config) ->
-    Condition = fun() -> length(cluster_members_online(Config, 0)) < 2 end,
-    await_cluster(Config, Condition, [1]).
+    with_retry(Config, [1], fun () ->
+        ?awaitMatch(
+            M when length(M) < 2,
+            cluster_members_online(Config, 0),
+            30000)
+    end).
 
 reset_and_restart_node(Config, I) when is_integer(I) andalso I >= 0 ->
     Name = rabbit_ct_broker_helpers:get_node_config(Config, I, nodename),
-    rabbit_control_helper:command(stop_app, Name),
-    rabbit_ct_broker_helpers:reset_node(Config, Name),
-    rabbit_control_helper:command(start_app, Name).
+    rabbit_control_helper:command(stop_app, Name).
 
-await_cluster(Config, Condition, Nodes) ->
+with_retry(Config, Nodes, Fun) ->
     try
-        rabbit_ct_helpers:await_condition(Condition, 30000)
+        Fun()
     catch
-        exit:{test_case_failed, _} ->
+        error:{awaitMatch, _} ->
             ct:pal(?LOW_IMPORTANCE, "Possible dead-lock; resetting/restarting these nodes: ~p", [Nodes]),
             [reset_and_restart_node(Config, N) || N <- Nodes],
-            rabbit_ct_helpers:await_condition(Condition, 30000)
+            Fun()
     end.
