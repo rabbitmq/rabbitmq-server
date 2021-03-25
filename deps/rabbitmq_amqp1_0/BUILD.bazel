@@ -1,0 +1,35 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+load("//:rabbitmq.bzl", "APP_VERSION")
+
+APP_ENV = """[
+	    {default_user, "guest"},
+	    {default_vhost, <<"/">>},
+	    {protocol_strict_mode, false}
+	  ]"""
+
+APP_NAME = "rabbitmq_amqp1_0"
+APP_DESCRIPTION = "AMQP 1.0 support for RabbitMQ"
+
+BUILD_DEPS = [
+    "//deps/rabbitmq_cli:rabbitmqctl",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/amqp_client:bazel_erlang_lib",
+    "//deps/amqp10_common:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit:bazel_erlang_lib",
+]
+
+erlang_lib(
+    app_env = APP_ENV,
+    app_description = APP_DESCRIPTION,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    build_deps = BUILD_DEPS,
+    deps = DEPS,
+    runtime_deps = RUNTIME_DEPS,
+)

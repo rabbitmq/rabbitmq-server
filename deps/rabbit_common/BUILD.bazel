@@ -29,6 +29,7 @@ genrule(
     name = "rabbit_framing_amqp_0_9_1.erl",
     srcs = [
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
+        "//deps/rabbitmq_codegen:credit_extension.json",
     ],
     outs = ["src/rabbit_framing_amqp_0_9_1.erl"],
     cmd = "$(location :codegen) body $(SRCS) $@",

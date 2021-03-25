@@ -32,7 +32,6 @@ def rabbitmq_lib(
         extra_apps = [],
         extra_erlc_opts = [],
         first_srcs = [],
-        priv = [],
         build_deps = [],
         deps = [],
         runtime_deps = []):
@@ -46,7 +45,6 @@ def rabbitmq_lib(
         extra_apps = extra_apps,
         erlc_opts = RABBITMQ_ERLC_OPTS + extra_erlc_opts,
         first_srcs = first_srcs,
-        priv = priv,
         build_deps = build_deps,
         deps = deps,
         runtime_deps = runtime_deps,
@@ -62,7 +60,6 @@ def rabbitmq_lib(
         extra_apps = extra_apps,
         erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS + extra_erlc_opts,
         first_srcs = first_srcs,
-        priv = priv,
         build_deps = build_deps,
         deps = deps,
         runtime_deps = runtime_deps,
@@ -70,13 +67,14 @@ def rabbitmq_lib(
 
 def rabbitmq_integration_suite(
         data = [],
+        extra_erlc_opts = [],
         test_env = {},
         tools = [],
         deps = [],
         runtime_deps = [],
         **kwargs):
     ct_suite(
-        erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+        erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS + extra_erlc_opts,
         data = [
             "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
             "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",

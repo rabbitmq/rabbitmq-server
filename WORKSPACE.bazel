@@ -42,3 +42,6 @@ http_archive(
     strip_prefix = "rabbitmq-ct-client-helpers-bazel",
     urls = ["https://github.com/rabbitmq/rabbitmq-ct-client-helpers/archive/bazel.zip"],
 )
+
+load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
+activemq_archive()

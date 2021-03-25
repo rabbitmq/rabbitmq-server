@@ -26,7 +26,6 @@ rabbitmq_lib(
         "crypto",
         "public_key",
     ],
-    priv = glob(["priv/**/*"]),
     deps = [
         "//deps/rabbit:bazel_erlang_lib",
         "//deps/rabbit_common:bazel_erlang_lib",
