@@ -84,6 +84,9 @@ ct_suite(
     erlc_opts = TEST_ERLC_OPTS + [
         "-I deps/amqp10_client",
     ],
+    additional_hdrs = [
+        "src/amqp10_client.hrl",
+    ],
     additional_srcs = [
         "test/activemq_ct_helpers.erl",
         "test/mock_server.erl",
