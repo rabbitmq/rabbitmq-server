@@ -146,13 +146,13 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %%
 successful_discovery(Config) ->
-    % with_retry(Config, [1, 2], fun () ->
+    with_retry(Config, [1, 2], fun () ->
         ?awaitMatch(
             {M1, M2} when length(M1) =:= 3; length(M2) =:= 3,
             {cluster_members_online(Config, 0),
             cluster_members_online(Config, 1)},
-            30000).
-    % end).
+            30000)
+    end).
 
 successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
     with_retry(Config, [1], fun () ->
