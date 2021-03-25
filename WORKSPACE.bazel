@@ -44,4 +44,5 @@ http_archive(
 )
 
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
+
 activemq_archive()

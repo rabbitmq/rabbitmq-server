@@ -8,6 +8,7 @@ APP_ENV = """[
 	  ]"""
 
 APP_NAME = "rabbitmq_amqp1_0"
+
 APP_DESCRIPTION = "AMQP 1.0 support for RabbitMQ"
 
 BUILD_DEPS = [
@@ -25,11 +26,11 @@ RUNTIME_DEPS = [
 ]
 
 erlang_lib(
-    app_env = APP_ENV,
     app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
     app_name = APP_NAME,
     app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
-    deps = DEPS,
     runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
 )
