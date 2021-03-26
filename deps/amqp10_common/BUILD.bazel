@@ -1,4 +1,5 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
+load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq.bzl", "APP_VERSION")
 
 py_binary(
@@ -59,24 +60,15 @@ bazel_erlang_lib(
     visibility = ["//visibility:public"],
 )
 
-# ct_test(
-#     name = "system_SUITE",
-#     suites = ["test/system_SUITE.erl"],
-#     hdrs = glob(["include/*.hrl"]),
-#     deps = [":bazel_erlang_lib"],
-# )
+bazel_erlang_lib(
+    name = "test_bazel_erlang_lib",
+    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    app = ":app_file",
+    app_name = "amqp10_common",
+    beam = [":beam_files"],
+    visibility = ["//visibility:public"],
+)
 
-# ct_test(
-#     name = "unit_SUITE",
-#     suites = ["test/unit_SUITE.erl"],
-#     hdrs = glob(["include/*.hrl"]),
-#     deps = [":bazel_erlang_lib"],
-# )
-
-# test_suite(
-#     name = "all",
-#     tests = [
-#         "system_SUITE",
-#         "unit_SUITE",
-#     ],
-# )
+ct_suite(
+    suite_name = "binary_generator_SUITE",
+)

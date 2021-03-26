@@ -125,6 +125,7 @@ def _impl(ctx):
         inputs = inputs,
         outputs = [escript, ebin, mix_invocation_dir],
         command = script,
+        mnemonic = "MIX",
     )
 
     deps = flat_deps(ctx.attr.deps)
