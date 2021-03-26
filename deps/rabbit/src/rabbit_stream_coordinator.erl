@@ -185,7 +185,7 @@ members(StreamId) when is_list(StreamId) ->
     case ra:local_query({?MODULE, node()}, MFA) of
         {ok, {_, {ok, _} = Result}, _} ->
             Result;
-        {ok, {_, {error, not_found} = Result}, _} ->
+        {ok, {_, {error, not_found}}, _} ->
             %% fall back to consistent query
             case ra:consistent_query({?MODULE, node()}, MFA) of
                 {ok, Result, _} ->
