@@ -74,7 +74,7 @@ init_per_testcase(successful_discovery = Testcase, Config) ->
       {rabbit, [
           {cluster_nodes, {NodeNamesWithHostname, disc}},
           {cluster_formation, [
-              {randomized_startup_delay_range, {1, 10}}
+              {randomized_startup_delay_range, {1, 20}}
           ]}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
@@ -105,7 +105,7 @@ init_per_testcase(successful_discovery_with_a_subset_of_nodes_coming_online = Te
           ]},
           {cluster_nodes, {NodeNamesWithHostname, disc}},
           {cluster_formation, [
-              {randomized_startup_delay_range, {1, 10}}
+              {randomized_startup_delay_range, {1, 20}}
           ]}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
@@ -122,7 +122,7 @@ init_per_testcase(no_nodes_configured = Testcase, Config) ->
       {rabbit, [
           {cluster_nodes, {[], disc}},
           {cluster_formation, [
-              {randomized_startup_delay_range, {1, 10}}
+              {randomized_startup_delay_range, {1, 20}}
           ]}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
