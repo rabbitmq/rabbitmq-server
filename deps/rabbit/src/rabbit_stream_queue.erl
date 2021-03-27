@@ -54,7 +54,7 @@
 
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
-                    policy, operator_policy, effective_policy_definition, type]).
+                    policy, operator_policy, effective_policy_definition, type, memory]).
 
 -type appender_seq() :: non_neg_integer().
 
@@ -429,6 +429,21 @@ i(leader, Q) when ?is_amqqueue(Q) ->
 i(members, Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
     Nodes;
+i(memory, Q) when ?is_amqqueue(Q) ->
+    %% Return writer memory. It's not the full memory usage (we also have replica readers on
+    %% the writer node), but might be good enough
+    case amqqueue:get_pid(Q) of
+        none ->
+            0;
+        Pid ->
+            try
+                {memory, M} = process_info(Pid, memory),
+                M
+            catch
+                error:badarg ->
+                    0
+            end
+    end;
 i(online, Q) ->
     #{name := StreamId} = amqqueue:get_type_state(Q),
     case rabbit_stream_coordinator:members(StreamId) of
