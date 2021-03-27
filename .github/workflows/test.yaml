@@ -30,8 +30,8 @@ jobs:
           build --host_java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
 
           build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
-          build --@bazel-erlang//:erlang_home=/usr/local/lib/erlang
-          build --//:elixir_home=/usr/local/lib/elixir
+          build --@bazel-erlang//:erlang_home=/usr/lib/erlang
+          build --//:elixir_home=/usr/local
 
           build --bes_results_url=https://app.buildbuddy.io/invocation/
           build --bes_backend=grpcs://cloud.buildbuddy.io

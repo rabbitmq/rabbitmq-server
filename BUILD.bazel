@@ -26,7 +26,7 @@ platform(
     ],
     exec_properties = {
         "OSFamily": "Linux",
-        "container-image": "docker://elixir:1.10",
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv:linux-erlang-22.3",
     },
 )
 
@@ -39,7 +39,7 @@ platform(
     ],
     exec_properties = {
         "OSFamily": "Linux",
-        "container-image": "docker://elixir:1.11",
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv:linux-erlang-23.2",
     },
 )
 
