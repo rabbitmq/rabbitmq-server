@@ -50,4 +50,5 @@ jobs:
     - name: RUN TESTS
       run: |
         bazelisk test //... \
+          --test_tag_filters=-exclusive \
           --verbose_failures
