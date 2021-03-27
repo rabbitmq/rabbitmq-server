@@ -173,9 +173,11 @@
         <td class="r">
           <%= fmt_num_thousands(queue.messages_unacknowledged) %>
         </td>
+        <% if (is_quorum(queue)) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ram) %>
         </td>
+        <% } %>
         <% if (is_classic(queue)) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_persistent) %>
@@ -186,6 +188,7 @@
         <% } %>
       </tr>
       <tr>
+        <% if (is_classic(queue) || is_quorum(queue)) { %>
         <th>
           Message body bytes
           <span class="help" id="queue-message-body-bytes"></span>
@@ -202,6 +205,7 @@
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_ram) %>
         </td>
+        <% } %>
         <% if (is_classic(queue)) { %>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_persistent) %>
