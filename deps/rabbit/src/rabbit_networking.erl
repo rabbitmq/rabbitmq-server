@@ -52,8 +52,8 @@
     connections_local/0
 ]).
 
--include("rabbit.hrl").
--include("rabbit_misc.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_misc.hrl").
 
 %% IANA-suggested ephemeral port range is 49152 to 65535
 -define(FIRST_TEST_BIND_PORT, 49152).

@@ -6,7 +6,7 @@
 %%
 
 -module(rabbit_exchange_type_direct).
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_exchange_type).
 

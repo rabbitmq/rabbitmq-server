@@ -7,7 +7,7 @@
 
 -module(rabbit_mirror_queue_mode_all).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_mirror_queue_mode).
 

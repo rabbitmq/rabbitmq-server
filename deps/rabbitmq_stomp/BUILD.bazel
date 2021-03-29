@@ -1,0 +1,42 @@
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "rabbitmq_lib")
+
+APP_ENV = """[
+	    {default_user,
+	     [{login, <<"guest">>},
+	      {passcode, <<"guest">>}]},
+	    {default_vhost, <<"/">>},
+	    {default_topic_exchange, <<"amq.topic">>},
+		{default_nack_requeue, true},
+	    {ssl_cert_login, false},
+	    {implicit_connect, false},
+	    {tcp_listeners, [61613]},
+	    {ssl_listeners, []},
+	    {num_tcp_acceptors, 10},
+	    {num_ssl_acceptors, 10},
+	    {tcp_listen_options, [{backlog,   128},
+	                          {nodelay,   true}]},
+	    %% see rabbitmq/rabbitmq-stomp#39
+	    {trailing_lf, true},
+	    %% see rabbitmq/rabbitmq-stomp#57
+	    {hide_server_info, false},
+	    {proxy_protocol, false}
+	  ]"""
+
+DEPS = [
+    "@ranch//:bazel_erlang_lib",
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/amqp_client:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = "RabbitMQ STOMP plugin",
+    app_env = APP_ENV,
+    app_module = "rabbit_stomp",
+    app_name = "rabbitmq_stomp",
+    app_version = APP_VERSION,
+    build_deps = [
+        "//deps/rabbitmq_cli:rabbitmqctl",
+    ],
+    deps = DEPS,
+)

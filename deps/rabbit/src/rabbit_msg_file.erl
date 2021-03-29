@@ -11,7 +11,7 @@
 
 %%----------------------------------------------------------------------------
 
--include("rabbit_msg_store.hrl").
+-include_lib("rabbit_common/include/rabbit_msg_store.hrl").
 
 -define(INTEGER_SIZE_BYTES,      8).
 -define(INTEGER_SIZE_BITS,       (8 * ?INTEGER_SIZE_BYTES)).

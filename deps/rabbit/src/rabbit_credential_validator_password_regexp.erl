@@ -10,7 +10,7 @@
 %% password against a pre-configured regular expression.
 -module(rabbit_credential_validator_password_regexp).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_credential_validator).
 

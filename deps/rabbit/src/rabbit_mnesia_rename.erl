@@ -6,7 +6,7 @@
 %%
 
 -module(rabbit_mnesia_rename).
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([rename/2]).
 -export([maybe_finish/1]).

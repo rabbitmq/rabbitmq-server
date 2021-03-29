@@ -110,7 +110,7 @@
 
 -module(rabbit_limiter).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(gen_server2).
 

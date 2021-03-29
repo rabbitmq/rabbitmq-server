@@ -7,7 +7,7 @@
 
 -module(rabbit_credential_validation).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %% used for backwards compatibility
 -define(DEFAULT_BACKEND, rabbit_credential_validator_accept_everything).

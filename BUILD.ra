@@ -1,0 +1,33 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib", "test_erlang_lib")
+
+DEPS = [
+    "@gen_batch_server//:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "@aten//:bazel_erlang_lib",
+]
+
+NAME = "ra"
+
+FIRST_SRCS = [
+    "src/ra_machine.erl",
+    "src/ra_snapshot.erl",
+]
+
+erlang_lib(
+    app_name = NAME,
+    first_srcs = FIRST_SRCS,
+    deps = DEPS,
+    runtime_deps = RUNTIME_DEPS,
+)
+
+test_erlang_lib(
+    app_name = NAME,
+    first_srcs = FIRST_SRCS,
+    erlc_opts = [
+        "+debug_info",
+    ],
+    deps = DEPS,
+    runtime_deps = RUNTIME_DEPS,
+)

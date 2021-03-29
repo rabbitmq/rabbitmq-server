@@ -1,0 +1,40 @@
+load("@bazel-erlang//:ct.bzl", "ct_test")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "rabbitmq_lib")
+
+APP_ENV = """[
+	    {http_log_dir,      none},
+	    {load_definitions,  none},
+	    {management_db_cache_multiplier, 5},
+	    {process_stats_gc_timeout, 300000},
+	    {stats_event_max_backlog, 250},
+
+	    {cors_allow_origins, []},
+	    {cors_max_age, 1800},
+	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
+	  ]"""
+
+rabbitmq_lib(
+    app_description = "RabbitMQ Management Console",
+    app_env = APP_ENV,
+    app_module = "rabbit_mgmt_app",
+    app_name = "rabbitmq_management",
+    extra_apps = [
+        "mnesia",
+        "ranch",
+        "ssl",
+        "crypto",
+        "public_key",
+    ],
+    first_srcs = [
+        "src/rabbit_mgmt_extension.erl",
+    ],
+    deps = [
+        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+        "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
+        "@cowboy//:bazel_erlang_lib",
+        "@cowlib//:bazel_erlang_lib",
+    ],
+)
