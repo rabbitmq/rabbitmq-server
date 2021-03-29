@@ -22,7 +22,7 @@
           msg_store_state
         }).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 

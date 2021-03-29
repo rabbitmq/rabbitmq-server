@@ -1,0 +1,33 @@
+load("@bazel-erlang//:ct.bzl", "ct_test")
+load("//:rabbitmq.bzl", "rabbitmq_lib")
+
+APP_ENV = """[
+	    {rates_mode,        basic},
+	    {sample_retention_policies,
+	     %% List of {MaxAgeInSeconds, SampleEveryNSeconds}
+	     [{global,   [{605, 5}, {3660, 60}, {29400, 600}, {86400, 1800}]},
+	      {basic,    [{605, 5}, {3600, 60}]},
+	      {detailed, [{605, 5}]}]}
+	  ]"""
+
+rabbitmq_lib(
+    app_description = "RabbitMQ Management Agent",
+    app_env = APP_ENV,
+    app_module = "rabbit_mgmt_agent_app",
+    app_name = "rabbitmq_management_agent",
+    build_deps = [
+        "//deps/rabbitmq_cli:rabbitmqctl",
+    ],
+    extra_apps = [
+        "xmerl",
+        "mnesia",
+        "ranch",
+        "ssl",
+        "crypto",
+        "public_key",
+    ],
+    deps = [
+        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)

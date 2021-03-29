@@ -9,7 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include("include/amqqueue.hrl").
+-include("amqqueue.hrl").
 
 -compile(export_all).
 

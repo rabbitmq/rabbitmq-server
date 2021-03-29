@@ -45,8 +45,8 @@
 %%
 %% Reader processes are special processes (in the OTP sense).
 
--include("rabbit_framing.hrl").
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([start_link/2, info_keys/0, info/1, info/2, force_event_refresh/2,
          shutdown/2]).

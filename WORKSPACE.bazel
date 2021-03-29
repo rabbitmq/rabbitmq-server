@@ -1,0 +1,48 @@
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "io_buildbuddy_buildbuddy_toolchain",
+    sha256 = "48546946879b1fd2dcba327ba15776c822f2ce9a9ef1077be9bf3ecadcc1564a",
+    strip_prefix = "buildbuddy-toolchain-b2f5e7e3b126c6d7cf243227147478c0959bfc95",
+    urls = ["https://github.com/buildbuddy-io/buildbuddy-toolchain/archive/b2f5e7e3b126c6d7cf243227147478c0959bfc95.zip"],
+)
+
+load("@io_buildbuddy_buildbuddy_toolchain//:deps.bzl", "buildbuddy_deps")
+
+buildbuddy_deps()
+
+load("@io_buildbuddy_buildbuddy_toolchain//:rules.bzl", "buildbuddy")
+
+buildbuddy(name = "buildbuddy_toolchain")
+
+http_archive(
+    name = "bazel-erlang",
+    strip_prefix = "bazel-erlang-master",
+    urls = ["https://github.com/rabbitmq/bazel-erlang/archive/master.zip"],
+)
+
+load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
+
+rabbitmq_external_deps(rabbitmq_workspace = "@")
+
+http_archive(
+    name = "rabbitmq_ct_helpers",
+    repo_mapping = {
+        "@rabbitmq-server": "@",
+    },
+    strip_prefix = "rabbitmq-ct-helpers-bazel",
+    urls = ["https://github.com/rabbitmq/rabbitmq-ct-helpers/archive/bazel.zip"],
+)
+
+http_archive(
+    name = "rabbitmq_ct_client_helpers",
+    repo_mapping = {
+        "@rabbitmq-server": "@",
+    },
+    strip_prefix = "rabbitmq-ct-client-helpers-bazel",
+    urls = ["https://github.com/rabbitmq/rabbitmq-ct-client-helpers/archive/bazel.zip"],
+)
+
+load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
+
+activemq_archive()

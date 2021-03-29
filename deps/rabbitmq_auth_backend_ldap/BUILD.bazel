@@ -1,0 +1,164 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib", "test_erlang_lib")
+load("@bazel-erlang//:ct.bzl", "ct_suite")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
+load("//:rabbitmq.bzl", "APP_VERSION")
+
+APP_ENV = """[
+	    {servers,               undefined},
+	    {user_bind_pattern,     none},
+	    {user_dn_pattern,       "$${username}"},
+	    {dn_lookup_attribute,   none},
+	    {dn_lookup_base,        none},
+	    {group_lookup_base,     none},
+	    {dn_lookup_bind,        as_user},
+	    {other_bind,            as_user},
+	    {anon_auth,             false},
+	    {vhost_access_query,    {constant, true}},
+	    {resource_access_query, {constant, true}},
+	    {topic_access_query,    {constant, true}},
+	    {tag_queries,           [{administrator, {constant, false}}]},
+	    {use_ssl,               false},
+	    {use_starttls,          false},
+	    {ssl_options,           []},
+	    {port,                  389},
+	    {timeout,               infinity},
+	    {log,                   false},
+	    {pool_size,             64},
+	    {idle_timeout,          300000}
+	  ]"""
+
+APP_NAME = "rabbitmq_auth_backend_ldap"
+
+APP_DESCRIPTION = "RabbitMQ LDAP Authentication Backend"
+
+APP_MODULE = "rabbit_auth_backend_ldap_app"
+
+EXTRA_APPS = [
+    "eldap",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit:bazel_erlang_lib",
+    # "//deps/amqp_client:bazel_erlang_lib",
+]
+
+FIRST_SRCS = [
+    # "src/rabbit_auth_cache.erl",
+]
+
+erlang_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    extra_apps = EXTRA_APPS,
+    first_srcs = FIRST_SRCS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+test_erlang_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    first_srcs = FIRST_SRCS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+TEST_ERLC_OPTS = [
+    "+nowarn_export_all",
+]
+
+rabbitmq_home(
+    name = "broker-for-tests-home",
+    plugins = [
+        "//deps/rabbit:bazel_erlang_lib",
+        ":bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-tests-run",
+    home = ":broker-for-tests-home",
+)
+
+ct_suite(
+    data = [
+        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
+        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
+    ],
+    erlc_opts = TEST_ERLC_OPTS,
+    suite_name = "config_schema_SUITE",
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_ldap/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_ldap/broker-for-tests-home/sbin/rabbitmqctl",
+        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_ldap/broker-for-tests-home/sbin/rabbitmq-plugins",
+    },
+    tools = [
+        ":rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    size = "small",
+    additional_srcs = [
+        "test/rabbit_ldap_seed.erl",
+    ],
+    data = [
+        "example/global.ldif",
+        "example/memberof_init.ldif",
+        "example/refint_1.ldif",
+        "example/refint_2.ldif",
+        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
+        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
+    ],
+    erlc_opts = TEST_ERLC_OPTS,
+    suite_name = "system_SUITE",
+    tags = [
+        "ldap",
+    ],
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_ldap/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_ldap/broker-for-tests-home/sbin/rabbitmqctl",
+        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_ldap/broker-for-tests-home/sbin/rabbitmq-plugins",
+    },
+    tools = [
+        ":rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+    deps = [
+        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = TEST_ERLC_OPTS,
+    suite_name = "unit_SUITE",
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+    },
+)

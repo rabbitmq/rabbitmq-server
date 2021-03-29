@@ -53,7 +53,7 @@
          lookup/1,
          count/0]).
 
--include_lib("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -import(rabbit_misc, [pget/2]).
 

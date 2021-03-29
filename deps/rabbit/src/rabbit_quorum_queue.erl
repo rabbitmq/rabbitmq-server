@@ -47,7 +47,7 @@
          spawn_notify_decorators/3]).
 
 -include_lib("stdlib/include/qlc.hrl").
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
 -type msg_id() :: non_neg_integer().

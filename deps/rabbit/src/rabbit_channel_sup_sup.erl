@@ -18,7 +18,7 @@
 
 -export([init/1]).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 

@@ -7,7 +7,7 @@
 
 -module(rabbit_access_control).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
          check_vhost_access/4, check_resource_access/4, check_topic_access/4]).

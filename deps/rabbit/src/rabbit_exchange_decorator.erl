@@ -7,7 +7,7 @@
 
 -module(rabbit_exchange_decorator).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([select/2, set/1]).
 

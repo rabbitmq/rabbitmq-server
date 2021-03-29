@@ -26,7 +26,7 @@
 -rabbit_upgrade({upgrade_recovery_terms, local, []}).
 -rabbit_upgrade({persistent_bytes, local, [upgrade_recovery_terms]}).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 

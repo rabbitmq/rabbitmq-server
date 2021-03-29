@@ -117,7 +117,7 @@ init_per_group(clustering, Config) ->
                  {rmq_nodes_clustered, false},
                  {start_rmq_with_plugins_disabled, true}]),
     rabbit_ct_helpers:run_setup_steps(Config1, [
-        fun build_my_plugin/1,
+        fun prepare_my_plugin/1,
         fun work_around_cli_and_rabbit_circular_dep/1
       ]);
 init_per_group(activating_plugin, Config) ->
@@ -127,7 +127,7 @@ init_per_group(activating_plugin, Config) ->
                  {rmq_nodes_clustered, true},
                  {start_rmq_with_plugins_disabled, true}]),
     rabbit_ct_helpers:run_setup_steps(Config1, [
-        fun build_my_plugin/1,
+        fun prepare_my_plugin/1,
         fun work_around_cli_and_rabbit_circular_dep/1
       ]);
 init_per_group(_, Config) ->
@@ -997,6 +997,17 @@ activating_plugin_with_new_ff_enabled(Config) ->
 %% -------------------------------------------------------------------
 %% Internal helpers.
 %% -------------------------------------------------------------------
+
+prepare_my_plugin(Config) ->
+    case os:getenv("RABBITMQ_RUN") of
+        false ->
+            build_my_plugin(Config);
+        _ ->
+            MyPluginDir = filename:dirname(filename:dirname(code:where_is_file("my_plugin.app"))),
+            PluginsDir = filename:dirname(MyPluginDir),
+            rabbit_ct_helpers:set_config(Config,
+                                         [{rmq_plugins_dir, PluginsDir}])
+    end.
 
 build_my_plugin(Config) ->
     PluginSrcDir = filename:join(?config(data_dir, Config), "my_plugin"),
