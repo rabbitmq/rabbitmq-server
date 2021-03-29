@@ -134,6 +134,7 @@ _APP_ENV = """[
 DEPS = [
     "//deps/amqp10_common:bazel_erlang_lib",
     "//deps/rabbit_common:bazel_erlang_lib",
+    "@lager//:bazel_erlang_lib",
     "@ra//:bazel_erlang_lib",
     "@ranch//:bazel_erlang_lib",
     "@stdout_formatter//:bazel_erlang_lib",
@@ -217,6 +218,7 @@ test_erlang_lib(
     deps = [
         "//deps/amqp10_common:bazel_erlang_lib",
         "//deps/rabbit_common:test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
         "@ra//:test_bazel_erlang_lib",  # <- test version
         "@ranch//:bazel_erlang_lib",
         "@stdout_formatter//:bazel_erlang_lib",

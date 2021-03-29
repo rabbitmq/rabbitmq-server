@@ -24,8 +24,8 @@
 
 -export([maybe_init_exchange/0]).
 
--include("rabbit.hrl").
--include("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -include_lib("lager/include/lager.hrl").
 

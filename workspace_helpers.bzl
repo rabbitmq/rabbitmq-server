@@ -56,6 +56,12 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         version = "0.8.4",
     )
 
+    hex_pm_bazel_erlang_lib(
+        name = "goldrush",
+        version = "0.1.9",
+        sha256 = "99cb4128cffcb3227581e5d4d803d5413fa643f4eb96523f77d9e6937d994ceb",
+    )
+
     http_archive(
         name = "inet_tcp_proxy",
         build_file = rabbitmq_workspace + "//:BUILD.inet_tcp_proxy",
@@ -70,6 +76,18 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         erlc_opts = [
             "+debug_info",
             "-Dmaps_support=1",
+        ],
+    )
+
+    hex_pm_bazel_erlang_lib(
+        name = "lager",
+        first_srcs = [
+            "src/lager_rotator_behaviour.erl",
+        ],
+        version = "3.8.2",
+        sha256 = "73329ce700410b423f64aafc5f94583073904899098e4461f3558ed2980462ab",
+        runtime_deps = [
+            "@goldrush//:bazel_erlang_lib",
         ],
     )
 
@@ -109,8 +127,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         first_srcs = [
             "src/ranch_transport.erl",
         ],
-        version = "2.0.0",
-        sha256 = "c20a4840c7d6623c19812d3a7c828b2f1bd153ef0f124cb69c54fe51d8a42ae0",
+        version = "1.7.1",
+        sha256 = "451d8527787df716d99dc36162fca05934915db0b6141bbdac2ea8d3c7afc7d7",
     )
 
     hex_pm_bazel_erlang_lib(

@@ -3,7 +3,26 @@ load("@bazel-erlang//:ct.bzl", "ct_suite", "ct_test")
 load("//deps/rabbitmq_cli:rabbitmqctl.bzl", "rabbitmqctl")
 load("//deps/rabbitmq_cli:rabbitmqctl_test.bzl", "rabbitmqctl_test")
 
-RABBITMQ_ERLC_OPTS = []
+_LAGER_EXTRA_SINKS = [
+    "rabbit_log",
+    "rabbit_log_channel",
+    "rabbit_log_connection",
+    "rabbit_log_feature_flags",
+    "rabbit_log_federation",
+    "rabbit_log_ldap",
+    "rabbit_log_mirroring",
+    "rabbit_log_osiris",
+    "rabbit_log_prelaunch",
+    "rabbit_log_queue",
+    "rabbit_log_ra",
+    "rabbit_log_shovel",
+    "rabbit_log_upgrade",
+]
+
+RABBITMQ_ERLC_OPTS = [
+    "+{parse_transform,lager_transform}",
+    "+{lager_extra_sinks,[" + ",".join(_LAGER_EXTRA_SINKS) + "]}",
+]
 
 RABBITMQ_TEST_ERLC_OPTS = TEST_ERLC_OPTS + [
     "+debug_info",

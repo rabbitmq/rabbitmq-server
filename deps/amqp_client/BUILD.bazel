@@ -10,6 +10,7 @@ APP_ENV = """[
 
 DEPS = [
     "//deps/rabbit_common:bazel_erlang_lib",
+    "@lager//:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(

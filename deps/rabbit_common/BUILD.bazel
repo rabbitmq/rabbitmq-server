@@ -46,7 +46,9 @@ genrule(
     tools = [":codegen"],
 )
 
-DEPS = []
+DEPS = [
+    "@lager//:bazel_erlang_lib",
+]
 
 RUNTIME_DEPS = [
     "@jsx//:bazel_erlang_lib",
@@ -172,6 +174,7 @@ erlc(
     erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         ":test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -195,6 +198,7 @@ erlc(
     erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         ":test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -216,6 +220,7 @@ erlc(
     erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         ":test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -240,6 +245,7 @@ erlc(
     erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         ":test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
     ],
 )
@@ -264,6 +270,7 @@ erlc(
     erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         ":test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
