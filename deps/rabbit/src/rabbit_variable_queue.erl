@@ -1110,7 +1110,7 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     %% disk). See push_alphas_to_betas/2.
     true = E2 or not ED,
     %% if delta has messages then q3 cannot be empty. This is enforced
-    %% by paging, where min([?SEGMENT_ENTRY_COUNT, len(q3)]) messages
+    %% by paging, where min([segment_entry_count(), len(q3)]) messages
     %% are always kept on RAM.
     true = ED or not E3,
     %% if the queue length is 0, then q3 and q4 must be empty.
