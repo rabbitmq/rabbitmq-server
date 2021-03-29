@@ -385,8 +385,13 @@ handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     noreply(State);
 
-handle_info(bump_reduce_memory_use, State) ->
-    noreply(State);
+handle_info(bump_reduce_memory_use, State = #state{backing_queue       = BQ,
+                                                backing_queue_state = BQS}) ->
+    BQS1 = BQ:handle_info(bump_reduce_memory_use, BQS),
+    BQS2 = BQ:resume(BQS1),
+    noreply(State#state{
+        backing_queue_state = BQS2
+    });
 
 %% In the event of a short partition during sync we can detect the
 %% master's 'death', drop out of sync, and then receive sync messages
