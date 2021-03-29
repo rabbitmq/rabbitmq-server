@@ -198,15 +198,27 @@
 %% -------------------------------------------------------------------
 
 setup_steps() ->
-    [
-      fun run_make_dist/1,
-      fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
-      fun rabbit_ct_helpers:ensure_rabbitmqctl_app/1,
-      fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
-      fun set_lager_flood_limit/1,
-      fun start_rabbitmq_nodes/1,
-      fun share_dist_and_proxy_ports_map/1
-    ].
+    case os:getenv("RABBITMQ_RUN") of
+        false ->
+            [
+                fun run_make_dist/1,
+                fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
+                fun rabbit_ct_helpers:ensure_rabbitmqctl_app/1,
+                fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
+                fun set_lager_flood_limit/1,
+                fun start_rabbitmq_nodes/1,
+                fun share_dist_and_proxy_ports_map/1
+            ];
+        _ ->
+            [
+                fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
+                fun rabbit_ct_helpers:load_rabbitmqctl_app/1,
+                fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
+                fun set_lager_flood_limit/1,
+                fun start_rabbitmq_nodes/1,
+                fun share_dist_and_proxy_ports_map/1
+            ]
+    end.
 
 teardown_steps() ->
     [
@@ -646,13 +658,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                      undefined ->
                          ExtraArgs0;
                      ExtraPluginsDir ->
-                         PathSep = case os:type() of
-                                       {win32, _} -> ";";
-                                       _          -> ":"
-                                   end,
-                         RegularPluginsDir = filename:join(SrcDir, "plugins"),
-                         [{"RABBITMQ_PLUGINS_DIR=~s~s~s",
-                           [RegularPluginsDir, PathSep, ExtraPluginsDir]}
+                         [{"EXTRA_PLUGINS_DIR=~s", [ExtraPluginsDir]}
                           | ExtraArgs0]
                  end,
     StartWithPluginsDisabled = rabbit_ct_helpers:get_config(
@@ -717,17 +723,33 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"TEST_TMPDIR=~s", [PrivDir]}
       | ExtraArgs],
     Cmd = ["start-background-broker" | MakeVars],
-    case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
-        {ok, _} ->
-            NodeConfig1 = rabbit_ct_helpers:set_config(
-                            NodeConfig,
-                            [{effective_srcdir, SrcDir},
-                             {make_vars_for_node_startup, MakeVars}]),
-            query_node(Config, NodeConfig1);
-        _ ->
-            AbortCmd = ["stop-node" | MakeVars],
-            _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
-            {skip, "Failed to initialize RabbitMQ"}
+    case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+        undefined ->
+            case rabbit_ct_helpers:make(Config, SrcDir, Cmd) of
+                {ok, _} ->
+                    NodeConfig1 = rabbit_ct_helpers:set_config(
+                                    NodeConfig,
+                                    [{effective_srcdir, SrcDir},
+                                    {make_vars_for_node_startup, MakeVars}]),
+                    query_node(Config, NodeConfig1);
+                _ ->
+                    AbortCmd = ["stop-node" | MakeVars],
+                    _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
+                    {skip, "Failed to initialize RabbitMQ"}
+            end;
+        RunCmd ->
+            case rabbit_ct_helpers:exec([RunCmd, "-C", SrcDir] ++ Cmd) of
+                {ok, _} ->
+                    NodeConfig1 = rabbit_ct_helpers:set_config(
+                                    NodeConfig,
+                                    [{effective_srcdir, SrcDir},
+                                    {make_vars_for_node_startup, MakeVars}]),
+                    query_node(Config, NodeConfig1);
+                _ ->
+                    AbortCmd = ["stop-node" | MakeVars],
+                    _ = rabbit_ct_helpers:exec([RunCmd | AbortCmd]),
+                    {skip, "Failed to initialize RabbitMQ"}
+            end
     end.
 
 query_node(Config, NodeConfig) ->
@@ -958,7 +980,12 @@ stop_rabbitmq_node(Config, NodeConfig) ->
       {"RABBITMQ_NODENAME_FOR_PATHS=~s", [InitialNodename]}
     ],
     Cmd = ["stop-node" | MakeVars],
-    rabbit_ct_helpers:make(Config, SrcDir, Cmd),
+    case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+        undefined ->
+            rabbit_ct_helpers:make(Config, SrcDir, Cmd);
+        RunCmd ->
+            rabbit_ct_helpers:exec([RunCmd | Cmd])
+    end,
     NodeConfig.
 
 %% -------------------------------------------------------------------

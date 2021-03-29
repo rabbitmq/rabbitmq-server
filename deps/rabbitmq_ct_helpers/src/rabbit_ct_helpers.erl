@@ -21,6 +21,7 @@
     ensure_application_srcdir/4,
     ensure_rabbitmqctl_cmd/1,
     ensure_rabbitmqctl_app/1,
+    load_rabbitmqctl_app/1,
     ensure_rabbitmq_plugins_cmd/1,
     ensure_rabbitmq_queues_cmd/1,
     start_long_running_testsuite_monitor/1,
@@ -67,24 +68,40 @@ run_setup_steps(Config) ->
     run_setup_steps(Config, []).
 
 run_setup_steps(Config, ExtraSteps) ->
-    Steps = [
-      fun init_skip_as_error_flag/1,
-      fun guess_tested_erlang_app_name/1,
-      fun ensure_secondary_umbrella/1,
-      fun ensure_current_srcdir/1,
-      fun ensure_rabbitmq_ct_helpers_srcdir/1,
-      fun ensure_erlang_mk_depsdir/1,
-      fun ensure_secondary_erlang_mk_depsdir/1,
-      fun ensure_secondary_current_srcdir/1,
-      fun ensure_rabbit_common_srcdir/1,
-      fun ensure_rabbitmq_cli_srcdir/1,
-      fun ensure_rabbit_srcdir/1,
-      fun ensure_make_cmd/1,
-      fun ensure_erl_call_cmd/1,
-      fun ensure_ssl_certs/1,
-      fun start_long_running_testsuite_monitor/1,
-      fun load_elixir/1
-    ],
+    Steps = case os:getenv("RABBITMQ_RUN") of
+        false ->
+            [
+                fun init_skip_as_error_flag/1,
+                fun guess_tested_erlang_app_name/1,
+                fun ensure_secondary_umbrella/1,
+                fun ensure_current_srcdir/1,
+                fun ensure_rabbitmq_ct_helpers_srcdir/1,
+                fun ensure_erlang_mk_depsdir/1,
+                fun ensure_secondary_erlang_mk_depsdir/1,
+                fun ensure_secondary_current_srcdir/1,
+                fun ensure_rabbit_common_srcdir/1,
+                fun ensure_rabbitmq_cli_srcdir/1,
+                fun ensure_rabbit_srcdir/1,
+                fun ensure_make_cmd/1,
+                fun ensure_erl_call_cmd/1,
+                fun ensure_ssl_certs/1,
+                fun start_long_running_testsuite_monitor/1,
+                fun load_elixir/1
+            ];
+        _ ->
+            [
+                fun init_skip_as_error_flag/1,
+                % fun guess_tested_erlang_app_name/1,
+                fun ensure_secondary_umbrella/1,
+                fun ensure_current_srcdir/1,
+                fun ensure_rabbitmq_ct_helpers_srcdir/1,
+                % fun ensure_rabbit_srcdir/1,
+                fun ensure_make_cmd/1,
+                fun ensure_rabbitmq_run_cmd/1,
+                fun ensure_ssl_certs/1,
+                fun start_long_running_testsuite_monitor/1
+            ]
+    end,
     run_steps(Config, Steps ++ ExtraSteps).
 
 run_teardown_steps(Config) ->
@@ -117,8 +134,14 @@ run_steps(Config, [Step | Rest]) ->
         {skip, _} = Error ->
             run_teardown_steps(Config),
             Error;
-        Config1 ->
-            run_steps(Config1, Rest)
+        Config1 when is_list(Config1) ->
+            run_steps(Config1, Rest);
+        Other ->
+            ct:pal(?LOW_IMPORTANCE,
+                "~p:~p/~p failed with ~p steps remaining (Config value ~p is not a proplist)",
+                [?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, length(Rest), Other]),
+            run_teardown_steps(Config),
+            exit("A setup step returned a non-proplist")
     end;
 run_steps(Config, []) ->
     Config.
@@ -137,7 +160,8 @@ init_skip_as_error_flag(Config) ->
 guess_tested_erlang_app_name(Config) ->
     case os:getenv("DIALYZER_PLT") of
         false ->
-            ok;
+            {skip,
+             "plt file required, please set DIALYZER_PLT"};
         Filename ->
             AppName0 = filename:basename(Filename, ".plt"),
             AppName = string:strip(AppName0, left, $.),
@@ -328,6 +352,16 @@ ensure_make_cmd(Config) ->
                     "please set MAKE or 'make_cmd' in ct config"}
     end.
 
+ensure_rabbitmq_run_cmd(Config) ->
+    case os:getenv("RABBITMQ_RUN") of
+        false ->
+            {skip,
+             "Bazel helper rabbitmq-run required, " ++
+             "please set RABBITMQ_RUN"};
+        P ->
+            set_config(Config, {rabbitmq_run_cmd, P})
+    end.
+
 ensure_erl_call_cmd(Config) ->
     ErlCallDir = code:lib_dir(erl_interface, bin),
     ErlCall = filename:join(ErlCallDir, "erl_call"),
@@ -417,6 +451,17 @@ ensure_rabbitmqctl_app(Config) ->
         false ->
             {skip, "Access to rabbitmq_cli ebin dir. required, " ++
              "please build rabbitmq_cli and set MIX_ENV"}
+    end.
+
+load_rabbitmqctl_app(Config) ->
+    case application:load(rabbitmqctl) of
+        ok ->
+            Config;
+        {error, {already_loaded, rabbitmqctl}} ->
+            Config;
+        {error, _} ->
+            {skip, "Application rabbitmqctl could not be loaded, " ++
+                "please place compiled rabbitmq_cli on the code path"}
     end.
 
 ensure_rabbitmq_plugins_cmd(Config) ->
