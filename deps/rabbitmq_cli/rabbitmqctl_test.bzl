@@ -54,7 +54,6 @@ def _impl(ctx):
         export LANG="en_US.UTF-8"
         export LC_ALL="en_US.UTF-8"
 
-        # In github actions, there is an erl at /usr/bin/erl...
         export PATH={elixir_home}/bin:{erlang_home}/bin:${{PATH}}
 
         INITIAL_DIR=${{PWD}}

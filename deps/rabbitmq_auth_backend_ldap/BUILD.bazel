@@ -121,14 +121,16 @@ ct_suite(
         "test/rabbit_ldap_seed.erl",
     ],
     data = [
+        "example/global.ldif",
+        "example/memberof_init.ldif",
+        "example/refint_1.ldif",
+        "example/refint_2.ldif",
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
     suite_name = "system_SUITE",
-    # will not pass remotely until we have openssl/slapd in the image
     tags = [
-        "exclusive",
         "ldap",
     ],
     test_env = {
