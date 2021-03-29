@@ -119,7 +119,7 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config,
       rabbit_ct_broker_helpers:setup_steps() ++ [
-        % fun ensure_amqp_client_srcdir/1,
+        fun ensure_amqp_client_srcdir/1,
         fun create_unauthorized_user/1
       ]).
 
@@ -129,8 +129,12 @@ end_per_suite(Config) ->
       ] ++ rabbit_ct_broker_helpers:teardown_steps()).
 
 ensure_amqp_client_srcdir(Config) ->
-    rabbit_ct_helpers:ensure_application_srcdir(Config,
-                                                amqp_client, amqp_client).
+    case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+        undefined ->
+            rabbit_ct_helpers:ensure_application_srcdir(Config,
+                                                        amqp_client, amqp_client);
+        _ -> Config
+    end.
 
 create_unauthorized_user(Config) ->
     Cmd = ["add_user", ?UNAUTHORIZED_USER, ?UNAUTHORIZED_USER],
