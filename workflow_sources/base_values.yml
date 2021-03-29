@@ -1,9 +1,0 @@
-#@data/values
----
-base_rmq_ref: v3.8.x
-secondary_umbrella_gitrefs:
-- v3.7.28
-- v3.8.9
-erlang_versions:
-- "22.3"
-- "23.1"
