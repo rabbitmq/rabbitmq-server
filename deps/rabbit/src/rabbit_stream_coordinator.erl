@@ -66,7 +66,7 @@
                    {delete_stream, stream_id(), #{}} |
                    {add_replica, stream_id(), #{node := node()}} |
                    {delete_replica, stream_id(), #{node := node()}} |
-                   {policy_changed, stream_id(), #{queue := amqqueue:amqueue()}} |
+                   {policy_changed, stream_id(), #{queue := amqqueue:amqqueue()}} |
                    {register_listener, #{pid := pid(),
                                          stream_id := stream_id(),
                                          queue_ref := queue_ref()}} |
