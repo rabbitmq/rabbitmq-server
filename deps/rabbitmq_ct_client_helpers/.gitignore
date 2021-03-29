@@ -18,3 +18,6 @@
 
 /rabbitmq_ct_client_helpers.d
 /.rabbitmq_ct_client_helpers.plt
+
+/.bazelrc
+/bazel-*
