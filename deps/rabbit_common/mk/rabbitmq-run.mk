@@ -102,11 +102,7 @@ else
 RMQ_PLUGINS_DIR=$(CURDIR)/$(DIST_DIR)
 endif
 
-node_plugins_dir = $(if $(RABBITMQ_PLUGINS_DIR),\
-                        $(RABBITMQ_PLUGINS_DIR),\
-                        $(if $(EXTRA_PLUGINS_DIR),\
-                          $(EXTRA_PLUGINS_DIR):$(RMQ_PLUGINS_DIR),\
-                          $(RMQ_PLUGINS_DIR)))
+node_plugins_dir = $(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(if $(EXTRA_PLUGINS_DIR),$(EXTRA_PLUGINS_DIR):$(RMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR)))
 
 define basic_script_env_settings
 MAKE="$(MAKE)" \
