@@ -102,9 +102,11 @@ else
 RMQ_PLUGINS_DIR=$(CURDIR)/$(DIST_DIR)
 endif
 
-ifdef EXTRA_PLUGINS_DIR
-RMQ_PLUGINS_DIR=$(RMQ_PLUGINS_DIR):$(EXTRA_PLUGINS_DIR)
-endif
+node_plugins_dir = $(if $(RABBITMQ_PLUGINS_DIR),\
+                        $(RABBITMQ_PLUGINS_DIR),\
+                        $(if $(EXTRA_PLUGINS_DIR),\
+                          $(EXTRA_PLUGINS_DIR):$(RMQ_PLUGINS_DIR),\
+                          $(RMQ_PLUGINS_DIR)))
 
 define basic_script_env_settings
 MAKE="$(MAKE)" \
@@ -119,7 +121,7 @@ RABBITMQ_MNESIA_BASE="$(call node_mnesia_base,$(2))" \
 RABBITMQ_MNESIA_DIR="$(call node_mnesia_dir,$(2))" \
 RABBITMQ_QUORUM_DIR="$(call node_quorum_dir,$(2))" \
 RABBITMQ_FEATURE_FLAGS_FILE="$(call node_feature_flags_file,$(2))" \
-RABBITMQ_PLUGINS_DIR="$(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR))" \
+RABBITMQ_PLUGINS_DIR="$(call node_plugins_dir)" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(2))" \
 RABBITMQ_SERVER_START_ARGS="-ra wal_sync_method sync $(RABBITMQ_SERVER_START_ARGS)" \
 RABBITMQ_ENABLED_PLUGINS="$(RABBITMQ_ENABLED_PLUGINS)"
