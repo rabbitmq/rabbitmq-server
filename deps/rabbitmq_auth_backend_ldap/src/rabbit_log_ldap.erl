@@ -18,7 +18,7 @@
          emergency/1, emergency/2, emergency/3,
          none/1, none/2, none/3]).
 
--include("include/logging.hrl").
+-include("logging.hrl").
 
 -compile({no_auto_import, [error/2]}).
 

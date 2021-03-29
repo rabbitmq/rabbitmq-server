@@ -6,7 +6,7 @@
 %%
 
 -module(rabbit_auth_mechanism_amqplain).
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_auth_mechanism).
 

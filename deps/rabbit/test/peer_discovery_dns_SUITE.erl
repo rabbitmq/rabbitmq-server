@@ -97,8 +97,12 @@ hostname_discovery_with_short_node_names(_) ->
 
 node_discovery_with_long_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT_RECORD_A, true),
-    ?assert(lists:member('ct_rabbit@dns.google', Result)).
+    ?assert(lists:member(list_to_atom(sname() ++ "@dns.google"), Result)).
 
 node_discovery_with_short_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT_RECORD_A, false),
-    ?assert(lists:member(ct_rabbit@dns, Result)).
+    ?assert(lists:member(list_to_atom(sname() ++ "@dns"), Result)).
+
+sname() ->
+    [Sname | _] = string:split(atom_to_list(erlang:node()), "@"),
+    Sname.

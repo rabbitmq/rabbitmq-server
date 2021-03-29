@@ -1,0 +1,54 @@
+name: Test
+on: push
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        erlang_version:
+        - "23"
+    timeout-minutes: 60
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2
+    - name: CONFIGURE BAZEL
+      run: |
+        echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
+        echo "${{ secrets.BUILDBUDDY_KEY }}" > buildbuddy-key.pem
+        cat << EOF >> .bazelrc
+          build --remote_executor=grpcs://cloud.buildbuddy.io
+          build --host_platform=//:erlang_${{ matrix.erlang_version }}_platform
+          build --platforms=//:erlang_${{ matrix.erlang_version }}_platform
+          build --extra_execution_platforms=//:erlang_${{ matrix.erlang_version }}_platform
+
+          build --crosstool_top=@buildbuddy_toolchain//:toolchain
+          build --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
+          build --javabase=@buildbuddy_toolchain//:javabase_jdk8
+          build --host_javabase=@buildbuddy_toolchain//:javabase_jdk8
+          build --java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+          build --host_java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+
+          build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
+          build --@bazel-erlang//:erlang_home=/usr/lib/erlang
+          build --//:elixir_home=/usr/local
+
+          build --bes_results_url=https://app.buildbuddy.io/invocation/
+          build --bes_backend=grpcs://cloud.buildbuddy.io
+          build --remote_cache=grpcs://cloud.buildbuddy.io
+          build --tls_client_certificate=buildbuddy-cert.pem
+          build --tls_client_key=buildbuddy-key.pem
+          build --remote_timeout=1200
+
+          build --build_metadata=ROLE=CI
+          build --remote_instance_name=buildbuddy-io/buildbuddy/ci
+          build --spawn_strategy=remote
+          build --jobs=50
+        EOF
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: RUN TESTS
+      run: |
+        bazelisk test //... \
+          --test_tag_filters=-exclusive \
+          --verbose_failures

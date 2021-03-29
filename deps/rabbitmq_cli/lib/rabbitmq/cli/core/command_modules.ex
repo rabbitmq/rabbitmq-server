@@ -100,7 +100,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
     end)
   end
 
-  defp make_module_map(modules, scope) do
+  defp make_module_map(modules, scope) when modules != nil do
     commands_ns = Regex.recompile!(@commands_ns)
 
     modules

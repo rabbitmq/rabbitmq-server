@@ -1,0 +1,24 @@
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "rabbitmq_lib")
+
+APP_ENV = """[
+	    {pgroup_name_cluster_id, false},
+	    {internal_exchange_check_interval, 90000}
+	  ]"""
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/amqp_client:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = "RabbitMQ Federation",
+    app_env = APP_ENV,
+    app_module = "rabbit_federation_app",
+    app_name = "rabbitmq_federation",
+    app_version = APP_VERSION,
+    build_deps = [
+        "//deps/rabbitmq_cli:rabbitmqctl",
+    ],
+    deps = DEPS,
+)

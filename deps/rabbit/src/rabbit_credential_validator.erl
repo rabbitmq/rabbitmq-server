@@ -7,7 +7,7 @@
 
 -module(rabbit_credential_validator).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %% Validates a password. Used by `rabbit_auth_backend_internal`.
 %%

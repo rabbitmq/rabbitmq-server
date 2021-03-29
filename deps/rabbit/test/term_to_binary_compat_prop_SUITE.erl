@@ -10,7 +10,7 @@
 
 -compile(export_all).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("proper/include/proper.hrl").
 

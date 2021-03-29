@@ -12,7 +12,7 @@
 
 -behaviour(rabbit_auth_cache).
 
--include("include/rabbit_auth_backend_cache.hrl").
+-include("rabbit_auth_backend_cache.hrl").
 
 -export([start_link/0,
          get/1, put/3, delete/1]).

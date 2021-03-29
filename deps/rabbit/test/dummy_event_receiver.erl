@@ -12,7 +12,7 @@
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 start(Pid, Nodes, Types) ->
     Oks = [ok || _ <- Nodes],

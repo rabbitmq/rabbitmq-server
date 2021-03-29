@@ -25,7 +25,7 @@
 %% use the now recommended try/catch syntax for obtaining the stack trace.
 -compile(nowarn_deprecated_function).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(TICKTIME_RATIO, 4).
 

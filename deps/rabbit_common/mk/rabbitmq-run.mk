@@ -104,6 +104,10 @@ else
 RMQ_PLUGINS_DIR=$(CURDIR)/$(DIST_DIR)
 endif
 
+ifdef EXTRA_PLUGINS_DIR
+RMQ_PLUGINS_DIR=$(RMQ_PLUGINS_DIR):$(EXTRA_PLUGINS_DIR)
+endif
+
 define basic_script_env_settings
 MAKE="$(MAKE)" \
 ERL_LIBS="$(DIST_ERL_LIBS)" \
