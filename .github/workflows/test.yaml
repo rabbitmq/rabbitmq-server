@@ -41,6 +41,7 @@ jobs:
           build --remote_timeout=1200
 
           build --build_metadata=ROLE=CI
+          build --build_metadata=VISIBILITY=PUBLIC
           build --remote_instance_name=buildbuddy-io/buildbuddy/ci
           build --spawn_strategy=remote
           build --jobs=50
