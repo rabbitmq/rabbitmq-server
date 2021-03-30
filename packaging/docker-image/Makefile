@@ -43,13 +43,12 @@ dist:
 	  --build-arg PGP_KEYSERVER=pgpkeys.uk \
 	  --build-arg OTP_VERSION=$(OTP_VERSION) \
 	  --build-arg OTP_SHA256=$(OTP_SHA256) \
-	  --build-arg RABBITMQ_VERSION=$(VERSION) \
 	  --build-arg RABBITMQ_BUILD=rabbitmq_server-$(VERSION) \
 	  --tag pivotalrabbitmq/rabbitmq:$(subst +,-,$(VERSION)) \
 	  .
 
-push: dist
-	docker push pivotalrabbitmq/rabbitmq:$(VERSION)
+push:
+	docker push pivotalrabbitmq/rabbitmq:$(subst +,-,$(VERSION))
 
 clean:
 	rm -rf rabbitmq_server-*
