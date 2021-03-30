@@ -620,45 +620,6 @@ credential_validator.regexp = ^abc\\d+",
  {proxy_protocol_off,
   "proxy_protocol = false",
   [{rabbit,[{proxy_protocol,false}]}],[]},
- {log_debug_file,
-  "log.file.level = debug",
-  [{rabbit,[{log, [{file, [{level, debug}]}]}]}],
-  []},
- {log_debug_console,
-  "log.console = true
-   log.console.level = debug",
-  [{rabbit,[{log, [{console, [{enabled, true}, {level, debug}]}]}]}],
-  []},
- {log_debug_exchange,
-  "log.exchange = true
-   log.exchange.level = debug",
-  [{rabbit,[{log, [{exchange, [{enabled, true}, {level, debug}]}]}]}],
-  []},
- {log_debug_syslog,
-  "log.syslog = true
-   log.syslog.level = debug",
-  [{rabbit,[{log, [{syslog, [{enabled, true}, {level, debug}]}]}]}],
-  []},
- {log_file_name,
-  "log.file = file_name",
-  [{rabbit,[{log, [{file, [{file, "file_name"}]}]}]}],
-  []},
- {log_file_disabled,
-  "log.file = false",
-  [{rabbit,[{log, [{file, [{file, false}]}]}]}],
-  []},
- {log_category_level,
-  "log.connection.level = debug
-   log.channel.level = error",
-  [{rabbit,[{log, [{categories, [{connection, [{level, debug}]},
-                                 {channel, [{level, error}]}]}]}]}],
-  []},
- {log_category_file,
-  "log.connection.file = file_name_connection
-   log.channel.file = file_name_channel",
-  [{rabbit,[{log, [{categories, [{connection, [{file, "file_name_connection"}]},
-                                 {channel, [{file, "file_name_channel"}]}]}]}]}],
-  []},
 
  {default_worker_pool_size,
   "default_worker_pool_size = 512",
@@ -701,58 +662,6 @@ credential_validator.regexp = ^abc\\d+",
       {mnesia_table_loading_retry_timeout, 45000}
      ]}],
    []},
-
-  {log_syslog_settings,
-   "log.syslog = true
-    log.syslog.identity = rabbitmq
-    log.syslog.facility = user
-    log.syslog.multiline_mode = true
-    log.syslog.ip = 10.10.10.10
-    log.syslog.port = 123",
-   [
-    {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
-    {syslog, [{app_name, "rabbitmq"},
-              {facility, user},
-              {multiline_mode, true},
-              {dest_host, "10.10.10.10"},
-              {dest_port, 123}]}
-   ],
-   []},
-  {log_syslog_tcp,
-   "log.syslog = true
-    log.syslog.transport = tcp
-    log.syslog.protocol = rfc5424
-    log.syslog.host = syslog.my-network.com",
-   [
-    {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
-    {syslog, [{protocol, {rfc5424, tcp}},
-              {dest_host, "syslog.my-network.com"}]}
-   ],
-   []},
-  {log_syslog_udp_default,
-   "log.syslog = true
-    log.syslog.protocol = rfc3164",
-   [
-    {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
-    {syslog, [{protocol, {rfc3164, udp}}]}
-   ],
-   []},
-  {log_syslog_tls,
-  "log.syslog = true
-   log.syslog.transport = tls
-   log.syslog.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   log.syslog.ssl_options.certfile = test/config_schema_SUITE_data/certs/cert.pem
-   log.syslog.ssl_options.keyfile = test/config_schema_SUITE_data/certs/key.pem
-   log.syslog.ssl_options.verify = verify_peer
-   log.syslog.ssl_options.fail_if_no_peer_cert = false",
-  [{rabbit, [{log, [{syslog, [{enabled, true}]}]}]},
-   {syslog, [{protocol, {rfc5424, tls,
-              [{verify,verify_peer},
-               {fail_if_no_peer_cert,false},
-               {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-               {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-               {keyfile,"test/config_schema_SUITE_data/certs/key.pem"}]}}]}],
-  []},
 
   %%
   %% Definitions
