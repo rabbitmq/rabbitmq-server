@@ -5,6 +5,9 @@ rabbitmq_lib(
     app_description = "RabbitMQ Web Dispatcher",
     app_module = "rabbit_web_dispatch_app",
     app_name = "rabbitmq_web_dispatch",
+    build_deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
     extra_apps = [
         "inets",
     ],

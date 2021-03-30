@@ -17,6 +17,7 @@ rabbitmq_lib(
     app_name = "rabbitmq_management_agent",
     build_deps = [
         "//deps/rabbitmq_cli:rabbitmqctl",
+        "@lager//:bazel_erlang_lib",
     ],
     extra_apps = [
         "xmerl",

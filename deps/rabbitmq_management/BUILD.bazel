@@ -18,6 +18,9 @@ rabbitmq_lib(
     app_env = APP_ENV,
     app_module = "rabbit_mgmt_app",
     app_name = "rabbitmq_management",
+    build_deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
     extra_apps = [
         "mnesia",
         "ranch",

@@ -89,7 +89,7 @@ _APP_ENV = """[
 	    %% rabbitmq-server#949, rabbitmq-server#1098
 	    {credit_flow_default_credit, {400, 200}},
 	    {quorum_commands_soft_limit, 32},
-	    {quorum_cluster_size, 5},
+	    {quorum_cluster_size, 3},
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
@@ -126,26 +126,27 @@ _APP_ENV = """[
 	    {writer_gc_threshold, 1000000000},
 	    %% interval at which connection/channel tracking executes post operations
 	    {tracking_execution_timeout, 15000},
-	    {stream_messages_soft_limit, 256},
         {track_auth_attempt_source, false}
 	  ]
 """
 
+BUILD_DEPS = [
+    "//deps/rabbitmq_cli:rabbitmqctl",
+    "@syslog//:bazel_erlang_lib",
+]
+
 DEPS = [
-    "//deps/amqp10_common:bazel_erlang_lib",
     "//deps/rabbit_common:bazel_erlang_lib",
     "@lager//:bazel_erlang_lib",
     "@ra//:bazel_erlang_lib",
     "@ranch//:bazel_erlang_lib",
     "@stdout_formatter//:bazel_erlang_lib",
-    "@syslog//:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
     "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
     "@cuttlefish//:bazel_erlang_lib",
     "@observer_cli//:bazel_erlang_lib",
-    "@osiris//:bazel_erlang_lib",
     "@recon//:bazel_erlang_lib",
     "@sysmon_handler//:bazel_erlang_lib",
 ]
@@ -160,7 +161,6 @@ APP_REGISTERED = [
 
 EXTRA_APPS = [
     "sasl",
-    "rabbitmq_prelaunch",
     "os_mon",
     "inets",
     "compiler",
@@ -190,6 +190,7 @@ erlang_lib(
     app_name = "rabbit",
     app_registered = APP_REGISTERED,
     app_version = APP_VERSION,
+    build_deps = BUILD_DEPS,
     erlc_opts = ERLC_OPTS,
     extra_apps = EXTRA_APPS,
     first_srcs = FIRST_SRCS,
@@ -204,6 +205,10 @@ test_erlang_lib(
     app_name = "rabbit",
     app_registered = APP_REGISTERED,
     app_version = APP_VERSION,
+    build_deps = [
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@syslog//:bazel_erlang_lib",
+    ],
     erlc_opts = ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
     extra_apps = EXTRA_APPS,
     first_srcs = FIRST_SRCS,
@@ -211,18 +216,15 @@ test_erlang_lib(
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",  # <- test version
         "@cuttlefish//:bazel_erlang_lib",
         "@observer_cli//:bazel_erlang_lib",
-        "@osiris//:bazel_erlang_lib",
         "@recon//:bazel_erlang_lib",
         "@sysmon_handler//:bazel_erlang_lib",
     ],
     deps = [
-        "//deps/amqp10_common:bazel_erlang_lib",
         "//deps/rabbit_common:test_bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
         "@ra//:test_bazel_erlang_lib",  # <- test version
         "@ranch//:bazel_erlang_lib",
         "@stdout_formatter//:bazel_erlang_lib",
-        "@syslog//:bazel_erlang_lib",
     ],
 )
 
@@ -640,18 +642,11 @@ rabbitmq_integration_suite(
         "quorum_queue",
         "quorum_queue_in_memory_limit",
         "quorum_queue_in_memory_bytes",
-        "stream_queue",
     ],
     suite_name = "queue_parallel_SUITE",
     runtime_deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
     ],
-    deps = DEPS,
-)
-
-rabbitmq_integration_suite(
-    size = "medium",
-    suite_name = "queue_type_SUITE",
     deps = DEPS,
 )
 
@@ -670,18 +665,6 @@ rabbitmq_integration_suite(
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
     ],
     deps = DEPS,
-)
-
-ct_suite(
-    size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    suite_name = "rabbit_confirms_SUITE",
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -785,39 +768,6 @@ ct_suite(
     ],
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-ct_suite(
-    size = "medium",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    suite_name = "rabbit_msg_record_SUITE",
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
-    deps = [
-        "//deps/amqp10_common:bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    size = "large",
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-    groups = [
-        "single_node",
-        "cluster_size_2",
-        "cluster_size_3",
-        "unclustered_size_3_1",
-        "unclustered_size_3_2",
-        "unclustered_size_3_3",
-        "cluster_size_3_1",
-    ],
-    suite_name = "rabbit_stream_queue_SUITE",
-    deps = DEPS + [
-        "@proper//:bazel_erlang_lib",
     ],
 )
 
@@ -1014,6 +964,15 @@ ct_suite(
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    suite_name = "unit_log_config_SUITE",
+    runtime_deps = [
+        "@syslog//:bazel_erlang_lib",
     ],
 )
 
