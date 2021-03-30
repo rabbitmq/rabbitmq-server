@@ -65,8 +65,22 @@ write_snippet(Config, {Name, Conf, Advanced}) ->
 
 generate_config(ConfFile, AdvancedFile) ->
     Context = rabbit_env:get_context(),
+    ErlangConfig =
     rabbit_prelaunch_conf:generate_config_from_cuttlefish_files(
-      Context, [ConfFile], AdvancedFile).
+      Context, [ConfFile], AdvancedFile),
+    case proplists:get_value(rabbit, ErlangConfig) of
+        undefined ->
+            ErlangConfig;
+        RabbitConfig ->
+            RabbitConfig1 = lists:keydelete(log, 1, RabbitConfig),
+            case RabbitConfig1 of
+                [] ->
+                    lists:keydelete(rabbit, 1, ErlangConfig);
+                _ ->
+                    lists:keystore(rabbit, 1, ErlangConfig,
+                                   {rabbit, RabbitConfig1})
+            end
+    end.
 
 deepsort(List) ->
     case is_proplist(List) of
