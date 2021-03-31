@@ -91,7 +91,7 @@ proxy_protocol(Config) ->
     {ok, _P} = rfc6455_client:recv(WS),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 ">>, [{capture, none}]),
+    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     {close, _} = rfc6455_client:close(WS),
     ok.
 
