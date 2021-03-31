@@ -44,11 +44,6 @@ DEPS = [
 
 RUNTIME_DEPS = [
     "//deps/rabbit:bazel_erlang_lib",
-    # "//deps/amqp_client:bazel_erlang_lib",
-]
-
-FIRST_SRCS = [
-    # "src/rabbit_auth_cache.erl",
 ]
 
 erlang_lib(
@@ -58,7 +53,6 @@ erlang_lib(
     app_name = APP_NAME,
     app_version = APP_VERSION,
     extra_apps = EXTRA_APPS,
-    first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
@@ -69,7 +63,6 @@ test_erlang_lib(
     app_module = APP_MODULE,
     app_name = APP_NAME,
     app_version = APP_VERSION,
-    first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )

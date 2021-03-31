@@ -64,6 +64,18 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     )
 
     hex_pm_bazel_erlang_lib(
+        name = "jose",
+        version = "1.11.1",
+        sha256 = "078f6c9fb3cd2f4cfafc972c814261a7d1e8d2b3685c0a76eb87e158efff1ac5",
+        first_srcs = [
+            "src/jose_block_encryptor.erl",
+            "src/jwk/jose_jwk_use_enc.erl",
+            "src/jwk/jose_jwk_use_sig.erl",
+            "src/jwk/jose_jwk_oct.erl",
+        ],
+    )
+
+    hex_pm_bazel_erlang_lib(
         name = "jsx",
         version = "2.11.0",
         sha256 = "eed26a0d04d217f9eecefffb89714452556cf90eb38f290a27a4d45b9988f8c0",
