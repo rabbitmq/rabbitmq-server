@@ -179,7 +179,7 @@ FIRST_SRCS = [
     "src/rabbit_queue_master_locator.erl",
 ]
 
-ERLC_OPTS = RABBITMQ_ERLC_OPTS + [
+EXTRA_ERLC_OPTS = [
     "-DINSTR_MOD=gm",
 ]
 
@@ -191,7 +191,7 @@ erlang_lib(
     app_registered = APP_REGISTERED,
     app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
-    erlc_opts = ERLC_OPTS,
+    erlc_opts = RABBITMQ_ERLC_OPTS + EXTRA_ERLC_OPTS,
     extra_apps = EXTRA_APPS,
     first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
@@ -209,7 +209,7 @@ test_erlang_lib(
         "//deps/rabbitmq_cli:rabbitmqctl",
         "@syslog//:bazel_erlang_lib",
     ],
-    erlc_opts = ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + EXTRA_ERLC_OPTS,
     extra_apps = EXTRA_APPS,
     first_srcs = FIRST_SRCS,
     runtime_deps = [
@@ -222,7 +222,7 @@ test_erlang_lib(
     deps = [
         "//deps/rabbit_common:test_bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
-        "@ra//:test_bazel_erlang_lib",  # <- test version
+        "@ra//:bazel_erlang_lib",
         "@ranch//:bazel_erlang_lib",
         "@stdout_formatter//:bazel_erlang_lib",
     ],
@@ -684,7 +684,7 @@ ct_suite(
         "@aten//:bazel_erlang_lib",
         "@gen_batch_server//:bazel_erlang_lib",
         "@meck//:bazel_erlang_lib",
-        "@ra//:test_bazel_erlang_lib",
+        "@ra//:bazel_erlang_lib",
     ],
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",

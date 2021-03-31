@@ -112,7 +112,10 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     github_bazel_erlang_lib(
         name = "proper",
-        first_srcs = ["src/vararg.erl"],
+        first_srcs = [
+            "src/vararg.erl",
+            "src/proper_target.erl",
+        ],
         org = "manopapad",
     )
 
