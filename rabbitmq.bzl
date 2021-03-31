@@ -1,12 +1,17 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "TEST_ERLC_OPTS", "erlang_lib", "test_erlang_lib")
+load(
+    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "DEFAULT_ERLC_OPTS",
+    "DEFAULT_TEST_ERLC_OPTS",
+    "erlang_lib",
+    "test_erlang_lib",
+)
 load("@bazel-erlang//:ct.bzl", "ct_suite", "ct_test")
 load("//deps/rabbitmq_cli:rabbitmqctl.bzl", "rabbitmqctl")
 load("//deps/rabbitmq_cli:rabbitmqctl_test.bzl", "rabbitmqctl_test")
 
-RABBITMQ_ERLC_OPTS = []
+RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS
 
-RABBITMQ_TEST_ERLC_OPTS = TEST_ERLC_OPTS + [
-    "+debug_info",
+RABBITMQ_TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
     "+nowarn_export_all",
 ]
 
@@ -58,7 +63,7 @@ def rabbitmq_lib(
         app_registered = app_registered,
         app_env = app_env,
         extra_apps = extra_apps,
-        erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS + extra_erlc_opts,
+        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + extra_erlc_opts,
         first_srcs = first_srcs,
         build_deps = build_deps,
         deps = deps,
@@ -74,7 +79,7 @@ def rabbitmq_integration_suite(
         runtime_deps = [],
         **kwargs):
     ct_suite(
-        erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS + extra_erlc_opts,
+        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + extra_erlc_opts,
         data = [
             "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
             "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",

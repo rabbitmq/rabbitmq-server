@@ -93,15 +93,26 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     github_bazel_erlang_lib(
         name = "proper",
-        first_srcs = ["src/vararg.erl"],
+        first_srcs = [
+            "src/vararg.erl",
+            "src/proper_target.erl",
+        ],
         org = "manopapad",
     )
 
-    http_archive(
+    github_bazel_erlang_lib(
         name = "ra",
-        build_file = rabbitmq_workspace + "//:BUILD.ra",
-        strip_prefix = "ra-master",
-        urls = ["https://github.com/rabbitmq/ra/archive/master.zip"],
+        first_srcs = [
+            "src/ra_machine.erl",
+            "src/ra_snapshot.erl",
+        ],
+        org = "rabbitmq",
+        deps = [
+            "@gen_batch_server//:bazel_erlang_lib",
+        ],
+        runtime_deps = [
+            "@aten//:bazel_erlang_lib",
+        ],
     )
 
     hex_pm_bazel_erlang_lib(
