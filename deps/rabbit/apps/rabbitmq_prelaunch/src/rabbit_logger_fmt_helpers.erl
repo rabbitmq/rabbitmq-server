@@ -14,10 +14,11 @@
 format_time(Timestamp, #{time_format := Format}) ->
     format_time1(Timestamp, Format);
 format_time(Timestamp, _) ->
-    format_time1(Timestamp, {rfc3339, $\s}).
+    format_time1(Timestamp, {rfc3339, $\s, ""}).
 
-format_time1(Timestamp, {rfc3339, Sep}) ->
+format_time1(Timestamp, {rfc3339, Sep, Offset}) ->
     Options = [{unit, microsecond},
+               {offset, Offset},
                {time_designator, Sep}],
     calendar:system_time_to_rfc3339(Timestamp, Options);
 format_time1(Timestamp, {epoch, secs, int}) ->
@@ -28,12 +29,18 @@ format_time1(Timestamp, {epoch, secs, binary}) ->
     io_lib:format("~.6.0f", [Timestamp / 1000000]);
 format_time1(Timestamp, {epoch, usecs, binary}) ->
     io_lib:format("~b", [Timestamp]);
-format_time1(Timestamp, {Format, Args}) ->
+format_time1(Timestamp, {LocalOrUniversal, Format, Args}) ->
     %% The format string and the args list is prepared by
     %% `rabbit_prelaunch_early_logging:translate_generic_conf()'.
     {{Year, Month, Day},
-     {Hour, Minute, Second}} = calendar:system_time_to_local_time(
-                                 Timestamp, microsecond),
+     {Hour, Minute, Second}} = case LocalOrUniversal of
+                                   local ->
+                                       calendar:system_time_to_local_time(
+                                         Timestamp, microsecond);
+                                   universal ->
+                                       calendar:system_time_to_universal_time(
+                                         Timestamp, microsecond)
+                               end,
     Args1 = lists:map(
               fun
                   (year)       -> Year;
