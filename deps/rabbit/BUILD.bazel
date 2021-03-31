@@ -419,6 +419,15 @@ rabbitmq_integration_suite(
         ":sync_detection_SUITE_beam_files",
     ],
     suite_name = "eager_sync_SUITE",
+    groups = {
+        "non_parallel_tests": [
+            "eager_sync",
+            "eager_sync_cancel",
+            "eager_sync_auto",
+            "eager_sync_auto_on_policy_change",
+            "eager_sync_requeue",
+        ],
+    },
     deps = DEPS,
 )
 
