@@ -495,19 +495,20 @@ setting_level_format_works(LevelFormat, LevelName, Config) ->
        Line).
 
 setting_time_format_works(Config) ->
-    DateTime = "2018-02-01T16:17:58.123456+01:00",
+    DateTime = "2018-05-01T16:17:58.123456+01:00",
     Timestamp = calendar:rfc3339_to_system_time(
                   DateTime, [{unit, microsecond}]),
     TimeFormats =
-    #{{rfc3339, $T}  => DateTime,
-      {rfc3339, $\s} => "2018-02-01 16:17:58.123456+01:00",
+    #{{rfc3339, $T, "+01:00"} => DateTime,
+      {rfc3339, $\s, "+01:00"} => "2018-05-01 16:17:58.123456+01:00",
       {epoch, usecs, binary} => integer_to_list(Timestamp),
       {epoch, secs, binary} => io_lib:format("~.6.0f", [Timestamp / 1000000]),
-      {"~4..0b-~2..0b-~2..0b "
+      {universal,
+       "~4..0b-~2..0b-~2..0b "
        "~2..0b:~2..0b:~2..0b.~3..0b",
        [year, month, day,
         hour, minute, second,
-        {second_fractional, 3}]} => "2018-02-01 16:17:58.123"},
+        {second_fractional, 3}]} => "2018-05-01 15:17:58.123"},
     maps:fold(
       fun(TimeFormat, TimeValue, Acc) ->
               remove_all_handlers(),
