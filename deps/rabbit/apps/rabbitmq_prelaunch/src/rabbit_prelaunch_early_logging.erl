@@ -181,9 +181,11 @@ translate_formatter_conf(Var, Conf) when is_list(Var) ->
 -type time_format_string_arg() :: year | month | day |
                                   hour | minute | second |
                                   {second_fractional, non_neg_integer()}.
--type time_format() :: {rfc3339, char()} |
+-type time_format() :: {rfc3339, char(), string() | integer()} |
                        {epoch, secs | usecs, binary | int} |
-                       {string(), [time_format_string_arg()]}.
+                       {local | universal,
+                        string(),
+                        [time_format_string_arg()]}.
 -type level_format() :: lc | uc | lc3 | uc3 | lc4 | uc4.
 -type formatter_generic_conf() :: #{time_format := time_format(),
                                     level_format := level_format(),
@@ -201,9 +203,9 @@ translate_generic_conf(Var, Conf) ->
     Formatter = cuttlefish:conf_get(Var, Conf),
     TimeFormat = case cuttlefish:conf_get(Var ++ ".time_format", Conf) of
                      rfc3339_T ->
-                         {rfc3339, $T};
+                         {rfc3339, $T, ""};
                      rfc3339_space ->
-                         {rfc3339, $\s};
+                         {rfc3339, $\s, ""};
                      epoch_secs when Formatter =:= json ->
                          {epoch, secs, int};
                      epoch_usecs when Formatter =:= json ->
@@ -213,7 +215,8 @@ translate_generic_conf(Var, Conf) ->
                      epoch_usecs ->
                          {epoch, usecs, binary};
                      lager_default ->
-                         {"~4..0b-~2..0b-~2..0b "
+                         {local,
+                          "~4..0b-~2..0b-~2..0b "
                           "~2..0b:~2..0b:~2..0b.~3..0b",
                           [year, month, day,
                            hour, minute, second,
