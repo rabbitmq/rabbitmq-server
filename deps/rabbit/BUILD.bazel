@@ -420,7 +420,10 @@ rabbitmq_integration_suite(
     ],
     groups = {
         "non_parallel_tests": [
-            {"case": "eager_sync", "flaky": True},
+            {
+                "case": "eager_sync",
+                "flaky": True,
+            },
             "eager_sync_cancel",
             "eager_sync_auto",
             "eager_sync_auto_on_policy_change",
