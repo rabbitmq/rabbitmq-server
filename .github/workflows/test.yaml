@@ -8,7 +8,7 @@ jobs:
       matrix:
         erlang_version:
         - "23"
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
