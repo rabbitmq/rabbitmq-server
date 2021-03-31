@@ -228,19 +228,15 @@ socket_ends(Sock, Direction) when ?IS_SSL(Sock);
         {_, {error, _Reason} = Error} ->
             Error
     end;
-socket_ends({rabbit_proxy_socket, CSocket, ProxyInfo}, Direction = inbound) ->
+socket_ends({rabbit_proxy_socket, _, ProxyInfo}, _) ->
     #{
-        src_address := FromAddress,
-        src_port := FromPort
-    } = ProxyInfo,
-    {_From, To} = sock_funs(Direction),
-    case To(CSocket) of
-        {ok, {ToAddress, ToPort}} ->
-            {ok, {rdns(FromAddress), FromPort,
-                rdns(ToAddress),   ToPort}};
-        {error, _Reason} = Error ->
-            Error
-    end.
+      src_address := FromAddress,
+      src_port := FromPort,
+      dest_address := ToAddress,
+      dest_port := ToPort
+     } = ProxyInfo,
+    {ok, {rdns(FromAddress), FromPort,
+          rdns(ToAddress),   ToPort}}.
 
 maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
 maybe_ntoab(Host)                     -> Host.

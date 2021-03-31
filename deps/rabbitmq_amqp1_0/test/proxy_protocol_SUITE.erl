@@ -64,7 +64,7 @@ proxy_protocol(Config) ->
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 ">>, [{capture, none}]),
+    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
 
@@ -81,7 +81,7 @@ proxy_protocol_tls(Config) ->
     timer:sleep(1000),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
-    match = re:run(ConnectionName, <<"^192.168.1.1:80 ">>, [{capture, none}]),
+    match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
     ok.
 
