@@ -1,0 +1,53 @@
+# https://github.com/marketplace/actions/build-and-push-docker-images
+name: OCI
+on:
+  push:
+    paths:
+      - 'deps/**'
+      - 'escript/**'
+      - 'packaging/**'
+      - 'scripts/**'
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
+env:
+  GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/PACKAGES/rabbitmq-server-generic-unix-${{ github.sha }}.tar.xz
+  RABBITMQ_VERSION: ${{ github.sha }}
+  VERSION: ${{ github.sha }}
+jobs:
+  build-publish-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      # RabbitMQ master requires Erlang 23 (correct at Mar 2021)
+      # Source of truth for released versions: https://www.rabbitmq.com/which-erlang.html
+      #
+      # For Elixir: https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
+      - name: Set up min required Erlang & Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '23.2'
+          elixir-version: '1.11.4'
+
+      - name: Build generic unix package
+        run: |
+          make package-generic-unix PROJECT_VERSION=${GITHUB_SHA}
+
+      - name: Build container image
+        working-directory: packaging/docker-image
+        run: |
+          make dist
+
+      - name: Login to DockerHub
+        working-directory: packaging/docker-image
+        run: |
+          docker login \
+            --username '${{ secrets.DOCKERHUB_USERNAME }}' \
+            --password '${{ secrets.DOCKERHUB_PASSWORD }}'
+
+      - name: Push container image to DockerHub
+        working-directory: packaging/docker-image
+        run: |
+          make push

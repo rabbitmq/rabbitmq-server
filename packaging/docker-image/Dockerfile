@@ -188,9 +188,6 @@ RUN set -eux; \
 	chmod 777 "$RABBITMQ_DATA_DIR" /etc/rabbitmq /etc/rabbitmq/conf.d /tmp/rabbitmq-ssl /var/log/rabbitmq; \
 	ln -sf "$RABBITMQ_DATA_DIR/.erlang.cookie" /root/.erlang.cookie
 
-# Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-ARG RABBITMQ_VERSION
-ENV RABBITMQ_VERSION=${RABBITMQ_VERSION}
 # https://www.rabbitmq.com/signatures.html#importing-gpg
 # ENV RABBITMQ_PGP_KEY_ID="0x0A9AF2115F4687BD29803A206B73A36E6026DFCA"
 ENV RABBITMQ_HOME=/opt/rabbitmq
@@ -215,21 +212,6 @@ RUN set -eux; \
 	; \
 	rm -rf /var/lib/apt/lists/*; \
 	\
-        # RABBITMQ_SOURCE_URL="https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/$RABBITMQ_VERSION/rabbitmq-server-generic-unix-latest-toolchain-${RABBITMQ_VERSION}.tar.xz"; \
-	# RABBITMQ_PATH="/usr/local/src/rabbitmq-$RABBITMQ_VERSION"; \
-	\
-	# wget --progress dot:giga --output-document "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_SOURCE_URL.asc"; \
-	# wget --progress dot:giga --output-document "$RABBITMQ_PATH.tar.xz" "$RABBITMQ_SOURCE_URL"; \
-	\
-	# export GNUPGHOME="$(mktemp -d)"; \
-	# gpg --batch --keyserver "$PGP_KEYSERVER" --recv-keys "$RABBITMQ_PGP_KEY_ID"; \
-	# gpg --batch --verify "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_PATH.tar.xz"; \
-	# gpgconf --kill all; \
-	# rm -rf "$GNUPGHOME"; \
-	\
-	# mkdir -p "$RABBITMQ_HOME"; \
-	# tar --extract --file "$RABBITMQ_PATH.tar.xz" --directory "$RABBITMQ_HOME" --strip-components 1; \
-	# rm -rf "$RABBITMQ_PATH"*; \
 # Do not default SYS_PREFIX to RABBITMQ_HOME, leave it empty
 	grep -qE '^SYS_PREFIX=\$\{RABBITMQ_HOME\}$' "$RABBITMQ_HOME/sbin/rabbitmq-defaults"; \
 	sed -i 's/^SYS_PREFIX=.*$/SYS_PREFIX=/' "$RABBITMQ_HOME/sbin/rabbitmq-defaults"; \
