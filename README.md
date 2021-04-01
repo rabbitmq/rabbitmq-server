@@ -71,4 +71,4 @@ RabbitMQ server is [licensed under the MPL 2.0](LICENSE-MPL-RabbitMQ).
 
 ## Copyright
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2021 VMware, Inc. or its affiliates.
