@@ -1304,6 +1304,21 @@ end}.
          rabbit_prelaunch_early_logging:translate_formatter_conf("log.exchange.formatter", Conf)
  end}.
 
+{mapping, "log.journald", "rabbit.log.journald.enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.journald.level", "rabbit.log.journald.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.journald.fields", "rabbit.log.journald.fields", [
+    {default, "SYSLOG_IDENTIFIER=\"rabbitmq-server\" syslog_timestamp syslog_pid priority ERL_PID=pid CODE_FILE=file CODE_LINE=line CODE_MFA=mfa"},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.journald.fields",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_journald_fields_conf("log.journald.fields", Conf)
+ end}.
+
 {mapping, "log.syslog", "rabbit.log.syslog.enabled", [
     {datatype, {enum, [true, false]}}
 ]}.
