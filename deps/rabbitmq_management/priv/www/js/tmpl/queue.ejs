@@ -136,10 +136,16 @@
         <th>Consumer capacity <span class="help" id="queue-consumer-capacity"></th>
         <td><%= fmt_percent(queue.consumer_capacity) %></td>
       </tr>
-      <% if (is_quorum(queue) || is_stream(queue)) { %>
+      <% if (is_quorum(queue)) { %>
       <tr>
         <th>Open files</th>
         <td><%= fmt_table_short(queue.open_files) %></td>
+      </tr>
+      <% } %>
+      <% if (is_stream(queue)) { %>
+      <tr>
+        <th>Readers</th>
+        <td><%= fmt_table_short(queue.readers) %></td>
       </tr>
       <% } %>
     </table>

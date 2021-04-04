@@ -33,7 +33,8 @@
          leader,
          online,
          members,
-         memory
+         memory,
+         readers
         ]).
 
 -record(state, {timeout :: non_neg_integer()}).

@@ -45,6 +45,7 @@
          delete_replica/3]).
 -export([format_osiris_event/2]).
 -export([update_stream_conf/2]).
+-export([readers/1]).
 
 -export([status/2,
          tracking_status/2]).
@@ -505,6 +506,12 @@ i(effective_policy_definition, Q) ->
         undefined -> [];
         Def       -> Def
     end;
+i(readers, Q) ->
+    QName = amqqueue:get_name(Q),
+    Conf = amqqueue:get_type_state(Q),
+    Nodes = [maps:get(leader_node, Conf) | maps:get(replica_nodes, Conf)],
+    {Data, _} = rpc:multicall(Nodes, ?MODULE, readers, [QName]),
+    lists:flatten(Data);
 i(type, _) ->
     stream;
 i(_, _) ->
@@ -554,6 +561,16 @@ tracking_status(Vhost, QueueName) ->
         {error, not_found} = E->
             E
     end.
+
+readers(QName) ->
+    Data = osiris_counters:overview(),
+    Readers = case maps:get({osiris_writer, QName}, Data, not_found) of
+                  not_found ->
+                      maps:get(readers, maps:get({osiris_replica, QName}, Data, #{}), 0);
+                  Map ->
+                      maps:get(readers, Map, 0)
+              end,
+    {node(), Readers}.
 
 init(Q) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
