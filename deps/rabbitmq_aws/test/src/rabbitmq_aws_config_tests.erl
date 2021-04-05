@@ -70,6 +70,10 @@ instance_metadata_test_() ->
       ?assertEqual("http://169.254.169.254/latest/meta-data/placement/availability-zone",
                    rabbitmq_aws_config:instance_availability_zone_url())
     end},
+    {"instance id URL", fun() ->
+      ?assertEqual("http://169.254.169.254/latest/meta-data/instance-id",
+        rabbitmq_aws_config:instance_id_url())
+    end},
     {"arbitrary paths", fun () ->
       ?assertEqual("http://169.254.169.254/a/b/c", rabbitmq_aws_config:instance_metadata_url("a/b/c")),
       ?assertEqual("http://169.254.169.254/a/b/c", rabbitmq_aws_config:instance_metadata_url("/a/b/c"))
@@ -96,8 +100,9 @@ credentials_test_() ->
     foreach,
     fun () ->
       meck:new(httpc),
+      meck:new(rabbitmq_aws),
       reset_environment(),
-      [httpc]
+      [httpc, rabbitmq_aws]
     end,
     fun meck:unload/1,
     [
@@ -114,6 +119,7 @@ credentials_test_() ->
        end},
       {"with missing environment variable", fun() ->
         os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
+        meck:sequence(rabbitmq_aws, ensure_imdsv2_token_valid, 0, "secret_imdsv2_token"),
         ?assertEqual({error, undefined},
                      rabbitmq_aws_config:credentials())
        end},
@@ -129,11 +135,13 @@ credentials_test_() ->
        end},
       {"from config file with bad profile", fun() ->
         setup_test_config_env_var(),
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         ?assertEqual({error, undefined},
                      rabbitmq_aws_config:credentials("bad-profile-name"))
        end},
       {"from credentials file with default profile", fun() ->
         setup_test_credentials_env_var(),
+
         ?assertEqual({ok, "foo1", "bar1", undefined, undefined},
                      rabbitmq_aws_config:credentials())
        end},
@@ -144,21 +152,25 @@ credentials_test_() ->
        end},
       {"from credentials file with bad profile", fun() ->
         setup_test_credentials_env_var(),
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         ?assertEqual({error, undefined},
                      rabbitmq_aws_config:credentials("bad-profile-name"))
        end},
       {"from credentials file with only the key in profile", fun() ->
         setup_test_credentials_env_var(),
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         ?assertEqual({error, undefined},
                      rabbitmq_aws_config:credentials("only-key"))
        end},
       {"from credentials file with only the value in profile", fun() ->
         setup_test_credentials_env_var(),
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         ?assertEqual({error, undefined},
                      rabbitmq_aws_config:credentials("only-value"))
        end},
       {"from credentials file with missing keys in profile", fun() ->
         setup_test_credentials_env_var(),
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         ?assertEqual({error, undefined},
                      rabbitmq_aws_config:credentials("bad-entry"))
        end},
@@ -167,23 +179,27 @@ credentials_test_() ->
         meck:sequence(httpc, request, 4,
                       [{ok, {{protocol, 200, message}, headers, "Bob"}},
                        {ok, {{protocol, 200, message}, headers, CredsBody}}]),
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         Expectation = {ok, "ASIAIMAFAKEACCESSKEY", "2+t64tZZVaz0yp0x1G23ZRYn+FAKEyVALUEs/4qh",
                        {{2016,4,1},{4,13,28}}, "FAKE//////////wEAK/TOKEN/VALUE="},
         ?assertEqual(Expectation, rabbitmq_aws_config:credentials())
        end
       },
       {"with instance metadata service role error", fun() ->
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         meck:expect(httpc, request, 4, {error, timeout}),
         ?assertEqual({error, undefined}, rabbitmq_aws_config:credentials())
        end
       },
       {"with instance metadata service role http error", fun() ->
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         meck:expect(httpc, request, 4,
                     {ok, {{protocol, 500, message}, headers, "Internal Server Error"}}),
         ?assertEqual({error, undefined}, rabbitmq_aws_config:credentials())
        end
       },
       {"with instance metadata service credentials error", fun() ->
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         meck:sequence(httpc, request, 4,
                       [{ok, {{protocol, 200, message}, headers, "Bob"}},
                        {error, timeout}]),
@@ -191,6 +207,7 @@ credentials_test_() ->
        end
       },
       {"with instance metadata service credentials not found", fun() ->
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         meck:sequence(httpc, request, 4,
                       [{ok, {{protocol, 200, message}, headers, "Bob"}},
                        {ok, {{protocol, 404, message}, headers, "File Not Found"}}]),
@@ -285,8 +302,9 @@ region_test_() ->
     foreach,
     fun () ->
       meck:new(httpc),
+      meck:new(rabbitmq_aws),
       reset_environment(),
-      [httpc]
+      [httpc, rabbitmq_aws]
     end,
     fun meck:unload/1,
     [
@@ -304,23 +322,114 @@ region_test_() ->
        end},
       {"missing profile in config", fun() ->
         setup_test_config_env_var(),
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         ?assertEqual({ok, ?DEFAULT_REGION}, rabbitmq_aws_config:region("no-region"))
        end},
       {"from instance metadata service", fun() ->
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         meck:expect(httpc, request, 4,
                     {ok, {{protocol, 200, message}, headers, "us-west-1a"}}),
         ?assertEqual({ok, "us-west-1"}, rabbitmq_aws_config:region())
        end},
       {"full lookup failure", fun() ->
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         ?assertEqual({ok, ?DEFAULT_REGION}, rabbitmq_aws_config:region())
        end},
       {"http error failure", fun() ->
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         meck:expect(httpc, request, 4,
                     {ok, {{protocol, 500, message}, headers, "Internal Server Error"}}),
         ?assertEqual({ok, ?DEFAULT_REGION}, rabbitmq_aws_config:region())
        end}
     ]}.
 
+
+instance_id_test_() ->
+  {
+    foreach,
+    fun () ->
+      meck:new(httpc),
+      meck:new(rabbitmq_aws),
+      reset_environment(),
+      [httpc, rabbitmq_aws]
+    end,
+    fun meck:unload/1,
+    [
+      {"get instance id successfully",
+        fun() ->
+          meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
+          meck:expect(httpc, request, 4, {ok, {{protocol, 200, message}, headers, "instance-id"}}),
+          ?assertEqual({ok, "instance-id"}, rabbitmq_aws_config:instance_id())
+        end
+      },
+      {"failed to get instance id - invalid token",
+        fun() ->
+          meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, "invalid"),
+          meck:expect(httpc, request, 4, {error, {{protocol, 401, message}, headers, "Invalid token"}}),
+          ?assertEqual({error, undefined}, rabbitmq_aws_config:instance_id())
+        end
+      },
+      {"failed to get instance id - access denied",
+        fun() ->
+          meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, "expired token"),
+          meck:expect(httpc, request, 4, {error, {{protocol, 403, message}, headers, "access denied"}}),
+          ?assertEqual({error, undefined}, rabbitmq_aws_config:instance_id())
+        end
+      }
+    ]
+  }.
+
+load_imdsv2_token_test_() ->
+  {
+    foreach,
+    fun () ->
+      meck:new(httpc),
+      [httpc]
+    end,
+    fun meck:unload/1,
+    [
+      {"fail to get imdsv2 token - timeout",
+        fun() ->
+          meck:expect(httpc, request, 4, {error, timeout}),
+          ?assertEqual(undefined, rabbitmq_aws_config:load_imdsv2_token())
+        end},
+      {"fail to get imdsv2 token - PUT request is not valid",
+        fun() ->
+          meck:expect(httpc, request, 4, {error, {{protocol, 400, messge}, headers, "Missing or Invalid Parameters – The PUT request is not valid."}}),
+          ?assertEqual(undefined, rabbitmq_aws_config:load_imdsv2_token())
+        end},
+      {"successfully get imdsv2 token from instance metadata service",
+        fun() ->
+          IMDSv2Token = "super_secret_token_value",
+          meck:sequence(httpc, request, 4,
+            [{ok, {{protocol, 200, message}, headers, IMDSv2Token}}]),
+          ?assertEqual(IMDSv2Token, rabbitmq_aws_config:load_imdsv2_token())
+        end}
+    ]
+  }.
+
+
+maybe_imdsv2_token_headers_test_() ->
+  {
+    foreach,
+    fun () ->
+      meck:new(rabbitmq_aws),
+      [rabbitmq_aws]
+    end,
+    fun meck:unload/1,
+    [
+      {"imdsv2 token is not available", fun() ->
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
+        ?assertEqual([], rabbitmq_aws_config:maybe_imdsv2_token_headers())
+      end}
+      ,
+      {"imdsv2 is available", fun() ->
+        IMDSv2Token = "super_secret_token_value ;)",
+        meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, IMDSv2Token),
+        ?assertEqual([{"X-aws-ec2-metadata-token", IMDSv2Token}], rabbitmq_aws_config:maybe_imdsv2_token_headers())
+      end}
+    ]
+  }.
 
 reset_environment() ->
   os:unsetenv("AWS_ACCESS_KEY_ID"),

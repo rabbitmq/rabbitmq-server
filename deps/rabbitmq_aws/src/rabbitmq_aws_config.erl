@@ -17,6 +17,10 @@
          instance_credentials_url/1,
          instance_availability_zone_url/0,
          instance_role_url/0,
+         instance_id_url/0,
+         instance_id/0,
+         load_imdsv2_token/0,
+         instance_metadata_request_headers/0,
          region/0,
          region/1]).
 
@@ -156,6 +160,14 @@ region(Profile) ->
     {ok, Region} -> {ok, Region};
     _ -> {ok, ?DEFAULT_REGION}
   end.
+
+
+-spec instance_id() -> string() | error.
+%% @doc Return the instance ID from the EC2 metadata service.
+%% @end
+instance_id() ->
+  URL = instance_id_url(),
+  parse_body_response(perform_http_get_instane_metadata(URL)).
 
 
 -spec value(Profile :: string(), Key :: atom())
@@ -413,6 +425,19 @@ instance_metadata_url(Path) ->
 instance_role_url() ->
   instance_metadata_url(string:join([?INSTANCE_METADATA_BASE, ?INSTANCE_CREDENTIALS], "/")).
 
+-spec imdsv2_token_url() -> string().
+%% @doc Return the URL for obtaining IMDSv2 token from the Instance Metadata service
+%% @end
+imdsv2_token_url() ->
+  instance_metadata_url(?TOKEN_URL).
+
+-spec instance_id_url() -> string().
+%% @doc Return the URL for querying the id of the current
+%%      instance from the Instance Metadata service.
+%% @end
+instance_id_url() ->
+  instance_metadata_url(string:join([?INSTANCE_METADATA_BASE, ?INSTANCE_ID], "/")).
+
 
 -spec lookup_credentials(Profile :: string(),
                          AccessKey :: string() | false,
@@ -564,7 +589,7 @@ maybe_get_credentials_from_instance_metadata({error, undefined}) ->
   {error, undefined};
 maybe_get_credentials_from_instance_metadata({ok, Role}) ->
   URL = instance_credentials_url(Role),
-  parse_credentials_response(perform_http_get(URL)).
+  parse_credentials_response(perform_http_get_instane_metadata(URL)).
 
 
 -spec maybe_get_region_from_instance_metadata()
@@ -573,7 +598,7 @@ maybe_get_credentials_from_instance_metadata({ok, Role}) ->
 %% @end
 maybe_get_region_from_instance_metadata() ->
   URL = instance_availability_zone_url(),
-  parse_az_response(perform_http_get(URL)).
+  parse_az_response(perform_http_get_instane_metadata(URL)).
 
 
 %% @doc Try to query the EC2 local instance metadata service to get the role
@@ -581,7 +606,7 @@ maybe_get_region_from_instance_metadata() ->
 %% @end
 maybe_get_role_from_instance_metadata() ->
   URL = instance_role_url(),
-  parse_body_response(perform_http_get(URL)).
+  parse_body_response(perform_http_get_instane_metadata(URL)).
 
 
 -spec parse_az_response(httpc_result())
@@ -600,6 +625,13 @@ parse_az_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 %% @doc Parse the return response from the Instance Metadata service where the
 %%      body value is the string to process.
 %% end.
+
+parse_body_response({error, {{_, 401, _}, _, _}}) ->
+  rabbit_log:error("Unauthorized instance metadata service request - The GET request uses an invalid token."),
+  {error, undefined};
+parse_body_response({error, {{_, 403, _}, _, _}}) ->
+  rabbit_log:error("The request is not allowed or the instance metadata service is turned off."),
+  {error, undefined};
 parse_body_response({error, _}) -> {error, undefined};
 parse_body_response({ok, {{_, 200, _}, _, Body}}) -> {ok, Body};
 parse_body_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
@@ -626,6 +658,15 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
 perform_http_get(URL) ->
   httpc:request(get, {URL, []},
                 [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
+
+
+-spec perform_http_get_instane_metadata(string()) -> httpc_result().
+%% @doc Wrap httpc:get/4 to simplify Instance Metadata service v2 requests
+%% @end
+perform_http_get_instane_metadata(URL) ->
+  rabbit_log:debug("Querying instance metadata service: ~p", [URL]),
+  httpc:request(get, {URL, instance_metadata_request_headers()},
+    [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
 
 
 -spec parse_iso8601_timestamp(Timestamp :: string() | binary()) -> calendar:datetime().
@@ -692,3 +733,44 @@ read_file(Fd, Lines) ->
 %% @end
 region_from_availability_zone(Value) ->
   string:sub_string(Value, 1, length(Value) - 1).
+
+
+-spec load_imdsv2_token() -> security_token().
+%% @doc Attempt to obtain IMDSv2 token.
+%% @end
+load_imdsv2_token() ->
+  TokenUrl=imdsv2_token_url(),
+  rabbit_log:info("Attemping to obtain EC2 IMDSv2 token from ~p ...", [TokenUrl]),
+  case httpc:request(put, {TokenUrl, [{?METADATA_TOKEN_TLL_HEADER, integer_to_list(?METADATA_TOKEN_TLL_SECONDS)}]},
+    [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []) of
+    {ok, {{_, 200, _}, _, Value}} ->
+      rabbit_log:debug("Successfully obtained EC2 IMDSv2 token."),
+      Value;
+    {error, {{_, 400, _}, _, _}} ->
+      rabbit_log:warning("Failed to obtain EC2 IMDSv2 token: Missing or Invalid Parameters – The PUT request is not valid"),
+      undefined;
+    Other ->
+      rabbit_log:warning("Failed to obtain EC2 IMDSv2 token: ~p. Fallback to use EC2 IMDSv1.", [Other]),
+      undefined
+  end.
+
+
+-spec instance_metadata_request_headers() -> headers().
+%% @doc Return headers used for instance metadata service requests.
+%% @end
+instance_metadata_request_headers() ->
+  case application:get_env(rabbit, aws_prefer_imdsv2) of
+    {ok, false} -> [];
+    _           -> %% undefined or {ok, true}
+                   rabbit_log:debug("AWS Instance metadata service v2 (IMDSv2) is preferred."),
+                   maybe_imdsv2_token_headers()
+  end.
+
+-spec maybe_imdsv2_token_headers() -> headers().
+%% @doc Construct http request headers from Imdsv2Token to use with GET requests submitted to the instance metadata service.
+%% @end
+maybe_imdsv2_token_headers() ->
+  case rabbitmq_aws:ensure_imdsv2_token_valid() of
+    undefined -> [];
+    Value     -> [{?METADATA_TOKEN, Value}]
+  end.
