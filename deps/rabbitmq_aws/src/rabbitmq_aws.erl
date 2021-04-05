@@ -495,15 +495,18 @@ sign_headers(#state{access_key = AccessKey,
 -spec expired_imdsv2_token(imdsv2token()) -> boolean().
 %% @doc Determine whether an Imdsv2Token has expired or not.
 %% @end
-expired_imdsv2_token(Imdsv2Token) ->
-  case Imdsv2Token of
-    undefined          -> rabbit_log:debug("AWS Imdsv2 token has not been obtained yet."),
-      true;
-    {_ ,_, undefined}  -> rabbit_log:debug("AWS Imdsv2 token has expired."),
-      true;
-    {_, _, Expiration} -> Now = calendar:datetime_to_gregorian_seconds(local_time()),
-      Now >= Expiration
-  end.
+expired_imdsv2_token(undefined) ->
+  rabbit_log:debug("AWS Imdsv2 token has not been obtained yet."),
+  true;
+expired_imdsv2_token({_, _, undefined}) ->
+  rabbit_log:debug("AWS Imdsv2 token is not available."),
+  true;
+expired_imdsv2_token({_, _, Expiration}) ->
+  Now = calendar:datetime_to_gregorian_seconds(local_time()),
+  HasExpired = Now >= Expiration,
+  rabbit_log:debug("AWS Imdsv2 token has expired: ~p", [HasExpired]),
+  HasExpired.
+
 
 -spec ensure_imdsv2_token_valid() -> imdsv2token().
 ensure_imdsv2_token_valid() ->
@@ -514,8 +517,7 @@ ensure_imdsv2_token_valid() ->
             set_imdsv2_token(#imdsv2token{token = Value,
                                           expiration = Expiration}),
             Value;
-    _    -> rabbit_log:debug("Imdsv2 token is still valid."),
-            Imdsv2Token#imdsv2token.token
+    _    -> Imdsv2Token#imdsv2token.token
   end.
 
 -spec ensure_credentials_valid() -> ok.
