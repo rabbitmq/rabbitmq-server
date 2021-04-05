@@ -625,15 +625,14 @@ parse_az_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 %% @doc Parse the return response from the Instance Metadata service where the
 %%      body value is the string to process.
 %% end.
-
-parse_body_response({error, {{_, 401, _}, _, _}}) ->
-  rabbit_log:error("Unauthorized instance metadata service request - The GET request uses an invalid token."),
-  {error, undefined};
-parse_body_response({error, {{_, 403, _}, _, _}}) ->
-  rabbit_log:error("The request is not allowed or the instance metadata service is turned off."),
-  {error, undefined};
 parse_body_response({error, _}) -> {error, undefined};
 parse_body_response({ok, {{_, 200, _}, _, Body}}) -> {ok, Body};
+parse_body_response({ok, {{_, 401, _}, _, _}}) ->
+  rabbit_log:error("Unauthorized instance metadata service request."),
+  {error, undefined};
+parse_body_response({ok, {{_, 403, _}, _, _}}) ->
+  rabbit_log:error("The request is not allowed or the instance metadata service is turned off."),
+  {error, undefined};
 parse_body_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 
 

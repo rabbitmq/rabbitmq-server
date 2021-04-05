@@ -1742,7 +1742,7 @@ end}.
 %% If not set or set to true, IMDSv2 will be preferred to use first. If fails, IMDSv1 will be used.
 %% {aws_prefer_imdsv2, false}
 
-{mapping, "aws_prefer_imdsv2", "rabbit.aws_prefer_imdsv2",
+{mapping, "aws.prefer_imdsv2", "rabbit.aws_prefer_imdsv2",
     [{datatype, {enum, [true, false]}}]}.
 
 

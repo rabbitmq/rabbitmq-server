@@ -86,9 +86,11 @@ list_nodes() ->
                                get_config_key(aws_secret_key, M)),
     case get_config_key(aws_autoscaling, M) of
         true ->
-            {ok, InstanceId} = rabbitmq_aws_config:instance_id(),
-            rabbit_log:debug("EC2 instance ID is determined from metadata service: ~p", [InstanceId]),
-            get_autoscaling_group_node_list(InstanceId, get_tags());
+            case rabbitmq_aws_config:instance_id() of
+                {ok, InstanceId} -> rabbit_log:debug("EC2 instance ID is determined from metadata service: ~p", [InstanceId]),
+                                    get_autoscaling_group_node_list(InstanceId, get_tags());
+                _                -> {error, "Failed to determined EC2 instance ID from metadata service"}
+            end;
         false ->
             get_node_list_from_tags(get_tags())
     end.
