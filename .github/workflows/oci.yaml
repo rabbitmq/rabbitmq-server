@@ -26,7 +26,7 @@ jobs:
       #
       # For Elixir: https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
       - name: Set up min required Erlang & Elixir
-        uses: erlef/setup-beam@v1
+        uses: erlef/setup-beam@v1.7
         with:
           otp-version: '23.2'
           elixir-version: '1.11.4'
