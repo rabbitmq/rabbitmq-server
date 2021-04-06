@@ -11,8 +11,8 @@ def activemq_archive():
         sha256 = SHA_256,
         strip_prefix = "apache-activemq-{}".format(ACTIVEMQ_VERSION),
         build_file_content = """filegroup(
-    name = "bin_dir",
-    srcs = glob(["bin/**/*"]),
+    name = "exec_dir",
+    srcs = glob(["bin/**/*", "lib/**/*", "conf/**/*", "activemq-all-*.jar"]),
     visibility = ["//visibility:public"],
 )
 """,

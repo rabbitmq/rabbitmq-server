@@ -77,7 +77,7 @@ rabbitmq_run(
 )
 
 ct_suite(
-    size = "large",
+    size = "medium",
     additional_hdrs = [
         "src/amqp10_client.hrl",
     ],
@@ -86,16 +86,21 @@ ct_suite(
         "test/mock_server.erl",
     ],
     data = [
-        "@activemq//:bin_dir",
+        "@activemq//:exec_dir",
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS + [
         "-I deps/amqp10_client",
     ],
+    groups = [
+        "rabbitmq",
+        "rabbitmq_strict",
+        "activemq",
+        "activemq_no_anon",
+        "mock",
+    ],
     suite_name = "system_SUITE",
-    # does not pass remotely. marking exclusive until we have logs from remote runs
-    tags = ["exclusive"],
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/amqp10_client/rabbitmq-for-tests-run",
