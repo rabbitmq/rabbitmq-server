@@ -1,0 +1,11 @@
+ARG ERLANG_VERSION
+
+FROM pivotalrabbitmq/rabbitmq-server-buildenv:linux-erlang-${ERLANG_VERSION}
+
+ENV UNPRIVILEGED_USER=rabbitmq
+RUN useradd \
+    --create-home \
+    --comment 'CI unprivileged user' \
+    ${UNPRIVILEGED_USER}
+
+USER ${UNPRIVILEGED_USER}
