@@ -352,7 +352,7 @@ stop-node:
 # Start a RabbitMQ cluster in the background.
 # --------------------------------------------------------------------
 
-NODES ?= 2
+NODES ?= 3
 
 start-brokers start-cluster: $(DIST_TARGET)
 	@for n in $$(seq $(NODES)); do \

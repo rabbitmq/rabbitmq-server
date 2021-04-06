@@ -23,7 +23,7 @@
 -compile(export_all).
 
 suite() ->
-    [{timetrap, 5 * 60000}].
+    [{timetrap, 15 * 60000}].
 
 all() ->
     [
