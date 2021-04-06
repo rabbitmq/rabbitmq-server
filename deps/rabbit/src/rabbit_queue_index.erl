@@ -7,6 +7,8 @@
 
 -module(rabbit_queue_index).
 
+-compile({inline, [segment_entry_count/0]}).
+
 -export([erase/1, init/3, reset_state/1, recover/6,
          terminate/3, delete_and_terminate/1,
          pre_publish/7, flush_pre_publish_cache/2,
@@ -43,13 +45,13 @@
 %% then delivered, then ack'd.
 %%
 %% In order to be able to clean up ack'd messages, we write to segment
-%% files. These files have a fixed number of entries: ?SEGMENT_ENTRY_COUNT
+%% files. These files have a fixed number of entries: segment_entry_count()
 %% publishes, delivers and acknowledgements. They are numbered, and so
 %% it is known that the 0th segment contains messages 0 ->
-%% ?SEGMENT_ENTRY_COUNT - 1, the 1st segment contains messages
-%% ?SEGMENT_ENTRY_COUNT -> 2*?SEGMENT_ENTRY_COUNT - 1 and so on. As
+%% segment_entry_count() - 1, the 1st segment contains messages
+%% segment_entry_count() -> 2*segment_entry_count() - 1 and so on. As
 %% such, in the segment files, we only refer to message sequence ids
-%% by the LSBs as SeqId rem ?SEGMENT_ENTRY_COUNT. This gives them a
+%% by the LSBs as SeqId rem segment_entry_count(). This gives them a
 %% fixed size.
 %%
 %% However, transient messages which are not sent to disk at any point
@@ -127,8 +129,6 @@
 %% binary generation/matching with constant vs variable lengths.
 
 -define(REL_SEQ_BITS, 14).
-%% calculated as trunc(math:pow(2,?REL_SEQ_BITS))).
--define(SEGMENT_ENTRY_COUNT, 16384).
 
 %% seq only is binary 01 followed by 14 bits of rel seq id
 %% (range: 0 - 16383)
@@ -352,11 +352,11 @@ pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint
 %% pre_publish_cache is the entry with most elements when compared to
 %% delivered_cache so we only check the former in the guard.
 maybe_flush_pre_publish_cache(JournalSizeHint,
-                              #qistate{pre_publish_cache = PPC} = State)
-  when length(PPC) >= ?SEGMENT_ENTRY_COUNT ->
-    flush_pre_publish_cache(JournalSizeHint, State);
-maybe_flush_pre_publish_cache(_JournalSizeHint, State) ->
-    State.
+                              #qistate{pre_publish_cache = PPC} = State) ->
+    case length(PPC) >= segment_entry_count() of
+        true -> flush_pre_publish_cache(JournalSizeHint, State);
+        false -> State
+    end.
 
 flush_pre_publish_cache(JournalSizeHint, State) ->
     State1 = flush_pre_publish_cache(State),
@@ -991,10 +991,11 @@ notify_sync(State = #qistate{unconfirmed     = UC,
 %%----------------------------------------------------------------------------
 
 seq_id_to_seg_and_rel_seq_id(SeqId) ->
-    { SeqId div ?SEGMENT_ENTRY_COUNT, SeqId rem ?SEGMENT_ENTRY_COUNT }.
+    SegmentEntryCount = segment_entry_count(),
+    { SeqId div SegmentEntryCount, SeqId rem SegmentEntryCount }.
 
 reconstruct_seq_id(Seg, RelSeq) ->
-    (Seg * ?SEGMENT_ENTRY_COUNT) + RelSeq.
+    (Seg * segment_entry_count()) + RelSeq.
 
 all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
     lists:sort(
@@ -1163,7 +1164,12 @@ array_new() ->
     array_new(undefined).
 
 array_new(Default) ->
-    array:new([{default, Default}, fixed, {size, ?SEGMENT_ENTRY_COUNT}]).
+    array:new([{default, Default}, fixed, {size, segment_entry_count()}]).
+
+segment_entry_count() ->
+    {ok, SegmentEntryCount} =
+        application:get_env(rabbit, queue_index_segment_entry_count),
+    SegmentEntryCount.
 
 bool_to_int(true ) -> 1;
 bool_to_int(false) -> 0.
