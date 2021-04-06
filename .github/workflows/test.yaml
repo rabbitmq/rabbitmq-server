@@ -30,8 +30,6 @@ jobs:
           build --host_java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
 
           build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
-          build --@bazel-erlang//:erlang_home=/usr/lib/erlang
-          build --//:elixir_home=/usr/local
 
           build --bes_results_url=https://app.buildbuddy.io/invocation/
           build --bes_backend=grpcs://cloud.buildbuddy.io
@@ -41,7 +39,6 @@ jobs:
           build --remote_timeout=1200
 
           build --build_metadata=ROLE=CI
-          build --build_metadata=VISIBILITY=PUBLIC
           build --remote_instance_name=buildbuddy-io/buildbuddy/ci
           build --spawn_strategy=remote
           build --jobs=50
@@ -52,5 +49,23 @@ jobs:
     - name: RUN TESTS
       run: |
         bazelisk test //... \
+          --@bazel-erlang//:erlang_home=/usr/lib/erlang \
+          --//:elixir_home=/usr/local \
+          --build_metadata=VISIBILITY=PUBLIC \
           --test_tag_filters=-exclusive \
+          --verbose_failures
+    - name: CONFIGURE OTP & ELIXIR
+      uses: erlef/setup-beam@v1.7
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: 1.11.4
+    - name: RUN EXCLUSIVE TESTS
+      run: |
+        ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+        ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+        bazelisk test //... \
+          --@bazel-erlang//:erlang_home=${ERLANG_HOME} \
+          --//:elixir_home=${ELIXIR_HOME} \
+          --test_strategy=exclusive \
+          --test_tag_filters=exclusive \
           --verbose_failures
