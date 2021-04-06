@@ -79,6 +79,7 @@ post(Service, Path, Body, Headers) ->
 refresh_credentials() ->
   gen_server:call(rabbitmq_aws, refresh_credentials).
 
+
 -spec refresh_credentials(state()) -> ok | error.
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2
 %%      Instance metadata service.
@@ -86,7 +87,9 @@ refresh_credentials() ->
 refresh_credentials(State) ->
   rabbit_log:debug("Refreshing AWS credentials..."),
   {_, NewState} = load_credentials(State),
+  rabbit_log:debug("AWS credentials has been refreshed."),
   set_credentials(NewState).
+
 
 -spec request(Service :: string(),
               Method :: method(),
@@ -496,15 +499,15 @@ sign_headers(#state{access_key = AccessKey,
 %% @doc Determine whether an Imdsv2Token has expired or not.
 %% @end
 expired_imdsv2_token(undefined) ->
-  rabbit_log:debug("AWS Imdsv2 token has not been obtained yet."),
+  rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained."),
   true;
 expired_imdsv2_token({_, _, undefined}) ->
-  rabbit_log:debug("AWS Imdsv2 token is not available."),
+  rabbit_log:debug("EC2 IMDSv2 token is not available."),
   true;
 expired_imdsv2_token({_, _, Expiration}) ->
   Now = calendar:datetime_to_gregorian_seconds(local_time()),
   HasExpired = Now >= Expiration,
-  rabbit_log:debug("AWS Imdsv2 token has expired: ~p", [HasExpired]),
+  rabbit_log:debug("EC2 IMDSv2 token has expired: ~p", [HasExpired]),
   HasExpired.
 
 
