@@ -20,7 +20,6 @@ BUILD_DEPS = [
 ]
 
 DEPS = [
-    # "//deps/rabbit_common:bazel_erlang_lib",
     "@jose//:bazel_erlang_lib",
 ]
 
@@ -29,16 +28,11 @@ RUNTIME_DEPS = [
     "@cowlib//:bazel_erlang_lib",
 ]
 
-FIRST_SRCS = [
-    # "src/rabbit_auth_cache.erl",
-]
-
 erlang_lib(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
     app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
-    first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
@@ -48,7 +42,6 @@ test_erlang_lib(
     app_name = APP_NAME,
     app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
-    first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
