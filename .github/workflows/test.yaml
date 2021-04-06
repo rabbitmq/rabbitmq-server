@@ -2,7 +2,7 @@ name: Test
 on: push
 jobs:
   test:
-    name: test
+    name: Test
     runs-on: ubuntu-18.04
     strategy:
       matrix:
@@ -30,6 +30,8 @@ jobs:
           build --host_java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
 
           build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
+          build --@bazel-erlang//:erlang_home=/usr/lib/erlang
+          build --//:elixir_home=/usr/local
 
           build --bes_results_url=https://app.buildbuddy.io/invocation/
           build --bes_backend=grpcs://cloud.buildbuddy.io
@@ -39,6 +41,7 @@ jobs:
           build --remote_timeout=1200
 
           build --build_metadata=ROLE=CI
+          build --build_metadata=VISIBILITY=PUBLIC
           build --remote_instance_name=buildbuddy-io/buildbuddy/ci
           build --spawn_strategy=remote
           build --jobs=50
@@ -49,23 +52,51 @@ jobs:
     - name: RUN TESTS
       run: |
         bazelisk test //... \
-          --@bazel-erlang//:erlang_home=/usr/lib/erlang \
-          --//:elixir_home=/usr/local \
-          --build_metadata=VISIBILITY=PUBLIC \
           --test_tag_filters=-exclusive \
           --verbose_failures
+  test-exclusive:
+    name: Test (Exclusive Tests)
+    runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        erlang_version:
+        - "23"
+    timeout-minutes: 20
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2
     - name: CONFIGURE OTP & ELIXIR
       uses: erlef/setup-beam@v1.7
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: 1.11.4
-    - name: RUN EXCLUSIVE TESTS
+    - name: CONFIGURE BAZEL
       run: |
         ERLANG_HOME="$(dirname $(dirname $(which erl)))"
         ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+        echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
+        echo "${{ secrets.BUILDBUDDY_KEY }}" > buildbuddy-key.pem
+        cat << EOF >> .bazelrc
+          build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
+          build --@bazel-erlang//:erlang_home=${ERLANG_HOME}
+          build --//:elixir_home=${ELIXIR_HOME}
+
+          build --bes_results_url=https://app.buildbuddy.io/invocation/
+          build --bes_backend=grpcs://cloud.buildbuddy.io
+          build --remote_cache=grpcs://cloud.buildbuddy.io
+          build --tls_client_certificate=buildbuddy-cert.pem
+          build --tls_client_key=buildbuddy-key.pem
+          build --remote_timeout=1200
+
+          build --build_metadata=ROLE=CI
+          build --build_metadata=VISIBILITY=PRIVATE
+          build --remote_instance_name=buildbuddy-io/buildbuddy/ci
+          build --grpc_keepalive_time=30s
+        EOF
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: RUN EXCLUSIVE TESTS
+      run: |
         bazelisk test //... \
-          --@bazel-erlang//:erlang_home=${ERLANG_HOME} \
-          --//:elixir_home=${ELIXIR_HOME} \
-          --test_strategy=exclusive \
           --test_tag_filters=exclusive \
           --verbose_failures
