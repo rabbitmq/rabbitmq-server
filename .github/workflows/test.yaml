@@ -61,7 +61,7 @@ jobs:
       matrix:
         erlang_version:
         - "23"
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2
@@ -90,7 +90,7 @@ jobs:
 
           build --build_metadata=ROLE=CI
           build --build_metadata=VISIBILITY=PRIVATE
-          build --remote_instance_name=buildbuddy-io/buildbuddy/ci
+          build --remote_instance_name=buildbuddy-io/buildbuddy/ci-exclusive
           build --grpc_keepalive_time=30s
         EOF
     #! - name: Setup tmate session
