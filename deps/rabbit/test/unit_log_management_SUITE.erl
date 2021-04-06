@@ -123,8 +123,7 @@ log_file_initialised_during_startup1(_Config) ->
     %% start application with simple tty logging
     ok = rabbit:stop(),
     ok = clean_logs([LogFile], Suffix),
-    ok = application:set_env(rabbit, log, [{console, [{enabled, true}]},
-                                           {file, [{file, false}]}]),
+    os:putenv("RABBITMQ_LOGS", "-"),
     ok = rabbit:start(),
 
     %% start application with logging to non-existing directory
@@ -134,13 +133,11 @@ log_file_initialised_during_startup1(_Config) ->
     delete_file(filename:dirname(NonExistent)),
     ok = rabbit:stop(),
     io:format("Setting log file to \"~s\"~n", [NonExistent]),
-    ok = application:set_env(rabbit, log, [{console, [{enabled, true}]},
-                                           {file, [{file, NonExistent}]}]),
+    os:putenv("RABBITMQ_LOGS", NonExistent),
     ok = rabbit:start(),
 
     %% clean up
-    ok = application:set_env(rabbit, log, [{console, [{enabled, true}]},
-                                           {file, [{file, LogFile}]}]),
+    os:unsetenv("RABBITMQ_LOGS"),
     ok = rabbit:start(),
     passed.
 
@@ -183,11 +180,7 @@ log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
 
     ok = rabbit:stop(),
     io:format("Setting log file to \"~s\"~n", [NoPermission1]),
-    ok = application:set_env(rabbit, log, [{console, [{enabled, true}]},
-                                           {file, [{file, NoPermission1}]}]),
-
-    io:format("rabbit application env.: ~p~n",
-              [application:get_all_env(rabbit)]),
+    os:putenv("RABBITMQ_LOGS", NoPermission1),
     ?assertThrow(
        {error, {rabbit, {{cannot_log_to_file, _, _}, _}}},
        rabbit:start()),
@@ -201,18 +194,13 @@ log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     delete_file(filename:dirname(NoPermission2)),
 
     io:format("Setting log file to \"~s\"~n", [NoPermission2]),
-    ok = application:set_env(rabbit, log, [{console, [{enabled, true}]},
-                                           {file, [{file, NoPermission2}]}]),
-
-    io:format("rabbit application env.: ~p~n",
-              [application:get_all_env(rabbit)]),
+    os:putenv("RABBITMQ_LOGS", NoPermission2),
     ?assertThrow(
        {error, {rabbit, {{cannot_log_to_file, _, _}, _}}},
        rabbit:start()),
 
     %% clean up
-    ok = application:set_env(rabbit, log, [{console, [{enabled, true}]},
-                                           {file, [{file, LogFile}]}]),
+    os:unsetenv("RABBITMQ_LOGS"),
     ok = rabbit:start(),
     passed.
 
