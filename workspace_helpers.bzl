@@ -131,11 +131,20 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         org = "manopapad",
     )
 
-    hex_archive(
+    hex_pm_bazel_erlang_lib(
         name = "ra",
         version = "1.1.8",
         sha256 = "d7e399f8a09c8420bc90953f3464127063e53cef39f27e0af452ec51ad26ea9e",
-        build_file = rabbitmq_workspace + "//:BUILD.ra",
+        first_srcs = [
+            "src/ra_machine.erl",
+            "src/ra_snapshot.erl",
+        ],
+        deps = [
+            "@gen_batch_server//:bazel_erlang_lib",
+        ],
+        runtime_deps = [
+            "@aten//:bazel_erlang_lib",
+        ],
     )
 
     hex_pm_bazel_erlang_lib(

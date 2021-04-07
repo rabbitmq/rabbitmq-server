@@ -130,7 +130,7 @@ erlc(
     srcs = glob(FIRST_SRCS),
     hdrs = HDRS,
     dest = "src",
-    erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = DEPS,
 )
 
@@ -147,7 +147,7 @@ erlc(
     hdrs = HDRS,
     beam = [":first_test_beam_files"],
     dest = "src",
-    erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = DEPS,
 )
 
@@ -171,7 +171,7 @@ erlc(
     srcs = ["test/rabbit_env_SUITE.erl"],
     hdrs = HDRS,
     dest = "test",
-    erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         ":test_bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
@@ -195,7 +195,7 @@ erlc(
     srcs = ["test/supervisor2_SUITE.erl"],
     hdrs = HDRS,
     dest = "test",
-    erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         ":test_bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
@@ -217,7 +217,7 @@ erlc(
     srcs = ["test/unit_priority_queue_SUITE.erl"],
     hdrs = HDRS,
     dest = "test",
-    erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         ":test_bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
@@ -242,7 +242,7 @@ erlc(
     ],
     hdrs = HDRS,
     dest = "test",
-    erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         ":test_bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
@@ -267,7 +267,7 @@ erlc(
     srcs = ["test/worker_pool_SUITE.erl"],
     hdrs = HDRS,
     dest = "test",
-    erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         ":test_bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",

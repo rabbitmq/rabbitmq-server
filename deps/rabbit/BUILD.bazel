@@ -518,6 +518,7 @@ ct_suite(
     },
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -530,6 +531,7 @@ ct_suite(
     },
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -701,6 +703,7 @@ ct_suite(
     ],
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -731,6 +734,7 @@ ct_suite(
     ],
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
     ],
 )
@@ -757,6 +761,7 @@ ct_suite(
     ],
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -781,6 +786,7 @@ ct_suite(
     ],
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -846,6 +852,7 @@ ct_suite(
     suite_name = "term_to_binary_compat_prop_SUITE",
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
     ],
@@ -890,6 +897,7 @@ ct_suite(
     suite_name = "unit_amqp091_content_framing_SUITE",
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -909,6 +917,9 @@ ct_suite(
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_cluster_formation_locking_mocks_SUITE",
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
     ],
@@ -918,6 +929,9 @@ ct_suite(
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_collections_SUITE",
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
     runtime_deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
     ],
@@ -927,6 +941,9 @@ ct_suite(
     size = "medium",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_config_value_encryption_SUITE",
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
     runtime_deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
         "//deps/rabbit_common:test_bazel_erlang_lib",
@@ -974,6 +991,9 @@ ct_suite(
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_gm_SUITE",
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
@@ -984,6 +1004,9 @@ ct_suite(
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_log_config_SUITE",
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
     runtime_deps = [
         "@syslog//:bazel_erlang_lib",
     ],
@@ -1001,6 +1024,7 @@ ct_suite(
     suite_name = "unit_operator_policy_SUITE",
     deps = [
         "//deps/rabbit_common:test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -1008,6 +1032,9 @@ ct_suite(
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_pg_local_SUITE",
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
 )
 
 ct_suite(
@@ -1016,6 +1043,7 @@ ct_suite(
     suite_name = "unit_plugin_directories_SUITE",
     deps = [
         "//deps/rabbit_common:test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -1029,6 +1057,7 @@ ct_suite(
     deps = [
         "//deps/amqp_client:bazel_erlang_lib",
         "//deps/rabbit_common:test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -1042,12 +1071,18 @@ ct_suite(
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_priority_queue_SUITE",
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
 )
 
 ct_suite(
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     suite_name = "unit_queue_consumers_SUITE",
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
 )
 
 rabbitmq_integration_suite(
@@ -1068,6 +1103,7 @@ ct_suite(
     suite_name = "unit_supervisor2_SUITE",
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 

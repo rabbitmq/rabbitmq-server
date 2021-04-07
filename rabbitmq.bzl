@@ -17,7 +17,6 @@ _LAGER_EXTRA_SINKS = [
     "rabbit_log_federation",
     "rabbit_log_ldap",
     "rabbit_log_mirroring",
-    "rabbit_log_osiris",
     "rabbit_log_prelaunch",
     "rabbit_log_queue",
     "rabbit_log_ra",
