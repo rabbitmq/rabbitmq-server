@@ -87,7 +87,7 @@ refresh_credentials() ->
 refresh_credentials(State) ->
   rabbit_log:debug("Refreshing AWS credentials..."),
   {_, NewState} = load_credentials(State),
-  rabbit_log:debug("AWS credentials has been refreshed."),
+  rabbit_log:debug("AWS credentials have been refreshed."),
   set_credentials(NewState).
 
 
@@ -496,7 +496,7 @@ sign_headers(#state{access_key = AccessKey,
                                   body = Body}).
 
 -spec expired_imdsv2_token(imdsv2token()) -> boolean().
-%% @doc Determine whether an Imdsv2Token has expired or not.
+%% @doc Determine whether or not an Imdsv2Token has expired..
 %% @end
 expired_imdsv2_token(undefined) ->
   rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained."),
@@ -524,13 +524,12 @@ ensure_imdsv2_token_valid() ->
   end.
 
 -spec ensure_credentials_valid() -> ok.
-%% @doc Invoked before each AWS service API request checking to see if credentials available
-%%      or whether the current credentials have expired.
-%%      If they haven't, move on performing the request, otherwise try and refresh the
-%%      credentials before performing the request.
+%% @doc Invoked before each AWS service API request to check if the current credentials are available and that they have not expired.
+%%      If the credentials are available and are still current, then move on and perform the request.
+%%      If the credentials are not available or have expired, then refresh them before performing the request.
 %% @end
 ensure_credentials_valid() ->
-  rabbit_log:debug("Making sure AWS credentials is available and still valid."),
+  rabbit_log:debug("Making sure AWS credentials are available and still valid."),
   {ok, State}=gen_server:call(rabbitmq_aws, get_state),
   case has_credentials(State) of
     true -> case expired_credentials(State#state.expiration) of
