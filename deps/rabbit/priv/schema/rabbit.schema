@@ -1739,7 +1739,9 @@ end}.
 % ===============================
 
 %% @doc Whether or not to prefer EC2 IMDSv2 when querying instance metadata service.
-%% If not set or set to true, EC2 IMDSv2 will be preferred to use first. If fails, IEC2 MDSv1 will be used.
+%% The setting defaults to true. When true, instance metadata will first be attempted using EC2 IMDSv2
+%% and will fall back to EC2 IMDSv1 upon failure.
+%% When false, EC2 IMDSv1 will be used first and no attempt will be made to EC2 IMDSv2..
 %% See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html.
 
 {mapping, "aws.prefer_imdsv2", "rabbit.aws_prefer_imdsv2",
