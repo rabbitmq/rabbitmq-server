@@ -30,8 +30,8 @@ http_archive(
     repo_mapping = {
         "@rabbitmq-server": "@",
     },
-    strip_prefix = "rabbitmq-ct-helpers-master",
-    urls = ["https://github.com/rabbitmq/rabbitmq-ct-helpers/archive/master.zip"],
+    strip_prefix = "rabbitmq-ct-helpers-3.8.x",
+    urls = ["https://github.com/rabbitmq/rabbitmq-ct-helpers/archive/refs/heads/v3.8.x.zip"],
 )
 
 http_archive(
@@ -39,8 +39,8 @@ http_archive(
     repo_mapping = {
         "@rabbitmq-server": "@",
     },
-    strip_prefix = "rabbitmq-ct-client-helpers-master",
-    urls = ["https://github.com/rabbitmq/rabbitmq-ct-client-helpers/archive/master.zip"],
+    strip_prefix = "rabbitmq-ct-client-helpers-3.8.x",
+    urls = ["https://github.com/rabbitmq/rabbitmq-ct-client-helpers/archive/refs/heads/v3.8.x.zip"],
 )
 
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
