@@ -127,8 +127,8 @@ parse_array_primitive(16#41, <<_:8/unsigned, R/binary>>) -> {true, R};
 parse_array_primitive(16#42, <<_:8/unsigned, R/binary>>) -> {false, R};
 parse_array_primitive(16#43, <<_:8/unsigned, R/binary>>) -> {{uint, 0}, R};
 parse_array_primitive(16#44, <<_:8/unsigned, R/binary>>) -> {{ulong, 0}, R};
-parse_array_primitive(Marker, Data) ->
-    parse_primitive(Marker, Data).
+parse_array_primitive(ElementType, Data) ->
+    parse_primitive(ElementType, Data).
 
 %% array structure is {array, Ctor, [Data]}
 %% e.g. {array, symbol, [<<"amqp:accepted:list">>]}
