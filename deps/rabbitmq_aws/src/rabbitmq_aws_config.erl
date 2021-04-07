@@ -751,7 +751,7 @@ load_imdsv2_token() ->
     Other ->
       rabbit_log:warning("Failed to obtain EC2 IMDSv2 token: ~p. "
                          "It is recommended to use EC2 IMDSv2. "
-                         "Please refer to AWS public document fordetail on how to configure instance metadata: "
+                         "Please refer to AWS public document for detail on how to configure instance metadata: "
                          "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html."
                          "Fallback to use EC2 IMDSv1 for now.", [Other]),
       undefined
@@ -765,7 +765,7 @@ instance_metadata_request_headers() ->
   case application:get_env(rabbit, aws_prefer_imdsv2) of
     {ok, false} -> [];
     _           -> %% undefined or {ok, true}
-                   rabbit_log:debug("AWS Instance metadata service v2 (IMDSv2) is preferred."),
+                   rabbit_log:debug("EC2 instance metadata service v2 (IMDSv2) is preferred."),
                    maybe_imdsv2_token_headers()
   end.
 
