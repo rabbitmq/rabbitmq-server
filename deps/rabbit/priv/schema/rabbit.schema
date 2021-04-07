@@ -1738,9 +1738,9 @@ end}.
 % AWS section
 % ===============================
 
-%% Whether or not to prefer IMDSv2 when querying instance metadata service (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html).
-%% If not set or set to true, IMDSv2 will be preferred to use first. If fails, IMDSv1 will be used.
-%% {aws_prefer_imdsv2, false}
+%% @doc Whether or not to prefer EC2 IMDSv2 when querying instance metadata service.
+%% If not set or set to true, EC2 IMDSv2 will be preferred to use first. If fails, IEC2 MDSv1 will be used.
+%% See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html.
 
 {mapping, "aws.prefer_imdsv2", "rabbit.aws_prefer_imdsv2",
     [{datatype, {enum, [true, false]}}]}.

@@ -426,14 +426,13 @@ instance_role_url() ->
   instance_metadata_url(string:join([?INSTANCE_METADATA_BASE, ?INSTANCE_CREDENTIALS], "/")).
 
 -spec imdsv2_token_url() -> string().
-%% @doc Return the URL for obtaining IMDSv2 token from the Instance Metadata service
+%% @doc Return the URL for obtaining IMDSv2 token from the Instance Metadata service.
 %% @end
 imdsv2_token_url() ->
   instance_metadata_url(?TOKEN_URL).
 
 -spec instance_id_url() -> string().
-%% @doc Return the URL for querying the id of the current
-%%      instance from the Instance Metadata service.
+%% @doc Return the URL for querying the id of the current instance from the Instance Metadata service.
 %% @end
 instance_id_url() ->
   instance_metadata_url(string:join([?INSTANCE_METADATA_BASE, ?INSTANCE_ID], "/")).
@@ -735,7 +734,7 @@ region_from_availability_zone(Value) ->
 
 
 -spec load_imdsv2_token() -> security_token().
-%% @doc Attempt to obtain IMDSv2 token.
+%% @doc Attempt to obtain EC2 IMDSv2 token.
 %% @end
 load_imdsv2_token() ->
   TokenUrl=imdsv2_token_url(),

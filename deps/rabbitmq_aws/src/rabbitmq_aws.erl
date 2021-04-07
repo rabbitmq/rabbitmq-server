@@ -154,14 +154,14 @@ set_region(Region) ->
   gen_server:call(rabbitmq_aws, {set_region, Region}).
 
 -spec set_imdsv2_token(imdsv2token()) -> ok.
-%% @doc Manually set the Imdsv2Token to perform instance metadata service requests.
+%% @doc Manually set the Imdsv2Token used to perform instance metadata service requests.
 %% @end
 set_imdsv2_token(Imdsv2Token) ->
   gen_server:call(rabbitmq_aws, {set_imdsv2_token, Imdsv2Token}).
 
 
 -spec get_imdsv2_token() -> imdsv2token().
-%% @doc return the current Imdsv2Token to perform instance metadata service requests.
+%% @doc return the current Imdsv2Token used to perform instance metadata service requests.
 %% @end
 get_imdsv2_token() ->
   {ok, Imdsv2Token}=gen_server:call(rabbitmq_aws, get_imdsv2_token),

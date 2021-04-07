@@ -35,8 +35,10 @@
 
 -define(METADATA_TOKEN_TLL_HEADER, "X-aws-ec2-metadata-token-ttl-seconds").
 
-% AWS IMDSv2 is session-based and instance metadata service requests which are only needed for loading/refreshing credentials.
-% We dont need to have long-live metadata token. In fact, we only need the token is valid for a sufficient period to successfully
+% EC2 Instance Metadata service version 2 (IMDSv2) uses session-oriented authentication.
+% Instance metadata service requests are only needed for loading/refreshing credentials.
+% We dont need to have long-live metadata token.
+% In fact, we only need the token is valid for a sufficient period to successfully
 % load/refresh credentials. 60 seconds is more than enough for that goal.
 -define(METADATA_TOKEN_TLL_SECONDS, 60).
 
