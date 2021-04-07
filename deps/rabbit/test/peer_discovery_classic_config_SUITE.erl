@@ -37,6 +37,7 @@ suite() ->
       {timetrap, {minutes, 5}}
     ].
 
+-define(TIMEOUT, 60000).
 
 %%
 %% Setup/teardown.
@@ -151,7 +152,7 @@ successful_discovery(Config) ->
             {M1, M2} when length(M1) =:= 3; length(M2) =:= 3,
             {cluster_members_online(Config, 0),
             cluster_members_online(Config, 1)},
-            30000)
+            ?TIMEOUT)
     end).
 
 successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
@@ -160,7 +161,7 @@ successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
             {M1, M2} when length(M1) =:= 2; length(M2) =:= 2,
             {cluster_members_online(Config, 0),
             cluster_members_online(Config, 1)},
-            30000)
+            ?TIMEOUT)
     end).
 
 no_nodes_configured(Config) ->
@@ -168,7 +169,7 @@ no_nodes_configured(Config) ->
         ?awaitMatch(
             M when length(M) < 2,
             cluster_members_online(Config, 0),
-            30000)
+            ?TIMEOUT)
     end).
 
 reset_and_restart_node(Config, I) when is_integer(I) andalso I >= 0 ->
