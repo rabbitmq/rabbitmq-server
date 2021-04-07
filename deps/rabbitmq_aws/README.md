@@ -37,7 +37,7 @@ The credentials values have the following precedence:
 
 ### EC2 Instance Metadata Service Versions
 
-There are two versions of the EC2 Instance Metadata Service that are available by default on EC2 instances; IMDSv1 and IMDSv2 which is protected by session authencation
+There are two versions of the EC2 Instance Metadata Service (IMDS) that are available by default on EC2 instances; IMDSv1 and IMDSv2 which is protected by session authencation
 and [adds defenses against aditional vulnerabilities](https://aws.amazon.com/blogs/security/defense-in-depth-open-firewalls-reverse-proxies-ssrf-vulnerabilities-ec2-instance-metadata-service/).
 AWS recommends adopting IMDSv2 and disabling IMDSv1 [by configuring the Instance Metadata Service on the EC2 instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html).
 
