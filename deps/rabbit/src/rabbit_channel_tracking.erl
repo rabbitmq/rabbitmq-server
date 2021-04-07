@@ -32,7 +32,7 @@
          get_all_tracked_channel_table_names_for_node/1,
          delete_tracked_channel_user_entry/1]).
 
--include_lib("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -import(rabbit_misc, [pget/2]).
 

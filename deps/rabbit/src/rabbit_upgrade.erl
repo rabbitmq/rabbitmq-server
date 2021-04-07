@@ -11,7 +11,7 @@
          maybe_migrate_queues_to_per_vhost_storage/0,
          nodes_running/1, secondary_upgrade/1]).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(VERSION_FILENAME, "schema_version").
 -define(LOCK_FILENAME, "schema_upgrade_lock").

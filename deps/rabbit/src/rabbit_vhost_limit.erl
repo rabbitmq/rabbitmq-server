@@ -9,7 +9,7 @@
 
 -behaviour(rabbit_runtime_parameter).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([register/0]).
 -export([parse_set/3, set/3, clear/2]).

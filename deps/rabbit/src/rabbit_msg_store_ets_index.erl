@@ -7,7 +7,7 @@
 
 -module(rabbit_msg_store_ets_index).
 
--include("rabbit_msg_store.hrl").
+-include_lib("rabbit_common/include/rabbit_msg_store.hrl").
 
 -behaviour(rabbit_msg_store_index).
 

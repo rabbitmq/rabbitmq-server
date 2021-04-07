@@ -9,7 +9,7 @@
 -behaviour(gen_server).
 -behaviour(rabbit_auth_cache).
 
--include("include/rabbit_auth_backend_cache.hrl").
+-include("rabbit_auth_backend_cache.hrl").
 
 -export([start_link/1,
          get/1, put/3, delete/1]).

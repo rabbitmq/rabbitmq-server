@@ -7,7 +7,7 @@
 
 -module(rabbit_maintenance).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
     is_enabled/0,

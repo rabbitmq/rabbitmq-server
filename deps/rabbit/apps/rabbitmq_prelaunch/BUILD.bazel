@@ -1,0 +1,37 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib", "test_erlang_lib")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+)
+APP_NAME = "rabbitmq_prelaunch"
+
+APP_VERSION = "1.0.0"
+
+APP_DESCRIPTION = "RabbitMQ prelaunch setup"
+
+APP_MODULE = "rabbit_prelaunch_app"
+
+erlang_lib(
+    app_description = APP_DESCRIPTION,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+    ],
+)
+
+test_erlang_lib(
+    app_description = APP_DESCRIPTION,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    deps = [
+        "//deps/rabbit_common:test_bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+    ],
+)

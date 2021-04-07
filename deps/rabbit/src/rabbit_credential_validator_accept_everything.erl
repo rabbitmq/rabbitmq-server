@@ -7,7 +7,7 @@
 
 -module(rabbit_credential_validator_accept_everything).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_credential_validator).
 
