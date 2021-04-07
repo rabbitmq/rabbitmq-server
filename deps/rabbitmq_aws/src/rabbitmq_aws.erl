@@ -496,7 +496,7 @@ sign_headers(#state{access_key = AccessKey,
                                   body = Body}).
 
 -spec expired_imdsv2_token(imdsv2token()) -> boolean().
-%% @doc Determine whether or not an Imdsv2Token has expired..
+%% @doc Determine whether or not an Imdsv2Token has expired.
 %% @end
 expired_imdsv2_token(undefined) ->
   rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained."),
@@ -516,7 +516,7 @@ ensure_imdsv2_token_valid() ->
   Imdsv2Token=get_imdsv2_token(),
   case expired_imdsv2_token(Imdsv2Token) of
     true -> Value=rabbitmq_aws_config:load_imdsv2_token(),
-            Expiration=calendar:datetime_to_gregorian_seconds(local_time()) + ?METADATA_TOKEN_TLL_SECONDS,
+            Expiration=calendar:datetime_to_gregorian_seconds(local_time()) + ?METADATA_TOKEN_TTL_SECONDS,
             set_imdsv2_token(#imdsv2token{token = Value,
                                           expiration = Expiration}),
             Value;
