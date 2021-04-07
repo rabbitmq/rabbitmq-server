@@ -54,7 +54,7 @@ configuration or to impact configuration behavior:
  ``rabbitmq_aws:set_region/1``          | Manually specify the AWS region to make requests to.
  ``rabbitmq_aws:set_credentials/2``     | Manually specify the request credentials to use.
  ``rabbitmq_aws:refresh_credentials/0`` | Refresh the credentials from the environment, filesystem, or EC2 Instance Metadata service.
- ``rabbitmq_aws:ensure_imdsv2_token_valid/0`` | Make sure IMDSv2 token is acctive and valid.
+ ``rabbitmq_aws:ensure_imdsv2_token_valid/0`` | Make sure EC2 IMDSv2 token is active and valid.
  ``rabbitmq_aws:api_get_request/2``           | Perform an AWS service API request.
  ``rabbitmq_aws:get/2``                 | Perform a GET request to the API specifying the service and request path.
  ``rabbitmq_aws:get/3``                 | Perform a GET request specifying the service, path, and headers.
