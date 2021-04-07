@@ -426,7 +426,7 @@ instance_role_url() ->
   instance_metadata_url(string:join([?INSTANCE_METADATA_BASE, ?INSTANCE_CREDENTIALS], "/")).
 
 -spec imdsv2_token_url() -> string().
-%% @doc Return the URL for obtaining IMDSv2 token from the Instance Metadata service.
+%% @doc Return the URL for obtaining EC2 IMDSv2 token from the Instance Metadata service.
 %% @end
 imdsv2_token_url() ->
   instance_metadata_url(?TOKEN_URL).
@@ -627,10 +627,10 @@ parse_az_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 parse_body_response({error, _}) -> {error, undefined};
 parse_body_response({ok, {{_, 200, _}, _, Body}}) -> {ok, Body};
 parse_body_response({ok, {{_, 401, _}, _, _}}) ->
-  rabbit_log:error("Unauthorized instance metadata service request."),
+  rabbit_log:error(get_instruction_on_instance_metadata_error("Unauthorized instance metadata service request. ")),
   {error, undefined};
 parse_body_response({ok, {{_, 403, _}, _, _}}) ->
-  rabbit_log:error("The request is not allowed or the instance metadata service is turned off."),
+  rabbit_log:error(get_instruction_on_instance_metadata_error("The request is not allowed or the instance metadata service is turned off.")),
   {error, undefined};
 parse_body_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 
@@ -665,6 +665,14 @@ perform_http_get_instance_metadata(URL) ->
   rabbit_log:debug("Querying instance metadata service: ~p", [URL]),
   httpc:request(get, {URL, instance_metadata_request_headers()},
     [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
+
+-spec get_instruction_on_instance_metadata_error(string()) -> string().
+%% @doc Return error message on failures related to instance metadata service with a reference to AWS document.
+%% end
+get_instruction_on_instance_metadata_error(ErrorMessage) ->
+  ErrorMessage ++
+  " Please refer to the AWS documentation for details on how to configure the instance metadata service: "
+  "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html.".
 
 
 -spec parse_iso8601_timestamp(Timestamp :: string() | binary()) -> calendar:datetime().
@@ -745,14 +753,12 @@ load_imdsv2_token() ->
       rabbit_log:debug("Successfully obtained EC2 IMDSv2 token."),
       Value;
     {error, {{_, 400, _}, _, _}} ->
-      rabbit_log:warning("Failed to obtain EC2 IMDSv2 token: Missing or Invalid Parameters – The PUT request is not valid"),
+      rabbit_log:warning("Failed to obtain EC2 IMDSv2 token: Missing or Invalid Parameters – The PUT request is not valid."),
       undefined;
     Other ->
-      rabbit_log:warning("Failed to obtain EC2 IMDSv2 token: ~p. "
-                         "It is recommended to use EC2 IMDSv2. "
-                         "Please refer to AWS public document for detail on how to configure instance metadata: "
-                         "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html."
-                         "Fallback to use EC2 IMDSv1 for now.", [Other]),
+      rabbit_log:warning(
+        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~p. "
+        "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Other]),
       undefined
   end.
 

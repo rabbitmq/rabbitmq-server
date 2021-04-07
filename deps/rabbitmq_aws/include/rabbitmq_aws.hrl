@@ -37,9 +37,8 @@
 
 % EC2 Instance Metadata service version 2 (IMDSv2) uses session-oriented authentication.
 % Instance metadata service requests are only needed for loading/refreshing credentials.
-% We dont need to have long-live metadata token.
-% In fact, we only need the token is valid for a sufficient period to successfully
-% load/refresh credentials. 60 seconds is more than enough for that goal.
+% Long-lived EC2 IMDSv2 tokens are unnecessary. The token only needs to be valid long enough
+% to successfully load/refresh the credentials. 60 seconds is more than enough time to accomplish this..
 -define(METADATA_TOKEN_TLL_SECONDS, 60).
 
 -define(METADATA_TOKEN, "X-aws-ec2-metadata-token").
