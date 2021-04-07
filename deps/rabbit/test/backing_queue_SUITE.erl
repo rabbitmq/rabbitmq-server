@@ -527,6 +527,7 @@ bq_queue_index(Config) ->
       ?MODULE, bq_queue_index1, [Config]).
 
 bq_queue_index1(_Config) ->
+    init_queue_index(),
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
     TwoSegs = SegmentSize + SegmentSize,
     MostOfASegment = trunc(SegmentSize*0.75),
@@ -708,6 +709,7 @@ bq_queue_recover(Config) ->
       ?MODULE, bq_queue_recover1, [Config]).
 
 bq_queue_recover1(Config) ->
+    init_queue_index(),
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
     QName0 = queue_name(Config, <<"bq_queue_recover-q">>),
     {new, Q} = rabbit_amqqueue:declare(QName0, true, false, [], none, <<"acting-user">>),
@@ -1314,6 +1316,13 @@ with_empty_test_queue(Fun) ->
     ok = empty_test_queue(QName),
     {0, 0, Qi} = init_test_queue(QName),
     rabbit_queue_index:delete_and_terminate(Fun(Qi, QName)).
+
+init_queue_index() ->
+    %% We must set the segment entry count in the process dictionary
+    %% for tests that call the queue index directly to have a correct
+    %% value.
+    put(segment_entry_count, 2048),
+    ok.
 
 restart_app() ->
     rabbit:stop(),
