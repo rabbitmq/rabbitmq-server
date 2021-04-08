@@ -164,7 +164,7 @@ maybe_set_region(Value) ->
 
 get_autoscaling_group_node_list(error, _) ->
     rabbit_log:warning("Cannot discover any nodes: failed to fetch this node's EC2 "
-                       "instance id from ~s", rabbitmq_aws_config:instance_id_url()),
+                       "instance id from ~s", [rabbitmq_aws_config:instance_id_url()]),
     {ok, {[], disc}};
 get_autoscaling_group_node_list(Instance, Tag) ->
     case get_all_autoscaling_instances([]) of
