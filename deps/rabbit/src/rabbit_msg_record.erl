@@ -70,6 +70,8 @@ decode([#'v1_0.application_properties'{} = AP | Rem], {MA, P, _, D}) ->
 decode([#'v1_0.data'{} = D | Rem], {MA, P, AP, _}) ->
     decode(Rem, {MA, P, AP, D}).
 
+amqp10_properties_empty(undefined) ->
+    true;
 amqp10_properties_empty(#'v1_0.properties'{message_id = undefined,
                                            user_id = undefined,
                                            to = undefined,
@@ -155,7 +157,6 @@ message_annotation(Key,
             Default
     end.
 
-
 %% take a binary AMQP 1.0 input function,
 %% parses it and returns the current parse state
 %% this is the input function from storage and from, e.g. socket input
@@ -213,11 +214,6 @@ from_amqp091(#'P_basic'{message_id = MsgId,
                         message_annotations = MA,
                         data = #'v1_0.data'{content = Data}}}.
 
-map_add(_T, _Key, _Type, undefined, Acc) ->
-    Acc;
-map_add(KeyType, Key, Type, Value, Acc) ->
-    [{wrap(KeyType, Key), wrap(Type, Value)} | Acc].
-
 -spec to_amqp091(state()) -> {#'P_basic'{}, iodata()}.
 to_amqp091(#?MODULE{msg = #msg{properties = P,
                                application_properties = APR,
@@ -235,7 +231,6 @@ to_amqp091(#?MODULE{msg = #msg{properties = P,
                                                         _ ->
                                                             P
                                                     end,
-
     AP0 = case APR of
               #'v1_0.application_properties'{content = AC} -> AC;
               _ -> []
@@ -300,24 +295,6 @@ unwrap(undefined) ->
 unwrap({_Type, V}) ->
     V.
 
-% symbol_for(#'v1_0.properties'{}) ->
-%     {symbol, <<"amqp:properties:list">>};
-
-% number_for(#'v1_0.properties'{}) ->
-%     {ulong, 115};
-% encode(Frame = #'v1_0.properties'{}) ->
-%     amqp10_framing:encode_described(list, 115, Frame);
-
-% encode_described(list, CodeNumber, Frame) ->
-%     {described, {ulong, CodeNumber},
-%      {list, lists:map(fun encode/1, tl(tuple_to_list(Frame)))}};
-
-% -spec generate(amqp10_type()) -> iolist().
-% generate({described, Descriptor, Value}) ->
-%     DescBin = generate(Descriptor),
-%     ValueBin = generate(Value),
-%     [ ?DESCRIBED_BIN, DescBin, ValueBin ].
-
 to_091(Key, {utf8, V}) when is_binary(V) -> {Key, longstr, V};
 to_091(Key, {long, V}) -> {Key, long, V};
 to_091(Key, {byte, V}) -> {Key, byte, V};
@@ -349,22 +326,6 @@ from_091(binary, V) -> {binary, V};
 from_091(timestamp, V) -> {timestamp, V * 1000};
 from_091(byte, V) -> {byte, V}.
 
-% convert_header(signedint, V) -> [$I, <<V:32/signed>>];
-% convert_header(decimal, V) -> {Before, After} = V,
-%                               [$D, Before, <<After:32>>];
-% convert_header(timestamp, V) -> [$T, <<V:64>>];
-% % convert_header(table, V) -> [$F | table_to_binary(V)];
-% % convert_header(array, V) -> [$A | array_to_binary(V)];
-% convert_header(byte, V) -> [$b, <<V:8/signed>>];
-% convert_header(double, V) -> [$d, <<V:64/float>>];
-% convert_header(float, V) -> [$f, <<V:32/float>>];
-% convert_header(short, V) -> [$s, <<V:16/signed>>];
-% convert_header(binary, V) -> [$x | long_string_to_binary(V)];
-% convert_header(unsignedbyte, V) -> [$B, <<V:8/unsigned>>];
-% convert_header(unsignedshort, V) -> [$u, <<V:16/unsigned>>];
-% convert_header(unsignedint, V) -> [$i, <<V:32/unsigned>>];
-% convert_header(void, _V) -> [$V].
-
 utf8(T) -> {utf8, T}.
 symbol(T) -> {symbol, T}.
 
@@ -394,6 +355,11 @@ message_id({utf8, S}, HKey, H0) ->
     end;
 message_id(MsgId, _, H) ->
     {H, unwrap(MsgId)}.
+
+map_add(_T, _Key, _Type, undefined, Acc) ->
+    Acc;
+map_add(KeyType, Key, Type, Value, Acc) ->
+    [{wrap(KeyType, Key), wrap(Type, Value)} | Acc].
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
