@@ -442,14 +442,25 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "feature_flags_SUITE",
-    size = "large",
-    groups = [
-        "registry",
-        "enabling_on_single_node",
-        "enabling_in_cluster",
-        "clustering",
-        "activating_plugin",
-    ],
+    size = "medium",
+    matrix = {
+        "registry": {
+            "groups": ["registry"],
+        },
+        "enabling_on_single_node": {
+            "groups": ["enabling_on_single_node"],
+        },
+        "enabling_in_cluster": {
+            "groups": ["enabling_in_cluster"],
+            "flaky": True,
+        },
+        "clustering": {
+            "groups": ["clustering"],
+        },
+        "activating_plugin": {
+            "groups": ["activating_plugin"],
+        },
+    },
     # The enabling_* tests chmod files and then expect writes to be blocked.
     # This probably doesn't work because we are root in the remote docker image.
     tags = ["exclusive"],
@@ -676,11 +687,26 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
-    groups = [
-        "single_node",
-        "unclustered",
-        "clustered",
-    ],
+    matrix = {
+        "single_node": {
+            "groups": ["single_node"],
+        },
+        "unclustered": {
+            "groups": ["unclustered"],
+        },
+        "clustered-cluster_size_2": {
+            "groups": ["cluster_size_2"],
+        },
+        "clustered-cluster_size_3": {
+            "groups": ["cluster_size_3"],
+        },
+        "clustered-cluster_size_5": {
+            "groups": ["cluster_size_5"],
+        },
+        "clustered-clustered_with_partitions": {
+            "groups": ["clustered_with_partitions"],
+        },
+    },
     runtime_deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
     ],
