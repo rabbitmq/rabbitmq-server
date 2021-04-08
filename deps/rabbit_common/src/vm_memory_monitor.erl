@@ -89,7 +89,7 @@ get_total_memory() ->
                 {ok, ParsedTotal} ->
                     ParsedTotal;
                 {error, parse_error} ->
-                    rabbit_log:warning(
+                    _ = rabbit_log:warning(
                       "The override value for the total memmory available is "
                       "not a valid value: ~p, getting total from the system.~n",
                       [Value]),
@@ -163,7 +163,7 @@ get_memory_calculation_strategy() ->
         legacy -> erlang; %% backwards compatibility
         rss -> rss;
         UnsupportedValue ->
-            rabbit_log:warning(
+            _ = rabbit_log:warning(
               "Unsupported value '~p' for vm_memory_calculation_strategy. "
               "Supported values: (allocated|erlang|legacy|rss). "
               "Defaulting to 'rss'",
@@ -252,7 +252,7 @@ get_cached_process_memory_and_limit() ->
     try
         gen_server:call(?MODULE, get_cached_process_memory_and_limit, infinity)
     catch exit:{noproc, Error} ->
-        rabbit_log:warning("Memory monitor process not yet started: ~p~n", [Error]),
+        _ = rabbit_log:warning("Memory monitor process not yet started: ~p~n", [Error]),
         ProcessMemory = get_process_memory_uncached(),
         {ProcessMemory, infinity}
     end.
@@ -306,7 +306,7 @@ get_total_memory_from_os() ->
     try
         get_total_memory(os:type())
     catch _:Error:Stacktrace ->
-            rabbit_log:warning(
+            _ = rabbit_log:warning(
               "Failed to get total system memory: ~n~p~n~p~n",
               [Error, Stacktrace]),
             unknown
@@ -317,7 +317,7 @@ set_mem_limits(State, {relative, MemLimit}) ->
 set_mem_limits(State, MemLimit) ->
     case erlang:system_info(wordsize) of
         4 ->
-            rabbit_log:warning(
+            _ = rabbit_log:warning(
               "You are using a 32-bit version of Erlang: you may run into "
               "memory address~n"
               "space exhaustion or statistic counters overflow.~n");
@@ -330,7 +330,7 @@ set_mem_limits(State, MemLimit) ->
                 case State of
                     #state { total_memory = undefined,
                              memory_limit = undefined } ->
-                        rabbit_log:warning(
+                        _ = rabbit_log:warning(
                           "Unknown total memory size for your OS ~p. "
                           "Assuming memory size is ~p MiB (~p bytes).~n",
                           [os:type(),
@@ -345,7 +345,7 @@ set_mem_limits(State, MemLimit) ->
     UsableMemory =
         case get_vm_limit() of
             Limit when Limit < TotalMemory ->
-                rabbit_log:warning(
+                _ = rabbit_log:warning(
                   "Only ~p MiB (~p bytes) of ~p MiB (~p bytes) memory usable due to "
                   "limited address space.~n"
                   "Crashes due to memory exhaustion are possible - see~n"
@@ -357,7 +357,7 @@ set_mem_limits(State, MemLimit) ->
                 TotalMemory
         end,
     MemLim = interpret_limit(parse_mem_limit(MemLimit), UsableMemory),
-    rabbit_log:info(
+    _ = rabbit_log:info(
         "Memory high watermark set to ~p MiB (~p bytes)"
         " of ~p MiB (~p bytes) total~n",
         [trunc(MemLim/?ONE_MiB), MemLim,
@@ -381,7 +381,7 @@ parse_mem_limit({absolute, Limit}) ->
     case rabbit_resource_monitor_misc:parse_information_unit(Limit) of
         {ok, ParsedLimit} -> {absolute, ParsedLimit};
         {error, parse_error} ->
-            rabbit_log:error("Unable to parse vm_memory_high_watermark value ~p", [Limit]),
+            _ = rabbit_log:error("Unable to parse vm_memory_high_watermark value ~p", [Limit]),
             ?DEFAULT_VM_MEMORY_HIGH_WATERMARK
     end;
 parse_mem_limit({relative, MemLimit}) ->
@@ -391,13 +391,13 @@ parse_mem_limit(MemLimit) when is_integer(MemLimit) ->
 parse_mem_limit(MemLimit) when is_float(MemLimit), MemLimit =< ?MAX_VM_MEMORY_HIGH_WATERMARK ->
     MemLimit;
 parse_mem_limit(MemLimit) when is_float(MemLimit), MemLimit > ?MAX_VM_MEMORY_HIGH_WATERMARK ->
-    rabbit_log:warning(
+    _ = rabbit_log:warning(
       "Memory high watermark of ~p is above the allowed maximum, falling back to ~p~n",
       [MemLimit, ?MAX_VM_MEMORY_HIGH_WATERMARK]
     ),
     ?MAX_VM_MEMORY_HIGH_WATERMARK;
 parse_mem_limit(MemLimit) ->
-    rabbit_log:warning(
+    _ = rabbit_log:warning(
       "Memory high watermark of ~p is invalid, defaulting to ~p~n",
       [MemLimit, ?DEFAULT_VM_MEMORY_HIGH_WATERMARK]
     ),
@@ -419,7 +419,7 @@ internal_update(State0 = #state{memory_limit = MemLimit,
     State1#state{alarmed = NewAlarmed}.
 
 emit_update_info(AlarmState, MemUsed, MemLimit) ->
-    rabbit_log:info(
+    _ = rabbit_log:info(
       "vm_memory_high_watermark ~p. Memory used:~p allowed:~p~n",
       [AlarmState, MemUsed, MemLimit]).
 
@@ -458,7 +458,7 @@ cmd(Command, ThrowIfMissing) ->
     end.
 
 default_linux_pagesize(CmdOutput) ->
-    rabbit_log:warning(
+    _ = rabbit_log:warning(
       "Failed to get memory page size, using 4096. Reason: ~s",
       [CmdOutput]),
     4096.
