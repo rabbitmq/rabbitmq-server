@@ -85,12 +85,12 @@ rabbitmq_run(
 )
 
 ct_suite(
+    name = "config_schema_SUITE",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "config_schema_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_ldap/rabbitmq-for-tests-run",
@@ -109,6 +109,7 @@ ct_suite(
 )
 
 ct_suite(
+    name = "system_SUITE",
     size = "small",
     additional_srcs = [
         "test/rabbit_ldap_seed.erl",
@@ -122,7 +123,6 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "system_SUITE",
     tags = [
         "ldap",
     ],
@@ -148,9 +148,9 @@ ct_suite(
 )
 
 ct_suite(
+    name = "unit_SUITE",
     size = "small",
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "unit_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },

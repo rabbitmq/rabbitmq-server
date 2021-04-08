@@ -66,12 +66,12 @@ rabbitmq_run(
 )
 
 ct_suite(
+    name = "amqp10_client_SUITE",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "amqp10_client_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_amqp1_0/rabbitmq-for-tests-run",
@@ -94,12 +94,12 @@ ct_suite(
 )
 
 ct_suite(
+    name = "command_SUITE",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "command_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_amqp1_0/rabbitmq-for-tests-run",
@@ -122,12 +122,12 @@ ct_suite(
 )
 
 ct_suite(
+    name = "proxy_protocol_SUITE",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "proxy_protocol_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_amqp1_0/rabbitmq-for-tests-run",
@@ -146,6 +146,7 @@ ct_suite(
 )
 
 ct_suite(
+    name = "system_SUITE",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
@@ -155,7 +156,6 @@ ct_suite(
         "dotnet",
         "java",
     ],
-    suite_name = "system_SUITE",
     tags = [
         "dotnet",
     ],
@@ -181,8 +181,8 @@ ct_suite(
 )
 
 ct_suite(
+    name = "unit_SUITE",
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "unit_SUITE",
     deps = [
         "//deps/amqp10_common:bazel_erlang_lib",
     ],
