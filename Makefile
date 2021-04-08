@@ -498,24 +498,12 @@ install-windows-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
 	$(inst_verbose) cp -r \
 		LICENSE* \
-		$(DEPS_DIR)/rabbit/ebin \
-		$(DEPS_DIR)/rabbit/priv \
 		$(DEPS_DIR)/rabbit/INSTALL \
 		$(DIST_DIR) \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/$(notdir $(DIST_DIR))/README.txt
 	$(verbose) $(UNIX_TO_DOS) $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
-
-	@# FIXME: Why do we copy headers?
-	$(verbose) cp -r \
-		$(DEPS_DIR)/rabbit/include \
-		$(DESTDIR)$(WINDOWS_PREFIX)
-	@# rabbitmq-common provides headers too: copy them to
-	@# rabbitmq_server/include.
-	$(verbose) cp -r \
-		$(DEPS_DIR)/rabbit_common/include \
-		$(DESTDIR)$(WINDOWS_PREFIX)
 
 install-windows-escripts:
 	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
