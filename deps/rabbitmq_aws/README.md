@@ -26,6 +26,15 @@ The configuration values have the following precedence:
  - Configuration file
  - EC2 Instance Metadata Service where applicable
 
+### Credentials Precedence
+
+The credentials values have the following precedence:
+
+ - Explicitly configured via API
+ - Environment variables
+ - Credentials file
+ - EC2 Instance Metadata Service
+
 ### EC2 Instance Metadata Service Versions
 
 There are two versions of the EC2 Instance Metadata Service (IMDS) that are available by default on EC2 instances; IMDSv1 and IMDSv2 which is protected by session authentication
