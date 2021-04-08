@@ -507,7 +507,7 @@ ensure_credentials_valid_test_() ->
     end,
     fun meck:unload/1,
     [
-      {"expired credentials is refreshed",
+      {"expired credentials are refreshed",
         fun() ->
           State = #state{access_key = "ExpiredKey",
                         secret_access_key = "ExpiredAccessKey",
@@ -536,7 +536,7 @@ ensure_credentials_valid_test_() ->
           ?assertEqual(Credentials, {ok, State2}),
           meck:validate(rabbitmq_aws_config)
         end},
-      {"valid credentials is returned",
+      {"valid credentials are returned",
         fun() ->
           State = #state{access_key = "GoodKey",
                          secret_access_key = "GoodAccessKey",

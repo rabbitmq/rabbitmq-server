@@ -362,14 +362,14 @@ instance_id_test_() ->
           ?assertEqual({ok, "instance-id"}, rabbitmq_aws_config:instance_id())
         end
       },
-      {"failed to get instance id - invalid token",
+      {"getting instance id is rejected with invalid token error",
         fun() ->
           meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, "invalid"),
           meck:expect(httpc, request, 4, {error, {{protocol, 401, message}, headers, "Invalid token"}}),
           ?assertEqual({error, undefined}, rabbitmq_aws_config:instance_id())
         end
       },
-      {"failed to get instance id - access denied",
+      {"getting instance id is rejected with access denied error",
         fun() ->
           meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, "expired token"),
           meck:expect(httpc, request, 4, {error, {{protocol, 403, message}, headers, "access denied"}}),

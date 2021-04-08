@@ -621,13 +621,13 @@ parse_az_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 
 -spec parse_body_response(httpc_result())
  -> {ok, Value :: string()} | {error, Reason :: atom()}.
-%% @doc Parse the return response from the Instance Metadata service where the
+%% @doc Parse the return response from the Instance Metadata Service where the
 %%      body value is the string to process.
 %% end.
 parse_body_response({error, _}) -> {error, undefined};
 parse_body_response({ok, {{_, 200, _}, _, Body}}) -> {ok, Body};
 parse_body_response({ok, {{_, 401, _}, _, _}}) ->
-  rabbit_log:error(get_instruction_on_instance_metadata_error("Unauthorized instance metadata service request. ")),
+  rabbit_log:error(get_instruction_on_instance_metadata_error("Unauthorized instance metadata service request.")),
   {error, undefined};
 parse_body_response({ok, {{_, 403, _}, _, _}}) ->
   rabbit_log:error(get_instruction_on_instance_metadata_error("The request is not allowed or the instance metadata service is turned off.")),
@@ -667,7 +667,7 @@ perform_http_get_instance_metadata(URL) ->
     [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
 
 -spec get_instruction_on_instance_metadata_error(string()) -> string().
-%% @doc Return error message on failures related to instance metadata service with a reference to AWS document.
+%% @doc Return error message on failures related to EC2 Instance Metadata Service with a reference to AWS document.
 %% end
 get_instruction_on_instance_metadata_error(ErrorMessage) ->
   ErrorMessage ++
@@ -770,12 +770,12 @@ instance_metadata_request_headers() ->
   case application:get_env(rabbit, aws_prefer_imdsv2) of
     {ok, false} -> [];
     _           -> %% undefined or {ok, true}
-                   rabbit_log:debug("EC2 instance metadata service v2 (IMDSv2) is preferred."),
+                   rabbit_log:debug("EC2 Instance Metadata Service v2 (IMDSv2) is preferred."),
                    maybe_imdsv2_token_headers()
   end.
 
 -spec maybe_imdsv2_token_headers() -> headers().
-%% @doc Construct http request headers from Imdsv2Token to use with GET requests submitted to the instance metadata service.
+%% @doc Construct http request headers from Imdsv2Token to use with GET requests submitted to the EC2 Instance Metadata Service.
 %% @end
 maybe_imdsv2_token_headers() ->
   case rabbitmq_aws:ensure_imdsv2_token_valid() of
