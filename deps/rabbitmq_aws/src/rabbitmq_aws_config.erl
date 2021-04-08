@@ -745,7 +745,7 @@ region_from_availability_zone(Value) ->
 %% @doc Attempt to obtain EC2 IMDSv2 token.
 %% @end
 load_imdsv2_token() ->
-  TokenUrl=imdsv2_token_url(),
+  TokenUrl = imdsv2_token_url(),
   rabbit_log:info("Attempting to obtain EC2 IMDSv2 token from ~p ...", [TokenUrl]),
   case httpc:request(put, {TokenUrl, [{?METADATA_TOKEN_TTL_HEADER, integer_to_list(?METADATA_TOKEN_TTL_SECONDS)}]},
     [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []) of

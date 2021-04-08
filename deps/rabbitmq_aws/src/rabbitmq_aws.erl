@@ -164,7 +164,7 @@ set_imdsv2_token(Imdsv2Token) ->
 %% @doc return the current Imdsv2Token used to perform instance metadata service requests.
 %% @end
 get_imdsv2_token() ->
-  {ok, Imdsv2Token}=gen_server:call(rabbitmq_aws, get_imdsv2_token),
+  {ok, Imdsv2Token} = gen_server:call(rabbitmq_aws, get_imdsv2_token),
   Imdsv2Token.
 
 
@@ -513,10 +513,10 @@ expired_imdsv2_token({_, _, Expiration}) ->
 
 -spec ensure_imdsv2_token_valid() -> imdsv2token().
 ensure_imdsv2_token_valid() ->
-  Imdsv2Token=get_imdsv2_token(),
+  Imdsv2Token = get_imdsv2_token(),
   case expired_imdsv2_token(Imdsv2Token) of
-    true -> Value=rabbitmq_aws_config:load_imdsv2_token(),
-            Expiration=calendar:datetime_to_gregorian_seconds(local_time()) + ?METADATA_TOKEN_TTL_SECONDS,
+    true -> Value = rabbitmq_aws_config:load_imdsv2_token(),
+            Expiration = calendar:datetime_to_gregorian_seconds(local_time()) + ?METADATA_TOKEN_TTL_SECONDS,
             set_imdsv2_token(#imdsv2token{token = Value,
                                           expiration = Expiration}),
             Value;
@@ -530,7 +530,7 @@ ensure_imdsv2_token_valid() ->
 %% @end
 ensure_credentials_valid() ->
   rabbit_log:debug("Making sure AWS credentials are available and still valid."),
-  {ok, State}=gen_server:call(rabbitmq_aws, get_state),
+  {ok, State} = gen_server:call(rabbitmq_aws, get_state),
   case has_credentials(State) of
     true -> case expired_credentials(State#state.expiration) of
               true -> refresh_credentials(State);
