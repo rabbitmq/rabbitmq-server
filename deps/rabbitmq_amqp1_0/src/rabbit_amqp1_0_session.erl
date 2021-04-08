@@ -14,7 +14,7 @@
          incr_incoming_id/1, next_delivery_id/1, transfers_left/1,
          record_transfers/2, bump_outgoing_window/1,
          record_outgoing/4, settle/3, flow_fields/2, channel/1,
-         flow/2, ack/2, validate_attach/1]).
+         flow/2, ack/2, nack/2, validate_attach/1]).
 
 -import(rabbit_amqp1_0_util, [protocol_error/3,
                               serial_add/2, serial_diff/2, serial_compare/2]).
@@ -350,26 +350,39 @@ flow(#'v1_0.flow'{next_incoming_id = FlowNextIn0,
 
 %% An acknowledgement from the queue, which we'll get if we are
 %% using confirms.
-ack(#'basic.ack'{delivery_tag = DTag, multiple = Multiple},
-    Session = #session{incoming_unsettled_map = Unsettled}) ->
-    {DeliveryIds, Unsettled1} =
-        case Multiple of
-            true  -> acknowledgement_range(DTag, Unsettled);
-            false -> case gb_trees:lookup(DTag, Unsettled) of
-                         {value, #incoming_delivery{ delivery_id = Id }} ->
-                             {[Id], gb_trees:delete(DTag, Unsettled)};
-                         none ->
-                             {[], Unsettled}
-                     end
-        end,
+ack(#'basic.ack'{delivery_tag = DTag, multiple = Multiple}, Session0) ->
+    {DeliveryIds, Session} = delivery_ids(DTag, Multiple, Session0),
     Disposition = case DeliveryIds of
                       [] -> [];
-                      _  -> [acknowledgement(
-                               DeliveryIds,
-                               #'v1_0.disposition'{role = ?RECV_ROLE})]
-    end,
-    {Disposition,
-     Session#session{incoming_unsettled_map = Unsettled1}}.
+                      _  ->
+                          [disposition(DeliveryIds, #'v1_0.accepted'{})]
+                  end,
+    {Disposition, Session}.
+
+nack(#'basic.nack'{delivery_tag = DTag, multiple = Multiple}, Session0) ->
+    {DeliveryIds, Session} = delivery_ids(DTag, Multiple, Session0),
+    Disposition = case DeliveryIds of
+                      [] -> [];
+                      _  ->
+                          [disposition(DeliveryIds, #'v1_0.rejected'{})]
+                  end,
+    {Disposition, Session}.
+
+delivery_ids(DTag, Multiple,
+             #session{incoming_unsettled_map = Unsettled} = Session) ->
+    case Multiple of
+        true  -> acknowledgement_range(DTag, Unsettled);
+        false ->
+            case gb_trees:lookup(DTag, Unsettled) of
+                {value, #incoming_delivery{ delivery_id = Id }} ->
+                    {[Id],
+                     Session#session{incoming_unsettled_map = gb_trees:delete(DTag, Unsettled)}
+                    };
+                none ->
+                    {[], Session}
+            end
+    end.
+
 
 acknowledgement_range(DTag, Unsettled) ->
     acknowledgement_range(DTag, Unsettled, []).
@@ -391,8 +404,9 @@ acknowledgement_range(DTag, Unsettled, Acc) ->
             end
     end.
 
-acknowledgement(DeliveryIds, Disposition) ->
-    Disposition#'v1_0.disposition'{ first = {uint, hd(DeliveryIds)},
-                                    last = {uint, lists:last(DeliveryIds)},
-                                    settled = true,
-                                    state = #'v1_0.accepted'{} }.
+disposition(DeliveryIds, State) ->
+    #'v1_0.disposition'{ role = ?RECV_ROLE,
+                         first = {uint, hd(DeliveryIds)},
+                         last = {uint, lists:last(DeliveryIds)},
+                         settled = true,
+                         state = State}.
