@@ -151,11 +151,11 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "system_SUITE",
     groups = [
         "dotnet",
         "java",
     ],
+    suite_name = "system_SUITE",
     tags = [
         "dotnet",
     ],
