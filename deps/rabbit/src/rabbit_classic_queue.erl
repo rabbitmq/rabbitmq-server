@@ -299,7 +299,8 @@ settlement_action(Type, QRef, MsgSeqs, Acc) ->
 deliver(Qs0, #delivery{flow = Flow,
                        msg_seq_no = MsgNo,
                        message = #basic_message{exchange_name = _Ex},
-                       confirm = _Confirm} = Delivery) ->
+                       confirm = _Confirm} = Delivery0) ->
+    Delivery = maybe_add_basic_message_id(Delivery0),
     %% TODO: record master and slaves for confirm processing
     {MPids, SPids, Qs, Actions} = qpids(Qs0, MsgNo),
     QPids = MPids ++ SPids,
@@ -316,7 +317,6 @@ deliver(Qs0, #delivery{flow = Flow,
     delegate:invoke_no_result(MPids, {gen_server2, cast, [MMsg]}),
     delegate:invoke_no_result(SPids, {gen_server2, cast, [SMsg]}),
     {Qs, Actions}.
-
 
 -spec dequeue(NoAck :: boolean(), LimiterPid :: pid(),
               rabbit_types:ctag(), state()) ->
@@ -525,3 +525,10 @@ send_rejection(Pid, QName, MsgSeqNo) ->
 
 send_queue_event(Pid, QName, Evt) ->
     gen_server2:cast(Pid, {queue_event, QName, Evt}).
+
+maybe_add_basic_message_id(#delivery{message =
+                                     #basic_message{id = undefined} = M} = D) ->
+    D#delivery{message = M#basic_message{id = rabbit_guid:gen()}};
+maybe_add_basic_message_id(D) ->
+    D.
+
