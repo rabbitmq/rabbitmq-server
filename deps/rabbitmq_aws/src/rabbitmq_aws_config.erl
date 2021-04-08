@@ -650,12 +650,21 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
    proplists:get_value("Token", Parsed)}.
 
 
--spec perform_http_get(string()) -> httpc_result().
-%% @doc Wrap httpc:get/4 to simplify Instance Metadata service requests
+-spec perform_http_get_instance_metadata(string()) -> httpc_result().
+%% @doc Wrap httpc:get/4 to simplify Instance Metadata service v2 requests
 %% @end
-perform_http_get(URL) ->
-  httpc:request(get, {URL, []},
-                [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
+perform_http_get_instance_metadata(URL) ->
+  rabbit_log:debug("Querying instance metadata service: ~p", [URL]),
+  httpc:request(get, {URL, instance_metadata_request_headers()},
+    [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
+
+-spec get_instruction_on_instance_metadata_error(string()) -> string().
+%% @doc Return error message on failures related to EC2 Instance Metadata Service with a reference to AWS document.
+%% end
+get_instruction_on_instance_metadata_error(ErrorMessage) ->
+  ErrorMessage ++
+  " Please refer to the AWS documentation for details on how to configure the instance metadata service: "
+  "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html.".
 
 
 -spec perform_http_get_instance_metadata(string()) -> httpc_result().

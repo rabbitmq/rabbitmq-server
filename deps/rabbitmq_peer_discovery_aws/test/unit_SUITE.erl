@@ -7,7 +7,7 @@
 %% Copyright (c) 2016-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
--module(rabbitmq_peer_discovery_aws_SUITE).
+-module(unit_SUITE).
 
 -compile(export_all).
 -include_lib("common_test/include/ct.hrl").
