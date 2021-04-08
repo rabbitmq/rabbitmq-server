@@ -51,6 +51,7 @@ test_erlang_lib(
 eunit(
     erlc_opts = DEFAULT_TEST_ERLC_OPTS + [
         "-I deps/rabbitmq_aws",
+        "+nowarn_export_all",
     ],
     runtime_deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
