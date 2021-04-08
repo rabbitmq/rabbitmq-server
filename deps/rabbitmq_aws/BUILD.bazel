@@ -1,0 +1,59 @@
+load(
+    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "DEFAULT_TEST_ERLC_OPTS",
+    "erlang_lib",
+    "test_erlang_lib",
+)
+load("@bazel-erlang//:eunit.bzl", "eunit")
+load("//:rabbitmq.bzl", "APP_VERSION")
+
+APP_NAME = "rabbitmq_aws"
+
+APP_DESCRIPTION = "A minimalistic AWS API interface used by rabbitmq-autocluster (3.6.x) and other RabbitMQ plugins"
+
+APP_MODULE = "rabbitmq_aws_app"
+
+APP_REGISTERED = [
+    "rabbitmq_aws",
+]
+
+EXTRA_APPS = [
+    "crypto",
+    "inets",
+    "ssl",
+    "xmerl",
+]
+
+BUILD_DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+]
+
+erlang_lib(
+    app_description = APP_DESCRIPTION,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_registered = APP_REGISTERED,
+    app_version = APP_VERSION,
+    build_deps = BUILD_DEPS,
+    extra_apps = EXTRA_APPS,
+)
+
+test_erlang_lib(
+    app_description = APP_DESCRIPTION,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_registered = APP_REGISTERED,
+    app_version = APP_VERSION,
+    build_deps = BUILD_DEPS,
+    extra_apps = EXTRA_APPS,
+)
+
+eunit(
+    erlc_opts = DEFAULT_TEST_ERLC_OPTS + [
+        "-I deps/rabbitmq_aws",
+    ],
+    runtime_deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@meck//:bazel_erlang_lib",
+    ],
+)
