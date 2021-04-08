@@ -256,7 +256,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 #
 # The ETS file must be recreated before compiling RabbitMQ. See the
 # `restore-hex-cache-ets-file` Make target.
-	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$@,$@.git-time.txt))
+	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$(call core_native_path,$@),$(call core_native_path,$@.git-time.txt)))
 # Fix file timestamps to have reproducible source archives.
 	$(verbose) find $@ -print0 | xargs -0 touch -t "$$(cat "$@.git-time.txt")"
 	$(verbose) rm "$@.git-times.txt" "$@.git-time.txt"
