@@ -42,7 +42,7 @@ and [adds defenses against additional vulnerabilities](https://aws.amazon.com/bl
 AWS recommends adopting IMDSv2 and disabling IMDSv1 [by configuring the Instance Metadata Service on the EC2 instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html).
 
 By default *rabbitmq-aws* will attempt to use IMDSv2 first and will fallback to use IMDSv1 if calls to IMDSv2 fail. This behavior can be overridden
-by setting the ``aws_prefer_imdsv2`` setting to ``false``.
+by setting the ``aws.prefer_imdsv2`` setting to ``false``.
 
 ### Environment Variables
 
