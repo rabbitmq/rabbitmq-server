@@ -369,20 +369,21 @@ nack(#'basic.nack'{delivery_tag = DTag, multiple = Multiple}, Session0) ->
     {Disposition, Session}.
 
 delivery_ids(DTag, Multiple,
-             #session{incoming_unsettled_map = Unsettled} = Session) ->
+             #session{incoming_unsettled_map = Unsettled0} = Session) ->
     case Multiple of
-        true  -> acknowledgement_range(DTag, Unsettled);
+        true ->
+            {Ids, Unsettled} = acknowledgement_range(DTag, Unsettled0),
+            {Ids, Session#session{incoming_unsettled_map = Unsettled}};
         false ->
-            case gb_trees:lookup(DTag, Unsettled) of
+            case gb_trees:lookup(DTag, Unsettled0) of
                 {value, #incoming_delivery{ delivery_id = Id }} ->
                     {[Id],
-                     Session#session{incoming_unsettled_map = gb_trees:delete(DTag, Unsettled)}
-                    };
+                     Session#session{incoming_unsettled_map =
+                                     gb_trees:delete(DTag, Unsettled0)}};
                 none ->
                     {[], Session}
             end
     end.
-
 
 acknowledgement_range(DTag, Unsettled) ->
     acknowledgement_range(DTag, Unsettled, []).
