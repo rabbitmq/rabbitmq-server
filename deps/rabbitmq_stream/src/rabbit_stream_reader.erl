@@ -277,7 +277,7 @@ listen_loop_pre_auth(Transport,
                      #configuration{frame_max = FrameMax,
                                     heartbeat = Heartbeat} =
                          Configuration) ->
-   {OK, Closed, Error, _Passive} = Transport:messages(),
+    {OK, Closed, Error, _Passive} = Transport:messages(),
     %% FIXME introduce timeout to complete the connection opening (after block should be enough)
     receive
         {OK, S, Data} ->
@@ -584,8 +584,7 @@ listen_loop_post_auth(Transport,
         {'$gen_cast',
          {queue_event, #resource{name = StreamName},
           {osiris_offset, _QueueResource, -1}}} ->
-            rabbit_log:info("received osiris offset event for ~p with offset "
-                            "~p",
+            rabbit_log:info("received osiris offset event for ~p with offset ~p",
                             [StreamName, -1]),
             listen_loop_post_auth(Transport, Connection, State, Configuration);
         {'$gen_cast',
@@ -1542,8 +1541,7 @@ handle_frame_post_auth(Transport,
                                         ?COMMAND_SUBSCRIBE,
                                         CorrelationId),
 
-                            rabbit_log:info("Distributing existing messages to subscription "
-                                            "~p",
+                            rabbit_log:info("Distributing existing messages to subscription ~p",
                                             [SubscriptionId]),
                             {{segment, Segment1}, {credit, Credit1}} =
                                 send_chunks(Transport, ConsumerState,
@@ -1673,8 +1671,7 @@ handle_frame_post_auth(_Transport,
             end;
         error ->
             %% FIXME commit offset is fire-and-forget, so no response even if error, change this?
-            rabbit_log:info("Not authorized to commit offset on ~p",
-                            [Stream]),
+            rabbit_log:info("Not authorized to commit offset on ~p", [Stream]),
             {Connection, State, Rest}
     end;
 handle_frame_post_auth(Transport,

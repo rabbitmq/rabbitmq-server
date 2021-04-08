@@ -163,42 +163,52 @@ handle_call({create, VirtualHost, Reference, Arguments, Username},
                               VirtualHost,
                               #{user => Username},
                               rabbit_stream_queue),
-            case rabbit_amqqueue:with(Name,
-                                      fun(Q) ->
-                                         ok =
-                                             rabbit_amqqueue:assert_equivalence(Q,
-                                                                                true,
-                                                                                false,
-                                                                                StreamQueueArguments,
-                                                                                none)
-                                      end)
-            of
-                ok ->
-                    {reply, {error, reference_already_exists}, State};
-                {error, not_found} ->
-                    try
-                        case rabbit_stream_queue:declare(Q0, node()) of
-                            {new, Q} ->
-                                {reply, {ok, amqqueue:get_type_state(Q)},
-                                 State};
-                            {existing, _} ->
-                                {reply, {error, reference_already_exists},
-                                 State};
-                            {error, Err} ->
-                                rabbit_log:warning("Error while creating ~p stream, ~p",
-                                                   [Reference, Err]),
+            try
+                QueueLookup =
+                    rabbit_amqqueue:with(Name,
+                                         fun(Q) ->
+                                            ok =
+                                                rabbit_amqqueue:assert_equivalence(Q,
+                                                                                   true,
+                                                                                   false,
+                                                                                   StreamQueueArguments,
+                                                                                   none)
+                                         end),
+
+                case QueueLookup of
+                    ok ->
+                        {reply, {error, reference_already_exists}, State};
+                    {error, not_found} ->
+                        try
+                            case rabbit_stream_queue:declare(Q0, node()) of
+                                {new, Q} ->
+                                    {reply, {ok, amqqueue:get_type_state(Q)},
+                                     State};
+                                {existing, _} ->
+                                    {reply, {error, reference_already_exists},
+                                     State};
+                                {error, Err} ->
+                                    rabbit_log:warning("Error while creating ~p stream, ~p",
+                                                       [Reference, Err]),
+                                    {reply, {error, internal_error}, State}
+                            end
+                        catch
+                            exit:Error ->
+                                rabbit_log:error("Error while creating ~p stream, ~p",
+                                                 [Reference, Error]),
                                 {reply, {error, internal_error}, State}
-                        end
-                    catch
-                        exit:Error ->
-                            rabbit_log:error("Error while creating ~p stream, ~p",
-                                             [Reference, Error]),
-                            {reply, {error, internal_error}, State}
-                    end;
-                {error, {absent, _, Reason}} ->
-                    rabbit_log:error("Error while creating ~p stream, ~p",
-                                     [Reference, Reason]),
-                    {reply, {error, internal_error}, State}
+                        end;
+                    {error, {absent, _, Reason}} ->
+                        rabbit_log:error("Error while creating ~p stream, ~p",
+                                         [Reference, Reason]),
+                        {reply, {error, internal_error}, State}
+                end
+            catch
+                exit:ExitError ->
+                    % likely to be a problem of inequivalent args on an existing stream
+                    rabbit_log:error("Error while creating ~p stream: ~p",
+                                     [Reference, ExitError]),
+                    {reply, {error, validation_failed}, State}
             end;
         error ->
             {reply, {error, validation_failed}, State}
@@ -218,7 +228,8 @@ handle_call({delete, VirtualHost, Reference, Username}, _From,
                 true ->
                     rabbit_log:debug("Queue record ~p is a stream, trying to delete it",
                                      [Reference]),
-                    {ok, _} = rabbit_stream_queue:delete(Q, false, false, Username),
+                    {ok, _} =
+                        rabbit_stream_queue:delete(Q, false, false, Username),
                     rabbit_log:debug("Stream ~p deleted", [Reference]),
                     {reply, {ok, deleted}, State};
                 _ ->
