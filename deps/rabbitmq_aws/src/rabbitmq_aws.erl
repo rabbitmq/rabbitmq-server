@@ -73,16 +73,14 @@ post(Service, Path, Body, Headers) ->
 
 
 -spec refresh_credentials() -> ok | error.
-%% @doc Manually refresh the credentials from the environment, filesystem or EC2
-%%      Instance metadata service.
+%% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
 %% @end
 refresh_credentials() ->
   gen_server:call(rabbitmq_aws, refresh_credentials).
 
 
 -spec refresh_credentials(state()) -> ok | error.
-%% @doc Manually refresh the credentials from the environment, filesystem or EC2
-%%      Instance metadata service.
+%% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
 %% @end
 refresh_credentials(State) ->
   rabbit_log:debug("Refreshing AWS credentials..."),
