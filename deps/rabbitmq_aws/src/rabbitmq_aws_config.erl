@@ -650,14 +650,6 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
    proplists:get_value("Token", Parsed)}.
 
 
--spec perform_http_get(string()) -> httpc_result().
-%% @doc Wrap httpc:get/4 to simplify Instance Metadata service requests
-%% @end
-perform_http_get(URL) ->
-  httpc:request(get, {URL, []},
-                [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
-
-
 -spec perform_http_get_instance_metadata(string()) -> httpc_result().
 %% @doc Wrap httpc:get/4 to simplify Instance Metadata service v2 requests
 %% @end
