@@ -37,7 +37,7 @@ groups() ->
      {single_node, [], memory_tests()},
      {single_node, [], [node_removal_is_quorum_critical]},
      {unclustered, [], [
-                        {cluster_size_2, [], [add_member]}
+                        {uncluster_size_2, [], [add_member]}
                        ]},
      {clustered, [], [
                       {cluster_size_2, [], [cleanup_data_dir]},
@@ -173,6 +173,7 @@ init_per_group(clustered_with_partitions, Config) ->
 init_per_group(Group, Config) ->
     ClusterSize = case Group of
                       single_node -> 1;
+                      uncluster_size_2 -> 2;
                       cluster_size_2 -> 2;
                       cluster_size_3 -> 3;
                       cluster_size_5 -> 5
@@ -204,13 +205,8 @@ init_per_group(Group, Config) ->
                             %% HACK: the larger cluster sizes benefit for a bit
                             %% more time after clustering before running the
                             %% tests.
-                            case Group of
-                                cluster_size_5 ->
-                                    timer:sleep(5000),
-                                    Config2;
-                                _ ->
-                                    Config2
-                            end;
+                            timer:sleep(ClusterSize * 1000),
+                            Config2;
                         Skip ->
                             end_per_group(Group, Config2),
                             Skip
