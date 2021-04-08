@@ -35,5 +35,5 @@ test_erlang_lib(
 )
 
 ct_suite(
-    suite_name = "rabbit_logger_std_h_SUITE",
+    name = "rabbit_logger_std_h_SUITE",
 )

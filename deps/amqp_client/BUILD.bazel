@@ -31,13 +31,13 @@ rabbitmq_lib(
 )
 
 ct_suite(
+    name = "system_SUITE",
     size = "large",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    suite_name = "system_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
@@ -57,9 +57,9 @@ ct_suite(
 )
 
 ct_suite(
+    name = "unit_SUITE",
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    suite_name = "unit_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },

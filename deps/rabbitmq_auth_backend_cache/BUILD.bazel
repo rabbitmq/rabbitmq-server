@@ -70,12 +70,12 @@ rabbitmq_run(
 )
 
 ct_suite(
+    name = "config_schema_SUITE",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "config_schema_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_cache/rabbitmq-for-tests-run",
@@ -94,12 +94,12 @@ ct_suite(
 )
 
 ct_suite(
+    name = "rabbit_auth_backend_cache_SUITE",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "rabbit_auth_backend_cache_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_cache/rabbitmq-for-tests-run",
@@ -120,8 +120,8 @@ ct_suite(
 )
 
 ct_suite(
+    name = "rabbit_auth_cache_SUITE",
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "rabbit_auth_cache_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },

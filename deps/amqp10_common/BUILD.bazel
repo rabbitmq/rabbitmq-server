@@ -70,5 +70,5 @@ bazel_erlang_lib(
 )
 
 ct_suite(
-    suite_name = "binary_generator_SUITE",
+    name = "binary_generator_SUITE",
 )

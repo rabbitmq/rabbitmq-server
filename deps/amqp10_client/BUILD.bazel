@@ -55,8 +55,8 @@ test_erlang_lib(
 )
 
 ct_suite(
+    name = "msg_SUITE",
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "msg_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
@@ -77,6 +77,7 @@ rabbitmq_run(
 )
 
 ct_suite(
+    name = "system_SUITE",
     size = "medium",
     additional_hdrs = [
         "src/amqp10_client.hrl",
@@ -100,7 +101,6 @@ ct_suite(
         "activemq_no_anon",
         "mock",
     ],
-    suite_name = "system_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/amqp10_client/rabbitmq-for-tests-run",

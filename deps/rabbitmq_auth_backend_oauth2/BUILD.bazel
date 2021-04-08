@@ -72,13 +72,13 @@ erlc(
 )
 
 ct_suite(
+    name = "add_uaa_key_command_SUITE",
     size = "small",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "add_uaa_key_command_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_oauth2/rabbitmq-for-tests-run",
@@ -92,12 +92,12 @@ ct_suite(
 )
 
 ct_suite(
+    name = "config_schema_SUITE",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "config_schema_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_oauth2/rabbitmq-for-tests-run",
@@ -116,6 +116,7 @@ ct_suite(
 )
 
 ct_suite(
+    name = "jwks_SUITE",
     additional_beam = [
         ":rabbit_auth_backend_oauth2_test_util",
     ],
@@ -129,7 +130,6 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "jwks_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_oauth2/rabbitmq-for-tests-run",
@@ -153,9 +153,9 @@ ct_suite(
 )
 
 ct_suite(
+    name = "scope_SUITE",
     size = "small",
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "scope_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
@@ -165,6 +165,7 @@ ct_suite(
 )
 
 ct_suite(
+    name = "unit_SUITE",
     size = "small",
     additional_beam = [
         ":rabbit_auth_backend_oauth2_test_util",
@@ -174,7 +175,6 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "unit_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_oauth2/rabbitmq-for-tests-run",
@@ -188,9 +188,9 @@ ct_suite(
 )
 
 ct_suite(
+    name = "wildcard_match_SUITE",
     size = "small",
     erlc_opts = TEST_ERLC_OPTS,
-    suite_name = "wildcard_match_SUITE",
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
