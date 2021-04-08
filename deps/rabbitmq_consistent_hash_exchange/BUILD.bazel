@@ -4,22 +4,12 @@ load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load("//:rabbitmq.bzl", "APP_VERSION")
 
-APP_ENV = """[
-	    {http_method,   get},
-	    {user_path,     "http://localhost:8000/auth/user"},
-	    {vhost_path,    "http://localhost:8000/auth/vhost"},
-	    {resource_path, "http://localhost:8000/auth/resource"},
-	    {topic_path,    "http://localhost:8000/auth/topic"}
-	  ]"""
+APP_NAME = "rabbitmq_consistent_hash_exchange"
 
-APP_NAME = "rabbitmq_auth_backend_http"
+APP_DESCRIPTION = "Consistent Hash Exchange Type"
 
-APP_DESCRIPTION = "RabbitMQ HTTP Authentication Backend"
-
-APP_MODULE = "rabbit_auth_backend_http_app"
-
-EXTRA_APPS = [
-    "inets",
+BUILD_DEPS = [
+    "//deps/rabbitmq_cli:rabbitmqctl",
 ]
 
 DEPS = [
@@ -28,26 +18,22 @@ DEPS = [
 
 RUNTIME_DEPS = [
     "//deps/rabbit:bazel_erlang_lib",
-    "//deps/amqp_client:bazel_erlang_lib",
 ]
 
 erlang_lib(
     app_description = APP_DESCRIPTION,
-    app_env = APP_ENV,
-    app_module = APP_MODULE,
     app_name = APP_NAME,
     app_version = APP_VERSION,
-    extra_apps = EXTRA_APPS,
+    build_deps = BUILD_DEPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
 
 test_erlang_lib(
     app_description = APP_DESCRIPTION,
-    app_env = APP_ENV,
-    app_module = APP_MODULE,
     app_name = APP_NAME,
     app_version = APP_VERSION,
+    build_deps = BUILD_DEPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
@@ -70,25 +56,7 @@ rabbitmq_run(
 )
 
 ct_suite(
-    name = "auth_SUITE",
-    size = "small",
-    additional_srcs = [
-        "test/auth_http_mock.erl",
-    ],
-    erlc_opts = TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
-    runtime_deps = [
-        "@cowboy//:bazel_erlang_lib",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-ct_suite(
-    name = "config_schema_SUITE",
+    name = "rabbit_exchange_type_consistent_hash_SUITE",
     data = [
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
@@ -96,9 +64,9 @@ ct_suite(
     erlc_opts = TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_http/rabbitmq-for-tests-run",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_http/broker-for-tests-home/sbin/rabbitmqctl",
-        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_http/broker-for-tests-home/sbin/rabbitmq-plugins",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_consistent_hash_exchange/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_consistent_hash_exchange/broker-for-tests-home/sbin/rabbitmqctl",
+        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_consistent_hash_exchange/broker-for-tests-home/sbin/rabbitmq-plugins",
     },
     tools = [
         ":rabbitmq-for-tests-run",
@@ -109,13 +77,8 @@ ct_suite(
         "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
     ],
-)
-
-ct_suite(
-    name = "unit_SUITE",
-    size = "small",
-    erlc_opts = TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
+    deps = [
+        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
 )
