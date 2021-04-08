@@ -218,7 +218,7 @@ gen_server_call_test_() ->
           ?assertEqual({reply, ok, State},
                        rabbitmq_aws:handle_call({set_credentials,
                                               State#state.access_key,
-                                              State#state.secret_access_key}, eunit, #state{region="us-west-3"}))
+                                              State#state.secret_access_key}, eunit, #state{region = "us-west-3"}))
         end
       },
       {
@@ -395,7 +395,7 @@ perform_request_test_() ->
           Options = [],
           Host = undefined,
           meck:expect(rabbitmq_aws_config, credentials, fun() -> {error, unit_test} end),
-          Expectation = {{error, {credentials, "Credentials expired!"}}, State#state{error="Credentials expired!"}},
+          Expectation = {{error, {credentials, "Credentials expired!"}}, State#state{error = "Credentials expired!"}},
           Result = rabbitmq_aws:perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
           ?assertEqual(Expectation, Result),
           meck:validate(rabbitmq_aws_config)
