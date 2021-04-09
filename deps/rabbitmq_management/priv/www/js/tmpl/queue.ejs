@@ -128,10 +128,17 @@
         <th>State</th>
         <td><%= fmt_object_state(queue) %></td>
       </tr>
+      <% if(queue.consumers) { %>
       <tr>
         <th>Consumers</th>
         <td><%= fmt_string(queue.consumers) %></td>
       </tr>
+      <% } else if(queue.hasOwnProperty('consumer_details')) { %>
+      <tr>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumer_details.length) %></td>
+      </tr>
+      <% } %>
       <tr>
         <th>Consumer capacity <span class="help" id="queue-consumer-capacity"></th>
         <td><%= fmt_percent(queue.consumer_capacity) %></td>
