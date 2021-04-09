@@ -35,7 +35,7 @@
                       -> rabbit_types:ok_pid_or_error().
 
 start_link(Q, StartMode, Marker) ->
-    gen_server2:start_link(?MODULE, {Q, StartMode, Marker}, []).
+    gen_server2:start_link(?MODULE, {Q, StartMode, Marker}, [{spawn_opt, [{fullsweep_after, 0}]}]).
 
 %%----------------------------------------------------------------------------
 
