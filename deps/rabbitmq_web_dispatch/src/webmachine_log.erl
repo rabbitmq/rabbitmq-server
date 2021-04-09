@@ -18,6 +18,7 @@
 
 -module(webmachine_log).
 
+-include_lib("kernel/include/logger.hrl").
 -include("webmachine_logger.hrl").
 
 -export([add_handler/2,
@@ -126,6 +127,7 @@ fmtnow() ->
 %% @doc Notify registered log event handler of an access event.
 -spec log_access(tuple()) -> ok.
 log_access({_, _, _}=LogData) ->
+    log_to_erlang_logger(LogData),
     gen_event:sync_notify(?EVENT_LOGGER, {log_access, LogData}).
 
 %% @doc Close a log file.
@@ -237,3 +239,45 @@ zone(Val) when Val < 0 ->
     io_lib:format("-~4..0w", [trunc(abs(Val))]);
 zone(Val) when Val >= 0 ->
     io_lib:format("+~4..0w", [trunc(abs(Val))]).
+
+log_to_erlang_logger({Status, Body, Req} = LogData) ->
+    User = webmachine_log_handler:user_from_req(Req),
+
+    %% From the request.
+    Method = cowboy_req:method(Req),
+    Path = cowboy_req:path(Req),
+    Version = cowboy_req:version(Req),
+    Peer = case cowboy_req:peer(Req) of
+                       {Peer0, _Port} -> Peer0;
+                       Other          -> Other
+                   end,
+    Referer = cowboy_req:header(<<"referer">>, Req, <<>>),
+    UserAgent = cowboy_req:header(<<"user-agent">>, Req, <<>>),
+
+    %% From the response.
+    Length = case Body of
+                 {sendfile, _, L, _} -> L;
+                 _                   -> iolist_size(Body)
+             end,
+
+    FormatStr = "~s",
+    Msg = webmachine_log_handler:format_req(LogData),
+    Meta = #{domain => ?RMQLOG_DOMAIN_HTTP_ACCESS_LOG,
+             http_status => Status,
+             http_user => User,
+             http_req_method => Method,
+             http_req_path => Path,
+             http_req_version => Version,
+             http_req_peer => fmt_ip(Peer),
+             http_req_referer => Referer,
+             http_req_user_agent => UserAgent,
+             http_resp_content_length => Length},
+    case is_http_error(Status) of
+        false -> ?LOG_INFO(FormatStr, [Msg], Meta);
+        true  -> ?LOG_ERROR(FormatStr, [Msg], Meta)
+    end.
+
+is_http_error(Status) when Status >= 400 andalso Status < 600 ->
+    true;
+is_http_error(_) ->
+    false.

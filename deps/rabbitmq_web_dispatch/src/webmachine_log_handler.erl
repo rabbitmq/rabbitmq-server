@@ -20,6 +20,9 @@
 
 -behaviour(gen_event).
 
+-export([format_req/1,
+         user_from_req/1]).
+
 %% gen_event callbacks
 -export([init/1,
          handle_call/2,
@@ -61,7 +64,7 @@ handle_call(_Request, State) ->
 handle_event({log_access, LogData}, State) ->
     NewState = webmachine_log:maybe_rotate(?MODULE, os:timestamp(), State),
     Msg = format_req(LogData),
-    webmachine_log:log_write(NewState#state.handle, Msg),
+    webmachine_log:log_write(NewState#state.handle, [Msg, $\n]),
     {ok, NewState};
 handle_event(_Event, State) ->
     {ok, State}.
@@ -112,7 +115,7 @@ fmt_alog(Time, Ip, User, Method, Path, Version,
     [webmachine_log:fmt_ip(Ip), " - ", User, [$\s], Time, [$\s, $"], Method, " ", Path,
      " ", atom_to_list(Version), [$",$\s],
      Status, [$\s], Length, [$\s,$"], Referrer,
-     [$",$\s,$"], UserAgent, [$",$\n]].
+     [$",$\s,$"], UserAgent, $"].
 
 user_from_req(Req) ->
     try cowboy_req:parse_header(<<"authorization">>, Req) of

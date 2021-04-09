@@ -14,3 +14,6 @@
 -type wm_log_data() :: #wm_log_data{}.
 
 -define(EVENT_LOGGER, webmachine_log_event).
+
+-include_lib("rabbit_common/include/logging.hrl").
+-define(RMQLOG_DOMAIN_HTTP_ACCESS_LOG, ?DEFINE_RMQLOG_DOMAIN(http_access_log)).
