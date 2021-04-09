@@ -152,6 +152,7 @@ RUNTIME_DEPS = [
     "@osiris//:bazel_erlang_lib",
     "@recon//:bazel_erlang_lib",
     "@sysmon_handler//:bazel_erlang_lib",
+    "@systemd//:bazel_erlang_lib",
 ]
 
 APP_REGISTERED = [

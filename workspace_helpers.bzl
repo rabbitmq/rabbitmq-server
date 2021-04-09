@@ -47,6 +47,12 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         org = "Kyorai",
     )
 
+    hex_pm_bazel_erlang_lib(
+        name = "enough",
+        version = "0.1.0",
+        sha256 = "0460c7abda5f5e0ea592b12bc6976b8a5c4b96e42f332059cd396525374bf9a1",
+    )
+
     github_bazel_erlang_lib(
         repo = "gen-batch-server",
         name = "gen_batch_server",
@@ -163,4 +169,16 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         name = "sysmon_handler",
         version = "1.3.0",
         sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
+    )
+
+    github_bazel_erlang_lib(
+        name = "systemd",
+        org = "hauleth",
+        repo = "erlang-systemd",
+        ref = "e732727b0b637eb29e8adc77a4eb46d7ebc0f41a",
+        version = "e732727b0b637eb29e8adc77a4eb46d7ebc0f41a",
+        deps = [
+            "@enough//:bazel_erlang_lib",
+        ],
+        sha256 = "41019287b59d995424ad274cd276ccc4a4fbeecc7f35dcd4e44347ba9812b46f",
     )
