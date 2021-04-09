@@ -1610,19 +1610,36 @@ handle_frame_post_auth(Transport,
     case Consumers of
         #{SubscriptionId := Consumer} ->
             #consumer{credit = AvailableCredit} = Consumer,
-
-            {{segment, Segment1}, {credit, Credit1}} =
-                send_chunks(Transport,
-                            Consumer,
-                            AvailableCredit + Credit,
-                            SendFileOct),
-
-            Consumer1 = Consumer#consumer{segment = Segment1, credit = Credit1},
-            {Connection,
-             State#stream_connection_state{consumers =
-                                               Consumers#{SubscriptionId =>
-                                                              Consumer1}},
-             Rest};
+            case send_chunks(Transport,
+                             Consumer,
+                             AvailableCredit + Credit,
+                             SendFileOct)
+            of
+                {error, closed} ->
+                    rabbit_log:warning("Reader for subscription ~p has been closed, removing "
+                                       "subscription",
+                                       [SubscriptionId]),
+                    {Connection1, State1} =
+                        remove_subscription(SubscriptionId, Connection, State),
+                    Frame =
+                        <<?RESPONSE:1,
+                          ?COMMAND_CREDIT:15,
+                          ?VERSION_1:16,
+                          ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST:16,
+                          SubscriptionId:8>>,
+                    FrameSize = byte_size(Frame),
+                    Transport:send(S, [<<FrameSize:32>>, Frame]),
+                    {Connection1, State1, Rest};
+                {{segment, Segment1}, {credit, Credit1}} ->
+                    Consumer1 =
+                        Consumer#consumer{segment = Segment1, credit = Credit1},
+                    {Connection,
+                     State#stream_connection_state{consumers =
+                                                       Consumers#{SubscriptionId
+                                                                      =>
+                                                                      Consumer1}},
+                     Rest}
+            end;
         _ ->
             rabbit_log:warning("Giving credit to unknown subscription: ~p",
                                [SubscriptionId]),
@@ -1744,36 +1761,13 @@ handle_frame_post_auth(Transport,
                      ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST),
             {Connection, State, Rest};
         true ->
-            #{SubscriptionId := Consumer} = Consumers,
-            Stream = Consumer#consumer.stream,
-            #{Stream := SubscriptionsForThisStream} = StreamSubscriptions,
-            SubscriptionsForThisStream1 =
-                lists:delete(SubscriptionId, SubscriptionsForThisStream),
-            StreamSubscriptions1 =
-                case length(SubscriptionsForThisStream1) of
-                    0 ->
-                        % no more subscription for this stream
-                        maps:remove(Stream, StreamSubscriptions);
-                    _ ->
-                        StreamSubscriptions#{Stream =>
-                                                 SubscriptionsForThisStream1}
-                end,
-            Connection1 =
-                Connection#stream_connection{stream_subscriptions =
-                                                 StreamSubscriptions1},
-            Consumers1 = maps:remove(SubscriptionId, Consumers),
-            Connection2 =
-                maybe_clean_connection_from_stream(Stream, Connection1),
-            rabbit_stream_metrics:consumer_cancelled(self(),
-                                                     stream_r(Stream,
-                                                              Connection2),
-                                                     SubscriptionId),
+            {Connection1, State1} =
+                remove_subscription(SubscriptionId, Connection, State),
             response_ok(Transport,
                         Connection,
-                        ?COMMAND_SUBSCRIBE,
+                        ?COMMAND_UNSUBSCRIBE,
                         CorrelationId),
-            {Connection2, State#stream_connection_state{consumers = Consumers1},
-             Rest}
+            {Connection1, State1, Rest}
     end;
 handle_frame_post_auth(Transport,
                        #stream_connection{virtual_host = VirtualHost,
@@ -2344,6 +2338,34 @@ lookup_leader(Stream,
 lookup_leader_from_manager(VirtualHost, Stream) ->
     rabbit_stream_manager:lookup_leader(VirtualHost, Stream).
 
+remove_subscription(SubscriptionId,
+                    #stream_connection{stream_subscriptions =
+                                           StreamSubscriptions} =
+                        Connection,
+                    #stream_connection_state{consumers = Consumers} = State) ->
+    #{SubscriptionId := Consumer} = Consumers,
+    Stream = Consumer#consumer.stream,
+    #{Stream := SubscriptionsForThisStream} = StreamSubscriptions,
+    SubscriptionsForThisStream1 =
+        lists:delete(SubscriptionId, SubscriptionsForThisStream),
+    StreamSubscriptions1 =
+        case length(SubscriptionsForThisStream1) of
+            0 ->
+                % no more subscription for this stream
+                maps:remove(Stream, StreamSubscriptions);
+            _ ->
+                StreamSubscriptions#{Stream => SubscriptionsForThisStream1}
+        end,
+    Connection1 =
+        Connection#stream_connection{stream_subscriptions =
+                                         StreamSubscriptions1},
+    Consumers1 = maps:remove(SubscriptionId, Consumers),
+    Connection2 = maybe_clean_connection_from_stream(Stream, Connection1),
+    rabbit_stream_metrics:consumer_cancelled(self(),
+                                             stream_r(Stream, Connection2),
+                                             SubscriptionId),
+    {Connection2, State#stream_connection_state{consumers = Consumers1}}.
+
 maybe_clean_connection_from_stream(Stream,
                                    #stream_connection{stream_leaders =
                                                           Leaders} =
@@ -2491,6 +2513,8 @@ send_chunks(Transport,
     of
         {ok, Segment1} ->
             send_chunks(Transport, State, Segment1, Credit - 1, true, Counter);
+        {error, closed} ->
+            {error, closed};
         {end_of_stream, Segment1} ->
             case Retry of
                 true ->
