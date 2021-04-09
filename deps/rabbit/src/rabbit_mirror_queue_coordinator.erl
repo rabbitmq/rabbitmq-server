@@ -418,14 +418,20 @@ handle_pre_hibernate(State = #state { gm = GM }) ->
 %% GM
 %% ---------------------------------------------------------------------------
 
+-spec joined(args(), members()) -> callback_result().
+
 joined([CPid], Members) ->
     CPid ! {joined, self(), Members},
     ok.
+
+-spec members_changed(args(), members(),members()) -> callback_result().
 
 members_changed([_CPid], _Births, []) ->
     ok;
 members_changed([CPid],  _Births, Deaths) ->
     ok = gen_server2:cast(CPid, {gm_deaths, Deaths}).
+
+-spec handle_msg(args(), pid(), any()) -> callback_result().
 
 handle_msg([CPid], _From, request_depth = Msg) ->
     ok = gen_server2:cast(CPid, Msg);
@@ -444,6 +450,8 @@ handle_msg([_CPid], _From, {delete_and_terminate, _Reason}) ->
     {stop, {shutdown, ring_shutdown}};
 handle_msg([_CPid], _From, _Msg) ->
     ok.
+
+-spec handle_terminate(args(), term()) -> any().
 
 handle_terminate([CPid], Reason) ->
     ok = gen_server2:cast(CPid, {delete_and_terminate, Reason}),

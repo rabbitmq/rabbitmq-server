@@ -103,10 +103,11 @@ set_max_check_interval(Interval) ->
     gen_server:call(?MODULE, {set_max_check_interval, Interval}, infinity).
 
 -spec get_disk_free() -> (integer() | 'unknown').
--spec set_enabled(string()) -> 'ok'.
 
 get_disk_free() ->
     gen_server:call(?MODULE, get_disk_free, infinity).
+
+-spec set_enabled(string()) -> 'ok'.
 
 set_enabled(Enabled) ->
     gen_server:call(?MODULE, {set_enabled, Enabled}, infinity).

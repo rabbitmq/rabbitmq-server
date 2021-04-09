@@ -16,11 +16,12 @@
 %% External functions
 %%----------------------------------------------------------------------------
 
--spec node(node(), timeout()) -> ok | {badrpc, term()} | {error_string, string()}.
-
 node(Node) ->
     %% same default as in CLI
     node(Node, 70000).
+
+-spec node(node(), timeout()) -> ok | {badrpc, term()} | {error_string, string()}.
+
 node(Node, Timeout) ->
     rabbit_misc:rpc_call(Node, rabbit_health_check, local, [], Timeout).
 
