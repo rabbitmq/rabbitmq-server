@@ -32,6 +32,8 @@
          set_terraform_aws_ec2_region/1,
          init_terraform/1,
          compute_vpc_cidr_block/1,
+         find_erlang_mk/1,
+         find_rabbitmq_components/1,
          list_dirs_to_upload/1,
          list_dirs_to_download/1,
          maybe_prepare_dirs_to_upload_archive/1,
@@ -72,6 +74,8 @@ setup_steps() ->
      fun set_terraform_aws_ec2_region/1,
      fun init_terraform/1,
      fun compute_vpc_cidr_block/1,
+     fun find_erlang_mk/1,
+     fun find_rabbitmq_components/1,
      fun list_dirs_to_upload/1,
      fun list_dirs_to_download/1,
      fun maybe_prepare_dirs_to_upload_archive/1,
@@ -344,6 +348,22 @@ compute_vpc_cidr_block(Config) ->
     CidrBlock = rabbit_misc:format("10.~b.0.0/16", [Seq]),
     rabbit_ct_helpers:set_config(Config, {terraform_vpc_cidr_block, CidrBlock}).
 
+find_in_srcdir_or_grandparent(Config, Name, ConfigKey) when is_atom(ConfigKey) ->
+    SrcDir = ?config(current_srcdir, Config),
+    SrcDirChild = filename:join([SrcDir, Name]),
+    SrcDirAncestor = filename:join([SrcDir, "..", "..", Name]),
+    case {filelib:is_regular(SrcDirChild), filelib:is_regular(SrcDirAncestor)} of
+        {true, _} -> rabbit_ct_helpers:set_config(Config, {ConfigKey, SrcDirChild});
+        {false, true} -> rabbit_ct_helpers:set_config(Config, {ConfigKey, SrcDirAncestor});
+        _ -> {skip, "Failed to find " ++ Name}
+    end.
+
+find_erlang_mk(Config) ->
+    find_in_srcdir_or_grandparent(Config, "erlang.mk", erlang_mk_path).
+
+find_rabbitmq_components(Config) ->
+    find_in_srcdir_or_grandparent(Config, "rabbitmq-components.mk", rabbitmq_components_path).
+
 list_dirs_to_upload(Config) ->
     SrcDir = ?config(current_srcdir, Config),
     LockId = {make_list_test_deps, self()},
@@ -361,7 +381,11 @@ list_dirs_to_upload(Config) ->
             global:del_lock(LockId, LockNodes),
             DepsDirs0 = string:tokens(binary_to_list(Content), "\n"),
             DepsDirs = filter_out_subdirs(SrcDir, DepsDirs0),
-            AllDirs = lists:sort([SrcDir | DepsDirs]),
+            ErlangMkPath = ?config(erlang_mk_path, Config),
+            RabbitmqComponentsPath = ?config(rabbitmq_components_path, Config),
+            AllDirs = lists:sort(
+                        [SrcDir, ErlangMkPath, RabbitmqComponentsPath] ++ DepsDirs
+                       ),
             ct:pal(?LOW_IMPORTANCE, "Directories to upload: ~p", [AllDirs]),
             rabbit_ct_helpers:set_config(Config, {dirs_to_upload, AllDirs});
         _ ->
