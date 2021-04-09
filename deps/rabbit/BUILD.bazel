@@ -452,6 +452,7 @@ rabbitmq_integration_suite(
         },
         "clustering": {
             "groups": ["clustering"],
+            "flaky": True,
         },
         "activating_plugin": {
             "groups": ["activating_plugin"],
