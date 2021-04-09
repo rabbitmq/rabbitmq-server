@@ -1,0 +1,97 @@
+load(
+    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "DEFAULT_ERLC_OPTS",
+    "DEFAULT_TEST_ERLC_OPTS",
+    "erlang_lib",
+    "test_erlang_lib",
+)
+load("@bazel-erlang//:ct.bzl", "ct_suite")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
+load("//:rabbitmq.bzl", "APP_VERSION")
+
+APP_NAME = "rabbitmq_peer_discovery_common"
+
+APP_DESCRIPTION = "Modules shared by various peer discovery backends"
+
+APP_MODULE = "rabbit_peer_discovery_common_app"
+
+EXTRA_APPS = [
+    "inets",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit:bazel_erlang_lib",
+]
+
+ERLC_OPTS = DEFAULT_ERLC_OPTS + [
+    "-I deps/rabbitmq_peer_discovery_common",
+]
+
+TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
+    "-I deps/rabbitmq_peer_discovery_common",
+    "+nowarn_export_all",
+]
+
+erlang_lib(
+    app_description = APP_DESCRIPTION,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    erlc_opts = ERLC_OPTS,
+    extra_apps = EXTRA_APPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+test_erlang_lib(
+    app_description = APP_DESCRIPTION,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    erlc_opts = TEST_ERLC_OPTS,
+    extra_apps = EXTRA_APPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+rabbitmq_home(
+    name = "broker-for-tests-home",
+    plugins = [
+        "//deps/rabbit:bazel_erlang_lib",
+        ":bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-tests-run",
+    home = ":broker-for-tests-home",
+)
+
+ct_suite(
+    name = "config_schema_SUITE",
+    data = [
+        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
+        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
+    ],
+    erlc_opts = TEST_ERLC_OPTS,
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_common/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_common/broker-for-tests-home/sbin/rabbitmqctl",
+        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_common/broker-for-tests-home/sbin/rabbitmq-plugins",
+    },
+    tools = [
+        ":rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+)
