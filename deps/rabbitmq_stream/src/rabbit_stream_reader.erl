@@ -1682,6 +1682,12 @@ handle_frame_post_auth(_Transport,
                                        [Stream]),
                     %% FIXME commit offset is fire-and-forget, so no response even if error, change this?
                     {Connection, State, Rest};
+                undefined ->
+                    rabbit_log:warning("Could not find leader (undefined) to commit offset "
+                                       "on ~p",
+                                       [Stream]),
+                    %% FIXME commit offset is fire-and-forget, so no response even if error, change this?
+                    {Connection, State, Rest};
                 {ClusterLeader, Connection1} ->
                     osiris:write_tracking(ClusterLeader, Reference, Offset),
                     {Connection1, State, Rest}
@@ -1745,7 +1751,7 @@ handle_frame_post_auth(Transport,
                        #stream_connection{stream_subscriptions =
                                               StreamSubscriptions} =
                            Connection,
-                       #stream_connection_state{consumers = Consumers} = State,
+                       #stream_connection_state{} = State,
                        <<?REQUEST:1,
                          ?COMMAND_UNSUBSCRIBE:15,
                          ?VERSION_1:16,
