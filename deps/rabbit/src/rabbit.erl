@@ -522,7 +522,7 @@ start_apps(Apps) ->
                  #{app_name() => restart_type()}) -> 'ok'.
 
 %% TODO: start_apps/2 and is now specific to plugins. This function
-%% should be moved over `rabbit_plugins`, along with stop_apps/1, once
+%% should be moved over `rabbit_plugins', along with stop_apps/1, once
 %% the latter stops using app_utils as well.
 
 start_apps(Apps, RestartTypes) ->

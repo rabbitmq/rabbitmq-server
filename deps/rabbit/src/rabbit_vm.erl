@@ -325,16 +325,17 @@ ra_type(PDict) ->
                                   info_value()).
 -type distinguisher() :: fun (([{term(), term()}]) -> atom()).
 -type distinguishers() :: [{info_key(), distinguisher()}].
+
 -spec sum_processes([process()], distinguishers(), [info_key()]) ->
-                              {[{process(), [info_item()]}], [info_item()]}.
--spec sum_processes([process()], accumulate(), distinguishers(),
-                          [info_item()]) ->
                               {[{process(), [info_item()]}], [info_item()]}.
 
 sum_processes(Names, Distinguishers, Items) ->
     sum_processes(Names, fun (_, X, Y) -> X + Y end, Distinguishers,
                   [{Item, 0} || Item <- Items]).
 
+-spec sum_processes([process()], accumulate(), distinguishers(),
+                          [info_item()]) ->
+                              {[{process(), [info_item()]}], [info_item()]}.
 %% summarize the process_info of all processes based on their
 %% '$ancestor' hierarchy, recorded in their process dictionary.
 %%

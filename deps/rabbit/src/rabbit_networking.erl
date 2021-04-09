@@ -183,15 +183,15 @@ tcp_listener_addresses_auto(Port) ->
     lists:append([tcp_listener_addresses(Listener) ||
                      Listener <- port_to_listeners(Port)]).
 
--spec tcp_listener_spec
-        (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(),
-         any(), protocol(), non_neg_integer(), non_neg_integer(), label()) ->
-            supervisor:child_spec().
-
 tcp_listener_spec(NamePrefix, Address, SocketOpts, Transport, ProtoSup, ProtoOpts,
                   Protocol, NumAcceptors, Label) ->
     tcp_listener_spec(NamePrefix, Address, SocketOpts, Transport, ProtoSup, ProtoOpts,
                       Protocol, NumAcceptors, 1, Label).
+
+-spec tcp_listener_spec
+        (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(),
+         any(), protocol(), non_neg_integer(), non_neg_integer(), label()) ->
+            supervisor:child_spec().
 
 tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
                   Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors,

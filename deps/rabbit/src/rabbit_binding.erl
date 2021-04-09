@@ -76,9 +76,6 @@ new(Src, RoutingKey, Dst, Arguments) ->
 
 %% Global table recovery
 
--spec recover([rabbit_exchange:name()], [rabbit_amqqueue:name()]) ->
-                        'ok'.
-
 recover() ->
     rabbit_misc:table_filter(
         fun (Route) ->
@@ -91,6 +88,9 @@ recover() ->
         end, rabbit_durable_route).
 
 %% Virtual host-specific recovery
+
+-spec recover([rabbit_exchange:name()], [rabbit_amqqueue:name()]) ->
+                        'ok'.
 recover(XNames, QNames) ->
     XNameSet = sets:from_list(XNames),
     QNameSet = sets:from_list(QNames),

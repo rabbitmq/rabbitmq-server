@@ -478,7 +478,11 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 %% GM
 %% ---------------------------------------------------------------------------
 
+-spec joined(args(), members()) -> callback_result().
+
 joined([SPid], _Members) -> SPid ! {joined, self()}, ok.
+
+-spec members_changed(args(), members(),members()) -> callback_result().
 
 members_changed([_SPid], _Births, []) ->
     ok;
@@ -491,6 +495,8 @@ members_changed([ SPid], _Births, Deaths) ->
         ok              -> ok;
         {promote, CPid} -> {become, rabbit_mirror_queue_coordinator, [CPid]}
     end.
+
+-spec handle_msg(args(), pid(), any()) -> callback_result().
 
 handle_msg([_SPid], _From, hibernate_heartbeat) ->
     %% See rabbit_mirror_queue_coordinator:handle_pre_hibernate/1
@@ -517,6 +523,8 @@ handle_msg([SPid], _From, {sync_start, Ref, Syncer, SPids}) ->
     end;
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
+
+-spec handle_terminate(args(), term()) -> any().
 
 handle_terminate([_SPid], _Reason) ->
     ok.

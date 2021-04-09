@@ -243,11 +243,14 @@ ct-slow: CT_SUITES = $(SLOW_CT_SUITES)
 # --------------------------------------------------------------------
 
 RMQ_ERLC_OPTS += -I $(DEPS_DIR)/rabbit_common/include
+EDOC_OPTS += {preprocess,true}
 
 ifdef INSTRUMENT_FOR_QC
 RMQ_ERLC_OPTS += -DINSTR_MOD=gm_qc
+EDOC_OPTS += ,{macros,[{'INSTR_MOD',gm_qc}]}
 else
 RMQ_ERLC_OPTS += -DINSTR_MOD=gm
+EDOC_OPTS += ,{macros,[{'INSTR_MOD',gm}]}
 endif
 
 ifdef CREDIT_FLOW_TRACING

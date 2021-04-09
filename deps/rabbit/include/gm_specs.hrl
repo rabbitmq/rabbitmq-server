@@ -8,8 +8,3 @@
 -type callback_result() :: 'ok' | {'stop', any()} | {'become', atom(), args()}.
 -type args() :: any().
 -type members() :: [pid()].
-
--spec joined(args(), members())                    -> callback_result().
--spec members_changed(args(), members(),members()) -> callback_result().
--spec handle_msg(args(), pid(), any())             -> callback_result().
--spec handle_terminate(args(), term())             -> any().
