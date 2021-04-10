@@ -66,7 +66,7 @@
 
 %%----------------------------------------------------------------------------
 
--type disk_free_limit() :: (integer() | {'absolute', integer()} | string() | {'mem_relative', float() | integer()}).
+-type disk_free_limit() :: integer() | {'absolute', integer()} | string() | {'mem_relative', float() | integer()}.
 
 %%----------------------------------------------------------------------------
 %% Public API
