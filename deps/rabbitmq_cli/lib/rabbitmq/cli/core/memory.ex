@@ -56,6 +56,9 @@ defmodule RabbitMQ.CLI.Core.Memory do
   def formatted_watermark(val) when is_float(val) do
     %{relative: val}
   end
+  def formatted_watermark({:relative, val}) when is_float(val) do
+    %{relative: val}
+  end
   def formatted_watermark({:absolute, val}) do
     %{absolute: parse_watermark(val)}
   end
