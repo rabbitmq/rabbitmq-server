@@ -563,14 +563,19 @@ tracking_status(Vhost, QueueName) ->
     end.
 
 readers(QName) ->
-    Data = osiris_counters:overview(),
-    Readers = case maps:get({osiris_writer, QName}, Data, not_found) of
-                  not_found ->
-                      maps:get(readers, maps:get({osiris_replica, QName}, Data, #{}), 0);
-                  Map ->
-                      maps:get(readers, Map, 0)
-              end,
-    {node(), Readers}.
+    try
+        Data = osiris_counters:overview(),
+        Readers = case maps:get({osiris_writer, QName}, Data, not_found) of
+                      not_found ->
+                          maps:get(readers, maps:get({osiris_replica, QName}, Data, #{}), 0);
+                      Map ->
+                          maps:get(readers, Map, 0)
+                  end,
+        {node(), Readers}
+    catch
+        _:_ ->
+            {node(), 0}
+    end.
 
 init(Q) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
