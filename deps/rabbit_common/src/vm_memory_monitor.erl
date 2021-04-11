@@ -32,7 +32,9 @@
          get_process_memory/0,
          get_process_memory/1,
          get_memory_calculation_strategy/0,
-         get_rss_memory/0]).
+         get_rss_memory/0,
+         interpret_limit/2
+        ]).
 
 %% for tests
 -export([parse_line_linux/1, parse_mem_limit/1]).
@@ -57,7 +59,7 @@
 %%----------------------------------------------------------------------------
 
 -type memory_calculation_strategy() :: rss | erlang | allocated.
--type vm_memory_high_watermark() :: float() | {'absolute', integer() | string()} | {'relative', float() | integer()}.
+-type vm_memory_high_watermark() :: float() | {'absolute', integer() | string()} | {'relative', float() | integer() | string()}.
 -spec start_link(float()) -> rabbit_types:ok_pid_or_error().
 -spec start_link(float(), fun ((any()) -> 'ok'),
                        fun ((any()) -> 'ok')) -> rabbit_types:ok_pid_or_error().
@@ -365,13 +367,16 @@ set_mem_limits(State, MemLimit) ->
                                    memory_limit    = MemLim,
                                    memory_config_limit = MemLimit}).
 
+
+-spec interpret_limit(vm_memory_high_watermark(), non_neg_integer()) -> non_neg_integer().
 interpret_limit({absolute, MemLim}, UsableMemory) ->
     erlang:min(MemLim, UsableMemory);
-interpret_limit({relative, MemFraction}, UsableMemory) ->
-    interpret_limit(MemFraction, UsableMemory);
+interpret_limit({relative, MemLim}, UsableMemory) ->
+    interpret_limit(MemLim, UsableMemory);
 interpret_limit(MemFraction, UsableMemory) ->
     trunc(MemFraction * UsableMemory).
 
+-spec parse_mem_limit(vm_memory_high_watermark()) -> float().
 parse_mem_limit({absolute, Limit}) ->
     case rabbit_resource_monitor_misc:parse_information_unit(Limit) of
         {ok, ParsedLimit} -> {absolute, ParsedLimit};
