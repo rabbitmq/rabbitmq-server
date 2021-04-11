@@ -57,7 +57,7 @@
 %%----------------------------------------------------------------------------
 
 -type memory_calculation_strategy() :: rss | erlang | allocated.
--type vm_memory_high_watermark() :: (float() | {'absolute', integer() | string()}).
+-type vm_memory_high_watermark() :: float() | {'absolute', integer() | string()} | {'relative', float() | integer()}.
 -spec start_link(float()) -> rabbit_types:ok_pid_or_error().
 -spec start_link(float(), fun ((any()) -> 'ok'),
                        fun ((any()) -> 'ok')) -> rabbit_types:ok_pid_or_error().
@@ -75,6 +75,7 @@
 -spec get_rss_memory() -> non_neg_integer().
 
 -export_type([memory_calculation_strategy/0]).
+
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
