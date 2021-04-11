@@ -309,6 +309,8 @@ get_total_memory_from_os() ->
             unknown
     end.
 
+set_mem_limits(State, {relative, MemLimit}) ->
+    set_mem_limits(State, MemLimit);
 set_mem_limits(State, MemLimit) ->
     case erlang:system_info(wordsize) of
         4 ->
@@ -362,8 +364,10 @@ set_mem_limits(State, MemLimit) ->
                                    memory_limit    = MemLim,
                                    memory_config_limit = MemLimit}).
 
-interpret_limit({'absolute', MemLim}, UsableMemory) ->
+interpret_limit({absolute, MemLim}, UsableMemory) ->
     erlang:min(MemLim, UsableMemory);
+interpret_limit({relative, MemFraction}, UsableMemory) ->
+    interpret_limit(MemFraction, UsableMemory);
 interpret_limit(MemFraction, UsableMemory) ->
     trunc(MemFraction * UsableMemory).
 
@@ -374,6 +378,8 @@ parse_mem_limit({absolute, Limit}) ->
             rabbit_log:error("Unable to parse vm_memory_high_watermark value ~p", [Limit]),
             ?DEFAULT_VM_MEMORY_HIGH_WATERMARK
     end;
+parse_mem_limit({relative, MemLimit}) ->
+    parse_mem_limit(MemLimit);
 parse_mem_limit(MemLimit) when is_integer(MemLimit) ->
     parse_mem_limit(float(MemLimit));
 parse_mem_limit(MemLimit) when is_float(MemLimit), MemLimit =< ?MAX_VM_MEMORY_HIGH_WATERMARK ->
