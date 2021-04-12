@@ -92,6 +92,7 @@ all_tests() ->
      declare_invalid_args,
      declare_invalid_properties,
      start_queue,
+     long_name,
      stop_queue,
      restart_queue,
      restart_all_types,
@@ -140,6 +141,8 @@ memory_tests() ->
     [
      memory_alarm_rolls_wal
     ].
+
+-define(SUPNAME, ra_server_sup_sup).
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -401,7 +404,29 @@ start_queue(Config) ->
     %% Check that the application and process are still up
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
-    ?assertMatch([_], rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])).
+    ?assertMatch(Expected,
+                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
+
+    ok.
+
+
+long_name(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    %% 64 + chars
+    VHost = <<"long_name_vhost____________________________________">>,
+    QName = atom_to_binary(?FUNCTION_NAME, utf8),
+    User = ?config(rmq_username, Config),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node,
+                                                              VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    %% long name
+    LongName = binary:copy(QName, 240 div byte_size(QName)),
+    ?assertEqual({'queue.declare_ok', LongName, 0, 0},
+                 declare(Ch, LongName,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ok.
 
 start_queue_concurrent(Config) ->
     Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

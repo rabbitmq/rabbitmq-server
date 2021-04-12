@@ -119,7 +119,12 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
     check_exclusive(Q),
     check_non_durable(Q),
     QuorumSize = get_default_quorum_initial_group_size(Arguments),
-    RaName = qname_to_rname(QName),
+    RaName = case qname_to_internal_name(QName) of
+                 {ok, A} ->
+                     A;
+                 {error, {too_long, N}} ->
+                     binary_to_atom(ra:new_uid(N))
+             end,
     Id = {RaName, node()},
     Nodes = select_quorum_nodes(QuorumSize, rabbit_mnesia:cluster_nodes(all)),
     NewQ0 = amqqueue:set_pid(Q, Id),
@@ -128,7 +133,8 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
     rabbit_log:debug("Will start up to ~p replicas for quorum queue ~s", [QuorumSize, rabbit_misc:rs(QName)]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
-            TickTimeout = application:get_env(rabbit, quorum_tick_interval, ?TICK_TIMEOUT),
+            TickTimeout = application:get_env(rabbit, quorum_tick_interval,
+                                              ?TICK_TIMEOUT),
             RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout)
                        || ServerId <- members(NewQ)],
             case ra:start_cluster(RaConfs) of
@@ -859,11 +865,11 @@ cluster_state(Name) ->
 status(Vhost, QueueName) ->
     %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
-    RName = qname_to_rname(QName),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {RName, _} = amqqueue:get_pid(Q),
             Nodes = get_nodes(Q),
             [begin
                  case get_sys_status({RName, N}) of
@@ -1180,10 +1186,18 @@ dead_letter_publish(X, RK, QName, ReasonMsgs) ->
     end.
 
 %% TODO escape hack
-qname_to_rname(#resource{virtual_host = <<"/">>, name = Name}) ->
-    erlang:binary_to_atom(<<"%2F_", Name/binary>>, utf8);
-qname_to_rname(#resource{virtual_host = VHost, name = Name}) ->
-    erlang:binary_to_atom(<<VHost/binary, "_", Name/binary>>, utf8).
+qname_to_internal_name(QName) ->
+    case name_concat(QName) of
+        Name when byte_size(Name) =< 255 ->
+            {ok, erlang:binary_to_atom(Name)};
+        Name ->
+            {error, {too_long, Name}}
+    end.
+
+name_concat(#resource{virtual_host = <<"/">>, name = Name}) ->
+    <<"%2F_", Name/binary>>;
+name_concat(#resource{virtual_host = VHost, name = Name}) ->
+    <<VHost/binary, "_", Name/binary>>.
 
 find_quorum_queues(VHost) ->
     Node = node(),
