@@ -1244,7 +1244,7 @@ end}.
     {default, lc},
     {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
 ]}.
-{mapping, "log.console.formatter.single_line", "rabbit.log.file.formatter", [
+{mapping, "log.console.formatter.single_line", "rabbit.log.console.formatter", [
     {default, off},
     {datatype, flag}
 ]}.
@@ -1283,7 +1283,7 @@ end}.
     {default, lc},
     {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
 ]}.
-{mapping, "log.exchange.formatter.single_line", "rabbit.log.file.formatter", [
+{mapping, "log.exchange.formatter.single_line", "rabbit.log.exchange.formatter", [
     {default, off},
     {datatype, flag}
 ]}.
@@ -1338,7 +1338,7 @@ end}.
     {default, lc},
     {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
 ]}.
-{mapping, "log.syslog.formatter.single_line", "rabbit.log.file.formatter", [
+{mapping, "log.syslog.formatter.single_line", "rabbit.log.syslog.formatter", [
     {default, off},
     {datatype, flag}
 ]}.
@@ -1568,7 +1568,7 @@ end}.
     {default, plaintext},
     {datatype, {enum, [plaintext, json]}}
 ]}.
-{mapping, "log.file.formatter.time_format", "rabbit.log.console.formatter", [
+{mapping, "log.file.formatter.time_format", "rabbit.log.file.formatter", [
     {default, rfc3339_space},
     {datatype, [{enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}, string]}
 ]}.
