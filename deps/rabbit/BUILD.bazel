@@ -547,6 +547,19 @@ ct_suite(
 rabbitmq_integration_suite(
     name = "peer_discovery_classic_config_SUITE",
     size = "medium",
+    groups = {
+        "non_parallel": [
+            {
+                "case": "successful_discovery",
+                "flaky": True,
+            },
+            {
+                "case": "successful_discovery_with_a_subset_of_nodes_coming_online",
+                "flaky": True,
+            },
+            "no_nodes_configured",
+        ],
+    },
     deps = DEPS,
 )
 
