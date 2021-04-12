@@ -36,11 +36,18 @@ args_policy_lookup(Name, Resolve, Q) when ?is_amqqueue(Q) ->
         {PolVal,    {_Type, ArgVal}} -> Resolve(PolVal, ArgVal)
     end.
 
-%% TODO escape hack
-qname_to_internal_name(#resource{virtual_host = <<"/">>, name = Name}) ->
-    erlang:binary_to_atom(<<"%2F_", Name/binary>>, utf8);
-qname_to_internal_name(#resource{virtual_host = VHost, name = Name}) ->
-    erlang:binary_to_atom(<<VHost/binary, "_", Name/binary>>, utf8).
+qname_to_internal_name(QName) ->
+    case name_concat(QName) of
+        Name when byte_size(Name) =< 255 ->
+            {ok, erlang:binary_to_atom(Name)};
+        Name ->
+            {error, {too_long, Name}}
+    end.
+
+name_concat(#resource{virtual_host = <<"/">>, name = Name}) ->
+    <<"%2F_", Name/binary>>;
+name_concat(#resource{virtual_host = VHost, name = Name}) ->
+    <<VHost/binary, "_", Name/binary>>.
 
 check_auto_delete(Q) when ?amqqueue_is_auto_delete(Q) ->
     Name = amqqueue:get_name(Q),
