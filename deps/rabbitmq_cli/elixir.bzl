@@ -9,15 +9,13 @@ def _impl(ctx):
 
     ebin = ctx.actions.declare_directory(path_join(ctx.attr.name, "ebin"))
 
-    ctx.actions.run(
+    ctx.actions.run_shell(
         inputs = [],
         outputs = [ebin],
-        executable = "cp",
-        arguments = [
-            "-R",
-            "{}/lib/elixir/ebin".format(elixir_home),
-            ebin.dirname,
-        ],
+        command = "mkdir -p {ebin_dirname} && cp -R {elixir_home}/lib/elixir/ebin {ebin_dirname}".format(
+            ebin_dirname = ebin.dirname,
+            elixir_home = elixir_home,
+        ),
     )
 
     return [

@@ -12,13 +12,10 @@ RabbitmqHomeInfo = provider(
 
 def _copy_script(ctx, script):
     dest = ctx.actions.declare_file(path_join(ctx.label.name, "sbin", script.basename))
-    args = ctx.actions.args()
-    args.add_all([script, dest])
-    ctx.actions.run(
+    ctx.actions.run_shell(
         inputs = [script],
         outputs = [dest],
-        executable = "cp",
-        arguments = [args],
+        command = "mkdir -p {} && cp {} {}".format(dest.dirname, script.path, dest.path),
     )
     return dest
 

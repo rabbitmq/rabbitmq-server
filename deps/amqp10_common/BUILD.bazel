@@ -24,7 +24,7 @@ genrule(
     name = "generated_headers",
     srcs = AMQP_SPEC_1_0,
     outs = ["include/amqp10_framing.hrl"],
-    cmd = "$(location :codegen) hrl $(SRCS) > $@",
+    cmd = "mkdir -p $$(dirname $@) && $(location :codegen) hrl $(SRCS) > $@",
     tools = [":codegen"],
 )
 
@@ -32,7 +32,7 @@ genrule(
     name = "generated_sources",
     srcs = AMQP_SPEC_1_0,
     outs = ["src/amqp10_framing0.erl"],
-    cmd = "$(location :codegen) erl $(SRCS) > $@",
+    cmd = "mkdir -p $$(dirname $@) && $(location :codegen) erl $(SRCS) > $@",
     tools = [":codegen"],
 )
 
