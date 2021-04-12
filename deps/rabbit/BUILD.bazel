@@ -438,10 +438,16 @@ rabbitmq_integration_suite(
         },
         "enabling_on_single_node": {
             "groups": ["enabling_on_single_node"],
+            # The enabling_* tests chmod files and then expect writes to be blocked.
+            # This probably doesn't work because we are root in the remote docker image.
+            "tags": ["exclusive"],
         },
         "enabling_in_cluster": {
             "groups": ["enabling_in_cluster"],
             "flaky": True,
+            # The enabling_* tests chmod files and then expect writes to be blocked.
+            # This probably doesn't work because we are root in the remote docker image.
+            "tags": ["exclusive"],
         },
         "clustering": {
             "groups": ["clustering"],
@@ -451,9 +457,6 @@ rabbitmq_integration_suite(
             "groups": ["activating_plugin"],
         },
     },
-    # The enabling_* tests chmod files and then expect writes to be blocked.
-    # This probably doesn't work because we are root in the remote docker image.
-    tags = ["exclusive"],
     runtime_deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
         "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:bazel_erlang_lib",
