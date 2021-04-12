@@ -169,7 +169,12 @@ start_cluster(Q) ->
     Opts = amqqueue:get_options(Q),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
     QuorumSize = get_default_quorum_initial_group_size(Arguments),
-    RaName = qname_to_internal_name(QName),
+    RaName = case qname_to_internal_name(QName) of
+                 {ok, A} ->
+                     A;
+                 {error, {too_long, N}} ->
+                     binary_to_atom(ra:new_uid(N))
+             end,
     Id = {RaName, node()},
     Nodes = select_quorum_nodes(QuorumSize, rabbit_mnesia:cluster_nodes(all)),
     NewQ0 = amqqueue:set_pid(Q, Id),
@@ -179,7 +184,8 @@ start_cluster(Q) ->
                      [QuorumSize, rabbit_misc:rs(QName)]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
-            TickTimeout = application:get_env(rabbit, quorum_tick_interval, ?TICK_TIMEOUT),
+            TickTimeout = application:get_env(rabbit, quorum_tick_interval,
+                                              ?TICK_TIMEOUT),
             RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout)
                        || ServerId <- members(NewQ)],
             case ra:start_cluster(?RA_SYSTEM, RaConfs) of
@@ -943,11 +949,11 @@ cluster_state(Name) ->
 status(Vhost, QueueName) ->
     %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
-    RName = qname_to_internal_name(QName),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {RName, _} = amqqueue:get_pid(Q),
             Nodes = get_nodes(Q),
             [begin
                  case get_sys_status({RName, N}) of
