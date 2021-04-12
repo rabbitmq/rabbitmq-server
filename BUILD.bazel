@@ -26,7 +26,7 @@ platform(
     ],
     exec_properties = {
         "OSFamily": "Linux",
-        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv:linux-erlang-22.3",
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenvsha256:685529484b4527cb9e4cbaaf9ee230e940f200236eea890f3c034834e2a3a0e7",
     },
 )
 
@@ -39,7 +39,7 @@ platform(
     ],
     exec_properties = {
         "OSFamily": "Linux",
-        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv:linux-erlang-23.2",
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:d9bfe6f8e17f1bb2c64b3857fd0fc5d3e703a819103e7e9d06bfa40f09ee7b88",
     },
 )
 
