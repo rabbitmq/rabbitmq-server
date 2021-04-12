@@ -1186,6 +1186,10 @@ end}.
     {datatype, string},
     {validators, ["dir_writable"]}]}.
 
+{mapping, "log.level", "rabbit.log.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+
 {mapping, "log.console", "rabbit.log.console.enabled", [
     {datatype, {enum, [true, false]}}
 ]}.
@@ -1598,59 +1602,134 @@ end}.
  end}.
 
 %% Log categories
+%% TODO: Add exchange, journald and syslog output variables.
+%% rabbit_prelaunch_early_logging has to be modified at the same time; see
+%% translate_categories_conf/2.
 
-{mapping, "log.connection.level", "rabbit.log.categories.connection.level", [
+{mapping, "log.$category.level", "rabbit.log.categories", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
-{mapping, "log.connection.file", "rabbit.log.categories.connection.file", [
+{mapping, "log.$category.console", "rabbit.log.categories", [
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.$category.console.level", "rabbit.log.categories", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.$category.console.stdio", "rabbit.log.categories", [
+    {default, stdout},
+    {datatype, {enum, [stdout, stderr]}}
+]}.
+{mapping, "log.$category.console.use_colors", "rabbit.log.categories", [
+    {default, on},
+    {datatype, flag}
+]}.
+{mapping, "log.$category.console.color_esc_seqs.debug", "rabbit.log.categories", [
+    {default, "\033[38;5;246m"},
     {datatype, string}
 ]}.
-
-{mapping, "log.channel.level", "rabbit.log.categories.channel.level", [
-    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
-]}.
-{mapping, "log.channel.file", "rabbit.log.categories.channel.file", [
+{mapping, "log.$category.console.color_esc_seqs.info", "rabbit.log.categories", [
+    {default, ""},
     {datatype, string}
 ]}.
-
-{mapping, "log.mirroring.level", "rabbit.log.categories.mirroring.level", [
-    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
-]}.
-{mapping, "log.mirroring.file", "rabbit.log.categories.mirroring.file", [
+{mapping, "log.$category.console.color_esc_seqs.notice", "rabbit.log.categories", [
+    {default, "\033[38;5;87m"},
     {datatype, string}
 ]}.
-
-{mapping, "log.queue.level", "rabbit.log.categories.queue.level", [
-    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
-]}.
-{mapping, "log.queue.file", "rabbit.log.categories.queue.file", [
+{mapping, "log.$category.console.color_esc_seqs.warning", "rabbit.log.categories", [
+    {default, "\033[38;5;214m"},
     {datatype, string}
 ]}.
-
-{mapping, "log.federation.level", "rabbit.log.categories.federation.level", [
-    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
-]}.
-{mapping, "log.federation.file", "rabbit.log.categories.federation.file", [
+{mapping, "log.$category.console.color_esc_seqs.error", "rabbit.log.categories", [
+    {default, "\033[38;5;160m"},
     {datatype, string}
 ]}.
-
-{mapping, "log.upgrade.level", "rabbit.log.categories.upgrade.level", [
-    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
-]}.
-{mapping, "log.upgrade.file", "rabbit.log.categories.upgrade.file", [
+{mapping, "log.$category.console.color_esc_seqs.critical", "rabbit.log.categories", [
+    {default, "\033[1;37m\033[48;5;20m"},
     {datatype, string}
 ]}.
-
-{mapping, "log.ra.level", "rabbit.log.categories.ra.level", [
-    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
-]}.
-{mapping, "log.ra.file", "rabbit.log.categories.ra.file", [
+{mapping, "log.$category.console.color_esc_seqs.alert", "rabbit.log.categories", [
+    {default, "\033[1;37m\033[48;5;93m"},
     {datatype, string}
 ]}.
-
-{mapping, "log.default.level", "rabbit.log.categories.default.level", [
+{mapping, "log.$category.console.color_esc_seqs.emergency", "rabbit.log.categories", [
+    {default, "\033[1;37m\033[48;5;196m"},
+    {datatype, string}
+]}.
+{mapping, "log.$category.console.formatter", "rabbit.log.categories", [
+    {default, plaintext},
+    {datatype, {enum, [plaintext, json]}}
+]}.
+{mapping, "log.$category.console.formatter.time_format", "rabbit.log.categories", [
+    {default, rfc3339_space},
+    {datatype, {enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}}
+]}.
+{mapping, "log.$category.console.formatter.level_format", "rabbit.log.categories", [
+    {default, lc},
+    {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
+]}.
+{mapping, "log.$category.console.formatter.single_line", "rabbit.log.categories", [
+    {default, off},
+    {datatype, flag}
+]}.
+{mapping, "log.$category.console.formatter.plaintext.format", "rabbit.log.categories", [
+    {default, "$time [$level] $pid $msg"},
+    {datatype, string}
+]}.
+{mapping, "log.$category.console.formatter.json.field_map", "rabbit.log.categories", [
+    {default, "time level msg gl:- logger_formatter:- report_cb:- error_logger:-"},
+    {datatype, string}
+]}.
+{mapping, "log.$category.console.formatter.json.verbosity_map", "rabbit.log.categories", [
+    {default, ""},
+    {datatype, string}
+]}.
+{mapping, "log.$category.file", "rabbit.log.categories", [
+    {datatype, string}
+]}.
+{mapping, "log.$category.file.level", "rabbit.log.categories", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
+{mapping, "log.$category.file.rotation.date", "rabbit.log.categories", [
+    {datatype, string}
+]}.
+{mapping, "log.$category.file.rotation.size", "rabbit.log.categories", [
+    {datatype, integer}
+]}.
+{mapping, "log.$category.file.rotation.count", "rabbit.log.categories", [
+    {datatype, integer}
+]}.
+{mapping, "log.$category.file.formatter", "rabbit.log.categories", [
+    {default, plaintext},
+    {datatype, {enum, [plaintext, json]}}
+]}.
+{mapping, "log.$category.file.formatter.time_format", "rabbit.log.categories", [
+    {default, rfc3339_space},
+    {datatype, [{enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}, string]}
+]}.
+{mapping, "log.$category.file.formatter.level_format", "rabbit.log.categories", [
+    {default, lc},
+    {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
+]}.
+{mapping, "log.$category.file.formatter.single_line", "rabbit.log.categories", [
+    {default, off},
+    {datatype, flag}
+]}.
+{mapping, "log.$category.file.formatter.plaintext.format", "rabbit.log.categories", [
+    {default, "$time [$level] $pid $msg"},
+    {datatype, string}
+]}.
+{mapping, "log.$category.file.formatter.json.field_map", "rabbit.log.categories", [
+    {default, "time level msg gl:- logger_formatter:- report_cb:- error_logger:-"},
+    {datatype, string}
+]}.
+{mapping, "log.$category.file.formatter.json.verbosity_map", "rabbit.log.categories", [
+    {default, ""},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.categories",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_categories_conf("log.$category", Conf)
+ end}.
 
 % ==========================
 % Kernel section

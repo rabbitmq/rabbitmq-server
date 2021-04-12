@@ -25,6 +25,7 @@
          end_per_testcase/2,
 
          logging_with_default_config_works/1,
+         setting_filename_only_works/1,
          setting_log_levels_in_env_works/1,
          setting_log_levels_in_config_works/1,
          setting_log_levels_in_config_with_output_overridden_in_env_works/1,
@@ -39,6 +40,7 @@
          removing_specific_json_fields_works/1,
          removing_non_mentionned_json_fields_works/1,
          configuring_verbosity_works/1,
+         configuring_categories_works/1,
 
          logging_to_stdout_configured_in_env_works/1,
          logging_to_stdout_configured_in_config_works/1,
@@ -66,6 +68,7 @@ groups() ->
     [
      {file_output, [],
       [logging_with_default_config_works,
+       setting_filename_only_works,
        setting_log_levels_in_env_works,
        setting_log_levels_in_config_works,
        setting_log_levels_in_config_with_output_overridden_in_env_works,
@@ -79,7 +82,8 @@ groups() ->
        renaming_json_fields_works,
        removing_specific_json_fields_works,
        removing_non_mentionned_json_fields_works,
-       configuring_verbosity_works]},
+       configuring_verbosity_works,
+       configuring_categories_works]},
 
      {console_output, [],
       [logging_to_stdout_configured_in_env_works,
@@ -236,6 +240,34 @@ logging_with_default_config_works(Config) ->
     ?assertNot(ping_log(rmq_1_file_2, info,
                         #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
     ok.
+
+setting_filename_only_works(Config) ->
+    Context = default_context(Config),
+    Basename = "logfile.log",
+    ok = application:set_env(
+           rabbit, log,
+           [{file, Basename}],
+           [{persistent, true}]),
+    rabbit_prelaunch_logging:clear_config_run_number(),
+    rabbit_prelaunch_logging:setup(Context),
+
+    Handlers = logger:get_handler_config(),
+
+    LogBaseDir = ?config(log_base_dir, Config),
+    MainFile = filename:join(LogBaseDir, Basename),
+    MainFileHandler = get_handler_by_id(Handlers, rmq_1_file_1),
+    ?assertNotEqual(undefined, MainFileHandler),
+    ?assertMatch(
+       #{level := info,
+         module := rabbit_logger_std_h,
+         filter_default := log,
+         filters := [{progress_reports, {_, stop}},
+                     {rmqlog_filter, {_, #{global := info,
+                                           upgrade := none}}}],
+         formatter := {rabbit_logger_text_fmt, _},
+         config := #{type := file,
+                     file := MainFile}},
+       MainFileHandler).
 
 setting_log_levels_in_env_works(Config) ->
     GlobalLevel = warning,
@@ -757,6 +789,62 @@ configuring_verbosity_works(Config) ->
        [{v, 1},
         {msg, RandomMsgBin}],
        Term).
+
+configuring_categories_works(Config) ->
+    Context = default_context(Config),
+    Cat2Basename = "cat2.log",
+    ok = application:set_env(
+           rabbit, log,
+           [{categories,
+             [{cat1, [{level, debug}]},
+              {cat2, [{file, Cat2Basename}]},
+              {cat3, [{console, [{enabled, true}]}]}]}],
+           [{persistent, true}]),
+    rabbit_prelaunch_logging:clear_config_run_number(),
+    rabbit_prelaunch_logging:setup(Context),
+
+    Handlers = logger:get_handler_config(),
+
+    MainFileHandler = get_handler_by_id(Handlers, rmq_1_file_2),
+    MainFile = main_log_file_in_context(Context),
+    ?assertMatch(
+       #{level := debug,
+         module := rabbit_logger_std_h,
+         filter_default := log,
+         filters := [{progress_reports, {_, stop}},
+                     {rmqlog_filter, {_, #{global := info,
+                                           cat1 := debug,
+                                           upgrade := none}}}],
+         formatter := {rabbit_logger_text_fmt, _},
+         config := #{type := file,
+                     file := MainFile}},
+       MainFileHandler),
+
+    LogBaseDir = ?config(log_base_dir, Config),
+    Cat2File = filename:join(LogBaseDir, Cat2Basename),
+    Cat2FileHandler = get_handler_by_id(Handlers, rmq_1_file_1),
+    ?assertMatch(
+       #{level := info,
+         module := rabbit_logger_std_h,
+         filter_default := stop,
+         filters := [{rmqlog_filter, {_, #{cat2 := info}}}],
+         formatter := {rabbit_logger_text_fmt, _},
+         config := #{type := file,
+                     file := Cat2File}},
+       Cat2FileHandler),
+
+    Cat3Handler = get_handler_by_id(Handlers, rmq_1_stdout),
+    ?assertNotEqual(undefined, Cat3Handler),
+    ?assertMatch(
+       #{level := info,
+         module := rabbit_logger_std_h,
+         filter_default := stop,
+         filters := [{rmqlog_filter, {_, #{cat3 := info}}}],
+         formatter := {rabbit_logger_text_fmt, _},
+         config := #{type := standard_io}},
+       Cat3Handler),
+
+    ok.
 
 logging_to_stdout_configured_in_env_works(Config) ->
     #{var_origins := Origins0} = Context0 = default_context(Config),

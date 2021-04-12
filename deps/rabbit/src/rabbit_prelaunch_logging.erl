@@ -110,6 +110,27 @@
 
 -export_type([log_location/0]).
 
+-type category_name() :: rabbit_prelaunch_early_logging:category_name().
+%% @hidden
+-type console_props() :: rabbit_prelaunch_early_logging:console_props().
+%% @hidden
+-type exchange_props() :: rabbit_prelaunch_early_logging:exchange_props().
+%% @hidden
+-type file_props() :: rabbit_prelaunch_early_logging:file_props().
+%% @hidden
+-type journald_props() :: rabbit_prelaunch_early_logging:journald_props().
+%% @hidden
+-type syslog_props() :: rabbit_prelaunch_early_logging:syslog_props().
+%% @hidden
+-type main_log_env() :: rabbit_prelaunch_early_logging:main_log_env().
+%% @hidden
+-type per_cat_env() :: rabbit_prelaunch_early_logging:per_cat_env().
+%% @hidden
+-type default_cat_env() :: rabbit_prelaunch_early_logging:default_cat_env().
+%% @hidden
+-type log_app_env() :: rabbit_prelaunch_early_logging:log_app_env().
+%% @hidden
+
 -type log_location() :: file:filename() | string().
 %% A short description of an output.
 %%
@@ -125,70 +146,6 @@
 %%
 %% If the output is syslog, the location is the string `"syslog:"' with the
 %% syslog server hostname appended.
-
--type category_name() :: atom().
-%% The name of a log category.
-%% Erlang Logger uses the concept of "domain" which is an ordered list of
-%% atoms. A category is mapped to the domain `[?RMQLOG_SUPER_DOMAIN_NAME,
-%% Category]'. In other words, a category is a subdomain of the `rabbitmq'
-%% domain.
-
--type console_props() :: [{level, logger:level()} |
-                          {enabled, boolean()} |
-                          {stdio, stdout | stderr} |
-                          {formatter, {atom(), term()}}].
-%% Console properties are the parameters in the configuration file for a
-%% console-based handler.
-
--type exchange_props() :: [{level, logger:level()} |
-                           {enabled, boolean()} |
-                           {formatter, {atom(), term()}}].
-%% Exchange properties are the parameters in the configuration file for an
-%% exchange-based handler.
-
--type file_props() :: [{level, logger:level()} |
-                       {file, file:filename() | false} |
-                       {date, string()} |
-                       {size, non_neg_integer()} |
-                       {count, non_neg_integer()} |
-                       {formatter, {atom(), term()}}].
-%% File properties are the parameters in the configuration file for a
-%% file-based handler.
-
--type journald_props() :: [{level, logger:level()} |
-                           {enabled, boolean()} |
-                           {fields, proplists:proplist()}].
-%% journald properties are the parameters in the configuration file for a
-%% journald-based handler.
-
--type syslog_props() :: [{level, logger:level()} |
-                         {enabled, boolean()} |
-                         {formatter, {atom(), term()}}].
-%% Syslog properties are the parameters in the configuration file for a
-%% syslog-based handler.
-
--type main_log_env() :: [{console, console_props()} |
-                         {exchange, exchange_props()} |
-                         {file, file_props()} |
-                         {journald, journald_props()} |
-                         {syslog, syslog_props()}].
-%% The main log environment is the parameters in the configuration file for
-%% the main log handler (i.e. where all messages go by default).
-
--type per_cat_env() :: [{level, logger:level()} |
-                        {file, file:filename()}].
-%% A per-category log environment is the parameters in the configuration file
-%% for a specific category log handler. There can be one per category.
-
--type default_cat_env() :: [{level, logger:level()}].
-%% The `default' category log environment is special (read: awkward) in the
-%% configuration file. It is used to change the log level of the main log
-%% handler.
-
--type log_app_env() :: [main_log_env() |
-                        {categories, [{default, default_cat_env()} |
-                                      {category_name(), per_cat_env()}]}].
-%% The value for the `log' key in the `rabbit' application environment.
 
 -type global_log_config() :: #{level => logger:level() | all | none,
                                outputs := [logger:handler_config()]}.
@@ -315,7 +272,7 @@ set_log_level(Level) ->
       end, logger:get_handler_config()),
     ok.
 
--spec log_locations() -> [file:filename() | string()].
+-spec log_locations() -> [log_location()].
 %% @doc
 %% Returns the list of output locations.
 %%
@@ -570,7 +527,7 @@ compute_implicitly_enabled_output(Props) ->
     SyslogEnabled,
 
     FileProps = proplists:get_value(file, Props4, []),
-    case is_output_explicitely_enabled(FileProps) of
+    case is_file_output_explicitely_enabled(FileProps) of
         true ->
             Props4;
         false ->
@@ -601,7 +558,9 @@ compute_implicitly_enabled_output1(SubProps) ->
     {Enabled,
      lists:keystore(enabled, 1, SubProps, {enabled, Enabled})}.
 
-is_output_explicitely_enabled(FileProps) ->
+is_file_output_explicitely_enabled([C | _]) when is_integer(C) ->
+    true;
+is_file_output_explicitely_enabled(FileProps) ->
     %% We consider the output enabled or disabled if:
     %%     * the file is explicitely set, or
     %%     * the level is set to a log level (enabled) or `none' (disabled)
@@ -609,6 +568,9 @@ is_output_explicitely_enabled(FileProps) ->
     Level = proplists:get_value(level, FileProps),
     is_list(File) orelse (Level =/= undefined andalso Level =/= none).
 
+normalize_main_log_config1([{level, Level} | Rest], LogConfig) ->
+    LogConfig1 = LogConfig#{level => Level},
+    normalize_main_log_config1(Rest, LogConfig1);
 normalize_main_log_config1([{Type, Props} | Rest],
                            #{outputs := Outputs} = LogConfig) ->
     Outputs1 = normalize_main_output(Type, Props, Outputs),
@@ -664,6 +626,8 @@ normalize_main_output(syslog, Props, Outputs) ->
                                  [logger:handler_config()]) ->
     [logger:handler_config()].
 
+normalize_main_file_output([C | _] = Filename, Output, Outputs) when is_integer(C) ->
+    normalize_main_file_output1([{file, Filename}], Output, Outputs);
 normalize_main_file_output(Props, Output, Outputs) ->
     Enabled = case proplists:get_value(file, Props) of
                   false     -> false;
@@ -914,23 +878,25 @@ remove_main_syslog_output(
 -spec normalize_per_cat_log_config(per_cat_env()) -> per_cat_log_config().
 
 normalize_per_cat_log_config(Props) ->
-    normalize_per_cat_log_config(Props, #{outputs => []}).
+    Props1 = remove_disabled_outputs_from_props(Props),
+    normalize_main_log_config1(Props1, #{outputs => []}).
 
-normalize_per_cat_log_config([{level, Level} | Rest], LogConfig) ->
-    LogConfig1 = LogConfig#{level => Level},
-    normalize_per_cat_log_config(Rest, LogConfig1);
-normalize_per_cat_log_config([{file, Filename} | Rest],
-                             #{outputs := Outputs} = LogConfig) ->
-    %% Caution: The `file' property in the per-category configuration only
-    %% accepts a filename. It doesn't support the properties of the `file'
-    %% property at the global configuration level.
-    Output = #{module => rabbit_logger_std_h,
-               config => #{type => file,
-                           file => Filename}},
-    LogConfig1 = LogConfig#{outputs => [Output | Outputs]},
-    normalize_per_cat_log_config(Rest, LogConfig1);
-normalize_per_cat_log_config([], LogConfig) ->
-    LogConfig.
+remove_disabled_outputs_from_props(Props) ->
+    lists:foldl(
+      fun
+          (file, P0) ->
+              case is_file_output_explicitely_enabled(P0) of
+                  true  -> P0;
+                  false -> lists:keydelete(file, 1, P0)
+              end;
+          (Output, P0) ->
+              case compute_implicitly_enabled_output(Output, P0) of
+                  {false, _} -> lists:keydelete(Output, 1, P0);
+                  {true, P1} -> P1
+              end
+      end,
+      Props,
+      [console, exchange, file, journald, syslog]).
 
 -spec handle_default_and_overridden_outputs(log_config(),
                                             rabbit_env:context()) ->
@@ -1144,9 +1110,6 @@ configure_formatters(
     LogConfig#{global => GlobalConfig1, per_category => PerCatConfig1}.
 
 configure_formatters1(#{outputs := Outputs} = Config, Context) ->
-    %% TODO: Add ability to configure formatters from the Cuttlefish
-    %% configuration file. For now, it is only possible from the
-    %% `$RABBITMQ_LOG' environment variable.
     ConsFormatter =
     rabbit_prelaunch_early_logging:default_console_formatter(Context),
     FileFormatter =

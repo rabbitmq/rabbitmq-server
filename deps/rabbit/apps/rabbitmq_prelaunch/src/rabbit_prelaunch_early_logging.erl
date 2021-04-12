@@ -20,6 +20,7 @@
          enable_quick_dbg/1,
          use_colored_logging/0,
          use_colored_logging/1,
+         translate_categories_conf/2,
          translate_formatter_conf/2,
          translate_journald_fields_conf/2]).
 -export([filter_log_event/2]).
@@ -28,6 +29,17 @@
 -export([levels/0,
          determine_prefix/1]).
 -endif.
+
+-export_type([category_name/0,
+              console_props/0,
+              exchange_props/0,
+              file_props/0,
+              journald_props/0,
+              syslog_props/0,
+              main_log_env/0,
+              per_cat_env/0,
+              default_cat_env/0,
+              log_app_env/0]).
 
 -define(CONFIGURED_KEY, {?MODULE, configured}).
 
@@ -156,6 +168,199 @@ enable_quick_dbg(#{dbg_output := Output, dbg_mods := Mods}) ->
 %% -------------------------------------------------------------------
 %% Internal function used by our Cuttlefish schema.
 %% -------------------------------------------------------------------
+
+-type category_name() :: atom().
+%% The name of a log category.
+%% Erlang Logger uses the concept of "domain" which is an ordered list of
+%% atoms. A category is mapped to the domain `[?RMQLOG_SUPER_DOMAIN_NAME,
+%% Category]'. In other words, a category is a subdomain of the `rabbitmq'
+%% domain.
+
+-type console_props() :: [{level, logger:level()} |
+                          {enabled, boolean()} |
+                          {stdio, stdout | stderr} |
+                          {formatter, {atom(), term()}}].
+%% Console properties are the parameters in the configuration file for a
+%% console-based handler.
+
+-type exchange_props() :: [{level, logger:level()} |
+                           {enabled, boolean()} |
+                           {formatter, {atom(), term()}}].
+%% Exchange properties are the parameters in the configuration file for an
+%% exchange-based handler.
+
+-type file_props() :: file:filename() |
+                      [{level, logger:level()} |
+                       {file, file:filename() | false} |
+                       {date, string()} |
+                       {size, non_neg_integer()} |
+                       {count, non_neg_integer()} |
+                       {formatter, {atom(), term()}}].
+%% File properties are the parameters in the configuration file for a
+%% file-based handler.
+
+-type journald_props() :: [{level, logger:level()} |
+                           {enabled, boolean()} |
+                           {fields, proplists:proplist()}].
+%% journald properties are the parameters in the configuration file for a
+%% journald-based handler.
+
+-type syslog_props() :: [{level, logger:level()} |
+                         {enabled, boolean()} |
+                         {formatter, {atom(), term()}}].
+%% Syslog properties are the parameters in the configuration file for a
+%% syslog-based handler.
+
+-type main_log_env() :: [{level, logger:level()} |
+                         {console, console_props()} |
+                         {exchange, exchange_props()} |
+                         {file, file_props()} |
+                         {journald, journald_props()} |
+                         {syslog, syslog_props()}].
+%% The main log environment is the parameters in the configuration file for
+%% the main log handler (i.e. where all messages go by default).
+
+-type per_cat_env() :: main_log_env().
+%% A per-category log environment is the parameters in the configuration file
+%% for a specific category log handler. There can be one per category.
+
+-type default_cat_env() :: [{level, logger:level()}].
+%% The `default' category log environment is special (read: awkward) in the
+%% configuration file. It is used to change the log level of the main log
+%% handler.
+
+-type categories_env() :: [{default, default_cat_env()} |
+                           {category_name(), per_cat_env()}].
+%% The environment for all categories, plus the "default" category environment.
+
+-type log_app_env() :: [main_log_env() |
+                        {categories, categories_env()}].
+%% The value for the `log' key in the `rabbit' application environment.
+
+-spec translate_categories_conf(string(), cuttlefish_conf:conf()) ->
+    [{default, default_cat_env()} |
+     {category_name(), per_cat_env()}].
+%% @doc
+%% Called from the Cuttlefish schema to derive the actual categories
+%% configuration from several Cuttlefish variables.
+
+translate_categories_conf(VarPrefix, Conf) ->
+    try
+        PerCatConfig0 = #{},
+        %% TODO: Add exchange, journald and syslog output variables.
+        Suffixes = ["level",
+                    "console",
+                    "console.level",
+                    "console.stdio",
+                    "console.formatter",
+                    "file",
+                    "file.level",
+                    "file.rotation.date",
+                    "file.rotation.size",
+                    "file.rotation.count",
+                    "file.formatter"
+                   ],
+        translate_each_category_variable_conf(
+          VarPrefix, Suffixes, Conf, PerCatConfig0)
+    catch
+        Class:Reason:Stacktrace ->
+            ?LOG_ERROR(
+               rabbit_prelaunch_errors:format_exception(
+                 Class, Reason, Stacktrace),
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+            throw({configuration_translation_failure, Reason})
+    end.
+
+translate_each_category_variable_conf(
+  VarPrefix, [Suffix | Rest], Conf, PerCatConfig) ->
+    PrefixPattern = string:tokens(VarPrefix, "."),
+    Values = lists:filter(
+               fun({Var, _Value}) ->
+                       Pattern = PrefixPattern ++ string:tokens(Suffix, "."),
+                       cuttlefish_variable:is_fuzzy_match(Var, Pattern)
+               end,
+               Conf),
+    PerCatConfig1 = lists:foldl(
+                      fun({VarTokens, Value}, PCC) ->
+                              RelevantVarTokens = lists:nthtail(
+                                                    length(PrefixPattern) - 1,
+                                                    VarTokens),
+                              translate_category_variable_conf(
+                                VarTokens,
+                                RelevantVarTokens,
+                                Value,
+                                PCC,
+                                Conf)
+                      end,
+                      PerCatConfig,
+                      Values),
+    translate_each_category_variable_conf(VarPrefix, Rest, Conf, PerCatConfig1);
+translate_each_category_variable_conf(_, [], _, PerCatConfig) ->
+    maps:to_list(PerCatConfig).
+
+translate_category_variable_conf(
+  _VarTokens, ["default" | _] = RelevantVarTokens, Value,
+  PerCatConfig, _Conf) ->
+    case RelevantVarTokens of
+        ["default", "level"] -> PerCatConfig#{default => [{level, Value}]};
+        _                    -> PerCatConfig
+    end;
+translate_category_variable_conf(
+  VarTokens, [CatNameS, OutputS, "formatter"], _Value,
+  PerCatConfig, Conf) ->
+    case is_category(CatNameS) of
+        true ->
+            Var = string:join(VarTokens, "."),
+            Value1 = translate_formatter_conf(Var, Conf),
+            Output = list_to_atom(OutputS),
+            add_category_prop(PerCatConfig, CatNameS, [Output, formatter], Value1);
+        false ->
+            PerCatConfig
+    end;
+translate_category_variable_conf(
+  _VarTokens, [CatNameS | _] = RelevantVarTokens, Value,
+  PerCatConfig, _Conf) ->
+    case is_category(CatNameS) of
+        true ->
+            PropPath = translate_prop_path(RelevantVarTokens),
+            add_category_prop(PerCatConfig, CatNameS, PropPath, Value);
+        false ->
+            PerCatConfig
+    end.
+
+is_category("console")  -> false;
+is_category("exchange") -> false;
+is_category("file")     -> false;
+is_category("journald") -> false;
+is_category("syslog")   -> false;
+is_category("level")    -> false;
+is_category("default")  -> false;
+is_category(_)          -> true.
+
+translate_prop_path([_, "console"])                   -> [console, enabled];
+translate_prop_path([_, "file"])                      -> [file, file];
+translate_prop_path([_, "file", "rotation", "date"])  -> [file, date];
+translate_prop_path([_, "file", "rotation", "size"])  -> [file, size];
+translate_prop_path([_, "file", "rotation", "count"]) -> [file, count];
+translate_prop_path([_ | Rest])                       ->
+    [list_to_atom(PropNameS) || PropNameS <- Rest].
+
+add_category_prop(PerCatConfig, CatNameS, PropPath, Value) ->
+    CatName = list_to_atom(CatNameS),
+    CatProps = case PerCatConfig of
+                   #{CatName := CatProps0} -> CatProps0;
+                   _                       -> []
+               end,
+    CatProps1 = add_category_prop1(PropPath, Value, CatProps),
+    PerCatConfig#{CatName => CatProps1}.
+
+add_category_prop1([PropName], Value, Props) ->
+    Prop = {PropName, Value},
+    lists:keystore(PropName, 1, Props, Prop);
+add_category_prop1([PropName | Rest], Value, Props) ->
+    SubProps = proplists:get_value(PropName, Props, []),
+    Prop = {PropName, add_category_prop1(Rest, Value, SubProps)},
+    lists:keystore(PropName, 1, Props, Prop).
 
 -spec translate_formatter_conf(string(), cuttlefish_conf:conf()) ->
     {rabbit_logger_text_fmt, formatter_plaintext_conf()} |
