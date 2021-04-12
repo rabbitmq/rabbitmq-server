@@ -124,3 +124,19 @@ def rabbitmq_integration_suite(
         ] + deps,
         **kwargs
     )
+
+LABELS_WITH_TEST_VERSIONS = [
+    "//deps/amqp10_common:bazel_erlang_lib",
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
+]
+
+def with_test_versions(deps):
+    r = []
+    for d in deps:
+        if d in LABELS_WITH_TEST_VERSIONS:
+            r.append(d.replace(":bazel_erlang_lib", ":test_bazel_erlang_lib"))
+        else:
+            r.append(d)
+    return r

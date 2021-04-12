@@ -6,6 +6,7 @@ load(
     "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
     "rabbitmq_integration_suite",
+    "with_test_versions",
 )
 
 exports_files([
@@ -217,20 +218,8 @@ test_erlang_lib(
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS + EXTRA_ERLC_OPTS,
     extra_apps = EXTRA_APPS,
     first_srcs = FIRST_SRCS,
-    runtime_deps = [
-        "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",  # <- test version
-        "@cuttlefish//:bazel_erlang_lib",
-        "@observer_cli//:bazel_erlang_lib",
-        "@recon//:bazel_erlang_lib",
-        "@sysmon_handler//:bazel_erlang_lib",
-    ],
-    deps = [
-        "//deps/rabbit_common:test_bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
-        "@ra//:bazel_erlang_lib",
-        "@ranch//:bazel_erlang_lib",
-        "@stdout_formatter//:bazel_erlang_lib",
-    ],
+    runtime_deps = with_test_versions(RUNTIME_DEPS),
+    deps = with_test_versions(DEPS),
 )
 
 erlc(
