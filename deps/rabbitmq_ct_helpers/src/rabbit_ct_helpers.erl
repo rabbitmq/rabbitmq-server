@@ -91,11 +91,10 @@ run_setup_steps(Config, ExtraSteps) ->
         _ ->
             [
                 fun init_skip_as_error_flag/1,
-                % fun guess_tested_erlang_app_name/1,
                 fun ensure_secondary_umbrella/1,
                 fun ensure_current_srcdir/1,
                 fun ensure_rabbitmq_ct_helpers_srcdir/1,
-                % fun ensure_rabbit_srcdir/1,
+                fun ensure_rabbit_srcdir/1,
                 fun ensure_make_cmd/1,
                 fun ensure_rabbitmq_run_cmd/1,
                 fun ensure_ssl_certs/1,
@@ -468,10 +467,8 @@ ensure_rabbitmq_plugins_cmd(Config) ->
     Rabbitmqplugins = case get_config(Config, rabbitmq_plugins_cmd) of
         undefined ->
             case os:getenv("RABBITMQ_PLUGINS") of
-                false ->
-                    find_script(Config, "rabbitmq-plugins");
-                R ->
-                    R
+                false -> find_script(Config, "rabbitmq-plugins");
+                R -> R
             end;
         R ->
             R
@@ -497,7 +494,10 @@ ensure_rabbitmq_plugins_cmd(Config) ->
 ensure_rabbitmq_queues_cmd(Config) ->
     RabbitmqQueues = case get_config(Config, rabbitmq_queues_cmd) of
         undefined ->
-            find_script(Config, "rabbitmq-queues");
+            case os:getenv("RABBITMQ_QUEUES") of
+                false -> find_script(Config, "rabbitmq-queues");
+                R -> R
+            end;
         R ->
             ct:pal(?LOW_IMPORTANCE,
               "Using rabbitmq-queues from rabbitmq_queues_cmd: ~p~n", [R]),
