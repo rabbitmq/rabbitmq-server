@@ -221,15 +221,15 @@ get_local_pid(#stream_client{stream_id = StreamId,
             {undefined, State}
     end.
 
-begin_stream(#stream_client{readers = Readers0} = State0,
+begin_stream(#stream_client{name = QName, readers = Readers0} = State0,
              Q, Tag, Offset, Max) ->
     {LocalPid, State} = get_local_pid(State0),
     case LocalPid of
         undefined ->
             {error, no_local_stream_replica_available};
         _ ->
-
-            {ok, Seg0} = osiris:init_reader(LocalPid, Offset),
+            CounterSpec = {{?MODULE, QName, self()}, []},
+            {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec),
             NextOffset = osiris_log:next_offset(Seg0) - 1,
             osiris:register_offset_listener(LocalPid, NextOffset),
             %% TODO: avoid double calls to the same process

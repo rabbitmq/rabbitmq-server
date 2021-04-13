@@ -328,7 +328,7 @@ listen_loop_pre_auth(Transport,
                                           State1,
                                           Configuration);
                 failure ->
-                    close(Transport, S);
+                    close(Transport, S, State);
                 _ ->
                     listen_loop_pre_auth(Transport,
                                          Connection1,
@@ -342,7 +342,7 @@ listen_loop_pre_auth(Transport,
             rabbit_log:info("Socket error ~p [~w]", [Reason, S, self()]);
         M ->
             rabbit_log:warning("Unknown message ~p", [M]),
-            close(Transport, S)
+            close(Transport, S, State)
     end.
 
 augment_infos_with_user_provided_connection_name(Infos,
@@ -356,7 +356,9 @@ augment_infos_with_user_provided_connection_name(Infos,
             Infos
     end.
 
-close(Transport, S) ->
+close(Transport, S, #stream_connection_state{consumers = Consumers}) ->
+    [osiris_log:close(Log)
+     || #consumer{segment = Log} <- maps:values(Consumers)],
     Transport:shutdown(S, write),
     Transport:close(S).
 
@@ -390,7 +392,7 @@ listen_loop_post_auth(Transport,
             #stream_connection{connection_step = Step} = Connection1,
             case Step of
                 closing ->
-                    close(Transport, S),
+                    close(Transport, S, State),
                     rabbit_networking:unregister_non_amqp_connection(self()),
                     notify_connection_closed(Connection1, State1);
                 close_sent ->
@@ -652,12 +654,12 @@ listen_loop_post_auth(Transport,
                     rabbit_log:info("Heartbeat send error ~p, closing connection",
                                     [Unexpected]),
                     C1 = demonitor_all_streams(Connection),
-                    close(Transport, C1)
+                    close(Transport, C1, State)
             end;
         heartbeat_timeout ->
             rabbit_log:info("Heartbeat timeout, closing connection~n"),
             C1 = demonitor_all_streams(Connection),
-            close(Transport, C1);
+            close(Transport, C1, State);
         {infos, From} ->
             From ! {self(), ClientProperties},
             listen_loop_post_auth(Transport, Connection, State, Configuration);
@@ -695,7 +697,7 @@ listen_loop_post_auth(Transport,
             demonitor_all_streams(Connection),
             rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State),
-            close(Transport, S),
+            close(Transport, S, State),
             ok;
         {Closed, S} ->
             demonitor_all_streams(Connection),
@@ -733,7 +735,7 @@ listen_loop_post_close(Transport,
             case Step of
                 closing_done ->
                     rabbit_log:debug("Received close confirmation from client"),
-                    close(Transport, S),
+                    close(Transport, S, State),
                     rabbit_networking:unregister_non_amqp_connection(self()),
                     notify_connection_closed(Connection1, State1);
                 _ ->
@@ -750,7 +752,7 @@ listen_loop_post_close(Transport,
             ok;
         {Error, S, Reason} ->
             rabbit_log:info("Socket error ~p [~w]", [Reason, S, self()]),
-            close(Transport, S),
+            close(Transport, S, State),
             rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State);
         M ->
@@ -1515,8 +1517,9 @@ handle_frame_post_auth(Transport,
                                             "ion ~p",
                                             [SubscriptionId, Stream,
                                              OffsetSpec]),
+                            CounterSpec = {{?MODULE, Stream, SubscriptionId, self()}, []},
                             {ok, Segment} =
-                                osiris:init_reader(LocalMemberPid, OffsetSpec),
+                                osiris:init_reader(LocalMemberPid, OffsetSpec, CounterSpec),
                             rabbit_log:info("Next offset for subscription ~p is ~p",
                                             [SubscriptionId,
                                              osiris_log:next_offset(Segment)]),
