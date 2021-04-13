@@ -45,6 +45,7 @@
          delete_replica/3]).
 -export([format_osiris_event/2]).
 -export([update_stream_conf/2]).
+-export([readers/1]).
 
 -export([status/2,
          tracking_status/2]).
@@ -54,7 +55,7 @@
 
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
-                    policy, operator_policy, effective_policy_definition, type]).
+                    policy, operator_policy, effective_policy_definition, type, memory]).
 
 -type appender_seq() :: non_neg_integer().
 
@@ -429,6 +430,21 @@ i(leader, Q) when ?is_amqqueue(Q) ->
 i(members, Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
     Nodes;
+i(memory, Q) when ?is_amqqueue(Q) ->
+    %% Return writer memory. It's not the full memory usage (we also have replica readers on
+    %% the writer node), but might be good enough
+    case amqqueue:get_pid(Q) of
+        none ->
+            0;
+        Pid ->
+            try
+                {memory, M} = process_info(Pid, memory),
+                M
+            catch
+                error:badarg ->
+                    0
+            end
+    end;
 i(online, Q) ->
     #{name := StreamId} = amqqueue:get_type_state(Q),
     case rabbit_stream_coordinator:members(StreamId) of
@@ -490,6 +506,12 @@ i(effective_policy_definition, Q) ->
         undefined -> [];
         Def       -> Def
     end;
+i(readers, Q) ->
+    QName = amqqueue:get_name(Q),
+    Conf = amqqueue:get_type_state(Q),
+    Nodes = [maps:get(leader_node, Conf) | maps:get(replica_nodes, Conf)],
+    {Data, _} = rpc:multicall(Nodes, ?MODULE, readers, [QName]),
+    lists:flatten(Data);
 i(type, _) ->
     stream;
 i(_, _) ->
@@ -538,6 +560,21 @@ tracking_status(Vhost, QueueName) ->
                       end, [], Map);
         {error, not_found} = E->
             E
+    end.
+
+readers(QName) ->
+    try
+        Data = osiris_counters:overview(),
+        Readers = case maps:get({osiris_writer, QName}, Data, not_found) of
+                      not_found ->
+                          maps:get(readers, maps:get({osiris_replica, QName}, Data, #{}), 0);
+                      Map ->
+                          maps:get(readers, Map, 0)
+                  end,
+        {node(), Readers}
+    catch
+        _:_ ->
+            {node(), 0}
     end.
 
 init(Q) when ?is_amqqueue(Q) ->
