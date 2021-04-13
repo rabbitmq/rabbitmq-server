@@ -213,8 +213,8 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		mix_exs=$@/deps/$$(basename $$dep)/mix.exs; \
 		if test -f $$mix_exs; then \
 			(cd $$(dirname "$$mix_exs") && \
-			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force && \
-			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get --only prod && \
+			 (test -d $@/deps/.hex || env DEPS_DIR=$@/deps MIX_HOME=$@/deps/.mix HEX_HOME=$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force) && \
+			 env DEPS_DIR=$@/deps MIX_HOME=$@/deps/.mix HEX_HOME=$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get --only prod && \
 			 cp $(CURDIR)/mk/rabbitmq-mix.mk . && \
 			 rm -rf _build deps); \
 		fi; \
@@ -256,7 +256,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 #
 # The ETS file must be recreated before compiling RabbitMQ. See the
 # `restore-hex-cache-ets-file` Make target.
-	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$@,$@.git-time.txt))
+	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$(call core_native_path,$@),$(call core_native_path,$@.git-time.txt)))
 # Fix file timestamps to have reproducible source archives.
 	$(verbose) find $@ -print0 | xargs -0 touch -t "$$(cat "$@.git-time.txt")"
 	$(verbose) rm "$@.git-times.txt" "$@.git-time.txt"
@@ -498,24 +498,12 @@ install-windows-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
 	$(inst_verbose) cp -r \
 		LICENSE* \
-		$(DEPS_DIR)/rabbit/ebin \
-		$(DEPS_DIR)/rabbit/priv \
 		$(DEPS_DIR)/rabbit/INSTALL \
 		$(DIST_DIR) \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/$(notdir $(DIST_DIR))/README.txt
 	$(verbose) $(UNIX_TO_DOS) $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
-
-	@# FIXME: Why do we copy headers?
-	$(verbose) cp -r \
-		$(DEPS_DIR)/rabbit/include \
-		$(DESTDIR)$(WINDOWS_PREFIX)
-	@# rabbitmq-common provides headers too: copy them to
-	@# rabbitmq_server/include.
-	$(verbose) cp -r \
-		$(DEPS_DIR)/rabbit_common/include \
-		$(DESTDIR)$(WINDOWS_PREFIX)
 
 install-windows-escripts:
 	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \

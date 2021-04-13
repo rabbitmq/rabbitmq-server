@@ -13,9 +13,9 @@ HEX_OFFLINE := 1
 
 override MIX_HOME := $(DEPS_DIR)/.mix
 
-# In addition to `$MIX_HOME`, we still have to set `$HOME` which is used
-# to find `~/.hex` where the Hex.pm cache and packages are stored.
+# In addition to `$MIX_HOME`, we still have to set `$HEX_HOME` which is used to
+# find `~/.hex` where the Hex.pm cache and packages are stored.
 
-override HOME := $(DEPS_DIR)
+override HEX_HOME := $(DEPS_DIR)/.hex
 
-export HEX_OFFLINE MIX_HOME HOME
+export HEX_OFFLINE MIX_HOME HEX_HOME
