@@ -508,11 +508,12 @@ status(Vhost, QueueName) ->
             Data = osiris_counters:overview(),
             case maps:get({osiris_writer, QName}, Data, undefined) of
                 undefined ->
-                    #{};
-                #{segments := Segments} = Map ->
+                    [];
+                #{} = Cnt0 ->
+                    Cnt = maps:without([chunks], Cnt0),
                     Conf = amqqueue:get_type_state(Q),
                     Max = maps:get(max_segment_size, Conf, osiris_log:get_default_max_segment_size()),
-                    Map#{max_disk_size => Segments * Max}
+                    [maps:to_list(Cnt#{max_segment_size => Max})]
             end;
         {error, not_found} = E->
             E
