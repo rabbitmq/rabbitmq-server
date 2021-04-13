@@ -717,6 +717,7 @@ overview(#?MODULE{consumers = Cons,
                   enqueue_count = EnqCount,
                   msg_bytes_enqueue = EnqueueBytes,
                   msg_bytes_checkout = CheckoutBytes,
+                  ra_indexes = Indexes,
                   cfg = Cfg} = State) ->
     Conf = #{name => Cfg#cfg.name,
              resource => Cfg#cfg.resource,
@@ -730,6 +731,7 @@ overview(#?MODULE{consumers = Cons,
              expires => Cfg#cfg.expires,
              delivery_limit => Cfg#cfg.delivery_limit
              },
+    Smallest = rabbit_fifo_index:smallest(Indexes),
     #{type => ?MODULE,
       config => Conf,
       num_consumers => maps:size(Cons),
@@ -741,7 +743,8 @@ overview(#?MODULE{consumers = Cons,
       release_cursors => [I || {_, I, _} <- lqueue:to_list(Cursors)],
       release_cursor_enqueue_counter => EnqCount,
       enqueue_message_bytes => EnqueueBytes,
-      checkout_message_bytes => CheckoutBytes}.
+      checkout_message_bytes => CheckoutBytes,
+      smallest_raft_index => Smallest}.
 
 -spec get_checked_out(consumer_id(), msg_id(), msg_id(), state()) ->
     [delivery_msg()].
