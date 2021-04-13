@@ -1308,7 +1308,7 @@ await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount) when is_integer
     await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, Attempts).
 
 await_binding(_Config, _Node, _Vhost, _X, _Key, ExpectedBindingCount, 0) ->
-    {error, rabbit_misc:format("expected ~s bindings but they did not materialize in time", [ExpectedBindingCount])};
+    {error, rabbit_misc:format("expected ~b bindings but they did not materialize in time", [ExpectedBindingCount])};
 await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft) when is_integer(ExpectedBindingCount) ->
     case bound_keys_from(Config, Node, Vhost, X, Key) of
         Bs when length(Bs) < ExpectedBindingCount ->

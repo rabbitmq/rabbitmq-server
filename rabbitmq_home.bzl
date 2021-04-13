@@ -101,7 +101,15 @@ def _impl(ctx):
 
     scripts = [_copy_script(ctx, script) for script in ctx.files._scripts]
 
-    escripts = [_link_escript(ctx, escript) for escript in ["rabbitmq-plugins", "rabbitmqctl"]]
+    rabbitmq_ctl_copies = [
+        "rabbitmq-diagnostics",
+        "rabbitmq-plugins",
+        "rabbitmq-queues",
+        "rabbitmq-streams",
+        "rabbitmq-upgrade",
+        "rabbitmqctl",
+    ]
+    escripts = [_link_escript(ctx, escript) for escript in rabbitmq_ctl_copies]
 
     plugins = _flatten([_plugins_dir_links(ctx, plugin) for plugin in plugins])
 
@@ -125,6 +133,7 @@ rabbitmq_home = rule(
                 "//deps/rabbit:scripts/rabbitmq-defaults",
                 "//deps/rabbit:scripts/rabbitmq-env",
                 "//deps/rabbit:scripts/rabbitmq-plugins",
+                "//deps/rabbit:scripts/rabbitmq-queues",
                 "//deps/rabbit:scripts/rabbitmq-server",
                 "//deps/rabbit:scripts/rabbitmqctl",
             ],

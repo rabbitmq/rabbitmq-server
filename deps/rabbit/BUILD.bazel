@@ -13,6 +13,7 @@ exports_files([
     "scripts/rabbitmq-defaults",
     "scripts/rabbitmq-env",
     "scripts/rabbitmq-plugins",
+    "scripts/rabbitmq-queues",
     "scripts/rabbitmq-server",
     "scripts/rabbitmqctl",
 ])
