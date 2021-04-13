@@ -1,4 +1,5 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("@bazel-erlang//:github.bzl", "github_bazel_erlang_lib")
 load("@bazel-erlang//:hex_pm.bzl", "hex_pm_bazel_erlang_lib")
 load("//:rabbitmq.bzl", "APP_VERSION")
@@ -171,14 +172,21 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
     )
 
-    github_bazel_erlang_lib(
+    new_git_repository(
         name = "systemd",
-        org = "hauleth",
-        repo = "erlang-systemd",
-        ref = "e732727b0b637eb29e8adc77a4eb46d7ebc0f41a",
-        version = "e732727b0b637eb29e8adc77a4eb46d7ebc0f41a",
-        deps = [
-            "@enough//:bazel_erlang_lib",
+        remote = "https://github.com/hauleth/erlang-systemd.git",
+        commit = "e732727b0b637eb29e8adc77a4eb46d7ebc0f41a",
+        build_file = rabbitmq_workspace + "//:BUILD.systemd",
+        patch_cmds = [
+            INJECT_GIT_VERSION,
         ],
-        sha256 = "41019287b59d995424ad274cd276ccc4a4fbeecc7f35dcd4e44347ba9812b46f",
     )
+
+INJECT_GIT_VERSION = """set -euo pipefail
+V="$(git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null \\
+     || git describe --dirty --abbrev=7 --tags --always 2>/dev/null || true)"
+cat src/systemd.app.src \\
+    | sed "s/{vsn,[[:space:]]git}/{vsn, \\"0.6.0-8-g$V\\"}/" \\
+    > src/systemd.app.src.two
+mv src/systemd.app.src.two src/systemd.app.src
+"""

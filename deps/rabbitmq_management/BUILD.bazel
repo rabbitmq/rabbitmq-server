@@ -1,5 +1,29 @@
+load(
+    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "erlang_lib",
+    "test_erlang_lib",
+)
 load("@bazel-erlang//:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "rabbitmq_lib")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+)
+
+APP_NAME = "rabbitmq_management"
+
+APP_DESCRIPTION = "RabbitMQ Management Console"
+
+APP_MODULE = "rabbit_mgmt_app"
+
+EXTRA_APPS = [
+    "mnesia",
+    "ranch",
+    "ssl",
+    "crypto",
+    "public_key",
+]
 
 APP_ENV = """[
 	    {http_log_dir,      none},
@@ -13,28 +37,47 @@ APP_ENV = """[
 	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
 	  ]"""
 
-rabbitmq_lib(
-    app_description = "RabbitMQ Management Console",
+FIRST_SRCS = [
+    "src/rabbit_mgmt_extension.erl",
+]
+
+DEPS = [
+    "//deps/amqp_client:bazel_erlang_lib",
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
+    "@cowboy//:bazel_erlang_lib",
+    "@cowlib//:bazel_erlang_lib",
+]
+
+erlang_lib(
+    app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
-    app_module = "rabbit_mgmt_app",
-    app_name = "rabbitmq_management",
-    extra_apps = [
-        "mnesia",
-        "ranch",
-        "ssl",
-        "crypto",
-        "public_key",
-    ],
-    first_srcs = [
-        "src/rabbit_mgmt_extension.erl",
-    ],
-    deps = [
-        "//deps/amqp_client:bazel_erlang_lib",
-        "//deps/rabbit:bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
-        "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
-        "@cowboy//:bazel_erlang_lib",
-        "@cowlib//:bazel_erlang_lib",
-    ],
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    extra_apps = EXTRA_APPS,
+    first_srcs = FIRST_SRCS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
 )
+
+test_erlang_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    extra_apps = EXTRA_APPS,
+    first_srcs = FIRST_SRCS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+# TODO: prepare-dist equivalent from Makefile
