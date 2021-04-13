@@ -1189,7 +1189,7 @@ dead_letter_publish(X, RK, QName, ReasonMsgs) ->
 qname_to_internal_name(QName) ->
     case name_concat(QName) of
         Name when byte_size(Name) =< 255 ->
-            {ok, erlang:binary_to_atom(Name)};
+            {ok, rabbit_data_coercion:to_atom(Name)};
         Name ->
             {error, {too_long, Name}}
     end.
