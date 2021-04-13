@@ -1658,8 +1658,8 @@ post_port_cmd_output(#{os_type := {OSType, _}}, Output, ExitStatus) ->
               end,
     Lines = string:split(string:trim(DecodedOutput), LineSep, all),
     ?LOG_DEBUG(
-       "$RABBITMQ_CONF_ENV_FILE output:~n~s",
-       string:join([io_lib:format("  ~ts", [Line]) || Line <- Lines], "\n"),
+       "$RABBITMQ_CONF_ENV_FILE output:~n~ts",
+       [string:join([io_lib:format("  ~ts", [Line]) || Line <- Lines], "\n")],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     Lines.
 
