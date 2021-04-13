@@ -1468,6 +1468,8 @@ select_leader(Offsets) ->
 
 maybe_sleep({{nodedown, _}, _}) ->
     timer:sleep(5000);
+maybe_sleep({noproc, _}) ->
+    timer:sleep(5000);
 maybe_sleep(_) ->
     ok.
 
