@@ -94,7 +94,7 @@ run_setup_steps(Config, ExtraSteps) ->
                 fun ensure_secondary_umbrella/1,
                 fun ensure_current_srcdir/1,
                 fun ensure_rabbitmq_ct_helpers_srcdir/1,
-                fun ensure_rabbit_srcdir/1,
+                fun maybe_rabbit_srcdir/1,
                 fun ensure_make_cmd/1,
                 fun ensure_rabbitmq_run_cmd/1,
                 fun ensure_ssl_certs/1,
@@ -281,6 +281,15 @@ ensure_rabbitmq_cli_srcdir(Config) ->
 
 ensure_rabbit_srcdir(Config) ->
     ensure_application_srcdir(Config, rabbit, rabbit).
+
+maybe_rabbit_srcdir(Config) ->
+    % Some tests under bazel use this value, others do not.
+    % By allowing this config to be optional, we avoid making
+    % more tests depend on rabbit
+    case ensure_application_srcdir(Config, rabbit, rabbit) of
+        {skip, _} -> Config;
+        Config1 -> Config1
+    end.
 
 ensure_application_srcdir(Config, App, Module) ->
     ensure_application_srcdir(Config, App, erlang, Module).
