@@ -123,7 +123,7 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
                  {ok, A} ->
                      A;
                  {error, {too_long, N}} ->
-                     binary_to_atom(ra:new_uid(N))
+                     rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
     Id = {RaName, node()},
     Nodes = select_quorum_nodes(QuorumSize, rabbit_mnesia:cluster_nodes(all)),
