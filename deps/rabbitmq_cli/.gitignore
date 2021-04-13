@@ -5,6 +5,7 @@
 /log
 /.erlang.mk/
 /ebin
+/sbin
 erl_crash.dump
 mix.lock
 *.ez
