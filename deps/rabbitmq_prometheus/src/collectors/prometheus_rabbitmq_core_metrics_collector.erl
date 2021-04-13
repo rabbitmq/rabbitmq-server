@@ -239,6 +239,9 @@ collect(PerObjectMetrics, Callback) ->
      end || {Table, Name, Type, Help} <- ?TOTALS],
     add_metric_family(build_info(), Callback),
     add_metric_family(identity_info(), Callback),
+    [begin
+         mf_totals(Callback, Name, Type, Help, Value)
+     end || {Name, Value, Type, Help} <- rabbit_global_counters:prometheus_format()],
     ok.
 
 include_when_per_object_metrics(false, auth_attempt_detailed_metrics) ->

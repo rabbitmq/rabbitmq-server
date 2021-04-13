@@ -449,6 +449,8 @@ deliver(Qs, Delivery, State) ->
     end.
 
 deliver0(Qs, Delivery, stateless) ->
+    rabbit_global_counters:messages_received(1),
+    rabbit_global_counters:messages_routed(length(Qs)),
     _ = lists:map(fun(Q) ->
                           Mod = amqqueue:get_type(Q),
                           _ = Mod:deliver([{Q, stateless}], Delivery)
@@ -467,8 +469,8 @@ deliver0(Qs, Delivery, #?STATE{} = State0) ->
                             end, [{Q, Ctx#ctx.state}], Acc)
                end, #{}, Qs),
     %%% dispatch each group to queue type interface?
-    {Xs, Actions} = maps:fold(fun(Mod, QSs, {X0, A0}) ->
-                                      {X, A} = Mod:deliver(QSs, Delivery),
+    {Xs, Actions} = maps:fold(fun(Mod, QTSs, {X0, A0}) ->
+                                      {X, A} = Mod:deliver(QTSs, Delivery),
                                       {X0 ++ X, A0 ++ A}
                               end, {[], []}, ByType),
     State = lists:foldl(
@@ -485,6 +487,7 @@ deliver0(Qs, Delivery, #?STATE{} = State0) ->
           {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
 settle(QRef, Op, CTag, MsgIds, Ctxs)
   when ?QREF(QRef) ->
+    rabbit_global_counters:messages_acknowledged(length(MsgIds)),
     case get_ctx(QRef, Ctxs, undefined) of
         undefined ->
             %% if we receive a settlement and there is no queue state it means
