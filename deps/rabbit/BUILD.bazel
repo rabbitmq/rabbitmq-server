@@ -387,11 +387,34 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "dynamic_ha_SUITE",
     size = "large",
-    groups = [
-        "cluster_size_5",
-        "cluster_size_2",
-        "cluster_size_3",
-    ],
+    groups = {
+        "cluster_size_5": [
+            "change_cluster",
+        ],
+        "cluster_size_2": [
+            "vhost_deletion",
+            "force_delete_if_no_master",
+            "promote_on_shutdown",
+            "promote_on_failure",
+            "follower_recovers_after_vhost_failure",
+            "follower_recovers_after_vhost_down_and_up",
+            "master_migrates_on_vhost_down",
+            "follower_recovers_after_vhost_down_and_master_migrated",
+            "queue_survive_adding_dead_vhost_mirror",
+            "dynamic_mirroring",
+        ],
+        "cluster_size_3": [
+            "change_policy",
+            "rapid_change",
+            "nodes_policy_should_pick_master_from_its_params",
+            "promote_follower_after_standalone_restart",
+            "queue_survive_adding_dead_vhost_mirror",
+            "rebalance_all",
+            "rebalance_exactly",
+            "rebalance_nodes",
+            "rebalance_multiple_blocked",
+        ],
+    },
     deps = DEPS + [
         "@proper//:bazel_erlang_lib",
     ],
