@@ -881,8 +881,11 @@ rabbitmq_integration_suite(
     ],
     groups = [
         "single_node",
+        "single_node_parallel",
         "cluster_size_2",
+        "cluster_size_2_parallel",
         "cluster_size_3",
+        "cluster_size_3_parallel",
         "unclustered_size_3_1",
         "unclustered_size_3_2",
         "unclustered_size_3_3",
