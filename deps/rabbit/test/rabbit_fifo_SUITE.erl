@@ -503,6 +503,27 @@ discarded_message_with_dead_letter_handler_emits_log_effect_test(_) ->
     ?ASSERT_EFF({log, _RaftIdxs, _}, Effects2),
     ok.
 
+mixed_send_msg_and_log_effects_are_correctly_ordered_test(_) ->
+    Cid = {cid(?FUNCTION_NAME), self()},
+    State00 = init(#{name => test,
+                     queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
+                     max_in_memory_length =>1,
+                     dead_letter_handler =>
+                     {somemod, somefun, [somearg]}}),
+    %% enqueue two messages
+    {State0, _} = enq(1, 1, first, State00),
+    {State1, _} = enq(2, 2, snd, State0),
+
+    {_State2, Effects1} = check_n(Cid, 3, 10, State1),
+    ct:pal("Effects ~w", [Effects1]),
+    %% in this case we expect no send_msg effect as any in memory messages
+    %% should be weaved into the send_msg effect emitted by the log effect
+    %% later. hence this is all we can assert on
+    %% as we need to send message is in the correct order to the consuming
+    %% channel or the channel may think a message has been lost in transit
+    ?ASSERT_NO_EFF({send_msg, _, _, _}, Effects1),
+    ok.
+
 tick_test(_) ->
     Cid = {<<"c">>, self()},
     Cid2 = {<<"c2">>, self()},
@@ -1712,3 +1733,6 @@ apply(Meta, Entry, State) -> rabbit_fifo:apply(Meta, Entry, State).
 init_aux(Conf) -> rabbit_fifo:init_aux(Conf).
 handle_aux(S, T, C, A, L, M) -> rabbit_fifo:handle_aux(S, T, C, A, L, M).
 make_checkout(C, S, M) -> rabbit_fifo:make_checkout(C, S, M).
+
+cid(A) when is_atom(A) ->
+    atom_to_binary(A, utf8).

@@ -2260,6 +2260,8 @@ queue_length_in_memory_limit(Config) ->
     Msg2 = <<"msg11">>,
     Msg3 = <<"msg111">>,
     Msg4 = <<"msg1111">>,
+    Msg5 = <<"msg1111">>,
+
 
     publish(Ch, QQ, Msg1),
     publish(Ch, QQ, Msg2),
@@ -2278,7 +2280,12 @@ queue_length_in_memory_limit(Config) ->
     wait_for_messages(Config, [[QQ, <<"3">>, <<"3">>, <<"0">>]]),
 
     ?assertEqual([{2, byte_size(Msg2) + byte_size(Msg4)}],
-                 dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)).
+                 dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)),
+    publish(Ch, QQ, Msg5),
+    wait_for_messages(Config, [[QQ, <<"4">>, <<"4">>, <<"0">>]]),
+    ExpectedMsgs = [Msg2, Msg3, Msg4, Msg5],
+    validate_queue(Ch, QQ, ExpectedMsgs),
+    ok.
 
 queue_length_in_memory_limit_returns(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -2807,3 +2814,21 @@ queue_names(Records) ->
          #resource{name = Name} = amqqueue:get_name(Q),
          Name
      end || Q <- Records].
+
+
+validate_queue(Ch, Queue, ExpectedMsgs) ->
+    qos(Ch, length(ExpectedMsgs), false),
+    subscribe(Ch, Queue, false),
+    [begin
+         receive
+             {#'basic.deliver'{delivery_tag = DeliveryTag1,
+                               redelivered = false},
+              #amqp_msg{payload = M}} ->
+                 amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
+                                                    multiple = false})
+         after 2000 ->
+                   flush(10),
+                   exit({validate_queue_timeout, M})
+         end
+     end || M <- ExpectedMsgs],
+    ok.
