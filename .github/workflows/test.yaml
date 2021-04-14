@@ -99,4 +99,5 @@ jobs:
       run: |
         bazelisk test //... \
           --test_tag_filters=exclusive \
+          --build_tests_only \
           --verbose_failures
