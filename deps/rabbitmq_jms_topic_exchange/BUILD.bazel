@@ -1,8 +1,6 @@
 load(
     "@bazel-erlang//:bazel_erlang_lib.bzl",
-    "DEFAULT_TEST_ERLC_OPTS",
     "erlang_lib",
-    "erlc",
     "test_erlang_lib",
 )
 load("@bazel-erlang//:ct.bzl", "ct_suite")
