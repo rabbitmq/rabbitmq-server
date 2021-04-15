@@ -370,7 +370,7 @@ apply(#{index := Index}, #purge{},
     Effects0 = [garbage_collection],
     Reply = {purge, Total},
     {State, _, Effects} = evaluate_limit(Index, false, State0,
-                                            State1, Effects0),
+                                         State1, Effects0),
     update_smallest_raft_index(Index, Reply, State, Effects);
 apply(_Meta, #garbage_collection{}, State) ->
     {State, ok, [{aux, garbage_collection}]};
@@ -1196,7 +1196,8 @@ enqueue(RaftIdx, RawMsg, #?MODULE{messages = Messages,
         case evaluate_memory_limit(Header, State0) of
             true ->
                 % indexed message with header map
-                {State0, {RaftIdx, {Header, 'empty'}}};
+                {State0,
+                 {RaftIdx, {Header, 'empty'}}};
             false ->
                 {add_in_memory_counts(Header, State0),
                  {RaftIdx, {Header, RawMsg}}} % indexed message with header map
@@ -1358,9 +1359,9 @@ complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerId,
                       #consumer{checked_out = Checked0} = Con0,
                       Effects0, State0) ->
     Discarded = maps:with(MsgIds, Checked0),
-    {State2, Effects1} = complete(Meta, ConsumerId, Discarded, Con0,
+    {State1, Effects1} = complete(Meta, ConsumerId, Discarded, Con0,
                                   Effects0, State0),
-    {State, ok, Effects} = checkout(Meta, State0, State2, Effects1, false),
+    {State, ok, Effects} = checkout(Meta, State0, State1, Effects1, false),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 dead_letter_effects(_Reason, _Discarded,
@@ -1536,7 +1537,7 @@ checkout(Meta, OldState, State, Effects) ->
 checkout(#{index := Index} = Meta, #?MODULE{cfg = #cfg{resource = QName}} = OldState, State0,
          Effects0, HandleConsumerChanges) ->
     {State1, _Result, Effects1} = checkout0(Meta, checkout_one(Meta, State0),
-                                            Effects0, {#{}, #{}}),
+                                            Effects0, #{}),
     case evaluate_limit(Index, false, OldState, State1, Effects1) of
         {State, true, Effects} ->
             case maybe_notify_decorators(State, HandleConsumerChanges) of
@@ -1557,28 +1558,28 @@ checkout(#{index := Index} = Meta, #?MODULE{cfg = #cfg{resource = QName}} = OldS
     end.
 
 checkout0(Meta, {success, ConsumerId, MsgId, {RaftIdx, {Header, 'empty'}}, State},
-          Effects, {SendAcc, LogAcc0}) ->
+          Effects, SendAcc0) ->
     DelMsg = {RaftIdx, {MsgId, Header}},
-    LogAcc = maps:update_with(ConsumerId,
-                              fun (M) -> [DelMsg | M] end,
-                              [DelMsg], LogAcc0),
-    checkout0(Meta, checkout_one(Meta, State), Effects, {SendAcc, LogAcc});
+    SendAcc = maps:update_with(ConsumerId,
+                           fun ({InMem, LogMsgs}) ->
+                                   {InMem, [DelMsg | LogMsgs]}
+                           end, {[], [DelMsg]}, SendAcc0),
+    checkout0(Meta, checkout_one(Meta, State), Effects, SendAcc);
 checkout0(Meta, {success, ConsumerId, MsgId, Msg, State}, Effects,
-          {SendAcc0, LogAcc}) ->
+          SendAcc0) ->
     DelMsg = {MsgId, Msg},
     SendAcc = maps:update_with(ConsumerId,
-                               fun (M) -> [DelMsg | M] end,
-                               [DelMsg], SendAcc0),
-    checkout0(Meta, checkout_one(Meta, State), Effects, {SendAcc, LogAcc});
-checkout0(_Meta, {Activity, State0}, Effects0, {SendAcc, LogAcc}) ->
+                           fun ({InMem, LogMsgs}) ->
+                                   {[DelMsg | InMem], LogMsgs}
+                           end, {[DelMsg], []}, SendAcc0),
+    checkout0(Meta, checkout_one(Meta, State), Effects, SendAcc);
+checkout0(_Meta, {Activity, State0}, Effects0, SendAcc) ->
     Effects1 = case Activity of
                    nochange ->
-                       append_send_msg_effects(
-                         append_log_effects(Effects0, LogAcc), SendAcc);
+                         append_delivery_effects(Effects0, SendAcc);
                    inactive ->
                        [{aux, inactive}
-                        | append_send_msg_effects(
-                            append_log_effects(Effects0, LogAcc), SendAcc)]
+                        | append_delivery_effects(Effects0, SendAcc)]
                end,
     {State0, ok, lists:reverse(Effects1)}.
 
@@ -1648,17 +1649,9 @@ evaluate_memory_limit(Size,
   when is_integer(Size) ->
     (Length >= MaxLength) orelse ((Bytes + Size) > MaxBytes).
 
-append_send_msg_effects(Effects, AccMap) when map_size(AccMap) == 0 ->
-    Effects;
-append_send_msg_effects(Effects0, AccMap) ->
-    Effects = maps:fold(fun (C, Msgs, Ef) ->
-                                [send_msg_effect(C, lists:reverse(Msgs)) | Ef]
-                        end, Effects0, AccMap),
-    [{aux, active} | Effects].
-
-append_log_effects(Effects0, AccMap) ->
-    maps:fold(fun (C, Msgs, Ef) ->
-                      [send_log_effect(C, lists:reverse(Msgs)) | Ef]
+append_delivery_effects(Effects0, AccMap) ->
+    maps:fold(fun (C, {InMemMsgs, LogMsgs}, Ef) ->
+                      [delivery_effect(C, lists:reverse(LogMsgs), InMemMsgs) | Ef]
               end, Effects0, AccMap).
 
 %% next message is determined as follows:
@@ -1709,16 +1702,22 @@ take_next_msg(#?MODULE{returns = Returns,
             end
     end.
 
-send_msg_effect({CTag, CPid}, Msgs) ->
-    {send_msg, CPid, {delivery, CTag, Msgs}, [local, ra_event]}.
-
-send_log_effect({CTag, CPid}, IdxMsgs) ->
+delivery_effect({CTag, CPid}, [], InMemMsgs) ->
+    {send_msg, CPid, {delivery, CTag, lists:reverse(InMemMsgs)},
+     [local, ra_event]};
+delivery_effect({CTag, CPid}, IdxMsgs, InMemMsgs) ->
     {RaftIdxs, Data} = lists:unzip(IdxMsgs),
     {log, RaftIdxs,
      fun(Log) ->
-             Msgs = lists:zipwith(fun ({enqueue, _, _, Msg}, {MsgId, Header}) ->
-                                          {MsgId, {Header, Msg}}
-                                  end, Log, Data),
+             Msgs0 = lists:zipwith(fun ({enqueue, _, _, Msg}, {MsgId, Header}) ->
+                                           {MsgId, {Header, Msg}}
+                                   end, Log, Data),
+             Msgs = case  InMemMsgs of
+                        [] ->
+                            Msgs0;
+                        _ ->
+                            lists:sort(InMemMsgs ++ Msgs0)
+                    end,
              [{send_msg, CPid, {delivery, CTag, Msgs}, [local, ra_event]}]
      end,
      {local, node(CPid)}}.
