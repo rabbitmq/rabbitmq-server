@@ -1,8 +1,13 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "DEFAULT_TEST_ERLC_OPTS", "erlang_lib", "test_erlang_lib")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib", "test_erlang_lib")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "APP_VERSION")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+)
 
 APP_ENV = """[
 	    {servers,               undefined},
@@ -38,6 +43,10 @@ EXTRA_APPS = [
     "eldap",
 ]
 
+BUILD_DEPS = [
+    "@lager//:bazel_erlang_lib",
+]
+
 DEPS = [
     "//deps/rabbit_common:bazel_erlang_lib",
 ]
@@ -52,6 +61,8 @@ erlang_lib(
     app_module = APP_MODULE,
     app_name = APP_NAME,
     app_version = APP_VERSION,
+    build_deps = BUILD_DEPS,
+    erlc_opts = RABBITMQ_ERLC_OPTS,
     extra_apps = EXTRA_APPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
@@ -63,13 +74,11 @@ test_erlang_lib(
     app_module = APP_MODULE,
     app_name = APP_NAME,
     app_version = APP_VERSION,
+    build_deps = BUILD_DEPS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
-
-TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
-    "+nowarn_export_all",
-]
 
 rabbitmq_home(
     name = "broker-for-tests-home",
@@ -90,7 +99,7 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_ldap/rabbitmq-for-tests-run",
@@ -105,6 +114,9 @@ ct_suite(
         "//deps/rabbitmq_cli:rabbitmqctl",
         "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+    deps = [
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -122,7 +134,7 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     tags = [
         "ldap",
     ],
@@ -144,14 +156,18 @@ ct_suite(
     deps = [
         "//deps/amqp_client:bazel_erlang_lib",
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
 ct_suite(
     name = "unit_SUITE",
     size = "small",
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
 )
