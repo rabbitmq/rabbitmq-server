@@ -979,11 +979,11 @@ ct_suite(
     name = "unit_cluster_formation_locking_mocks_SUITE",
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
+    ],
+    deps = [
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -991,11 +991,11 @@ ct_suite(
     name = "unit_collections_SUITE",
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
     runtime_deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+    deps = [
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -1003,13 +1003,13 @@ ct_suite(
     name = "unit_config_value_encryption_SUITE",
     size = "medium",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
     runtime_deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
         "//deps/rabbit_common:test_bazel_erlang_lib",
         "@credentials_obfuscation//:bazel_erlang_lib",
+    ],
+    deps = [
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -1053,12 +1053,12 @@ ct_suite(
     name = "unit_gm_SUITE",
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+    deps = [
+        "@lager//:bazel_erlang_lib",
     ],
 )
 
@@ -1066,11 +1066,11 @@ ct_suite(
     name = "unit_log_config_SUITE",
     size = "small",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
     runtime_deps = [
         "@syslog//:bazel_erlang_lib",
+    ],
+    deps = [
+        "@lager//:bazel_erlang_lib",
     ],
 )
 

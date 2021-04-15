@@ -4,6 +4,7 @@ load(
     "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
 )
+
 APP_NAME = "rabbitmq_prelaunch"
 
 APP_VERSION = "1.0.0"
