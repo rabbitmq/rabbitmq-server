@@ -184,12 +184,16 @@ try_handshake(AmqpParams, SIF, State = #state{sock = Sock}) ->
     end.
 
 handshake(AmqpParams, SIF, State0 = #state{sock = Sock}) ->
-    ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
-    case start_infrastructure(SIF, State0) of
-      {ok, ChMgr, State1} ->
-        network_handshake(AmqpParams, {ChMgr, State1});
-      {error, Reason} ->
-        {error, Reason}
+    case rabbit_net:send(Sock, ?PROTOCOL_HEADER) of
+        ok ->
+            case start_infrastructure(SIF, State0) of
+              {ok, ChMgr, State1} ->
+                network_handshake(AmqpParams, {ChMgr, State1});
+              {error, Reason} ->
+                {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 start_infrastructure(SIF, State = #state{sock = Sock, name = Name}) ->
