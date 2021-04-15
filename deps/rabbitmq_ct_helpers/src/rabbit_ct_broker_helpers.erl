@@ -872,10 +872,16 @@ wait_for_node_handling(Procs, Fun, T0, Results) ->
 move_nonworking_nodedir_away(NodeConfig) ->
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
     ConfigDir = filename:dirname(ConfigFile),
-    NewName = filename:join(
-      filename:dirname(ConfigDir),
-      "_unused_nodedir_" ++ filename:basename(ConfigDir)),
-    file:rename(ConfigDir, NewName),
+    case os:getenv("RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES") =/= false
+        andalso ?OTP_RELEASE >= 23 of
+        true ->
+            file:del_dir_r(ConfigDir);
+        _ ->
+            NewName = filename:join(
+                        filename:dirname(ConfigDir),
+                        "_unused_nodedir_" ++ filename:basename(ConfigDir)),
+            file:rename(ConfigDir, NewName)
+    end,
     lists:keydelete(erlang_node_config_filename, 1, NodeConfig).
 
 share_dist_and_proxy_ports_map(Config) ->
