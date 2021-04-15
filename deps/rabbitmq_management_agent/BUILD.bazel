@@ -1,5 +1,18 @@
-load("@bazel-erlang//:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "rabbitmq_lib")
+load(
+    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "erlang_lib",
+    "erlc",
+    "test_erlang_lib",
+)
+load("@bazel-erlang//:ct.bzl", "ct_suite")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+)
 
 APP_ENV = """[
 	    {rates_mode,        basic},
@@ -10,25 +23,153 @@ APP_ENV = """[
 	      {detailed, [{605, 5}]}]}
 	  ]"""
 
-rabbitmq_lib(
-    app_description = "RabbitMQ Management Agent",
+APP_NAME = "rabbitmq_management_agent"
+
+APP_DESCRIPTION = "RabbitMQ Management Agent"
+
+APP_MODULE = "rabbit_mgmt_agent_app"
+
+EXTRA_APPS = [
+    "xmerl",
+    "mnesia",
+    "ranch",
+    "ssl",
+    "crypto",
+    "public_key",
+]
+
+BUILD_DEPS = [
+    "//deps/rabbitmq_cli:rabbitmqctl",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+    "@lager//:bazel_erlang_lib",
+]
+
+erlang_lib(
+    app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
-    app_module = "rabbit_mgmt_agent_app",
-    app_name = "rabbitmq_management_agent",
-    build_deps = [
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        "@lager//:bazel_erlang_lib",
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    build_deps = BUILD_DEPS,
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    extra_apps = EXTRA_APPS,
+    deps = DEPS,
+)
+
+test_erlang_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    build_deps = BUILD_DEPS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    extra_apps = EXTRA_APPS,
+    deps = DEPS,
+)
+
+rabbitmq_home(
+    name = "broker-for-tests-home",
+    plugins = [
+        "//deps/rabbit:bazel_erlang_lib",
+        ":bazel_erlang_lib",
     ],
-    extra_apps = [
-        "xmerl",
-        "mnesia",
-        "ranch",
-        "ssl",
-        "crypto",
-        "public_key",
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-tests-run",
+    home = ":broker-for-tests-home",
+)
+
+ct_suite(
+    name = "exometer_slide_SUITE",
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+    },
+    deps = [
+        "@lager//:bazel_erlang_lib",
+        "@proper//:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    name = "metrics_SUITE",
+    size = "small",
+    data = [
+        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
+        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
+    ],
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_management_agent/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_management_agent/broker-for-tests-home/sbin/rabbitmqctl",
+        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_management_agent/broker-for-tests-home/sbin/rabbitmq-plugins",
+    },
+    tools = [
+        ":rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
     ],
     deps = [
-        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/amqp_client:bazel_erlang_lib",
         "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    name = "rabbit_mgmt_gc_SUITE",
+    size = "small",
+    data = [
+        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
+        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
+    ],
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_management_agent/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_management_agent/broker-for-tests-home/sbin/rabbitmqctl",
+        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_management_agent/broker-for-tests-home/sbin/rabbitmq-plugins",
+    },
+    tools = [
+        ":rabbitmq-for-tests-run",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
+    ],
+    deps = [
+        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    name = "rabbit_mgmt_slide_SUITE",
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+    },
+    runtime_deps = [
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+    deps = [
+        "@lager//:bazel_erlang_lib",
+        "@proper//:bazel_erlang_lib",
     ],
 )
