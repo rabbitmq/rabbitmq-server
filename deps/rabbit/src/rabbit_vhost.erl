@@ -66,10 +66,20 @@ parse_tags("") ->
     [];
 parse_tags(<<"">>) ->
     [];
+parse_tags([]) ->
+    [];
 parse_tags(Val) when is_binary(Val) ->
-    parse_tags(rabbit_data_coercion:to_list(Val));
+    SVal = rabbit_data_coercion:to_list(Val),
+    [trim_tag(Tag) || Tag <- re:split(SVal, ",", [{return, list}])];
 parse_tags(Val) when is_list(Val) ->
-    [trim_tag(Tag) || Tag <- re:split(Val, ",", [{return, list}])].
+    case hd(Val) of
+      Bin when is_binary(Bin) ->
+        %% this is a list of binaries
+           [trim_tag(Tag) || Tag <- Val];
+      Int when is_integer(Int) ->
+          %% this is a string/charlist
+          [trim_tag(Tag) || Tag <- re:split(Val, ",", [{return, list}])]
+    end.
 
 -spec add(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 
@@ -92,7 +102,7 @@ do_add(Name, Description, Tags, ActingUser) ->
         undefined ->
             rabbit_log:info("Adding vhost '~s' without a description", [Name]);
         Value ->
-            rabbit_log:info("Adding vhost '~s' (description: '~s')", [Name, Value])
+            rabbit_log:info("Adding vhost '~s' (description: '~s', tags: ~p)", [Name, Value, Tags])
     end,
     VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
@@ -178,15 +188,18 @@ put_vhost(Name, Description, Tags0, Trace, Username) ->
     end,
     Result = case exists(Name) of
         true  -> ok;
-        false -> add(Name, Description, parse_tags(Tags), Username),
-                 %% wait for up to 45 seconds for the vhost to initialise
-                 %% on all nodes
-                 case await_running_on_all_nodes(Name, 45000) of
-                     ok               ->
-                         maybe_grant_full_permissions(Name, Username);
-                     {error, timeout} ->
-                         {error, timeout}
-                 end
+        false ->
+            ParsedTags = parse_tags(Tags),
+            rabbit_log:debug("Parsed tags ~p to ~p", [Tags, ParsedTags]),
+            add(Name, Description, ParsedTags, Username),
+             %% wait for up to 45 seconds for the vhost to initialise
+             %% on all nodes
+             case await_running_on_all_nodes(Name, 45000) of
+                 ok               ->
+                     maybe_grant_full_permissions(Name, Username);
+                 {error, timeout} ->
+                     {error, timeout}
+             end
     end,
     case Trace of
         true      -> rabbit_trace:start(Name);
