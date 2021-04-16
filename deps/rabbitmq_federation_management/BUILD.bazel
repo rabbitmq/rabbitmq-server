@@ -1,10 +1,4 @@
-load(
-    "@bazel-erlang//:bazel_erlang_lib.bzl",
-    "DEFAULT_TEST_ERLC_OPTS",
-    "erlang_lib",
-    "erlc",
-    "test_erlang_lib",
-)
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -13,6 +7,7 @@ load(
     "APP_VERSION",
     "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "rabbitmq_lib",
 )
 
 APP_NAME = "rabbitmq_federation_management"
@@ -37,24 +32,12 @@ RUNTIME_DEPS = [
     "//deps/rabbitmq_federation:bazel_erlang_lib",
 ]
 
-erlang_lib(
+rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
     app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
-    erlc_opts = RABBITMQ_ERLC_OPTS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
-)
-
-test_erlang_lib(
-    app_description = APP_DESCRIPTION,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    app_version = APP_VERSION,
-    build_deps = BUILD_DEPS,
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )

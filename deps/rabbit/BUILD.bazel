@@ -1,4 +1,4 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib", "erlc", "test_erlang_lib")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load(
     "//:rabbitmq.bzl",
@@ -6,7 +6,7 @@ load(
     "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
     "rabbitmq_integration_suite",
-    "with_test_versions",
+    "rabbitmq_lib",
 )
 
 exports_files([
@@ -190,7 +190,7 @@ EXTRA_ERLC_OPTS = [
     "-DINSTR_MOD=gm",
 ]
 
-erlang_lib(
+rabbitmq_lib(
     app_description = "RabbitMQ",
     app_env = _APP_ENV,
     app_module = "rabbit",
@@ -201,26 +201,9 @@ erlang_lib(
     erlc_opts = RABBITMQ_ERLC_OPTS + EXTRA_ERLC_OPTS,
     extra_apps = EXTRA_APPS,
     first_srcs = FIRST_SRCS,
+    test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS + EXTRA_ERLC_OPTS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
-)
-
-test_erlang_lib(
-    app_description = "RabbitMQ",
-    app_env = _APP_ENV,
-    app_module = "rabbit",
-    app_name = "rabbit",
-    app_registered = APP_REGISTERED,
-    app_version = APP_VERSION,
-    build_deps = [
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        "@syslog//:bazel_erlang_lib",
-    ],
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + EXTRA_ERLC_OPTS,
-    extra_apps = EXTRA_APPS,
-    first_srcs = FIRST_SRCS,
-    runtime_deps = with_test_versions(RUNTIME_DEPS),
-    deps = with_test_versions(DEPS),
 )
 
 erlc(
