@@ -39,15 +39,14 @@ shift
 terraform_dir=$(cd "$(dirname "$0")" && pwd)
 
 init_terraform() {
-  terraform init "$terraform_dir"
+  terraform -chdir="$terraform_dir" init
 }
 
 query_vms() {
-  terraform apply \
+  terraform -chdir "$terraform_dir" apply \
     -auto-approve=true \
     -var="uuid=$uuid" \
-    -var="erlang_nodename=control" \
-    "$terraform_dir"
+    -var="erlang_nodename=control"
 }
 
 init_terraform
