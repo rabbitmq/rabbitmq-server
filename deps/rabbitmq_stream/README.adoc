@@ -29,21 +29,6 @@ The project is currently under development, there is no guarantee yet that it wi
 in the future (read: you are welcome to experiment with it and give feedback, but please do not base
 your whole business on it).
 
-== Build Instructions
-
-----
-git clone git@github.com:rabbitmq/rabbitmq-public-umbrella.git
-cd rabbitmq-public-umbrella
-make co
-make up BRANCH="stream-queue" -j 32
-cd deps
-git clone git@github.com:rabbitmq/rabbitmq-stream.git rabbitmq_stream
-cd rabbitmq_stream
-make run-broker
-----
-
-Then follow the instructions to https://github.com/rabbitmq/rabbitmq-stream-java-client[build the client and the performance tool].
-
 == Licensing
 
 Released under the link:LICENSE-MPL-RabbitMQ[MPL 2.0].
