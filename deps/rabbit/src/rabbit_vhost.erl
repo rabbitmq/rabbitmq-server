@@ -62,8 +62,6 @@ recover(VHost) ->
 -spec parse_tags(binary() | string() | atom()) -> [atom()].
 parse_tags(undefined) ->
     [];
-parse_tags("") ->
-    [];
 parse_tags(<<"">>) ->
     [];
 parse_tags([]) ->
