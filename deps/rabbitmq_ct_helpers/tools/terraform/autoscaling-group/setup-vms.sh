@@ -132,7 +132,7 @@ start_vms() {
 
 destroy_vms() {
   terraform -chdir "$terraform_dir" destroy \
-    -force \
+    -auto-approve=true \
     -var="erlang_version=$erlang_branch" \
     -var="elixir_version=$elixir_version" \
     -var="erlang_cookie=$erlang_cookie" \
