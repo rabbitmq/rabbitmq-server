@@ -468,6 +468,7 @@ rabbitmq_integration_suite(
         "enabling_in_cluster-enable_feature_flag_when_ff_file_is_unwritable": {
             "groups": ["enabling_in_cluster"],
             "cases": ["enable_feature_flag_when_ff_file_is_unwritable"],
+            "flaky": True,
             # The enabling_* tests chmod files and then expect writes to be blocked.
             # This probably doesn't work because we are root in the remote docker image.
             "tags": ["exclusive"],
