@@ -38,11 +38,12 @@ To use this plugin
 1. UAA should be configured to produce encrypted JWT tokens containing a set of RabbitMQ permission scopes
 2. All RabbitMQ nodes must be [configured to use the `rabbit_auth_backend_oauth2` backend](https://www.rabbitmq.com/access-control.html)
 3. All RabbitMQ nodes must be configure with a resource service ID (`resource_server_id`) that matches the scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`).
+4. The token **must** has a value in`aud` that match `resource_server_id` value. 
 
 ### Authorization Flow
 
 1. Client authorize with OAuth 2.0 provider, requesting an `access_token` (using any grant type desired)
-2. Token scope returned by OAuth 2.0 provider must include RabbitMQ resource scopes that follow a convention used by this plugin: `configure:%2F/foo` means "configure permissions for 'foo' in vhost '/'")
+2. Token scope returned by OAuth 2.0 provider must include RabbitMQ resource scopes that follow a convention used by this plugin: `configure:%2F/foo` means "configure permissions for 'foo' in vhost '/'") (`scope` field can be changed using `extra_scopes_source` in **advanced.config** file.
 3. Client passes the token as password when connecting to a RabbitMQ node. **The username field is ignored**.
 4. The translated permissions are stored as part of the authenticated connection state and used the same
    way permissions from RabbitMQ's internal database would be used.
@@ -130,7 +131,7 @@ In that case, the configuration will look like this:
   {rabbitmq_auth_backend_oauth2, [
     {resource_server_id, <<"my_rabbit_server">>},
     {key_config, [
-      {jwks_url, "https://my-jwt-issuer/jwks.json"}
+      {jwks_url, <<"https://my-jwt-issuer/jwks.json">>}
     ]}
   ]},
 ].
@@ -188,6 +189,34 @@ See the [./test/wildcard_match_SUITE.erl](wildcard matching test suite) and [./t
 Scopes should be prefixed with `resource_server_id`. For example,
 if `resource_server_id` is "my_rabbit", a scope to enable read from any vhost will
 be `my_rabbit.read:*/*`.
+
+### Using a different token field for the Scope
+
+By default the plugin will look for the `scope` key in the token, you can configure the plugin to also look in other fields using the `extra_scopes_source` setting. Values format accepted are scope as **string** or **list**
+
+
+```erlang
+[
+  {rabbitmq_auth_backend_oauth2, [
+    {resource_server_id, <<"my_rabbit_server">>},
+    {extra_scopes_source, <<"my_custom_scope_key">>},
+    ...
+    ]}
+  ]},
+].
+```
+Token sample: 
+```
+{
+ "exp": 1618592626,
+ "iat": 1618578226,
+ "aud" : ["my_id"],
+ ...
+ "scope_as_string": "my_id.configure:*/* my_id.read:*/* my_id.write:*/*",
+ "scope_as_list": ["my_id.configure:*/*", "my_id.read:*/*", my_id.write:*/*"],
+ ...
+ }
+```
 
 ### Using Tokens with Clients
 
