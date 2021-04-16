@@ -454,19 +454,43 @@ rabbitmq_integration_suite(
         "registry": {
             "groups": ["registry"],
         },
-        "enabling_on_single_node": {
+        "enabling_on_single_node-enable_feature_flag_in_a_healthy_situation": {
             "groups": ["enabling_on_single_node"],
+            "cases": ["enable_feature_flag_in_a_healthy_situation"],
+        },
+        "enabling_on_single_node-enable_unsupported_feature_flag_in_a_healthy_situation": {
+            "groups": ["enabling_on_single_node"],
+            "cases": ["enable_unsupported_feature_flag_in_a_healthy_situation"],
+        },
+        "enabling_on_single_node-enable_feature_flag_when_ff_file_is_unwritable": {
+            "groups": ["enabling_on_single_node"],
+            "cases": ["enable_feature_flag_when_ff_file_is_unwritable"],
             # The enabling_* tests chmod files and then expect writes to be blocked.
             # This probably doesn't work because we are root in the remote docker image.
             "tags": ["exclusive"],
         },
-        "enabling_in_cluster": {
+        "enabling_in_cluster-enable_feature_flag_in_a_healthy_situation": {
             "groups": ["enabling_in_cluster"],
-            "flaky": True,
-            "size": "large",
+            "cases": ["enable_feature_flag_in_a_healthy_situation"],
+        },
+        "enabling_in_cluster-enable_unsupported_feature_flag_in_a_healthy_situation": {
+            "groups": ["enabling_in_cluster"],
+            "cases": ["enable_unsupported_feature_flag_in_a_healthy_situation"],
+        },
+        "enabling_in_cluster-enable_feature_flag_when_ff_file_is_unwritable": {
+            "groups": ["enabling_in_cluster"],
+            "cases": ["enable_feature_flag_when_ff_file_is_unwritable"],
             # The enabling_* tests chmod files and then expect writes to be blocked.
             # This probably doesn't work because we are root in the remote docker image.
             "tags": ["exclusive"],
+        },
+        "enabling_in_cluster-enable_feature_flag_with_a_network_partition": {
+            "groups": ["enabling_in_cluster"],
+            "cases": ["enable_feature_flag_with_a_network_partition"],
+        },
+        "enabling_in_cluster-mark_feature_flag_as_enabled_with_a_network_partition": {
+            "groups": ["enabling_in_cluster"],
+            "cases": ["mark_feature_flag_as_enabled_with_a_network_partition"],
         },
         "clustering": {
             "groups": ["clustering"],
