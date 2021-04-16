@@ -1590,7 +1590,8 @@ notify_decorators(Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
     case ra:local_query(QPid, fun rabbit_fifo:query_notify_decorators_info/1) of
         {ok, {_, {MaxActivePriority, IsEmpty}}, _} ->
-            notify_decorators(QName, consumer_state_changed, [MaxActivePriority, IsEmpty]);
+            notify_decorators(QName, consumer_state_changed,
+                              [MaxActivePriority, IsEmpty]);
         _ -> ok
     end.
 

@@ -1576,7 +1576,7 @@ checkout0(Meta, {success, ConsumerId, MsgId, Msg, State}, Effects,
 checkout0(_Meta, {Activity, State0}, Effects0, SendAcc) ->
     Effects1 = case Activity of
                    nochange ->
-                         append_delivery_effects(Effects0, SendAcc);
+                       append_delivery_effects(Effects0, SendAcc);
                    inactive ->
                        [{aux, inactive}
                         | append_delivery_effects(Effects0, SendAcc)]
@@ -1649,10 +1649,14 @@ evaluate_memory_limit(Size,
   when is_integer(Size) ->
     (Length >= MaxLength) orelse ((Bytes + Size) > MaxBytes).
 
+append_delivery_effects(Effects0, AccMap) when map_size(AccMap) == 0 ->
+    %% does this ever happen?
+    Effects0;
 append_delivery_effects(Effects0, AccMap) ->
-    maps:fold(fun (C, {InMemMsgs, LogMsgs}, Ef) ->
-                      [delivery_effect(C, lists:reverse(LogMsgs), InMemMsgs) | Ef]
-              end, Effects0, AccMap).
+    [{aux, active} |
+     maps:fold(fun (C, {InMemMsgs, LogMsgs}, Ef) ->
+                       [delivery_effect(C, lists:reverse(LogMsgs), InMemMsgs) | Ef]
+               end, Effects0, AccMap)].
 
 %% next message is determined as follows:
 %% First we check if there are are prefex returns
