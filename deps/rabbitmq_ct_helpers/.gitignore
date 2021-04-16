@@ -3,7 +3,9 @@
 .*.sw?
 *.beam
 .terraform/
+.terraform-*
 terraform.tfstate*
+*terraform.lock*
 /.erlang.mk/
 /cover/
 /deps/
