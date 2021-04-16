@@ -1,4 +1,4 @@
-load( "@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -7,7 +7,7 @@ load(
     "APP_VERSION",
     "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
-    "rabbitmq_lib"
+    "rabbitmq_lib",
 )
 
 APP_NAME = "rabbitmq_management"

@@ -5,8 +5,8 @@ load(
     "APP_VERSION",
     "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
-    "rabbitmq_lib",
     "rabbitmq_integration_suite",
+    "rabbitmq_lib",
 )
 
 exports_files([
@@ -198,9 +198,9 @@ rabbitmq_lib(
     app_registered = APP_REGISTERED,
     app_version = APP_VERSION,
     erlc_opts = RABBITMQ_ERLC_OPTS + EXTRA_ERLC_OPTS,
-    test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS + EXTRA_ERLC_OPTS,
     extra_apps = EXTRA_APPS,
     first_srcs = FIRST_SRCS,
+    test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS + EXTRA_ERLC_OPTS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
