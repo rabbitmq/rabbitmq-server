@@ -533,9 +533,14 @@ get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState)
             %% not found and no initial state passed - initialize new state
             Mod = amqqueue:get_type(Q),
             Name = amqqueue:get_name(Q),
-            #ctx{module = Mod,
-                 name = Name,
-                 state = Mod:init(Q)};
+            case Mod:init(Q) of
+                {error, Reason} ->
+                    exit({Reason, Ref});
+                QState ->
+                    #ctx{module = Mod,
+                         name = Name,
+                         state = QState}
+            end;
         _  ->
             %% not found - initialize with supplied initial state
             Mod = amqqueue:get_type(Q),

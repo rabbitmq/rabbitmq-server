@@ -51,7 +51,8 @@ groups() ->
            replica_recovery,
            leader_failover,
            leader_failover_dedupe,
-           add_replicas]},
+           add_replicas,
+           publish_coordinator_unavailable]},
      {cluster_size_3_parallel, [parallel], [delete_replica,
                                             delete_last_replica,
                                             delete_classic_replica,
@@ -571,6 +572,38 @@ delete_down_replica(Config) ->
               ok == rpc:call(Server0, rabbit_stream_queue, delete_replica,
                              [<<"/">>, Q, Server1])
       end),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+publish_coordinator_unavailable(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    check_leader_and_replicas(Config, [Server0, Server1, Server2]),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              N = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_mnesia, cluster_nodes, [running]),
+              length(N) == 1
+      end),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    publish(Ch, Q),
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 506, _}}}, _},
+                amqp_channel:wait_for_confirms(Ch, 60)),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              Info = find_queue_info(Config, 0, [online]),
+              length(proplists:get_value(online, Info)) == 3
+      end),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    publish(Ch1, Q),
+    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 publish(Config) ->
