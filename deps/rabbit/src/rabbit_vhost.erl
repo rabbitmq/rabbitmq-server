@@ -75,10 +75,10 @@ parse_tags(Val) when is_list(Val) ->
     case hd(Val) of
       Bin when is_binary(Bin) ->
         %% this is a list of binaries
-           [trim_tag(Tag) || Tag <- Val];
+        [trim_tag(Tag) || Tag <- Val];
       Int when is_integer(Int) ->
-          %% this is a string/charlist
-          [trim_tag(Tag) || Tag <- re:split(Val, ",", [{return, list}])]
+        %% this is a string/charlist
+        [trim_tag(Tag) || Tag <- re:split(Val, ",", [{return, list}])]
     end.
 
 -spec add(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
