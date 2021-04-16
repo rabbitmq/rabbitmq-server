@@ -1,8 +1,7 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "DEFAULT_TEST_ERLC_OPTS", "erlang_lib", "test_erlang_lib")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "APP_VERSION")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
 
 APP_NAME = "amqp10_client"
 
@@ -16,10 +15,6 @@ EXTRA_APPS = [
     "crypto",
 ]
 
-TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
-    "+nowarn_export_all",
-]
-
 BUILD_DEPS = [
     "//deps/rabbit_common:bazel_erlang_lib",
 ]
@@ -28,30 +23,19 @@ DEPS = [
     "//deps/amqp10_common:bazel_erlang_lib",
 ]
 
-erlang_lib(
+rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
     app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
-    extra_apps = EXTRA_APPS,
-    deps = DEPS,
-)
-
-test_erlang_lib(
-    app_description = APP_DESCRIPTION,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    app_version = APP_VERSION,
-    build_deps = BUILD_DEPS,
-    erlc_opts = TEST_ERLC_OPTS,
     extra_apps = EXTRA_APPS,
     deps = DEPS,
 )
 
 ct_suite(
     name = "msg_SUITE",
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
@@ -86,7 +70,7 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    erlc_opts = TEST_ERLC_OPTS + [
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
         "-I deps/amqp10_client",
     ],
     groups = [

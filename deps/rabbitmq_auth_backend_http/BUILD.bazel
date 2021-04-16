@@ -1,8 +1,7 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "DEFAULT_TEST_ERLC_OPTS", "erlang_lib", "test_erlang_lib")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "APP_VERSION")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
 
 APP_ENV = """[
 	    {http_method,   get},
@@ -31,7 +30,7 @@ RUNTIME_DEPS = [
     "//deps/amqp_client:bazel_erlang_lib",
 ]
 
-erlang_lib(
+rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_module = APP_MODULE,
@@ -41,20 +40,6 @@ erlang_lib(
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
-
-test_erlang_lib(
-    app_description = APP_DESCRIPTION,
-    app_env = APP_ENV,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    app_version = APP_VERSION,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
-)
-
-TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
-    "+nowarn_export_all",
-]
 
 rabbitmq_home(
     name = "broker-for-tests-home",
@@ -75,7 +60,7 @@ ct_suite(
     additional_srcs = [
         "test/auth_http_mock.erl",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
@@ -93,7 +78,7 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_http/rabbitmq-for-tests-run",
@@ -114,7 +99,7 @@ ct_suite(
 ct_suite(
     name = "unit_SUITE",
     size = "small",
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },

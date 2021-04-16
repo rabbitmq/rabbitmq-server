@@ -1,14 +1,8 @@
-load(
-    "@bazel-erlang//:bazel_erlang_lib.bzl",
-    "DEFAULT_TEST_ERLC_OPTS",
-    "erlang_lib",
-    "erlc",
-    "test_erlang_lib",
-)
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "APP_VERSION")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
 
 APP_NAME = "rabbitmq_auth_backend_oauth2"
 
@@ -28,7 +22,7 @@ RUNTIME_DEPS = [
     "@cowlib//:bazel_erlang_lib",
 ]
 
-erlang_lib(
+rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
     app_version = APP_VERSION,
@@ -36,19 +30,6 @@ erlang_lib(
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
-
-test_erlang_lib(
-    app_description = APP_DESCRIPTION,
-    app_name = APP_NAME,
-    app_version = APP_VERSION,
-    build_deps = BUILD_DEPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
-)
-
-TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
-    "+nowarn_export_all",
-]
 
 rabbitmq_home(
     name = "broker-for-tests-home",
@@ -68,7 +49,7 @@ erlc(
     srcs = [
         "test/rabbit_auth_backend_oauth2_test_util.erl",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
 ct_suite(
@@ -78,7 +59,7 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_oauth2/rabbitmq-for-tests-run",
@@ -97,7 +78,7 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_oauth2/rabbitmq-for-tests-run",
@@ -129,7 +110,7 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_oauth2/rabbitmq-for-tests-run",
@@ -155,7 +136,7 @@ ct_suite(
 ct_suite(
     name = "scope_SUITE",
     size = "small",
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },
@@ -174,7 +155,7 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
         "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_oauth2/rabbitmq-for-tests-run",
@@ -190,7 +171,7 @@ ct_suite(
 ct_suite(
     name = "wildcard_match_SUITE",
     size = "small",
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
     },

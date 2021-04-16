@@ -27,6 +27,22 @@ def management_plugins(rabbitmq_workspace = "@rabbitmq-server"):
         rabbitmq_workspace + "//deps/rabbitmq_management:bazel_erlang_lib",
     ]
 
+LABELS_WITH_TEST_VERSIONS = [
+    "//deps/amqp10_common:bazel_erlang_lib",
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
+]
+
+def with_test_versions(deps):
+    r = []
+    for d in deps:
+        if d in LABELS_WITH_TEST_VERSIONS:
+            r.append(d.replace(":bazel_erlang_lib", ":test_bazel_erlang_lib"))
+        else:
+            r.append(d)
+    return r
+
 def rabbitmq_lib(
         app_name = "",
         app_version = APP_VERSION,
@@ -35,7 +51,8 @@ def rabbitmq_lib(
         app_registered = [],
         app_env = "[]",
         extra_apps = [],
-        extra_erlc_opts = [],
+        erlc_opts = RABBITMQ_ERLC_OPTS,
+        test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
         first_srcs = [],
         build_deps = [],
         deps = [],
@@ -48,7 +65,7 @@ def rabbitmq_lib(
         app_registered = app_registered,
         app_env = app_env,
         extra_apps = extra_apps,
-        erlc_opts = RABBITMQ_ERLC_OPTS + extra_erlc_opts,
+        erlc_opts = erlc_opts,
         first_srcs = first_srcs,
         build_deps = build_deps,
         deps = deps,
@@ -63,11 +80,11 @@ def rabbitmq_lib(
         app_registered = app_registered,
         app_env = app_env,
         extra_apps = extra_apps,
-        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + extra_erlc_opts,
+        erlc_opts = test_erlc_opts,
         first_srcs = first_srcs,
-        build_deps = build_deps,
-        deps = deps,
-        runtime_deps = runtime_deps,
+        build_deps = with_test_versions(build_deps),
+        deps = with_test_versions(deps),
+        runtime_deps = with_test_versions(runtime_deps),
     )
 
 def rabbitmq_integration_suite(
@@ -104,19 +121,3 @@ def rabbitmq_integration_suite(
         ] + deps,
         **kwargs
     )
-
-LABELS_WITH_TEST_VERSIONS = [
-    "//deps/amqp10_common:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
-]
-
-def with_test_versions(deps):
-    r = []
-    for d in deps:
-        if d in LABELS_WITH_TEST_VERSIONS:
-            r.append(d.replace(":bazel_erlang_lib", ":test_bazel_erlang_lib"))
-        else:
-            r.append(d)
-    return r

@@ -1,11 +1,5 @@
-load(
-    "@bazel-erlang//:bazel_erlang_lib.bzl",
-    "DEFAULT_TEST_ERLC_OPTS",
-    "erlang_lib",
-    "test_erlang_lib",
-)
 load("@bazel-erlang//:eunit.bzl", "eunit")
-load("//:rabbitmq.bzl", "APP_VERSION")
+load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
 
 APP_NAME = "rabbitmq_aws"
 
@@ -28,17 +22,7 @@ BUILD_DEPS = [
     "//deps/rabbit_common:bazel_erlang_lib",
 ]
 
-erlang_lib(
-    app_description = APP_DESCRIPTION,
-    app_module = APP_MODULE,
-    app_name = APP_NAME,
-    app_registered = APP_REGISTERED,
-    app_version = APP_VERSION,
-    build_deps = BUILD_DEPS,
-    extra_apps = EXTRA_APPS,
-)
-
-test_erlang_lib(
+rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
@@ -49,7 +33,7 @@ test_erlang_lib(
 )
 
 eunit(
-    erlc_opts = DEFAULT_TEST_ERLC_OPTS + [
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
         "-I deps/rabbitmq_aws",
         "+nowarn_export_all",
     ],
