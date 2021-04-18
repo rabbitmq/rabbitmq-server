@@ -1,6 +1,6 @@
 -module(rabbit_queue_type).
 -include("amqqueue.hrl").
--include_lib("rabbit_common/include/resource.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
          init/0,
@@ -449,36 +449,55 @@ deliver(Qs, Delivery, State) ->
     end.
 
 deliver0(Qs, Delivery, stateless) ->
-    rabbit_global_counters:messages_received(1),
-    rabbit_global_counters:messages_routed(length(Qs)),
-    _ = lists:map(fun(Q) ->
-                          Mod = amqqueue:get_type(Q),
-                          _ = Mod:deliver([{Q, stateless}], Delivery)
-                  end, Qs),
+    case Qs of
+        [] ->
+            case Delivery#delivery.mandatory of
+                false -> rabbit_global_counters:messages_unroutable_dropped(1);
+                true -> rabbit_global_counters:messages_unroutable_returned(1)
+            end;
+        _ ->
+            rabbit_global_counters:messages_routed(1),
+            _ = lists:map(fun(Q) ->
+                                Mod = amqqueue:get_type(Q),
+                                _ = Mod:deliver([{Q, stateless}], Delivery)
+                        end, Qs),
+            rabbit_global_counters:messages_published(length(Qs))
+    end,
     {ok, stateless, []};
 deliver0(Qs, Delivery, #?STATE{} = State0) ->
-    %% TODO: optimise single queue case?
-    %% sort by queue type - then dispatch each group
-    ByType = lists:foldl(
-               fun (Q, Acc) ->
-                       T = amqqueue:get_type(Q),
-                       Ctx = get_ctx(Q, State0),
-                       maps:update_with(
-                         T, fun (A) ->
-                                    [{Q, Ctx#ctx.state} | A]
-                            end, [{Q, Ctx#ctx.state}], Acc)
-               end, #{}, Qs),
-    %%% dispatch each group to queue type interface?
-    {Xs, Actions} = maps:fold(fun(Mod, QTSs, {X0, A0}) ->
-                                      {X, A} = Mod:deliver(QTSs, Delivery),
-                                      {X0 ++ X, A0 ++ A}
-                              end, {[], []}, ByType),
-    State = lists:foldl(
-              fun({Q, S}, Acc) ->
-                      Ctx = get_ctx_with(Q, Acc, S),
-                      set_ctx(qref(Q), Ctx#ctx{state = S}, Acc)
-              end, State0, Xs),
-    return_ok(State, Actions).
+    case Qs of
+        [] ->
+            case Delivery#delivery.mandatory of
+                false -> rabbit_global_counters:messages_unroutable_dropped(1);
+                true -> rabbit_global_counters:messages_unroutable_returned(1)
+            end,
+            return_ok(State0, []);
+        _ ->
+            rabbit_global_counters:messages_routed(1),
+            %% TODO: optimise single queue case?
+            %% sort by queue type - then dispatch each group
+            ByType = lists:foldl(
+                    fun (Q, Acc) ->
+                            T = amqqueue:get_type(Q),
+                            Ctx = get_ctx(Q, State0),
+                            maps:update_with(
+                                T, fun (A) ->
+                                            [{Q, Ctx#ctx.state} | A]
+                                    end, [{Q, Ctx#ctx.state}], Acc)
+                    end, #{}, Qs),
+            %%% dispatch each group to queue type interface?
+            {Xs, Actions} = maps:fold(fun(Mod, QTSs, {X0, A0}) ->
+                                            {X, A} = Mod:deliver(QTSs, Delivery),
+                                            rabbit_global_counters:messages_published(length(Qs)),
+                                            {X0 ++ X, A0 ++ A}
+                                    end, {[], []}, ByType),
+            State = lists:foldl(
+                    fun({Q, S}, Acc) ->
+                            Ctx = get_ctx_with(Q, Acc, S),
+                            set_ctx(qref(Q), Ctx#ctx{state = S}, Acc)
+                    end, State0, Xs),
+            return_ok(State, Actions)
+    end.
 
 
 -spec settle(queue_ref(), settle_op(), rabbit_types:ctag(),
@@ -487,7 +506,6 @@ deliver0(Qs, Delivery, #?STATE{} = State0) ->
           {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
 settle(QRef, Op, CTag, MsgIds, Ctxs)
   when ?QREF(QRef) ->
-    rabbit_global_counters:messages_acknowledged(length(MsgIds)),
     case get_ctx(QRef, Ctxs, undefined) of
         undefined ->
             %% if we receive a settlement and there is no queue state it means
@@ -521,8 +539,13 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
     Mod = amqqueue:get_type(Q),
     case Mod:dequeue(NoAck, LimiterPid, CTag, State0) of
         {ok, Num, Msg, State} ->
+            case NoAck of
+                false -> rabbit_global_counters:messages_delivered_get_ack(1);
+                true -> rabbit_global_counters:messages_delivered_get_autoack(1)
+            end,
             {ok, Num, Msg, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {empty, State} ->
+            rabbit_global_counters:basic_get_empty(1),
             {empty, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {error, _} = Err ->
             Err;

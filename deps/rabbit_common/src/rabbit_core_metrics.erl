@@ -197,10 +197,12 @@ channel_stats(queue_stats, get_no_ack, Id, Value) ->
 channel_stats(queue_stats, deliver, Id, Value) ->
     %% Includes delete marker
     _ = ets:update_counter(channel_queue_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0, 0, 0, 0}),
+    rabbit_global_counters:messages_delivered_consume_ack(Value),
     ok;
 channel_stats(queue_stats, deliver_no_ack, Id, Value) ->
     %% Includes delete marker
     _ = ets:update_counter(channel_queue_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0, 0, 0, 0}),
+    rabbit_global_counters:messages_delivered_consume_autoack(Value),
     ok;
 channel_stats(queue_stats, redeliver, Id, Value) ->
     %% Includes delete marker
