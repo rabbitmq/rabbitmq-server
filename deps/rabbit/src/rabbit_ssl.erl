@@ -130,13 +130,12 @@ peer_cert_validity(Cert) ->
     rabbit_cert_info:validity(Cert).
 
 %% Extract a username from the certificate
--spec peer_cert_auth_name
-        (certificate()) -> binary() | 'not_found' | 'unsafe'.
-
+-spec peer_cert_auth_name(certificate()) -> binary() | 'not_found' | 'unsafe'.
 peer_cert_auth_name(Cert) ->
     {ok, Mode} = application:get_env(rabbit, ssl_cert_login_from),
     peer_cert_auth_name(Mode, Cert).
 
+-spec peer_cert_auth_name(atom(), certificate()) -> binary() | 'not_found' | 'unsafe'.
 peer_cert_auth_name(distinguished_name, Cert) ->
     case auth_config_sane() of
         true  -> iolist_to_binary(peer_cert_subject(Cert));
@@ -158,8 +157,17 @@ peer_cert_auth_name(subject_alternative_name, Cert) ->
                 0                 -> not_found;
                 N when N < Index  -> not_found;
                 N when N >= Index ->
-                    {_, Value} = lists:nth(Index, OfType),
-                    rabbit_data_coercion:to_binary(Value)
+                    Nth = lists:nth(Index, OfType),
+                    case Nth of
+                      %% this is SAN of type otherName; it can be anything, so we simply try to extract the value
+                      %% the best we can and return it. There aren't really any conventions or widely held expectations
+                      %% about the format :(
+                      {otherName, {'AnotherName', _, Value}} ->
+                          rabbit_cert_info:sanitize_other_name(rabbit_data_coercion:to_binary(Value));
+                      %% most SAN types return a pair: DNS, email, URI
+                      {_, Value} ->
+                          rabbit_data_coercion:to_binary(Value)
+                    end
             end;
         false -> unsafe
     end;
@@ -193,3 +201,4 @@ otp_san_type(email)      -> rfc822Name;
 otp_san_type(uri)        -> uniformResourceIdentifier;
 otp_san_type(other_name) -> otherName;
 otp_san_type(Other)      -> Other.
+
