@@ -76,6 +76,16 @@ For example, to use the first SAN value of type DNS:
 auth_mechanisms.1 = EXTERNAL
 
 ssl_cert_login_from      = subject_alternative_name
+ssl_cert_login_san_type  = dns
+ssl_cert_login_san_index = 0
+```
+
+Or of type email:
+
+``` ini
+auth_mechanisms.1 = EXTERNAL
+
+ssl_cert_login_from      = subject_alternative_name
 ssl_cert_login_san_type  = email
 ssl_cert_login_san_index = 0
 ```
