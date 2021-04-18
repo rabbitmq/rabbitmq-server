@@ -17,11 +17,13 @@
          extensions/1
 ]).
 
+-export([sanitize_other_name/1]).
+
 %%--------------------------------------------------------------------------
 
 -export_type([certificate/0]).
 
--type certificate() :: binary().
+-type certificate() :: #'OTPCertificate'{}.
 
 %%--------------------------------------------------------------------------
 %% High-level functions used by reader
@@ -102,6 +104,13 @@ find_by_type(Type, {rdnSequence, RDNs}) ->
 %%--------------------------------------------------------------------------
 %% Formatting functions
 %%--------------------------------------------------------------------------
+
+sanitize_other_name(Bin) when is_binary(Bin) ->
+    %% strip off leading values that seem to be ASN.1 UTF value encoding artifacts
+    case Bin of
+        <<12, 14, Rest/binary>> -> Rest;
+        Other                   -> Other
+    end.
 
 %% Format and rdnSequence as a RFC4514 subject string.
 format_rdn_sequence({rdnSequence, Seq}) ->

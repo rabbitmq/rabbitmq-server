@@ -49,14 +49,19 @@ init(Sock) ->
                        case rabbit_ssl:peer_cert_auth_name(C) of
                            unsafe    -> {refused, none, "TLS configuration is unsafe", []};
                            not_found -> {refused, none, "no name found", []};
-                           Name      -> rabbit_data_coercion:to_binary(Name)
+                           Name      ->
+                               %% strip any leading and trailing newlines, we assume that they are never
+                               %% added intentionally. For SANS of type otherName, the Erlang ASN.1/public key parser
+                               %% seems to add some in certain cases
+                               Val = rabbit_data_coercion:to_binary(Name),
+                               rabbit_log:debug("auth mechanism TLS extracted username '~s' from peer certificate", [Val]),
+                               Val
                        end;
                    {error, no_peercert} ->
                        {refused, none, "connection peer presented no TLS (x.509) certificate", []};
                    nossl ->
                        {refused, none, "not a TLS-enabled connection", []}
                end,
-    rabbit_log:debug("auth mechanism TLS extracted username '~s' from peer certificate", [Username]),
     #state{username = Username}.
 
 handle_response(_Response, #state{username = Username}) ->
