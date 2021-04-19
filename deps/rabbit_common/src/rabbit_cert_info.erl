@@ -114,8 +114,8 @@ sanitize_other_name(Bin) when is_binary(Bin) ->
     %% but ASN.1 decoding functions in OTP only offer so much and SAN values
     %% are expected to be "string-like" by RabbitMQ
     case 'OTP-PUB-KEY':decode('DirectoryString', Bin) of
-        {ok, {utf8String, Val}} -> Val;
-        Other                   -> Other
+        {ok, {_, Val}} -> Val;
+        Other          -> Other
     end.
 
 %% Format and rdnSequence as a RFC4514 subject string.
