@@ -1,6 +1,7 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("@bazel-erlang//:github.bzl", "github_bazel_erlang_lib")
+load("@bazel-erlang//:hex_archive.bzl", "hex_archive")
 load("@bazel-erlang//:hex_pm.bzl", "hex_pm_bazel_erlang_lib")
 load("//:rabbitmq.bzl", "APP_VERSION")
 
@@ -46,6 +47,22 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     github_bazel_erlang_lib(
         name = "cuttlefish",
         org = "Kyorai",
+    )
+
+    http_archive(
+        name = "emqttc",
+        urls = ["https://github.com/rabbitmq/emqttc/archive/remove-logging.zip"],
+        strip_prefix = "emqttc-remove-logging",
+        build_file_content = """load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+
+erlang_lib(
+    app_name = "emqttc",
+    erlc_opts = [
+        "+warn_export_all",
+        "+warn_unused_import",
+    ],
+)
+""",
     )
 
     hex_pm_bazel_erlang_lib(
@@ -134,13 +151,11 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         ],
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_archive(
         name = "ranch",
-        first_srcs = [
-            "src/ranch_transport.erl",
-        ],
         version = "2.0.0",
         sha256 = "c20a4840c7d6623c19812d3a7c828b2f1bd153ef0f124cb69c54fe51d8a42ae0",
+        build_file = rabbitmq_workspace + "//:BUILD.ranch",
     )
 
     hex_pm_bazel_erlang_lib(
