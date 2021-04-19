@@ -52,6 +52,7 @@ case "$erlang_version" in
 esac
 
 install_essentials() {
+  apt-get -qq update
   apt-get -qq install wget curl gnupg
 }
 
