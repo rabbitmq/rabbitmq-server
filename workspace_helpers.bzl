@@ -49,6 +49,22 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         org = "Kyorai",
     )
 
+    http_archive(
+        name = "emqttc",
+        urls = ["https://github.com/rabbitmq/emqttc/archive/remove-logging.zip"],
+        strip_prefix = "emqttc-remove-logging",
+        build_file_content = """load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+
+erlang_lib(
+    app_name = "emqttc",
+    erlc_opts = [
+        "+warn_export_all",
+        "+warn_unused_import",
+    ],
+)
+""",
+    )
+
     github_bazel_erlang_lib(
         repo = "gen-batch-server",
         name = "gen_batch_server",
