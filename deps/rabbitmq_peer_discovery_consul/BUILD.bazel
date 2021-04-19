@@ -1,4 +1,3 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -10,15 +9,11 @@ load(
     "rabbitmq_lib",
 )
 
-APP_NAME = "rabbitmq_peer_discovery_common"
+APP_NAME = "rabbitmq_peer_discovery_consul"
 
-APP_DESCRIPTION = "Modules shared by various peer discovery backends"
+APP_DESCRIPTION = "Consult-based RabbitMQ peer discovery backend"
 
-APP_MODULE = "rabbit_peer_discovery_common_app"
-
-EXTRA_APPS = [
-    "inets",
-]
+APP_MODULE = "rabbitmq_peer_discovery_consul_app"
 
 BUILD_DEPS = [
     "@lager//:bazel_erlang_lib",
@@ -26,18 +21,11 @@ BUILD_DEPS = [
 
 DEPS = [
     "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbitmq_peer_discovery_common:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
     "//deps/rabbit:bazel_erlang_lib",
-]
-
-ERLC_OPTS = RABBITMQ_ERLC_OPTS + [
-    "-I deps/rabbitmq_peer_discovery_common",
-]
-
-TEST_ERLC_OPTS = RABBITMQ_TEST_ERLC_OPTS + [
-    "-I deps/rabbitmq_peer_discovery_common",
 ]
 
 rabbitmq_lib(
@@ -46,9 +34,6 @@ rabbitmq_lib(
     app_name = APP_NAME,
     app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
-    erlc_opts = ERLC_OPTS,
-    extra_apps = EXTRA_APPS,
-    test_erlc_opts = TEST_ERLC_OPTS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
@@ -72,12 +57,12 @@ ct_suite(
         "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
         "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     test_env = {
         "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_common/rabbitmq-for-tests-run",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_common/broker-for-tests-home/sbin/rabbitmqctl",
-        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_common/broker-for-tests-home/sbin/rabbitmq-plugins",
+        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_consul/rabbitmq-for-tests-run",
+        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_consul/broker-for-tests-home/sbin/rabbitmqctl",
+        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_consul/broker-for-tests-home/sbin/rabbitmq-plugins",
     },
     tools = [
         ":rabbitmq-for-tests-run",
@@ -87,6 +72,21 @@ ct_suite(
         "//deps/rabbitmq_cli:rabbitmqctl",
         "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+    ],
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
+)
+
+ct_suite(
+    name = "rabbitmq_peer_discovery_consul_SUITE",
+    size = "small",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    test_env = {
+        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+    },
+    runtime_deps = [
+        "@meck//:bazel_erlang_lib",
     ],
     deps = [
         "@lager//:bazel_erlang_lib",
