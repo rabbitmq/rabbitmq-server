@@ -51,6 +51,10 @@ case "$erlang_version" in
     ;;
 esac
 
+install_essentials() {
+  apt-get -qq install wget curl gnupg
+}
+
 setup_backports() {
   # Enable backports.
   cat >/etc/apt/sources.list.d/backports.list << EOF
@@ -223,6 +227,7 @@ EOF
 # Main.
 # --------------------------------------------------------------------
 
+install_essentials
 setup_backports
 
 # Install Erlang + various tools.
