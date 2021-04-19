@@ -23,7 +23,7 @@
 
 -export_type([certificate/0]).
 
--type certificate() :: #'OTPCertificate'{}.
+-type certificate() :: public_key:der_encoded().
 
 %%--------------------------------------------------------------------------
 %% High-level functions used by reader
