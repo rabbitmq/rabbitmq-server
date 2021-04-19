@@ -102,8 +102,8 @@ variable "erlang_version_to_system" {
     "23.0"   = "debian-stretch"
     "23.1"   = "debian-stretch"
     "23.2"   = "debian-stretch"
-    "23.3"   = "debian-stretch"
-    "24.0"   = "debian-stretch"
+    "23.3"   = "debian-buster"
+    "24.0"   = "debian-buster"
   }
 }
 
@@ -117,48 +117,46 @@ variable "ec2_instance_types" {
 variable "amis" {
   type = map
   default = {
-    "centos-6"            = "ami-051b1563"
-    "centos-7"            = "ami-061b1560"
-    "debian-wheezy"       = "ami-61e56916"
-    "debian-jessie"       = "ami-3291be54"
-    "debian-stretch"      = "ami-907f9ae9"
-    "fedora-24"           = "ami-415ec132" # Community image.
-    "fedora-25"           = "ami-ffe8b88c" # Community image.
-    "fedora-26"           = "ami-aac928d3" # Community image.
-    "freebsd-10"          = "ami-809012f3"
-    "freebsd-11"          = "ami-ab56bed2"
-    "opensuse-leap-42.2"  = "ami-8bfda0ed"
-    "rhel-6"              = "ami-c1bb06b2"
-    "rhel-7.0"            = "ami-8cff51fb"
-    "rhel-7.1"            = "ami-25158352"
-    "rhel-7.2"            = "ami-8b8c57f8"
-    "sles-11"             = "ami-a2baf5d5"
-    "sles-12"             = "ami-f4278487"
-    "ubuntu-12.04"        = "ami-ee0b0688" # Community image.
-    "ubuntu-14.04"        = "ami-78648501"
-    "ubuntu-16.04"        = "ami-841ffefd"
-    "ubuntu-16.10"        = "ami-8ea14ff7" # Community image.
-    "ubuntu-17.04"        = "ami-9f8228e6" # Community image.
-    "ubuntu-17.10"        = "ami-5815a221" # Community image.
+    "centos-7"           = "ami-6e28b517"
+    "centos-8"           = "ami-0645e7b5435a343a5" # Community-provided
+    "debian-buster"      = "ami-02498d1ddb8cc6a86" # Community-provided
+    "fedora-30"          = "ami-0c8df718af40abdae"
+    "fedora-31"          = "ami-00d8194a6e394e1c5"
+    "fedora-32"          = "ami-0f17c0eb4a2e08778"
+    "fedora-33"          = "ami-0aa3a65f84cb982ca"
+    "freebsd-10"         = "ami-76f82c0f"
+    "freebsd-11"         = "ami-ab56bed2"
+    "opensuse-leap-15.1" = "ami-0f81506cab2b62029"
+    "opensuse-leap-15.2" = "ami-013f2b687f5a91567"
+    "rhel-7"             = "ami-8b8c57f8"
+    "sles-11"            = "ami-a2baf5d5"
+    "sles-12"            = "ami-f4278487"
+    "ubuntu-16.04"       = "ami-067b6923c66564bf6"
+    "ubuntu-18.04"       = "ami-01cca82393e531118"
+    "ubuntu-20.04"       = "ami-09376517f0f510ad9"
   }
 }
 
 variable "usernames" {
   type = map
   default = {
-    "centos-6"           = "centos"
     "centos-7"           = "centos"
-    "debian-wheezy"      = "admin"
-    "debian-jessie"      = "admin"
-    "debian-stretch"     = "admin"
-    "fedora-24"          = "fedora"
-    "fedora-25"          = "fedora"
-    "fedora-26"          = "fedora"
-    "ubuntu-12.04"       = "ubuntu"
-    "ubuntu-14.04"       = "ubuntu"
+    "centos-8"           = "centos"
+    "debian-buster"      = "admin"
+    "debian-bullseye"    = "admin"
+    "fedora-30"          = "fedora"
+    "fedora-31"          = "fedora"
+    "fedora-32"          = "fedora"
+    "fedora-33"          = "fedora"
+    "freebsd-10"         = "ec2-user"
+    "freebsd-11"         = "ec2-user"
+    "opensuse-leap-15.1" = "ec2-user"
+    "opensuse-leap-15.2" = "ec2-user"
+    "rhel-7"             = "ec2-user"
+    "sles-11"            = "ec2-user"
+    "sles-12"            = "ec2-user"
     "ubuntu-16.04"       = "ubuntu"
-    "ubuntu-16.10"       = "ubuntu"
-    "ubuntu-17.04"       = "ubuntu"
-    "ubuntu-17.10"       = "ubuntu"
+    "ubuntu-18.04"       = "ubuntu"
+    "ubuntu-20.04"       = "ubuntu"
   }
 }

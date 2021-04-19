@@ -97,10 +97,10 @@ END {
 
 setup_erlang_deb_repository() {
   # Setup repository to get Erlang.
-  wget -O- https://www.rabbitmq.com/rabbitmq-release-signing-key.asc \
-    | apt-key add -
+  wget -O- https://www.rabbitmq.com/rabbitmq-release-signing-key.asc | apt-key add -
+  wget -O- https://dl.cloudsmith.io/public/rabbitmq/rabbitmq-erlang/gpg.E495BB49CC4BBE5B.key | apt-key add -
   cat >/etc/apt/sources.list.d/rabbitmq-erlang.list <<EOF
-deb https://dl.bintray.com/rabbitmq-erlang/debian stretch erlang elixir
+deb https://dl.cloudsmith.io/public/rabbitmq/rabbitmq-erlang/deb/debian buster main
 EOF
 
   # Configure Erlang version pinning.
@@ -131,30 +131,12 @@ Pin-Priority: 1000
 EOF
   fi
 
-  case "$debian_codename" in
-    wheezy)
-      # We don't install Elixir because we only use Debian Wheezy to
-      # run Erlang R16B03. This version of Erlang is only useful for
-      # RabbitMQ 3.6.x which doesn't depend on Elixir.
-      ;;
-    *)
-      apt-get -qq install -y --no-install-recommends \
-        elixir
-      ;;
-  esac
+  apt-get -qq install -y --no-install-recommends elixir
 }
 
 apt_install_extra() {
-  case "$debian_codename" in
-    wheezy)
-      readonly extra_pkgs='make rsync vim-nox zip'
-      readonly extra_backports='git'
-      ;;
-    *)
-      readonly extra_pkgs='git make rsync vim-nox xz-utils zip'
-      readonly extra_backports=''
-      ;;
-  esac
+  readonly extra_pkgs='git make rsync vim-nox xz-utils zip'
+  readonly extra_backports=''
 
   # shellcheck disable=SC2086
   test -z "$extra_pkgs" || \
