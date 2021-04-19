@@ -112,7 +112,7 @@ find_by_type(Type, {rdnSequence, RDNs}) ->
 sanitize_other_name(Bin) when is_binary(Bin) ->
     %% strip off leading values that seem to be ASN.1 UTF value encoding artifacts
     case Bin of
-        <<12, 14, Rest/binary>> -> Rest;
+        <<_:2/binary, Rest/binary>> -> Rest;
         Other                   -> Other
     end.
 
