@@ -49,6 +49,15 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         org = "Kyorai",
     )
 
+    hex_pm_bazel_erlang_lib(
+        name = "eetcd",
+        version = "0.3.3",
+        sha256 = "8fb280156ddd1b7b34d0f446c5711832385bff512c05378dcea8362f4f5060d6",
+        runtime_deps = [
+            "@gun//:bazel_erlang_lib",
+        ],
+    )
+
     http_archive(
         name = "emqttc",
         urls = ["https://github.com/rabbitmq/emqttc/archive/remove-logging.zip"],
@@ -78,6 +87,18 @@ erlang_lib(
         name = "goldrush",
         version = "0.1.9",
         sha256 = "99cb4128cffcb3227581e5d4d803d5413fa643f4eb96523f77d9e6937d994ceb",
+    )
+
+    hex_pm_bazel_erlang_lib(
+        name = "gun",
+        version = "1.3.3",
+        sha256 = "3106ce167f9c9723f849e4fb54ea4a4d814e3996ae243a1c828b256e749041e0",
+        first_srcs = [
+            "src/gun_content_handler.erl",
+        ],
+        runtime_deps = [
+            "@cowlib//:bazel_erlang_lib",
+        ],
     )
 
     http_archive(
