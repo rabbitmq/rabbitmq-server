@@ -325,13 +325,12 @@ init_terraform_dirs(Config, [{ConfigDir, DataDir} | Rest]) ->
           ],
     Cmd = [
            Terraform,
-           {"-chdir=~s", [ConfigDir]},
-           "init"
+           "init",
+           ConfigDir
           ],
     case rabbit_ct_helpers:exec(Cmd, [{env, Env}]) of
         {ok, _} -> init_terraform_dirs(Config, Rest);
-        {error, Code, Reason} ->
-            {skip, rabbit_misc:format("Failed to init Terraform. Exit code: ~p, message: ~s", [Code, Reason])}
+        _       -> {skip, "Failed to init Terraform"}
     end;
 init_terraform_dirs(Config, []) ->
     Config.
@@ -483,11 +482,12 @@ spawn_terraform_vms(Config) ->
           ],
     Cmd = [
            Terraform,
-           {"-chdir=~s", [TfConfigDir]},
            "apply",
            "-auto-approve=true",
            {"-state=~s", [TfState]}
-          ] ++ TfVarFlags,
+          ] ++ TfVarFlags ++ [
+           TfConfigDir
+          ],
     case rabbit_ct_helpers:exec(Cmd, [{env, Env}]) of
         {ok, _} ->
             Config1 = rabbit_ct_helpers:set_config(
@@ -514,11 +514,12 @@ destroy_terraform_vms(Config) ->
           ],
     Cmd = [
            Terraform,
-           {"-chdir=~s", [TfConfigDir]},
            "destroy",
            "-force",
            {"-state=~s", [TfState]}
-          ] ++ TfVarFlags,
+          ] ++ TfVarFlags ++ [
+           TfConfigDir
+          ],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]),
     Config.
 
@@ -656,12 +657,12 @@ do_poll_vms(Config, TRef) ->
           ],
     Cmd = [
            Terraform,
-           {"-chdir=~s", [TfConfigDir]},
            "apply",
            "-auto-approve=true",
            {"-state=~s", [TfState]},
            {"-var=uuid=~s", [Uuid]},
-           {"-var=erlang_nodename=~s", [?ERLANG_REMOTE_NODENAME]}
+           {"-var=erlang_nodename=~s", [?ERLANG_REMOTE_NODENAME]},
+           TfConfigDir
           ],
     case rabbit_ct_helpers:exec(Cmd, [{env, Env}]) of
         {ok, _} -> ensure_instance_count(Config, TRef);

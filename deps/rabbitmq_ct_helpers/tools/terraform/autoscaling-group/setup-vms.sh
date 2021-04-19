@@ -114,11 +114,11 @@ list_dirs_to_upload() {
 }
 
 init_terraform() {
-  terraform -chdir="$terraform_dir" init
+  terraform init "$terraform_dir"
 }
 
 start_vms() {
-  terraform -chdir "$terraform_dir" apply \
+  terraform apply \
     -auto-approve=true \
     -var="erlang_version=$erlang_branch" \
     -var="elixir_version=$elixir_version" \
@@ -127,11 +127,12 @@ start_vms() {
     -var="ssh_key=$ssh_key" \
     -var="instance_count=$instance_count" \
     -var="instance_name_prefix=\"$instance_name_prefix\"" \
-    -var="upload_dirs_archive=$dirs_archive"
+    -var="upload_dirs_archive=$dirs_archive" \
+    "$terraform_dir"
 }
 
 destroy_vms() {
-  terraform -chdir "$terraform_dir" destroy \
+  terraform destroy \
     -force \
     -var="erlang_version=$erlang_branch" \
     -var="elixir_version=$elixir_version" \
