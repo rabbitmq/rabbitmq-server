@@ -134,7 +134,7 @@ start_vms() {
 
 destroy_vms() {
   terraform destroy \
-    -force \
+    -auto-approve=true \
     -var="erlang_version=$erlang_branch" \
     -var="elixir_version=$elixir_version" \
     -var="erlang_git_ref=$erlang_git_ref" \

@@ -515,7 +515,7 @@ destroy_terraform_vms(Config) ->
     Cmd = [
            Terraform,
            "destroy",
-           "-force",
+           "-auto-approve=true",
            {"-state=~s", [TfState]}
           ] ++ TfVarFlags ++ [
            TfConfigDir
