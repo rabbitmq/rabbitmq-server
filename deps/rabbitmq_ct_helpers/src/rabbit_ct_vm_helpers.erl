@@ -516,7 +516,7 @@ destroy_terraform_vms(Config) ->
            Terraform,
            {"-chdir=~s", [TfConfigDir]},
            "destroy",
-           "-auto-approve=true",
+           "-force",
            {"-state=~s", [TfState]}
           ] ++ TfVarFlags,
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]),
