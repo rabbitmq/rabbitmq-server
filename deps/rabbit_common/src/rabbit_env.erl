@@ -1727,14 +1727,35 @@ is_sh_function(Line, Lines) ->
     andalso
     re:run(hd(Lines), "^\\s*\\{\\s*$", [{capture, none}]) =:= match.
 
-parse_sh_literal("'" ++ SingleQuoted, Lines, Literal) ->
+parse_sh_literal([$' | SingleQuoted], Lines, Literal) ->
     parse_single_quoted_literal(SingleQuoted, Lines, Literal);
-parse_sh_literal("\"" ++ DoubleQuoted, Lines, Literal) ->
+parse_sh_literal([$" | DoubleQuoted], Lines, Literal) ->
     parse_double_quoted_literal(DoubleQuoted, Lines, Literal);
-parse_sh_literal("$'" ++ DollarSingleQuoted, Lines, Literal) ->
+parse_sh_literal([$$, $' | DollarSingleQuoted], Lines, Literal) ->
     parse_dollar_single_quoted_literal(DollarSingleQuoted, Lines, Literal);
+parse_sh_literal([], Lines, Literal) ->
+    %% We reached the end of the literal.
+    {lists:reverse(Literal), Lines};
 parse_sh_literal(Unquoted, Lines, Literal) ->
-    {lists:reverse(Literal) ++ Unquoted, Lines}.
+    parse_unquoted_literal(Unquoted, Lines, Literal).
+
+parse_unquoted_literal([$\\], [Line | Lines], Literal) ->
+    %% The newline character is escaped: it means line continuation.
+    parse_unquoted_literal(Line, Lines, Literal);
+parse_unquoted_literal([$\\, C | Rest], Lines, Literal) ->
+    %% This is an escaped character, so we "eat" the two characters but append
+    %% only the escaped one.
+    parse_unquoted_literal(Rest, Lines, [C | Literal]);
+parse_unquoted_literal([C | _] = Rest, Lines, Literal)
+  when C =:= $' orelse C =:= $" ->
+    %% We reached the end of the unquoted literal and the beginning of a quoted
+    %% literal. Both are concatenated.
+    parse_sh_literal(Rest, Lines, Literal);
+parse_unquoted_literal([C | Rest], Lines, Literal) ->
+    parse_unquoted_literal(Rest, Lines, [C | Literal]);
+parse_unquoted_literal([], Lines, Literal) ->
+    %% We reached the end of the unquoted literal.
+    parse_sh_literal([], Lines, Literal).
 
 parse_single_quoted_literal([$' | Rest], Lines, Literal) ->
     %% We reached the closing single quote.
@@ -1747,6 +1768,14 @@ parse_single_quoted_literal([], [Line | Lines], Literal) ->
 parse_single_quoted_literal([C | Rest], Lines, Literal) ->
     parse_single_quoted_literal(Rest, Lines, [C | Literal]).
 
+parse_double_quoted_literal([$\\], [Line | Lines], Literal) ->
+    %% The newline character is escaped: it means line continuation.
+    parse_double_quoted_literal(Line, Lines, Literal);
+parse_double_quoted_literal([$\\, C | Rest], Lines, Literal)
+  when C =:= $$ orelse C =:= $` orelse C =:= $" orelse C =:= $\\ ->
+    %% This is an escaped character, so we "eat" the two characters but append
+    %% only the escaped one.
+    parse_double_quoted_literal(Rest, Lines, [C | Literal]);
 parse_double_quoted_literal([$" | Rest], Lines, Literal) ->
     %% We reached the closing double quote.
     parse_sh_literal(Rest, Lines, Literal);
@@ -1758,6 +1787,59 @@ parse_double_quoted_literal([], [Line | Lines], Literal) ->
 parse_double_quoted_literal([C | Rest], Lines, Literal) ->
     parse_double_quoted_literal(Rest, Lines, [C | Literal]).
 
+-define(IS_OCTAL(C), C >= $0 andalso C < $8).
+-define(IS_HEX(C),
+        (C >= $0 andalso C =< $9) orelse
+        (C >= $a andalso C =< $f) orelse
+        (C >= $A andalso C =< $F)).
+
+parse_dollar_single_quoted_literal([$\\, C1, C2, C3 | Rest], Lines, Literal)
+  when ?IS_OCTAL(C1) andalso ?IS_OCTAL(C2) andalso ?IS_OCTAL(C3) ->
+    %% An octal-based escaped character.
+    C = octal_to_character([C1, C2, C3]),
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]);
+parse_dollar_single_quoted_literal([$\\, $x, C1, C2 | Rest], Lines, Literal)
+  when ?IS_HEX(C1) andalso ?IS_HEX(C2) ->
+    %% A hex-based escaped character.
+    C = hex_to_character([C1, C2]),
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]);
+parse_dollar_single_quoted_literal([$\\, $u,
+                                    C1, C2, C3, C4 | Rest],
+                                   Lines, Literal)
+  when ?IS_HEX(C1) andalso ?IS_HEX(C2) andalso
+       ?IS_HEX(C3) andalso ?IS_HEX(C4) ->
+    %% A hex-based escaped character.
+    C = hex_to_character([C1, C2, C3, C4]),
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]);
+parse_dollar_single_quoted_literal([$\\, $U,
+                                    C1, C2, C3, C4,
+                                    C5, C6, C7, C8 | Rest],
+                                   Lines, Literal)
+  when ?IS_HEX(C1) andalso ?IS_HEX(C2) andalso
+       ?IS_HEX(C3) andalso ?IS_HEX(C4) andalso
+       ?IS_HEX(C5) andalso ?IS_HEX(C6) andalso
+       ?IS_HEX(C7) andalso ?IS_HEX(C8) ->
+    %% A hex-based escaped character.
+    C = hex_to_character([C1, C2, C3, C4, C5, C6, C7, C8]),
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]);
+parse_dollar_single_quoted_literal([$\\, C1 | Rest], Lines, Literal)
+  when C1 =:= $a orelse
+       C1 =:= $b orelse
+       C1 =:= $e orelse
+       C1 =:= $E orelse
+       C1 =:= $f orelse
+       C1 =:= $n orelse
+       C1 =:= $r orelse
+       C1 =:= $t orelse
+       C1 =:= $v orelse
+       C1 =:= $\\ orelse
+       C1 =:= $' orelse
+       C1 =:= $" orelse
+       C1 =:= $? ->
+    %% This is an escaped character, so we "eat" the two characters but append
+    %% only the escaped one.
+    C = esc_to_character(C1),
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]);
 parse_dollar_single_quoted_literal([$'], Lines, Literal) ->
     %% We reached the closing single quote.
     {lists:reverse(Literal), Lines};
@@ -1768,6 +1850,37 @@ parse_dollar_single_quoted_literal([], [Line | Lines], Literal) ->
     parse_dollar_single_quoted_literal(Line, Lines, [$\n | Literal]);
 parse_dollar_single_quoted_literal([C | Rest], Lines, Literal) ->
     parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]).
+
+octal_to_character(List) ->
+    octal_to_character(List, 0).
+
+octal_to_character([D | Rest], C) when ?IS_OCTAL(D) ->
+    octal_to_character(Rest, C * 8 + D - $0);
+octal_to_character([], C) ->
+    C.
+
+hex_to_character(List) ->
+    hex_to_character(List, 0).
+
+hex_to_character([D | Rest], C) ->
+    hex_to_character(Rest, C * 16 + hex_to_int(D));
+hex_to_character([], C) ->
+    C.
+
+hex_to_int(C) when C >= $0 andalso C =< $9 -> C - $0;
+hex_to_int(C) when C >= $a andalso C =< $f -> 10 + C - $a;
+hex_to_int(C) when C >= $A andalso C =< $F -> 10 + C - $A.
+
+esc_to_character($a) -> 7;   % Bell
+esc_to_character($b) -> 8;   % Backspace
+esc_to_character($e) -> 27;  % Esc
+esc_to_character($E) -> 27;  % Esc
+esc_to_character($f) -> 12;  % Form feed
+esc_to_character($n) -> $\n; % Newline
+esc_to_character($r) -> 13;  % Carriage return
+esc_to_character($t) -> 9;   % Horizontal tab
+esc_to_character($v) -> 11;  % Vertical tab
+esc_to_character(C)  -> C.
 
 skip_sh_function(["}" | Lines], Vars) ->
     parse_conf_env_file_output2(Lines, Vars);

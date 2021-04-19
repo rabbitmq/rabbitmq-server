@@ -1087,13 +1087,42 @@ check_parse_conf_env_file_output(_) ->
          #{}
         )),
     ?assertEqual(
+       #{"DOUBLE_QUOTED" => "\\' \" \\v",
+         "SINGLE_DOLLAR" => "' \" \\ \007 z z z z"},
+       rabbit_env:parse_conf_env_file_output2(
+         ["DOUBLE_QUOTED=\"\\' \\\" \\v\"",
+          "SINGLE_DOLLAR=$'\\' \\\" \\\\ \\a \\172 \\x7a \\u007A \\U0000007a'"
+         ],
+         #{}
+        )),
+    ?assertEqual(
        #{"A" => "a",
          "B" => "b",
-         "MULTI_LINE" => "\n'foobar'"},
+         "SINGLE_QUOTED_MULTI_LINE" => "\n'foobar'",
+         "DOUBLE_QUOTED_MULTI_LINE" => "Line1\nLine2"},
        rabbit_env:parse_conf_env_file_output2(
          ["A=a",
-          "MULTI_LINE='",
+          "SINGLE_QUOTED_MULTI_LINE='",
           "'\"'\"'foobar'\"'\"",
+          "DOUBLE_QUOTED_MULTI_LINE=\"Line1",
+          "Line\\",
+          "2\"",
           "B=b"],
+         #{}
+        )),
+    ?assertEqual(
+       #{"shellHook" =>
+         "\n"
+         "function isShellInteractive {\n"
+         "  # shell is interactive if $- contains 'i'\n"
+         "  [[ $- == *i* ]]\n"
+         "}\n"},
+       rabbit_env:parse_conf_env_file_output2(
+         ["shellHook='",
+          "function isShellInteractive {",
+          "  # shell is interactive if $- contains '\\''i'\\''",
+          "  [[ $- == *i* ]]",
+          "}",
+          "'"],
          #{}
         )).
