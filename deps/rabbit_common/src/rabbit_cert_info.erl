@@ -110,9 +110,11 @@ find_by_type(Type, {rdnSequence, RDNs}) ->
 %%--------------------------------------------------------------------------
 
 sanitize_other_name(Bin) when is_binary(Bin) ->
-    %% strip off leading values that seem to be ASN.1 UTF value encoding artifacts
-    case Bin of
-        <<_:2/binary, Rest/binary>> -> Rest;
+    %% We make a wild assumption about the types here
+    %% but ASN.1 decoding functions in OTP only offer so much and SAN values
+    %% are expected to be "string-like" by RabbitMQ
+    case 'OTP-PUB-KEY':decode('DirectoryString', Bin) of
+        {ok, {utf8String, Val}} -> Val;
         Other                   -> Other
     end.
 
