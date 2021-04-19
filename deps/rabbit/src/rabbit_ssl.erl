@@ -28,6 +28,8 @@
               {ssl_cipher_format, suite_map_to_openssl_str, 1},
               {ssl_cipher_format, suite_map_to_bin, 1}]).
 
+-dialyzer({nowarn_function, peer_cert_auth_name/2}).
+
 -type certificate() :: rabbit_cert_info:certificate().
 
 -type cipher_suites_mode() :: default | all | anonymous.

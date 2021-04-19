@@ -25,6 +25,10 @@
 
 -type certificate() :: public_key:der_encoded().
 
+%% x.509 certificate extensions usually look like key/value pairs but can
+%% be just about any value
+-type certificate_extension_value() :: any().
+
 %%--------------------------------------------------------------------------
 %% High-level functions used by reader
 %%--------------------------------------------------------------------------
@@ -68,7 +72,7 @@ extensions(Cert) ->
                       Extensions
               end, Cert).
 
--spec subject_alternative_names(certificate()) -> [{atom(), string()}].
+-spec subject_alternative_names(certificate()) -> [certificate_extension_value()].
 subject_alternative_names(Cert) ->
     Extensions = extensions(Cert),
     try lists:keyfind(?'id-ce-subjectAltName', #'Extension'.extnID, Extensions) of
