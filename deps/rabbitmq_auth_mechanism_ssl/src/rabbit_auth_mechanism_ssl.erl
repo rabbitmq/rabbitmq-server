@@ -50,9 +50,6 @@ init(Sock) ->
                            unsafe    -> {refused, none, "TLS configuration is unsafe", []};
                            not_found -> {refused, none, "no name found", []};
                            Name      ->
-                               %% strip any leading and trailing newlines, we assume that they are never
-                               %% added intentionally. For SANS of type otherName, the Erlang ASN.1/public key parser
-                               %% seems to add some in certain cases
                                Val = rabbit_data_coercion:to_binary(Name),
                                rabbit_log:debug("auth mechanism TLS extracted username '~s' from peer certificate", [Val]),
                                Val
