@@ -73,33 +73,10 @@ cipher_suites_openssl(Mode, Version) ->
 
 
 format_cipher_erlang(Cipher) ->
-  case erlang:function_exported(ssl_cipher_format, suite_map_to_bin, 1) of
-      true ->
-          format_cipher_erlang22(Cipher);
-      false ->
-          format_cipher_erlang21(Cipher)
-  end.
-
-format_cipher_erlang22(Cipher) ->
   ssl_cipher_format:suite_legacy(ssl_cipher_format:suite_map_to_bin(Cipher)).
 
-format_cipher_erlang21(Cipher) ->
-  ssl_cipher_format:erl_suite_definition(ssl_cipher_format:suite(Cipher)).
-
-
 format_cipher_openssl(Cipher) ->
-    case erlang:function_exported(ssl_cipher_format, suite_map_to_bin, 1) of
-      true ->
-        format_cipher_openssl22(Cipher);
-      false ->
-        format_cipher_openssl21(Cipher)
-    end.
-
-format_cipher_openssl22(Cipher) ->
     ssl_cipher_format:suite_map_to_openssl_str(Cipher).
-
-format_cipher_openssl21(Cipher) ->
-    ssl_cipher_format:suite_to_str(Cipher).
 
 -spec get_highest_protocol_version() -> tls_record:tls_atom_version().
 get_highest_protocol_version() ->
