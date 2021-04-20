@@ -26,8 +26,14 @@ intercept(#'basic.publish'{} = Method, Content, _IState) ->
     Content2 = Content#content{payload_fragments_rev = []},
     {Method, Content2};
 
+%% Use 'queue.declare' to test #amqp_error{} handling
+intercept(#'queue.declare'{queue = <<"failing-q">>}, _Content, _IState) ->
+    rabbit_misc:amqp_error(
+        'precondition_failed', "operation not allowed", [],
+        'queue.declare');
+
 intercept(Method, Content, _VHost) ->
     {Method, Content}.
 
 applies_to() ->
-    ['basic.publish'].
+    ['basic.publish', 'queue.declare'].
