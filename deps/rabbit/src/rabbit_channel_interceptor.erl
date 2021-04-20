@@ -29,7 +29,7 @@
 -callback init(rabbit_channel:channel()) -> interceptor_state().
 -callback intercept(original_method(), original_content(),
                     interceptor_state()) ->
-    {processed_method(), processed_content()} |
+    {processed_method(), processed_content()} | rabbit_types:amqp_error() |
     rabbit_misc:channel_or_connection_exit().
 -callback applies_to() -> list(method_name()).
 
@@ -88,7 +88,9 @@ validate_response(Mod, M1, C1, R = {M2, C2}) ->
                                 "content iff content is provided but "
                                 "content in = ~p; content out = ~p",
                            [Mod, C1, C2])
-    end.
+    end;
+validate_response(_Mod, _M1, _C1, AMQPError = #amqp_error{}) ->
+    internal_error(AMQPError).
 
 validate_method(M, M2) ->
     rabbit_misc:method_record_type(M) =:= rabbit_misc:method_record_type(M2).
@@ -98,6 +100,12 @@ validate_content(#content{}, #content{}) -> true;
 validate_content(_, _) -> false.
 
 %% keep dialyzer happy
--spec internal_error(string(), [any()]) -> no_return().
+-spec internal_error(rabbit_types:amqp_error()) ->
+  rabbit_misc:channel_or_connection_exit().
+internal_error(AMQPError = #amqp_error{}) ->
+    rabbit_misc:protocol_error(AMQPError).
+
+-spec internal_error(string(), [any()]) ->
+  rabbit_misc:channel_or_connection_exit().
 internal_error(Format, Args) ->
     rabbit_misc:protocol_error(internal_error, Format, Args).
