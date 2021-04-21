@@ -105,24 +105,57 @@ trace(X, Msg = #basic_message{content = #content{payload_fragments_rev = PFR}},
 msg_to_table(#basic_message{exchange_name = #resource{name = XName},
                             routing_keys  = RoutingKeys,
                             content       = Content}) ->
-    #content{properties = Props} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
-    {PropsTable, _Ix} =
-        lists:foldl(fun (K, {L, Ix}) ->
-                            V = element(Ix, Props),
-                            NewL = case V of
-                                       undefined -> L;
-                                       _         -> [{a2b(K), type(V), V} | L]
-                                   end,
-                            {NewL, Ix + 1}
-                    end, {[], 2}, record_info(fields, 'P_basic')),
-    [{<<"exchange_name">>, longstr, XName},
-     {<<"routing_keys">>,  array,   [{longstr, K} || K <- RoutingKeys]},
-     {<<"properties">>,    table,   PropsTable},
-     {<<"node">>,          longstr, a2b(node())}].
+    #content{properties = Props} = rabbit_binary_parser:ensure_content_decoded(Content),
+    #'P_basic'{
+        content_type = CT,
+        content_encoding = CE,
+        headers = Headers,
+        delivery_mode = DMode,
+        priority = Pr,
+        correlation_id = CorrId,
+        reply_to = ReplyTo,
+        expiration = Exp,
+        message_id = MsgId,
+        timestamp = Ts,
+        type = Type,
+        user_id = UserId,
+        app_id = AppId,
+        cluster_id = ClusterId
+    } = Props,
 
-a2b(A) -> list_to_binary(atom_to_list(A)).
+    PropsTable0  = [],
+    PropsTable1  = append_property(content_type, CT, PropsTable0),
+    PropsTable2  = append_property(content_encoding, CE, PropsTable1),
+    PropsTable3  = append_property(headers, Headers, PropsTable2),
+    PropsTable4  = append_property(delivery_mode, DMode, PropsTable3),
+    PropsTable5  = append_property(priority, Pr, PropsTable4),
+    PropsTable6  = append_property(correlation_id, CorrId, PropsTable5),
+    PropsTable7  = append_property(reply_to, ReplyTo, PropsTable6),
+    PropsTable8  = append_property(expiration, Exp, PropsTable7),
+    PropsTable9  = append_property(message_id, MsgId, PropsTable8),
+    PropsTable10 = append_property(timestamp, Ts, PropsTable9),
+    PropsTable11 = append_property(type, Type, PropsTable10),
+    PropsTable12 = append_property(user_id, UserId, PropsTable11),
+    PropsTable13 = append_property(app_id, AppId, PropsTable12),
+    PropsTable14 = append_property(cluster_id, ClusterId, PropsTable13),
 
-type(V) when is_list(V)    -> table;
-type(V) when is_integer(V) -> signedint;
-type(_V)                   -> longstr.
+    [
+        {<<"exchange_name">>, longstr, XName},
+        {<<"routing_keys">>,  array,   [{longstr, K} || K <- RoutingKeys]},
+        {<<"properties">>,    table,   PropsTable14},
+        {<<"node">>,          longstr, rabbit_data_coercion:to_binary(node())}
+    ].
+
+append_property(_Key, undefined, PropsTable) ->
+    PropsTable;
+append_property(Key = headers, Val, PropsTable) ->
+    [{rabbit_data_coercion:to_binary(Key), table, Val} | PropsTable];
+append_property(timestamp, Val, PropsTable) ->
+    [
+        %% TODO: should timestamp_in_ms added?
+        {<<"timestamp">>, long, Val} | PropsTable
+    ];
+append_property(Key, Val, PropsTable) when is_integer(Val) ->
+    [{rabbit_data_coercion:to_binary(Key), signedint, Val} | PropsTable];
+append_property(Key, Val, PropsTable) ->
+    [{rabbit_data_coercion:to_binary(Key), longstr, Val} | PropsTable].
