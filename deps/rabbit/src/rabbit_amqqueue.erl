@@ -504,7 +504,7 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
         [{_, Q, false} = Queue | Queues] = All when length(All) > MaxQueuesDesired ->
             Name = amqqueue:get_name(Q),
             Module = rebalance_module(Q),
-            Candidates = rabbit_maintenance:filter_out_drained_nodes_consistent_read(Module:get_replicas(Q) -- [N]),
+            Candidates = rabbit_maintenance:filter_out_drained_nodes_local_read(Module:get_replicas(Q) -- [N]),
             case Candidates of
                 [] ->
                     {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)};
