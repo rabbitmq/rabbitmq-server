@@ -104,6 +104,7 @@
 -define(TICK_TIMEOUT, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
+-define(TRANSFER_TIMEOUT, 60000).
 
 %%----------- rabbit_queue_type ---------------------------------------------
 
@@ -1173,7 +1174,7 @@ transfer_leadership(Q, Destination) ->
     {RaName, _} = Pid = amqqueue:get_pid(Q),
     case ra:transfer_leadership(Pid, {RaName, Destination}) of
         ok ->
-          case ra:members(Pid) of
+          case ra:members(Pid, ?TRANSFER_TIMEOUT) of
             {_, _, {_, NewNode}} ->
               {migrated, NewNode};
             {timeout, _} ->
