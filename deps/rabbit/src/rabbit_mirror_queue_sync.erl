@@ -288,6 +288,9 @@ wait_for_credit(SPids) ->
     end.
 
 wait_for_resources(Ref, SPids) ->
+    erlang:garbage_collect(),
+    % Probably bump_reduce_memory_use messages should be handled here as well,
+    % otherwise the BQ is not pushing messages to disk
     receive
         {conserve_resources, memory, false} ->
             SPids;
@@ -367,7 +370,11 @@ slave_sync_loop(Args = {Ref, MRef, Syncer, BQ, UpdateRamDuration, Parent},
         %% If the master throws an exception
         {'$gen_cast', {gm, {delete_and_terminate, Reason}}} ->
             BQ:delete_and_terminate(Reason, BQS),
-            {stop, Reason, {[], TRef, undefined}}
+            {stop, Reason, {[], TRef, undefined}};
+        bump_reduce_memory_use -> 
+            BQS1 = BQ:handle_info(bump_reduce_memory_use, BQS),
+            BQS2 = BQ:resume(BQS1),
+            slave_sync_loop(Args, {MA, TRef, BQS2})
     end.
 
 %% We are partitioning messages by the Unacked element in the tuple.
