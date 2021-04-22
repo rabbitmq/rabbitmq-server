@@ -368,10 +368,7 @@ run_prelaunch_second_phase() ->
     ?LOG_DEBUG("Starting Mnesia"),
     ok = mnesia:start(),
 
-    ?LOG_DEBUG(""),
-    ?LOG_DEBUG("== Prelaunch DONE =="),
-
-    ?LOG_DEBUG("Starting Ra Systems"),
+    ?LOG_DEBUG("Starting Ra systems"),
     Default = ra_system:default_config(),
     Quorum = Default#{name => quorum_queues},
                       % names => ra_system:derive_names(quorum)},
@@ -382,11 +379,24 @@ run_prelaunch_second_phase() ->
                      wal_max_size_bytes => ?COORD_WAL_MAX_SIZE_B,
                      names => ra_system:derive_names(coordination)},
 
+    MDStoreDir = filename:join(
+                   [rabbit_mnesia:dir(), "metadata_store", node()]),
+    MDStore = Default#{name => metadata_store,
+                       data_dir => MDStoreDir,
+                       wal_data_dir => MDStoreDir,
+                       wal_max_size_bytes => 1024 * 1024,
+                       names => ra_system:derive_names(metadata_store)},
+
     {ok, _} = ra_system:start(Quorum),
     {ok, _} = ra_system:start(Coord),
+    {ok, _} = ra_system:start(MDStore),
+    ?LOG_DEBUG("Ra systems started"),
+
+    ?LOG_DEBUG("Starting Khepri-based metadata store"),
+    rabbit_khepri:setup(Context),
 
     ?LOG_DEBUG(""),
-    ?LOG_DEBUG("== Ra System Start done DONE =="),
+    ?LOG_DEBUG("== Prelaunch DONE =="),
 
     case IsInitialPass of
         true  -> rabbit_prelaunch:initial_pass_finished();

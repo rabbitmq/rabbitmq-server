@@ -6,13 +6,18 @@
 %%
 
 -module(rabbit_auth_backend_internal).
+
+-include_lib("kernel/include/logger.hrl").
+
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
 
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
+         check_vhost_access/3, check_resource_access/4, check_topic_access/4,
+         with_user/2]).
 
 -export([add_user/3, delete_user/2, lookup_user/1, exists/1,
          change_password/3, clear_password/2,
@@ -60,6 +65,17 @@ hashing_module_for_user(User) ->
         "user '~s' attempted to log in with a blank password, which is prohibited by the internal authN backend. "
         "To use TLS/x509 certificate-based authentication, see the rabbitmq_auth_mechanism_ssl plugin and configure the client to use the EXTERNAL authentication mechanism. "
         "Alternatively change the password for the user to be non-blank.").
+
+with_user(Username, Thunk) ->
+    fun () ->
+            Path = khepri_user_path(Username),
+            case rabbit_khepri:get(Path) of
+                {ok, {object, _}, _} ->
+                    Thunk();
+                _ ->
+                    throw({no_such_user, Username})
+            end
+    end.
 
 %% For cases when we do not have a set of credentials,
 %% namely when x509 (TLS) certificates are used. This should only be
@@ -216,72 +232,109 @@ add_user_sans_validation(Username, Password, ActingUser) ->
     HashingMod = rabbit_password:hashing_mod(),
     PasswordHash = hash_password(HashingMod, Password),
     User = internal_user:create_user(Username, PasswordHash, HashingMod),
-    try
-        R = rabbit_misc:execute_mnesia_transaction(
-          fun () ->
-                  case mnesia:wread({rabbit_user, Username}) of
-                      [] ->
-                          ok = mnesia:write(rabbit_user, User, write);
-                      _ ->
-                          mnesia:abort({user_already_exists, Username})
-                  end
-          end),
-        rabbit_log:info("Created user '~s'", [Username]),
-        rabbit_event:notify(user_created, [{name, Username},
-                                           {user_who_performed_action, ActingUser}]),
-        R
-    catch
-        throw:{error, {user_already_exists, _}} = Error ->
+
+    %% MNESIA try
+    %% MNESIA     R = rabbit_misc:execute_mnesia_transaction(
+    %% MNESIA       fun () ->
+    %% MNESIA               case mnesia:wread({rabbit_user, Username}) of
+    %% MNESIA                   [] ->
+    %% MNESIA                       ok = mnesia:write(rabbit_user, User, write);
+    %% MNESIA                   _ ->
+    %% MNESIA                       mnesia:abort({user_already_exists, Username})
+    %% MNESIA               end
+    %% MNESIA       end),
+    %% MNESIA     rabbit_log:info("Created user '~s'", [Username]),
+    %% MNESIA     rabbit_event:notify(user_created, [{name, Username},
+    %% MNESIA                                        {user_who_performed_action, ActingUser}]),
+    %% MNESIA     R
+    %% MNESIA catch
+    %% MNESIA     throw:{error, {user_already_exists, _}} = Error ->
+    %% MNESIA         rabbit_log:warning("Failed to add user '~s': the user already exists", [Username]),
+    %% MNESIA         throw(Error);
+    %% MNESIA     throw:Error ->
+    %% MNESIA         rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
+    %% MNESIA         throw(Error);
+    %% MNESIA     exit:Error ->
+    %% MNESIA         rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
+    %% MNESIA         exit(Error)
+    %% MNESIA end .
+
+    Path = khepri_user_path(Username),
+    case rabbit_khepri:insert(Path, User, {if_exists, false}) of
+        {ok, _} ->
+            rabbit_log:info("Created user '~s'", [Username]),
+            rabbit_event:notify(user_created, [{name, Username},
+                                               {user_who_performed_action, ActingUser}]),
+            ok;
+        {error, node_exists} ->
             rabbit_log:warning("Failed to add user '~s': the user already exists", [Username]),
-            throw(Error);
-        throw:Error ->
+            throw({error, {user_already_exists, Username}});
+        {error, _} = Error ->
             rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
             throw(Error);
-        exit:Error ->
+        {timeout, _} = Error ->
             rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
-            exit(Error)
-    end .
+            throw(Error)
+    end.
 
 -spec delete_user(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
 
 delete_user(Username, ActingUser) ->
     rabbit_log:debug("Asked to delete user '~s'", [Username]),
-    try
-        R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_misc:with_user(
-            Username,
-            fun () ->
-                    ok = mnesia:delete({rabbit_user, Username}),
-                    [ok = mnesia:delete_object(
-                            rabbit_user_permission, R, write) ||
-                        R <- mnesia:match_object(
-                               rabbit_user_permission,
-                               #user_permission{user_vhost = #user_vhost{
-                                                  username = Username,
-                                                  virtual_host = '_'},
-                                                permission = '_'},
-                               write)],
-                    UserTopicPermissionsQuery = match_user_vhost_topic_permission(Username, '_'),
-                    UserTopicPermissions = UserTopicPermissionsQuery(),
-                    [ok = mnesia:delete_object(rabbit_topic_permission, R, write) || R <- UserTopicPermissions],
-                    ok
-            end)),
-        rabbit_log:info("Deleted user '~s'", [Username]),
-        rabbit_event:notify(user_deleted,
-                            [{name, Username},
-                             {user_who_performed_action, ActingUser}]),
-        R
-    catch
-        throw:{error, {no_such_user, _}} = Error ->
+    %% MNESIA try
+    %% MNESIA     R = rabbit_misc:execute_mnesia_transaction(
+    %% MNESIA       rabbit_misc:with_user(
+    %% MNESIA         Username,
+    %% MNESIA         fun () ->
+    %% MNESIA                 ok = mnesia:delete({rabbit_user, Username}),
+    %% MNESIA                 [ok = mnesia:delete_object(
+    %% MNESIA                         rabbit_user_permission, R, write) ||
+    %% MNESIA                     R <- mnesia:match_object(
+    %% MNESIA                            rabbit_user_permission,
+    %% MNESIA                            #user_permission{user_vhost = #user_vhost{
+    %% MNESIA                                               username = Username,
+    %% MNESIA                                               virtual_host = '_'},
+    %% MNESIA                                             permission = '_'},
+    %% MNESIA                            write)],
+    %% MNESIA                 UserTopicPermissionsQuery = match_user_vhost_topic_permission(Username, '_'),
+    %% MNESIA                 UserTopicPermissions = UserTopicPermissionsQuery(),
+    %% MNESIA                 [ok = mnesia:delete_object(rabbit_topic_permission, R, write) || R <- UserTopicPermissions],
+    %% MNESIA                 ok
+    %% MNESIA         end)),
+    %% MNESIA     rabbit_log:info("Deleted user '~s'", [Username]),
+    %% MNESIA     rabbit_event:notify(user_deleted,
+    %% MNESIA                         [{name, Username},
+    %% MNESIA                          {user_who_performed_action, ActingUser}]),
+    %% MNESIA     R
+    %% MNESIA catch
+    %% MNESIA     throw:{error, {no_such_user, _}} = Error ->
+    %% MNESIA         rabbit_log:warning("Failed to delete user '~s': the user does not exist", [Username]),
+    %% MNESIA         throw(Error);
+    %% MNESIA     throw:Error ->
+    %% MNESIA         rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
+    %% MNESIA         throw(Error);
+    %% MNESIA     exit:Error ->
+    %% MNESIA         rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
+    %% MNESIA         exit(Error)
+    %% MNESIA end .
+    Path = khepri_user_path(Username),
+    case rabbit_khepri:delete(Path) of
+        {ok, _} ->
+            rabbit_log:info("Deleted user '~s'", [Username]),
+            rabbit_event:notify(user_deleted,
+                                [{name, Username},
+                                 {user_who_performed_action, ActingUser}]),
+            ok;
+        {error, missing_node} ->
             rabbit_log:warning("Failed to delete user '~s': the user does not exist", [Username]),
-            throw(Error);
-        throw:Error ->
+            throw({error, {no_such_user, Username}});
+        {error, _} = Error ->
             rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
             throw(Error);
-        exit:Error ->
+        {timeout, _} = Error ->
             rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
             exit(Error)
-    end .
+    end.
 
 -spec lookup_user
         (rabbit_types:username()) ->
@@ -289,7 +342,15 @@ delete_user(Username, ActingUser) ->
             rabbit_types:error('not_found').
 
 lookup_user(Username) ->
-    rabbit_misc:dirty_read({rabbit_user, Username}).
+    %% MNESIA rabbit_misc:dirty_read({rabbit_user, Username}).
+
+    Path = khepri_user_path(Username),
+    case rabbit_khepri:get(Path) of
+        {ok, {object, User}, _} ->
+            {ok, User};
+        _ ->
+            {error, not_found}
+    end.
 
 -spec exists(rabbit_types:username()) -> boolean().
 
@@ -492,13 +553,32 @@ clear_permissions(Username, VirtualHost, ActingUser) ->
 
 
 update_user(Username, Fun) ->
-    rabbit_misc:execute_mnesia_transaction(
-      rabbit_misc:with_user(
-        Username,
-        fun () ->
-                {ok, User} = lookup_user(Username),
-                ok = mnesia:write(rabbit_user, Fun(User), write)
-        end)).
+    %% MNESIA rabbit_misc:execute_mnesia_transaction(
+    %% MNESIA   rabbit_misc:with_user(
+    %% MNESIA     Username,
+    %% MNESIA     fun () ->
+    %% MNESIA             {ok, User} = lookup_user(Username),
+    %% MNESIA             ok = mnesia:write(rabbit_user, Fun(User), write)
+    %% MNESIA     end)).
+    ?LOG_DEBUG("All users: ~p", [all_users()]),
+    Path = khepri_user_path(Username),
+    Ret = rabbit_khepri:get(Path),
+    ?LOG_DEBUG("Get user ret: ~p", [Ret]),
+    case Ret of
+        {ok, {object, User}, _} ->
+            ?LOG_DEBUG("User: ~p", [User]),
+            User1 = Fun(User),
+            case rabbit_khepri:insert(Path, User1, {if_matches, User}) of
+                {ok, _}                     -> ok;
+                {error, mismatching_object} -> update_user(Username, Fun);
+                {error, _} = Error          -> throw(Error);
+                {timeout, _} = Error        -> throw(Error)
+            end;
+        {error, _} = Error ->
+            throw(Error);
+        {timeout, _} = Error ->
+            throw(Error)
+    end.
 
 set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, ActingUser) ->
     rabbit_log:debug("Asked to set topic permissions on exchange '~s' for "
@@ -856,7 +936,13 @@ user_topic_perms_info_keys()       -> [vhost, exchange, write, read].
 vhost_topic_perms_info_keys()      -> [user, exchange, write, read].
 user_vhost_topic_perms_info_keys() -> [exchange, write, read].
 
-all_users() -> mnesia:dirty_match_object(rabbit_user, internal_user:pattern_match_all()).
+all_users() ->
+    %% MNESIA mnesia:dirty_match_object(rabbit_user, internal_user:pattern_match_all()).
+    Path = khepri_users_path(),
+    case rabbit_khepri:list(Path) of
+        {ok, Users, _} -> [User || {object, User} <- maps:values(Users)];
+        _              -> []
+    end.
 
 -spec list_users() -> [rabbit_types:infos()].
 
@@ -892,17 +978,24 @@ filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
         (rabbit_types:username()) -> [rabbit_types:infos()].
 
 list_user_permissions(Username) ->
+    %% MNESIA list_permissions(
+    %% MNESIA   user_perms_info_keys(),
+    %% MNESIA   rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
     list_permissions(
       user_perms_info_keys(),
-      rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
+      with_user(Username, match_user_vhost(Username, '_'))).
 
 -spec list_user_permissions
         (rabbit_types:username(), reference(), pid()) -> 'ok'.
 
 list_user_permissions(Username, Ref, AggregatorPid) ->
+    %% MNESIA list_permissions(
+    %% MNESIA   user_perms_info_keys(),
+    %% MNESIA   rabbit_misc:with_user(Username, match_user_vhost(Username, '_')),
+    %% MNESIA   Ref, AggregatorPid).
     list_permissions(
       user_perms_info_keys(),
-      rabbit_misc:with_user(Username, match_user_vhost(Username, '_')),
+      with_user(Username, match_user_vhost(Username, '_')),
       Ref, AggregatorPid).
 
 -spec list_vhost_permissions
@@ -963,8 +1056,10 @@ list_topic_permissions() ->
     list_topic_permissions(topic_perms_info_keys(), match_user_vhost_topic_permission('_', '_')).
 
 list_user_topic_permissions(Username) ->
+    %% MNESIA list_topic_permissions(user_topic_perms_info_keys(),
+    %% MNESIA     rabbit_misc:with_user(Username, match_user_vhost_topic_permission(Username, '_'))).
     list_topic_permissions(user_topic_perms_info_keys(),
-        rabbit_misc:with_user(Username, match_user_vhost_topic_permission(Username, '_'))).
+        with_user(Username, match_user_vhost_topic_permission(Username, '_'))).
 
 list_vhost_topic_permissions(VHost) ->
     list_topic_permissions(vhost_topic_perms_info_keys(),
@@ -1080,3 +1175,6 @@ notify_limit_clear(Username, ActingUser) ->
     rabbit_event:notify(user_limits_cleared,
         [{name, <<"limits">>}, {user_who_performed_action, ActingUser},
         {username, Username}]).
+
+khepri_users_path()        -> [?MODULE, users].
+khepri_user_path(Username) -> [?MODULE, users, Username].

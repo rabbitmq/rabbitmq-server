@@ -395,7 +395,8 @@ with(VHostName, Thunk) ->
 
 -spec with_user_and_vhost(rabbit_types:username(), vhost:name(), rabbit_misc:thunk(A)) -> A.
 with_user_and_vhost(Username, VHostName, Thunk) ->
-    rabbit_misc:with_user(Username, with(VHostName, Thunk)).
+    %% MNESIA rabbit_misc:with_user(Username, with(VHostName, Thunk)).
+    rabbit_auth_backend_internal:with_user(Username, with(VHostName, Thunk)).
 
 %% Like with/2 but outside an Mnesia tx
 
