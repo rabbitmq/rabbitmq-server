@@ -188,7 +188,7 @@ put_vhost(Name, Description, Tags0, Trace, Username) ->
         true  -> ok;
         false ->
             ParsedTags = parse_tags(Tags),
-            rabbit_log:debug("Parsed tags ~p to ~p", [Tags, ParsedTags]),
+            _ = rabbit_log:debug("Parsed tags ~p to ~p", [Tags, ParsedTags]),
             add(Name, Description, ParsedTags, Username),
              %% wait for up to 45 seconds for the vhost to initialise
              %% on all nodes
