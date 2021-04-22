@@ -287,8 +287,6 @@
 %% 100 ms
 -define(BOOT_STATUS_CHECK_INTERVAL, 100).
 
--define(COORD_WAL_MAX_SIZE_B, 64_000_000).
-
 %%----------------------------------------------------------------------------
 
 -type restart_type() :: 'permanent' | 'transient' | 'temporary'.
@@ -369,25 +367,14 @@ run_prelaunch_second_phase() ->
     ?LOG_DEBUG("Starting Mnesia"),
     ok = mnesia:start(),
 
+    ok = rabbit_ra_systems:setup(Context),
+
+    %% Khepri requires the "coordination" Ra system to be started by the
+    %% previous call, but will ensure it runs anyway.
+    ok = rabbit_khepri:setup(Context),
+
     ?LOG_DEBUG(""),
     ?LOG_DEBUG("== Prelaunch DONE =="),
-
-    ?LOG_DEBUG("Starting Ra Systems"),
-    Default = ra_system:default_config(),
-    Quorum = Default#{name => quorum_queues},
-                      % names => ra_system:derive_names(quorum)},
-    CoordDataDir = filename:join([rabbit_mnesia:dir(), "coordination", node()]),
-    Coord = Default#{name => coordination,
-                     data_dir => CoordDataDir,
-                     wal_data_dir => CoordDataDir,
-                     wal_max_size_bytes => ?COORD_WAL_MAX_SIZE_B,
-                     names => ra_system:derive_names(coordination)},
-
-    {ok, _} = ra_system:start(Quorum),
-    {ok, _} = ra_system:start(Coord),
-
-    ?LOG_DEBUG(""),
-    ?LOG_DEBUG("== Ra System Start done DONE =="),
 
     case IsInitialPass of
         true  -> rabbit_prelaunch:initial_pass_finished();

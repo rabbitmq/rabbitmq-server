@@ -8,10 +8,16 @@
 -module(rabbit_vhost).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+
+-include_lib("khepri/include/khepri.hrl").
+
 -include("vhost.hrl").
 
 -export([recover/0, recover/1, read_config/1]).
--export([add/2, add/4, delete/2, exists/1, with/2, with_user_and_vhost/3, assert/1, update/2,
+-export([add/2, add/4, delete/2, exists/1,
+         with/2, with_in_mnesia/2, with_in_khepri/2,
+         with_user_and_vhost/3, with_user_and_vhost_in_mnesia/3, with_user_and_vhost_in_khepri/3,
+         assert/1, update/2,
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
 -export([parse_tags/1, update_metadata/2, tag_with/2, untag_from/2, update_tags/2, update_tags/3]).
@@ -21,6 +27,33 @@
 -export([delete_storage/1]).
 -export([vhost_down/1]).
 -export([put_vhost/5]).
+-export([clear_data_in_khepri/0,
+         mnesia_write_to_khepri/1,
+         mnesia_delete_to_khepri/1]).
+-export([khepri_vhosts_path/0,
+         khepri_vhost_path/1]).
+
+-ifdef(TEST).
+-export([do_add_to_mnesia/3,
+         do_add_to_khepri/3,
+         lookup_in_mnesia/1,
+         lookup_in_khepri/1,
+         exists_in_mnesia/1,
+         exists_in_khepri/1,
+         list_names_in_mnesia/0,
+         list_names_in_khepri/0,
+         all_in_mnesia/0,
+         all_in_khepri/0,
+         update_in_mnesia/2,
+         update_in_khepri/2,
+         update_in_mnesia/3,
+         update_in_khepri/3,
+         info_in_mnesia/1,
+         info_in_khepri/1,
+         internal_delete_in_mnesia_part1/2,
+         internal_delete_in_mnesia_part2/1,
+         internal_delete_in_khepri/1]).
+-endif.
 
 %%
 %% API
@@ -161,38 +194,10 @@ do_add(Name, Description, Tags, ActingUser) ->
         Value ->
             rabbit_log:info("Adding vhost '~s' (description: '~s', tags: ~p)", [Name, Value, Tags])
     end,
-    VHost = rabbit_misc:execute_mnesia_transaction(
-          fun () ->
-                  case mnesia:wread({rabbit_vhost, Name}) of
-                      [] ->
-                        Row = vhost:new(Name, [], #{description => Description, tags => Tags}),
-                        rabbit_log:debug("Inserting a virtual host record ~p", [Row]),
-                        ok = mnesia:write(rabbit_vhost, Row, write),
-                        Row;
-                      %% the vhost already exists
-                      [Row] ->
-                        Row
-                  end
-          end,
-          fun (VHost1, true) ->
-                  VHost1;
-              (VHost1, false) ->
-                  [begin
-                    Resource = rabbit_misc:r(Name, exchange, ExchangeName),
-                    rabbit_log:debug("Will declare an exchange ~p", [Resource]),
-                    _ = rabbit_exchange:declare(Resource, Type, true, false, Internal, [], ActingUser)
-                  end || {ExchangeName, Type, Internal} <-
-                          [{<<"">>,                   direct,  false},
-                           {<<"amq.direct">>,         direct,  false},
-                           {<<"amq.topic">>,          topic,   false},
-                           %% per 0-9-1 pdf
-                           {<<"amq.match">>,          headers, false},
-                           %% per 0-9-1 xml
-                           {<<"amq.headers">>,        headers, false},
-                           {<<"amq.fanout">>,         fanout,  false},
-                           {<<"amq.rabbitmq.trace">>, topic,   true}]],
-                  VHost1
-          end),
+    VHost = rabbit_khepri:try_mnesia_or_khepri(
+              fun() -> do_add_to_mnesia(Name, Description, Tags) end,
+              fun() -> do_add_to_khepri(Name, Description, Tags) end),
+    declare_default_exchanges(Name, ActingUser),
     case rabbit_vhost_sup_sup:start_on_all_nodes(Name) of
         ok ->
             rabbit_event:notify(vhost_created, info(VHost)
@@ -206,8 +211,71 @@ do_add(Name, Description, Tags, ActingUser) ->
             {error, Msg}
     end.
 
+do_add_to_mnesia(Name, Description, Tags) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:wread({rabbit_vhost, Name}) of
+                  [] ->
+                      Row = vhost:new(Name, [], #{description => Description, tags => Tags}),
+                      rabbit_log:debug("Inserting a virtual host record ~p", [Row]),
+                      ok = mnesia:write(rabbit_vhost, Row, write),
+                      Row;
+                  %% the vhost already exists
+                  [Row] ->
+                      Row
+              end
+      end).
+
+do_add_to_khepri(Name, Description, Tags) ->
+    Path = khepri_vhost_path(Name),
+    NewVHost = vhost:new(
+                 Name, [], #{description => Description, tags => Tags}),
+    case rabbit_khepri:create(Path, NewVHost) of
+        ok ->
+            NewVHost;
+        {error, {mismatching_node,
+                 #{node_path := Path,
+                   node_props := #{data := ExistingVHost}}}} ->
+            ExistingVHost;
+        Error ->
+            throw(Error)
+    end.
+
+declare_default_exchanges(Name, ActingUser) ->
+    DefaultExchanges = [{<<"">>,                   direct,  false},
+                        {<<"amq.direct">>,         direct,  false},
+                        {<<"amq.topic">>,          topic,   false},
+                        %% per 0-9-1 pdf
+                        {<<"amq.match">>,          headers, false},
+                        %% per 0-9-1 xml
+                        {<<"amq.headers">>,        headers, false},
+                        {<<"amq.fanout">>,         fanout,  false},
+                        {<<"amq.rabbitmq.trace">>, topic,   true}],
+    lists:foreach(
+      fun({ExchangeName, Type, Internal}) ->
+              Resource = rabbit_misc:r(Name, exchange, ExchangeName),
+              rabbit_log:debug("Will declare an exchange ~p", [Resource]),
+              _ = rabbit_exchange:declare(
+                    Resource, Type, true, false, Internal, [], ActingUser)
+      end, DefaultExchanges).
+
 -spec update(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 update(Name, Description, Tags, ActingUser) ->
+    Ret = rabbit_khepri:try_mnesia_or_khepri(
+            fun() -> update_in_mnesia(Name, Description, Tags) end,
+            fun() -> update_in_khepri(Name, Description, Tags) end),
+    case Ret of
+        {ok, VHost} ->
+            rabbit_event:notify(vhost_updated, info(VHost)
+                                ++ [{user_who_performed_action, ActingUser},
+                                    {description, Description},
+                                    {tags, Tags}]),
+            ok;
+        _ ->
+            Ret
+    end.
+
+update_in_mnesia(Name, Description, Tags) ->
     rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_vhost, Name}) of
@@ -217,14 +285,34 @@ update(Name, Description, Tags, ActingUser) ->
                           VHost = vhost:merge_metadata(VHost0, #{description => Description, tags => Tags}),
                           rabbit_log:debug("Updating a virtual host record ~p", [VHost]),
                           ok = mnesia:write(rabbit_vhost, VHost, write),
-                          rabbit_event:notify(vhost_updated, info(VHost)
-                                ++ [{user_who_performed_action, ActingUser},
-                                    {description, Description},
-                                    {tags, Tags}]),
-                          ok
+                          {ok, VHost}
                   end
           end).
 
+update_in_khepri(Name, Description, Tags) ->
+    Path = khepri_vhost_path(Name),
+    Ret1 = rabbit_khepri:get(Path),
+    case Ret1 of
+        {ok, #{data := VHost0, payload_version := DVersion}} ->
+            VHost = vhost:merge_metadata(
+                      VHost0, #{description => Description, tags => Tags}),
+            rabbit_log:debug("Updating a virtual host record ~p", [VHost]),
+            Path1 = khepri_path:combine_with_conditions(
+                      Path, [#if_payload_version{version = DVersion}]),
+            Ret2 = rabbit_khepri:insert(Path1, VHost),
+            case Ret2 of
+                ok ->
+                    {ok, VHost};
+                {error, {mismatching_node, #{node_path := Path}}} ->
+                    update_in_khepri(Name, Description, Tags);
+                {error, _} = Error ->
+                    Error
+            end;
+        {error, {node_not_found, _}} ->
+            {error, {no_such_vhost, Name}};
+        {error, _} = Error ->
+            Error
+    end.
 
 -spec delete(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 
@@ -242,8 +330,10 @@ delete(VHost, ActingUser) ->
      end || Q <- rabbit_amqqueue:list(VHost)],
     [assert_benign(rabbit_exchange:delete(Name, false, ActingUser), ActingUser) ||
         #exchange{name = Name} <- rabbit_exchange:list(VHost)],
-    Funs = rabbit_misc:execute_mnesia_transaction(
-          with(VHost, fun () -> internal_delete(VHost, ActingUser) end)),
+    With = with(VHost, fun () -> internal_delete(VHost, ActingUser) end),
+    Funs = rabbit_khepri:try_mnesia_or_khepri(
+             fun() -> rabbit_misc:execute_mnesia_transaction(With) end,
+             fun() -> With() end),
     ok = rabbit_event:notify(vhost_deleted, [{name, VHost},
                                              {user_who_performed_action, ActingUser}]),
     [case Fun() of
@@ -372,13 +462,9 @@ assert_benign({error, {absent, Q, _}}, ActingUser) ->
     rabbit_amqqueue:internal_delete(QName, ActingUser).
 
 internal_delete(VHost, ActingUser) ->
-    [ok = rabbit_auth_backend_internal:clear_permissions(
-            proplists:get_value(user, Info), VHost, ActingUser)
-     || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHost)],
-    TopicPermissions = rabbit_auth_backend_internal:list_vhost_topic_permissions(VHost),
-    [ok = rabbit_auth_backend_internal:clear_topic_permissions(
-        proplists:get_value(user, TopicPermission), VHost, ActingUser)
-     || TopicPermission <- TopicPermissions],
+    _ = rabbit_khepri:try_mnesia_or_khepri(
+          fun() -> internal_delete_in_mnesia_part1(VHost, ActingUser) end,
+          fun() -> ok end),
     Fs1 = [rabbit_runtime_parameters:clear(VHost,
                                            proplists:get_value(component, Info),
                                            proplists:get_value(name, Info),
@@ -386,23 +472,79 @@ internal_delete(VHost, ActingUser) ->
      || Info <- rabbit_runtime_parameters:list(VHost)],
     Fs2 = [rabbit_policy:delete(VHost, proplists:get_value(name, Info), ActingUser)
            || Info <- rabbit_policy:list(VHost)],
-    ok = mnesia:delete({rabbit_vhost, VHost}),
+    _ = rabbit_khepri:try_mnesia_or_khepri(
+          fun() -> internal_delete_in_mnesia_part2(VHost) end,
+          fun() -> internal_delete_in_khepri(VHost) end),
     Fs1 ++ Fs2.
+
+internal_delete_in_mnesia_part1(VHost, ActingUser) ->
+    [ok = rabbit_auth_backend_internal:clear_permissions(
+            proplists:get_value(user, Info), VHost, ActingUser)
+     || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHost)],
+    TopicPermissions = rabbit_auth_backend_internal:list_vhost_topic_permissions(VHost),
+    [ok = rabbit_auth_backend_internal:clear_topic_permissions(
+        proplists:get_value(user, TopicPermission), VHost, ActingUser)
+     || TopicPermission <- TopicPermissions],
+    ok.
+
+internal_delete_in_mnesia_part2(VHost) ->
+    ok = mnesia:delete({rabbit_vhost, VHost}),
+    ok.
+
+internal_delete_in_khepri(VHost) ->
+    Path = khepri_vhost_path(VHost),
+    ok = rabbit_khepri:delete(Path),
+    ok.
 
 -spec exists(vhost:name()) -> boolean().
 
 exists(VHost) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> exists_in_mnesia(VHost) end,
+      fun() -> exists_in_khepri(VHost) end).
+
+exists_in_mnesia(VHost) ->
     mnesia:dirty_read({rabbit_vhost, VHost}) /= [].
 
+exists_in_khepri(VHost) ->
+    Path = khepri_vhost_path(VHost),
+    rabbit_khepri:exists(Path).
+
 -spec list_names() -> [vhost:name()].
-list_names() -> mnesia:dirty_all_keys(rabbit_vhost).
+list_names() ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> list_names_in_mnesia() end,
+      fun() -> list_names_in_khepri() end).
+
+list_names_in_mnesia() ->
+    mnesia:dirty_all_keys(rabbit_vhost).
+
+list_names_in_khepri() ->
+    Path = khepri_vhosts_path(),
+    case rabbit_khepri:list_child_nodes(Path) of
+        {ok, Result} -> Result;
+        _            -> []
+    end.
 
 %% Exists for backwards compatibility, prefer list_names/0.
 -spec list() -> [vhost:name()].
 list() -> list_names().
 
 -spec all() -> [vhost:vhost()].
-all() -> mnesia:dirty_match_object(rabbit_vhost, vhost:pattern_match_all()).
+all() ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> all_in_mnesia() end,
+      fun() -> all_in_khepri() end).
+
+all_in_mnesia() ->
+    mnesia:dirty_match_object(rabbit_vhost, vhost:pattern_match_all()).
+
+all_in_khepri() ->
+    Path = khepri_vhosts_path(),
+    case rabbit_khepri:list_child_data(Path) of
+        {ok, VHosts} -> maps:values(VHosts);
+        _            -> []
+    end.
 
 -spec all_tagged_with(atom()) -> [vhost:vhost()].
 all_tagged_with(TagName) ->
@@ -422,23 +564,65 @@ count() ->
 
 -spec lookup(vhost:name()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
 lookup(VHostName) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> lookup_in_mnesia(VHostName) end,
+      fun() -> lookup_in_khepri(VHostName) end).
+
+lookup_in_mnesia(VHostName) ->
     case rabbit_misc:dirty_read({rabbit_vhost, VHostName}) of
         {error, not_found} -> {error, {no_such_vhost, VHostName}};
         {ok, Record}       -> Record
     end.
 
+lookup_in_khepri(VHostName) ->
+    Path = khepri_vhost_path(VHostName),
+    case rabbit_khepri:get_data(Path) of
+        {ok, Record} -> Record;
+        _            -> {error, {no_such_vhost, VHostName}}
+    end.
+
 -spec with(vhost:name(), rabbit_misc:thunk(A)) -> A.
 with(VHostName, Thunk) ->
-    fun () ->
-        case mnesia:read({rabbit_vhost, VHostName}) of
-            []   -> mnesia:abort({no_such_vhost, VHostName});
-            [_V] -> Thunk()
-        end
+    fun() ->
+            rabbit_khepri:try_mnesia_or_khepri(
+              with_in_mnesia(VHostName, Thunk),
+              with_in_khepri(VHostName, Thunk))
+    end.
+
+with_in_mnesia(VHostName, Thunk) ->
+    fun() ->
+            case mnesia:read({rabbit_vhost, VHostName}) of
+                []   -> mnesia:abort({no_such_vhost, VHostName});
+                [_V] -> Thunk()
+            end
+    end.
+
+with_in_khepri(VHostName, Thunk) ->
+    fun() ->
+            Path = khepri_vhost_path(VHostName),
+            case khepri_tx:exists(Path) of
+                true  -> Thunk();
+                false -> khepri_tx:abort({no_such_vhost, VHostName})
+            end
     end.
 
 -spec with_user_and_vhost(rabbit_types:username(), vhost:name(), rabbit_misc:thunk(A)) -> A.
 with_user_and_vhost(Username, VHostName, Thunk) ->
-    rabbit_misc:with_user(Username, with(VHostName, Thunk)).
+    fun() ->
+            rabbit_khepri:try_mnesia_or_khepri(
+              rabbit_auth_backend_internal:with_user_in_mnesia(
+                Username, with_in_mnesia(VHostName, Thunk)),
+              rabbit_auth_backend_internal:with_user_in_khepri(
+                Username, with_in_khepri(VHostName, Thunk)))
+    end.
+
+with_user_and_vhost_in_mnesia(Username, VHostName, Thunk) ->
+    rabbit_auth_backend_internal:with_user_in_mnesia(
+      Username, with_in_mnesia(VHostName, Thunk)).
+
+with_user_and_vhost_in_khepri(Username, VHostName, Thunk) ->
+    rabbit_auth_backend_internal:with_user_in_khepri(
+      Username, with_in_khepri(VHostName, Thunk)).
 
 %% Like with/2 but outside an Mnesia tx
 
@@ -451,6 +635,11 @@ assert(VHostName) ->
 
 -spec update(vhost:name(), fun((vhost:vhost()) -> vhost:vhost())) -> vhost:vhost().
 update(VHostName, Fun) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> update_in_mnesia(VHostName, Fun) end,
+      fun() -> update_in_khepri(VHostName, Fun) end).
+
+update_in_mnesia(VHostName, Fun) ->
     case mnesia:read({rabbit_vhost, VHostName}) of
         [] ->
             mnesia:abort({no_such_vhost, VHostName});
@@ -458,6 +647,27 @@ update(VHostName, Fun) ->
             V1 = Fun(V),
             ok = mnesia:write(rabbit_vhost, V1, write),
             V1
+    end.
+
+update_in_khepri(VHostName, Fun) ->
+    Path = khepri_vhost_path(VHostName),
+    case rabbit_khepri:get(Path) of
+        {ok, #{data := V, payload_version := DVersion}} ->
+            V1 = Fun(V),
+            Path1 = khepri_path:combine_with_conditions(
+                      Path, [#if_payload_version{version = DVersion}]),
+            case rabbit_khepri:insert(Path1, V1) of
+                ok ->
+                    V1;
+                {error, {mismatching_node, _}} ->
+                    update(VHostName, Fun);
+                Error ->
+                    throw(Error)
+            end;
+        {error, {node_not_found, _}} ->
+            throw({error, {no_such_vhost, VHostName}});
+        Error ->
+            throw(Error)
     end.
 
 -spec update_metadata(vhost:name(), fun((map())-> map())) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
@@ -470,10 +680,11 @@ update_metadata(VHostName, Fun) ->
 -spec update_tags(vhost:name(), [vhost_tag()], rabbit_types:username()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
 update_tags(VHostName, Tags, ActingUser) ->
     ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+    Fun = fun() -> update_tags(VHostName, ConvertedTags) end,
     try
-        R = rabbit_misc:execute_mnesia_transaction(fun() ->
-            update_tags(VHostName, ConvertedTags)
-        end),
+        R = rabbit_khepri:try_mnesia_or_khepri(
+              fun() -> rabbit_misc:execute_mnesia_transaction(Fun) end,
+              fun() -> Fun() end),
         rabbit_log:info("Successfully set tags for virtual host '~s' to ~p", [VHostName, ConvertedTags]),
         rabbit_event:notify(vhost_tags_set, [{name, VHostName},
                                              {tags, ConvertedTags},
@@ -560,9 +771,21 @@ i(Item, VHost)     ->
 info(VHost) when ?is_vhost(VHost) ->
     infos(?INFO_KEYS, VHost);
 info(Key) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> info_in_mnesia(Key) end,
+      fun() -> info_in_khepri(Key) end).
+
+info_in_mnesia(Key) ->
     case mnesia:dirty_read({rabbit_vhost, Key}) of
         [] -> [];
         [VHost] -> infos(?INFO_KEYS, VHost)
+    end.
+
+info_in_khepri(Key) ->
+    Path = khepri_vhost_path(Key),
+    case rabbit_khepri:get_data(Path) of
+        {ok, VHost} -> infos(?INFO_KEYS, VHost);
+        _           -> []
     end.
 
 -spec info(vhost:vhost(), rabbit_types:info_keys()) -> rabbit_types:infos().
@@ -580,3 +803,29 @@ info_all(Ref, AggregatorPid)        -> info_all(?INFO_KEYS, Ref, AggregatorPid).
 info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
        AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, all()).
+
+clear_data_in_khepri() ->
+    Path = khepri_vhosts_path(),
+    case rabbit_khepri:delete(Path) of
+        ok    -> ok;
+        Error -> throw(Error)
+    end.
+
+mnesia_write_to_khepri(VHost) when ?is_vhost(VHost) ->
+    Name = vhost:get_name(VHost),
+    Path = khepri_vhost_path(Name),
+    case rabbit_khepri:insert(Path, VHost) of
+        ok    -> ok;
+        Error -> throw(Error)
+    end.
+
+mnesia_delete_to_khepri(VHost) when ?is_vhost(VHost) ->
+    Name = vhost:get_name(VHost),
+    Path = khepri_vhost_path(Name),
+    case rabbit_khepri:delete(Path) of
+        ok    -> ok;
+        Error -> throw(Error)
+    end.
+
+khepri_vhosts_path()     -> [?MODULE].
+khepri_vhost_path(VHost) -> [?MODULE, VHost].

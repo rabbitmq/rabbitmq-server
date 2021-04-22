@@ -19,6 +19,10 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-ifdef(TEST).
+-export([pre_khepri_definitions/0]).
+-endif.
+
 %%----------------------------------------------------------------------------
 
 -type retry() :: boolean().
@@ -155,8 +159,28 @@ is_empty()           -> is_empty(names()).
 
 -spec needs_default_data() -> boolean().
 
-needs_default_data() -> is_empty([rabbit_user, rabbit_user_permission,
-                                  rabbit_vhost]).
+needs_default_data() ->
+    case rabbit_khepri:is_enabled() of
+        true ->
+            needs_default_data_in_khepri();
+        false ->
+            needs_default_data_in_mnesia()
+    end.
+
+needs_default_data_in_khepri() ->
+    Paths = [rabbit_vhost:khepri_vhosts_path(),
+             rabbit_auth_backend_internal:khepri_users_path()],
+    lists:all(
+      fun(Path) ->
+              case rabbit_khepri:list(Path) of
+                  {ok, List} when is_map(List) andalso List =:= #{} -> true;
+                  _                                                 -> false
+              end
+      end, Paths).
+
+needs_default_data_in_mnesia() ->
+    is_empty([rabbit_user, rabbit_user_permission,
+              rabbit_vhost]).
 
 is_empty(Names) ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
@@ -294,32 +318,11 @@ definitions(ram) ->
         {Tab, TabDef} <- definitions()].
 
 definitions() ->
-    [{rabbit_user,
-      [{record_name, internal_user},
-       {attributes, internal_user:fields()},
-       {disc_copies, [node()]},
-       {match, internal_user:pattern_match_all()}]},
-     {rabbit_user_permission,
-      [{record_name, user_permission},
-       {attributes, record_info(fields, user_permission)},
-       {disc_copies, [node()]},
-       {match, #user_permission{user_vhost = #user_vhost{_='_'},
-                                permission = #permission{_='_'},
-                                _='_'}}]},
-     {rabbit_topic_permission,
-      [{record_name, topic_permission},
-       {attributes, record_info(fields, topic_permission)},
-       {disc_copies, [node()]},
-       {match, #topic_permission{topic_permission_key = #topic_permission_key{_='_'},
-                                 permission = #permission{_='_'},
-                                 _='_'}}]},
-     {rabbit_vhost,
-      [
-       {record_name, vhost},
-       {attributes, vhost:fields()},
-       {disc_copies, [node()]},
-       {match, vhost:pattern_match_all()}]},
-     {rabbit_listener,
+    PreKhepriDefs = case rabbit_khepri:is_enabled(non_blocking) of
+                        true  -> [];
+                        false -> pre_khepri_definitions()
+                    end,
+    [{rabbit_listener,
       [{record_name, listener},
        {attributes, record_info(fields, listener)},
        {type, bag},
@@ -389,8 +392,37 @@ definitions() ->
        {attributes, amqqueue:fields()},
        {match, amqqueue:pattern_match_on_name(queue_name_match())}]}
     ]
+        ++ PreKhepriDefs
         ++ gm:table_definitions()
         ++ mirrored_supervisor:table_definitions().
+
+pre_khepri_definitions() ->
+    [{rabbit_user,
+      [{record_name, internal_user},
+       {attributes, internal_user:fields()},
+       {disc_copies, [node()]},
+       {match, internal_user:pattern_match_all()}]},
+     {rabbit_user_permission,
+      [{record_name, user_permission},
+       {attributes, record_info(fields, user_permission)},
+       {disc_copies, [node()]},
+       {match, #user_permission{user_vhost = #user_vhost{_='_'},
+                                permission = #permission{_='_'},
+                                _='_'}}]},
+     {rabbit_topic_permission,
+      [{record_name, topic_permission},
+       {attributes, record_info(fields, topic_permission)},
+       {disc_copies, [node()]},
+       {match, #topic_permission{topic_permission_key = #topic_permission_key{_='_'},
+                                 permission = #permission{_='_'},
+                                 _='_'}}]},
+     {rabbit_vhost,
+      [
+       {record_name, vhost},
+       {attributes, vhost:fields()},
+       {disc_copies, [node()]},
+       {match, vhost:pattern_match_all()}]}
+    ].
 
 binding_match() ->
     #binding{source = exchange_name_match(),

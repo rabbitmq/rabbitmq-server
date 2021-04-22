@@ -6,13 +6,22 @@
 %%
 
 -module(rabbit_auth_backend_internal).
+
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("khepri/include/khepri.hrl").
+
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+
+-include("internal_user.hrl").
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
 
 -export([user_login_authentication/2, user_login_authorization/2,
-         check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
+         check_vhost_access/3, check_resource_access/4, check_topic_access/4,
+         with_user/2, with_user_in_mnesia/2, with_user_in_khepri/2]).
 
 -export([add_user/3, delete_user/2, lookup_user/1, exists/1,
          change_password/3, clear_password/2,
@@ -27,6 +36,8 @@
 -export([user_info_keys/0, perms_info_keys/0,
          user_perms_info_keys/0, vhost_perms_info_keys/0,
          user_vhost_perms_info_keys/0, all_users/0,
+         user_topic_perms_info_keys/0, vhost_topic_perms_info_keys/0,
+         user_vhost_topic_perms_info_keys/0,
          list_users/0, list_users/2, list_permissions/0,
          list_user_permissions/1, list_user_permissions/3,
          list_topic_permissions/0,
@@ -35,9 +46,55 @@
          list_user_topic_permissions/1, list_vhost_topic_permissions/1, list_user_vhost_topic_permissions/2]).
 
 -export([state_can_expire/0]).
+-export([clear_data_in_khepri/0,
+         mnesia_write_to_khepri/1,
+         mnesia_delete_to_khepri/1]).
+-export([khepri_users_path/0,
+         khepri_user_path/1]).
 
 %% for testing
 -export([hashing_module_for_user/1, expand_topic_permission/2]).
+
+-ifdef(TEST).
+-export([lookup_user_in_mnesia/1,
+         lookup_user_in_khepri/1,
+         add_user_sans_validation_in_mnesia/2,
+         add_user_sans_validation_in_khepri/2,
+         update_user_in_mnesia/2,
+         update_user_in_khepri/2,
+         delete_user_in_mnesia/1,
+         delete_user_in_khepri/1,
+         all_users_in_mnesia/0,
+         all_users_in_khepri/0,
+
+         check_vhost_access_in_mnesia/2,
+         check_vhost_access_in_khepri/2,
+         check_resource_access_in_mnesia/4,
+         check_resource_access_in_khepri/4,
+         set_permissions_in_mnesia/3,
+         set_permissions_in_khepri/3,
+         list_permissions_in_mnesia/1,
+         list_permissions_in_khepri/1,
+         match_user_vhost/2,
+         match_path_in_khepri/1,
+         clear_permissions_in_mnesia/2,
+         clear_permissions_in_khepri/2,
+
+         check_topic_access_in_mnesia/5,
+         check_topic_access_in_khepri/5,
+         set_topic_permissions_in_mnesia/4,
+         set_topic_permissions_in_khepri/4,
+         list_topic_permissions_in_mnesia/1,
+         list_topic_permissions_in_khepri/1,
+         match_user_vhost_topic_permission/3,
+         clear_topic_permissions_in_mnesia/2,
+         clear_topic_permissions_in_mnesia/3,
+         clear_topic_permissions_in_khepri/2,
+         clear_topic_permissions_in_khepri/3,
+
+         extract_user_permission_params/2,
+         extract_topic_permission_params/2]).
+-endif.
 
 -import(rabbit_data_coercion, [to_atom/1, to_list/1, to_binary/1]).
 
@@ -60,6 +117,30 @@ hashing_module_for_user(User) ->
         "user '~s' attempted to log in with a blank password, which is prohibited by the internal authN backend. "
         "To use TLS/x509 certificate-based authentication, see the rabbitmq_auth_mechanism_ssl plugin and configure the client to use the EXTERNAL authentication mechanism. "
         "Alternatively change the password for the user to be non-blank.").
+
+with_user(Username, Thunk) ->
+    fun() ->
+            rabbit_khepri:try_mnesia_or_khepri(
+              with_user_in_mnesia(Username, Thunk),
+              with_user_in_khepri(Username, Thunk))
+    end.
+
+with_user_in_mnesia(Username, Thunk) ->
+    fun () ->
+            case mnesia:read({rabbit_user, Username}) of
+                [_U] -> Thunk();
+                []   -> mnesia:abort({no_such_user, Username})
+            end
+    end.
+
+with_user_in_khepri(Username, Thunk) ->
+    fun() ->
+            Path = khepri_user_path(Username),
+            case khepri_tx:exists(Path) of
+                true  -> Thunk();
+                false -> khepri_tx:abort({no_such_user, Username})
+            end
+    end.
 
 %% For cases when we do not have a set of credentials,
 %% namely when x509 (TLS) certificates are used. This should only be
@@ -116,6 +197,11 @@ internal_check_user_login(Username, Fun) ->
     end.
 
 check_vhost_access(#auth_user{username = Username}, VHostPath, _AuthzData) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> check_vhost_access_in_mnesia(Username, VHostPath) end,
+      fun() -> check_vhost_access_in_khepri(Username, VHostPath) end).
+
+check_vhost_access_in_mnesia(Username, VHostPath) ->
     case mnesia:dirty_read({rabbit_user_permission,
                             #user_vhost{username     = Username,
                                         virtual_host = VHostPath}}) of
@@ -123,31 +209,67 @@ check_vhost_access(#auth_user{username = Username}, VHostPath, _AuthzData) ->
         [_R] -> true
     end.
 
+check_vhost_access_in_khepri(Username, VHostPath) ->
+    Path = khepri_user_permission_path(Username, VHostPath),
+    rabbit_khepri:exists(Path).
+
 check_resource_access(#auth_user{username = Username},
                       #resource{virtual_host = VHostPath, name = Name},
                       Permission,
                       _AuthContext) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() ->
+              check_resource_access_in_mnesia(
+                Username, VHostPath, Name, Permission)
+      end,
+      fun() ->
+              check_resource_access_in_khepri(
+                Username, VHostPath, Name, Permission)
+      end).
+
+check_resource_access_in_mnesia(Username, VHostPath, Name, Permission) ->
     case mnesia:dirty_read({rabbit_user_permission,
                             #user_vhost{username     = Username,
                                         virtual_host = VHostPath}}) of
         [] ->
             false;
         [#user_permission{permission = P}] ->
-            PermRegexp = case element(permission_index(Permission), P) of
-                             %% <<"^$">> breaks Emacs' erlang mode
-                             <<"">> -> <<$^, $$>>;
-                             RE     -> RE
-                         end,
-            case re:run(Name, PermRegexp, [{capture, none}]) of
-                match    -> true;
-                nomatch  -> false
-            end
+            do_check_resource_access(Name, Permission, P)
     end.
+
+check_resource_access_in_khepri(Username, VHostPath, Name, Permission) ->
+    Path = khepri_user_permission_path(Username, VHostPath),
+    case rabbit_khepri:get_data(Path) of
+        {ok, #user_permission{permission = P}} ->
+            do_check_resource_access(Name, Permission, P);
+        _ ->
+            false
+    end.
+
+do_check_resource_access(Name, Permission, P) ->
+    PermRegexp = case element(permission_index(Permission), P) of
+                     %% <<"^$">> breaks Emacs' erlang mode
+                     <<"">> -> <<$^, $$>>;
+                     RE     -> RE
+                 end,
+    re:run(Name, PermRegexp, [{capture, none}]) =:= match.
 
 check_topic_access(#auth_user{username = Username},
                    #resource{virtual_host = VHostPath, name = Name, kind = topic},
                    Permission,
                    Context) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() ->
+              check_topic_access_in_mnesia(
+                Username, VHostPath, Name, Permission, Context)
+      end,
+      fun() ->
+              check_topic_access_in_khepri(
+                Username, VHostPath, Name, Permission, Context)
+      end).
+
+check_topic_access_in_mnesia(
+  Username, VHostPath, Name, Permission, Context) ->
     case mnesia:dirty_read({rabbit_topic_permission,
         #topic_permission_key{user_vhost = #user_vhost{username     = Username,
                                                        virtual_host = VHostPath},
@@ -156,20 +278,31 @@ check_topic_access(#auth_user{username = Username},
         [] ->
             true;
         [#topic_permission{permission = P}] ->
-            PermRegexp = case element(permission_index(Permission), P) of
-                             %% <<"^$">> breaks Emacs' erlang mode
-                             <<"">> -> <<$^, $$>>;
-                             RE     -> RE
-                         end,
-            PermRegexpExpanded = expand_topic_permission(
-                PermRegexp,
-                maps:get(variable_map, Context, undefined)
-            ),
-            case re:run(maps:get(routing_key, Context), PermRegexpExpanded, [{capture, none}]) of
-                match    -> true;
-                nomatch  -> false
-            end
+            do_check_topic_access(Permission, Context, P)
     end.
+
+check_topic_access_in_khepri(
+  Username, VHostPath, Name, Permission, Context) ->
+    Path = khepri_topic_permission_path(Username, VHostPath, Name),
+    case rabbit_khepri:get_data(Path) of
+        {ok, #topic_permission{permission = P}} ->
+            do_check_topic_access(Permission, Context, P);
+        _ ->
+            true
+    end.
+
+do_check_topic_access(Permission, Context, P) ->
+    PermRegexp = case element(permission_index(Permission), P) of
+                     %% <<"^$">> breaks Emacs' erlang mode
+                     <<"">> -> <<$^, $$>>;
+                     RE     -> RE
+                 end,
+    PermRegexpExpanded = expand_topic_permission(
+                           PermRegexp,
+                           maps:get(variable_map, Context, undefined)
+                          ),
+    re:run(maps:get(routing_key, Context), PermRegexpExpanded, [{capture, none}])
+    =:= match.
 
 expand_topic_permission(Permission, ToExpand) when is_map(ToExpand) ->
     Opening = <<"{">>,
@@ -216,16 +349,11 @@ add_user_sans_validation(Username, Password, ActingUser) ->
     HashingMod = rabbit_password:hashing_mod(),
     PasswordHash = hash_password(HashingMod, Password),
     User = internal_user:create_user(Username, PasswordHash, HashingMod),
+
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-          fun () ->
-                  case mnesia:wread({rabbit_user, Username}) of
-                      [] ->
-                          ok = mnesia:write(rabbit_user, User, write);
-                      _ ->
-                          mnesia:abort({user_already_exists, Username})
-                  end
-          end),
+        R = rabbit_khepri:try_mnesia_or_khepri(
+              fun() -> add_user_sans_validation_in_mnesia(Username, User) end,
+              fun() -> add_user_sans_validation_in_khepri(Username, User) end),
         rabbit_log:info("Created user '~s'", [Username]),
         rabbit_event:notify(user_created, [{name, Username},
                                            {user_who_performed_action, ActingUser}]),
@@ -239,30 +367,37 @@ add_user_sans_validation(Username, Password, ActingUser) ->
             erlang:raise(Class, Error, Stacktrace)
     end .
 
+add_user_sans_validation_in_mnesia(Username, User) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun () ->
+              case mnesia:wread({rabbit_user, Username}) of
+                  [] ->
+                      ok = mnesia:write(rabbit_user, User, write);
+                  _ ->
+                      mnesia:abort({user_already_exists, Username})
+              end
+      end),
+    ok.
+
+add_user_sans_validation_in_khepri(Username, User) ->
+    Path = khepri_user_path(Username),
+    case rabbit_khepri:create(Path, User) of
+        ok ->
+            ok;
+        {error, {mismatching_node, _}} ->
+            throw({error, {user_already_exists, Username}});
+        {error, _} = Error ->
+            throw(Error)
+    end.
+
 -spec delete_user(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
 
 delete_user(Username, ActingUser) ->
     rabbit_log:debug("Asked to delete user '~s'", [Username]),
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_misc:with_user(
-            Username,
-            fun () ->
-                    ok = mnesia:delete({rabbit_user, Username}),
-                    [ok = mnesia:delete_object(
-                            rabbit_user_permission, R, write) ||
-                        R <- mnesia:match_object(
-                               rabbit_user_permission,
-                               #user_permission{user_vhost = #user_vhost{
-                                                  username = Username,
-                                                  virtual_host = '_'},
-                                                permission = '_'},
-                               write)],
-                    UserTopicPermissionsQuery = match_user_vhost_topic_permission(Username, '_'),
-                    UserTopicPermissions = UserTopicPermissionsQuery(),
-                    [ok = mnesia:delete_object(rabbit_topic_permission, R, write) || R <- UserTopicPermissions],
-                    ok
-            end)),
+        R = rabbit_khepri:try_mnesia_or_khepri(
+              fun() -> delete_user_in_mnesia(Username) end,
+              fun() -> delete_user_in_khepri(Username) end),
         rabbit_log:info("Deleted user '~s'", [Username]),
         rabbit_event:notify(user_deleted,
                             [{name, Username},
@@ -277,13 +412,58 @@ delete_user(Username, ActingUser) ->
             erlang:raise(Class, Error, Stacktrace)
     end .
 
+delete_user_in_mnesia(Username) ->
+    rabbit_misc:execute_mnesia_transaction(
+      with_user_in_mnesia(
+        Username,
+        fun () ->
+                ok = mnesia:delete({rabbit_user, Username}),
+                [ok = mnesia:delete_object(
+                        rabbit_user_permission, R, write) ||
+                 R <- mnesia:match_object(
+                        rabbit_user_permission,
+                        #user_permission{user_vhost = #user_vhost{
+                                                         username = Username,
+                                                         virtual_host = '_'},
+                                         permission = '_'},
+                        write)],
+                UserTopicPermissionsQuery = match_user_vhost_topic_permission(Username, '_'),
+                UserTopicPermissions = UserTopicPermissionsQuery(),
+                [ok = mnesia:delete_object(rabbit_topic_permission, R, write) || R <- UserTopicPermissions],
+                ok
+        end)).
+
+delete_user_in_khepri(Username) ->
+    rabbit_khepri:transaction(
+      with_user_in_khepri(
+        Username,
+        fun() ->
+                Path = khepri_user_path(Username),
+                case khepri_tx:delete(Path) of
+                    {ok, _} -> ok;
+                    Error   -> khepri_tx:abort(Error)
+                end
+        end)).
+
 -spec lookup_user
         (rabbit_types:username()) ->
             rabbit_types:ok(internal_user:internal_user()) |
             rabbit_types:error('not_found').
 
 lookup_user(Username) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> lookup_user_in_mnesia(Username) end,
+      fun() -> lookup_user_in_khepri(Username) end).
+
+lookup_user_in_mnesia(Username) ->
     rabbit_misc:dirty_read({rabbit_user, Username}).
+
+lookup_user_in_khepri(Username) ->
+    Path = khepri_user_path(Username),
+    case rabbit_khepri:get_data(Path) of
+        {ok, User} -> {ok, User};
+        _          -> {error, not_found}
+    end.
 
 -spec exists(rabbit_types:username()) -> boolean().
 
@@ -394,21 +574,24 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
                       throw({error, {invalid_regexp, Regexp, Reason}})
               end
       end, [ConfigurePerm, WritePerm, ReadPerm]),
+    UserPermission = #user_permission{
+                        user_vhost = #user_vhost{
+                                        username     = Username,
+                                        virtual_host = VirtualHost},
+                        permission = #permission{
+                                        configure  = ConfigurePerm,
+                                        write      = WritePerm,
+                                        read       = ReadPerm}},
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-             rabbit_vhost:with_user_and_vhost(
-                Username, VirtualHost,
-                fun () -> ok = mnesia:write(
-                                 rabbit_user_permission,
-                                 #user_permission{user_vhost = #user_vhost{
-                                                      username     = Username,
-                                                      virtual_host = VirtualHost},
-                                                  permission = #permission{
-                                                      configure  = ConfigurePerm,
-                                                      write      = WritePerm,
-                                                      read       = ReadPerm}},
-                                 write)
-                end)),
+        R = rabbit_khepri:try_mnesia_or_khepri(
+              fun() ->
+                      set_permissions_in_mnesia(
+                        Username, VirtualHost, UserPermission)
+              end,
+              fun() ->
+                      set_permissions_in_khepri(
+                        Username, VirtualHost, UserPermission)
+              end),
         rabbit_log:info("Successfully set permissions for "
                         "'~s' in virtual host '~s' to '~s', '~s', '~s'",
                         [Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm]),
@@ -434,6 +617,40 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
             erlang:raise(Class, Error, Stacktrace)
     end.
 
+set_permissions_in_mnesia(Username, VirtualHost, UserPermission) ->
+    rabbit_misc:execute_mnesia_transaction(
+      rabbit_vhost:with_user_and_vhost_in_mnesia(
+        Username, VirtualHost,
+        fun () -> ok = mnesia:write(
+                         rabbit_user_permission,
+                         UserPermission,
+                         write)
+        end)).
+
+set_permissions_in_khepri(Username, VirtualHost, UserPermission) ->
+    rabbit_khepri:transaction(
+      rabbit_vhost:with_user_and_vhost_in_khepri(
+        Username, VirtualHost,
+        fun() ->
+                Path = khepri_user_permission_path(
+                         #if_all{conditions =
+                                 [Username,
+                                  #if_node_exists{exists = true}]},
+                         VirtualHost),
+                %% TODO: Add a keep_until for the intermediate
+                %% 'user_permissions' node so it is removed when its last
+                %% children is removed.
+                Extra = #{keep_until =>
+                          #{rabbit_vhost:khepri_vhost_path(VirtualHost) =>
+                            #if_node_exists{exists = true}}},
+                Ret = khepri_tx:put(
+                        Path, ?DATA_PAYLOAD(UserPermission), Extra),
+                case Ret of
+                    {ok, _} -> ok;
+                    Error   -> khepri_tx:abort(Error)
+                end
+        end)).
+
 -spec clear_permissions
         (rabbit_types:username(), rabbit_types:vhost(), rabbit_types:username()) -> 'ok'.
 
@@ -441,14 +658,9 @@ clear_permissions(Username, VirtualHost, ActingUser) ->
     rabbit_log:debug("Asked to clear permissions for '~s' in virtual host '~s'",
                      [Username, VirtualHost]),
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-          rabbit_vhost:with_user_and_vhost(
-            Username, VirtualHost,
-            fun () ->
-                    ok = mnesia:delete({rabbit_user_permission,
-                                        #user_vhost{username     = Username,
-                                                    virtual_host = VirtualHost}})
-            end)),
+        R = rabbit_khepri:try_mnesia_or_khepri(
+              fun() -> clear_permissions_in_mnesia(Username, VirtualHost) end,
+              fun() -> clear_permissions_in_khepri(Username, VirtualHost) end),
         rabbit_log:info("Successfully cleared permissions for '~s' in virtual host '~s'",
                         [Username, VirtualHost]),
         rabbit_event:notify(permission_deleted, [{user,  Username},
@@ -470,14 +682,59 @@ clear_permissions(Username, VirtualHost, ActingUser) ->
             erlang:raise(Class, Error, Stacktrace)
     end.
 
+clear_permissions_in_mnesia(Username, VirtualHost) ->
+    rabbit_misc:execute_mnesia_transaction(
+      rabbit_vhost:with_user_and_vhost_in_mnesia(
+        Username, VirtualHost,
+        fun () ->
+                ok = mnesia:delete({rabbit_user_permission,
+                                    #user_vhost{username     = Username,
+                                                virtual_host = VirtualHost}})
+        end)).
+
+clear_permissions_in_khepri(Username, VirtualHost) ->
+    %% FIXME: We now check the vhost and user existence in an atomic manner.
+    %%
+    %% In the end, do we really need to have a more complex transaction
+    %% mechanism when we just want to delete something? The code and the
+    %% execution would be much simpler if we just deleted the permission and
+    %% be done with it.
+    rabbit_khepri:transaction(
+      rabbit_vhost:with_user_and_vhost_in_khepri(
+        Username, VirtualHost,
+        fun () ->
+                Path = khepri_user_permission_path(Username, VirtualHost),
+                case khepri_tx:delete(Path) of
+                    {ok, _} -> ok;
+                    Error   -> khepri_tx:abort(Error)
+                end
+        end)).
 
 update_user(Username, Fun) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> update_user_in_mnesia(Username, Fun) end,
+      fun() -> update_user_in_khepri(Username, Fun) end).
+
+update_user_in_mnesia(Username, Fun) ->
     rabbit_misc:execute_mnesia_transaction(
-      rabbit_misc:with_user(
+      with_user_in_mnesia(
         Username,
         fun () ->
                 {ok, User} = lookup_user(Username),
                 ok = mnesia:write(rabbit_user, Fun(User), write)
+        end)).
+
+update_user_in_khepri(Username, Fun) ->
+    rabbit_khepri:transaction(
+      with_user_in_khepri(
+        Username,
+        fun () ->
+                Path = khepri_user_path(Username),
+                {ok, #{Path := #{data := User}}} = khepri_tx:get(Path),
+                case khepri_tx:put(Path, ?DATA_PAYLOAD(Fun(User))) of
+                    {ok, #{Path := #{data := User}}} -> ok;
+                    Error                            -> khepri_tx:abort(Error)
+                end
         end)).
 
 set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, ActingUser) ->
@@ -497,26 +754,28 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
                     throw({error, {invalid_regexp, RegexpBin, Reason}})
             end
         end, [WritePerm, ReadPerm]),
+    TopicPermission = #topic_permission{
+                         topic_permission_key = #topic_permission_key{
+                                                   user_vhost = #user_vhost{
+                                                                   username     = Username,
+                                                                   virtual_host = VirtualHost},
+                                                   exchange = Exchange
+                                                  },
+                         permission = #permission{
+                                         write = WritePermRegex,
+                                         read  = ReadPermRegex
+                                        }
+                        },
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-        rabbit_vhost:with_user_and_vhost(
-            Username, VirtualHost,
-            fun () -> ok = mnesia:write(
-                rabbit_topic_permission,
-                #topic_permission{
-                    topic_permission_key = #topic_permission_key{
-                        user_vhost = #user_vhost{
-                            username     = Username,
-                            virtual_host = VirtualHost},
-                        exchange = Exchange
-                    },
-                    permission = #permission{
-                            write = WritePermRegex,
-                            read  = ReadPermRegex
-                    }
-                },
-                write)
-            end)),
+        R = rabbit_khepri:try_mnesia_or_khepri(
+              fun() ->
+                      set_topic_permissions_in_mnesia(
+                        Username, VirtualHost, Exchange, TopicPermission)
+              end,
+              fun() ->
+                      set_topic_permissions_in_khepri(
+                        Username, VirtualHost, Exchange, TopicPermission)
+              end),
         rabbit_log:info("Successfully set topic permissions on exchange '~s' for "
                          "'~s' in virtual host '~s' to '~s', '~s'",
                          [Exchange, Username, VirtualHost, WritePerm, ReadPerm]),
@@ -543,20 +802,55 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
             erlang:raise(Class, Error, Stacktrace)
     end .
 
+set_topic_permissions_in_mnesia(
+  Username, VirtualHost, _Exchange, TopicPermission) ->
+    rabbit_misc:execute_mnesia_transaction(
+      rabbit_vhost:with_user_and_vhost_in_mnesia(
+        Username, VirtualHost,
+        fun () -> ok = mnesia:write(
+                         rabbit_topic_permission,
+                         TopicPermission,
+                         write)
+        end)).
+
+set_topic_permissions_in_khepri(
+  Username, VirtualHost, Exchange, TopicPermission) ->
+    %% TODO: Add a keep_until for the intermediate 'topic_permissions' node so
+    %% it is removed when its last children is removed.
+    rabbit_khepri:transaction(
+      rabbit_vhost:with_user_and_vhost_in_khepri(
+        Username, VirtualHost,
+        fun () ->
+                Path = khepri_topic_permission_path(
+                         #if_all{conditions =
+                                 [Username,
+                                  #if_node_exists{exists = true}]},
+                         VirtualHost,
+                         Exchange),
+                Extra = #{keep_until =>
+                          #{rabbit_vhost:khepri_vhost_path(VirtualHost) =>
+                            #if_node_exists{exists = true}}},
+                Ret = khepri_tx:put(
+                        Path, ?DATA_PAYLOAD(TopicPermission), Extra),
+                case Ret of
+                    {ok, _} -> ok;
+                    Error   -> khepri_tx:abort(Error)
+                end
+        end)).
+
 clear_topic_permissions(Username, VirtualHost, ActingUser) ->
     rabbit_log:debug("Asked to clear topic permissions for '~s' in virtual host '~s'",
                      [Username, VirtualHost]),
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-        rabbit_vhost:with_user_and_vhost(
-            Username, VirtualHost,
-            fun () ->
-                ListFunction = match_user_vhost_topic_permission(Username, VirtualHost),
-                List = ListFunction(),
-                lists:foreach(fun(X) ->
-                                ok = mnesia:delete_object(rabbit_topic_permission, X, write)
-                              end, List)
-            end)),
+        R = rabbit_khepri:try_mnesia_or_khepri(
+              fun() ->
+                      clear_topic_permissions_in_mnesia(
+                        Username, VirtualHost)
+              end,
+              fun() ->
+                      clear_topic_permissions_in_khepri(
+                        Username, VirtualHost)
+              end),
         rabbit_log:info("Successfully cleared topic permissions for '~s' in virtual host '~s'",
                         [Username, VirtualHost]),
         rabbit_event:notify(topic_permission_deleted, [{user,  Username},
@@ -578,22 +872,34 @@ clear_topic_permissions(Username, VirtualHost, ActingUser) ->
             erlang:raise(Class, Error, Stacktrace)
     end.
 
+clear_topic_permissions_in_mnesia(Username, VirtualHost) ->
+    rabbit_misc:execute_mnesia_transaction(
+      rabbit_vhost:with_user_and_vhost_in_mnesia(
+        Username, VirtualHost,
+        fun () ->
+                ListFunction = match_user_vhost_topic_permission(Username, VirtualHost),
+                List = ListFunction(),
+                lists:foreach(fun(X) ->
+                                      ok = mnesia:delete_object(rabbit_topic_permission, X, write)
+                              end, List)
+        end)).
+
+clear_topic_permissions_in_khepri(Username, VirtualHost) ->
+    clear_topic_permissions_in_khepri(Username, VirtualHost, ?STAR).
+
 clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
     rabbit_log:debug("Asked to clear topic permissions on exchange '~s' for '~s' in virtual host '~s'",
                      [Exchange, Username, VirtualHost]),
     try
-        R = rabbit_misc:execute_mnesia_transaction(
-        rabbit_vhost:with_user_and_vhost(
-            Username, VirtualHost,
-            fun () ->
-                ok = mnesia:delete(rabbit_topic_permission,
-                    #topic_permission_key{
-                        user_vhost = #user_vhost{
-                            username     = Username,
-                            virtual_host = VirtualHost},
-                        exchange = Exchange
-                    }, write)
-            end)),
+        R = rabbit_khepri:try_mnesia_or_khepri(
+              fun() ->
+                      clear_topic_permissions_in_mnesia(
+                        Username, VirtualHost, Exchange)
+              end,
+              fun() ->
+                      clear_topic_permissions_in_khepri(
+                        Username, VirtualHost, Exchange)
+              end),
         rabbit_log:info("Successfully cleared topic permissions on exchange '~s' for '~s' in virtual host '~s'",
                         [Exchange, Username, VirtualHost]),
         rabbit_event:notify(permission_deleted, [{user,  Username},
@@ -614,6 +920,39 @@ clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
                                [Exchange, Username, VirtualHost, Error]),
             erlang:raise(Class, Error, Stacktrace)
     end.
+
+clear_topic_permissions_in_mnesia(Username, VirtualHost, Exchange) ->
+    rabbit_misc:execute_mnesia_transaction(
+      rabbit_vhost:with_user_and_vhost_in_mnesia(
+        Username, VirtualHost,
+        fun () ->
+                ok = mnesia:delete(rabbit_topic_permission,
+                                   #topic_permission_key{
+                                      user_vhost = #user_vhost{
+                                                      username     = Username,
+                                                      virtual_host = VirtualHost},
+                                      exchange = Exchange
+                                     }, write)
+        end)).
+
+clear_topic_permissions_in_khepri(Username, VirtualHost, Exchange) ->
+    %% FIXME: We now check the vhost and user existence in an atomic manner.
+    %%
+    %% In the end, do we really need to have a more complex transaction
+    %% mechanism when we just want to delete something? The code and the
+    %% execution would be much simpler if we just deleted the permission and
+    %% be done with it.
+    rabbit_khepri:transaction(
+      rabbit_vhost:with_user_and_vhost_in_khepri(
+        Username, VirtualHost,
+        fun () ->
+                Path = khepri_topic_permission_path(
+                         Username, VirtualHost, Exchange),
+                case khepri_tx:delete(Path) of
+                    {ok, _} -> ok;
+                    Error   -> khepri_tx:abort(Error)
+                end
+        end)).
 
 put_user(User, ActingUser) -> put_user(User, undefined, ActingUser).
 
@@ -824,7 +1163,20 @@ user_topic_perms_info_keys()       -> [vhost, exchange, write, read].
 vhost_topic_perms_info_keys()      -> [user, exchange, write, read].
 user_vhost_topic_perms_info_keys() -> [exchange, write, read].
 
-all_users() -> mnesia:dirty_match_object(rabbit_user, internal_user:pattern_match_all()).
+all_users() ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> all_users_in_mnesia() end,
+      fun() -> all_users_in_khepri() end).
+
+all_users_in_mnesia() ->
+    mnesia:dirty_match_object(rabbit_user, internal_user:pattern_match_all()).
+
+all_users_in_khepri() ->
+    Path = khepri_users_path(),
+    case rabbit_khepri:list_child_data(Path) of
+        {ok, Users} -> maps:values(Users);
+        _           -> []
+    end.
 
 -spec list_users() -> [rabbit_types:infos()].
 
@@ -843,16 +1195,33 @@ list_users(Ref, AggregatorPid) ->
 -spec list_permissions() -> [rabbit_types:infos()].
 
 list_permissions() ->
-    list_permissions(perms_info_keys(), match_user_vhost('_', '_')).
+    MnesiaThunk = match_user_vhost('_', '_'),
+    KhepriThunk = match_path_in_khepri(
+                    khepri_user_permission_path(?STAR, ?STAR)),
+    list_permissions(perms_info_keys(), MnesiaThunk, KhepriThunk).
 
-list_permissions(Keys, QueryThunk) ->
-    [extract_user_permission_params(Keys, U) ||
-        U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
+list_permissions(Keys, MnesiaThunk, KhepriThunk) ->
+    UserPermissions = rabbit_khepri:try_mnesia_or_khepri(
+                        fun() -> list_permissions_in_mnesia(MnesiaThunk) end,
+                        fun() -> list_permissions_in_khepri(KhepriThunk) end),
+    [extract_user_permission_params(Keys, U) || U <- UserPermissions].
 
-list_permissions(Keys, QueryThunk, Ref, AggregatorPid) ->
+list_permissions_in_mnesia(QueryThunk) when is_function(QueryThunk) ->
+    rabbit_misc:execute_mnesia_transaction(QueryThunk).
+
+list_permissions_in_khepri(QueryThunk) when is_function(QueryThunk) ->
+    case rabbit_khepri:transaction(QueryThunk, ro) of
+        {ok, UserPermissions} -> maps:values(UserPermissions);
+        _                     -> []
+    end.
+
+list_permissions(Keys, MnesiaThunk, KhepriThunk, Ref, AggregatorPid) ->
+    Users = rabbit_khepri:try_mnesia_or_khepri(
+              fun() -> list_permissions_in_mnesia(MnesiaThunk) end,
+              fun() -> list_permissions_in_khepri(KhepriThunk) end),
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref, fun(U) -> extract_user_permission_params(Keys, U) end,
-      rabbit_misc:execute_mnesia_transaction(QueryThunk)).
+      Users).
 
 filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
 
@@ -860,44 +1229,64 @@ filter_props(Keys, Props) -> [T || T = {K, _} <- Props, lists:member(K, Keys)].
         (rabbit_types:username()) -> [rabbit_types:infos()].
 
 list_user_permissions(Username) ->
-    list_permissions(
-      user_perms_info_keys(),
-      rabbit_misc:with_user(Username, match_user_vhost(Username, '_'))).
+    MnesiaThunk = with_user_in_mnesia(
+                    Username, match_user_vhost(Username, '_')),
+    KhepriThunk = with_user_in_khepri(
+                    Username,
+                    match_path_in_khepri(
+                      khepri_user_permission_path(Username, ?STAR))),
+    list_permissions(user_perms_info_keys(), MnesiaThunk, KhepriThunk).
 
 -spec list_user_permissions
         (rabbit_types:username(), reference(), pid()) -> 'ok'.
 
 list_user_permissions(Username, Ref, AggregatorPid) ->
+    MnesiaThunk = with_user_in_mnesia(
+                    Username, match_user_vhost(Username, '_')),
+    KhepriThunk = with_user_in_khepri(
+                    Username,
+                    match_path_in_khepri(
+                      khepri_user_permission_path(Username, ?STAR))),
     list_permissions(
-      user_perms_info_keys(),
-      rabbit_misc:with_user(Username, match_user_vhost(Username, '_')),
-      Ref, AggregatorPid).
+      user_perms_info_keys(), MnesiaThunk, KhepriThunk, Ref, AggregatorPid).
 
 -spec list_vhost_permissions
         (rabbit_types:vhost()) -> [rabbit_types:infos()].
 
 list_vhost_permissions(VHostPath) ->
-    list_permissions(
-      vhost_perms_info_keys(),
-      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath))).
+    MnesiaThunk = rabbit_vhost:with_in_mnesia(
+                   VHostPath, match_user_vhost('_', VHostPath)),
+    KhepriThunk = rabbit_vhost:with_in_khepri(
+                    VHostPath,
+                    match_path_in_khepri(
+                      khepri_user_permission_path(?STAR, VHostPath))),
+    list_permissions(vhost_perms_info_keys(), MnesiaThunk, KhepriThunk).
 
 -spec list_vhost_permissions
         (rabbit_types:vhost(), reference(), pid()) -> 'ok'.
 
 list_vhost_permissions(VHostPath, Ref, AggregatorPid) ->
+    MnesiaThunk = rabbit_vhost:with_in_mnesia(
+                    VHostPath, match_user_vhost('_', VHostPath)),
+    KhepriThunk = rabbit_vhost:with_in_khepri(
+                    VHostPath,
+                    match_path_in_khepri(
+                      khepri_user_permission_path(?STAR, VHostPath))),
     list_permissions(
-      vhost_perms_info_keys(),
-      rabbit_vhost:with(VHostPath, match_user_vhost('_', VHostPath)),
-      Ref, AggregatorPid).
+      vhost_perms_info_keys(), MnesiaThunk, KhepriThunk, Ref, AggregatorPid).
 
 -spec list_user_vhost_permissions
         (rabbit_types:username(), rabbit_types:vhost()) -> [rabbit_types:infos()].
 
 list_user_vhost_permissions(Username, VHostPath) ->
-    list_permissions(
-      user_vhost_perms_info_keys(),
-      rabbit_vhost:with_user_and_vhost(
-        Username, VHostPath, match_user_vhost(Username, VHostPath))).
+    MnesiaThunk = rabbit_vhost:with_user_and_vhost_in_mnesia(
+                    Username, VHostPath,
+                    match_user_vhost(Username, VHostPath)),
+    KhepriThunk = rabbit_vhost:with_user_and_vhost_in_khepri(
+                    Username, VHostPath,
+                    match_path_in_khepri(
+                      khepri_user_permission_path(Username, VHostPath))),
+    list_permissions(user_vhost_perms_info_keys(), MnesiaThunk, KhepriThunk).
 
 extract_user_permission_params(Keys, #user_permission{
                                         user_vhost =
@@ -927,24 +1316,64 @@ match_user_vhost(Username, VHostPath) ->
                 read)
     end.
 
+match_path_in_khepri(Path) ->
+    fun() -> rabbit_khepri:tx_match_and_get_data(Path) end.
+
 list_topic_permissions() ->
-    list_topic_permissions(topic_perms_info_keys(), match_user_vhost_topic_permission('_', '_')).
+    QueryThunk = match_user_vhost_topic_permission('_', '_'),
+    Path = khepri_topic_permission_path(?STAR, ?STAR, ?STAR),
+    list_topic_permissions(topic_perms_info_keys(), QueryThunk, Path).
 
 list_user_topic_permissions(Username) ->
-    list_topic_permissions(user_topic_perms_info_keys(),
-        rabbit_misc:with_user(Username, match_user_vhost_topic_permission(Username, '_'))).
+    MnesiaThunk = with_user_in_mnesia(
+                    Username,
+                    match_user_vhost_topic_permission(Username, '_')),
+    KhepriThunk = with_user_in_khepri(
+                    Username,
+                    match_path_in_khepri(
+                      khepri_topic_permission_path(Username, ?STAR, ?STAR))),
+    list_topic_permissions(
+      user_topic_perms_info_keys(), MnesiaThunk, KhepriThunk).
 
 list_vhost_topic_permissions(VHost) ->
-    list_topic_permissions(vhost_topic_perms_info_keys(),
-        rabbit_vhost:with(VHost, match_user_vhost_topic_permission('_', VHost))).
+    MnesiaThunk = rabbit_vhost:with_in_mnesia(
+                    VHost, match_user_vhost_topic_permission('_', VHost)),
+    KhepriThunk = rabbit_vhost:with_in_khepri(
+                    VHost,
+                    match_path_in_khepri(
+                      khepri_topic_permission_path(?STAR, VHost, ?STAR))),
+    list_topic_permissions(
+      vhost_topic_perms_info_keys(), MnesiaThunk, KhepriThunk).
 
 list_user_vhost_topic_permissions(Username, VHost) ->
-    list_topic_permissions(user_vhost_topic_perms_info_keys(),
-        rabbit_vhost:with_user_and_vhost(Username, VHost, match_user_vhost_topic_permission(Username, VHost))).
+    MnesiaThunk = rabbit_vhost:with_user_and_vhost_in_mnesia(
+                    Username, VHost,
+                    match_user_vhost_topic_permission(Username, VHost)),
+    KhepriThunk = rabbit_vhost:with_user_and_vhost_in_khepri(
+                    Username, VHost,
+                    match_path_in_khepri(
+                      khepri_topic_permission_path(Username, VHost, ?STAR))),
+    list_topic_permissions(
+      user_vhost_topic_perms_info_keys(), MnesiaThunk, KhepriThunk).
 
-list_topic_permissions(Keys, QueryThunk) ->
-    [extract_topic_permission_params(Keys, U) ||
-        U <- rabbit_misc:execute_mnesia_transaction(QueryThunk)].
+list_topic_permissions(Keys, MnesiaThunk, KhepriThunk) ->
+    TopicPermissions = rabbit_khepri:try_mnesia_or_khepri(
+                         fun() ->
+                                 list_topic_permissions_in_mnesia(MnesiaThunk)
+                         end,
+                         fun() ->
+                                 list_topic_permissions_in_khepri(KhepriThunk)
+                         end),
+    [extract_topic_permission_params(Keys, U) || U <- TopicPermissions].
+
+list_topic_permissions_in_mnesia(QueryThunk) when is_function(QueryThunk) ->
+    rabbit_misc:execute_mnesia_transaction(QueryThunk).
+
+list_topic_permissions_in_khepri(QueryThunk) when is_function(QueryThunk) ->
+    case rabbit_khepri:transaction(QueryThunk, ro) of
+        {ok, TopicPermissions} -> maps:values(TopicPermissions);
+        _                      -> []
+    end.
 
 match_user_vhost_topic_permission(Username, VHostPath) ->
     match_user_vhost_topic_permission(Username, VHostPath, '_').
@@ -1048,3 +1477,96 @@ notify_limit_clear(Username, ActingUser) ->
     rabbit_event:notify(user_limits_cleared,
         [{name, <<"limits">>}, {user_who_performed_action, ActingUser},
         {username, Username}]).
+
+clear_data_in_khepri() ->
+    Path = khepri_users_path(),
+    case rabbit_khepri:delete(Path) of
+        ok    -> ok;
+        Error -> throw(Error)
+    end.
+
+mnesia_write_to_khepri(User) when ?is_internal_user(User) ->
+    Username = internal_user:get_username(User),
+    Path = khepri_user_path(Username),
+    case rabbit_khepri:insert(Path, User) of
+        ok    -> ok;
+        Error -> throw(Error)
+    end;
+mnesia_write_to_khepri(
+  #user_permission{
+     user_vhost = #user_vhost{
+                     username = Username,
+                     virtual_host = VHost}} = UserPermission) ->
+    Path = khepri_user_permission_path(
+             #if_all{conditions =
+                     [Username,
+                      #if_node_exists{exists = true}]},
+             VHost),
+    Extra = #{keep_until =>
+              #{rabbit_vhost:khepri_vhost_path(VHost) =>
+                #if_node_exists{exists = true}}},
+    case rabbit_khepri:put(Path, UserPermission, Extra) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end;
+mnesia_write_to_khepri(
+  #topic_permission{
+     topic_permission_key =
+     #topic_permission_key{
+        user_vhost = #user_vhost{
+                        username = Username,
+                        virtual_host = VHost},
+        exchange = Exchange}} = TopicPermission) ->
+    Path = khepri_topic_permission_path(
+             #if_all{conditions =
+                     [Username,
+                      #if_node_exists{exists = true}]},
+             VHost,
+             Exchange),
+    Extra = #{keep_until =>
+              #{rabbit_vhost:khepri_vhost_path(VHost) =>
+                #if_node_exists{exists = true}}},
+    case rabbit_khepri:put(Path, TopicPermission, Extra) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end.
+
+mnesia_delete_to_khepri(User) when ?is_internal_user(User) ->
+    Username = internal_user:get_username(User),
+    Path = khepri_user_path(Username),
+    case rabbit_khepri:delete(Path) of
+        ok    -> ok;
+        Error -> throw(Error)
+    end;
+mnesia_delete_to_khepri(
+  #user_permission{
+     user_vhost = #user_vhost{
+                     username = Username,
+                     virtual_host = VHost}}) ->
+    Path = khepri_user_permission_path(Username, VHost),
+    case rabbit_khepri:delete(Path) of
+        ok    -> ok;
+        Error -> throw(Error)
+    end;
+mnesia_delete_to_khepri(
+  #topic_permission{
+     topic_permission_key =
+     #topic_permission_key{
+        user_vhost = #user_vhost{
+                        username = Username,
+                        virtual_host = VHost},
+        exchange = Exchange}}) ->
+    Path = khepri_topic_permission_path(Username, VHost, Exchange),
+    case rabbit_khepri:delete(Path) of
+        ok    -> ok;
+        Error -> throw(Error)
+    end.
+
+khepri_users_path()        -> [?MODULE, users].
+khepri_user_path(Username) -> [?MODULE, users, Username].
+
+khepri_user_permission_path(Username, VHostName) ->
+    [?MODULE, users, Username, user_permissions, VHostName].
+
+khepri_topic_permission_path(Username, VHostName, Exchange) ->
+    [?MODULE, users, Username, topic_permissions, VHostName, Exchange].

@@ -29,7 +29,6 @@
 -export([start_cover/1]).
 -export([throw_on_error/2, with_exit_handler/2, is_abnormal_exit/1,
          filter_exit_map/2]).
--export([with_user/2]).
 -export([execute_mnesia_transaction/1]).
 -export([execute_mnesia_transaction/2]).
 -export([execute_mnesia_tx_with_tail/1]).
@@ -165,7 +164,6 @@
 -spec with_exit_handler(thunk(A), thunk(A)) -> A.
 -spec is_abnormal_exit(any()) -> boolean().
 -spec filter_exit_map(fun ((A) -> B), [A]) -> [B].
--spec with_user(rabbit_types:username(), thunk(A)) -> A.
 -spec execute_mnesia_transaction(thunk(A)) -> A.
 -spec execute_mnesia_transaction(thunk(A), fun ((A, boolean()) -> B)) -> B.
 -spec execute_mnesia_tx_with_tail
@@ -537,17 +535,6 @@ filter_exit_map(F, L) ->
                  [with_exit_handler(
                     fun () -> Ref end,
                     fun () -> F(I) end) || I <- L]).
-
-
-with_user(Username, Thunk) ->
-    fun () ->
-            case mnesia:read({rabbit_user, Username}) of
-                [] ->
-                    mnesia:abort({no_such_user, Username});
-                [_U] ->
-                    Thunk()
-            end
-    end.
 
 execute_mnesia_transaction(TxFun) ->
     %% Making this a sync_transaction allows us to use dirty_read
