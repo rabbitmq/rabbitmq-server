@@ -642,9 +642,7 @@ add_replica(VHost, Name, Node) ->
                 false ->
                     {error, node_not_running};
                 true ->
-                    #{name := StreamId} = amqqueue:get_type_state(Q),
-                    {ok, Reply, _} = rabbit_stream_coordinator:add_replica(StreamId, Node),
-                    Reply
+                    rabbit_stream_coordinator:add_replica(Q, Node)
             end;
         E ->
             E

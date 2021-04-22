@@ -50,7 +50,8 @@ groups() ->
            delete_down_replica,
            replica_recovery,
            leader_failover,
-           leader_failover_dedupe]},
+           leader_failover_dedupe,
+           add_replicas]},
      {cluster_size_3_parallel, [parallel], [delete_replica,
                                             delete_classic_replica,
                                             delete_quorum_replica,
@@ -293,6 +294,71 @@ delete_queue(Config) ->
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})).
+
+add_replicas(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-initial-cluster-size">>, long, 1}])),
+
+    %% TODO: add lots of data so that replica is still out of sync when
+    %% second request comes in
+    NumMsgs = 1000,
+    Data = crypto:strong_rand_bytes(1000),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    [publish(Ch, Q, Data) || _ <- lists:seq(1, NumMsgs)],
+    %% should be sufficient for the next message to fall in the next
+    %% chunk
+    timer:sleep(100),
+    publish(Ch, Q, <<"last">>),
+    amqp_channel:wait_for_confirms(Ch, 30),
+    timer:sleep(1000),
+    ?assertEqual(ok,
+                 rpc:call(Server0, rabbit_stream_queue, add_replica,
+                          [<<"/">>, Q, Server1])),
+
+    timer:sleep(1000),
+
+    %% it is almost impossible to reliably catch this situation.
+    %% increasing number of messages published and the data size could help
+    % ?assertMatch({error, {disallowed, out_of_sync_replica}} ,
+    ?assertMatch(ok ,
+                 rpc:call(Server0, rabbit_stream_queue, add_replica,
+                          [<<"/">>, Q, Server2])),
+    timer:sleep(1000),
+    %% validate we can read the last entry
+    qos(Ch, 10, false),
+    amqp_channel:subscribe(
+      Ch, #'basic.consume'{queue = Q,
+                           no_ack = false,
+                           consumer_tag = <<"ctag">>,
+                           arguments = [{<<"x-stream-offset">>, longstr, <<"last">>}]},
+      self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
+             ok
+    end,
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag},
+         #amqp_msg{payload = <<"last">>}} ->
+            ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                                    multiple     = false})
+    after 60000 ->
+              flush(),
+              ?assertMatch(#'queue.delete_ok'{},
+                           amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+              exit(deliver_timeout)
+    end,
+    % ?assertMatch({error, {disallowed, out_of_sync_replica}} ,
+    %              rpc:call(Server0, rabbit_stream_queue, add_replica,
+    %                       [<<"/">>, Q, Server2])),
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+    ok.
 
 add_replica(Config) ->
     [Server0, Server1, Server2] =

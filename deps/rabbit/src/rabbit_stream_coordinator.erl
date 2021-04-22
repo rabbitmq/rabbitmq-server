@@ -55,6 +55,7 @@
 -include("rabbit_stream_coordinator.hrl").
 -include("amqqueue.hrl").
 
+-define(REPLICA_FRESHNESS_LIMIT_MS, 10 * 1000). %% 10s
 
 -type state() :: #?MODULE{}.
 -type args() :: #{index := ra:index(),
@@ -142,8 +143,38 @@ delete_stream(Q, ActingUser)
             Err
     end.
 
-add_replica(StreamId, Node) ->
-    process_command({add_replica, StreamId, #{node => Node}}).
+-spec add_replica(amqqueue:amqqueue(), node()) ->
+    ok | {error, term()}.
+add_replica(Q, Node) when ?is_amqqueue(Q) ->
+    %% performing safety check
+    %% if any replica is stale then we should not allow
+    %% further replicas to be added
+    Pid = amqqueue:get_pid(Q),
+    try
+        ReplState0 = osiris_writer:query_replication_state(Pid),
+        {{_, InitTs}, ReplState} = maps:take(node(Pid), ReplState0),
+        {MaxTs, MinTs} = maps:fold(fun (_, {_, Ts}, {Max, Min}) ->
+                                           {max(Ts, Max), min(Ts, Min)}
+                                   end, {InitTs, InitTs}, ReplState),
+        case (MaxTs - MinTs) > ?REPLICA_FRESHNESS_LIMIT_MS of
+            true ->
+                {error, {disallowed, out_of_sync_replica}};
+            false ->
+                Name = rabbit_misc:rs(amqqueue:get_name(Q)),
+                rabbit_log:info("~s : adding replica ~s to ~s Replication State: ~w",
+                                [?MODULE, Node, Name, ReplState0]),
+                StreamId = maps:get(name, amqqueue:get_type_state(Q)),
+                case process_command({add_replica, StreamId, #{node => Node}}) of
+                    {ok, Result, _} ->
+                        Result;
+                    Err ->
+                        Err
+                end
+        end
+    catch
+        _:Error ->
+            {error, Error}
+    end.
 
 delete_replica(StreamId, Node) ->
     process_command({delete_replica, StreamId, #{node => Node}}).
@@ -416,8 +447,8 @@ apply(Meta, {nodeup, Node} = Cmd,
     return(Meta, State#?MODULE{monitors = Monitors,
                                streams = Streams}, ok, Effects);
 apply(Meta, UnkCmd, State) ->
-    rabbit_log:debug("rabbit_stream_coordinator: unknown command ~W",
-                     [UnkCmd, 10]),
+    rabbit_log:debug("~s: unknown command ~W",
+                     [?MODULE, UnkCmd, 10]),
     return(Meta, State, {error, unknown_command}, []).
 
 return(#{index := Idx}, State, Reply, Effects) ->
@@ -544,36 +575,38 @@ handle_aux(leader, _, {start_writer, StreamId,
 handle_aux(leader, _, {start_replica, StreamId,
                        #{epoch := Epoch, node := Node} = Args, Conf},
            Aux, LogState, _) ->
-    rabbit_log:debug("rabbit_stream_coordinator: running action: 'start_replica'"
-                     " for ~s on node ~w in epoch ~b", [StreamId, Node, Epoch]),
+    rabbit_log:debug("~s: running action: 'start_replica'"
+                     " for ~s on node ~w in epoch ~b",
+                     [?MODULE, StreamId, Node, Epoch]),
     ActionFun = fun () -> phase_start_replica(StreamId, Args, Conf) end,
     run_action(starting, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, {stop, StreamId, #{node := Node,
                                          epoch := Epoch} = Args, Conf},
            Aux, LogState, _) ->
-    rabbit_log:debug("rabbit_stream_coordinator: running action: 'stop'"
-                     " for ~s on node ~w in epoch ~b", [StreamId, Node, Epoch]),
+    rabbit_log:debug("~s: running action: 'stop'"
+                     " for ~s on node ~w in epoch ~b",
+                     [?MODULE, StreamId, Node, Epoch]),
     ActionFun = fun () -> phase_stop_member(StreamId, Args, Conf) end,
     run_action(stopping, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, {update_mnesia, StreamId, Args, Conf},
            #aux{actions = _Monitors} = Aux, LogState,
            #?MODULE{streams = _Streams}) ->
-    rabbit_log:debug("rabbit_stream_coordinator: running action: 'update_mnesia'"
-                     " for ~s", [StreamId]),
+    rabbit_log:debug("~s: running action: 'update_mnesia'"
+                     " for ~s", [?MODULE, StreamId]),
     ActionFun = fun () -> phase_update_mnesia(StreamId, Args, Conf) end,
     run_action(updating_mnesia, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, {update_retention, StreamId, Args, _Conf},
            #aux{actions = _Monitors} = Aux, LogState,
            #?MODULE{streams = _Streams}) ->
-    rabbit_log:debug("rabbit_stream_coordinator: running action: 'update_retention'"
-                     " for ~s", [StreamId]),
+    rabbit_log:debug("~s: running action: 'update_retention'"
+                     " for ~s", [?MODULE, StreamId]),
     ActionFun = fun () -> phase_update_retention(StreamId, Args) end,
     run_action(update_retention, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, {delete_member, StreamId, #{node := Node} = Args, Conf},
            #aux{actions = _Monitors} = Aux, LogState,
            #?MODULE{streams = _Streams}) ->
-    rabbit_log:debug("rabbit_stream_coordinator: running action: 'delete_member'"
-                     " for ~s ~s", [StreamId, Node]),
+    rabbit_log:debug("~s: running action: 'delete_member'"
+                     " for ~s ~s", [?MODULE, StreamId, Node]),
     ActionFun = fun () -> phase_delete_member(StreamId, Args, Conf) end,
     run_action(delete_member, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, fail_active_actions,
@@ -594,9 +627,9 @@ handle_aux(leader, _, {down, Pid, Reason},
     %% An action has failed - report back to the state machine
     case maps:get(Pid, Monitors0, undefined) of
         {StreamId, Action, #{node := Node, epoch := Epoch} = Args} ->
-            rabbit_log:warning("Error while executing action for stream queue ~s, "
+            rabbit_log:warning("~s: error while executing action for stream queue ~s, "
                                " node ~s, epoch ~b Err: ~w",
-                               [StreamId, Node, Epoch, Reason]),
+                               [?MODULE, StreamId, Node, Epoch, Reason]),
             Monitors = maps:remove(Pid, Monitors0),
             Cmd = {action_failed, StreamId, Args#{action => Action}},
             send_self_command(Cmd),
