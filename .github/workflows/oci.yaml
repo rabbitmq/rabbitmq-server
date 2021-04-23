@@ -38,7 +38,7 @@ jobs:
       - name: Build container image
         working-directory: packaging/docker-image
         run: |
-          make dist
+          make dist IMAGE_TAG=${GITHUB_REF##*/}
 
       - name: Login to DockerHub
         working-directory: packaging/docker-image
@@ -50,4 +50,4 @@ jobs:
       - name: Push container image to DockerHub
         working-directory: packaging/docker-image
         run: |
-          make push
+          make push IMAGE_TAG=${GITHUB_REF##*/}
