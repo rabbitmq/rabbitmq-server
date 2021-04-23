@@ -34,6 +34,7 @@ endif
 
 OTP_VERSION ?= 23.2.4
 OTP_SHA256 ?= e72aa084907e0f34f932cf00caa33aba93147b0a7c9c35569d6bd1c402f532de
+REPO ?= pivotalrabbitmq/rabbitmq
 
 all: dist
 
@@ -44,11 +45,17 @@ dist:
 	  --build-arg OTP_VERSION=$(OTP_VERSION) \
 	  --build-arg OTP_SHA256=$(OTP_SHA256) \
 	  --build-arg RABBITMQ_BUILD=rabbitmq_server-$(VERSION) \
-	  --tag pivotalrabbitmq/rabbitmq:$(subst +,-,$(VERSION)) \
+	  --tag $(REPO):$(subst +,-,$(VERSION)) \
 	  .
+ifdef IMAGE_TAG
+	docker tag $(REPO):$(subst +,-,$(VERSION)) $(REPO):$(IMAGE_TAG)
+endif
 
 push:
-	docker push pivotalrabbitmq/rabbitmq:$(subst +,-,$(VERSION))
+	docker push $(REPO):$(subst +,-,$(VERSION))
+ifdef IMAGE_TAG
+	docker push $(REPO):$(IMAGE_TAG)
+endif
 
 clean:
 	rm -rf rabbitmq_server-*
