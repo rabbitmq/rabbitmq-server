@@ -26,6 +26,7 @@
 -define(HEADER_PASSCODE, "passcode").
 -define(HEADER_PERSISTENT, "persistent").
 -define(HEADER_PREFETCH_COUNT, "prefetch-count").
+-define(HEADER_X_STREAM_OFFSET, "x-stream-offset").
 -define(HEADER_PRIORITY, "priority").
 -define(HEADER_RECEIPT, "receipt").
 -define(HEADER_REDELIVERED, "redelivered").

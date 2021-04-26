@@ -27,6 +27,7 @@
          boolean_header/2, boolean_header/3,
          integer_header/2, integer_header/3,
          binary_header/2, binary_header/3]).
+-export([stream_offset_header/2]).
 -export([serialize/1, serialize/2]).
 
 initial_state() -> none.
@@ -221,6 +222,26 @@ binary_header(F, K) ->
     end.
 
 binary_header(F, K, D) -> default_value(binary_header(F, K), D).
+
+stream_offset_header(F, D) ->
+    OffsetPrefix = <<"offset:">>,
+    OffsetPrefixLength = byte_size(OffsetPrefix),
+    TimestampPrefix = <<"timestamp:">>,
+    TimestampPrefixLength = byte_size(TimestampPrefix),
+    case binary_header(F, ?HEADER_X_STREAM_OFFSET, D) of
+        <<"first">> ->
+            {longstr, <<"first">>};
+        <<"last">> ->
+            {longstr, <<"last">>};
+        <<"next">> ->
+            {longstr, <<"next">>};
+        <<OffsetPrefix:OffsetPrefixLength/binary, OffsetValue/binary>> ->
+            {long, binary_to_integer(OffsetValue)};
+        <<TimestampPrefix:TimestampPrefixLength/binary, TimestampValue/binary>> ->
+            {timestamp, binary_to_integer(TimestampValue)};
+        _ ->
+            D
+    end.
 
 serialize(Frame) ->
     serialize(Frame, true).
