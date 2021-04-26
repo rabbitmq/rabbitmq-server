@@ -168,8 +168,8 @@ stream_offset_header(_) ->
         {{"x-stream-offset", "first"}, {longstr, <<"first">>}},
         {{"x-stream-offset", "last"}, {longstr, <<"last">>}},
         {{"x-stream-offset", "next"}, {longstr, <<"next">>}},
-        {{"x-stream-offset", "offset:5000"}, {long, 5000}},
-        {{"x-stream-offset", "timestamp:1000"}, {timestamp, 1000}},
+        {{"x-stream-offset", "offset=5000"}, {long, 5000}},
+        {{"x-stream-offset", "timestamp=1000"}, {timestamp, 1000}},
         {{"x-stream-offset", "foo"}, undefined},
         {{"some-header", "some value"}, undefined}
     ],

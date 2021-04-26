@@ -224,10 +224,6 @@ binary_header(F, K) ->
 binary_header(F, K, D) -> default_value(binary_header(F, K), D).
 
 stream_offset_header(F, D) ->
-    OffsetPrefix = <<"offset:">>,
-    OffsetPrefixLength = byte_size(OffsetPrefix),
-    TimestampPrefix = <<"timestamp:">>,
-    TimestampPrefixLength = byte_size(TimestampPrefix),
     case binary_header(F, ?HEADER_X_STREAM_OFFSET, D) of
         <<"first">> ->
             {longstr, <<"first">>};
@@ -235,9 +231,9 @@ stream_offset_header(F, D) ->
             {longstr, <<"last">>};
         <<"next">> ->
             {longstr, <<"next">>};
-        <<OffsetPrefix:OffsetPrefixLength/binary, OffsetValue/binary>> ->
+        <<"offset=", OffsetValue/binary>> ->
             {long, binary_to_integer(OffsetValue)};
-        <<TimestampPrefix:TimestampPrefixLength/binary, TimestampValue/binary>> ->
+        <<"timestamp=", TimestampValue/binary>> ->
             {timestamp, binary_to_integer(TimestampValue)};
         _ ->
             D
