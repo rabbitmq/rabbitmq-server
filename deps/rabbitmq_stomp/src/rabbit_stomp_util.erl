@@ -115,6 +115,8 @@ adhoc_convert_headers(Headers, Existing) ->
                         [{binary_to_list(K), binary_to_list(V)} | Acc];
                     ({K, signedint, V}, Acc) ->
                         [{binary_to_list(K), integer_to_list(V)} | Acc];
+                    ({K, long, V}, Acc) ->
+                        [{binary_to_list(K), integer_to_list(V)} | Acc];
                     (_, Acc) ->
                         Acc
                 end, Existing, Headers).

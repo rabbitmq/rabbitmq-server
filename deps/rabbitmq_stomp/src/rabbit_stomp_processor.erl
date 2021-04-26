@@ -685,6 +685,13 @@ do_subscribe(Destination, DestHdr, Frame,
                     {stop, normal, close_connection(State)};
                 error ->
                     ExchangeAndKey = parse_routing(Destination, DfltTopicEx),
+                    StreamOffset = rabbit_stomp_frame:stream_offset_header(Frame, undefined),
+                    Arguments = case StreamOffset of
+                                    undefined ->
+                                        [];
+                                    {Type, Value} ->
+                                        [{<<"x-stream-offset">>, Type, Value}]
+                                end,
                     try
                         amqp_channel:subscribe(Channel,
                                                #'basic.consume'{
@@ -693,7 +700,7 @@ do_subscribe(Destination, DestHdr, Frame,
                                                   no_local     = false,
                                                   no_ack       = (AckMode == auto),
                                                   exclusive    = false,
-                                                  arguments    = []},
+                                                  arguments    = Arguments},
                                                self()),
                         ok = rabbit_routing_util:ensure_binding(
                                Queue, ExchangeAndKey, Channel)
