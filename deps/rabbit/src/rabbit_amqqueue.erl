@@ -55,7 +55,7 @@
 -export([rebalance/3]).
 -export([collect_info_all/2]).
 
--export([is_policy_applicable/2, declare_args/0]).
+-export([is_policy_applicable/2, declare_args/0, consume_args/0]).
 -export([is_server_named_allowed/1]).
 
 -export([check_max_age/1]).
@@ -787,7 +787,8 @@ declare_args() ->
      {<<"x-queue-leader-locator">>,    fun check_queue_leader_locator_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
-                   {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
+                   {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2},
+                   {<<"x-stream-offset">>, fun check_stream_offset_arg/2}].
 
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
@@ -968,6 +969,19 @@ check_queue_leader_locator_arg(Val, _Args) when is_binary(Val) ->
     end;
 check_queue_leader_locator_arg(_Val, _Args) ->
     {error, invalid_queue_locator_arg}.
+
+-define(KNOWN_OFFSETS, [<<"first">>, <<"last">>, <<"next">>]).
+check_stream_offset_arg({longstr, Val}, _Args) ->
+    case lists:member(Val, ?KNOWN_OFFSETS) of
+        true  -> ok;
+        false -> {error, invalid_stream_offset_arg}
+    end;
+check_stream_offset_arg({timestamp, Val}, _Args) when is_integer(Val) ->
+    ok;
+check_stream_offset_arg({_, Val}, _Args) when is_integer(Val) ->
+    ok;
+check_stream_offset_arg(_Val, _Args) ->
+    {error, invalid_stream_offset_arg}.
 
 -define(KNOWN_QUEUE_MODES, [<<"default">>, <<"lazy">>]).
 check_queue_mode({longstr, Val}, _Args) ->

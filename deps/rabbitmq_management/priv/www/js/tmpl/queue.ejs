@@ -369,6 +369,9 @@
       <input type="hidden" name="dest-uri" value="amqp:///<%= esc(queue.vhost) %>"/>
       <input type="hidden" name="dest-add-forward-headers" value="false"/>
       <input type="hidden" name="ack-mode" value="on-confirm"/>
+      <% if (is_stream(queue)) { %>
+        <input type="hidden" name="src-consumer-args-stream-offset" value="first"/>
+      <% } %>
       <input type="hidden" name="redirect" value="#/queues"/>
 
       <table class="form">

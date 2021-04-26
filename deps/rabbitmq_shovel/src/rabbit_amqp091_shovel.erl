@@ -41,12 +41,15 @@ parse(_Name, {source, Source}) ->
                                                    ?DEFAULT_PREFETCH)),
     Queue = parse_parameter(queue, fun parse_binary/1,
                             proplists:get_value(queue, Source)),
+    %% TODO parse
+    CArgs = proplists:get_value(consumer_args, Source, []),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Source),
       resource_decl => decl_fun(Source),
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
-      prefetch_count => Prefetch};
+      prefetch_count => Prefetch,
+      consumer_args => CArgs};
 parse(Name, {destination, Dest}) ->
     PubProp = proplists:get_value(publish_properties, Dest, []),
     PropsFun = try_make_parse_publish(publish_properties, PubProp),
@@ -73,7 +76,8 @@ init_source(Conf = #{ack_mode := AckMode,
                      source := #{queue := Queue,
                                  current := {Conn, Chan, _},
                                  prefetch_count := Prefetch,
-                                 resource_decl := Decl} = Src}) ->
+                                 resource_decl := Decl,
+                                 consumer_args := Args} = Src}) ->
     Decl(Conn, Chan),
 
     NoAck = AckMode =:= no_ack,
@@ -92,7 +96,8 @@ init_source(Conf = #{ack_mode := AckMode,
     end,
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Chan, #'basic.consume'{queue = Queue,
-                                                      no_ack = NoAck}, self()),
+                                                      no_ack = NoAck,
+                                                      arguments = Args}, self()),
     Conf#{source => Src#{remaining => Remaining,
                          remaining_unacked => Remaining}}.
 
