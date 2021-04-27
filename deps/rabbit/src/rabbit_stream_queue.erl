@@ -554,9 +554,10 @@ tracking_status(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             Leader = amqqueue:get_pid(Q),
             Map = osiris:read_tracking(Leader),
-            maps:fold(fun(K, V, Acc) ->
+            maps:fold(fun(K, {Type, Value}, Acc) ->
                               [[{reference, K},
-                                {offset, V}] | Acc]
+                                {type, Type},
+                                {value, Value}] | Acc]
                       end, [], Map);
         {error, not_found} = E->
             E
