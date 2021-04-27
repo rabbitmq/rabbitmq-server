@@ -351,23 +351,23 @@ validate(_VHost, <<"operator_policy">>, Name, Term, _User) ->
       Name, operator_policy_validation(), Term).
 
 notify(VHost, <<"policy">>, Name, Term, ActingUser) ->
+    update_policies(VHost),
     rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost},
-                                     {user_who_performed_action, ActingUser} | Term]),
-    update_policies(VHost);
+                                     {user_who_performed_action, ActingUser} | Term]);
 notify(VHost, <<"operator_policy">>, Name, Term, ActingUser) ->
+    update_policies(VHost),
     rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost},
-                                     {user_who_performed_action, ActingUser} | Term]),
-    update_policies(VHost).
+                                     {user_who_performed_action, ActingUser} | Term]).
 
 notify_clear(VHost, <<"policy">>, Name, ActingUser) ->
+    update_policies(VHost),
     rabbit_event:notify(policy_cleared, [{name, Name}, {vhost, VHost},
-                                         {user_who_performed_action, ActingUser}]),
-    update_policies(VHost);
+                                         {user_who_performed_action, ActingUser}]);
 notify_clear(VHost, <<"operator_policy">>, Name, ActingUser) ->
+    update_policies(VHost),
     rabbit_event:notify(operator_policy_cleared,
                         [{name, Name}, {vhost, VHost},
-                         {user_who_performed_action, ActingUser}]),
-    update_policies(VHost).
+                         {user_who_performed_action, ActingUser}]).
 
 %%----------------------------------------------------------------------------
 
