@@ -1836,8 +1836,10 @@ handle_frame_post_auth(Transport,
                          case osiris:read_tracking(LocalMemberPid, Reference) of
                              undefined ->
                                  0;
-                             Offt ->
-                                 Offt
+                             {offset, Offt} ->
+                                 Offt;
+                             _ ->
+                                 0
                          end}
                 end;
             error ->
