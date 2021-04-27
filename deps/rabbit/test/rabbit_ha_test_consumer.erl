@@ -51,15 +51,9 @@ run(TestPid, Channel, Queue, CancelOnFailover, LowestSeen, MsgsToConsume) ->
             %% counter.
             if
                 MsgNum + 1 == LowestSeen ->
-                    error_logger:info_msg("recording ~w left ~w",
-                                          [MsgNum, MsgsToConsume]),
                     run(TestPid, Channel, Queue,
                         CancelOnFailover, MsgNum, MsgsToConsume - 1);
                 MsgNum >= LowestSeen ->
-                    error_logger:info_msg(
-                      "consumer ~p on ~p ignoring redelivered msg ~p"
-                      "lowest seen ~w~n",
-                      [self(), Channel, MsgNum, LowestSeen]),
                     true = Redelivered, %% ASSERTION
                     run(TestPid, Channel, Queue,
                         CancelOnFailover, LowestSeen, MsgsToConsume);
