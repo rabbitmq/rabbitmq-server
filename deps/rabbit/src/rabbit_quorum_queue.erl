@@ -63,6 +63,8 @@
          notify_decorators/3,
          spawn_notify_decorators/3]).
 
+-export([get_oldest_message_timestamp/1]).
+
 -export([is_enabled/0,
          declare/2]).
 
@@ -1593,6 +1595,22 @@ notify_decorators(Q) when ?is_amqqueue(Q) ->
             notify_decorators(QName, consumer_state_changed,
                               [MaxActivePriority, IsEmpty]);
         _ -> ok
+    end.
+
+
+-spec get_oldest_message_timestamp(amqqueue:amqqueue()) ->
+    {ok, non_neg_integer() | undefined | ''} |
+    {error, term()}.
+get_oldest_message_timestamp(Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_oldest_message_timestamp/1) of
+        {ok, {_, Timestamp}, _} ->
+            {ok, Timestamp};
+        {error, _} = Err ->
+            Err;
+        {timeout, _} ->
+            {error, timeout}
     end.
 
 notify_decorators(QName, Event) ->

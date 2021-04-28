@@ -35,6 +35,7 @@
          query_messages_total/1,
          query_processes/1,
          query_ra_indexes/1,
+         query_oldest_message_timestamp/1,
          query_consumer_count/1,
          query_consumers/1,
          query_stat/1,
@@ -868,6 +869,9 @@ query_processes(#?MODULE{enqueuers = Enqs, consumers = Cons0}) ->
 
 query_ra_indexes(#?MODULE{ra_indexes = RaIndexes}) ->
     RaIndexes.
+
+query_oldest_message_timestamp(#?MODULE{ra_indexes = RaIndexes}) ->
+    rabbit_fifo_index:smallest_value(RaIndexes).
 
 query_consumer_count(#?MODULE{consumers = Consumers,
                               waiting_consumers = WaitingConsumers}) ->
