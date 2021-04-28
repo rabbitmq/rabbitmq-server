@@ -33,6 +33,8 @@ groups() ->
             data_coercion_to_proplist,
             data_coercion_to_list,
             data_coercion_to_map,
+            data_coercion_atomize_keys_proplist,
+            data_coercion_atomize_keys_map,
             pget,
             encrypt_decrypt,
             encrypt_decrypt_term,
@@ -298,6 +300,16 @@ data_coercion_to_map(_Config) ->
 data_coercion_to_proplist(_Config) ->
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_proplist([{a, 1}])),
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_proplist(#{a => 1})).
+
+data_coercion_atomize_keys_map(_Config) ->
+    A = #{a => 1, b => 2, c => 3},
+    B = rabbit_data_coercion:atomize_keys(#{a => 1, "b" => 2, <<"c">> => 3}),
+    ?assertEqual(A, B).
+
+data_coercion_atomize_keys_proplist(_Config) ->
+    A = [{a, 1}, {b, 2}, {c, 3}],
+    B = rabbit_data_coercion:atomize_keys([{a, 1}, {"b", 2}, {<<"c">>, 3}]),
+    ?assertEqual(lists:usort(A), lists:usort(B)).
 
 data_coercion_to_list(_Config) ->
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_list([{a, 1}])),
