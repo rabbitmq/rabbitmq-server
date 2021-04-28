@@ -1154,10 +1154,11 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerId, Consumer, S0, Effects0
              Effects1}
     end.
 
-apply_enqueue(#{index := RaftIdx} = Meta, From, Seq, RawMsg, State0) ->
+apply_enqueue(#{index := RaftIdx,
+                system_time := Ts} = Meta, From, Seq, RawMsg, State0) ->
     case maybe_enqueue(RaftIdx, From, Seq, RawMsg, [], State0) of
         {ok, State1, Effects1} ->
-            State2 = append_to_master_index(RaftIdx, State1),
+            State2 = append_to_master_index(RaftIdx, Ts, State1),
             {State, ok, Effects} = checkout(Meta, State0, State2, Effects1, false),
             {maybe_store_dehydrated_state(RaftIdx, State), ok, Effects};
         {duplicate, State, Effects} ->
@@ -1206,10 +1207,10 @@ enqueue(RaftIdx, RawMsg, #?MODULE{messages = Messages,
     State#?MODULE{messages = lqueue:in({NextMsgNum, Msg}, Messages),
                   next_msg_num = NextMsgNum + 1}.
 
-append_to_master_index(RaftIdx,
+append_to_master_index(RaftIdx, Ts,
                        #?MODULE{ra_indexes = Indexes0} = State0) ->
     State = incr_enqueue_count(State0),
-    Indexes = rabbit_fifo_index:append(RaftIdx, Indexes0),
+    Indexes = rabbit_fifo_index:append(RaftIdx, Ts, Indexes0),
     State#?MODULE{ra_indexes = Indexes}.
 
 

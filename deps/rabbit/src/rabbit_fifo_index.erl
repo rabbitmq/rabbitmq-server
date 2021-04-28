@@ -4,9 +4,11 @@
          empty/0,
          exists/2,
          append/2,
+         append/3,
          delete/2,
          size/1,
          smallest/1,
+         smallest_value/1,
          map/2
         ]).
 
@@ -15,8 +17,9 @@
 %% the empty atom is a lot smaller (4 bytes) than e.g. `undefined` (13 bytes).
 %% This matters as the data map gets persisted as part of the snapshot
 -define(NIL, '').
+-type milliseconds() :: non_neg_integer().
 
--record(?MODULE, {data = #{} :: #{integer() => ?NIL},
+-record(?MODULE, {data = #{} :: #{integer() => ?NIL | milliseconds()},
                   smallest :: undefined | non_neg_integer(),
                   largest :: undefined | non_neg_integer()
                  }).
@@ -34,14 +37,18 @@ empty() ->
 exists(Key, #?MODULE{data = Data}) ->
     maps:is_key(Key, Data).
 
-% only integer keys are supported
 -spec append(integer(), state()) -> state().
-append(Key,
+append(Key, State) ->
+    append(Key, ?NIL, State).
+
+% only integer keys are supported
+-spec append(integer(), term(), state()) -> state().
+append(Key, Value,
        #?MODULE{data = Data,
                 smallest = Smallest,
                 largest = Largest} = State)
   when Key > Largest orelse Largest =:= undefined ->
-    State#?MODULE{data = maps:put(Key, ?NIL, Data),
+    State#?MODULE{data = maps:put(Key, Value, Data),
                   smallest = ra_lib:default(Smallest, Key),
                   largest = Key}.
 
@@ -69,6 +76,10 @@ size(#?MODULE{data = Data}) ->
 smallest(#?MODULE{smallest = Smallest}) ->
     Smallest.
 
+-spec smallest_value(state()) -> ?NIL | milliseconds() | undefined.
+smallest_value(#?MODULE{smallest = Smallest,
+                        data = Data}) ->
+    maps:get(Smallest, Data, undefined).
 
 -spec map(fun(), state()) -> state().
 map(F, #?MODULE{data = Data} = State) ->
