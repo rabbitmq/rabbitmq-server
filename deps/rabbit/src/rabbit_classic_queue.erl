@@ -144,11 +144,11 @@ stat(Q) ->
     delegate:invoke(amqqueue:get_pid(Q),
                     {gen_server2, call, [stat, infinity]}).
 
--spec init(amqqueue:amqqueue()) -> state().
+-spec init(amqqueue:amqqueue()) -> {ok, state()}.
 init(Q) when ?amqqueue_is_classic(Q) ->
     QName = amqqueue:get_name(Q),
-    #?STATE{pid = amqqueue:get_pid(Q),
-            qref = QName}.
+    {ok, #?STATE{pid = amqqueue:get_pid(Q),
+                 qref = QName}}.
 
 -spec close(state()) -> ok.
 close(_State) ->

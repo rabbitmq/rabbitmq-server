@@ -636,11 +636,11 @@ init(Q) when ?is_amqqueue(Q) ->
             Prefix = erlang:pid_to_list(self()) ++ "_",
             WriterId = rabbit_guid:binary(rabbit_guid:gen(), Prefix),
             {ok, SoftLimit} = application:get_env(rabbit, stream_messages_soft_limit),
-            #stream_client{stream_id = StreamId,
-                           name = amqqueue:get_name(Q),
-                           leader = Leader,
-                           writer_id = WriterId,
-                           soft_limit = SoftLimit};
+            {ok, #stream_client{stream_id = StreamId,
+                                name = amqqueue:get_name(Q),
+                                leader = Leader,
+                                writer_id = WriterId,
+                                soft_limit = SoftLimit}};
         {error, coordinator_unavailable} = E ->
             rabbit_log:warning("Failed to start stream queue ~p: coordinator unavailable",
                                [rabbit_misc:rs(QName)]),

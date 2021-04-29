@@ -140,7 +140,7 @@
 
 %% stateful
 %% intitialise and return a queue type specific session context
--callback init(amqqueue:amqqueue()) -> queue_state().
+-callback init(amqqueue:amqqueue()) -> {ok, queue_state()} | {error, Reason :: term()}.
 
 -callback close(queue_state()) -> ok.
 %% update the queue type state from amqqrecord
@@ -544,7 +544,7 @@ get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState)
             case Mod:init(Q) of
                 {error, Reason} ->
                     exit({Reason, Ref});
-                QState ->
+                {ok, QState} ->
                     #ctx{module = Mod,
                          name = Name,
                          state = QState}
