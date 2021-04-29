@@ -17,7 +17,7 @@
          start_ecs_cluster/1,
          destroy_ecs_cluster/1,
          register_task/2,
-         deregister_task/1,
+         deregister_tasks/1,
          create_service/1,
          delete_service/1,
          public_dns_names/1,
@@ -120,10 +120,19 @@ read_awscli_config([], AwscliConfig) ->
     AwscliConfig.
 
 ensure_rabbitmq_image(Config) ->
-    rabbit_ct_helpers:set_config(
-      Config, [
-               {rabbitmq_image, os:getenv("RABBITMQ_IMAGE", "rabbitmq:3.8-management")}
-              ]).
+    Image = case rabbit_ct_helpers:get_config(Config, rabbitmq_image) of
+                undefined -> os:getenv("RABBITMQ_IMAGE");
+                I -> I
+            end,
+    case Image of
+        false ->
+            {skip, "rabbitmq image required," ++
+                 "please set RABBITMQ_IMAGE or 'rabbitmq_image' " ++
+                 "in ct config"};
+        Img ->
+            rabbit_ct_helpers:set_config(
+              Config, {rabbitmq_image, Img})
+    end.
 
 ecs_configure(Config) ->
     EcsCliCmd = ?config(ecs_cli_cmd, Config),
@@ -187,10 +196,12 @@ ecs_down(Config) ->
 adjust_security_group(Config) ->
     AwsCmd = ?config(aws_cmd, Config),
     ClusterName = ?config(ecs_cluster_name, Config),
+    Region = ?config(ecs_region, Config),
     {ok, [GroupId]} = ?awaitMatch({ok, L} when length(L) == 1,
-                                               security_group_ids(AwsCmd, ClusterName),
+                                               security_group_ids(AwsCmd, ClusterName, Region),
                                                ?ECS_CLUSTER_TIMEOUT),
     AuthorizeSecurityGroupIngress = [AwsCmd, "ec2", "authorize-security-group-ingress",
+                                     "--region", Region,
                                      "--group-id", GroupId,
                                      "--protocol", "tcp",
                                      "--port", "1-65535",
@@ -213,20 +224,25 @@ start_ecs_cluster(Config) ->
 destroy_ecs_cluster(Config) ->
     ecs_down(Config).
 
-list_container_instances(AwsCmd, ClusterName) ->
+list_container_instances(AwsCmd, ClusterName, Region) ->
     ListContainerInstances = [AwsCmd, "ecs", "list-container-instances",
-                              "--cluster", ClusterName],
+                              "--cluster", ClusterName,
+                              "--region", Region],
     case rabbit_ct_helpers:exec(ListContainerInstances, [binary]) of
         {ok, Response} -> rabbit_json:try_decode(Response);
         Error -> Error
     end.
 
-describe_container_instances(AwsCmd, ClusterName) ->
-    case list_container_instances(AwsCmd, ClusterName) of
+describe_container_instances(AwsCmd, ClusterName, Region) ->
+    case list_container_instances(AwsCmd, ClusterName, Region) of
+        {ok, #{<<"containerInstanceArns">> := []}} ->
+            {error, no_instances};
         {ok, #{<<"containerInstanceArns">> := ContainerInstanceArns}} ->
             InputJson = rabbit_json:encode(#{<<"cluster">> => list_to_binary(ClusterName),
                                              <<"containerInstances">> => ContainerInstanceArns}),
             DescribeContainerInstances = [AwsCmd, "ecs", "describe-container-instances",
+                                          "--region", Region,
+                                          "--query", "containerInstances[*].ec2InstanceId",
                                           "--cli-input-json", InputJson],
             case rabbit_ct_helpers:exec(DescribeContainerInstances, []) of
                 {ok, Response} -> rabbit_json:try_decode(list_to_binary(Response));
@@ -236,52 +252,42 @@ describe_container_instances(AwsCmd, ClusterName) ->
             Error
     end.
 
-describe_instances(AwsCmd, ClusterName) ->
-    case describe_container_instances(AwsCmd, ClusterName) of
-        {ok, #{<<"containerInstances">> := ContainerInstances}} ->
-            InstanceIds = [maps:get(<<"ec2InstanceId">>, I) || I <- ContainerInstances],
-            InputJson = rabbit_json:encode(#{<<"InstanceIds">> => InstanceIds}),
+describe_instances(AwsCmd, ClusterName, Region, Query) ->
+    case describe_container_instances(AwsCmd, ClusterName, Region) of
+        {ok, InstanceIds} ->
             DescribeInstances = [AwsCmd, "ec2", "describe-instances",
-                                 "--cli-input-json", InputJson],
-            case rabbit_ct_helpers:exec(DescribeInstances, [binary]) of
-                {ok, ResponseBinary} -> rabbit_json:try_decode(ResponseBinary);
+                                 "--region", Region,
+                                 "--query", Query,
+                                 "--instance-ids"] ++ InstanceIds,
+            case rabbit_ct_helpers:exec(DescribeInstances, []) of
+                {ok, Response} -> rabbit_json:try_decode(list_to_binary(Response));
                 Error -> Error
             end;
         Error ->
             Error
     end.
 
-security_group_ids(AwsCmd, ClusterName) ->
-    case describe_instances(AwsCmd, ClusterName) of
+security_group_ids(AwsCmd, ClusterName, Region) ->
+    Query = "Reservations[*].Instances[].NetworkInterfaces[].Groups[].GroupId",
+    case describe_instances(AwsCmd, ClusterName, Region, Query) of
         {ok, InstancesResponse} ->
-            Instances = lists:flatmap(
-                          fun (R) -> maps:get(<<"Instances">>, R) end,
-                          maps:get(<<"Reservations">>, InstancesResponse)
-                         ),
-            NetworkInterfaces = lists:flatmap(
-                                  fun (I) -> maps:get(<<"NetworkInterfaces">>, I) end,
-                                  Instances
-                                 ),
-            Groups = lists:flatmap(
-                       fun (N) -> maps:get(<<"Groups">>, N) end,
-                       NetworkInterfaces
-                      ),
-            GroupIds = lists:map(fun (G) -> maps:get(<<"GroupId">>, G) end, Groups),
-            {ok, lists:usort(GroupIds)};
+            {ok, lists:usort(InstancesResponse)};
         Error ->
             Error
     end.
 
 register_task(Config, TaskJson) ->
     AwsCmd = ?config(aws_cmd, Config),
+    Region = ?config(ecs_region, Config),
     Cmd = [AwsCmd, "ecs", "register-task-definition",
+           "--region", Region,
            "--cli-input-json", TaskJson],
     case rabbit_ct_helpers:exec(Cmd, []) of
         {ok, _} -> Config;
         _ -> {skip, "Failed to register task with ecs"}
     end.
 
-deregister_task(Config) ->
+deregister_tasks(Config) ->
     AwsCmd = ?config(aws_cmd, Config),
     Region = ?config(ecs_region, Config),
     ServiceName = ?config(ecs_service_name, Config),
@@ -300,10 +306,12 @@ deregister_task(Config) ->
 
 create_service(Config) ->
     AwsCmd = ?config(aws_cmd, Config),
+    Region = ?config(ecs_region, Config),
     ClusterName = ?config(ecs_cluster_name, Config),
     ServiceName = ?config(ecs_service_name, Config),
     ClusterSize = ?config(ecs_cluster_size, Config),
     Cmd = [AwsCmd, "ecs", "create-service",
+           "--region", Region,
            "--cluster", ClusterName,
            "--service-name", ServiceName,
            "--desired-count", integer_to_list(ClusterSize),
@@ -316,9 +324,11 @@ create_service(Config) ->
 
 delete_service(Config) ->
     AwsCmd = ?config(aws_cmd, Config),
+    Region = ?config(ecs_region, Config),
     ClusterName = ?config(ecs_cluster_name, Config),
     ServiceName = ?config(ecs_service_name, Config),
     Cmd = [AwsCmd, "ecs", "delete-service",
+           "--region", Region,
            "--cluster", ClusterName,
            "--service", ServiceName,
            "--force"],
@@ -328,24 +338,11 @@ delete_service(Config) ->
 public_dns_names(Config) ->
     AwsCmd = ?config(aws_cmd, Config),
     ClusterName = ?config(ecs_cluster_name, Config),
-    case describe_instances(AwsCmd, ClusterName) of
-        {ok, InstancesResponse} ->
-            Instances = lists:flatmap(
-                          fun (R) -> maps:get(<<"Instances">>, R) end,
-                          maps:get(<<"Reservations">>, InstancesResponse, [])
-                         ),
-            Names = lists:map(
-                      fun (I) ->
-                              binary_to_list(maps:get(<<"PublicDnsName">>, I))
-                      end,
-                      Instances
-                     ),
-            {ok, Names};
-        Error ->
-            Error
-    end.
+    Region = ?config(ecs_region, Config),
+    Query = "Reservations[*].Instances[].PublicDnsName",
+    describe_instances(AwsCmd, ClusterName, Region, Query).
 
-fetch_nodes_endpoint(Config, Host) ->
+fetch_nodes_endpoint(Config, Host) when is_list(Host)->
     DefaultUser = ?config(rabbitmq_default_user, Config),
     DefaultPass = ?config(rabbitmq_default_pass, Config),
     Url = "http://" ++ Host ++ ":15672/api/nodes",

@@ -12,7 +12,7 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -define(CLUSTER_SIZE, 3).
--define(TIMEOUT_MILLIS, 120000).
+-define(TIMEOUT_MILLIS, 180000).
 
 -export([all/0,
          suite/0,
@@ -58,6 +58,7 @@ init_per_suite(Config) ->
     Config2 = rabbit_ct_helpers:register_teardown_step(Config1, fun aws_ecs_util:destroy_ecs_cluster/1),
     rabbit_ct_helpers:run_steps(
       Config2, [
+                fun rabbit_ct_helpers:init_skip_as_error_flag/1,
                 fun rabbit_ct_helpers:start_long_running_testsuite_monitor/1,
                 fun aws_ecs_util:ensure_aws_cli/1,
                 fun aws_ecs_util:ensure_ecs_cli/1,
@@ -91,7 +92,7 @@ end_per_group(_Group, Config) ->
                                                  timer:sleep(10000),
                                                  C
                                          end,
-                                         fun aws_ecs_util:deregister_task/1]).
+                                         fun aws_ecs_util:deregister_tasks/1]).
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -107,7 +108,7 @@ cluster_was_formed(Config) ->
     [N1Nodes, N2Nodes, N3Nodes] =
         [begin
              {ok, R} = ?awaitMatch({ok, R} when is_list(R) andalso length(R) == ?CLUSTER_SIZE,
-                                                aws_ecs_util:fetch_nodes_endpoint(Config, H),
+                                                aws_ecs_util:fetch_nodes_endpoint(Config, binary_to_list(H)),
                                                 ?TIMEOUT_MILLIS),
              [maps:get(<<"name">>, N) || N <- R]
          end || H <- [H1, H2, H3]],
@@ -118,7 +119,8 @@ cluster_was_formed(Config) ->
 register_tagged_task(Config) ->
     RabbitmqConf = string:join([
                                 "cluster_formation.peer_discovery_backend = aws",
-                                "cluster_formation.aws.instance_tags.service = rabbitmq"
+                                "cluster_formation.aws.instance_tags.service = rabbitmq",
+                                ""
                                ], "\n"),
     TaskJson = task_json(Config, RabbitmqConf),
     aws_ecs_util:register_task(Config, TaskJson).
@@ -126,7 +128,8 @@ register_tagged_task(Config) ->
 register_autoscaled_task(Config) ->
     RabbitmqConf = string:join([
                                 "cluster_formation.peer_discovery_backend = aws",
-                                "cluster_formation.aws.use_autoscaling_group = true"
+                                "cluster_formation.aws.use_autoscaling_group = true",
+                                ""
                                ], "\n"),
     TaskJson = task_json(Config, RabbitmqConf),
     aws_ecs_util:register_task(Config, TaskJson).
