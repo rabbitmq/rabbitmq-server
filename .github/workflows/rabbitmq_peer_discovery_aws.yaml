@@ -1,0 +1,32 @@
+name: Peer Discovery AWS Integration Test
+on:
+  push:
+    paths:
+      - 'deps/rabbitmq_peer_discovery_aws/**'
+jobs:
+  test:
+    name: Integration Test
+    runs-on: ubuntu-18.04
+    timeout-minutes: 45
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2
+    - name: Set up min required Erlang & Elixir
+      uses: erlef/setup-beam@v1.7
+      with:
+        otp-version: '23.2'
+        elixir-version: '1.11.4'
+    - name: WAIT FOR OCI IMAGE WORKFLOW
+      uses: lewagon/wait-on-check-action@v0.2
+      with:
+        ref: ${{ github.ref }}
+        check-name: build-publish-dev
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        wait-interval: 30 # seconds
+    - name: RUN TESTS
+      run: |
+        make -C deps/rabbitmq_peer_discovery_aws \
+          ct-integration \
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }} \
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }} \
+          RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:${{ github.ref }}"
