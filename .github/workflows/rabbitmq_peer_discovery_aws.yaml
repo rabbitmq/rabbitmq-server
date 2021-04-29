@@ -4,7 +4,7 @@ on:
     paths:
       - 'deps/rabbitmq_peer_discovery_aws/**'
 jobs:
-  test:
+  peer-discovery-aws-integration-test:
     name: Integration Test
     runs-on: ubuntu-18.04
     timeout-minutes: 45
