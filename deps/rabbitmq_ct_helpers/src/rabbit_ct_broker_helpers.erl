@@ -91,6 +91,7 @@
     clear_operator_policy/3,
     set_ha_policy/4, set_ha_policy/5,
     set_ha_policy_all/1,
+    set_ha_policy_all/2,
     set_ha_policy_two_pos/1,
     set_ha_policy_two_pos_batch_sync/1,
 
@@ -1788,6 +1789,10 @@ ha_policy({Mode, Params}) -> [{<<"ha-mode">>,   Mode},
 
 set_ha_policy_all(Config) ->
     set_ha_policy(Config, 0, <<".*">>, <<"all">>),
+    Config.
+
+set_ha_policy_all(Config, Extra) ->
+    set_ha_policy(Config, 0, <<".*">>, <<"all">>, Extra),
     Config.
 
 set_ha_policy_two_pos(Config) ->
