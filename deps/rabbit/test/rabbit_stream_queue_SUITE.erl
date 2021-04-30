@@ -53,6 +53,7 @@ groups() ->
            leader_failover_dedupe,
            add_replicas]},
      {cluster_size_3_parallel, [parallel], [delete_replica,
+                                            delete_last_replica,
                                             delete_classic_replica,
                                             delete_quorum_replica,
                                             consume_from_replica,
@@ -441,6 +442,30 @@ delete_replica(Config) ->
     %% Delete the last replica
     ?assertEqual(ok, rpc:call(Server0, rabbit_stream_queue, delete_replica,
                               [<<"/">>, Q, Server2])),
+    check_leader_and_replicas(Config, [Server0]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+delete_last_replica(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    check_leader_and_replicas(Config, [Server0, Server1, Server2]),
+    ?assertEqual(ok,
+                 rpc:call(Server0, rabbit_stream_queue, delete_replica,
+                          [<<"/">>, Q, Server1])),
+    ?assertEqual(ok,
+                 rpc:call(Server0, rabbit_stream_queue, delete_replica,
+                          [<<"/">>, Q, Server2])),
+    %% check they're gone
+    check_leader_and_replicas(Config, [Server0]),
+    %% delete the last one
+    ?assertEqual({error, last_stream_member},
+                 rpc:call(Server0, rabbit_stream_queue, delete_replica,
+                          [<<"/">>, Q, Server0])),
+    %% It's still here
     check_leader_and_replicas(Config, [Server0]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
