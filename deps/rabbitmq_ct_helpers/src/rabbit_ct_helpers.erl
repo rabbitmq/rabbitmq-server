@@ -24,6 +24,7 @@
     load_rabbitmqctl_app/1,
     ensure_rabbitmq_plugins_cmd/1,
     ensure_rabbitmq_queues_cmd/1,
+    init_skip_as_error_flag/1,
     start_long_running_testsuite_monitor/1,
     stop_long_running_testsuite_monitor/1,
     config_to_testcase_name/2,
