@@ -4,11 +4,11 @@
 ##
 ## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.StreamStatusCommand do
+defmodule RabbitMQ.CLI.Streams.Commands.StreamStatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
-  def scopes(), do: [:diagnostics, :queues]
+  def scopes(), do: [:diagnostics, :queues, :streams]
 
   def merge_defaults(args, opts), do: {args, Map.merge(%{tracking: false, vhost: "/"}, opts)}
 
