@@ -25,7 +25,8 @@
   get_metadata/1,
   get_description/1,
   get_tags/1,
-  set_limits/2
+  set_limits/2,
+  set_metadata/2
 ]).
 
 -define(record_version, vhost_v2).
@@ -169,4 +170,13 @@ set_limits(VHost, Value) ->
         VHost#vhost{limits = Value};
       _ ->
         vhost_v1:set_limits(VHost, Value)
+    end.
+
+set_metadata(VHost, Value) ->
+    case record_version_to_use() of
+      ?record_version ->
+        VHost#vhost{metadata = Value};
+      _ ->
+        %% the field is not available, so this is a no-op
+        VHost
     end.
