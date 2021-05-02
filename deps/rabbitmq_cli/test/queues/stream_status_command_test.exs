@@ -4,11 +4,11 @@
 ##
 ## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.StreamStatusCommandTest do
+defmodule RabbitMQ.CLI.Streams.Commands.StreamStatusCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Queues.Commands.StreamStatusCommand
+  @command RabbitMQ.CLI.Streams.Commands.StreamStatusCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
