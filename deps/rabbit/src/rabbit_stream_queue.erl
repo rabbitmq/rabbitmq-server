@@ -182,32 +182,43 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
               args := Args,
               ok_msg := OkMsg} = Spec,
             QName = amqqueue:get_name(Q),
-            Offset = case rabbit_misc:table_lookup(Args, <<"x-stream-offset">>) of
-                         undefined ->
-                             next;
-                         {_, <<"first">>} ->
-                             first;
-                         {_, <<"last">>} ->
-                             last;
-                         {_, <<"next">>} ->
-                             next;
-                         {timestamp, V} ->
-                             {timestamp, V * 1000};
-                         {_, V} ->
-                             V
-                     end,
-            rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                                 not NoAck, QName,
-                                                 ConsumerPrefetchCount, false,
-                                                 up, Args),
-            %% FIXME: reply needs to be sent before the stream begins sending
-            %% really it should be sent by the stream queue process like classic queues
-            %% do
-            maybe_send_reply(ChPid, OkMsg),
-            begin_stream(QState0, Q, ConsumerTag, Offset, ConsumerPrefetchCount);
+            case parse_offset(rabbit_misc:table_lookup(Args, <<"x-stream-offset">>)) of
+                {error, _} = Err ->
+                    Err;
+                Offset ->
+                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                                         not NoAck, QName,
+                                                         ConsumerPrefetchCount, false,
+                                                         up, Args),
+                    %% FIXME: reply needs to be sent before the stream begins sending
+                    %% really it should be sent by the stream queue process like classic queues
+                    %% do
+                    maybe_send_reply(ChPid, OkMsg),
+                    begin_stream(QState0, Q, ConsumerTag, Offset, ConsumerPrefetchCount)
+            end;
         Err ->
             Err
     end.
+
+parse_offset(undefined) ->
+    next;
+parse_offset({_, <<"first">>}) ->
+    first;
+parse_offset({_, <<"last">>}) ->
+    last;
+parse_offset({_, <<"next">>}) ->
+    next;
+parse_offset({timestamp, V}) ->
+    {timestamp, V * 1000};
+parse_offset({longstr, V}) ->
+    case rabbit_amqqueue:check_max_age(V) of
+        {error, _} = Err ->
+            Err;
+        Ms ->
+            {timestamp, erlang:system_time(millisecond) - Ms}
+    end;
+parse_offset({_, V}) ->
+    V.
 
 get_local_pid(#stream_client{local_pid = Pid} = State)
   when is_pid(Pid) ->
