@@ -2,8 +2,8 @@
 
 -export([check/1]).
 
--define(OTP_MINIMUM, "22.3").
--define(ERTS_MINIMUM, "10.7").
+-define(OTP_MINIMUM, "23.2").
+-define(ERTS_MINIMUM, "11.0").
 
 check(_Context) ->
     _ = rabbit_log_prelaunch:debug(""),
