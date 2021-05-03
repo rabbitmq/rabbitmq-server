@@ -33,6 +33,7 @@ rabbitmqctl_test(
         "test/**/*.exs",
     ]),
     data = glob(["test/fixtures/**/*"]),
+    flaky = True,
     rabbitmq_run = "//:rabbitmq-for-cli-tests-run",
     deps = [
         "//deps/amqp_client:bazel_erlang_lib",
