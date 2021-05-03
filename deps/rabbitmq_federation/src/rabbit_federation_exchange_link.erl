@@ -7,9 +7,6 @@
 
 -module(rabbit_federation_exchange_link).
 
-%% pg2 is deprecated in OTP 23.
--compile(nowarn_deprecated_function).
-
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 
@@ -51,7 +48,9 @@
 %% start during exchange recovery, when rabbit is not fully started
 %% and the Erlang client is not running. This then gets invoked when
 %% the federation app is started.
-go() -> cast(go).
+go() ->
+    rabbit_federation_pg:start_scope(),
+    cast(go).
 
 add_binding(S, XN, B)      -> cast(XN, {enqueue, S, {add_binding, B}}).
 remove_bindings(S, XN, Bs) -> cast(XN, {enqueue, S, {remove_bindings, Bs}}).
@@ -89,11 +88,8 @@ handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast(maybe_go, S0 = {not_started, _Args}) ->
-    case federation_up() of
-        true  -> go(S0);
-        false -> {noreply, S0}
-    end;
+handle_cast(maybe_go, State = {not_started, _Args}) ->
+    go(State);
 
 handle_cast(go, S0 = {not_started, _Args}) ->
     go(S0);
@@ -179,7 +175,7 @@ handle_info(check_internal_exchange, State = #state{internal_exchange = IntXName
                                                     internal_exchange_interval = Interval}) ->
     case check_internal_exchange(IntXNameBin, State) of
         upstream_not_found ->
-            rabbit_log_federation:warning("Federation link could not find upstream exchange '~s' and will restart",
+            _ = rabbit_log_federation:warning("Federation link could not find upstream exchange '~s' and will restart",
                                           [IntXNameBin]),
             {stop, {shutdown, restart}, State};
         _ ->
@@ -205,14 +201,14 @@ terminate(Reason, #state{downstream_connection = DConn,
     timer:cancel(TRef),
     rabbit_federation_link_util:ensure_connection_closed(DConn),
 
-    rabbit_log:debug("Exchange federation: link is shutting down, resource cleanup mode: ~p", [Upstream#upstream.resource_cleanup_mode]),
+    _ = rabbit_log:debug("Exchange federation: link is shutting down, resource cleanup mode: ~p", [Upstream#upstream.resource_cleanup_mode]),
     case Upstream#upstream.resource_cleanup_mode of
         never -> ok;
         _     ->
             %% This is a normal shutdown and we are allowed to clean up the internally used queue and exchange
-            rabbit_log:debug("Federated exchange '~s' link will delete its internal queue '~s'", [Upstream#upstream.exchange_name, Queue]),
+            _ = rabbit_log:debug("Federated exchange '~s' link will delete its internal queue '~s'", [Upstream#upstream.exchange_name, Queue]),
             delete_upstream_queue(Conn, Queue),
-            rabbit_log:debug("Federated exchange '~s' link will delete its upstream exchange", [Upstream#upstream.exchange_name]),
+            _ = rabbit_log:debug("Federated exchange '~s' link will delete its upstream exchange", [Upstream#upstream.exchange_name]),
             delete_upstream_exchange(Conn, IntExchange)
     end,
 
@@ -247,20 +243,15 @@ cast(Msg)        -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
 cast(XName, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- x(XName)].
 
 join(Name) ->
-    pg2:create(pgname(Name)),
-    ok = pg2:join(pgname(Name), self()).
+    ok = pg:join(?FEDERATION_PG_SCOPE, pgname(Name), self()).
 
 all() ->
-    pg2:create(pgname(rabbit_federation_exchanges)),
-    pg2:get_members(pgname(rabbit_federation_exchanges)).
+    pg:get_members(?FEDERATION_PG_SCOPE, pgname(rabbit_federation_exchanges)).
 
 x(XName) ->
-    pg2:create(pgname({rabbit_federation_exchange, XName})),
-    pg2:get_members(pgname({rabbit_federation_exchange, XName})).
+    pg:get_members(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_exchange, XName})).
 
 %%----------------------------------------------------------------------------
-
-federation_up() -> is_pid(whereis(rabbit_federation_app)).
 
 handle_command({add_binding, Binding}, State) ->
     add_binding(Binding, State);
@@ -478,25 +469,25 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                                  unacked               = Unacked,
                                  internal_exchange_interval = Interval}),
                         Bindings),
-              rabbit_log_federation:info("Federation link for ~s (upstream: ~s) will perform internal exchange checks "
+              _ = rabbit_log_federation:info("Federation link for ~s (upstream: ~s) will perform internal exchange checks "
                                          "every ~b seconds", [rabbit_misc:rs(DownXName), UName, round(Interval / 1000)]),
               TRef = erlang:send_after(Interval, self(), check_internal_exchange),
               {noreply, State#state{internal_exchange_timer = TRef}}
       end, Upstream, UParams, DownXName, S0).
 
 log_link_startup_attempt(#upstream{name = Name, channel_use_mode = ChMode}, DownXName) ->
-    rabbit_log_federation:debug("Will try to start a federation link for ~s, upstream: '~s', channel use mode: ~s",
+    _ = rabbit_log_federation:debug("Will try to start a federation link for ~s, upstream: '~s', channel use mode: ~s",
                                 [rabbit_misc:rs(DownXName), Name, ChMode]).
 
 %% If channel use mode is 'single', reuse the message transfer channel.
 %% Otherwise open a separate one.
 reuse_command_channel(MainCh, #upstream{name = UName}, DownXName) ->
-    rabbit_log_federation:debug("Will use a single channel for both schema operations and message transfer on links to upstream '~s' for downstream federated ~s",
+    _ = rabbit_log_federation:debug("Will use a single channel for both schema operations and message transfer on links to upstream '~s' for downstream federated ~s",
                                 [UName, rabbit_misc:rs(DownXName)]),
     {ok, MainCh}.
 
 open_command_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXName, S0) ->
-    rabbit_log_federation:debug("Will open a command channel to upstream '~s' for downstream federated ~s",
+    _ = rabbit_log_federation:debug("Will open a command channel to upstream '~s' for downstream federated ~s",
                                 [UName, rabbit_misc:rs(DownXName)]),
     case amqp_connection:open_channel(Conn) of
         {ok, CCh} ->
@@ -590,12 +581,12 @@ ensure_internal_exchange(IntXNameBin,
                                 connection          = Conn,
                                 channel             = Ch,
                                 downstream_exchange = #resource{virtual_host = DVhost}}) ->
-    rabbit_log_federation:debug("Exchange federation will set up exchange '~s' in upstream '~s'",
+    _ = rabbit_log_federation:debug("Exchange federation will set up exchange '~s' in upstream '~s'",
                                 [IntXNameBin, UName]),
     #upstream_params{params = Params} = rabbit_federation_util:deobfuscate_upstream_params(UParams),
-    rabbit_log_federation:debug("Will delete upstream exchange '~s'", [IntXNameBin]),
+    _ = rabbit_log_federation:debug("Will delete upstream exchange '~s'", [IntXNameBin]),
     delete_upstream_exchange(Conn, IntXNameBin),
-    rabbit_log_federation:debug("Will declare an internal upstream exchange '~s'", [IntXNameBin]),
+    _ = rabbit_log_federation:debug("Will declare an internal upstream exchange '~s'", [IntXNameBin]),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                durable     = true,
                                internal    = true,
@@ -620,7 +611,7 @@ check_internal_exchange(IntXNameBin,
                                 downstream_exchange = XName = #resource{virtual_host = DVhost}}) ->
     #upstream_params{params = Params} =
         rabbit_federation_util:deobfuscate_upstream_params(UParams),
-    rabbit_log_federation:debug("Exchange federation will check on exchange '~s' in upstream '~s'",
+    _ = rabbit_log_federation:debug("Exchange federation will check on exchange '~s' in upstream '~s'",
                                 [IntXNameBin, UName]),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                passive     = true,

@@ -30,7 +30,7 @@ ensure_listener(Listener) ->
             {Transport, TransportOpts, ProtoOpts} = preprocess_config(Listener),
             ProtoOptsMap = maps:from_list(ProtoOpts),
             StreamHandlers = stream_handlers_config(ProtoOpts),
-            rabbit_log:debug("Starting HTTP[S] listener with transport ~s, options ~p and protocol options ~p, stream handlers ~p",
+            _ = rabbit_log:debug("Starting HTTP[S] listener with transport ~s, options ~p and protocol options ~p, stream handlers ~p",
                              [Transport, TransportOpts, ProtoOptsMap, StreamHandlers]),
             CowboyOptsMap =
                 maps:merge(#{env =>
@@ -39,7 +39,7 @@ ensure_listener(Listener) ->
                                 [rabbit_cowboy_middleware, cowboy_router, cowboy_handler],
                              stream_handlers => StreamHandlers},
                            ProtoOptsMap),
-            Child = ranch:child_spec(rabbit_networking:ranch_ref(Listener), 100,
+            Child = ranch:child_spec(rabbit_networking:ranch_ref(Listener),
                 Transport, TransportOpts,
                 cowboy_clear, CowboyOptsMap),
             case supervisor:start_child(?SUP, Child) of
@@ -51,8 +51,8 @@ ensure_listener(Listener) ->
 
 stop_listener(Listener) ->
     Name = rabbit_networking:ranch_ref(Listener),
-    ok = supervisor:terminate_child(?SUP, {ranch_listener_sup, Name}),
-    ok = supervisor:delete_child(?SUP, {ranch_listener_sup, Name}).
+    ok = supervisor:terminate_child(?SUP, {ranch_embedded_sup, Name}),
+    ok = supervisor:delete_child(?SUP, {ranch_embedded_sup, Name}).
 
 %% @spec init([[instance()]]) -> SupervisorTree
 %% @doc supervisor callback.

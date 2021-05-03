@@ -78,7 +78,7 @@ stop_and_delete_vhost(VHost) ->
             case is_process_alive(WrapperPid) of
                 false -> ok;
                 true  ->
-                    rabbit_log:info("Stopping vhost supervisor ~p"
+                    _ = rabbit_log:info("Stopping vhost supervisor ~p"
                                     " for vhost '~s'~n",
                                     [VHostSupPid, VHost]),
                     case supervisor2:terminate_child(?MODULE, WrapperPid) of
@@ -100,7 +100,7 @@ stop_and_delete_vhost(VHost, Node) ->
     case rabbit_misc:rpc_call(Node, rabbit_vhost_sup_sup, stop_and_delete_vhost, [VHost]) of
         ok -> ok;
         {badrpc, RpcErr} ->
-            rabbit_log:error("Failed to stop and delete a vhost ~p"
+            _ = rabbit_log:error("Failed to stop and delete a vhost ~p"
                              " on node ~p."
                              " Reason: ~p",
                              [VHost, Node, RpcErr]),
@@ -112,7 +112,7 @@ init_vhost(VHost) ->
     case start_vhost(VHost) of
         {ok, _} -> ok;
         {error, {already_started, _}} ->
-            rabbit_log:warning(
+            _ = rabbit_log:warning(
                 "Attempting to start an already started vhost '~s'.",
                 [VHost]),
             ok;
@@ -121,13 +121,13 @@ init_vhost(VHost) ->
         {error, Reason} ->
             case vhost_restart_strategy() of
                 permanent ->
-                    rabbit_log:error(
+                    _ = rabbit_log:error(
                         "Unable to initialize vhost data store for vhost '~s'."
                         " Reason: ~p",
                         [VHost, Reason]),
                     throw({error, Reason});
                 transient ->
-                    rabbit_log:warning(
+                    _ = rabbit_log:warning(
                         "Unable to initialize vhost data store for vhost '~s'."
                         " The vhost will be stopped for this node. "
                         " Reason: ~p",

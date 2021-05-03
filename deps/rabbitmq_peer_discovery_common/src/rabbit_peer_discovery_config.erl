@@ -24,7 +24,7 @@
 get(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
         false ->
-            rabbit_log:error("Key ~s is not found in peer discovery config mapping ~p!", [Key, Mapping]),
+            _ = rabbit_log:error("Key ~s is not found in peer discovery config mapping ~p!", [Key, Mapping]),
             throw({badkey, Key});
         true  ->
             get_with_entry_meta(Key, maps:get(Key, Mapping), Config)
@@ -37,7 +37,7 @@ get(Key, Mapping, Config) ->
 get_integer(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
         false ->
-            rabbit_log:error("Key ~s is not found in peer discovery config mapping ~p!", [Key, Mapping]),
+            _ = rabbit_log:error("Key ~s is not found in peer discovery config mapping ~p!", [Key, Mapping]),
             throw({badkey, Key});
         true  ->
             get_integer_with_entry_meta(Key, maps:get(Key, Mapping), Config)

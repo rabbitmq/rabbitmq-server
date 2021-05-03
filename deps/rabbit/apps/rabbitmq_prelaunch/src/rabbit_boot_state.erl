@@ -36,7 +36,7 @@ get() ->
 
 -spec set(boot_state()) -> ok.
 set(BootState) ->
-    rabbit_log_prelaunch:debug("Change boot state to `~s`", [BootState]),
+    _ = rabbit_log_prelaunch:debug("Change boot state to `~s`", [BootState]),
     ?assert(is_valid(BootState)),
     case BootState of
         stopped -> persistent_term:erase(?PT_KEY_BOOT_STATE);

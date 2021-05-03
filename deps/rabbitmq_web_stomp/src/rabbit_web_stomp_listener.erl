@@ -32,7 +32,8 @@
 init() ->
     WsFrame = get_env(ws_frame, text),
     CowboyOpts0 = maps:from_list(get_env(cowboy_opts, [])),
-    CowboyOpts = CowboyOpts0#{proxy_header => get_env(proxy_protocol, false)},
+    CowboyOpts = CowboyOpts0#{proxy_header => get_env(proxy_protocol, false),
+                              stream_handlers => [rabbit_web_stomp_stream_handler, cowboy_stream_h]},
     CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
 
     VhostRoutes = [
@@ -97,7 +98,8 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
     socket_opts     => TCPConf,
     connection_type => supervisor,
     max_connections => get_max_connections(),
-    num_acceptors   => NumTcpAcceptors
+    num_acceptors   => NumTcpAcceptors,
+    num_conns_sups => 1
   },
   CowboyOpts = CowboyOpts0#{env => #{dispatch => Routes},
                             middlewares => [cowboy_router,
@@ -111,14 +113,14 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
       {error, ErrTCP}                  ->
-          rabbit_log_connection:error(
+          _ = rabbit_log_connection:error(
               "Failed to start a WebSocket (HTTP) listener. Error: ~p,"
               " listener settings: ~p~n",
               [ErrTCP, TCPConf]),
           throw(ErrTCP)
   end,
   listener_started(?TCP_PROTOCOL, TCPConf),
-  rabbit_log_connection:info(
+  _ = rabbit_log_connection:info(
       "rabbit_web_stomp: listening for HTTP connections on ~s:~w~n",
       [get_binding_address(TCPConf), Port]).
 
@@ -135,7 +137,8 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
     socket_opts     => TLSConf,
     connection_type => supervisor,
     max_connections => get_max_connections(),
-    num_acceptors   => NumSslAcceptors
+    num_acceptors   => NumSslAcceptors,
+    num_conns_sups => 1
   },
   CowboyOpts = CowboyOpts0#{env => #{dispatch => Routes},
                             middlewares => [cowboy_router,
@@ -149,14 +152,14 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
       {error, ErrTLS}                  ->
-          rabbit_log_connection:error(
+          _ = rabbit_log_connection:error(
               "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~p,"
               " listener settings: ~p~n",
               [ErrTLS, TLSConf]),
           throw(ErrTLS)
   end,
   listener_started(?TLS_PROTOCOL, TLSConf),
-  rabbit_log_connection:info(
+  _ = rabbit_log_connection:info(
       "rabbit_web_stomp: listening for HTTPS connections on ~s:~w~n",
       [get_binding_address(TLSConf), TLSPort]).
 

@@ -55,10 +55,10 @@ check_user_login(Username, AuthProps) ->
                   %% it gives us
                   case try_authenticate(Mod, Username, AuthProps) of
                       {ok, ModNUser = #auth_user{username = Username2, impl = Impl}} ->
-                          rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, Mod]),
+                          _ = rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, Mod]),
                           user(ModNUser, {ok, [{Mod, Impl}], []});
                       Else ->
-                          rabbit_log:debug("User '~s' failed authenticatation by backend ~s", [Username, Mod]),
+                          _ = rabbit_log:debug("User '~s' failed authenticatation by backend ~s", [Username, Mod]),
                           Else
                   end;
               (_, {ok, User}) ->
@@ -75,7 +75,7 @@ try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
             end,
     case try_authenticate(ModN, Username, AuthProps) of
         {ok, ModNUser = #auth_user{username = Username2}} ->
-            rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, ModN]),
+            _ = rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, ModN]),
             user(ModNUser, try_authorize(ModZs, Username2, AuthProps));
         Else ->
             Else
@@ -217,7 +217,7 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
         {error, E}  ->
             FullErrStr = ErrStr ++ ", backend ~s returned an error: ~p~n",
             FullErrArgs = ErrArgs ++ [Module, E],
-            rabbit_log:error(FullErrStr, FullErrArgs),
+            _ = rabbit_log:error(FullErrStr, FullErrArgs),
             rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs)
     end.
 

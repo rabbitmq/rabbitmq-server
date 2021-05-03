@@ -69,7 +69,7 @@ terminate(#state { table = MsgLocations, dir = Dir }) ->
                       [{extended_info, [object_count]}]) of
         ok           -> ok;
         {error, Err} ->
-            rabbit_log:error("Unable to save message store index"
+            _ = rabbit_log:error("Unable to save message store index"
                              " for directory ~p.~nError: ~p~n",
                              [Dir, Err])
     end,

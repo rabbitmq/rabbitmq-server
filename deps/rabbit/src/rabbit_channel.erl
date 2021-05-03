@@ -391,7 +391,7 @@ info(Pid) ->
         end
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("Timed out getting channel ~p info", [Pid]),
+            _ = rabbit_log:error("Timed out getting channel ~p info", [Pid]),
             throw(timeout)
     end.
 
@@ -406,7 +406,7 @@ info(Pid, Items) ->
         end
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("Timed out getting channel ~p info", [Pid]),
+            _ = rabbit_log:error("Timed out getting channel ~p info", [Pid]),
             throw(timeout)
     end.
 
@@ -442,7 +442,7 @@ refresh_config_local() ->
         try
           gen_server2:call(C, refresh_config, infinity)
         catch _:Reason ->
-          rabbit_log:error("Failed to refresh channel config "
+          _ = rabbit_log:error("Failed to refresh channel config "
                            "for channel ~p. Reason ~p",
                            [C, Reason])
         end
@@ -456,7 +456,7 @@ refresh_interceptors() ->
         try
           gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
         catch _:Reason ->
-          rabbit_log:error("Failed to refresh channel interceptors "
+          _ = rabbit_log:error("Failed to refresh channel interceptors "
                            "for channel ~p. Reason ~p",
                            [C, Reason])
         end
@@ -890,7 +890,7 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 handle_info({{Ref, Node}, LateAnswer},
             State = #ch{cfg = #conf{channel = Channel}})
   when is_reference(Ref) ->
-    rabbit_log_channel:warning("Channel ~p ignoring late answer ~p from ~p",
+    _ = rabbit_log_channel:warning("Channel ~p ignoring late answer ~p from ~p",
         [Channel, LateAnswer, Node]),
     noreply(State);
 
@@ -1004,7 +1004,7 @@ handle_exception(Reason, State = #ch{cfg = #conf{protocol = Protocol,
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log_channel:error(
+            _ = rabbit_log_channel:error(
                 "Channel error on connection ~p (~s, vhost: '~s',"
                 " user: '~s'), channel ~p:~n~s~n",
                 [ConnPid, ConnName, VHost, User#user.username,
@@ -2823,7 +2823,7 @@ evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
         {value, {_DTag, ConsumerTag, Time, {_QPid, _Msg}}}
           when is_integer(Timeout)
                andalso Time < Now - Timeout ->
-            rabbit_log_channel:warning("Consumer ~s on channel ~w has timed out "
+            _ = rabbit_log_channel:warning("Consumer ~s on channel ~w has timed out "
                                        "waiting on consumer acknowledgement. Timeout used: ~p ms",
                                        [rabbit_data_coercion:to_binary(ConsumerTag),
                                        Channel, Timeout]),

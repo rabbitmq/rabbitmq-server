@@ -48,7 +48,7 @@ edit(Options) ->
         undefined ->
             ok;
         Val       ->
-            rabbit_log:warning("RabbitMQ trust store plugin is used "
+            _ = rabbit_log:warning("RabbitMQ trust store plugin is used "
                                "and the verify_fun TLS option is set: ~p. "
                                "It will be overwritten by the plugin.~n", [Val]),
             ok

@@ -12,5 +12,5 @@
 -export([log/4]).
 
 log(Level, Format, Args, _Meta) ->
-    rabbit_log:log(ra, Level, Format, Args),
+    _ = rabbit_log:log(ra, Level, Format, Args),
     ok.

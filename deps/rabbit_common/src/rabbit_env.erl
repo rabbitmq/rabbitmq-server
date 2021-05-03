@@ -231,26 +231,26 @@ get_used_env_vars() ->
       lists:sort(env_vars())).
 
 log_process_env() ->
-    rabbit_log_prelaunch:debug("Process environment:"),
+    _ = rabbit_log_prelaunch:debug("Process environment:"),
     lists:foreach(
       fun({Var, Value}) ->
-              rabbit_log_prelaunch:debug("  - ~s = ~ts", [Var, Value])
+              _ = rabbit_log_prelaunch:debug("  - ~s = ~ts", [Var, Value])
       end, lists:sort(env_vars())).
 
 log_context(Context) ->
-    rabbit_log_prelaunch:debug("Context (based on environment variables):"),
+    _ = rabbit_log_prelaunch:debug("Context (based on environment variables):"),
     lists:foreach(
       fun(Key) ->
               Value = maps:get(Key, Context),
-              rabbit_log_prelaunch:debug("  - ~s: ~p", [Key, Value])
+              _ = rabbit_log_prelaunch:debug("  - ~s: ~p", [Key, Value])
       end,
       lists:sort(maps:keys(Context))).
 
 context_to_app_env_vars(Context) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Setting default application environment variables:"),
     Fun = fun({App, Param, Value}) ->
-                  rabbit_log_prelaunch:debug(
+                  _ = rabbit_log_prelaunch:debug(
                     "  - ~s:~s = ~p", [App, Param, Value]),
                   ok = application:set_env(
                          App, Param, Value, [{persistent, true}])
@@ -1166,7 +1166,7 @@ amqp_tcp_port(Context) ->
                 update_context(Context, amqp_tcp_port, TcpPort, environment)
             catch
                 _:badarg ->
-                    rabbit_log_prelaunch:error(
+                    _ = rabbit_log_prelaunch:error(
                       "Invalid value for $RABBITMQ_NODE_PORT: ~p",
                       [TcpPortStr]),
                     throw({exit, ex_config})
@@ -1185,7 +1185,7 @@ erlang_dist_tcp_port(#{amqp_tcp_port := AmqpTcpPort} = Context) ->
                                erlang_dist_tcp_port, TcpPort, environment)
             catch
                 _:badarg ->
-                    rabbit_log_prelaunch:error(
+                    _ = rabbit_log_prelaunch:error(
                       "Invalid value for $RABBITMQ_DIST_PORT: ~p",
                       [TcpPortStr]),
                     throw({exit, ex_config})
@@ -1405,7 +1405,7 @@ load_conf_env_file(#{os_type := {unix, _},
         true ->
             case filelib:is_regular(ConfEnvFile) of
                 false ->
-                    rabbit_log_prelaunch:debug(
+                    _ = rabbit_log_prelaunch:debug(
                       "No $RABBITMQ_CONF_ENV_FILE (~ts)", [ConfEnvFile]),
                     Context1;
                 true ->
@@ -1417,7 +1417,7 @@ load_conf_env_file(#{os_type := {unix, _},
                     end
             end;
         false ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "Loading of $RABBITMQ_CONF_ENV_FILE (~ts) is disabled",
               [ConfEnvFile]),
             Context1
@@ -1437,7 +1437,7 @@ load_conf_env_file(#{os_type := {win32, _},
         true ->
             case filelib:is_regular(ConfEnvFile) of
                 false ->
-                    rabbit_log_prelaunch:debug(
+                    _ = rabbit_log_prelaunch:debug(
                       "No $RABBITMQ_CONF_ENV_FILE (~ts)", [ConfEnvFile]),
                     Context1;
                 true ->
@@ -1458,7 +1458,7 @@ load_conf_env_file(#{os_type := {win32, _},
                     end
             end;
         false ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "Loading of $RABBITMQ_CONF_ENV_FILE (~ts) is disabled",
               [ConfEnvFile]),
             Context1
@@ -1482,7 +1482,7 @@ loading_conf_env_file_enabled(_) ->
 -endif.
 
 do_load_conf_env_file(#{os_type := {unix, _}} = Context, Sh, ConfEnvFile) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Sourcing $RABBITMQ_CONF_ENV_FILE: ~ts", [ConfEnvFile]),
 
     %% The script below sources the `CONF_ENV_FILE` file, then it shows a
@@ -1525,7 +1525,7 @@ do_load_conf_env_file(#{os_type := {unix, _}} = Context, Sh, ConfEnvFile) ->
     collect_conf_env_file_output(Context, Port, Marker, <<>>);
 do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile) ->
     %% rabbitmq/rabbitmq-common#392
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Executing $RABBITMQ_CONF_ENV_FILE: ~ts", [ConfEnvFile]),
 
     %% The script below executes the `CONF_ENV_FILE` file, then it shows a
@@ -1587,7 +1587,7 @@ collect_conf_env_file_output(Context, Port, Marker, Output) ->
     end.
 
 post_port_cmd_output(#{os_type := {OSType, _}}, Output, ExitStatus) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "$RABBITMQ_CONF_ENV_FILE exit status: ~b",
       [ExitStatus]),
     DecodedOutput = unicode:characters_to_list(Output),
@@ -1596,8 +1596,8 @@ post_port_cmd_output(#{os_type := {OSType, _}}, Output, ExitStatus) ->
                   _     -> "\n"
               end,
     Lines = string:split(string:trim(DecodedOutput), LineSep, all),
-    rabbit_log_prelaunch:debug("$RABBITMQ_CONF_ENV_FILE output:"),
-    [rabbit_log_prelaunch:debug("  ~ts", [Line]) || Line <- Lines],
+    _ = rabbit_log_prelaunch:debug("$RABBITMQ_CONF_ENV_FILE output:"),
+    [_ = rabbit_log_prelaunch:debug("  ~ts", [Line]) || Line <- Lines],
     Lines.
 
 parse_conf_env_file_output(Context, _, []) ->
@@ -1617,7 +1617,7 @@ parse_conf_env_file_output1(Context, Lines) ->
               IsSet = var_is_set(Var),
               case IsUsed andalso not IsSet of
                   true ->
-                      rabbit_log_prelaunch:debug(
+                      _ = rabbit_log_prelaunch:debug(
                         "$RABBITMQ_CONF_ENV_FILE: re-exporting variable $~s",
                         [Var]),
                       os:putenv(Var, maps:get(Var, Vars));
@@ -1645,7 +1645,7 @@ parse_conf_env_file_output2([Line | Lines], Vars) ->
                     parse_conf_env_file_output2(Lines1, Vars1);
                 _ ->
                     %% Parsing failed somehow.
-                    rabbit_log_prelaunch:warning(
+                    _ = rabbit_log_prelaunch:warning(
                       "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~p",
                       [Line]),
                     #{}

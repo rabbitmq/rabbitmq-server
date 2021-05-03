@@ -22,15 +22,15 @@ boot() ->
         false ->
             ok;
         On when On =:= "1" orelse On =:= "true" ->
-            rabbit_log:info("Loading Looking Glass profiler for interactive use"),
+            _ = rabbit_log:info("Loading Looking Glass profiler for interactive use"),
             case application:ensure_all_started(looking_glass) of
                 {ok, _} -> ok;
                 {error, Error} ->
-                    rabbit_log:error("Failed to start Looking Glass, reason: ~p", [Error])
+                    _ = rabbit_log:error("Failed to start Looking Glass, reason: ~p", [Error])
             end;
         Value ->
             Input = parse_value(Value),
-            rabbit_log:info(
+            _ = rabbit_log:info(
                 "Enabling Looking Glass profiler, input value: ~p",
                 [Input]
             ),

@@ -93,16 +93,16 @@ handle_event({monitor, PidOrPort, Type, Info}, State=#state{timer_ref=TimerRef})
     %% Reset the inactivity timeout
     NewTimerRef = reset_timer(TimerRef),
     {Fmt, Args} = format_pretty_proc_or_port_info(PidOrPort),
-    rabbit_log:warning("~p ~w ~w " ++ Fmt ++ " ~w", [?MODULE, Type, PidOrPort] ++ Args ++ [Info]),
+    _ = rabbit_log:warning("~p ~w ~w " ++ Fmt ++ " ~w", [?MODULE, Type, PidOrPort] ++ Args ++ [Info]),
     {ok, State#state{timer_ref=NewTimerRef}};
 handle_event({suppressed, Type, Info}, State=#state{timer_ref=TimerRef}) ->
     %% Reset the inactivity timeout
     NewTimerRef = reset_timer(TimerRef),
-    rabbit_log:debug("~p encountered a suppressed event of type ~w: ~w", [?MODULE, Type, Info]),
+    _ = rabbit_log:debug("~p encountered a suppressed event of type ~w: ~w", [?MODULE, Type, Info]),
     {ok, State#state{timer_ref=NewTimerRef}};
 handle_event(Event, State=#state{timer_ref=TimerRef}) ->
     NewTimerRef = reset_timer(TimerRef),
-    rabbit_log:warning("~p unhandled event: ~p", [?MODULE, Event]),
+    _ = rabbit_log:warning("~p unhandled event: ~p", [?MODULE, Event]),
     {ok, State#state{timer_ref=NewTimerRef}}.
 
 %%--------------------------------------------------------------------
@@ -140,7 +140,7 @@ handle_info(inactivity_timeout, State) ->
     %% so hibernate to free up resources.
     {ok, State, hibernate};
 handle_info(Info, State) ->
-    rabbit_log:info("handle_info got ~p", [Info]),
+    _ = rabbit_log:info("handle_info got ~p", [Info]),
     {ok, State}.
 
 %%--------------------------------------------------------------------

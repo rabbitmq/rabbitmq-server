@@ -27,7 +27,7 @@
 %%
 
 init() ->
-    rabbit_log:debug("Peer discovery Kubernetes: initialising..."),
+    _ = rabbit_log:debug("Peer discovery Kubernetes: initialising..."),
     ok = application:ensure_started(inets),
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
@@ -44,7 +44,7 @@ list_nodes() ->
 	    {ok, {lists:map(fun node_name/1, Addresses), disc}};
 	{error, Reason} ->
 	    Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~s", [Reason]),
-        rabbit_log:error(Details),
+        _ = rabbit_log:error(Details),
         send_event("Warning", "Failed", Details),
   	    {error, Reason}
     end.
@@ -138,7 +138,7 @@ maybe_ready_address(Subset) ->
       undefined -> ok;
       NotReadyAddresses ->
             Formatted = string:join([binary_to_list(get_address(X)) || X <- NotReadyAddresses], ", "),
-            rabbit_log:info("k8s endpoint listing returned nodes not yet ready: ~s", [Formatted])
+            _ = rabbit_log:info("k8s endpoint listing returned nodes not yet ready: ~s", [Formatted])
     end,
     maps:get(<<"addresses">>, Subset, []).
 

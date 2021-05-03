@@ -534,7 +534,7 @@ shortstr_size(S) ->
 
     for (c,v,cls) in spec.constants: genLookupException(c,v,cls)
     print("lookup_amqp_exception(Code) ->")
-    print("  rabbit_log:warning(\"Unknown AMQP error code '~p'~n\", [Code]),")
+    print("  _ = rabbit_log:warning(\"Unknown AMQP error code '~p'~n\", [Code]),")
     print("  {true, ?INTERNAL_ERROR, <<\"INTERNAL_ERROR\">>}.")
 
     for(c,v,cls) in spec.constants: genAmqpException(c,v,cls)

@@ -432,7 +432,7 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
                            case rpc:call(Node, rabbit, is_running, []) of
                                {badrpc, _} -> ok;
                                _           ->
-                                   rabbit_log:warning("Received a 'DOWN' message"
+                                   _ = rabbit_log:warning("Received a 'DOWN' message"
                                                       " from ~p but still can"
                                                       " communicate with it ~n",
                                                       [Node]),
@@ -466,7 +466,7 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
     ArgsBase = [NotReallyDown, Proxy, NotReallyDown],
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
-            rabbit_log:error(
+            _ = rabbit_log:error(
               FmtBase ++ " * pause_minority mode enabled~n"
               "We will therefore pause until the *entire* cluster recovers~n",
               ArgsBase),
@@ -474,17 +474,17 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
             {noreply, State};
         {ok, {pause_if_all_down, PreferredNodes, _}} ->
             case in_preferred_partition(PreferredNodes) of
-                true  -> rabbit_log:error(
+                true  -> _ = rabbit_log:error(
                            FmtBase ++ "We will therefore intentionally "
                            "disconnect from ~s~n", ArgsBase ++ [Proxy]),
                          upgrade_to_full_partition(Proxy);
-                false -> rabbit_log:info(
+                false -> _ = rabbit_log:info(
                            FmtBase ++ "We are about to pause, no need "
                            "for further actions~n", ArgsBase)
             end,
             {noreply, State};
         {ok, _} ->
-            rabbit_log:error(
+            _ = rabbit_log:error(
               FmtBase ++ "We will therefore intentionally disconnect from ~s~n",
               ArgsBase ++ [Proxy]),
             upgrade_to_full_partition(Proxy),
@@ -498,7 +498,7 @@ handle_cast({partial_partition, _GUID, _Reporter, _Proxy}, State) ->
 %% messages reliably when another node disconnects from us. Therefore
 %% we are told just before the disconnection so we can reciprocate.
 handle_cast({partial_partition_disconnect, Other}, State) ->
-    rabbit_log:error("Partial partition disconnect from ~s~n", [Other]),
+    _ = rabbit_log:error("Partial partition disconnect from ~s~n", [Other]),
     disconnect(Other),
     {noreply, State};
 
@@ -507,7 +507,7 @@ handle_cast({partial_partition_disconnect, Other}, State) ->
 %% mnesia propagation.
 handle_cast({node_up, Node, NodeType},
             State = #state{monitors = Monitors}) ->
-    rabbit_log:info("rabbit on node ~p up~n", [Node]),
+    _ = rabbit_log:info("rabbit on node ~p up~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
     write_cluster_status({add_node(Node, AllNodes),
                           case NodeType of
@@ -551,7 +551,7 @@ handle_cast(_Msg, State) ->
 
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
             State = #state{monitors = Monitors, subscribers = Subscribers}) ->
-    rabbit_log:info("rabbit on node ~p down~n", [Node]),
+    _ = rabbit_log:info("rabbit on node ~p down~n", [Node]),
     {AllNodes, DiscNodes, RunningNodes} = read_cluster_status(),
     write_cluster_status({AllNodes, DiscNodes, del_node(Node, RunningNodes)}),
     [P ! {node_down, Node} || P <- pmon:monitored(Subscribers)],
@@ -565,7 +565,7 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
 
 handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
                                                    node_guids = GUIDs}) ->
-    rabbit_log:info("node ~p down: ~p~n",
+    _ = rabbit_log:info("node ~p down: ~p~n",
                     [Node, proplists:get_value(nodedown_reason, Info)]),
     Check = fun (N, CheckGUID, DownGUID) ->
                     cast(N, {check_partial_partition,
@@ -583,7 +583,7 @@ handle_info({nodedown, Node, Info}, State = #state{guid       = MyGUID,
     {noreply, handle_dead_node(Node, State)};
 
 handle_info({nodeup, Node, _Info}, State) ->
-    rabbit_log:info("node ~p up~n", [Node]),
+    _ = rabbit_log:info("node ~p up~n", [Node]),
     {noreply, State};
 
 handle_info({mnesia_system_event,
@@ -686,13 +686,13 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
         {ok, autoheal} ->
             State#state{autoheal = rabbit_autoheal:node_down(Node, Autoheal)};
         {ok, Term} ->
-            rabbit_log:warning("cluster_partition_handling ~p unrecognised, "
+            _ = rabbit_log:warning("cluster_partition_handling ~p unrecognised, "
                                "assuming 'ignore'~n", [Term]),
             State
     end.
 
 await_cluster_recovery(Condition) ->
-    rabbit_log:warning("Cluster minority/secondary status detected - "
+    _ = rabbit_log:warning("Cluster minority/secondary status detected - "
                        "awaiting recovery~n", []),
     run_outside_applications(fun () ->
                                      rabbit:stop(),
@@ -743,7 +743,7 @@ do_run_outside_app_fun(Fun) ->
     try
         Fun()
     catch _:E:Stacktrace ->
-            rabbit_log:error(
+            _ = rabbit_log:error(
               "rabbit_outside_app_process:~n~p~n~p~n",
               [E, Stacktrace])
     end.
@@ -920,7 +920,7 @@ possibly_partitioned_nodes() ->
     alive_rabbit_nodes() -- rabbit_nodes:all_running().
 
 startup_log([]) ->
-    rabbit_log:info("Starting rabbit_node_monitor~n", []);
+    _ = rabbit_log:info("Starting rabbit_node_monitor~n", []);
 startup_log(Nodes) ->
-    rabbit_log:info("Starting rabbit_node_monitor, might be partitioned from ~p~n",
+    _ = rabbit_log:info("Starting rabbit_node_monitor, might be partitioned from ~p~n",
                     [Nodes]).

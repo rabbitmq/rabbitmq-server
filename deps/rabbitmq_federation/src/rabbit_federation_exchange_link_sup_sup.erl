@@ -21,6 +21,11 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
+    _ = pg:start_link(),
+    %% This scope is used by concurrently starting exchange and queue links,
+    %% and other places, so we have to start it very early outside of the supervision tree.
+    %% The scope is stopped in stop/1.
+    rabbit_federation_pg:start_scope(),
     mirrored_supervisor:start_link({local, ?SUPERVISOR}, ?SUPERVISOR,
                                    fun rabbit_misc:execute_mnesia_transaction/1,
                                    ?MODULE, []).
@@ -36,7 +41,7 @@ start_child(X) ->
         {ok, _Pid}               -> ok;
         {error, {already_started, _Pid}} ->
           #exchange{name = ExchangeName} = X,
-          rabbit_log_federation:debug("Federation link for exchange ~p was already started",
+          _ = rabbit_log_federation:debug("Federation link for exchange ~p was already started",
                                       [rabbit_misc:rs(ExchangeName)]),
           ok;
         %% A link returned {stop, gone}, the link_sup shut down, that's OK.
@@ -58,7 +63,7 @@ stop_child(X) ->
       ok -> ok;
       {error, Err} ->
         #exchange{name = ExchangeName} = X,
-        rabbit_log_federation:warning(
+        _ = rabbit_log_federation:warning(
           "Attempt to stop a federation link for exchange ~p failed: ~p",
           [rabbit_misc:rs(ExchangeName), Err]),
         ok

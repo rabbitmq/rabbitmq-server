@@ -19,6 +19,7 @@ start_link(Listeners, Configuration) ->
 
 init([{Listeners, SslListeners0}, Configuration]) ->
     NumTcpAcceptors = application:get_env(rabbitmq_stomp, num_tcp_acceptors, 10),
+    ConcurrentConnsSups = application:get_env(rabbitmq_stomp, num_conns_sups, 1),
     {ok, SocketOpts} = application:get_env(rabbitmq_stomp, tcp_listen_options),
     {SslOpts, NumSslAcceptors, SslListeners}
         = case SslListeners0 of
@@ -37,9 +38,11 @@ init([{Listeners, SslListeners0}, Configuration]) ->
     },
     {ok, {Flags,
            listener_specs(fun tcp_listener_spec/1,
-                          [SocketOpts, Configuration, NumTcpAcceptors], Listeners) ++
+                          [SocketOpts, Configuration, NumTcpAcceptors, ConcurrentConnsSups],
+                          Listeners) ++
            listener_specs(fun ssl_listener_spec/1,
-                          [SocketOpts, SslOpts, Configuration, NumSslAcceptors], SslListeners)}}.
+                          [SocketOpts, SslOpts, Configuration, NumSslAcceptors, ConcurrentConnsSups],
+                          SslListeners)}}.
 
 stop_listeners() ->
     rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
@@ -55,17 +58,17 @@ listener_specs(Fun, Args, Listeners) ->
         Listener <- Listeners,
         Address  <- rabbit_networking:tcp_listener_addresses(Listener)].
 
-tcp_listener_spec([Address, SocketOpts, Configuration, NumAcceptors]) ->
+tcp_listener_spec([Address, SocketOpts, Configuration, NumAcceptors, ConcurrentConnsSups]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts,
       transport(?TCP_PROTOCOL), rabbit_stomp_client_sup, Configuration,
-      stomp, NumAcceptors, "STOMP TCP listener").
+      stomp, NumAcceptors, ConcurrentConnsSups, "STOMP TCP listener").
 
-ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration, NumAcceptors]) ->
+ssl_listener_spec([Address, SocketOpts, SslOpts, Configuration, NumAcceptors, ConcurrentConnsSups]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_stomp_listener_sup, Address, SocketOpts ++ SslOpts,
       transport(?TLS_PROTOCOL), rabbit_stomp_client_sup, Configuration,
-      'stomp/ssl', NumAcceptors, "STOMP TLS listener").
+      'stomp/ssl', NumAcceptors, ConcurrentConnsSups, "STOMP TLS listener").
 
 transport(Protocol) ->
     case Protocol of

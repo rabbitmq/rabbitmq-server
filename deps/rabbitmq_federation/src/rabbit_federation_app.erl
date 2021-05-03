@@ -7,6 +7,8 @@
 
 -module(rabbit_federation_app).
 
+-include("rabbit_federation.hrl").
+
 -behaviour(application).
 -export([start/2, stop/1]).
 
@@ -27,12 +29,18 @@
 -export([init/1]).
 
 start(_Type, _StartArgs) ->
-    rabbit_federation_exchange_link:go(),
-    rabbit_federation_queue_link:go(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
+    rabbit_federation_pg:stop_scope(),
     ok.
+
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, {{one_for_one, 3, 10}, []}}.
+init([]) ->
+    Flags = #{
+        strategy  => one_for_one,
+        intensity => 3,
+        period    => 10
+    },
+    {ok, {Flags, []}}.

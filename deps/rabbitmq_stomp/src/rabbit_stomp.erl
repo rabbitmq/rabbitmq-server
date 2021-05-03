@@ -87,7 +87,7 @@ parse_default_user([{passcode, Passcode} | Rest], Configuration) ->
     parse_default_user(Rest, Configuration#stomp_configuration{
                                default_passcode = Passcode});
 parse_default_user([Unknown | Rest], Configuration) ->
-    rabbit_log:warning("rabbit_stomp: ignoring invalid default_user "
+    _ = rabbit_log:warning("rabbit_stomp: ignoring invalid default_user "
                        "configuration option: ~p~n", [Unknown]),
     parse_default_user(Rest, Configuration).
 
@@ -97,26 +97,28 @@ report_configuration(#stomp_configuration{
                         ssl_cert_login   = SSLCertLogin}) ->
     case Login of
         undefined -> ok;
-        _         -> rabbit_log:info("rabbit_stomp: default user '~s' "
+        _         -> _ = rabbit_log:info("rabbit_stomp: default user '~s' "
                                      "enabled~n", [Login])
     end,
 
     case ImplicitConnect of
-        true  -> rabbit_log:info("rabbit_stomp: implicit connect enabled~n");
+        true  -> _ = rabbit_log:info("rabbit_stomp: implicit connect enabled~n");
         false -> ok
     end,
 
     case SSLCertLogin of
-        true  -> rabbit_log:info("rabbit_stomp: ssl_cert_login enabled~n");
+        true  -> _ = rabbit_log:info("rabbit_stomp: ssl_cert_login enabled~n");
         false -> ok
     end,
 
     ok.
 
 list() ->
-    [Client
-     || {_, ListSupPid, _, _} <- supervisor2:which_children(rabbit_stomp_sup),
-        {_, RanchSup, supervisor, _} <- supervisor2:which_children(ListSupPid),
-        {ranch_conns_sup, ConnSup, _, _} <- supervisor:which_children(RanchSup),
-        {_, CliSup, _, _} <- supervisor:which_children(ConnSup),
-        {rabbit_stomp_reader, Client, _, _} <- supervisor:which_children(CliSup)].
+    [Client ||
+        {_, ListSup, _, _} <- supervisor2:which_children(rabbit_stomp_sup),
+        {_, RanchEmbeddedSup, supervisor, _} <- supervisor2:which_children(ListSup),
+        {{ranch_listener_sup, _}, RanchListSup, _, _} <- supervisor:which_children(RanchEmbeddedSup),
+        {ranch_conns_sup_sup, RanchConnsSup, supervisor, _} <- supervisor2:which_children(RanchListSup),
+        {_, RanchConnSup, supervisor, _} <- supervisor2:which_children(RanchConnsSup),
+        {_, StompClientSup, supervisor, _} <- supervisor2:which_children(RanchConnSup),
+        {rabbit_stomp_reader, Client, _, _} <- supervisor:which_children(StompClientSup)].

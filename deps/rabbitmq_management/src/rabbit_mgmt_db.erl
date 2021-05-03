@@ -7,13 +7,12 @@
 
 -module(rabbit_mgmt_db).
 
-%% pg2 is deprecated in OTP 23.
--compile(nowarn_deprecated_function).
-
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
+
+-include("rabbit_mgmt.hrl").
 
 -behaviour(gen_server2).
 
@@ -223,7 +222,7 @@ get_overview(User, Ranges) ->
 
 init([]) ->
     {ok, Interval} = application:get_env(rabbit, collect_statistics_interval),
-    rabbit_log:info("Statistics database started."),
+    _ = rabbit_log:info("Statistics database started."),
     {ok, #state{interval = Interval}, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
 
@@ -695,7 +694,7 @@ merge_data(_, D1, D2) -> % we assume if we get here both values a maps
        maps_merge(fun merge_data/3, D1, D2)
    catch
        error:Err ->
-           rabbit_log:debug("merge_data err ~p got: ~p ~p ~n", [Err, D1, D2]),
+           _ = rabbit_log:debug("merge_data err ~p got: ~p ~p ~n", [Err, D1, D2]),
            case is_map(D1) of
                true -> D1;
                false -> D2
@@ -732,11 +731,11 @@ created_stats_delegated(Type) ->
 
 -spec delegate_invoke(mfargs()) -> [any()].
 delegate_invoke(FunOrMFA) ->
-    MemberPids = [P || P <- pg2:get_members(management_db)],
+    MemberPids = [P || P <- pg:get_members(?MANAGEMENT_PG_SCOPE, ?MANAGEMENT_PG_GROUP)],
     {Results, Errors} = delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA),
     case Errors of
         [] -> ok;
-        _ -> rabbit_log:warning("Management delegate query returned errors:~n~p", [Errors])
+        _ -> _ = rabbit_log:warning("Management delegate query returned errors:~n~p", [Errors])
     end,
     [R || {_, R} <- Results].
 

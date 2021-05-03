@@ -484,7 +484,7 @@ stop(VHost) ->
     ok = rabbit_queue_index:stop(VHost).
 
 start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefined ->
-    rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
+    _ = rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
     do_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE),
     do_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState),
     ok.
@@ -492,13 +492,13 @@ start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefine
 do_start_msg_store(VHost, Type, Refs, StartFunState) ->
     case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState) of
         {ok, _} ->
-            rabbit_log:info("Started message store of type ~s for vhost '~s'~n", [abbreviated_type(Type), VHost]);
+            _ = rabbit_log:info("Started message store of type ~s for vhost '~s'~n", [abbreviated_type(Type), VHost]);
         {error, {no_such_vhost, VHost}} = Err ->
-            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': the vhost no longer exists!~n",
+            _ = rabbit_log:error("Failed to start message store of type ~s for vhost '~s': the vhost no longer exists!~n",
                              [Type, VHost]),
             exit(Err);
         {error, Error} ->
-            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': ~p~n",
+            _ = rabbit_log:error("Failed to start message store of type ~s for vhost '~s': ~p~n",
                              [Type, VHost, Error]),
             exit({error, Error})
     end.
@@ -2865,7 +2865,7 @@ in_batches(Size, BatchNum, MFA, List, MessageStart, MessageEnd) ->
         false -> lists:split(Size, List)
     end,
     ProcessedLength = (BatchNum - 1) * Size,
-    rabbit_log:info(MessageStart, [BatchNum, Size, ProcessedLength + Length]),
+    _ = rabbit_log:info(MessageStart, [BatchNum, Size, ProcessedLength + Length]),
     {M, F, A} = MFA,
     Keys = [ rpc:async_call(node(), M, F, [El | A]) || El <- Batch ],
     lists:foreach(fun(Key) ->
@@ -2875,7 +2875,7 @@ in_batches(Size, BatchNum, MFA, List, MessageStart, MessageEnd) ->
         end
     end,
     Keys),
-    rabbit_log:info(MessageEnd, [BatchNum, Size, length(Tail)]),
+    _ = rabbit_log:info(MessageEnd, [BatchNum, Size, length(Tail)]),
     in_batches(Size, BatchNum + 1, MFA, Tail, MessageStart, MessageEnd).
 
 migrate_queue({QueueName = #resource{virtual_host = VHost, name = Name},
@@ -2995,13 +2995,13 @@ log_upgrade(Msg) ->
     log_upgrade(Msg, []).
 
 log_upgrade(Msg, Args) ->
-    rabbit_log:info("message_store upgrades: " ++ Msg, Args).
+    _ = rabbit_log:info("message_store upgrades: " ++ Msg, Args).
 
 log_upgrade_verbose(Msg) ->
     log_upgrade_verbose(Msg, []).
 
 log_upgrade_verbose(Msg, Args) ->
-    rabbit_log_upgrade:info(Msg, Args).
+    _ = rabbit_log_upgrade:info(Msg, Args).
 
 maybe_client_terminate(MSCStateP) ->
     %% Queue might have been asked to stop by the supervisor, it needs a clean

@@ -29,11 +29,11 @@ start_link() ->
     start_link(Size).
 
 start_link(PoolSize) ->
-    rabbit_log:info("Will use ~p processes for default worker pool", [PoolSize]),
+    _ = rabbit_log:info("Will use ~p processes for default worker pool", [PoolSize]),
     start_link(PoolSize, worker_pool:default_pool()).
 
 start_link(PoolSize, PoolName) ->
-    rabbit_log:info("Starting worker pool '~p' with ~p processes in it", [PoolName, PoolSize]),
+    _ = rabbit_log:info("Starting worker pool '~p' with ~p processes in it", [PoolName, PoolSize]),
     SupName = list_to_atom(atom_to_list(PoolName) ++ "_sup"),
     supervisor:start_link({local, SupName}, ?MODULE, [PoolSize, PoolName]).
 

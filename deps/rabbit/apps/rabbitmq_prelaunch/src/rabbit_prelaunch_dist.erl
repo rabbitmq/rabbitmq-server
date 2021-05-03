@@ -3,9 +3,9 @@
 -export([setup/1]).
 
 setup(#{nodename := Node, nodename_type := NameType} = Context) ->
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Erlang distribution =="),
-    rabbit_log_prelaunch:debug("Rqeuested node name: ~s (type: ~s)",
+    _ = rabbit_log_prelaunch:debug(""),
+    _ = rabbit_log_prelaunch:debug("== Erlang distribution =="),
+    _ = rabbit_log_prelaunch:debug("Rqeuested node name: ~s (type: ~s)",
                                [Node, NameType]),
     case node() of
         nonode@nohost ->
@@ -16,7 +16,7 @@ setup(#{nodename := Node, nodename_type := NameType} = Context) ->
 
             ok = do_setup(Context);
         Node ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "Erlang distribution already running", []),
             ok;
         Unexpected ->
@@ -26,7 +26,7 @@ setup(#{nodename := Node, nodename_type := NameType} = Context) ->
     ok.
 
 do_setup(#{nodename := Node, nodename_type := NameType}) ->
-    rabbit_log_prelaunch:debug("Starting Erlang distribution", []),
+    _ = rabbit_log_prelaunch:debug("Starting Erlang distribution", []),
     case application:get_env(kernel, net_ticktime) of
         {ok, Ticktime} when is_integer(Ticktime) andalso Ticktime >= 1 ->
             %% The value passed to net_kernel:start/1 is the
@@ -43,7 +43,7 @@ do_setup(#{nodename := Node, nodename_type := NameType}) ->
 
 %% Check whether a node with the same name is already running
 duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Checking if node name ~s is already used", [NodeName]),
     PrelaunchName = rabbit_nodes_common:make(
                       {NodeName ++ "_prelaunch_" ++ os:getpid(),
@@ -63,7 +63,7 @@ duplicate_node_check(#{split_nodename := {NodeName, NodeHost}}) ->
     end.
 
 dist_port_range_check(#{erlang_dist_tcp_port := DistTcpPort}) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Checking if TCP port ~b is valid", [DistTcpPort]),
     case DistTcpPort of
         _ when DistTcpPort < 1 orelse DistTcpPort > 65535 ->
@@ -74,7 +74,7 @@ dist_port_range_check(#{erlang_dist_tcp_port := DistTcpPort}) ->
 
 dist_port_use_check(#{split_nodename := {_, NodeHost},
                       erlang_dist_tcp_port := DistTcpPort}) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Checking if TCP port ~b is available", [DistTcpPort]),
     dist_port_use_check_ipv4(NodeHost, DistTcpPort).
 

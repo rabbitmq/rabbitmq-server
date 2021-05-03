@@ -65,7 +65,7 @@ start_for_vhost(VHost) ->
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} ->
-            rabbit_log:error("Failed to start a queue process supervisor for vhost ~s: vhost no longer exists!",
+            _ = rabbit_log:error("Failed to start a queue process supervisor for vhost ~s: vhost no longer exists!",
                              [VHost]),
             {error, {no_such_vhost, VHost}}
     end.
@@ -78,7 +78,7 @@ stop_for_vhost(VHost) ->
             ok = supervisor2:delete_child(VHostSup, rabbit_amqqueue_sup_sup);
         %% see start/1
         {error, {no_such_vhost, VHost}} ->
-            rabbit_log:error("Failed to stop a queue process supervisor for vhost ~s: vhost no longer exists!",
+            _ = rabbit_log:error("Failed to stop a queue process supervisor for vhost ~s: vhost no longer exists!",
                              [VHost]),
             ok
     end.

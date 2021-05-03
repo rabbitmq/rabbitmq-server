@@ -422,7 +422,7 @@ registry_concurrent_reloads(_Config) ->
                     maps:keys(FeatureFlags) ++
                     [MakeName(I) || I <- ProcIs]),
     Spammer = spawn_link(fun() -> registry_spammer([], FinalFFList) end),
-    rabbit_log_feature_flags:info(
+    _ = rabbit_log_feature_flags:info(
       ?MODULE_STRING ": Started registry spammer (~p)",
       [self()]),
 
@@ -430,7 +430,7 @@ registry_concurrent_reloads(_Config) ->
     %% processes we are about to spawn.
     Lock = rabbit_feature_flags:registry_loading_lock(),
     ThisNode = [node()],
-    rabbit_log_feature_flags:info(
+    _ = rabbit_log_feature_flags:info(
       ?MODULE_STRING ": Acquiring registry load lock"),
     global:set_lock(Lock, ThisNode),
 
@@ -446,11 +446,11 @@ registry_concurrent_reloads(_Config) ->
     %% we don't have a way to verify this fact, but it must be enough,
     %% right?
     timer:sleep(1000),
-    rabbit_log_feature_flags:info(
+    _ = rabbit_log_feature_flags:info(
       ?MODULE_STRING ": Releasing registry load lock"),
     global:del_lock(Lock, ThisNode),
 
-    rabbit_log_feature_flags:info(
+    _ = rabbit_log_feature_flags:info(
       ?MODULE_STRING ": Wait for test processes to finish"),
     lists:foreach(
       fun(Pid) ->
@@ -471,7 +471,7 @@ registry_spammer(CurrentFeatureNames, FinalFeatureNames) ->
         CurrentFeatureNames ->
             registry_spammer(CurrentFeatureNames, FinalFeatureNames);
         FinalFeatureNames ->
-            rabbit_log_feature_flags:info(
+            _ = rabbit_log_feature_flags:info(
               ?MODULE_STRING ": Registry spammer: all feature flags "
               "appeared"),
             registry_spammer1(FinalFeatureNames);

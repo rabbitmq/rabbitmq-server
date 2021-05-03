@@ -67,7 +67,7 @@ enable() ->
     {ok, RealBQ} = application:get_env(rabbit, backing_queue_module),
     case RealBQ of
         ?MODULE -> ok;
-        _       -> rabbit_log:info("Priority queues enabled, real BQ is ~s~n",
+        _       -> _ = rabbit_log:info("Priority queues enabled, real BQ is ~s~n",
                                    [RealBQ]),
                    application:set_env(
                      rabbitmq_priority_queue, backing_queue_module, RealBQ),

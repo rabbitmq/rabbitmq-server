@@ -50,14 +50,14 @@ start(Delay, AttemptsLeft) ->
                       %% This scenario does not guarantee single cluster formation but without knowing the list of members
                       %% ahead of time, this is a best effort workaround. Multi-node consensus is apparently hard
                       %% to achieve without having consensus around expected cluster members.
-                      rabbit_log:info("MQTT: will wait for ~p more ms for cluster members to join before triggering a Raft leader election", [Delay]),
+                      _ = rabbit_log:info("MQTT: will wait for ~p more ms for cluster members to join before triggering a Raft leader election", [Delay]),
                       timer:sleep(Delay),
                       start(Delay, AttemptsLeft - 1);
                   Peers ->
                       %% Trigger an election.
                       %% This is required when we start a node for the first time.
                       %% Using default timeout because it supposed to reply fast.
-                      rabbit_log:info("MQTT: discovered ~p cluster peers that support client ID tracking", [length(Peers)]),
+                      _ = rabbit_log:info("MQTT: discovered ~p cluster peers that support client ID tracking", [length(Peers)]),
                       start_server(),
                       join_peers(NodeId, Peers),
                       ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
@@ -98,7 +98,7 @@ join_peers(NodeId, Nodes) ->
 join_peers(_NodeId, [], _RetriesLeft) ->
     ok;
 join_peers(_NodeId, _Nodes, RetriesLeft) when RetriesLeft =:= 0 ->
-    rabbit_log:error("MQTT: exhausted all attempts while trying to rejoin cluster peers");
+    _ = rabbit_log:error("MQTT: exhausted all attempts while trying to rejoin cluster peers");
 join_peers(NodeId, Nodes, RetriesLeft) ->
     case ra:members(Nodes, ?START_TIMEOUT) of
         {ok, Members, _} ->
@@ -107,7 +107,7 @@ join_peers(NodeId, Nodes, RetriesLeft) ->
                 false -> ra:add_member(Members, NodeId)
             end;
         {timeout, _} ->
-            rabbit_log:debug("MQTT: timed out contacting cluster peers, %s retries left", [RetriesLeft]),
+            _ = rabbit_log:debug("MQTT: timed out contacting cluster peers, %s retries left", [RetriesLeft]),
             timer:sleep(?RETRY_INTERVAL),
             join_peers(NodeId, Nodes, RetriesLeft - 1);
         Err ->

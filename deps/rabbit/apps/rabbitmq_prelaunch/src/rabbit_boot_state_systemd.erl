@@ -74,18 +74,18 @@ code_change(_OldVsn, State, _Extra) ->
 
 notify_boot_state(ready = BootState,
                   #state{mechanism = legacy, sd_notify_module = SDNotify}) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       ?LOG_PREFIX "notifying of state `~s` (via native module)",
       [BootState]),
     sd_notify_legacy(SDNotify);
 notify_boot_state(ready = BootState,
                   #state{mechanism = socat, socket = Socket}) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       ?LOG_PREFIX "notifying of state `~s` (via socat(1))",
       [BootState]),
     sd_notify_socat(Socket);
 notify_boot_state(BootState, _) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       ?LOG_PREFIX "ignoring state `~s`",
       [BootState]),
     ok.
@@ -108,7 +108,7 @@ sd_notify_legacy(SDNotify) ->
 sd_notify_socat(Socket) ->
     case sd_current_unit() of
         {ok, Unit} ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               ?LOG_PREFIX "systemd unit for activation check: \"~s\"~n",
               [Unit]),
             sd_notify_socat(Socket, Unit);
@@ -125,7 +125,7 @@ sd_notify_socat(Socket, Unit) ->
             Result
     catch
         Class:Reason ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               ?LOG_PREFIX "Failed to start socat(1): ~p:~p~n",
               [Class, Reason]),
             false
@@ -156,7 +156,7 @@ sd_open_port(Socket) ->
 sd_wait_activation(Port, Unit) ->
     case os:find_executable("systemctl") of
         false ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               ?LOG_PREFIX "systemctl(1) unavailable, falling back to sleep~n"),
             timer:sleep(5000),
             ok;
@@ -165,7 +165,7 @@ sd_wait_activation(Port, Unit) ->
     end.
 
 sd_wait_activation(_, _, 0) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       ?LOG_PREFIX "service still in 'activating' state, bailing out~n"),
     ok;
 sd_wait_activation(Port, Unit, AttemptsLeft) ->
@@ -177,7 +177,7 @@ sd_wait_activation(Port, Unit, AttemptsLeft) ->
         "ActiveState=" ++ _ ->
             ok;
         _ = Err ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               ?LOG_PREFIX "unexpected status from systemd: ~p~n", [Err]),
             ok
     end.

@@ -33,14 +33,14 @@ init() ->
     %% We need to do it conditionally, however.
     NoOp = fun() -> ok end,
     Run  = fun(_) ->
-            rabbit_log:debug("Peer discovery etcd: initialising..."),
+            _ = rabbit_log:debug("Peer discovery etcd: initialising..."),
             application:ensure_all_started(eetcd),
             Formation = application:get_env(rabbit, cluster_formation, []),
             Opts = maps:from_list(proplists:get_value(peer_discovery_etcd, Formation, [])),
             {ok, Pid} = rabbitmq_peer_discovery_etcd_v3_client:start_link(Opts),
             %% unlink so that this supervisor's lifecycle does not affect RabbitMQ core
             unlink(Pid),
-            rabbit_log:debug("etcd peer discovery: v3 client pid: ~p", [whereis(rabbitmq_peer_discovery_etcd_v3_client)])
+            _ = rabbit_log:debug("etcd peer discovery: v3 client pid: ~p", [whereis(rabbitmq_peer_discovery_etcd_v3_client)])
            end,
     rabbit_peer_discovery_util:maybe_backend_configured(?BACKEND_CONFIG_KEY, NoOp, NoOp, Run),
 
@@ -52,7 +52,7 @@ init() ->
 list_nodes() ->
     Fun0 = fun() -> {ok, {[], disc}} end,
     Fun1 = fun() ->
-                   rabbit_log:warning("Peer discovery backend is set to ~s "
+                   _ = rabbit_log:warning("Peer discovery backend is set to ~s "
                                       "but final config does not contain "
                                       "rabbit.cluster_formation.peer_discovery_etcd. "
                                       "Cannot discover any nodes because etcd cluster details are not configured!",
@@ -77,7 +77,7 @@ supports_registration() ->
 
 register() ->
     Result = ?ETCD_CLIENT:register(),
-    rabbit_log:info("Registered node with etcd"),
+    _ = rabbit_log:info("Registered node with etcd"),
     Result.
 
 

@@ -17,7 +17,7 @@ apply_on_node(ReqData, Context, Mod, Fun, Args) ->
                 {badrpc, _} = Error ->
                     Msg = io_lib:format("Node ~p could not be contacted: ~p",
                                         [Node, Error]),
-                    rabbit_log:warning(Msg, []),
+                    _ = rabbit_log:warning(Msg, []),
                     rabbit_mgmt_util:bad_request(list_to_binary(Msg), ReqData, Context);
                 Any ->
                     Any

@@ -44,3 +44,5 @@
 -define(DEF_PREFETCH, 1000).
 
 -define(FEDERATION_GUIDE_URL, <<"https://rabbitmq.com/federation.html">>).
+
+-define(FEDERATION_PG_SCOPE, rabbitmq_federation_pg_scope).

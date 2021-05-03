@@ -90,7 +90,7 @@ declare_queue(XName, Durable, N, Node) ->
             ok
     catch
         _Error:Reason ->
-            rabbit_log:error("sharding failed to declare queue for exchange ~p"
+            _ = rabbit_log:error("sharding failed to declare queue for exchange ~p"
                              " - soft error:~n~p~n",
                              [exchange_bin(XName), Reason]),
             error
@@ -119,7 +119,7 @@ binding_action(F, XName, RoutingKey, N, Node, ErrMsg) ->
            ?SHARDING_USER) of
         ok              -> ok;
         {error, Reason} ->
-            rabbit_log:error(ErrMsg, [QBin, exchange_bin(XName), Reason]),
+            _ = rabbit_log:error(ErrMsg, [QBin, exchange_bin(XName), Reason]),
             error
     end.
 

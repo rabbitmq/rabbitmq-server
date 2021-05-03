@@ -2,23 +2,23 @@
 
 -export([check/1]).
 
--define(OTP_MINIMUM, "22.3").
--define(ERTS_MINIMUM, "10.7").
+-define(OTP_MINIMUM, "23.2").
+-define(ERTS_MINIMUM, "11.1").
 
 check(_Context) ->
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Erlang/OTP compatibility check =="),
+    _ = rabbit_log_prelaunch:debug(""),
+    _ = rabbit_log_prelaunch:debug("== Erlang/OTP compatibility check =="),
 
     ERTSVer = erlang:system_info(version),
     OTPRel = rabbit_misc:otp_release(),
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Requiring: Erlang/OTP ~s (ERTS ~s)", [?OTP_MINIMUM, ?ERTS_MINIMUM]),
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Running:   Erlang/OTP ~s (ERTS ~s)", [OTPRel, ERTSVer]),
 
     case rabbit_misc:version_compare(?ERTS_MINIMUM, ERTSVer, lte) of
         true when ?ERTS_MINIMUM =/= ERTSVer ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "Erlang/OTP version requirement satisfied"),
             ok;
         true when ?ERTS_MINIMUM =:= ERTSVer andalso ?OTP_MINIMUM =< OTPRel ->
@@ -35,7 +35,7 @@ check(_Context) ->
             "This RabbitMQ version cannot run on Erlang ~s (erts ~s): "
             "minimum required version is ~s (erts ~s)",
             Args = [OTPRel, ERTSVer, ?OTP_MINIMUM, ?ERTS_MINIMUM],
-            rabbit_log_prelaunch:error(Msg, Args),
+            _ = rabbit_log_prelaunch:error(Msg, Args),
 
             %% Also print to stderr to make this more visible
             io:format(standard_error, "Error: " ++ Msg ++ "~n", Args),

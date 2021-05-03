@@ -102,7 +102,7 @@ warn_file_limit() ->
     %% when trying to recover queues, warn the user:
     case file_handle_cache:get_limit() < L of
         true ->
-            rabbit_log:warning(
+            _ = rabbit_log:warning(
               "Recovering ~p queues, available file handles: ~p. Please increase max open file handles limit to at least ~p!~n",
               [L, file_handle_cache:get_limit(), L]);
         false ->
@@ -135,7 +135,7 @@ recover_classic_queues(VHost, Queues) ->
                                  not lists:member(amqqueue:get_name(Q), RecoveredNames)],
             {RecoveredQs, FailedQueues};
         {error, Reason} ->
-            rabbit_log:error("Failed to start queue supervisor for vhost '~s': ~s", [VHost, Reason]),
+            _ = rabbit_log:error("Failed to start queue supervisor for vhost '~s': ~s", [VHost, Reason]),
             throw({error, Reason})
     end.
 
@@ -235,7 +235,7 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
         gen_server2:mcall(
           [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q, recovery),
             {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
-    [rabbit_log:error("Queue ~p failed to initialise: ~p~n",
+    [_ = rabbit_log:error("Queue ~p failed to initialise: ~p~n",
                       [Pid, Error]) || {Pid, Error} <- Failures],
     [Q || {_, {new, Q}} <- Results].
 
@@ -527,7 +527,7 @@ rebalance(Type, VhostSpec, QueueSpec) ->
     maybe_rebalance(get_rebalance_lock(self()), Type, VhostSpec, QueueSpec).
 
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
-    rabbit_log:info("Starting queue rebalance operation: '~s' for vhosts matching '~s' and queues matching '~s'",
+    _ = rabbit_log:info("Starting queue rebalance operation: '~s' for vhosts matching '~s' and queues matching '~s'",
                     [Type, VhostSpec, QueueSpec]),
     Running = rabbit_maintenance:filter_out_drained_nodes_consistent_read(rabbit_nodes:all_running()),
     NumRunning = length(Running),
@@ -545,10 +545,10 @@ maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     MaxQueuesDesired = (NumToRebalance div NumRunning) + Rem,
     Result = iterative_rebalance(ByNode, MaxQueuesDesired),
     global:del_lock(Id),
-    rabbit_log:info("Finished queue rebalance operation"),
+    _ = rabbit_log:info("Finished queue rebalance operation"),
     Result;
 maybe_rebalance(false, _Type, _VhostSpec, _QueueSpec) ->
-    rabbit_log:warning("Queue rebalance operation is in progress, please wait."),
+    _ = rabbit_log:warning("Queue rebalance operation is in progress, please wait."),
     {error, rebalance_in_progress}.
 
 filter_per_type(all, _) ->
@@ -572,7 +572,7 @@ is_match(Subj, E) ->
 iterative_rebalance(ByNode, MaxQueuesDesired) ->
     case maybe_migrate(ByNode, MaxQueuesDesired) of
         {ok, Summary} ->
-            rabbit_log:info("All queue masters are balanced"),
+            _ = rabbit_log:info("All queue masters are balanced"),
             {ok, Summary};
         {migrated, Other} ->
             iterative_rebalance(Other, MaxQueuesDesired);
@@ -602,23 +602,23 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
                     {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)};
                 _ ->
                     [{Length, Destination} | _] = sort_by_number_of_queues(Candidates, ByNode),
-                    rabbit_log:warning("Migrating queue ~p from node ~p with ~p queues to node ~p with ~p queues",
+                    _ = rabbit_log:warning("Migrating queue ~p from node ~p with ~p queues to node ~p with ~p queues",
                                        [Name, N, length(All), Destination, Length]),
                     case Module:transfer_leadership(Q, Destination) of
                         {migrated, NewNode} ->
-                            rabbit_log:warning("Queue ~p migrated to ~p", [Name, NewNode]),
+                            _ = rabbit_log:warning("Queue ~p migrated to ~p", [Name, NewNode]),
                             {migrated, update_migrated_queue(Destination, N, Queue, Queues, ByNode)};
                         {not_migrated, Reason} ->
-                            rabbit_log:warning("Error migrating queue ~p: ~p", [Name, Reason]),
+                            _ = rabbit_log:warning("Error migrating queue ~p: ~p", [Name, Reason]),
                             {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)}
                     end
             end;
         [{_, _, true} | _] = All when length(All) > MaxQueuesDesired ->
-            rabbit_log:warning("Node ~p contains ~p queues, but all have already migrated. "
+            _ = rabbit_log:warning("Node ~p contains ~p queues, but all have already migrated. "
                                "Do nothing", [N, length(All)]),
             maybe_migrate(ByNode, MaxQueuesDesired, Nodes);
         All ->
-            rabbit_log:warning("Node ~p only contains ~p queues, do nothing",
+            _ = rabbit_log:warning("Node ~p only contains ~p queues, do nothing",
                                [N, length(All)]),
             maybe_migrate(ByNode, MaxQueuesDesired, Nodes)
     end.
@@ -717,7 +717,7 @@ retry_wait(Q, F, E, RetriesLeft) ->
                     % The old check would have crashed here,
                     % instead, log it and run the exit fun. absent & alive is weird,
                     % but better than crashing with badmatch,true
-                    rabbit_log:debug("Unexpected alive queue process ~p~n", [QPid]),
+                    _ = rabbit_log:debug("Unexpected alive queue process ~p~n", [QPid]),
                     E({absent, Q, alive});
                 false ->
                     ok % Expected result
@@ -1260,7 +1260,7 @@ count(VHost) ->
     %% that requires a proper consensus algorithm.
     length(list_for_count(VHost))
   catch _:Err ->
-    rabbit_log:error("Failed to fetch number of queues in vhost ~p:~n~p~n",
+    _ = rabbit_log:error("Failed to fetch number of queues in vhost ~p:~n~p~n",
                      [VHost, Err]),
     0
   end.
@@ -1555,14 +1555,14 @@ delete(Q, IfUnused, IfEmpty, ActingUser) ->
             #resource{name = Name, virtual_host = Vhost} = amqqueue:get_name(Q1),
             case IfEmpty of
                 true ->
-                    rabbit_log:error("Queue ~s in vhost ~s has its master node down and "
+                    _ = rabbit_log:error("Queue ~s in vhost ~s has its master node down and "
                                      "no mirrors available or eligible for promotion. "
                                      "The queue may be non-empty. "
                                      "Refusing to force-delete.",
                                      [Name, Vhost]),
                     {error, not_empty};
                 false ->
-                    rabbit_log:warning("Queue ~s in vhost ~s has its master node is down and "
+                    _ = rabbit_log:warning("Queue ~s in vhost ~s has its master node is down and "
                                        "no mirrors available or eligible for promotion. "
                                        "Forcing queue deletion.",
                                        [Name, Vhost]),

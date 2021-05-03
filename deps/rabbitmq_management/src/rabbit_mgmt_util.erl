@@ -90,7 +90,7 @@ is_authorized_admin(ReqData, Context, Username, Password) ->
     case is_basic_auth_disabled() of
         true ->
             Msg = "HTTP access denied: basic auth disabled",
-            rabbit_log:warning(Msg),
+            _ = rabbit_log:warning(Msg),
             not_authorised(Msg, ReqData, Context);
         false ->
             is_authorized(ReqData, Context, Username, Password,
@@ -137,7 +137,7 @@ get_bool_env(Application, Par, Default) ->
         true -> true;
         false -> false;
         Other ->
-            rabbit_log:warning("Invalid configuration for application ~p: ~p set to ~p",
+            _ = rabbit_log:warning("Invalid configuration for application ~p: ~p set to ~p",
                                [Application, Par, Other]),
             Default
     end.
@@ -211,7 +211,7 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
             case is_basic_auth_disabled() of
                 true ->
                     Msg = "HTTP access denied: basic auth disabled",
-                    rabbit_log:warning(Msg),
+                    _ = rabbit_log:warning(Msg),
                     not_authorised(Msg, ReqData, Context);
                 false ->
                     is_authorized(ReqData, Context,
@@ -226,7 +226,7 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
             case is_basic_auth_disabled() of
                 true ->
                     Msg = "HTTP access denied: basic auth disabled",
-                    rabbit_log:warning(Msg),
+                    _ = rabbit_log:warning(Msg),
                     not_authorised(Msg, ReqData, Context);
                 false ->
                     {{false, ?AUTH_REALM}, ReqData, Context}
@@ -240,7 +240,7 @@ is_authorized_user(ReqData, Context, Username, Password) ->
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
     ErrFun = fun (Msg) ->
-                     rabbit_log:warning("HTTP access denied: user '~s' - ~s",
+                     _ = rabbit_log:warning("HTTP access denied: user '~s' - ~s",
                                         [Username, Msg]),
                      not_authorised(Msg, ReqData, Context)
              end,
@@ -278,7 +278,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
             end;
         {refused, _Username, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
-            rabbit_log:warning("HTTP access denied: ~s",
+            _ = rabbit_log:warning("HTTP access denied: ~s",
                                [rabbit_misc:format(Msg, Args)]),
             not_authorised(<<"Login failed">>, ReqData, Context)
     end.
@@ -733,7 +733,7 @@ not_found(Reason, ReqData, Context) ->
     halt_response(404, not_found, Reason, ReqData, Context).
 
 internal_server_error(Error, Reason, ReqData, Context) ->
-    rabbit_log:error("~s~n~s", [Error, Reason]),
+    _ = rabbit_log:error("~s~n~s", [Error, Reason]),
     halt_response(500, Error, Reason, ReqData, Context).
 
 invalid_pagination(Type,Reason, ReqData, Context) ->
@@ -867,22 +867,22 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                                          VHost, User]) of
                   {badrpc, nodedown} ->
                       Msg = io_lib:format("Node ~p could not be contacted", [Node]),
-                      rabbit_log:warning(ErrorMsg, [Msg]),
+                      _ = rabbit_log:warning(ErrorMsg, [Msg]),
                       bad_request(list_to_binary(Msg), ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{name = not_found, explanation = Explanation}}} ->
-                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      _ = rabbit_log:warning(ErrorMsg, [Explanation]),
                       not_found(Explanation, ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{name = access_refused, explanation = Explanation}}} ->
-                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      _ = rabbit_log:warning(ErrorMsg, [Explanation]),
                       not_authorised(<<"Access refused.">>, ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{name = not_allowed, explanation = Explanation}}} ->
-                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      _ = rabbit_log:warning(ErrorMsg, [Explanation]),
                       not_authorised(<<"Access refused.">>, ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{explanation = Explanation}}} ->
-                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      _ = rabbit_log:warning(ErrorMsg, [Explanation]),
                       bad_request(list_to_binary(Explanation), ReqData1, Context);
                   {badrpc, Reason} ->
-                      rabbit_log:warning(ErrorMsg, [Reason]),
+                      _ = rabbit_log:warning(ErrorMsg, [Reason]),
                       bad_request(
                         list_to_binary(
                           io_lib:format("Request to node ~s failed with ~p",
@@ -1116,7 +1116,7 @@ list_login_vhosts(User, AuthzData) ->
 
 % rabbitmq/rabbitmq-auth-backend-http#100
 log_access_control_result(NotOK) ->
-    rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~p", [NotOK]).
+    _ = rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~p", [NotOK]).
 
 %% base64:decode throws lots of weird errors. Catch and convert to one
 %% that will cause a bad_request.

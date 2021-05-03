@@ -71,7 +71,7 @@ quorum_queue_migration(_FeatureName, _FeatureProps, is_enabled) ->
     mnesia:table_info(rabbit_durable_queue, attributes) =:= Fields.
 
 migrate_to_amqqueue_with_type(FeatureName, [Table | Rest], Fields) ->
-    rabbit_log_feature_flags:info(
+    _ = rabbit_log_feature_flags:info(
       "Feature flag `~s`:   migrating Mnesia table ~s...",
       [FeatureName, Table]),
     Fun = fun(Queue) -> amqqueue:upgrade_to(amqqueue_v2, Queue) end,
@@ -82,7 +82,7 @@ migrate_to_amqqueue_with_type(FeatureName, [Table | Rest], Fields) ->
         {aborted, Reason} -> {error, Reason}
     end;
 migrate_to_amqqueue_with_type(FeatureName, [], _) ->
-    rabbit_log_feature_flags:info(
+    _ = rabbit_log_feature_flags:info(
       "Feature flag `~s`:   Mnesia tables migration done",
       [FeatureName]),
     ok.
@@ -106,7 +106,7 @@ implicit_default_bindings_migration(_Feature_Name, _FeatureProps,
 remove_explicit_default_bindings(_FeatureName, []) ->
     ok;
 remove_explicit_default_bindings(FeatureName, Queues) ->
-    rabbit_log_feature_flags:info(
+    _ = rabbit_log_feature_flags:info(
       "Feature flag `~s`:   deleting explicit default bindings "
       "for ~b queues (it may take some time)...",
       [FeatureName, length(Queues)]),
@@ -137,12 +137,12 @@ virtual_host_metadata_migration(_FeatureName, _FeatureProps, is_enabled) ->
 
 maintenance_mode_status_migration(FeatureName, _FeatureProps, enable) ->
     TableName = rabbit_maintenance:status_table_name(),
-    rabbit_log:info("Creating table ~s for feature flag `~s`", [TableName, FeatureName]),
+    _ = rabbit_log:info("Creating table ~s for feature flag `~s`", [TableName, FeatureName]),
     try
         _ = rabbit_table:create(TableName, rabbit_maintenance:status_table_definition()),
         _ = rabbit_table:ensure_table_copy(TableName, node())
     catch throw:Reason  ->
-        rabbit_log:error("Failed to create maintenance status table: ~p", [Reason])
+        _ = rabbit_log:error("Failed to create maintenance status table: ~p", [Reason])
     end;
 maintenance_mode_status_migration(_FeatureName, _FeatureProps, is_enabled) ->
     rabbit_table:exists(rabbit_maintenance:status_table_name()).

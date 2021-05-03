@@ -309,10 +309,10 @@ log(Level, XorQName, Fmt0, Args0) ->
     Fmt = "Federation ~s " ++ Fmt0,
     Args = [rabbit_misc:rs(XorQName) | Args0],
     case Level of
-        debug   -> rabbit_log_federation:debug(Fmt, Args);
-        info    -> rabbit_log_federation:info(Fmt, Args);
-        warning -> rabbit_log_federation:warning(Fmt, Args);
-        error   -> rabbit_log_federation:error(Fmt, Args)
+        debug   -> _ = rabbit_log_federation:debug(Fmt, Args);
+        info    -> _ = rabbit_log_federation:info(Fmt, Args);
+        warning -> _ = rabbit_log_federation:warning(Fmt, Args);
+        error   -> _ = rabbit_log_federation:error(Fmt, Args)
     end.
 
 %%----------------------------------------------------------------------------
@@ -332,12 +332,12 @@ disposable_channel_call(Conn, Method, ErrFun) ->
         end
     catch
           Exception:Reason ->
-            rabbit_log_federation:error("Federation link could not create a disposable (one-off) channel due to an error ~p: ~p~n", [Exception, Reason])
+            _ = rabbit_log_federation:error("Federation link could not create a disposable (one-off) channel due to an error ~p: ~p~n", [Exception, Reason])
     end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
     try
-        rabbit_log_federation:debug("Disposable connection parameters: ~p", [Params]),
+        _ = rabbit_log_federation:debug("Disposable connection parameters: ~p", [Params]),
         case open(Params, <<"Disposable exchange federation link connection">>) of
             {ok, Conn, Ch} ->
                 try
@@ -350,15 +350,15 @@ disposable_connection_call(Params, Method, ErrFun) ->
                     ensure_connection_closed(Conn)
                 end;
             {error, {auth_failure, Message}} ->
-                rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection "
+                _ = rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection "
                                             "due to an authentication failure: ~s~n", [Message]);
             Error ->
-                rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection, "
+                _ = rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection, "
                                             "reason: ~p~n", [Error]),
                 Error
         end
     catch
         Exception:Reason ->
-            rabbit_log_federation:error("Federation link could not create a disposable (one-off) connection "
+            _ = rabbit_log_federation:error("Federation link could not create a disposable (one-off) connection "
                                         "due to an error ~p: ~p~n", [Exception, Reason])
     end.

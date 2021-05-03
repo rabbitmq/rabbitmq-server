@@ -43,8 +43,8 @@ make_verify_fun(Module, Function, InitialUserState) ->
         Module:module_info()
     catch
         _:Exception ->
-            rabbit_log:error("SSL verify_fun: module ~s missing: ~p~n",
-                             [Module, Exception]),
+            _ = rabbit_log:error("TLS verify_fun: module ~s missing: ~p~n",
+                                 [Module, Exception]),
             throw({error, {invalid_verify_fun, missing_module}})
     end,
     NewForm = erlang:function_exported(Module, Function, 3),
@@ -66,8 +66,8 @@ make_verify_fun(Module, Function, InitialUserState) ->
                     Module:Function(Args)
             end;
         _ ->
-            rabbit_log:error("SSL verify_fun: no ~s:~s/3 exported~n",
-              [Module, Function]),
+            _ = rabbit_log:error("TLS verify_fun: no ~s:~s/3 exported~n",
+                                 [Module, Function]),
             throw({error, {invalid_verify_fun, function_not_exported}})
     end.
 

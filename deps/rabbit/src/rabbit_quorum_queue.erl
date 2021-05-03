@@ -107,7 +107,7 @@ handle_event({ra_event, From, Evt}, QState) ->
     {new | existing, amqqueue:amqqueue()} | rabbit_types:channel_exit().
 
 declare(Q) when ?amqqueue_is_quorum(Q) ->
-    rabbit_log:info("quorum_queue declaring ~w", [Q]),
+    _ = rabbit_log:info("quorum_queue declaring ~w", [Q]),
     QName = amqqueue:get_name(Q),
     Durable = amqqueue:is_durable(Q),
     AutoDelete = amqqueue:is_auto_delete(Q),
@@ -130,7 +130,7 @@ declare(Q) when ?amqqueue_is_quorum(Q) ->
     NewQ0 = amqqueue:set_pid(Q, Id),
     NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => Nodes}),
 
-    rabbit_log:debug("Will start up to ~p replicas for quorum queue ~s", [QuorumSize, rabbit_misc:rs(QName)]),
+    _ = rabbit_log:debug("Will start up to ~p replicas for quorum queue ~s", [QuorumSize, rabbit_misc:rs(QName)]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval,
@@ -382,7 +382,7 @@ handle_tick(QName,
                           [] ->
                               ok;
                           Stale ->
-                              rabbit_log:info("~s: stale nodes detected. Purging ~w~n",
+                              _ = rabbit_log:info("~s: stale nodes detected. Purging ~w~n",
                                               [rabbit_misc:rs(QName), Stale]),
                               %% pipeline purge command
                               {ok, Q} = rabbit_amqqueue:lookup(QName),
@@ -402,7 +402,7 @@ repair_leader_record(QName, Self) ->
             %% it's ok - we don't need to do anything
             ok;
         _ ->
-            rabbit_log:debug("~s: repairing leader record",
+            _ = rabbit_log:debug("~s: repairing leader record",
                              [rabbit_misc:rs(QName)]),
             {_, Name} = erlang:process_info(Self, registered_name),
             become_leader(QName, Name)
@@ -472,7 +472,7 @@ recover(Queues) ->
                      ok ->
                          ok;
                      Err2 ->
-                         rabbit_log:warning("recover: quorum queue ~w could not"
+                         _ = rabbit_log:warning("recover: quorum queue ~w could not"
                                             " be started ~w", [Name, Err2]),
                          ok
                  end;
@@ -483,7 +483,7 @@ recover(Queues) ->
                  ok;
              Err ->
                  %% catch all clause to avoid causing the vhost not to start
-                 rabbit_log:warning("recover: quorum queue ~w could not be "
+                 _ = rabbit_log:warning("recover: quorum queue ~w could not be "
                                     "restarted ~w", [Name, Err]),
                  ok
          end,
@@ -552,7 +552,7 @@ delete(Q,
                     {ok, ReadyMsgs};
                 false ->
                     %% attempt forced deletion of all servers
-                    rabbit_log:warning(
+                    _ = rabbit_log:warning(
                       "Could not delete quorum queue '~s', not enough nodes "
                        " online to reach a quorum: ~255p."
                        " Attempting force delete.",
@@ -570,7 +570,7 @@ force_delete_queue(Servers) ->
          case catch(ra:force_delete_server(S)) of
              ok -> ok;
              Err ->
-                 rabbit_log:warning(
+                 _ = rabbit_log:warning(
                    "Force delete of ~w failed with: ~w"
                    "This may require manual data clean up~n",
                    [S, Err]),
@@ -1040,14 +1040,14 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
 shrink_all(Node) ->
     [begin
          QName = amqqueue:get_name(Q),
-         rabbit_log:info("~s: removing member (replica) on node ~w",
+         _ = rabbit_log:info("~s: removing member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
          Size = length(get_nodes(Q)),
          case delete_member(Q, Node) of
              ok ->
                  {QName, {ok, Size-1}};
              {error, Err} ->
-                 rabbit_log:warning("~s: failed to remove member (replica) on node ~w, error: ~w",
+                 _ = rabbit_log:warning("~s: failed to remove member (replica) on node ~w, error: ~w",
                                     [rabbit_misc:rs(QName), Node, Err]),
                  {QName, {error, Size, Err}}
          end
@@ -1063,13 +1063,13 @@ grow(Node, VhostSpec, QueueSpec, Strategy) ->
     [begin
          Size = length(get_nodes(Q)),
          QName = amqqueue:get_name(Q),
-         rabbit_log:info("~s: adding a new member (replica) on node ~w",
+         _ = rabbit_log:info("~s: adding a new member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
          case add_member(Q, Node, ?ADD_MEMBER_TIMEOUT) of
              ok ->
                  {QName, {ok, Size + 1}};
              {error, Err} ->
-                 rabbit_log:warning(
+                 _ = rabbit_log:warning(
                    "~s: failed to add member (replica) on node ~w, error: ~w",
                    [rabbit_misc:rs(QName), Node, Err]),
                  {QName, {error, Size, Err}}

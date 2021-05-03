@@ -84,7 +84,7 @@ init([]) ->
     Map = ?CONFIG_MODULE:config_map(?CONFIG_KEY),
     case map_size(Map) of
         0 ->
-            rabbit_log:info("Peer discovery: node cleanup is disabled", []),
+            _ = rabbit_log:info("Peer discovery: node cleanup is disabled", []),
             {ok, #state{}};
         _ ->
             Interval = ?CONFIG_MODULE:get(cleanup_interval, ?CONFIG_MAPPING, Map),
@@ -96,7 +96,7 @@ init([]) ->
                           true -> "will only log warnings";
                           false -> "will remove nodes not known to the discovery backend"
                       end,
-            rabbit_log:info("Peer discovery: enabling node cleanup (~s). Check interval: ~p seconds.",
+            _ = rabbit_log:info("Peer discovery: enabling node cleanup (~s). Check interval: ~p seconds.",
                             [WarnMsg, State#state.interval]),
             {ok, State}
     end.
@@ -118,7 +118,7 @@ init([]) ->
         {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_call(check_cluster, _From, State) ->
-    rabbit_log:debug("Peer discovery: checking for partitioned nodes to clean up."),
+    _ = rabbit_log:debug("Peer discovery: checking for partitioned nodes to clean up."),
     maybe_cleanup(State),
     {reply, ok, State};
 handle_call(_Request, _From, State) ->
@@ -226,18 +226,18 @@ maybe_cleanup(State) ->
 -spec maybe_cleanup(State :: #state{},
                     UnreachableNodes :: [node()]) -> ok.
 maybe_cleanup(_, []) ->
-    rabbit_log:debug("Peer discovery: all known cluster nodes are up.");
+    _ = rabbit_log:debug("Peer discovery: all known cluster nodes are up.");
 maybe_cleanup(State, UnreachableNodes) ->
-    rabbit_log:debug("Peer discovery: cleanup discovered unreachable nodes: ~p",
+    _ = rabbit_log:debug("Peer discovery: cleanup discovered unreachable nodes: ~p",
                      [UnreachableNodes]),
     case lists:subtract(UnreachableNodes, service_discovery_nodes()) of
         [] ->
-            rabbit_log:debug("Peer discovery: all unreachable nodes are still "
+            _ = rabbit_log:debug("Peer discovery: all unreachable nodes are still "
                              "registered with the discovery backend ~p",
                              [rabbit_peer_discovery:backend()]),
             ok;
         Nodes ->
-            rabbit_log:debug("Peer discovery: unreachable nodes are not registered "
+            _ = rabbit_log:debug("Peer discovery: unreachable nodes are not registered "
                              "with the discovery backend ~p", [Nodes]),
             maybe_remove_nodes(Nodes, State#state.warn_only)
     end.
@@ -254,10 +254,10 @@ maybe_cleanup(State, UnreachableNodes) ->
                          WarnOnly :: true | false) -> ok.
 maybe_remove_nodes([], _) -> ok;
 maybe_remove_nodes([Node | Nodes], true) ->
-    rabbit_log:warning("Peer discovery: node ~s is unreachable", [Node]),
+    _ = rabbit_log:warning("Peer discovery: node ~s is unreachable", [Node]),
     maybe_remove_nodes(Nodes, true);
 maybe_remove_nodes([Node | Nodes], false) ->
-    rabbit_log:warning("Peer discovery: removing unknown node ~s from the cluster", [Node]),
+    _ = rabbit_log:warning("Peer discovery: removing unknown node ~s from the cluster", [Node]),
     rabbit_mnesia:forget_cluster_node(Node, false),
     maybe_remove_nodes(Nodes, false).
 
@@ -288,11 +288,11 @@ service_discovery_nodes() ->
     Module = rabbit_peer_discovery:backend(),
     case rabbit_peer_discovery:normalize(Module:list_nodes()) of
         {ok, {Nodes, _Type}} ->
-            rabbit_log:debug("Peer discovery cleanup: ~p returned ~p",
+            _ = rabbit_log:debug("Peer discovery cleanup: ~p returned ~p",
                              [Module, Nodes]),
             Nodes;
         {error, Reason} ->
-            rabbit_log:debug("Peer discovery cleanup: ~p returned error ~p",
+            _ = rabbit_log:debug("Peer discovery cleanup: ~p returned error ~p",
                             [Module, Reason]),
             []
     end.

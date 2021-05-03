@@ -61,7 +61,7 @@ start_applications(Apps, ErrorHandler, RestartTypes) ->
 stop_applications(Apps, ErrorHandler) ->
     manage_applications(fun lists:foldr/3,
                         fun(App) ->
-                            rabbit_log:info("Stopping application '~s'", [App]),
+                            _ = rabbit_log:info("Stopping application '~s'", [App]),
                             application:stop(App)
                         end,
                         fun(App) -> ensure_all_started(App, #{}) end,

@@ -70,7 +70,7 @@ handle_maybe_call_mfa(true, {Module, Function, Args, Default}, State) ->
         error:undef ->
             handle_maybe_call_mfa_error(Module, Default, State);
         Err:Reason ->
-            rabbit_log:error("Calling ~p:~p failed: ~p:~p~n",
+            _ = rabbit_log:error("Calling ~p:~p failed: ~p:~p~n",
                              [Module, Function, Err, Reason]),
             handle_maybe_call_mfa_error(Module, Default, State)
     end.

@@ -159,12 +159,12 @@ handle_info(refresh, #state{refresh_interval = Interval,
                             providers_state = ProvidersState} = St) ->
         Config = application:get_all_env(rabbitmq_trust_store),
         try
-            rabbit_log:debug("Trust store will attempt to refresh certificates..."),
+            _ = rabbit_log:debug("Trust store will attempt to refresh certificates..."),
             NewProvidersState = refresh_certs(Config, ProvidersState),
             {noreply, St#state{providers_state = NewProvidersState}}
         catch
             _:Error  ->
-                rabbit_log:error("Failed to refresh certificates: ~p", [Error]),
+                _ = rabbit_log:error("Failed to refresh certificates: ~p", [Error]),
                 {noreply, St#state{providers_state = ProvidersState}}
         after
             erlang:send_after(Interval, erlang:self(), refresh)
@@ -227,17 +227,17 @@ refresh_certs(Config, State) ->
 refresh_provider_certs(Provider, Config, ProviderState) ->
     case list_certs(Provider, Config, ProviderState) of
         no_change ->
-            rabbit_log:debug("Trust store provider reported no certificate changes"),
+            _ = rabbit_log:debug("Trust store provider reported no certificate changes"),
             ProviderState;
         ok ->
-            rabbit_log:debug("Trust store provider reported no certificate changes"),
+            _ = rabbit_log:debug("Trust store provider reported no certificate changes"),
             ProviderState;
         {ok, CertsList, NewProviderState} ->
-            rabbit_log:debug("Trust store listed certificates: ~p", [CertsList]),
+            _ = rabbit_log:debug("Trust store listed certificates: ~p", [CertsList]),
             update_certs(CertsList, Provider, Config),
             NewProviderState;
         {error, Reason} ->
-            rabbit_log:error("Unable to load certificate list for provider ~p,"
+            _ = rabbit_log:error("Unable to load certificate list for provider ~p,"
                              " reason: ~p~n",
                              [Provider, Reason]),
             ProviderState
@@ -249,7 +249,7 @@ list_certs(Provider, Config, ProviderState) ->
     Provider:list_certs(Config, ProviderState).
 
 update_certs(CertsList, Provider, Config) ->
-    rabbit_log:debug("Updating ~p fetched trust store certificates", [length(CertsList)]),
+    _ = rabbit_log:debug("Updating ~p fetched trust store certificates", [length(CertsList)]),
     OldCertIds = get_old_cert_ids(Provider),
     {NewCertIds, _} = lists:unzip(CertsList),
 
@@ -261,7 +261,7 @@ update_certs(CertsList, Provider, Config) ->
                 {ok, Cert, IssuerId} ->
                     save_cert(CertId, Provider, IssuerId, Cert, Name);
                 {error, Reason} ->
-                    rabbit_log:error("Unable to load CA certificate ~p"
+                    _ = rabbit_log:error("Unable to load CA certificate ~p"
                                      " with provider ~p,"
                                      " reason: ~p",
                                      [CertId, Provider, Reason])
@@ -316,7 +316,7 @@ providers(Config) ->
             case code:ensure_loaded(Provider) of
                 {module, Provider} -> true;
                 {error, Error} ->
-                    rabbit_log:warning("Unable to load trust store certificates"
+                    _ = rabbit_log:warning("Unable to load trust store certificates"
                                        " with provider module ~p. Reason: ~p~n",
                                        [Provider, Error]),
                     false

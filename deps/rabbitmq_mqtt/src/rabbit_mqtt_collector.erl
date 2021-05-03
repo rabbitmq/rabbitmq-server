@@ -53,7 +53,7 @@ list() ->
             case ra:leader_query(NodeIds, QF) of
                 {ok, {_, Ids}, _} -> Ids;
                 {timeout, _}      ->
-                    rabbit_log:debug("~s:list/0 leader query timed out",
+                    _ = rabbit_log:debug("~s:list/0 leader query timed out",
                                      [?MODULE]),
                     []
             end;
@@ -63,7 +63,7 @@ list() ->
                 {error, _} ->
                     [];
                 {timeout, _}      ->
-                    rabbit_log:debug("~s:list/0 leader query timed out",
+                    _ = rabbit_log:debug("~s:list/0 leader query timed out",
                                      [?MODULE]),
                     []
             end

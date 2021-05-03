@@ -7,9 +7,6 @@
 
 -module(mirrored_supervisor).
 
-%% pg2 is deprecated in OTP 23.
--compile(nowarn_deprecated_function).
-
 %% Mirrored Supervisor
 %% ===================
 %%
@@ -211,6 +208,7 @@ start_link0(Prefix, Group, TxFun, Init) ->
     end.
 
 init(Mod, Args) ->
+    _ = pg:start_link(),
     case Mod:init(Args) of
         {ok, {{Bad, _, _}, _ChildSpecs}} when
               Bad =:= simple_one_for_one -> erlang:error(badarg);
@@ -247,7 +245,7 @@ fold(FunAtom, Sup, AggFun) ->
     Group = call(Sup, group),
     lists:foldl(AggFun, [],
                 [apply(?SUPERVISOR, FunAtom, [D]) ||
-                    M <- pg2:get_members(Group),
+                    M <- pg:get_members(Group),
                     D <- [delegate(M)]]).
 
 child(Sup, Id) ->
@@ -279,9 +277,8 @@ handle_call({init, Overall}, _From,
                            tx_fun             = TxFun,
                            initial_childspecs = ChildSpecs}) ->
     process_flag(trap_exit, true),
-    pg2:create(Group),
-    ok = pg2:join(Group, Overall),
-    Rest = pg2:get_members(Group) -- [Overall],
+    ok = pg:join(Group, Overall),
+    Rest = pg:get_members(Group) -- [Overall],
     case Rest of
         [] -> TxFun(fun() -> delete_all(Group) end);
         _  -> ok
@@ -355,9 +352,8 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
                            tx_fun   = TxFun,
                            overall  = O,
                            child_order = ChildOrder}) ->
-    %% TODO load balance this
-    %% No guarantee pg2 will have received the DOWN before us.
-    R = case lists:sort(pg2:get_members(Group)) -- [Pid] of
+    %% No guarantee pg will have received the DOWN before us.
+    R = case lists:sort(pg:get_members(Group)) -- [Pid] of
             [O | _] -> ChildSpecs =
                            TxFun(fun() -> update_all(O, Pid) end),
                        [start(Delegate, ChildSpec)
@@ -382,7 +378,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 tell_all_peers_to_die(Group, Reason) ->
-    [cast(P, {die, Reason}) || P <- pg2:get_members(Group) -- [self()]].
+    [cast(P, {die, Reason}) || P <- pg:get_members(Group) -- [self()]].
 
 maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) ->
     try TxFun(fun() -> check_start(Group, Overall, Delegate, ChildSpec) end) of

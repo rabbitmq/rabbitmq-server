@@ -209,7 +209,7 @@ log_fd_error(Fmt, Args, #state{error_logged_time = undefined}=State) ->
     % rabbitmq/rabbitmq-management#90
     % no errors have been logged, so log it and make a note of when
     Now = erlang:monotonic_time(second),
-    ok = rabbit_log:error(Fmt, Args),
+    _ = rabbit_log:error(Fmt, Args),
     State#state{error_logged_time = Now};
 log_fd_error(Fmt, Args, #state{error_logged_time = Time}=State) ->
     Now = erlang:monotonic_time(second),
@@ -218,7 +218,7 @@ log_fd_error(Fmt, Args, #state{error_logged_time = Time}=State) ->
             % rabbitmq/rabbitmq-management#90
             % it has been longer than 10 minutes,
             % re-log the error
-            ok = rabbit_log:error(Fmt, Args),
+            _ = rabbit_log:error(Fmt, Args),
             State#state{error_logged_time = Now};
         _ ->
             % 10 minutes have not yet passed

@@ -44,7 +44,7 @@ start(VHost) ->
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} ->
-            rabbit_log:error("Failed to start a recovery terms manager for vhost ~s: vhost no longer exists!",
+            _ = rabbit_log:error("Failed to start a recovery terms manager for vhost ~s: vhost no longer exists!",
                              [VHost])
     end,
     ok.
@@ -60,7 +60,7 @@ stop(VHost) ->
             end;
         %% see start/1
         {error, {no_such_vhost, VHost}} ->
-            rabbit_log:error("Failed to stop a recovery terms manager for vhost ~s: vhost no longer exists!",
+            _ = rabbit_log:error("Failed to stop a recovery terms manager for vhost ~s: vhost no longer exists!",
                              [VHost]),
 
             ok
@@ -86,7 +86,7 @@ clear(VHost) ->
         dets:delete_all_objects(VHost)
     %% see start/1
     catch _:badarg ->
-            rabbit_log:error("Failed to clear recovery terms for vhost ~s: table no longer exists!",
+            _ = rabbit_log:error("Failed to clear recovery terms for vhost ~s: table no longer exists!",
                              [VHost]),
             ok
     end,
@@ -146,7 +146,7 @@ close_global_table() ->
         dets:close(?MODULE)
     %% see clear/1
     catch _:badarg ->
-            rabbit_log:error("Failed to clear global recovery terms: table no longer exists!",
+            _ = rabbit_log:error("Failed to clear global recovery terms: table no longer exists!",
                              []),
             ok
     end.
@@ -207,7 +207,7 @@ open_table(VHost, RetriesLeft) ->
                     _ = file:delete(File),
                     %% Wait before retrying
                     DelayInMs = 1000,
-                    rabbit_log:warning("Failed to open a recovery terms DETS file at ~p. Will delete it and retry in ~p ms (~p retries left)",
+                    _ = rabbit_log:warning("Failed to open a recovery terms DETS file at ~p. Will delete it and retry in ~p ms (~p retries left)",
                                        [File, DelayInMs, RetriesLeft]),
                     timer:sleep(DelayInMs),
                     open_table(VHost, RetriesLeft - 1)
@@ -221,7 +221,7 @@ flush(VHost) ->
         dets:sync(VHost)
     %% see clear/1
     catch _:badarg ->
-            rabbit_log:error("Failed to sync recovery terms table for vhost ~s: the table no longer exists!",
+            _ = rabbit_log:error("Failed to sync recovery terms table for vhost ~s: the table no longer exists!",
                              [VHost]),
             ok
     end.
@@ -234,7 +234,7 @@ close_table(VHost) ->
         ok = dets:close(VHost)
     %% see clear/1
     catch _:badarg ->
-            rabbit_log:error("Failed to close recovery terms table for vhost ~s: the table no longer exists!",
+            _ = rabbit_log:error("Failed to close recovery terms table for vhost ~s: the table no longer exists!",
                              [VHost]),
             ok
     end.

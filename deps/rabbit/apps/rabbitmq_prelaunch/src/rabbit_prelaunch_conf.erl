@@ -15,8 +15,8 @@
 -endif.
 
 setup(Context) ->
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Configuration =="),
+    _ = rabbit_log_prelaunch:debug(""),
+    _ = rabbit_log_prelaunch:debug("== Configuration =="),
 
     %% TODO: Check if directories/files are inside Mnesia dir.
 
@@ -52,7 +52,7 @@ setup(Context) ->
                     #{config_files => ConfigFiles,
                       config_advanced_file => AdvancedConfigFile};
                 undefined when AdvancedConfigFile =/= undefined ->
-                    rabbit_log_prelaunch:warning(
+                    _ = rabbit_log_prelaunch:warning(
                       "Using RABBITMQ_ADVANCED_CONFIG_FILE: ~s",
                       [AdvancedConfigFile]),
                     Config = load_cuttlefish_config_file(Context,
@@ -68,7 +68,7 @@ setup(Context) ->
             end,
     ok = override_with_hard_coded_critical_config(),
     ok = set_credentials_obfuscation_secret(),
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Saving config state to application env: ~p", [State]),
     store_config_state(State).
 
@@ -83,7 +83,7 @@ get_config_state() ->
 %% -------------------------------------------------------------------
 
 set_default_config() ->
-    rabbit_log_prelaunch:debug("Setting default config"),
+    _ = rabbit_log_prelaunch:debug("Setting default config"),
     Config = [
               {ra,
                [
@@ -126,13 +126,13 @@ find_actual_main_config_file(#{main_config_file := File}) ->
                 true ->
                     case filelib:is_regular(NewFormatFile) of
                         true ->
-                            rabbit_log_prelaunch:warning(
+                            _ = rabbit_log_prelaunch:warning(
                               "Both old (.config) and new (.conf) format "
                               "config files exist."),
-                            rabbit_log_prelaunch:warning(
+                            _ = rabbit_log_prelaunch:warning(
                               "Using the old format config file: ~s",
                               [OldFormatFile]),
-                            rabbit_log_prelaunch:warning(
+                            _ = rabbit_log_prelaunch:warning(
                               "Please update your config files to the new "
                               "format and remove the old file."),
                             ok;
@@ -193,15 +193,15 @@ generate_config_from_cuttlefish_files(Context,
     SchemaFiles = find_cuttlefish_schemas(Context),
     case SchemaFiles of
         [] ->
-            rabbit_log_prelaunch:error(
+            _ = rabbit_log_prelaunch:error(
               "No configuration schema found~n", []),
             throw({error, no_configuration_schema_found});
         _ ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "Configuration schemas found:~n", []),
             lists:foreach(
               fun(SchemaFile) ->
-                      rabbit_log_prelaunch:debug("  - ~ts", [SchemaFile])
+                      _ = rabbit_log_prelaunch:debug("  - ~ts", [SchemaFile])
               end,
               SchemaFiles),
             ok
@@ -209,22 +209,22 @@ generate_config_from_cuttlefish_files(Context,
     Schema = cuttlefish_schema:files(SchemaFiles),
 
     %% Load configuration.
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Loading configuration files (Cuttlefish based):"),
     lists:foreach(
       fun(ConfigFile) ->
-              rabbit_log_prelaunch:debug("  - ~ts", [ConfigFile])
+              _ = rabbit_log_prelaunch:debug("  - ~ts", [ConfigFile])
       end, ConfigFiles),
     case cuttlefish_conf:files(ConfigFiles) of
         {errorlist, Errors} ->
-            rabbit_log_prelaunch:error("Error parsing configuration:"),
+            _ = rabbit_log_prelaunch:error("Error parsing configuration:"),
             lists:foreach(
               fun(Error) ->
-                      rabbit_log_prelaunch:error(
+                      _ = rabbit_log_prelaunch:error(
                         "  - ~ts",
                         [cuttlefish_error:xlate(Error)])
               end, Errors),
-            rabbit_log_prelaunch:error(
+            _ = rabbit_log_prelaunch:error(
               "Are these files using the Cuttlefish format?"),
             throw({error, failed_to_parse_configuration_file});
         Config0 ->
@@ -232,12 +232,12 @@ generate_config_from_cuttlefish_files(Context,
             Config = case cuttlefish_generator:map(Schema, Config0) of
                          {error, Phase, {errorlist, Errors}} ->
                              %% TODO
-                             rabbit_log_prelaunch:error(
+                             _ = rabbit_log_prelaunch:error(
                                "Error preparing configuration in phase ~ts:",
                                [Phase]),
                              lists:foreach(
                                fun(Error) ->
-                                       rabbit_log_prelaunch:error(
+                                       _ = rabbit_log_prelaunch:error(
                                          "  - ~ts",
                                          [cuttlefish_error:xlate(Error)])
                                end, Errors),
@@ -253,7 +253,7 @@ generate_config_from_cuttlefish_files(Context,
 
 find_cuttlefish_schemas(Context) ->
     Apps = list_apps(Context),
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Looking up configuration schemas in the following applications:"),
     find_cuttlefish_schemas(Apps, []).
 
@@ -281,7 +281,7 @@ list_apps1([Dir | Rest], Apps) ->
             Apps1 = lists:umerge(Apps, lists:sort(NewApps)),
             list_apps1(Rest, Apps1);
         {error, Reason} ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "Failed to list directory \"~ts\" content: ~ts",
               [Dir, file:format_error(Reason)]),
             list_apps1(Rest, Apps)
@@ -299,7 +299,7 @@ list_schemas_in_app(App) ->
                true ->
                    case code:priv_dir(App) of
                        {error, bad_name} ->
-                           rabbit_log_prelaunch:debug(
+                           _ = rabbit_log_prelaunch:debug(
                              "  [ ] ~s (no readable priv dir)", [App]),
                            [];
                        PrivDir ->
@@ -307,7 +307,7 @@ list_schemas_in_app(App) ->
                            do_list_schemas_in_app(App, SchemaDir)
                    end;
                false ->
-                   rabbit_log_prelaunch:debug(
+                   _ = rabbit_log_prelaunch:debug(
                      "  [ ] ~s (failed to load application)", [App]),
                    []
            end,
@@ -321,12 +321,12 @@ list_schemas_in_app(App) ->
 do_list_schemas_in_app(App, SchemaDir) ->
     case erl_prim_loader:list_dir(SchemaDir) of
         {ok, Files} ->
-            rabbit_log_prelaunch:debug("  [x] ~s", [App]),
+            _ = rabbit_log_prelaunch:debug("  [x] ~s", [App]),
             [filename:join(SchemaDir, File)
              || [C | _] = File <- Files,
                 C =/= $.];
         error ->
-            rabbit_log_prelaunch:debug(
+            _ = rabbit_log_prelaunch:debug(
               "  [ ] ~s (no readable schema dir)", [App]),
             []
     end.
@@ -334,27 +334,27 @@ do_list_schemas_in_app(App, SchemaDir) ->
 override_with_advanced_config(Config, undefined) ->
     Config;
 override_with_advanced_config(Config, AdvancedConfigFile) ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Override with advanced configuration file \"~ts\"",
       [AdvancedConfigFile]),
     case file:consult(AdvancedConfigFile) of
         {ok, [AdvancedConfig]} ->
             cuttlefish_advanced:overlay(Config, AdvancedConfig);
         {ok, OtherTerms} ->
-            rabbit_log_prelaunch:error(
+            _ = rabbit_log_prelaunch:error(
               "Failed to load advanced configuration file \"~ts\", "
               "incorrect format: ~p",
               [AdvancedConfigFile, OtherTerms]),
             throw({error, failed_to_parse_advanced_configuration_file});
         {error, Reason} ->
-            rabbit_log_prelaunch:error(
+            _ = rabbit_log_prelaunch:error(
               "Failed to load advanced configuration file \"~ts\": ~ts",
               [AdvancedConfigFile, file:format_error(Reason)]),
             throw({error, failed_to_read_advanced_configuration_file})
     end.
 
 override_with_hard_coded_critical_config() ->
-    rabbit_log_prelaunch:debug("Override with hard-coded critical config"),
+    _ = rabbit_log_prelaunch:debug("Override with hard-coded critical config"),
     Config = [
               {ra,
                %% Make Ra use a custom logger that dispatches to lager
@@ -366,26 +366,26 @@ override_with_hard_coded_critical_config() ->
 apply_erlang_term_based_config([{_, []} | Rest]) ->
     apply_erlang_term_based_config(Rest);
 apply_erlang_term_based_config([{App, Vars} | Rest]) ->
-    rabbit_log_prelaunch:debug("  Applying configuration for '~s':", [App]),
+    _ = rabbit_log_prelaunch:debug("  Applying configuration for '~s':", [App]),
     ok = apply_app_env_vars(App, Vars),
     apply_erlang_term_based_config(Rest);
 apply_erlang_term_based_config([]) ->
     ok.
 
 apply_app_env_vars(App, [{Var, Value} | Rest]) ->
-    rabbit_log_prelaunch:debug("    - ~s = ~p", [Var, Value]),
+    _ = rabbit_log_prelaunch:debug("    - ~s = ~p", [Var, Value]),
     ok = application:set_env(App, Var, Value, [{persistent, true}]),
     apply_app_env_vars(App, Rest);
 apply_app_env_vars(_, []) ->
     ok.
 
 set_credentials_obfuscation_secret() ->
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Refreshing credentials obfuscation configuration from env: ~p",
       [application:get_all_env(credentials_obfuscation)]),
     ok = credentials_obfuscation:refresh_config(),
     CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
-    rabbit_log_prelaunch:debug(
+    _ = rabbit_log_prelaunch:debug(
       "Setting credentials obfuscation secret to '~s'", [CookieBin]),
     ok = credentials_obfuscation:set_secret(CookieBin).
 
@@ -394,7 +394,7 @@ set_credentials_obfuscation_secret() ->
 %% -------------------------------------------------------------------
 
 decrypt_config(Apps) ->
-    rabbit_log_prelaunch:debug("Decoding encrypted config values (if any)"),
+    _ = rabbit_log_prelaunch:debug("Decoding encrypted config values (if any)"),
     ConfigEntryDecoder = application:get_env(rabbit, config_entry_decoder, []),
     decrypt_config(Apps, ConfigEntryDecoder).
 
@@ -412,7 +412,7 @@ decrypt_app(App, [{Key, Value} | Tail], Algo) ->
                     {Value, Algo1} ->
                         Algo1;
                     {NewValue, Algo1} ->
-                        rabbit_log_prelaunch:debug(
+                        _ = rabbit_log_prelaunch:debug(
                           "Value of `~s` decrypted", [Key]),
                         ok = application:set_env(App, Key, NewValue,
                                                  [{persistent, true}]),
@@ -471,7 +471,7 @@ config_entry_decoder_to_algo(ConfigEntryDecoder) ->
     end.
 
 get_passphrase(ConfigEntryDecoder) ->
-    rabbit_log_prelaunch:debug("Getting encrypted config passphrase"),
+    _ = rabbit_log_prelaunch:debug("Getting encrypted config passphrase"),
     case proplists:get_value(passphrase, ConfigEntryDecoder) of
         prompt ->
             IoDevice = get_input_iodevice(),

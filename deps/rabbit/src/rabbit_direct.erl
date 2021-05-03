@@ -139,7 +139,7 @@ is_vhost_alive(VHost, {Username, _Password}, Pid) ->
     case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
         true  -> true;
         false ->
-            rabbit_log_connection:error(
+            _ = rabbit_log_connection:error(
                 "Error on Direct connection ~p~n"
                 "access to vhost '~s' refused for user '~s': "
                 "vhost '~s' is down",
@@ -155,7 +155,7 @@ is_over_vhost_connection_limit(VHost, {Username, _Password}, Pid) ->
     try rabbit_vhost_limit:is_over_connection_limit(VHost) of
         false         -> false;
         {true, Limit} ->
-            rabbit_log_connection:error(
+            _ = rabbit_log_connection:error(
                 "Error on Direct connection ~p~n"
                 "access to vhost '~s' refused for user '~s': "
                 "vhost connection limit (~p) is reached",
@@ -163,7 +163,7 @@ is_over_vhost_connection_limit(VHost, {Username, _Password}, Pid) ->
             true
     catch
         throw:{error, {no_such_vhost, VHost}} ->
-            rabbit_log_connection:error(
+            _ = rabbit_log_connection:error(
                 "Error on Direct connection ~p~n"
                 "vhost ~s not found", [Pid, VHost]),
             true
@@ -193,7 +193,7 @@ connect1(User = #user{username = Username}, VHost, Protocol, Pid, Infos) ->
                     {error, Reason}
             end;
         {true, Limit} ->
-            rabbit_log_connection:error(
+            _ = rabbit_log_connection:error(
                 "Error on Direct connection ~p~n"
                 "access refused for user '~s': "
                 "user connection limit (~p) is reached",
@@ -219,7 +219,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol,
                     User, VHost, Capabilities, Collector, AmqpParams}]),
             {ok, ChannelPid};
         {true, Limit} ->
-            rabbit_log_connection:error(
+            _ = rabbit_log_connection:error(
                 "Error on direct connection ~p~n"
                 "number of channels opened for user '~s' has reached the "
                 "maximum allowed limit of (~w)",
