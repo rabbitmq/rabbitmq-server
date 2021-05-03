@@ -952,6 +952,11 @@ handle_frame_pre_auth(Transport,
                     end,
                     #{}, RawConfigServerProps),
 
+    %% FIXME move advertised host and port transmission after authentication
+    %% e.g. in in OPEN. They would be part of "connection properties".
+    AdvertisedHost = rabbit_stream:host(),
+    AdvertisedPort = rabbit_data_coercion:to_binary(rabbit_stream:port()),
+
     ServerProperties =
         maps:merge(ConfigServerProperties,
                    #{<<"product">> => Product,
@@ -959,7 +964,9 @@ handle_frame_pre_auth(Transport,
                      <<"cluster_name">> => rabbit_nodes:cluster_name(),
                      <<"platform">> => rabbit_misc:platform_and_version(),
                      <<"copyright">> => ?COPYRIGHT_MESSAGE,
-                     <<"information">> => ?INFORMATION_MESSAGE}),
+                     <<"information">> => ?INFORMATION_MESSAGE,
+                     <<"advertised_host">> => AdvertisedHost,
+                     <<"advertised_port">> => AdvertisedPort}),
 
     ServerPropertiesCount = map_size(ServerProperties),
 
