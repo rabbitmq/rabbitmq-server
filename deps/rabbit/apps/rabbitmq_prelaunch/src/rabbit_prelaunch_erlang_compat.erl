@@ -6,7 +6,7 @@
 
 -export([check/1]).
 
--define(OTP_MINIMUM, "23.0").
+-define(OTP_MINIMUM, "23.2").
 -define(ERTS_MINIMUM, "11.1").
 
 check(_Context) ->
