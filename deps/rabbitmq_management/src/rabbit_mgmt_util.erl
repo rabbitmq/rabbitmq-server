@@ -953,6 +953,7 @@ with_channel(VHost, ReqData,
                                  virtual_host = VHost},
     case amqp_connection:start(Params) of
         {ok, Conn} ->
+            _ = erlang:link(Conn),
             {ok, Ch} = amqp_connection:open_channel(Conn),
             try
                 Fun(Ch)
@@ -973,6 +974,7 @@ with_channel(VHost, ReqData,
                        ServerClose =:= server_initiated_hard_close ->
                     bad_request_exception(Code, Reason, ReqData, Context)
             after
+            erlang:unlink(Conn),
             catch amqp_channel:close(Ch),
             catch amqp_connection:close(Conn)
             end;
