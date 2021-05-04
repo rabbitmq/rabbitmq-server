@@ -12,6 +12,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 
+-include_lib("khepri/include/khepri_conditions.hrl").
+
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
 
@@ -70,7 +72,7 @@ with_user(Username, Thunk) ->
     fun () ->
             Path = khepri_user_path(Username),
             case rabbit_khepri:get(Path) of
-                {ok, {object, _}, _} ->
+                {ok, _} ->
                     Thunk();
                 _ ->
                     throw({no_such_user, Username})
@@ -260,19 +262,16 @@ add_user_sans_validation(Username, Password, ActingUser) ->
     %% MNESIA end .
 
     Path = khepri_user_path(Username),
-    case rabbit_khepri:insert(Path, User, {if_exists, false}) of
+    case rabbit_khepri:insert(Path, User, [#if_node_exists{exists = false}]) of
         {ok, _} ->
             rabbit_log:info("Created user '~s'", [Username]),
             rabbit_event:notify(user_created, [{name, Username},
                                                {user_who_performed_action, ActingUser}]),
             ok;
-        {error, node_exists} ->
+        {error, mismatching_node} ->
             rabbit_log:warning("Failed to add user '~s': the user already exists", [Username]),
             throw({error, {user_already_exists, Username}});
         {error, _} = Error ->
-            rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
-            throw(Error);
-        {timeout, _} = Error ->
             rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
             throw(Error)
     end.
@@ -325,15 +324,12 @@ delete_user(Username, ActingUser) ->
                                 [{name, Username},
                                  {user_who_performed_action, ActingUser}]),
             ok;
-        {error, missing_node} ->
+        {error, node_not_found} ->
             rabbit_log:warning("Failed to delete user '~s': the user does not exist", [Username]),
             throw({error, {no_such_user, Username}});
         {error, _} = Error ->
             rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
-            throw(Error);
-        {timeout, _} = Error ->
-            rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
-            exit(Error)
+            throw(Error)
     end.
 
 -spec lookup_user
@@ -343,10 +339,9 @@ delete_user(Username, ActingUser) ->
 
 lookup_user(Username) ->
     %% MNESIA rabbit_misc:dirty_read({rabbit_user, Username}).
-
     Path = khepri_user_path(Username),
     case rabbit_khepri:get(Path) of
-        {ok, {object, User}, _} ->
+        {ok, #{data := User}} ->
             {ok, User};
         _ ->
             {error, not_found}
@@ -562,17 +557,18 @@ update_user(Username, Fun) ->
     %% MNESIA     end)).
     ?LOG_DEBUG("All users: ~p", [all_users()]),
     Path = khepri_user_path(Username),
-    Ret = rabbit_khepri:get(Path),
-    ?LOG_DEBUG("Get user ret: ~p", [Ret]),
-    case Ret of
-        {ok, {object, User}, _} ->
+    Ret1 = rabbit_khepri:get(Path),
+    ?LOG_DEBUG("Get user ret: ~p", [Ret1]),
+    case Ret1 of
+        {ok, #{data := User, data_version := DVersion}} ->
             ?LOG_DEBUG("User: ~p", [User]),
             User1 = Fun(User),
-            case rabbit_khepri:insert(Path, User1, {if_matches, User}) of
-                {ok, _}                     -> ok;
-                {error, mismatching_object} -> update_user(Username, Fun);
-                {error, _} = Error          -> throw(Error);
-                {timeout, _} = Error        -> throw(Error)
+            Ret2 = rabbit_khepri:insert(
+                     Path, User1, [#if_data_version{version = DVersion}]),
+            case Ret2 of
+                {ok, _}                   -> ok;
+                {error, mismatching_node} -> update_user(Username, Fun);
+                {error, _} = Error        -> throw(Error)
             end;
         {error, _} = Error ->
             throw(Error);
@@ -940,8 +936,8 @@ all_users() ->
     %% MNESIA mnesia:dirty_match_object(rabbit_user, internal_user:pattern_match_all()).
     Path = khepri_users_path(),
     case rabbit_khepri:list(Path) of
-        {ok, Users, _} -> [User || {object, User} <- maps:values(Users)];
-        _              -> []
+        {ok, Users} -> [User || #{data := User} <- maps:values(Users)];
+        _           -> []
     end.
 
 -spec list_users() -> [rabbit_types:infos()].

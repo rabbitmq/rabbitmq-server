@@ -12,7 +12,7 @@
 -include_lib("rabbit_common/include/logging.hrl").
 
 -export([setup/1,
-         get_store/0,
+         get_store_id/0,
          insert/2,
          insert/3,
          get/1,
@@ -23,6 +23,7 @@
 -compile({no_auto_import, [get/2]}).
 
 -define(RA_SYSTEM, metadata_store). %% FIXME: Also hard-coded in rabbit.erl.
+-define(STORE_NAME, ?RA_SYSTEM).
 -define(MDSTORE_SARTUP_LOCK, {?MODULE, self()}).
 -define(PT_KEY, ?MODULE).
 
@@ -34,39 +35,33 @@ setup(_) ->
     Nodes = rabbit_mnesia:cluster_nodes(all),
 
     case khepri:new(?RA_SYSTEM, ClusterName, FriendlyName, Nodes) of
-        {error, _} = Error ->
-            exit(Error);
-        Store ->
+        {ok, ?STORE_NAME} ->
             ?LOG_DEBUG(
                "Khepri-based metadata store ready",
                [],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            persistent_term:put(?PT_KEY, Store)
+            ok;
+        {error, _} = Error ->
+            exit(Error)
     end.
 
-get_store() ->
-    persistent_term:get(?PT_KEY).
+get_store_id() ->
+    ?STORE_NAME.
 
-insert(Path, Object) ->
-    Store = get_store(),
-    khepri:insert(Store, Path, Object).
+insert(Path, Data) ->
+    khepri:insert(?STORE_NAME, Path, Data).
 
-insert(Path, Object, Condition) ->
-    Store = get_store(),
-    khepri:insert(Store, Path, Object, Condition).
+insert(Path, Data, Conditions) ->
+    khepri:insert(?STORE_NAME, Path, Data, Conditions).
 
 get(Path) ->
-    Store = get_store(),
-    khepri:get(Store, Path).
+    khepri:get(?STORE_NAME, Path).
 
 list(Path) ->
-    Store = get_store(),
-    khepri:list(Store, Path).
+    khepri:list(?STORE_NAME, Path).
 
 delete(Path) ->
-    Store = get_store(),
-    khepri:delete(Store, Path).
+    khepri:delete(?STORE_NAME, Path).
 
 i() ->
-    Store = get_store(),
-    khepri:i(Store).
+    khepri:i(?STORE_NAME).
