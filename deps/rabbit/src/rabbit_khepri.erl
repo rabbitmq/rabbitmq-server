@@ -16,6 +16,7 @@
          insert/2,
          insert/3,
          get/1,
+         match/1,
          list/1,
          delete/1,
          i/0]).
@@ -56,6 +57,9 @@ insert(Path, Data, Conditions) ->
 
 get(Path) ->
     khepri:get(?STORE_NAME, Path).
+
+match(Path) ->
+    khepri:match(?STORE_NAME, Path).
 
 list(Path) ->
     khepri:list(?STORE_NAME, Path).
