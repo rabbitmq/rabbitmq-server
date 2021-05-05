@@ -18,19 +18,6 @@ elixir_home(
 )
 
 platform(
-    name = "erlang_22_platform",
-    constraint_values = [
-        "@platforms//os:linux",
-        "@platforms//cpu:x86_64",
-        "@bazel_tools//tools/cpp:clang",
-    ],
-    exec_properties = {
-        "OSFamily": "Linux",
-        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:685529484b4527cb9e4cbaaf9ee230e940f200236eea890f3c034834e2a3a0e7",
-    },
-)
-
-platform(
     name = "erlang_23_platform",
     constraint_values = [
         "@platforms//os:linux",
@@ -39,7 +26,7 @@ platform(
     ],
     exec_properties = {
         "OSFamily": "Linux",
-        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:30f2e1bf6b2f25300218c19670e38fe679a3f1ba68840d3a52ef75e76e05260f",
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:1a0335f16ae7e91559441f5b831d0809907fc38743ba66b23b980b77b1d3c33e",
     },
 )
 
