@@ -8,6 +8,7 @@ rabbitmq_lib(
     build_deps = [
         "@lager//:bazel_erlang_lib",
     ],
+    erlc_opts = RABBITMQ_ERLC_OPTS,
     extra_apps = [
         "inets",
     ],
