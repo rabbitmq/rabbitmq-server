@@ -6,6 +6,11 @@ load("@bazel-erlang//:hex_pm.bzl", "hex_pm_bazel_erlang_lib")
 load("//:rabbitmq.bzl", "APP_VERSION")
 
 def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
+    hex_pm_bazel_erlang_lib(
+        name = "accept",
+        version = "0.3.5",
+    )
+
     github_bazel_erlang_lib(
         name = "aten",
         org = "rabbitmq",
@@ -149,12 +154,35 @@ erlang_lib(
     )
 
     github_bazel_erlang_lib(
+        name = "prometheus",
+        org = "deadtrickster",
+        repo = "prometheus.erl",
+        first_srcs = [
+            "src/prometheus_collector.erl",
+            "src/prometheus_format.erl",
+            "src/prometheus_instrumenter.erl",
+            "src/prometheus_metric.erl",
+        ],
+        deps = [
+            "@quantile_estimator//:bazel_erlang_lib",
+        ],
+    )
+
+    github_bazel_erlang_lib(
         name = "proper",
         first_srcs = [
             "src/vararg.erl",
             "src/proper_target.erl",
         ],
         org = "manopapad",
+    )
+
+    hex_pm_bazel_erlang_lib(
+        name = "quantile_estimator",
+        version = "0.2.1",
+        erlc_opts = [
+            "+debug_info",
+        ],
     )
 
     github_bazel_erlang_lib(
