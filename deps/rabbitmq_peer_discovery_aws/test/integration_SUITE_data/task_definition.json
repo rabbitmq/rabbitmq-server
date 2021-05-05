@@ -1,0 +1,85 @@
+{
+    "family": "PLACEHOLDER",
+    "networkMode": "host",
+    "containerDefinitions": [
+        {
+            "name": "rabbitmq",
+            "image": "PLACEHOLDER",
+            "cpu": 256,
+            "memory": 512,
+            "portMappings": [
+                {
+                    "containerPort": 5672,
+                    "hostPort": 5672,
+                    "protocol": "tcp"
+                },
+                {
+                    "containerPort": 15672,
+                    "hostPort": 15672,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "RABBITMQ_DEFAULT_USER",
+                    "value": "PLACEHOLDER"
+                },
+                {
+                    "name": "RABBITMQ_DEFAULT_PASS",
+                    "value": "PLACEHOLDER"
+                },
+                {
+                    "name": "RABBITMQ_ERLANG_COOKIE",
+                    "value": "PLACEHOLDER"
+                }
+            ],
+            "mountPoints": [
+                {
+                    "sourceVolume": "rabbitmq-conf-vol",
+                    "containerPath": "/etc/rabbitmq"
+                }
+            ],
+            "dependsOn": [
+                {
+                    "containerName": "rabbitmq-config",
+                    "condition": "COMPLETE"
+                }
+            ]
+        },
+        {
+            "name": "rabbitmq-config",
+            "image": "bash",
+            "cpu": 256,
+            "memory": 512,
+            "essential": false,
+            "command": [
+                "-c",
+                "echo \"[rabbitmq_management, rabbitmq_peer_discovery_aws].\" > /etc/rabbitmq/enabled_plugins && echo $DATA | base64 -d - | tee /etc/rabbitmq/rabbitmq.conf"
+            ],
+            "environment": [
+                {
+                    "name": "DATA",
+                    "value": "PLACEHOLDER"
+                }
+            ],
+            "mountPoints": [
+                {
+                    "sourceVolume": "rabbitmq-conf-vol",
+                    "containerPath": "/etc/rabbitmq"
+                }
+            ]
+        }
+    ],
+    "volumes": [
+        {
+            "name": "rabbitmq-conf-vol",
+            "host": {
+                "sourcePath": "/rabbitmq-conf-vol"
+            }
+        }
+    ],
+    "requiresCompatibilities": [
+        "EC2"
+    ]
+}
