@@ -37,9 +37,9 @@ rabbitmq_lib(
     app_module = APP_MODULE,
     app_name = APP_NAME,
     app_version = APP_VERSION,
+    build_deps = BUILD_DEPS,
     erlc_opts = RABBITMQ_ERLC_OPTS,
     test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    build_deps = BUILD_DEPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
@@ -98,14 +98,14 @@ ct_suite(
     tools = [
         ":rabbitmq-for-tests-run",
     ],
-    deps = [
-        "//deps/amqp_client:bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
     runtime_deps = [
         "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
         "//deps/rabbitmq_cli:rabbitmqctl",
         "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
+    ],
+    deps = [
+        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
     ],
 )
