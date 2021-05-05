@@ -12,7 +12,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 
--include_lib("khepri/include/khepri_conditions.hrl").
+-include_lib("khepri/include/khepri.hrl").
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
@@ -168,7 +168,7 @@ check_resource_access(#auth_user{username = Username},
     %% MNESIA end.
     Path = khepri_user_permission_path(Username, VHostPath),
     case rabbit_khepri:get(Path) of
-        {ok, #{data := #user_permission{permission = P}}} ->
+        {ok, #user_permission{permission = P}} ->
             PermRegexp = case element(permission_index(Permission), P) of
                              %% <<"^$">> breaks Emacs' erlang mode
                              <<"">> -> <<$^, $$>>;
@@ -210,7 +210,7 @@ check_topic_access(#auth_user{username = Username},
     %% MNESIA end.
     Path = khepri_topic_permission_path(Username, VHostPath, Name),
     case rabbit_khepri:get(Path) of
-        {ok, #{data := #topic_permission{permission = P}}} ->
+        {ok, #topic_permission{permission = P}} ->
             PermRegexp = case element(permission_index(Permission), P) of
                              %% <<"^$">> breaks Emacs' erlang mode
                              <<"">> -> <<$^, $$>>;
@@ -307,7 +307,7 @@ add_user_sans_validation(Username, Password, ActingUser) ->
             rabbit_event:notify(user_created, [{name, Username},
                                                {user_who_performed_action, ActingUser}]),
             ok;
-        {error, mismatching_node} ->
+        {error, {mismatching_node, _, _}} ->
             rabbit_log:warning("Failed to add user '~s': the user already exists", [Username]),
             throw({error, {user_already_exists, Username}});
         {error, _} = Error ->
@@ -363,7 +363,7 @@ delete_user(Username, ActingUser) ->
                                 [{name, Username},
                                  {user_who_performed_action, ActingUser}]),
             ok;
-        {error, node_not_found} ->
+        {error, {node_not_found, _}} ->
             rabbit_log:warning("Failed to delete user '~s': the user does not exist", [Username]),
             throw({error, {no_such_user, Username}});
         {error, _} = Error ->
@@ -380,7 +380,7 @@ lookup_user(Username) ->
     %% MNESIA rabbit_misc:dirty_read({rabbit_user, Username}).
     Path = khepri_user_path(Username),
     case rabbit_khepri:get(Path) of
-        {ok, #{data := User}} ->
+        {ok, User} ->
             {ok, User};
         _ ->
             {error, not_found}
@@ -571,7 +571,7 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
                                                      {read,      ReadPerm},
                                                      {user_who_performed_action, ActingUser}]),
             ok;
-        {error, node_not_found} = Error ->
+        {error, {node_not_found, _}} = Error ->
             rabbit_log:warning("Failed to set permissions for '~s': user or virtual host '~s' does not exist",
                                [Username, VirtualHost]),
             throw(Error);
@@ -629,7 +629,7 @@ clear_permissions(Username, VirtualHost, ActingUser) ->
                                                      {vhost, VirtualHost},
                                                      {user_who_performed_action, ActingUser}]),
             ok;
-        {error, node_not_found} = Error ->
+        {error, {node_not_found, _}} = Error ->
             rabbit_log:warning("Failed to clear permissions for '~s': user or virtual host '~s' does not exist",
                                [Username, VirtualHost]),
             throw(Error);
@@ -649,16 +649,19 @@ update_user(Username, Fun) ->
     %% MNESIA             ok = mnesia:write(rabbit_user, Fun(User), write)
     %% MNESIA     end)).
     Path = khepri_user_path(Username),
-    Ret1 = rabbit_khepri:get(Path),
+    Ret1 = rabbit_khepri:get_with_props(Path),
     case Ret1 of
         {ok, #{data := User, data_version := DVersion}} ->
             User1 = Fun(User),
             Ret2 = rabbit_khepri:insert(
                      Path, User1, [#if_data_version{version = DVersion}]),
             case Ret2 of
-                {ok, _}                   -> ok;
-                {error, mismatching_node} -> update_user(Username, Fun);
-                {error, _} = Error        -> throw(Error)
+                {ok, _} ->
+                    ok;
+                {error, {mismatching_node, _, _}} ->
+                    update_user(Username, Fun);
+                {error, _} = Error ->
+                    throw(Error)
             end;
         {error, _} = Error ->
             throw(Error);
@@ -765,7 +768,7 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
                 {read,      ReadPermRegex},
                 {user_who_performed_action, ActingUser}]),
                 ok;
-        {error, node_not_found} = Error ->
+        {error, {node_not_found, _}} = Error ->
             rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s': user or virtual host '~s' does not exist.",
                                [Exchange, Username, VirtualHost]),
             throw(Error);
@@ -823,7 +826,7 @@ clear_topic_permissions(Username, VirtualHost, ActingUser) ->
                 {vhost, VirtualHost},
                 {user_who_performed_action, ActingUser}]),
             ok;
-        {error, node_not_found} = Error ->
+        {error, {node_not_found, _}} = Error ->
             rabbit_log:warning("Failed to clear topic permissions for '~s': user or virtual host '~s' does not exist",
                                [Username, VirtualHost]),
             throw(Error);
@@ -883,7 +886,7 @@ clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
                                                      {vhost, VirtualHost},
                                                      {user_who_performed_action, ActingUser}]),
             ok;
-        {error, node_not_found} = Error ->
+        {error, {node_not_found, _}} = Error ->
             rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s': user or virtual host '~s' does not exist",
                                [Exchange, Username, VirtualHost]),
             throw(Error);
@@ -1106,7 +1109,7 @@ all_users() ->
     %% MNESIA mnesia:dirty_match_object(rabbit_user, internal_user:pattern_match_all()).
     Path = khepri_users_path(),
     case rabbit_khepri:list(Path) of
-        {ok, Users} -> [User || #{data := User} <- maps:values(Users)];
+        {ok, Users} -> maps:values(Users);
         _           -> []
     end.
 
@@ -1139,7 +1142,7 @@ list_permissions(Keys, Path) ->
     case Ret of
         {ok, Users} ->
             [extract_user_permission_params(Keys, U) ||
-             #{data := U} <- maps:values(Users)];
+             U <- maps:values(Users)];
         _ ->
             []
     end.
@@ -1149,7 +1152,7 @@ list_permissions(Keys, Path, Ref, AggregatorPid) ->
     %% MNESIA   AggregatorPid, Ref, fun(U) -> extract_user_permission_params(Keys, U) end,
     %% MNESIA   rabbit_misc:execute_mnesia_transaction(QueryThunk)).
     Users = case rabbit_khepri:match(Path) of
-                {ok, Users0} -> [U || #{data := U} <- maps:values(Users0)];
+                {ok, Users0} -> [U || U <- maps:values(Users0)];
                 _            -> []
             end,
     rabbit_control_misc:emitting_map(
@@ -1281,7 +1284,7 @@ list_topic_permissions(Keys, Path) ->
     case Ret of
         {ok, Users} ->
             [extract_topic_permission_params(Keys, U) ||
-             #{data := U} <- maps:values(Users)];
+             U <- maps:values(Users)];
         _ ->
             []
     end.

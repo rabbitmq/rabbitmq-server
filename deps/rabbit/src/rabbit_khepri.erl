@@ -15,9 +15,12 @@
          get_store_id/0,
          insert/2,
          insert/3,
-         get/1,
          match/1,
+         match_with_props/1,
+         get/1,
+         get_with_props/1,
          list/1,
+         list_with_props/1,
          delete/1,
          i/0]).
 
@@ -58,11 +61,20 @@ insert(Path, Data, Conditions) ->
 get(Path) ->
     khepri:get(?STORE_NAME, Path).
 
+get_with_props(Path) ->
+    khepri:get_with_props(?STORE_NAME, Path).
+
 match(Path) ->
     khepri:match(?STORE_NAME, Path).
 
+match_with_props(Path) ->
+    khepri:match_with_props(?STORE_NAME, Path).
+
 list(Path) ->
     khepri:list(?STORE_NAME, Path).
+
+list_with_props(Path) ->
+    khepri:list_with_props(?STORE_NAME, Path).
 
 delete(Path) ->
     khepri:delete(?STORE_NAME, Path).
