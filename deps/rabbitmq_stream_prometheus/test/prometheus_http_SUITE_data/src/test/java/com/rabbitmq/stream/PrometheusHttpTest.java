@@ -16,10 +16,25 @@
 
 package com.rabbitmq.stream;
 
-import static com.rabbitmq.stream.MetricsUtils.*;
+import static com.rabbitmq.stream.MetricsUtils.METRICS;
+import static com.rabbitmq.stream.MetricsUtils.METRIC_CONSUMERS;
+import static com.rabbitmq.stream.MetricsUtils.METRIC_CONSUMERS_CONSUMED;
+import static com.rabbitmq.stream.MetricsUtils.METRIC_PUBLISHERS;
+import static com.rabbitmq.stream.MetricsUtils.METRIC_PUBLISHERS_CONFIRMED;
+import static com.rabbitmq.stream.MetricsUtils.METRIC_PUBLISHERS_ERRORED;
+import static com.rabbitmq.stream.MetricsUtils.METRIC_PUBLISHERS_PUBLISHED;
+import static com.rabbitmq.stream.MetricsUtils.Metric;
+import static com.rabbitmq.stream.MetricsUtils.MetricValue;
 import static com.rabbitmq.stream.MetricsUtils.parseMetrics;
-import static com.rabbitmq.stream.TestUtils.*;
+import static com.rabbitmq.stream.TestUtils.counter;
+import static com.rabbitmq.stream.TestUtils.gauge;
+import static com.rabbitmq.stream.TestUtils.help;
+import static com.rabbitmq.stream.TestUtils.noValue;
+import static com.rabbitmq.stream.TestUtils.value;
+import static com.rabbitmq.stream.TestUtils.valueCount;
+import static com.rabbitmq.stream.TestUtils.valuesWithLabels;
 import static com.rabbitmq.stream.TestUtils.waitUntil;
+import static com.rabbitmq.stream.TestUtils.zero;
 import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.condition.AllOf.allOf;
@@ -62,6 +77,14 @@ public class PrometheusHttpTest {
 
   static String url(String endpoint) {
     return "http://localhost:" + TestUtils.prometheusPort() + "/metrics" + endpoint;
+  }
+
+  static Metrics metrics() throws IOException {
+    return parseMetrics(get(""));
+  }
+
+  static Metrics metricsPerObject() throws IOException {
+    return parseMetrics(get("/per-object"));
   }
 
   @ParameterizedTest
@@ -149,6 +172,7 @@ public class PrometheusHttpTest {
               .mapToObj(
                   i ->
                       env.consumerBuilder().stream(streams.get(i % streams.size()))
+                          .offset(OffsetSpecification.first())
                           .messageHandler((ctx, msg) -> consumedLatch.countDown())
                           .build())
               .collect(toList());
@@ -245,6 +269,7 @@ public class PrometheusHttpTest {
               .mapToObj(
                   i ->
                       env.consumerBuilder().stream(streams.get(i % streams.size()))
+                          .offset(OffsetSpecification.first())
                           .messageHandler((ctx, msg) -> consumedLatch.countDown())
                           .build())
               .collect(toList());
@@ -276,13 +301,5 @@ public class PrometheusHttpTest {
       streams.forEach(stream -> env.deleteStream(stream));
       env.close();
     }
-  }
-
-  static Metrics metrics() throws IOException {
-    return parseMetrics(get(""));
-  }
-
-  static Metrics metricsPerObject() throws IOException {
-    return parseMetrics(get("/per-object"));
   }
 }
