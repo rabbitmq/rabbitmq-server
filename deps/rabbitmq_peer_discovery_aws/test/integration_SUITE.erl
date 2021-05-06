@@ -47,7 +47,7 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [
                          {ecs_region, "eu-west-1"},
-                         {ecs_cluster_name, "rabbitmq-peer-discovery-aws"},
+                         {ecs_cluster_name, os:getenv("AWS_ECS_CLUSTER_NAME", "rabbitmq-peer-discovery-aws")},
                          {ecs_profile_name, "rabbitmq-peer-discovery-aws-profile"},
                          {ecs_instance_role, "ecs-peer-discovery-aws"},
                          {ecs_cluster_size, ?CLUSTER_SIZE},
