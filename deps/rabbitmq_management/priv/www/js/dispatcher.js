@@ -189,7 +189,7 @@ dispatcher_add(function(sammy) {
             res = sync_put(this, '/users/:username');
             if (res) {
                 if (res.http_status === 204) {
-                    username = res.req_params.username;
+                    username = fmt_escape_html(res.req_params.username);
                     show_popup('warn', "Updated an existing user: '" + username + "'");
                 }
                 update();
