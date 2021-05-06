@@ -56,7 +56,8 @@ public class MetricsUtils {
       while ((line = reader.readLine()) != null) {
         if (line.trim().isEmpty()
             || !line.contains(METRIC_PREFIX)
-            || line.contains("ct_rabbitmq_stream_prometheus")) {
+            || line.contains("ct_rabbitmq_stream_prometheus")
+            || line.contains("ct-rabbitmq_stream_prometheus")) {
           // empty line, non-stream metrics,
           // or line containing the name of the erlang node, which is the name of the test suite
           // the latter shows up in some metrics
