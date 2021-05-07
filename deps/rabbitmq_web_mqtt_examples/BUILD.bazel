@@ -1,0 +1,40 @@
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "rabbitmq_lib",
+)
+
+APP_NAME = "rabbitmq_web_mqtt_examples"
+
+APP_DESCRIPTION = "Rabbit WEB-MQTT - examples"
+
+APP_MODULE = "rabbit_web_mqtt_examples_app"
+
+APP_ENV = """[
+	    {listener, [{port, 15670}]}
+	  ]"""
+
+DEPS = [
+    "@lager//:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
+    "//deps/rabbitmq_web_mqtt:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
