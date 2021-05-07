@@ -141,7 +141,7 @@ APPS_DIR := $(CURDIR)/apps
 LOCAL_DEPS = sasl rabbitmq_prelaunch os_mon inets compiler public_key crypto ssl syntax_tools xmerl
 
 BUILD_DEPS = rabbitmq_cli
-DEPS = ranch rabbit_common ra sysmon_handler stdout_formatter recon observer_cli osiris amqp10_common syslog systemd
+DEPS = ranch rabbit_common ra sysmon_handler stdout_formatter recon observer_cli osiris amqp10_common syslog systemd seshat
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
 
 PLT_APPS += mnesia
@@ -150,6 +150,7 @@ dep_syslog = git https://github.com/schlagert/syslog 4.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris master
 # TODO: Use systemd from Hex.pm, once there is a new post-0.6.0 release.
 dep_systemd = git https://github.com/hauleth/erlang-systemd e732727b0b637eb29e8adc77a4eb46d7ebc0f41a
+dep_seshat = git https://github.com/rabbitmq/seshat master
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))

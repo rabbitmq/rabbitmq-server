@@ -126,6 +126,7 @@ create_stream(Q0, Node) ->
                                          {arguments, Arguments},
                                          {user_who_performed_action,
                                           ActingUser}]),
+                    rabbit_messages_counters:new(queue, QName, []),
                     {new, Q};
                 Error ->
 

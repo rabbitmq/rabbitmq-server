@@ -1224,6 +1224,8 @@ handle_frame_post_auth(Transport,
                        leader = Leader,
                        message_counters = Counters} =
                 Publisher,
+            QName = rabbit_misc:r(VirtualHost, queue, Stream),
+            rabbit_messages_counters:messages_published(queue, QName, MessageCount),
             increase_messages_published(Counters, MessageCount),
             case rabbit_stream_utils:check_write_permitted(#resource{name =
                                                                          Stream,

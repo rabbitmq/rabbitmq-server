@@ -125,6 +125,13 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({rabbit_messages_counters,
+                   [{description, "messages metrics storage"},
+                    {mfa,         {rabbit_messages_counters, init,
+                                   []}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
 %% -rabbit_boot_step({rabbit_stream_coordinator,
 %%                    [{description, "stream queues coordinator"},
 %%                     {mfa,         {rabbit_stream_coordinator, start,

@@ -61,7 +61,7 @@ handle_cast(_Request, State) ->
     {noreply, State}.
 
 handle_info(tick, #state{timeout = Timeout} = State) ->
-    Data = osiris_counters:overview(),
+    Data = seshat_counters:overview(osiris),
     maps:map(
       fun ({osiris_writer, QName}, #{offset := Offs,
                                      first_offset := FstOffs}) ->
