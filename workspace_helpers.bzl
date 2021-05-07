@@ -50,6 +50,11 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     )
 
     github_bazel_erlang_lib(
+        name = "ct_helper",
+        org = "extend",
+    )
+
+    github_bazel_erlang_lib(
         name = "cuttlefish",
         org = "Kyorai",
     )
@@ -242,11 +247,18 @@ erlang_lib(
         commit = "e732727b0b637eb29e8adc77a4eb46d7ebc0f41a",
         build_file = rabbitmq_workspace + "//:BUILD.systemd",
         patch_cmds = [
-            INJECT_GIT_VERSION,
+            SYSTEMD_INJECT_GIT_VERSION,
         ],
     )
 
-INJECT_GIT_VERSION = """set -euo pipefail
+    new_git_repository(
+        name = "trust_store_http",
+        remote = "https://github.com/rabbitmq/trust-store-http.git",
+        branch = "master",
+        build_file = rabbitmq_workspace + "//:BUILD.trust_store_http",
+    )
+
+SYSTEMD_INJECT_GIT_VERSION = """set -euo pipefail
 V="$(git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null \\
      || git describe --dirty --abbrev=7 --tags --always 2>/dev/null || true)"
 cat src/systemd.app.src \\
