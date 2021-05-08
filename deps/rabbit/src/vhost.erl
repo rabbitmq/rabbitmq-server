@@ -26,7 +26,8 @@
   get_description/1,
   get_tags/1,
   set_limits/2,
-  set_metadata/2
+  set_metadata/2,
+  is_tagged_with/2
 ]).
 
 -define(record_version, vhost_v2).
@@ -180,3 +181,7 @@ set_metadata(VHost, Value) ->
         %% the field is not available, so this is a no-op
         VHost
     end.
+
+-spec is_tagged_with(vhost:vhost(), atom()) -> boolean().
+is_tagged_with(VHost, Tag) ->
+    lists:member(Tag, get_tags(VHost)).
