@@ -17,16 +17,6 @@ RABBITMQ_TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
 
 APP_VERSION = "3.9.0"
 
-def required_plugins(rabbitmq_workspace = "@rabbitmq-server"):
-    return [
-        rabbitmq_workspace + "//deps/rabbit:bazel_erlang_lib",
-    ]
-
-def management_plugins(rabbitmq_workspace = "@rabbitmq-server"):
-    return [
-        rabbitmq_workspace + "//deps/rabbitmq_management:bazel_erlang_lib",
-    ]
-
 LABELS_WITH_TEST_VERSIONS = [
     "//deps/amqp10_common:bazel_erlang_lib",
     "//deps/rabbit_common:bazel_erlang_lib",
@@ -88,6 +78,7 @@ def rabbitmq_lib(
     )
 
 def rabbitmq_integration_suite(
+        package,
         data = [],
         extra_erlc_opts = [],
         test_env = {},
@@ -103,12 +94,12 @@ def rabbitmq_integration_suite(
         ] + data,
         test_env = dict({
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-            "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/rabbitmq-for-tests-run",
-            "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmqctl",
-            "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/broker-for-tests-home/sbin/rabbitmq-plugins",
+            "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/rabbitmq-for-tests-run".format(package),
+            "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
+            "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
         }.items() + test_env.items()),
         tools = [
-            "//:rabbitmq-for-tests-run",
+            ":rabbitmq-for-tests-run",
         ] + tools,
         runtime_deps = [
             "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",

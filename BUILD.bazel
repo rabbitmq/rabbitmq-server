@@ -2,7 +2,6 @@ load("elixir_home.bzl", "elixir_home")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
-load(":rabbitmq.bzl", "management_plugins", "required_plugins")
 
 exports_files([
     "scripts/bazel/rabbitmq-run.sh",
@@ -32,28 +31,49 @@ platform(
 
 rabbitmq_home(
     name = "broker-home",
-    plugins = required_plugins(rabbitmq_workspace = "@"),
-)
-
-rabbitmq_home(
-    name = "broker-management-home",
-    plugins = required_plugins(rabbitmq_workspace = "@") + management_plugins(rabbitmq_workspace = "@"),
-)
-
-rabbitmq_home(
-    name = "broker-for-tests-home",
-    testonly = True,
     plugins = [
-        "//deps/rabbit:test_bazel_erlang_lib",  # <- compiled with test erlc_opts
-        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
-        "@inet_tcp_proxy//:bazel_erlang_lib",
-        "@meck//:bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
+        "//deps/rabbitmq_auth_backend_cache:bazel_erlang_lib",
+        "//deps/rabbitmq_auth_backend_http:bazel_erlang_lib",
+        "//deps/rabbitmq_auth_backend_ldap:bazel_erlang_lib",
+        "//deps/rabbitmq_auth_backend_oauth2:bazel_erlang_lib",
+        "//deps/rabbitmq_auth_mechanism_ssl:bazel_erlang_lib",
+        "//deps/rabbitmq_consistent_hash_exchange:bazel_erlang_lib",
+        "//deps/rabbitmq_event_exchange:bazel_erlang_lib",
+        "//deps/rabbitmq_federation:bazel_erlang_lib",
+        "//deps/rabbitmq_federation_management:bazel_erlang_lib",
+        "//deps/rabbitmq_jms_topic_exchange:bazel_erlang_lib",
+        "//deps/rabbitmq_management:bazel_erlang_lib",
+        "//deps/rabbitmq_mqtt:bazel_erlang_lib",
+        "//deps/rabbitmq_peer_discovery_aws:bazel_erlang_lib",
+        "//deps/rabbitmq_peer_discovery_consul:bazel_erlang_lib",
+        "//deps/rabbitmq_peer_discovery_etcd:bazel_erlang_lib",
+        "//deps/rabbitmq_peer_discovery_k8s:bazel_erlang_lib",
+        "//deps/rabbitmq_prometheus:bazel_erlang_lib",
+        "//deps/rabbitmq_random_exchange:bazel_erlang_lib",
+        "//deps/rabbitmq_recent_history_exchange:bazel_erlang_lib",
+        "//deps/rabbitmq_sharding:bazel_erlang_lib",
+        "//deps/rabbitmq_shovel:bazel_erlang_lib",
+        "//deps/rabbitmq_shovel_management:bazel_erlang_lib",
+        "//deps/rabbitmq_stomp:bazel_erlang_lib",
+        "//deps/rabbitmq_stream:bazel_erlang_lib",
+        "//deps/rabbitmq_stream_management:bazel_erlang_lib",
+        "//deps/rabbitmq_stream_prometheus:bazel_erlang_lib",
+        "//deps/rabbitmq_top:bazel_erlang_lib",
+        "//deps/rabbitmq_tracing:bazel_erlang_lib",
+        "//deps/rabbitmq_trust_store:bazel_erlang_lib",
+        "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
+        "//deps/rabbitmq_web_mqtt:bazel_erlang_lib",
+        "//deps/rabbitmq_web_stomp:bazel_erlang_lib",
     ],
 )
 
 rabbitmq_home(
     name = "broker-for-cli-tests-home",
-    plugins = required_plugins(rabbitmq_workspace = "@") + [
+    testonly = True,
+    plugins = [
+        "//deps/rabbit:bazel_erlang_lib",
         "//deps/rabbitmq_federation:bazel_erlang_lib",
         "//deps/rabbitmq_stomp:bazel_erlang_lib",
         "//deps/amqp_client:bazel_erlang_lib",
@@ -63,19 +83,6 @@ rabbitmq_home(
 rabbitmq_run(
     name = "rabbitmq-run",
     home = ":broker-home",
-    visibility = ["//visibility:public"],
-)
-
-rabbitmq_run(
-    name = "rabbitmq-management-run",
-    home = ":broker-management-home",
-    visibility = ["//visibility:public"],
-)
-
-rabbitmq_run(
-    name = "rabbitmq-for-tests-run",
-    testonly = True,
-    home = ":broker-for-tests-home",
     visibility = ["//visibility:public"],
 )
 
@@ -92,14 +99,6 @@ rabbitmq_run(
 rabbitmq_run_command(
     name = "broker",
     rabbitmq_run = ":rabbitmq-run",
-    subcommand = "run-broker",
-)
-
-# `bazel run broker-management` for the broker with just the
-# management plugin
-rabbitmq_run_command(
-    name = "broker-management",
-    rabbitmq_run = ":rabbitmq-management-run",
     subcommand = "run-broker",
 )
 
