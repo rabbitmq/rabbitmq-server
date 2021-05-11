@@ -1,12 +1,11 @@
-load("@bazel-erlang//:ct.bzl", "ct_suite")
-load("//:rabbitmq_home.bzl", "rabbitmq_home")
-load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
     "APP_VERSION",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
+    "rabbitmq_suite",
 )
 
 APP_ENV = """[
@@ -44,18 +43,7 @@ rabbitmq_lib(
     deps = DEPS,
 )
 
-rabbitmq_home(
-    name = "broker-for-tests-home",
-    plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
-        ":bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_run(
-    name = "rabbitmq-for-tests-run",
-    home = ":broker-for-tests-home",
-)
+broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_amqp1_0"
 
@@ -95,11 +83,9 @@ rabbitmq_integration_suite(
     },
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_SUITE",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         "//deps/amqp10_common:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
     ],
 )

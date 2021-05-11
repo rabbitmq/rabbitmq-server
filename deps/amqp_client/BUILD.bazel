@@ -7,6 +7,7 @@ load(
     "RABBITMQ_TEST_ERLC_OPTS",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
+    "rabbitmq_suite",
 )
 
 APP_ENV = """[
@@ -59,18 +60,13 @@ rabbitmq_integration_suite(
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     runtime_deps = [
         "//deps/rabbit:bazel_erlang_lib",
     ],
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
     ],
 )

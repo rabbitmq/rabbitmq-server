@@ -6,8 +6,8 @@ load(
     "test_erlang_lib",
 )
 load("@bazel-erlang//:ct.bzl", "ct_suite", "ct_test")
-load("//deps/rabbitmq_cli:rabbitmqctl.bzl", "rabbitmqctl")
-load("//deps/rabbitmq_cli:rabbitmqctl_test.bzl", "rabbitmqctl_test")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
 
 _LAGER_EXTRA_SINKS = [
     "rabbit_log",
@@ -97,17 +97,41 @@ def rabbitmq_lib(
         runtime_deps = with_test_versions(runtime_deps),
     )
 
+def rabbitmq_suite(deps = [], erlc_opts = [], test_env = {}, **kwargs):
+    ct_suite(
+        deps = ["@lager//:bazel_erlang_lib"] + deps,
+        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
+        test_env = dict({
+            "RABBITMQ_CT_SKIP_AS_ERROR": "true",
+        }.items() + test_env.items()),
+        **kwargs
+    )
+
+def broker_for_integration_suites():
+    rabbitmq_home(
+        name = "broker-for-tests-home",
+        plugins = [
+            "//deps/rabbit:bazel_erlang_lib",
+            ":bazel_erlang_lib",
+        ],
+    )
+
+    rabbitmq_run(
+        name = "rabbitmq-for-tests-run",
+        home = ":broker-for-tests-home",
+    )
+
 def rabbitmq_integration_suite(
         package,
         data = [],
-        extra_erlc_opts = [],
+        erlc_opts = [],
         test_env = {},
         tools = [],
         deps = [],
         runtime_deps = [],
         **kwargs):
     ct_suite(
-        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + extra_erlc_opts,
+        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
         data = [
             "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
             "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
