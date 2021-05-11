@@ -3,8 +3,6 @@ load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
-    "APP_VERSION",
-    "RABBITMQ_TEST_ERLC_OPTS",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
     "rabbitmq_suite",

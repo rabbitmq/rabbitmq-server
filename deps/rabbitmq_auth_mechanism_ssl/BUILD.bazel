@@ -1,7 +1,7 @@
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
+load("//:rabbitmq.bzl", "rabbitmq_lib")
 
 APP_NAME = "rabbitmq_auth_mechanism_ssl"
 
@@ -26,7 +26,6 @@ rabbitmq_lib(
     app_env = APP_ENV,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    app_version = APP_VERSION,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )

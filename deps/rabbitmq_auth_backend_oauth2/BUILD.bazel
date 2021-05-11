@@ -1,7 +1,6 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load(
     "//:rabbitmq.bzl",
-    "APP_VERSION",
     "RABBITMQ_TEST_ERLC_OPTS",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
@@ -30,7 +29,6 @@ RUNTIME_DEPS = [
 rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
-    app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
@@ -40,9 +38,11 @@ broker_for_integration_suites()
 
 erlc(
     name = "rabbit_auth_backend_oauth2_test_util",
+    testonly = True,
     srcs = [
         "test/rabbit_auth_backend_oauth2_test_util.erl",
     ],
+    dest = "test",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 

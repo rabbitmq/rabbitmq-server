@@ -1,5 +1,5 @@
 load("@bazel-erlang//:eunit.bzl", "eunit")
-load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
+load("//:rabbitmq.bzl", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
 
 APP_NAME = "rabbitmq_aws"
 
@@ -27,7 +27,6 @@ rabbitmq_lib(
     app_module = APP_MODULE,
     app_name = APP_NAME,
     app_registered = APP_REGISTERED,
-    app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
     extra_apps = EXTRA_APPS,
 )
