@@ -1,5 +1,4 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
-load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
@@ -9,6 +8,7 @@ load(
     "RABBITMQ_TEST_ERLC_OPTS",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
+    "rabbitmq_suite",
 )
 
 exports_files([
@@ -259,12 +259,9 @@ erlc(
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "amqqueue_backward_compatibility_SUITE",
     size = "small",
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
 )
 
 PACKAGE = "deps/rabbit"
@@ -549,28 +546,20 @@ rabbitmq_integration_suite(
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "mirrored_supervisor_SUITE",
     size = "small",
     additional_srcs = [
         "test/mirrored_supervisor_SUITE_gs.erl",
     ],
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "msg_store_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
     ],
@@ -753,13 +742,9 @@ rabbitmq_integration_suite(
     },
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "rabbit_confirms_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
     ],
@@ -771,13 +756,9 @@ rabbitmq_integration_suite(
     size = "medium",
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "rabbit_fifo_int_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     runtime_deps = [
         "@aten//:bazel_erlang_lib",
         "@gen_batch_server//:bazel_erlang_lib",
@@ -798,7 +779,7 @@ erlc(
     dest = "test",
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "rabbit_fifo_prop_SUITE",
     size = "medium",
     additional_beam = [
@@ -807,12 +788,9 @@ ct_suite(
     additional_hdrs = [
         "src/rabbit_fifo.hrl",
     ],
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
+    erlc_opts = [
         "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
     ],
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     runtime_deps = [
         "@ra//:bazel_erlang_lib",
     ],
@@ -822,7 +800,7 @@ ct_suite(
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "rabbit_fifo_SUITE",
     size = "medium",
     additional_beam = [
@@ -832,12 +810,9 @@ ct_suite(
     additional_hdrs = [
         "src/rabbit_fifo.hrl",
     ],
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
+    erlc_opts = [
         "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
     ],
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
         "@ra//:bazel_erlang_lib",
@@ -847,7 +822,7 @@ ct_suite(
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "rabbit_fifo_v0_SUITE",
     size = "medium",
     additional_beam = [
@@ -856,12 +831,9 @@ ct_suite(
     additional_hdrs = [
         "src/rabbit_fifo_v0.hrl",
     ],
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
+    erlc_opts = [
         "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
     ],
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
         "@ra//:bazel_erlang_lib",
@@ -871,13 +843,9 @@ ct_suite(
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "rabbit_msg_record_SUITE",
     size = "medium",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     deps = [
         "//deps/amqp10_common:bazel_erlang_lib",
         "//deps/rabbit_common:bazel_erlang_lib",
@@ -968,13 +936,11 @@ rabbitmq_integration_suite(
     size = "medium",
 )
 
-ct_suite(
+rabbitmq_integration_suite(
+    PACKAGE,
     name = "term_to_binary_compat_prop_SUITE",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
     ],
 )
 
@@ -1012,10 +978,9 @@ rabbitmq_integration_suite(
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_amqp091_content_framing_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
     ],
@@ -1033,28 +998,25 @@ rabbitmq_integration_suite(
     size = "small",
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_cluster_formation_locking_mocks_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_collections_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     runtime_deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_config_value_encryption_SUITE",
     size = "medium",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     runtime_deps = [
         "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
         "//deps/rabbit_common:test_bazel_erlang_lib",
@@ -1098,10 +1060,9 @@ rabbitmq_integration_suite(
     size = "small",
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_gm_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
@@ -1114,41 +1075,31 @@ rabbitmq_integration_suite(
     size = "small",
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_operator_policy_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         "//deps/rabbit_common:test_bazel_erlang_lib",
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_pg_local_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_plugin_directories_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         "//deps/rabbit_common:test_bazel_erlang_lib",
     ],
 )
 
-ct_suite(
+rabbitmq_integration_suite(
+    PACKAGE,
     name = "unit_plugin_versioning_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    runtime_deps = [
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
-    deps = [
-        "//deps/amqp_client:bazel_erlang_lib",
-        "//deps/rabbit_common:test_bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -1157,16 +1108,14 @@ rabbitmq_integration_suite(
     size = "small",
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_priority_queue_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_queue_consumers_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
 rabbitmq_integration_suite(
@@ -1178,13 +1127,12 @@ rabbitmq_integration_suite(
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_supervisor2_SUITE",
     size = "small",
     additional_srcs = [
         "test/dummy_supervisor2.erl",
     ],
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
 rabbitmq_integration_suite(

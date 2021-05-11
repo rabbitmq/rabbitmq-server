@@ -1,7 +1,14 @@
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+    "rabbitmq_suite",
+)
 
 APP_NAME = "amqp10_client"
 
@@ -33,12 +40,8 @@ rabbitmq_lib(
     deps = DEPS,
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "msg_SUITE",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     deps = DEPS,
 )
 
@@ -55,7 +58,8 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-ct_suite(
+rabbitmq_integration_suite(
+    "deps/amqp10_client",
     name = "system_SUITE",
     size = "medium",
     additional_hdrs = [
@@ -67,10 +71,8 @@ ct_suite(
     ],
     data = [
         "@activemq//:exec_dir",
-        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
-        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
     ],
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
+    erlc_opts = [
         "-I deps/amqp10_client",
     ],
     groups = [
@@ -81,21 +83,7 @@ ct_suite(
         "mock",
     ],
     test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/amqp10_client/rabbitmq-for-tests-run",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/amqp10_client/broker-for-tests-home/sbin/rabbitmqctl",
-        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/amqp10_client/broker-for-tests-home/sbin/rabbitmq-plugins",
         "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq",
     },
-    tools = [
-        ":rabbitmq-for-tests-run",
-    ],
-    runtime_deps = [
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
-    ],
-    deps = DEPS + [
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
+    deps = DEPS,
 )

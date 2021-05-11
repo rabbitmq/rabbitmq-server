@@ -1,12 +1,11 @@
-load("@bazel-erlang//:ct.bzl", "ct_suite")
-load("//:rabbitmq_home.bzl", "rabbitmq_home")
-load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
     "APP_VERSION",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
+    "rabbitmq_suite",
 )
 
 APP_ENV = """[
@@ -46,18 +45,7 @@ rabbitmq_lib(
     deps = DEPS,
 )
 
-rabbitmq_home(
-    name = "broker-for-tests-home",
-    plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
-        ":bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_run(
-    name = "rabbitmq-for-tests-run",
-    home = ":broker-for-tests-home",
-)
+broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_auth_backend_cache"
 
@@ -71,12 +59,8 @@ rabbitmq_integration_suite(
     name = "rabbit_auth_backend_cache_SUITE",
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "rabbit_auth_cache_SUITE",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     runtime_deps = [
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
     ],
