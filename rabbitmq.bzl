@@ -137,10 +137,12 @@ def rabbitmq_integration_suite(
             "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
         ] + data,
         test_env = dict({
+            "SKIP_MAKE_TEST_DIST": "true",
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
             "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/rabbitmq-for-tests-run".format(package),
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
+            "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
         }.items() + test_env.items()),
         tools = [
             ":rabbitmq-for-tests-run",
