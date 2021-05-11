@@ -1,10 +1,4 @@
-load(
-    "//:rabbitmq.bzl",
-    "APP_VERSION",
-    "RABBITMQ_ERLC_OPTS",
-    "RABBITMQ_TEST_ERLC_OPTS",
-    "rabbitmq_lib",
-)
+load("//:rabbitmq.bzl", "rabbitmq_lib")
 
 APP_NAME = "rabbitmq_random_exchange"
 
@@ -22,9 +16,6 @@ RUNTIME_DEPS = [
 rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
-    app_version = APP_VERSION,
-    erlc_opts = RABBITMQ_ERLC_OPTS,
-    test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
