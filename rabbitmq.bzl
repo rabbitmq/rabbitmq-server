@@ -108,6 +108,7 @@ def rabbitmq_integration_suite(
         ] + runtime_deps,
         deps = [
             "//deps/amqp_client:bazel_erlang_lib",
+            "//deps/rabbit_common:bazel_erlang_lib",
             "@rabbitmq_ct_helpers//:bazel_erlang_lib",
         ] + deps,
         **kwargs
