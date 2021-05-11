@@ -761,6 +761,10 @@ erlc(
         "test/test_util.erl",
     ],
     dest = "test",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
 )
 
 rabbitmq_suite(
