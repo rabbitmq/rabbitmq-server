@@ -3,8 +3,6 @@ load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
-    "APP_VERSION",
-    "RABBITMQ_TEST_ERLC_OPTS",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
     "rabbitmq_suite",
@@ -35,7 +33,6 @@ rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
     extra_apps = EXTRA_APPS,
     deps = DEPS,

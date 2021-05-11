@@ -1,8 +1,6 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load(
     "//:rabbitmq.bzl",
-    "APP_VERSION",
-    "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
@@ -37,7 +35,6 @@ rabbitmq_lib(
     app_env = APP_ENV,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    app_version = APP_VERSION,
     build_deps = BUILD_DEPS,
     deps = DEPS,
 )
