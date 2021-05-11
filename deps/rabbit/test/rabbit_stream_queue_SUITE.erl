@@ -93,6 +93,7 @@ all_tests() ->
      consume_from_last,
      consume_from_next,
      consume_from_default,
+     consume_from_relative_time_offset,
      consume_credit,
      consume_credit_out_of_order_ack,
      consume_credit_multiple_ack,
@@ -1097,6 +1098,36 @@ consume_from_next(Config, Args) ->
 
     %% Yeah! we got them
     receive_batch(Ch1, 100, 199),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+consume_from_relative_time_offset(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
+    amqp_channel:wait_for_confirms(Ch, 5),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    qos(Ch1, 10, false),
+    amqp_channel:subscribe(
+      Ch1, #'basic.consume'{queue = Q,
+                            no_ack = false,
+                            consumer_tag = <<"ctag">>,
+                            arguments = [{<<"x-stream-offset">>, longstr, <<"100s">>}]},
+      self()),
+    receive
+        #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
+             ok
+    end,
+
+    receive_batch(Ch1, 0, 99),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 consume_from_replica(Config) ->
