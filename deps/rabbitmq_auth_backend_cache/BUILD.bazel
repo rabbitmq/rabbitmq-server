@@ -1,7 +1,13 @@
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+)
 
 APP_ENV = """[
 	    {cache_ttl,      15000},
@@ -53,54 +59,16 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-ct_suite(
+PACKAGE = "deps/rabbitmq_auth_backend_cache"
+
+rabbitmq_integration_suite(
+    PACKAGE,
     name = "config_schema_SUITE",
-    data = [
-        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
-        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
-    ],
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_cache/rabbitmq-for-tests-run",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_cache/broker-for-tests-home/sbin/rabbitmqctl",
-        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_cache/broker-for-tests-home/sbin/rabbitmq-plugins",
-    },
-    tools = [
-        ":rabbitmq-for-tests-run",
-    ],
-    runtime_deps = [
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
 )
 
-ct_suite(
+rabbitmq_integration_suite(
+    PACKAGE,
     name = "rabbit_auth_backend_cache_SUITE",
-    data = [
-        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
-        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
-    ],
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_cache/rabbitmq-for-tests-run",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_cache/broker-for-tests-home/sbin/rabbitmqctl",
-        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_auth_backend_cache/broker-for-tests-home/sbin/rabbitmq-plugins",
-    },
-    tools = [
-        ":rabbitmq-for-tests-run",
-    ],
-    runtime_deps = [
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 ct_suite(
