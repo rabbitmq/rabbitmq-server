@@ -85,8 +85,9 @@ define PROJECT_ENV
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
-	    %% 15 minutes
-	    {consumer_timeout, 900000},
+	    %% See https://www.rabbitmq.com/consumers.html#acknowledgement-timeout
+	    %% 30 minutes
+	    {consumer_timeout, 1800000},
 
 	    %% see rabbitmq-server#486
 	    {autocluster,
