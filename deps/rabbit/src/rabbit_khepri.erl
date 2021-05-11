@@ -13,15 +13,20 @@
 
 -export([setup/1,
          get_store_id/0,
+         machine_insert/3,
          insert/2,
          insert/3,
          match/1,
          match_with_props/1,
          get/1,
          get_with_props/1,
+         exists/1,
          list/1,
          list_with_props/1,
+         list_matching/2,
+         list_matching_with_props/2,
          delete/1,
+         dir/0,
          i/0]).
 
 -compile({no_auto_import, [get/2]}).
@@ -52,6 +57,11 @@ setup(_) ->
 get_store_id() ->
     ?STORE_NAME.
 
+dir() ->
+    filename:join(rabbit_mnesia:dir(), atom_to_list(?STORE_NAME)).
+machine_insert(PathPattern, Data, Extra) ->
+    khepri_machine:insert(?STORE_NAME, PathPattern, Data, Extra).
+
 insert(Path, Data) ->
     khepri:insert(?STORE_NAME, Path, Data).
 
@@ -70,8 +80,20 @@ match(Path) ->
 match_with_props(Path) ->
     khepri:match_with_props(?STORE_NAME, Path).
 
+exists(Path) ->
+    case match(Path) of
+        {ok, #{Path := _}} -> true;
+        _                  -> false
+    end.
+
 list(Path) ->
     khepri:list(?STORE_NAME, Path).
+
+list_matching(Path, Pattern) ->
+    khepri:list_matching(?STORE_NAME, Path, Pattern).
+
+list_matching_with_props(Path, Pattern) ->
+    khepri:list_matching_with_props(?STORE_NAME, Path, Pattern).
 
 list_with_props(Path) ->
     khepri:list_with_props(?STORE_NAME, Path).

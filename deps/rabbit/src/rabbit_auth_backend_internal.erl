@@ -42,6 +42,7 @@
          list_user_topic_permissions/1, list_vhost_topic_permissions/1, list_user_vhost_topic_permissions/2]).
 
 -export([state_can_expire/0]).
+-export([khepri_users_path/0, khepri_user_path/1]).
 
 %% for testing
 -export([hashing_module_for_user/1, expand_topic_permission/2]).
@@ -307,7 +308,7 @@ add_user_sans_validation(Username, Password, ActingUser) ->
             rabbit_event:notify(user_created, [{name, Username},
                                                {user_who_performed_action, ActingUser}]),
             ok;
-        {error, {mismatching_node, _, _}} ->
+        {error, {mismatching_node, _, _, _}} ->
             rabbit_log:warning("Failed to add user '~s': the user already exists", [Username]),
             throw({error, {user_already_exists, Username}});
         {error, _} = Error ->
@@ -557,9 +558,10 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
                               configure  = ConfigurePerm,
                               write      = WritePerm,
                               read       = ReadPerm}},
-    %% FIXME: Should we do that in a Mnesia transaction to make sure the vhost
-    %% exists at the time the permission is written?
-    case rabbit_khepri:insert(Path, Data) of
+    %% TODO: Add a keep_until for the intermediate 'user_permissions' node so
+    %% it is removed when its last children is removed.
+    Extra = #{keep_until => [rabbit_vhost:khepri_vhost_path(VirtualHost)]},
+    case rabbit_khepri:machine_insert(Path, Data, Extra) of
         {ok, _} ->
             rabbit_log:info("Successfully set permissions for "
                             "'~s' in virtual host '~s' to '~s', '~s', '~s'",
@@ -658,7 +660,7 @@ update_user(Username, Fun) ->
             case Ret2 of
                 {ok, _} ->
                     ok;
-                {error, {mismatching_node, _, _}} ->
+                {error, {mismatching_node, Path, _, _}} ->
                     update_user(Username, Fun);
                 {error, _} = Error ->
                     throw(Error)
@@ -753,9 +755,10 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
                               read  = ReadPermRegex
                              }
              },
-    %% FIXME: Should we do that in a Mnesia transaction to make sure the vhost
-    %% exists at the time the permission is written?
-    case rabbit_khepri:insert(Path, Data) of
+    %% TODO: Add a keep_until for the intermediate 'topic_permissions' node so
+    %% it is removed when its last children is removed.
+    Extra = #{keep_until => [rabbit_vhost:khepri_vhost_path(VirtualHost)]},
+    case rabbit_khepri:machine_insert(Path, Data, Extra) of
         {ok, _} ->
             rabbit_log:info("Successfully set topic permissions on exchange '~s' for "
                              "'~s' in virtual host '~s' to '~s', '~s'",

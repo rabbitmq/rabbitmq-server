@@ -155,8 +155,18 @@ is_empty()           -> is_empty(names()).
 
 -spec needs_default_data() -> boolean().
 
-needs_default_data() -> is_empty([rabbit_user, rabbit_user_permission,
-                                  rabbit_vhost]).
+needs_default_data() ->
+    %% MNESIA is_empty([rabbit_user, rabbit_user_permission,
+    %% MNESIA           rabbit_vhost]).
+    Paths = [rabbit_vhost:khepri_vhosts_path(),
+             rabbit_auth_backend_internal:khepri_users_path()],
+    lists:all(
+      fun(Path) ->
+              case rabbit_khepri:list(Path) of
+                  {ok, List} when is_list(List) andalso List =/= [] -> true;
+                  _                                                 -> false
+              end
+      end, Paths).
 
 is_empty(Names) ->
     lists:all(fun (Tab) -> mnesia:dirty_first(Tab) == '$end_of_table' end,
