@@ -1,8 +1,10 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "DEFAULT_TEST_ERLC_OPTS", "erlang_lib", "test_erlang_lib")
-load("@bazel-erlang//:ct.bzl", "ct_suite")
-load("//:rabbitmq_home.bzl", "rabbitmq_home")
-load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "APP_VERSION")
+load(
+    "//:rabbitmq.bzl",
+    "broker_for_integration_suites",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+    "rabbitmq_suite",
+)
 
 APP_NAME = "rabbitmq_peer_discovery_aws"
 
@@ -22,95 +24,45 @@ RUNTIME_DEPS = [
     "//deps/rabbit:bazel_erlang_lib",
 ]
 
-erlang_lib(
+rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
-    app_version = APP_VERSION,
     extra_apps = EXTRA_APPS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
 
-TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
-    "+nowarn_export_all",
-]
+broker_for_integration_suites()
 
-test_erlang_lib(
-    app_description = APP_DESCRIPTION,
-    app_name = APP_NAME,
-    app_version = APP_VERSION,
-    erlc_opts = TEST_ERLC_OPTS,
-    extra_apps = EXTRA_APPS,
-    runtime_deps = RUNTIME_DEPS,
-    deps = DEPS,
-)
+PACKAGE = "deps/rabbitmq_peer_discovery_aws"
 
-rabbitmq_home(
-    name = "broker-for-tests-home",
-    plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
-        ":bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_run(
-    name = "rabbitmq-for-tests-run",
-    home = ":broker-for-tests-home",
-)
-
-ct_suite(
+rabbitmq_integration_suite(
+    PACKAGE,
     name = "config_schema_SUITE",
     size = "small",
-    data = [
-        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
-        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
-    ],
-    erlc_opts = TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_aws/rabbitmq-for-tests-run",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_aws/broker-for-tests-home/sbin/rabbitmqctl",
-        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_peer_discovery_aws/broker-for-tests-home/sbin/rabbitmq-plugins",
-    },
-    tools = [
-        ":rabbitmq-for-tests-run",
-    ],
-    runtime_deps = [
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
 )
 
-# NOTE: integration_SUITE requires aws credentials. They can be
-# supplied with:
+# NOTE: integration_SUITE requires aws credentials and a docker image.
+# They can be supplied with:
 # --test_env AWS_ACCESS_KEY_ID=... --test_env AWS_SECRET_ACCESS_KEY=...
+# --test_env RABBITMQ_IMAGE=...
 # bazel args
-ct_suite(
+rabbitmq_suite(
     name = "integration_SUITE",
     size = "large",
     additional_srcs = [
         "test/aws_ecs_util.erl",
     ],
-    erlc_opts = TEST_ERLC_OPTS,
     tags = [
         "aws",
         "external",
     ],
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
     deps = [
         "@rabbitmq_ct_helpers//:bazel_erlang_lib",
     ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "unit_SUITE",
     size = "small",
-    erlc_opts = TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
 )

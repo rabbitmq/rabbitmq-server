@@ -1,5 +1,4 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib", "test_erlang_lib")
-load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
@@ -7,6 +6,8 @@ load(
     "APP_VERSION",
     "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "rabbitmq_integration_suite",
+    "rabbitmq_suite",
 )
 
 APP_NAME = "rabbitmq_web_dispatch"
@@ -61,34 +62,14 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-ct_suite(
+PACKAGE = "deps/rabbitmq_web_dispatch"
+
+rabbitmq_integration_suite(
+    PACKAGE,
     name = "rabbit_web_dispatch_SUITE",
-    data = [
-        "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
-        "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
-    ],
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-        "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_web_dispatch/rabbitmq-for-tests-run",
-        "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_web_dispatch/broker-for-tests-home/sbin/rabbitmqctl",
-        "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/deps/rabbitmq_web_dispatch/broker-for-tests-home/sbin/rabbitmq-plugins",
-    },
-    tools = [
-        ":rabbitmq-for-tests-run",
-    ],
-    runtime_deps = [
-        "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
-        "//deps/rabbitmq_cli:rabbitmqctl",
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
 )
 
-ct_suite(
+rabbitmq_suite(
     name = "rabbit_web_dispatch_unit_SUITE",
     size = "small",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    test_env = {
-        "RABBITMQ_CT_SKIP_AS_ERROR": "true",
-    },
 )
