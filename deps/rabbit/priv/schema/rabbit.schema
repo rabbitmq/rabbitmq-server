@@ -1152,9 +1152,9 @@ end}.
     [{datatype, {enum, [stop_node, continue, transient, persistent]}}]}.
 
 %% Approximate maximum time a consumer can spend processing a message before
-%% the channel is terminated, in milliseconds. Default is no timeout.
+%% the channel is terminated, in milliseconds.
 %%
-%% {consumer_timeout, 10000},
+%% {consumer_timeout, 1800000},
 
 {mapping, "consumer_timeout", "rabbit.consumer_timeout", [
     {datatype, integer},
