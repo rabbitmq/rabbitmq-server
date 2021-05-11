@@ -185,7 +185,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
             case parse_offset(rabbit_misc:table_lookup(Args, <<"x-stream-offset">>)) of
                 {error, _} = Err ->
                     Err;
-                Offset ->
+                OffsetSpec ->
                     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                                          not NoAck, QName,
                                                          ConsumerPrefetchCount, false,
@@ -194,7 +194,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
                     %% really it should be sent by the stream queue process like classic queues
                     %% do
                     maybe_send_reply(ChPid, OkMsg),
-                    begin_stream(QState0, Q, ConsumerTag, Offset, ConsumerPrefetchCount)
+                    begin_stream(QState0, Q, ConsumerTag, OffsetSpec, ConsumerPrefetchCount)
             end;
         Err ->
             Err
