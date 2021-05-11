@@ -775,6 +775,7 @@ erlc(
         "test/test_util.erl",
     ],
     dest = "test",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
 rabbitmq_suite(
