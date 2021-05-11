@@ -57,9 +57,6 @@ rabbitmq_integration_suite(
     runtime_deps = [
         "@meck//:bazel_erlang_lib",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 ct_suite(
@@ -72,5 +69,8 @@ ct_suite(
     runtime_deps = [
         "//deps/rabbit:bazel_erlang_lib",
     ],
-    deps = DEPS,
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@lager//:bazel_erlang_lib",
+    ],
 )

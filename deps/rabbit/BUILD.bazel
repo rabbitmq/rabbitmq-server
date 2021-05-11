@@ -274,9 +274,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "backing_queue_SUITE",
     size = "large",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -287,9 +284,6 @@ rabbitmq_integration_suite(
         "test/dummy_interceptor.erl",
         "test/failing_dummy_interceptor.erl",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -298,9 +292,6 @@ rabbitmq_integration_suite(
     size = "medium",
     additional_srcs = [
         "test/channel_operation_timeout_test_queue.erl",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
@@ -312,27 +303,18 @@ rabbitmq_integration_suite(
         "cluster_size_2",
         "cluster_size_3",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "cluster_SUITE",
     size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "clustering_management_SUITE",
     size = "large",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -348,9 +330,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "confirms_rejects_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -360,18 +339,12 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "crashing_queues_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -381,27 +354,18 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "definition_import_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "disconnect_detected_during_alarm_SUITE",
     size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -437,7 +401,6 @@ rabbitmq_integration_suite(
         ],
     },
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
     ],
 )
@@ -450,7 +413,6 @@ rabbitmq_integration_suite(
         ":quorum_queue_utils",
     ],
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
     ],
 )
@@ -475,9 +437,6 @@ rabbitmq_integration_suite(
         ],
     },
     tags = ["classic-queue"],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -535,7 +494,6 @@ rabbitmq_integration_suite(
         },
     },
     runtime_deps = [
-        "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
         "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:bazel_erlang_lib",
     ],
 )
@@ -544,27 +502,18 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "lazy_queue_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "list_consumers_sanity_check_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "list_queues_online_and_offline_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -573,9 +522,6 @@ rabbitmq_integration_suite(
     size = "medium",
     additional_beam = [
         ":quorum_queue_utils",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
@@ -587,18 +533,12 @@ rabbitmq_integration_suite(
         ":rabbit_ha_test_consumer",
         ":rabbit_ha_test_producer",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "message_size_limit_SUITE",
     size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -606,7 +546,6 @@ rabbitmq_integration_suite(
     name = "metrics_SUITE",
     size = "medium",
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
     ],
 )
@@ -657,117 +596,78 @@ rabbitmq_integration_suite(
             "no_nodes_configured",
         ],
     },
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "peer_discovery_dns_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "per_user_connection_channel_limit_partitions_SUITE",
     size = "large",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "per_user_connection_channel_limit_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "per_user_connection_channel_tracking_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "per_user_connection_tracking_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "per_vhost_connection_limit_partitions_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "per_vhost_connection_limit_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "per_vhost_msg_store_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "per_vhost_queue_limit_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "policy_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "priority_queue_recovery_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "priority_queue_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -780,9 +680,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "proxy_protocol_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -792,27 +689,18 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "queue_length_limits_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "queue_master_location_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -828,9 +716,6 @@ rabbitmq_integration_suite(
         "quorum_queue",
         "quorum_queue_in_memory_limit",
         "quorum_queue_in_memory_bytes",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
@@ -862,18 +747,12 @@ rabbitmq_integration_suite(
             "groups": ["clustered_with_partitions"],
         },
     },
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbit_core_metrics_gc_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 ct_suite(
@@ -984,27 +863,18 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbitmq_queues_cli_integration_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbitmqctl_integration_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbitmqctl_shutdown_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -1025,9 +895,6 @@ rabbitmq_integration_suite(
         "cluster_size_2",
         "cluster_size_3",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -1041,18 +908,12 @@ rabbitmq_integration_suite(
         "classic_queue",
         "quorum_queue",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "sync_detection_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 ct_suite(
@@ -1070,9 +931,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "topic_permission_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -1082,9 +940,6 @@ rabbitmq_integration_suite(
     additional_srcs = [
         "test/rabbit_auth_backend_context_propagation_mock.erl",
         "test/rabbit_foo_protocol_connection_info.erl",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
@@ -1104,9 +959,6 @@ rabbitmq_integration_suite(
     additional_srcs = [
         "test/rabbit_dummy_protocol_connection_info.erl",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 ct_suite(
@@ -1123,18 +975,12 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "unit_amqp091_server_properties_SUITE",
     size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "unit_app_management_SUITE",
     size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 ct_suite(
@@ -1179,9 +1025,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "unit_connection_tracking_SUITE",
     size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -1206,9 +1049,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "unit_file_handle_cache_SUITE",
     size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -1246,9 +1086,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "unit_log_management_SUITE",
     size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 ct_suite(
@@ -1325,9 +1162,6 @@ rabbitmq_integration_suite(
     additional_srcs = [
         "test/dummy_event_receiver.erl",
     ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 ct_suite(
@@ -1353,9 +1187,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "upgrade_preparation_SUITE",
     size = "medium",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
 )
 
 rabbitmq_integration_suite(
@@ -1367,8 +1198,5 @@ rabbitmq_integration_suite(
         "cluster_size_2_network",
         "cluster_size_1_direct",
         "cluster_size_2_direct",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
