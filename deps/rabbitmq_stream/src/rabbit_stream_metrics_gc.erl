@@ -47,8 +47,16 @@ handle_info(start_gc, State) ->
     GbSet =
         gb_sets:from_list(
             rabbit_amqqueue:list_names()),
-    gc_process_and_entity(?TABLE_CONSUMER, GbSet),
-    gc_process_and_entity(?TABLE_PUBLISHER, GbSet),
+    FunC = fun({Id, Pid, _}) ->
+                   not (rabbit_misc:is_process_alive(Pid)
+                        andalso gb_sets:is_member(Id, GbSet))
+           end,
+    FunP = fun({Id, Pid, _, _}) ->
+                   not (rabbit_misc:is_process_alive(Pid)
+                        andalso gb_sets:is_member(Id, GbSet))
+           end,
+    seshat_counters:gc(?TABLE_CONSUMER, FunC),
+    seshat_counters:gc(?TABLE_PUBLISHER, FunP),
     {noreply, start_timer(State)}.
 
 terminate(_Reason, #state{timer = TRef}) ->
@@ -61,20 +69,3 @@ code_change(_OldVsn, State, _Extra) ->
 start_timer(#state{interval = Interval} = St) ->
     TRef = erlang:send_after(Interval, self(), start_gc),
     St#state{timer = TRef}.
-
-gc_process_and_entity(Table, GbSet) ->
-    ets:foldl(fun({{Id, Pid, _} = Key, _}, none) ->
-                 gc_process_and_entity(Id, Pid, Table, Key, GbSet)
-              end,
-              none, Table).
-
-gc_process_and_entity(Id, Pid, Table, Key, GbSet) ->
-    case rabbit_misc:is_process_alive(Pid)
-         andalso gb_sets:is_member(Id, GbSet)
-    of
-        true ->
-            none;
-        false ->
-            ets:delete(Table, Key),
-            none
-    end.

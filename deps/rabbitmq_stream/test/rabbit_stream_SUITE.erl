@@ -93,14 +93,11 @@ test_gc_consumers(Config) ->
     rabbit_ct_broker_helpers:rpc(Config,
                                  0,
                                  rabbit_stream_metrics,
-                                 consumer_created,
+                                 consumer_counters,
                                  [Pid,
                                   #resource{name = <<"test">>,
                                             kind = queue,
                                             virtual_host = <<"/">>},
-                                  0,
-                                  10,
-                                  0,
                                   0]),
     ok = test_utils:wait_until(fun() -> consumer_count(Config) == 0 end),
     ok.
@@ -110,7 +107,7 @@ test_gc_publishers(Config) ->
     rabbit_ct_broker_helpers:rpc(Config,
                                  0,
                                  rabbit_stream_metrics,
-                                 publisher_created,
+                                 publisher_counters,
                                  [Pid,
                                   #resource{name = <<"test">>,
                                             kind = queue,
@@ -121,14 +118,14 @@ test_gc_publishers(Config) ->
     ok.
 
 consumer_count(Config) ->
-    ets_count(Config, ?TABLE_CONSUMER).
+    seshat_count(Config, ?TABLE_CONSUMER).
 
 publisher_count(Config) ->
-    ets_count(Config, ?TABLE_PUBLISHER).
+    seshat_count(Config, ?TABLE_PUBLISHER).
 
-ets_count(Config, Table) ->
-    Info = rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [Table]),
-    rabbit_misc:pget(size, Info).
+seshat_count(Config, Group) ->
+    Info = rabbit_ct_broker_helpers:rpc(Config, 0, seshat_counters, overview, [Group]),
+    maps:size(Info).
 
 java(Config) ->
     StreamPortNode1 = get_stream_port(Config, 0),

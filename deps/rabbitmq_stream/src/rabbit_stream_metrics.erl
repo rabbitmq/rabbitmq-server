@@ -20,30 +20,27 @@
 
 %% API
 -export([init/0]).
--export([consumer_created/6,
-         consumer_updated/6,
+-export([consumer_counters/3,
+         consumer_created/3,
          consumer_cancelled/3]).
--export([publisher_created/4,
-         publisher_updated/7,
-         publisher_deleted/3]).
+-export([publisher_counters/4,
+         publisher_deleted/4]).
 
 -define(CTAG_PREFIX, <<"stream.subid-">>).
 
 init() ->
-    rabbit_core_metrics:create_table({?TABLE_CONSUMER, set}),
-    rabbit_core_metrics:create_table({?TABLE_PUBLISHER, set}),
+    seshat_counters:new_group(?TABLE_CONSUMER),
+    seshat_counters:new_group(?TABLE_PUBLISHER),
     ok.
+
+consumer_counters(Connection, StreamResource, SubscriptionId) ->
+    seshat_counters:new(?TABLE_CONSUMER,
+                        {StreamResource, Connection, SubscriptionId},
+                        ?CONSUMER_COUNTERS).
 
 consumer_created(Connection,
                  StreamResource,
-                 SubscriptionId,
-                 Credits,
-                 MessageCount,
-                 Offset) ->
-    Values =
-        [{credits, Credits}, {consumed, MessageCount}, {offset, Offset}],
-    ets:insert(?TABLE_CONSUMER,
-               {{StreamResource, Connection, SubscriptionId}, Values}),
+                 SubscriptionId) ->
     rabbit_core_metrics:consumer_created(Connection,
                                          consumer_tag(SubscriptionId),
                                          false,
@@ -59,58 +56,24 @@ consumer_tag(SubscriptionId) ->
     SubIdBinary = rabbit_data_coercion:to_binary(SubscriptionId),
     <<?CTAG_PREFIX/binary, SubIdBinary/binary>>.
 
-consumer_updated(Connection,
-                 StreamResource,
-                 SubscriptionId,
-                 Credits,
-                 MessageCount,
-                 Offset) ->
-    Values =
-        [{credits, Credits}, {consumed, MessageCount}, {offset, Offset}],
-    ets:insert(?TABLE_CONSUMER,
-               {{StreamResource, Connection, SubscriptionId}, Values}),
-    ok.
-
 consumer_cancelled(Connection, StreamResource, SubscriptionId) ->
-    ets:delete(?TABLE_CONSUMER,
-               {StreamResource, Connection, SubscriptionId}),
+    seshat_counters:delete(?TABLE_CONSUMER,
+                           {StreamResource, Connection, SubscriptionId}),
     rabbit_core_metrics:consumer_deleted(Connection,
                                          consumer_tag(SubscriptionId),
                                          StreamResource),
     ok.
 
-publisher_created(Connection,
-                  StreamResource,
-                  PublisherId,
-                  Reference) ->
-    Values =
-        [{reference, format_publisher_reference(Reference)},
-         {published, 0},
-         {confirmed, 0},
-         {errored, 0}],
-    ets:insert(?TABLE_PUBLISHER,
-               {{StreamResource, Connection, PublisherId}, Values}),
-    ok.
+publisher_counters(Connection, StreamResource, PublisherId, Reference) ->
+    seshat_counters:new(?TABLE_PUBLISHER,
+                        {StreamResource, Connection, PublisherId,
+                         format_publisher_reference(Reference)},
+                        ?PUBLISHER_COUNTERS).
 
-publisher_updated(Connection,
-                  StreamResource,
-                  PublisherId,
-                  Reference,
-                  Published,
-                  Confirmed,
-                  Errored) ->
-    Values =
-        [{reference, format_publisher_reference(Reference)},
-         {published, Published},
-         {confirmed, Confirmed},
-         {errored, Errored}],
-    ets:insert(?TABLE_PUBLISHER,
-               {{StreamResource, Connection, PublisherId}, Values}),
-    ok.
-
-publisher_deleted(Connection, StreamResource, PublisherId) ->
-    ets:delete(?TABLE_PUBLISHER,
-               {StreamResource, Connection, PublisherId}),
+publisher_deleted(Connection, StreamResource, PublisherId, Reference) ->
+    seshat_counters:delete(?TABLE_PUBLISHER,
+                           {StreamResource, Connection, PublisherId,
+                            format_publisher_reference(Reference)}),
     ok.
 
 format_publisher_reference(undefined) ->
