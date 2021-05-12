@@ -38,7 +38,9 @@
          % operator_policy
          get_operator_policy/1,
          set_operator_policy/2,
+         % options
          get_options/1,
+         set_options/2,
          % pid
          get_pid/1,
          set_pid/2,
@@ -392,9 +394,16 @@ get_name(#amqqueue{name = Name}) -> Name.
 set_name(#amqqueue{} = Queue, Name) ->
     Queue#amqqueue{name = Name}.
 
+%% options
+
 -spec get_options(amqqueue()) -> map().
 
 get_options(#amqqueue{options = Options}) -> Options.
+
+-spec set_options(amqqueue(), map()) -> amqqueue().
+
+set_options(#amqqueue{} = Queue, Options) ->
+    Queue#amqqueue{options = Options}.
 
 % pid
 
