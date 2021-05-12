@@ -17,6 +17,7 @@
 -module(rabbit_stream_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -include("rabbit_stream.hrl").
@@ -164,283 +165,127 @@ get_node_name(Config, Node) ->
 test_server(Port) ->
     {ok, S} =
         gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
-    test_peer_properties(S),
-    test_authenticate(S),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(S, C0),
+    C2 = test_authenticate(S, C1),
     Stream = <<"stream1">>,
-    test_create_stream(S, Stream),
+    C3 = test_create_stream(S, Stream, C2),
     PublisherId = 42,
-    test_declare_publisher(S, PublisherId, Stream),
+    C4 = test_declare_publisher(S, PublisherId, Stream, C3),
     Body = <<"hello">>,
-    test_publish_confirm(S, PublisherId, Body),
+    C5 = test_publish_confirm(S, PublisherId, Body, C4),
     SubscriptionId = 42,
-    Rest = test_subscribe(S, SubscriptionId, Stream),
-    test_deliver(S, Rest, SubscriptionId, Body),
-    test_delete_stream(S, Stream),
-    test_metadata_update_stream_deleted(S, Stream),
-    test_close(S),
+    C6 = test_subscribe(S, SubscriptionId, Stream, C5),
+    C7 = test_deliver(S, SubscriptionId, Body, C6),
+    C8 = test_delete_stream(S, Stream, C7),
+    % test_metadata_update_stream_deleted(S, Stream),
+    _C9 = test_close(S, C8),
     closed = wait_for_socket_close(S, 10),
     ok.
 
-test_peer_properties(S) ->
+test_peer_properties(S, C0) ->
     PeerPropertiesFrame =
-        <<?REQUEST:1,
-          ?COMMAND_PEER_PROPERTIES:15,
-          ?VERSION_1:16,
-          1:32,
-          0:32>>,
-    PeerPropertiesFrameSize = byte_size(PeerPropertiesFrame),
-    gen_tcp:send(S,
-                 <<PeerPropertiesFrameSize:32, PeerPropertiesFrame/binary>>),
-    {ok,
-     <<_Size:32,
-       ?RESPONSE:1,
-       ?COMMAND_PEER_PROPERTIES:15,
-       ?VERSION_1:16,
-       1:32,
-       ?RESPONSE_CODE_OK:16,
-       _Rest/binary>>} =
-        gen_tcp:recv(S, 0, 5000).
+        rabbit_stream_core:frame({request, 1, {peer_properties, #{}}}),
+    ok = gen_tcp:send(S, PeerPropertiesFrame),
+    {C, [Cmd]} = receive_commands(S, C0),
+    ?assertMatch({response, 1, {peer_properties, ?RESPONSE_CODE_OK, _}}, Cmd),
+    C.
 
-test_authenticate(S) ->
-    SaslHandshakeFrame =
-        <<?REQUEST:1, ?COMMAND_SASL_HANDSHAKE:15, ?VERSION_1:16, 1:32>>,
-    SaslHandshakeFrameSize = byte_size(SaslHandshakeFrame),
-    gen_tcp:send(S,
-                 <<SaslHandshakeFrameSize:32, SaslHandshakeFrame/binary>>),
+test_authenticate(S, C0) ->
+    SaslHandshakeFrame = rabbit_stream_core:frame({request, 1, sasl_handshake}),
+    ok = gen_tcp:send(S, SaslHandshakeFrame),
     Plain = <<"PLAIN">>,
     AmqPlain = <<"AMQPLAIN">>,
-    {ok, SaslAvailable} = gen_tcp:recv(S, 0, 5000),
-    %% mechanisms order is not deterministic, so checking both orders
-    ok =
-        case SaslAvailable of
-            <<31:32,
-              ?RESPONSE:1,
-              ?COMMAND_SASL_HANDSHAKE:15,
-              ?VERSION_1:16,
-              1:32,
-              ?RESPONSE_CODE_OK:16,
-              2:32,
-              5:16,
-              Plain:5/binary,
-              8:16,
-              AmqPlain:8/binary>> ->
-                ok;
-            <<31:32,
-              ?RESPONSE:1,
-              ?COMMAND_SASL_HANDSHAKE:15,
-              ?VERSION_1:16,
-              1:32,
-              ?RESPONSE_CODE_OK:16,
-              2:32,
-              8:16,
-              AmqPlain:8/binary,
-              5:16,
-              Plain:5/binary>> ->
-                ok;
-            _ ->
-                failed
-        end,
+    {C1, [Cmd]} = receive_commands(S, C0),
+    case Cmd of
+        {response, _, {sasl_handshake,  ?RESPONSE_CODE_OK, Mechanisms}} ->
+            ?assertEqual([AmqPlain, Plain], lists:sort(Mechanisms));
+        _ ->
+            ct:fail("invalid cmd ~p", [Cmd])
+    end,
 
     Username = <<"guest">>,
     Password = <<"guest">>,
     Null = 0,
     PlainSasl = <<Null:8, Username/binary, Null:8, Password/binary>>,
-    PlainSaslSize = byte_size(PlainSasl),
 
     SaslAuthenticateFrame =
-        <<?REQUEST:1,
-          ?COMMAND_SASL_AUTHENTICATE:15,
-          ?VERSION_1:16,
-          2:32,
-          5:16,
-          Plain/binary,
-          PlainSaslSize:32,
-          PlainSasl/binary>>,
+        rabbit_stream_core:frame({request, 2,
+                                  {sasl_authenticate, Plain, PlainSasl}}),
+    ok = gen_tcp:send(S, SaslAuthenticateFrame),
+    {C2, [SaslAuth | Cmds2]} = receive_commands(S, C1),
+    {response, 2, {sasl_authenticate, ?RESPONSE_CODE_OK}} = SaslAuth,
+    {C3, Tune} = case Cmds2 of
+                     [] ->
+                         {C2b, [X]} = receive_commands(S, C2),
+                         {C2b, X};
+                     [T] ->
+                         {C2, T}
+                 end,
 
-    SaslAuthenticateFrameSize = byte_size(SaslAuthenticateFrame),
+    {tune, ?DEFAULT_FRAME_MAX, ?DEFAULT_HEARTBEAT} = Tune,
 
-    gen_tcp:send(S,
-                 <<SaslAuthenticateFrameSize:32,
-                   SaslAuthenticateFrame/binary>>),
-    {ok,
-     <<10:32,
-       ?RESPONSE:1,
-       ?COMMAND_SASL_AUTHENTICATE:15,
-       ?VERSION_1:16,
-       2:32,
-       ?RESPONSE_CODE_OK:16,
-       RestTune/binary>>} =
-        gen_tcp:recv(S, 0, 5000),
-
-    TuneExpected =
-        <<12:32,
-          ?REQUEST:1,
-          ?COMMAND_TUNE:15,
-          ?VERSION_1:16,
-          ?DEFAULT_FRAME_MAX:32,
-          ?DEFAULT_HEARTBEAT:32>>,
-    case RestTune of
-        <<>> ->
-            {ok, TuneExpected} = gen_tcp:recv(S, 0, 5000);
-        TuneReceived ->
-            TuneExpected = TuneReceived
-    end,
-
-    TuneFrame =
-        <<?RESPONSE:1,
-          ?COMMAND_TUNE:15,
-          ?VERSION_1:16,
-          ?DEFAULT_FRAME_MAX:32,
-          0:32>>,
-    TuneFrameSize = byte_size(TuneFrame),
-    gen_tcp:send(S, <<TuneFrameSize:32, TuneFrame/binary>>),
+    TuneFrame = rabbit_stream_core:frame({response, 0, {tune, ?DEFAULT_FRAME_MAX, 0}}),
+    ok = gen_tcp:send(S, TuneFrame),
 
     VirtualHost = <<"/">>,
-    VirtualHostLength = byte_size(VirtualHost),
-    OpenFrame =
-        <<?REQUEST:1,
-          ?COMMAND_OPEN:15,
-          ?VERSION_1:16,
-          3:32,
-          VirtualHostLength:16,
-          VirtualHost/binary>>,
-    OpenFrameSize = byte_size(OpenFrame),
-    gen_tcp:send(S, <<OpenFrameSize:32, OpenFrame/binary>>),
-    {ok,
-     <<10:32,
-       ?RESPONSE:1,
-       ?COMMAND_OPEN:15,
-       ?VERSION_1:16,
-       3:32,
-       ?RESPONSE_CODE_OK:16>>} =
-        gen_tcp:recv(S, 0, 5000).
+    OpenFrame = rabbit_stream_core:frame({request, 3, {open, VirtualHost}}),
+    ok = gen_tcp:send(S, OpenFrame),
+    {C4, [{response, 3, {open, ?RESPONSE_CODE_OK}}]} = receive_commands(S, C3),
+    C4.
 
-test_create_stream(S, Stream) ->
-    StreamSize = byte_size(Stream),
-    CreateStreamFrame =
-        <<?REQUEST:1,
-          ?COMMAND_CREATE_STREAM:15,
-          ?VERSION_1:16,
-          1:32,
-          StreamSize:16,
-          Stream:StreamSize/binary,
-          0:32>>,
-    FrameSize = byte_size(CreateStreamFrame),
-    gen_tcp:send(S, <<FrameSize:32, CreateStreamFrame/binary>>),
-    {ok,
-     <<_Size:32,
-       ?RESPONSE:1,
-       ?COMMAND_CREATE_STREAM:15,
-       ?VERSION_1:16,
-       1:32,
-       ?RESPONSE_CODE_OK:16>>} =
-        gen_tcp:recv(S, 0, 5000).
+test_create_stream(S, Stream, C0) ->
+    CreateStreamFrame = rabbit_stream_core:frame({request, 1,
+                                                  {create_stream, Stream, #{}}}),
+    ok = gen_tcp:send(S, CreateStreamFrame),
+    {C, [Cmd]} = receive_commands(S, C0),
+    ?assertMatch({response, 1, {create_stream, ?RESPONSE_CODE_OK}}, Cmd),
+    C.
 
-test_delete_stream(S, Stream) ->
-    StreamSize = byte_size(Stream),
-    DeleteStreamFrame =
-        <<?REQUEST:1,
-          ?COMMAND_DELETE_STREAM:15,
-          ?VERSION_1:16,
-          1:32,
-          StreamSize:16,
-          Stream:StreamSize/binary>>,
-    FrameSize = byte_size(DeleteStreamFrame),
-    gen_tcp:send(S, <<FrameSize:32, DeleteStreamFrame/binary>>),
-    ResponseFrameSize = 10,
-    {ok,
-     <<ResponseFrameSize:32,
-       ?RESPONSE:1,
-       ?COMMAND_DELETE_STREAM:15,
-       ?VERSION_1:16,
-       1:32,
-       ?RESPONSE_CODE_OK:16>>} =
-        gen_tcp:recv(S, 4 + 10, 5000).
+test_delete_stream(S, Stream, C0) ->
+    DeleteStreamFrame = rabbit_stream_core:frame({request, 1, {delete_stream, Stream}}),
+    ok = gen_tcp:send(S, DeleteStreamFrame),
+    {C1, [Cmd | MaybeMetaData]} = receive_commands(S, C0),
+    ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, Cmd),
+    case MaybeMetaData of
+        [] ->
+            {C, [Meta]} = receive_commands(S, C1),
+            {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta,
+            C;
+        [Meta] ->
+            {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta,
+            C1
+    end.
 
-test_declare_publisher(S, PublisherId, Stream) ->
-    StreamSize = byte_size(Stream),
+test_declare_publisher(S, PublisherId, Stream, C0) ->
     DeclarePublisherFrame =
-        <<?REQUEST:1,
-          ?COMMAND_DECLARE_PUBLISHER:15,
-          ?VERSION_1:16,
-          1:32,
-          PublisherId:8,
-          0:16, %% empty publisher reference
-          StreamSize:16,
-          Stream:StreamSize/binary>>,
-    FrameSize = byte_size(DeclarePublisherFrame),
-    gen_tcp:send(S, <<FrameSize:32, DeclarePublisherFrame/binary>>),
-    Res = gen_tcp:recv(S, 0, 5000),
-    {ok,
-     <<_Size:32,
-       ?RESPONSE:1,
-       ?COMMAND_DECLARE_PUBLISHER:15,
-       ?VERSION_1:16,
-       1:32,
-       ?RESPONSE_CODE_OK:16,
-       Rest/binary>>} =
-        Res,
-    Rest.
+        rabbit_stream_core:frame({request, 1,
+                                  {declare_publisher, PublisherId, <<>>, Stream}}),
+    ok = gen_tcp:send(S, DeclarePublisherFrame),
+    {C, [Cmd]} = receive_commands(S, C0),
+    ?assertMatch({response,1, {declare_publisher, ?RESPONSE_CODE_OK}}, Cmd),
+    C.
 
-test_publish_confirm(S, PublisherId, Body) ->
+test_publish_confirm(S, PublisherId, Body, C0) ->
     BodySize = byte_size(Body),
-    PublishFrame =
-        <<?REQUEST:1,
-          ?COMMAND_PUBLISH:15,
-          ?VERSION_1:16,
-          PublisherId:8,
-          1:32,
-          1:64,
-          BodySize:32,
-          Body:BodySize/binary>>,
-    FrameSize = byte_size(PublishFrame),
-    gen_tcp:send(S, <<FrameSize:32, PublishFrame/binary>>),
-    {ok,
-     <<_Size:32,
-       ?REQUEST:1,
-       ?COMMAND_PUBLISH_CONFIRM:15,
-       ?VERSION_1:16,
-       PublisherId:8,
-       1:32,
-       1:64>>} =
-        gen_tcp:recv(S, 0, 5000).
+    Messages = [<<1:64, 0:1, BodySize:31, Body:BodySize/binary>>],
+    PublishFrame = rabbit_stream_core:frame({publish, PublisherId, 1, Messages}),
+    ok = gen_tcp:send(S, PublishFrame),
+    {C, [Cmd]} = receive_commands(S, C0),
+    ?assertMatch({publish_confirm, PublisherId, [1]}, Cmd),
+    C.
 
-test_subscribe(S, SubscriptionId, Stream) ->
-    StreamSize = byte_size(Stream),
-    SubscribeFrame =
-        <<?REQUEST:1,
-          ?COMMAND_SUBSCRIBE:15,
-          ?VERSION_1:16,
-          1:32,
-          SubscriptionId:8,
-          StreamSize:16,
-          Stream:StreamSize/binary,
-          ?OFFSET_TYPE_OFFSET:16,
-          0:64,
-          10:16>>,
-    FrameSize = byte_size(SubscribeFrame),
-    gen_tcp:send(S, <<FrameSize:32, SubscribeFrame/binary>>),
-    Res = gen_tcp:recv(S, 0, 5000),
-    {ok,
-     <<_Size:32,
-       ?RESPONSE:1,
-       ?COMMAND_SUBSCRIBE:15,
-       ?VERSION_1:16,
-       1:32,
-       ?RESPONSE_CODE_OK:16,
-       Rest/binary>>} =
-        Res,
-    Rest.
+test_subscribe(S, SubscriptionId, Stream, C0) ->
+    SubCmd = {request, 1, {subscribe, SubscriptionId, Stream, 0, 10}},
+    SubscribeFrame = rabbit_stream_core:frame(SubCmd),
+    ok = gen_tcp:send(S, SubscribeFrame),
+    {C, [Cmd]} = receive_commands(S, C0),
+    ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_OK}}, Cmd),
+    C.
 
-test_deliver(S, Rest, SubscriptionId, Body) ->
-    BodySize = byte_size(Body),
-    Frame = read_frame(S, Rest),
-    <<62:32,
-      ?REQUEST:1,
-      ?COMMAND_DELIVER:15,
-      ?VERSION_1:16,
-      SubscriptionId:8,
-      5:4/unsigned,
+test_deliver(S, SubscriptionId, Body, C0) ->
+    {C, [{deliver, SubscriptionId, Chunk}]} = receive_commands(S, C0),
+    <<5:4/unsigned,
       0:4/unsigned,
       0:8,
       1:16,
@@ -454,8 +299,8 @@ test_deliver(S, Rest, SubscriptionId, Body) ->
       _ReservedBytes:32,
       0:1,
       BodySize:31/unsigned,
-      Body/binary>> =
-        Frame.
+      Body:BodySize/binary>> = Chunk,
+    C.
 
 test_metadata_update_stream_deleted(S, Stream) ->
     StreamSize = byte_size(Stream),
@@ -470,27 +315,12 @@ test_metadata_update_stream_deleted(S, Stream) ->
        Stream/binary>>} =
         gen_tcp:recv(S, 0, 5000).
 
-test_close(S) ->
+test_close(S, C0) ->
     CloseReason = <<"OK">>,
-    CloseReasonSize = byte_size(CloseReason),
-    CloseFrame =
-        <<?REQUEST:1,
-          ?COMMAND_CLOSE:15,
-          ?VERSION_1:16,
-          1:32,
-          ?RESPONSE_CODE_OK:16,
-          CloseReasonSize:16,
-          CloseReason/binary>>,
-    CloseFrameSize = byte_size(CloseFrame),
-    gen_tcp:send(S, <<CloseFrameSize:32, CloseFrame/binary>>),
-    {ok,
-     <<10:32,
-       ?RESPONSE:1,
-       ?COMMAND_CLOSE:15,
-       ?VERSION_1:16,
-       1:32,
-       ?RESPONSE_CODE_OK:16>>} =
-        gen_tcp:recv(S, 0, 5000).
+    CloseFrame = rabbit_stream_core:frame({request, 1, {close, ?RESPONSE_CODE_OK, CloseReason}}),
+    ok = gen_tcp:send(S, CloseFrame),
+    {C, [{response, 1, {close,  ?RESPONSE_CODE_OK}}]} = receive_commands(S, C0),
+    C.
 
 wait_for_socket_close(_S, 0) ->
     not_closed;
@@ -517,3 +347,20 @@ read_frame(S, Buffer) ->
         inet:setopts(S, [{active, false}]),
         Buffer
     end.
+
+receive_commands(S, C0) ->
+    case gen_tcp:recv(S, 0, 5000) of
+        {ok, Data} ->
+            case rabbit_stream_core:incoming_data(Data, C0) of
+                {C1, []} ->
+                    %% no command received, try once more
+                    {ok, Data2} = gen_tcp:recv(S, 0, 5000),
+                    rabbit_stream_core:incoming_data(Data2, C1);
+                {_C, _Cmds} = Ret ->
+                    Ret
+            end;
+        {error, Err} ->
+            ct:pal("error receiving data ~w", [Err]),
+            {C0, []}
+    end.
+

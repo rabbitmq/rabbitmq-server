@@ -105,7 +105,8 @@
       create_stream |
       delete_stream |
       open |
-      close,
+      close |
+      sasl_authenticate, %% only for code 'ok' - else it may have additiona data
       response_code()} |
      {query_publisher_sequence, response_code(), sequence()} |
      %% commit offset has no response
