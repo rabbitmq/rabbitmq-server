@@ -229,6 +229,7 @@ erlc(
         "test/quorum_queue_utils.erl",
     ],
     dest = "test",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
 erlc(
@@ -238,6 +239,7 @@ erlc(
         "test/rabbit_ha_test_consumer.erl",
     ],
     dest = "test",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         "//deps/amqp_client:bazel_erlang_lib",
         "//deps/rabbit_common:bazel_erlang_lib",
@@ -251,10 +253,21 @@ erlc(
         "test/rabbit_ha_test_producer.erl",
     ],
     dest = "test",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         "//deps/amqp_client:bazel_erlang_lib",
         "//deps/rabbit_common:bazel_erlang_lib",
     ],
+)
+
+erlc(
+    name = "test_util",
+    testonly = True,
+    srcs = [
+        "test/test_util.erl",
+    ],
+    dest = "test",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
 rabbitmq_suite(
@@ -766,16 +779,6 @@ rabbitmq_suite(
     deps = [
         "//deps/rabbit_common:bazel_erlang_lib",
     ],
-)
-
-erlc(
-    name = "test_util",
-    testonly = True,
-    srcs = [
-        "test/test_util.erl",
-    ],
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
 rabbitmq_suite(
