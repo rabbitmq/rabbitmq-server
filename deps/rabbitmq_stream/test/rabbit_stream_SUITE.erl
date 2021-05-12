@@ -16,13 +16,13 @@
 
 -module(rabbit_stream_SUITE).
 
--include_lib("common_test/include/ct.hrl").
+% -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -include("rabbit_stream.hrl").
 -include("rabbit_stream_metrics.hrl").
-
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -330,22 +330,6 @@ wait_for_socket_close(S, Attempt) ->
             wait_for_socket_close(S, Attempt - 1);
         {error, closed} ->
             closed
-    end.
-
-read_frame(S, Buffer) ->
-    inet:setopts(S, [{active, once}]),
-    receive
-        {tcp, S, Received} ->
-            Data = <<Buffer/binary, Received/binary>>,
-            case Data of
-                <<Size:32, _Body:Size/binary>> ->
-                    Data;
-                _ ->
-                    read_frame(S, Data)
-            end
-    after 1000 ->
-        inet:setopts(S, [{active, false}]),
-        Buffer
     end.
 
 receive_commands(S, C0) ->
