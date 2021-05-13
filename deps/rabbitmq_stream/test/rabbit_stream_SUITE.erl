@@ -249,13 +249,17 @@ test_delete_stream(S, Stream, C0) ->
     ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, Cmd),
     case MaybeMetaData of
         [] ->
-            {C, [Meta]} = receive_commands(S, C1),
-            {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta,
-            C;
+            test_metadata_update_stream_deleted(S, Stream, C1);
         [Meta] ->
             {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta,
             C1
     end.
+
+test_metadata_update_stream_deleted(S, Stream, C0) ->
+    {C1, [Meta]} = receive_commands(S, C0),
+    {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta,
+    C1.
+
 
 test_declare_publisher(S, PublisherId, Stream, C0) ->
     DeclarePublisherFrame =
