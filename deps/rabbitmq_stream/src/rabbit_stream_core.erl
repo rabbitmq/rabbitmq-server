@@ -381,8 +381,6 @@ response_body({partitions = Tag, Code, Streams}) ->
 
 
 
-request_body({close, Code, Reason}) ->
-    {close, <<Code:16, ?STRING(Reason)>>};
 request_body({declare_publisher = Tag, PublisherId, WriterRef, Stream}) ->
     {Tag, <<PublisherId:8, ?STRING(WriterRef), ?STRING(Stream)>>};
 request_body({query_publisher_sequence = Tag, WriterRef, Stream}) ->
