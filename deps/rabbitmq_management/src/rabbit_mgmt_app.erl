@@ -133,11 +133,11 @@ get_tls_listener() ->
                  {ssl_opts, Listener0}
              ];
         CowboyOpts ->
-            Listener1 = lists:keydelete(cowboy_opts, 1, Listener0),
+            WithoutCowboyOpts = lists:keydelete(cowboy_opts, 1, Listener0),
             [
                 {port, Port},
                 {ssl, true},
-                {ssl_opts, Listener1},
+                {ssl_opts, WithoutCowboyOpts},
                 {cowboy_opts, CowboyOpts}
             ]
      end.
