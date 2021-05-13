@@ -128,6 +128,46 @@ end}.
     {datatype, integer}
 ]}.
 
+
+%%
+%% TLS
+%%
+
+{mapping, "stream.listeners.ssl", "rabbitmq_stream.ssl_listeners",[
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "stream.listeners.ssl.$name", "rabbitmq_stream.ssl_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbitmq_stream.ssl_listeners",
+fun(Conf) ->
+    case cuttlefish:conf_get("stream.listeners.ssl", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("stream.listeners.ssl", Conf),
+            [ V || {_, V} <- Settings ]
+    end
+end}.
+
+%% Number of Erlang processes that will accept connections for the SSL listeners.
+%%
+%% {num_ssl_acceptors, 10},
+
+{mapping, "stream.num_acceptors.ssl", "rabbitmq_stream.num_ssl_acceptors", [
+    {datatype, integer}
+]}.
+
+%% Additional TLS options
+
+%% Extract a name from the client's certificate when using TLS.
+%%
+%% Defaults to true.
+
+{mapping, "stream.ssl_cert_login", "rabbitmq_stream.ssl_cert_login",
+    [{datatype, {enum, [true, false]}}]}.
+
 {mapping, "stream.initial_credits", "rabbitmq_stream.initial_credits", [
     {datatype, integer}
 ]}.

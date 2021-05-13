@@ -32,6 +32,21 @@ init([]) ->
         application:get_env(rabbitmq_stream, num_tcp_acceptors, 10),
     {ok, SocketOpts} =
         application:get_env(rabbitmq_stream, tcp_listen_options),
+
+    {ok, SslListeners0} = application:get_env(rabbitmq_stream, ssl_listeners),
+    {ok, SslSocketOpts} =
+        application:get_env(rabbitmq_stream, ssl_listen_options),
+    {SslOpts, NumSslAcceptors, SslListeners}
+        = case SslListeners0 of
+              [] -> {none, 0, []};
+              _  -> {rabbit_networking:ensure_ssl(),
+                     application:get_env(rabbitmq_stream, num_ssl_acceptors, 10),
+                     case rabbit_networking:poodle_check('STREAM') of
+                         ok     -> SslListeners0;
+                         danger -> []
+                     end}
+          end,
+
     Nodes = rabbit_mnesia:cluster_nodes(all),
     OsirisConf = #{nodes => Nodes},
 
@@ -64,7 +79,10 @@ init([]) ->
       [StreamManager, MetricsGc]
       ++ listener_specs(fun tcp_listener_spec/1,
                         [SocketOpts, ServerConfiguration, NumTcpAcceptors],
-                        Listeners)}}.
+                        Listeners)
+      ++ listener_specs(fun ssl_listener_spec/1,
+                        [SslSocketOpts, SslOpts, ServerConfiguration, NumSslAcceptors],
+                        SslListeners)}}.
 
 listener_specs(Fun, Args, Listeners) ->
     [Fun([Address | Args])
@@ -81,6 +99,20 @@ tcp_listener_spec([Address,
                                         ranch_tcp,
                                         rabbit_stream_connection_sup,
                                         Configuration,
-                                        stream,
+                                        'stream',
                                         NumAcceptors,
                                         "Stream TCP listener").
+
+ssl_listener_spec([Address,
+                   SocketOpts,
+                   SslOpts,
+                   Configuration,
+                   NumAcceptors]) ->
+    rabbit_networking:tcp_listener_spec(rabbit_stream_listener_sup,
+                                        Address, SocketOpts ++ SslOpts,
+                                        ranch_ssl,
+                                        rabbit_stream_connection_sup,
+                                        Configuration,
+                                        'stream/ssl',
+                                        NumAcceptors,
+                                        "Stream TLS listener").
