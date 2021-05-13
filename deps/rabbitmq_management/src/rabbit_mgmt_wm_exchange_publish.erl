@@ -93,6 +93,9 @@ bad({shutdown, {server_initiated_close, Code, Reason}}, ReqData, Context) ->
     rabbit_mgmt_util:bad_request_exception(Code, Reason, ReqData, Context);
 bad(rejected, ReqData, Context) ->
     Msg = "Unable to publish message. Check queue limits.",
+    rabbit_mgmt_util:bad_request_exception(rejected, Msg, ReqData, Context);
+bad({{coordinator_unavailable, _}, _}, ReqData, Context) ->
+    Msg = "Unable to publish message. Coordinator unavailable.",
     rabbit_mgmt_util:bad_request_exception(rejected, Msg, ReqData, Context).
 
 is_authorized(ReqData, Context) ->

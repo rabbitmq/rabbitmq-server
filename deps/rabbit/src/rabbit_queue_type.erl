@@ -140,7 +140,7 @@
 
 %% stateful
 %% intitialise and return a queue type specific session context
--callback init(amqqueue:amqqueue()) -> queue_state().
+-callback init(amqqueue:amqqueue()) -> {ok, queue_state()} | {error, Reason :: term()}.
 
 -callback close(queue_state()) -> ok.
 %% update the queue type state from amqqrecord
@@ -439,14 +439,22 @@ module(QRef, Ctxs) ->
 
 -spec deliver([amqqueue:amqqueue()], Delivery :: term(),
               stateless | state()) ->
-    {ok, state(), actions()}.
-deliver(Qs, Delivery, stateless) ->
+    {ok, state(), actions()} | {error, Reason :: term()}.
+deliver(Qs, Delivery, State) ->
+    try
+        deliver0(Qs, Delivery, State)
+    catch
+        exit:Reason ->
+            {error, Reason}
+    end.
+
+deliver0(Qs, Delivery, stateless) ->
     _ = lists:map(fun(Q) ->
                           Mod = amqqueue:get_type(Q),
                           _ = Mod:deliver([{Q, stateless}], Delivery)
                   end, Qs),
     {ok, stateless, []};
-deliver(Qs, Delivery, #?STATE{} = State0) ->
+deliver0(Qs, Delivery, #?STATE{} = State0) ->
     %% TODO: optimise single queue case?
     %% sort by queue type - then dispatch each group
     ByType = lists:foldl(
@@ -533,9 +541,14 @@ get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState)
             %% not found and no initial state passed - initialize new state
             Mod = amqqueue:get_type(Q),
             Name = amqqueue:get_name(Q),
-            #ctx{module = Mod,
-                 name = Name,
-                 state = Mod:init(Q)};
+            case Mod:init(Q) of
+                {error, Reason} ->
+                    exit({Reason, Ref});
+                {ok, QState} ->
+                    #ctx{module = Mod,
+                         name = Name,
+                         state = QState}
+            end;
         _  ->
             %% not found - initialize with supplied initial state
             Mod = amqqueue:get_type(Q),

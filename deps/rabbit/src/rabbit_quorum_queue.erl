@@ -113,7 +113,7 @@ is_enabled() ->
 
 %%----------------------------------------------------------------------------
 
--spec init(amqqueue:amqqueue()) -> rabbit_fifo_client:state().
+-spec init(amqqueue:amqqueue()) -> {ok, rabbit_fifo_client:state()}.
 init(Q) when ?is_amqqueue(Q) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
     %% This lookup could potentially return an {error, not_found}, but we do not
@@ -124,9 +124,9 @@ init(Q) when ?is_amqqueue(Q) ->
     %% Ensure the leader is listed first
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
-    rabbit_fifo_client:init(QName, Servers, SoftLimit,
-                            fun() -> credit_flow:block(Name) end,
-                            fun() -> credit_flow:unblock(Name), ok end).
+    {ok, rabbit_fifo_client:init(QName, Servers, SoftLimit,
+                                 fun() -> credit_flow:block(Name) end,
+                                 fun() -> credit_flow:unblock(Name), ok end)}.
 
 -spec close(rabbit_fifo_client:state()) -> ok.
 close(_State) ->

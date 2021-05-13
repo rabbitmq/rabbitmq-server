@@ -628,17 +628,24 @@ readers(QName) ->
 
 init(Q) when ?is_amqqueue(Q) ->
     Leader = amqqueue:get_pid(Q),
+    QName = amqqueue:get_name(Q),
     #{name := StreamId} = amqqueue:get_type_state(Q),
     %% tell us about leader changes so we can fail over
-    {ok, ok, _} = rabbit_stream_coordinator:register_listener(Q),
-    Prefix = erlang:pid_to_list(self()) ++ "_",
-    WriterId = rabbit_guid:binary(rabbit_guid:gen(), Prefix),
-    {ok, SoftLimit} = application:get_env(rabbit, stream_messages_soft_limit),
-    #stream_client{stream_id = StreamId,
-                   name = amqqueue:get_name(Q),
-                   leader = Leader,
-                   writer_id = WriterId,
-                   soft_limit = SoftLimit}.
+    case rabbit_stream_coordinator:register_listener(Q) of
+        {ok, ok, _} ->
+            Prefix = erlang:pid_to_list(self()) ++ "_",
+            WriterId = rabbit_guid:binary(rabbit_guid:gen(), Prefix),
+            {ok, SoftLimit} = application:get_env(rabbit, stream_messages_soft_limit),
+            {ok, #stream_client{stream_id = StreamId,
+                                name = amqqueue:get_name(Q),
+                                leader = Leader,
+                                writer_id = WriterId,
+                                soft_limit = SoftLimit}};
+        {error, coordinator_unavailable} = E ->
+            rabbit_log:warning("Failed to start stream queue ~p: coordinator unavailable",
+                               [rabbit_misc:rs(QName)]),
+            E
+    end.
 
 close(#stream_client{readers = Readers}) ->
     _ = maps:map(fun (_, #stream{log = Log}) ->

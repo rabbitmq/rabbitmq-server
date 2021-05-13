@@ -2123,27 +2123,33 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{
                                         QRef = amqqueue:get_name(Q),
                                         [QRef | Acc]
                                 end, [], Qs),
-    {ok, QueueStates, Actions} =
-        rabbit_queue_type:deliver(Qs, Delivery, QueueStates0),
-    %% NB: the order here is important since basic.returns must be
-    %% sent before confirms.
-    ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
-    State1 = process_routing_confirm(Confirm, AllQueueNames,
-                                     MsgSeqNo, XName, State0),
-    %% Actions must be processed after registering confirms as actions may
-    %% contain rejections of publishes
-    State = handle_queue_actions(Actions,
-                                 State1#ch{queue_states = QueueStates}),
-    case rabbit_event:stats_level(State, #ch.stats_timer) of
-        fine ->
-            ?INCR_STATS(exchange_stats, XName, 1, publish),
-            [?INCR_STATS(queue_exchange_stats,
-                         {amqqueue:get_name(Q), XName}, 1, publish)
-             || Q <- Qs];
-        _ ->
-            ok
-    end,
-    State.
+    case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
+        {ok, QueueStates, Actions}  ->
+            %% NB: the order here is important since basic.returns must be
+            %% sent before confirms.
+            ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
+            State1 = process_routing_confirm(Confirm, AllQueueNames,
+                                             MsgSeqNo, XName, State0),
+            %% Actions must be processed after registering confirms as actions may
+            %% contain rejections of publishes
+            State = handle_queue_actions(Actions,
+                                         State1#ch{queue_states = QueueStates}),
+            case rabbit_event:stats_level(State, #ch.stats_timer) of
+                fine ->
+                    ?INCR_STATS(exchange_stats, XName, 1, publish),
+                    [?INCR_STATS(queue_exchange_stats,
+                                 {amqqueue:get_name(Q), XName}, 1, publish)
+                     || Q <- Qs];
+                _ ->
+                    ok
+            end,
+            State;
+        {error, {coordinator_unavailable, Resource}} ->
+            rabbit_misc:protocol_error(
+              resource_error,
+              "Stream coordinator unavailable for ~s",
+              [rabbit_misc:rs(Resource)])
+    end.
 
 process_routing_mandatory(_Mandatory = true,
                           _RoutedToQs = [],
