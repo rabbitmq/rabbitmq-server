@@ -32,7 +32,7 @@ all() ->
 groups() ->
     [{single_node, [],
       [test_stream, test_stream_tls, test_gc_consumers, test_gc_publishers]},
-     {cluster, [], [test_stream, java]}].
+     {cluster, [], [test_stream, test_stream_tls, java]}].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -61,7 +61,8 @@ init_per_group(cluster = Group, Config) ->
                                      [{rmq_nodes_count, 3},
                                       {rmq_nodename_suffix, Group},
                                       {tcp_ports_base}]),
-    rabbit_ct_helpers:run_setup_steps(Config2,
+    Config3 = rabbit_ct_helpers:set_config(Config2, {rabbitmq_ct_tls_verify, verify_none}),
+    rabbit_ct_helpers:run_setup_steps(Config3,
                                       [fun(StepConfig) ->
                                           rabbit_ct_helpers:merge_app_env(StepConfig,
                                                                           {aten,
@@ -341,6 +342,9 @@ test_deliver(Transport, S, SubscriptionId, Body, C0) ->
       Body:BodySize/binary>> =
         Chunk,
     C.
+
+test_metadata_update_stream_deleted(S, Stream) ->
+    test_metadata_update_stream_deleted(gen_tcp, S, Stream).
 
 test_metadata_update_stream_deleted(Transport, S, Stream) ->
     StreamSize = byte_size(Stream),

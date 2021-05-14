@@ -79,7 +79,8 @@
          stats_timer :: undefined | reference(),
          resource_alarm :: boolean(),
          send_file_oct ::
-             atomics:atomics_ref()}). % number of bytes sent with send_file (for metrics)
+             atomics:atomics_ref(),
+         transport :: 'tcp' | 'ssl'}). % number of bytes sent with send_file (for metrics)
 -record(configuration,
         {initial_credits :: integer(),
          credits_required_for_unblocking :: integer(),
@@ -157,7 +158,8 @@ init([KeepaliveSup,
       #{initial_credits := InitialCredits,
         credits_required_for_unblocking := CreditsRequiredBeforeUnblocking,
         frame_max := FrameMax,
-        heartbeat := Heartbeat}]) ->
+        heartbeat := Heartbeat,
+        transport := ConnTransport}]) ->
     process_flag(trap_exit, true),
     {ok, Sock} =
         rabbit_networking:handshake(Ref,
@@ -193,7 +195,8 @@ init([KeepaliveSup,
                                    connection_step = tcp_connected,
                                    frame_max = FrameMax,
                                    resource_alarm = false,
-                                   send_file_oct = SendFileOct},
+                                   send_file_oct = SendFileOct,
+                                   transport = ConnTransport},
             State =
                 #stream_connection_state{consumers = #{},
                                          blocked = false,
@@ -1364,7 +1367,8 @@ handle_frame_post_auth(Transport,
                                               StreamSubscriptions,
                                           virtual_host = VirtualHost,
                                           user = User,
-                                          send_file_oct = SendFileOct} =
+                                          send_file_oct = SendFileOct,
+                                          transport = ConnTransport} =
                            Connection,
                        #stream_connection_state{consumers = Consumers} = State,
                        {request, CorrelationId,
@@ -1417,7 +1421,7 @@ handle_frame_post_auth(Transport,
                                 {{?MODULE, QueueResource, SubscriptionId, self()}, []},
                             {ok, Segment} =
                                 osiris:init_reader(LocalMemberPid, OffsetSpec,
-                                                   CounterSpec),
+                                                   CounterSpec, ConnTransport),
                             rabbit_log:info("Next offset for subscription ~p is ~p",
                                             [SubscriptionId,
                                              osiris_log:next_offset(Segment)]),
