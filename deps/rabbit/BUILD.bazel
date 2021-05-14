@@ -9,6 +9,7 @@ load(
     "rabbitmq_lib",
     "rabbitmq_suite",
 )
+load(":bats.bzl", "bats")
 
 exports_files([
     "scripts/rabbitmq-defaults",
@@ -204,6 +205,14 @@ rabbitmq_lib(
     test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS + EXTRA_ERLC_OPTS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
+)
+
+bats(
+    srcs = glob(["test/**/*.bats"]),
+    data = glob(
+        ["scripts/*"],
+        exclude = ["scripts/*.bat"],
+    ),
 )
 
 rabbitmq_home(
