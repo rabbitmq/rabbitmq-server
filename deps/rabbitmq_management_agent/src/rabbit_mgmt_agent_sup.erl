@@ -24,8 +24,8 @@ init([]) ->
                      permanent, 5000, worker, [rabbit_mgmt_external_stats]},
     Flags = #{
         strategy  => one_for_one,
-        intensity => 0,
-        period    => 1
+        intensity => 100,
+        period    => 50
     },
     {ok, {Flags, [ExternalStats] ++ MCs}}.
 
