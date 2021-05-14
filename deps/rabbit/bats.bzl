@@ -1,7 +1,7 @@
 def _impl(ctx):
     script = """set -euo pipefail
 
-external/bats/bin/bats {test_files}
+external/bats/libexec/bats {test_files}
 """.format(
         package_dir = ctx.label.package,
         test_files = " ".join([t.short_path for t in ctx.files.srcs]),
