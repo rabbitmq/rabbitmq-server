@@ -56,8 +56,10 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
+PACKAGE = "deps/amqp10_client"
+
 rabbitmq_integration_suite(
-    "deps/amqp10_client",
+    PACKAGE,
     name = "system_SUITE",
     size = "medium",
     additional_hdrs = [
