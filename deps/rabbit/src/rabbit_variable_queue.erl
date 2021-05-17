@@ -1822,8 +1822,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                             unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
-    %% @todo With modern queue we WANT to store the index on disk.
-    {MsgStatus1, State1} = PersistFun(false, true, MsgStatus, State),
+    {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = case ?QUEUE:is_empty(Q3) of
                  false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
                  true  -> State1 #vqstate { q4 = ?QUEUE:in(m(MsgStatus1), Q4) }
@@ -1846,7 +1845,6 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                                 delta               = Delta}) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
-    %% @todo With modern queue we WANT to store the index on disk.
     {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
     Delta1 = expand_delta(SeqId, Delta, IsPersistent),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
@@ -1874,8 +1872,7 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                       unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
-    %% @todo With modern queue we WANT to store the index on disk.
-    {MsgStatus1, State1} = PersistFun(false, true, MsgStatus, State),
+    {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
     State3 = stats({0, 1}, {none, MsgStatus1}, 0,
@@ -1898,7 +1895,6 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                       unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
-    %% @todo With modern queue we WANT to store the index on disk.
     {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
@@ -1972,12 +1968,10 @@ maybe_batch_write_index_to_disk(Force,
 maybe_batch_write_index_to_disk(_Force, MsgStatus, State) ->
     {MsgStatus, State}.
 
-%% @todo We should always behave as if the index is not on disk.
-%%       Or rather we should tell the index this message is no longer in transit.
-%maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
-%                                    index_on_disk = true }, State) ->
-%    {MsgStatus, State};
-maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
+maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
+                                    index_on_disk = true }, State) ->
+    {MsgStatus, State};
+maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
                                    msg           = Msg,
                                    msg_id        = MsgId,
                                    seq_id        = SeqId,
@@ -1987,7 +1981,8 @@ maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
                           State = #vqstate{target_ram_count = TargetRamCount,
                                            disk_write_count = DiskWriteCount,
                                            index_state      = IndexState})
-  when Force orelse IsPersistent ->
+%  when Force orelse IsPersistent ->
+->
     {MsgOrId, DiskWriteCount1} =
         case persist_to(MsgStatus) of
             msg_store   -> {MsgId, DiskWriteCount};
