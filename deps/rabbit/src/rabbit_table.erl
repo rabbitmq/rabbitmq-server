@@ -163,7 +163,7 @@ needs_default_data() ->
     lists:all(
       fun(Path) ->
               case rabbit_khepri:list(Path) of
-                  {ok, List} when is_list(List) andalso List =/= [] -> true;
+                  {ok, List} when is_map(List) andalso List =:= #{} -> true;
                   _                                                 -> false
               end
       end, Paths).
