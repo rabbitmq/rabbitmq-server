@@ -540,23 +540,22 @@ tcp_listen_options.exit_on_close = false",
  {cluster_formation_randomized_startup_delay_both_values,
   "cluster_formation.randomized_startup_delay_range.min = 10
    cluster_formation.randomized_startup_delay_range.max = 30",
-  [{rabbit, [{cluster_formation, [
-                                  {randomized_startup_delay_range, {10, 30}}
-                                  ]}]}],
+  [],
   []},
 
  {cluster_formation_randomized_startup_delay_min_only,
   "cluster_formation.randomized_startup_delay_range.min = 10",
-  [{rabbit, [{cluster_formation, [
-                                  {randomized_startup_delay_range, {10, 60}}
-                                  ]}]}],
+  [],
   []},
 
  {cluster_formation_randomized_startup_delay_max_only,
   "cluster_formation.randomized_startup_delay_range.max = 30",
-  [{rabbit, [{cluster_formation, [
-                                  {randomized_startup_delay_range, {5, 30}}
-                                  ]}]}],
+  [],
+  []},
+
+ {cluster_formation_internal_lock_retries,
+  "cluster_formation.internal_lock_retries = 10",
+  [{rabbit,[{cluster_formation,[{internal_lock_retries,10}]}]}],
   []},
 
  {cluster_formation_dns,

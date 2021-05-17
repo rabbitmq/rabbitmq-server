@@ -105,21 +105,18 @@ init_with_lock(Retries, Timeout, RunPeerDiscovery) ->
     rabbit_log:debug("rabbit_peer_discovery:lock returned ~p", [LockResult]),
     case LockResult of
         not_supported ->
-            rabbit_log:info("Peer discovery backend does not support locking, falling back to randomized delay"),
-            %% See rabbitmq/rabbitmq-server#1202 for details.
-            rabbit_peer_discovery:maybe_inject_randomized_delay(),
             RunPeerDiscovery(),
             rabbit_peer_discovery:maybe_register();
-        {error, _Reason} ->
-            timer:sleep(Timeout),
-            init_with_lock(Retries - 1, Timeout, RunPeerDiscovery);
         {ok, Data} ->
             try
                 RunPeerDiscovery(),
                 rabbit_peer_discovery:maybe_register()
             after
                 rabbit_peer_discovery:unlock(Data)
-            end
+            end;
+        {error, _Reason} ->
+            timer:sleep(Timeout),
+            init_with_lock(Retries - 1, Timeout, RunPeerDiscovery)
     end.
 
 -spec run_peer_discovery() -> ok | {[node()], node_type()}.
@@ -178,7 +175,7 @@ join_discovered_peers(TryNodes, NodeType) ->
     join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterval).
 
 join_discovered_peers_with_retries(TryNodes, _NodeType, 0, _DelayInterval) ->
-    rabbit_log:warning(
+    rabbit_log:info(
               "Could not successfully contact any node of: ~s (as in Erlang distribution). "
                "Starting as a blank standalone node...",
                 [string:join(lists:map(fun atom_to_list/1, TryNodes), ",")]),
@@ -193,7 +190,7 @@ join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterva
             rabbit_node_monitor:notify_joined_cluster();
         none ->
             RetriesLeft1 = RetriesLeft - 1,
-            rabbit_log:error("Trying to join discovered peers failed. Will retry after a delay of ~b ms, ~b retries left...",
+            rabbit_log:info("Trying to join discovered peers failed. Will retry after a delay of ~b ms, ~b retries left...",
                             [DelayInterval, RetriesLeft1]),
             timer:sleep(DelayInterval),
             join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft1, DelayInterval)

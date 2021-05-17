@@ -12,7 +12,7 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -define(CLUSTER_SIZE, 3).
--define(TIMEOUT_MILLIS, 180000).
+-define(TIMEOUT_MILLIS, 180_000).
 
 -export([all/0,
          suite/0,

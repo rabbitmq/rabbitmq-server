@@ -37,7 +37,7 @@ suite() ->
       {timetrap, {minutes, 5}}
     ].
 
--define(TIMEOUT, 60000).
+-define(TIMEOUT, 120_000).
 
 %%
 %% Setup/teardown.
@@ -49,12 +49,6 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
-
-init_per_group(_, Config) ->
-    Config.
-
-end_per_group(_, Config) ->
-    Config.
 
 init_per_testcase(successful_discovery = Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
@@ -75,7 +69,7 @@ init_per_testcase(successful_discovery = Testcase, Config) ->
       {rabbit, [
           {cluster_nodes, {NodeNamesWithHostname, disc}},
           {cluster_formation, [
-              {randomized_startup_delay_range, {1, 20}}
+              {internal_lock_retries, 10}
           ]}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
@@ -106,7 +100,7 @@ init_per_testcase(successful_discovery_with_a_subset_of_nodes_coming_online = Te
           ]},
           {cluster_nodes, {NodeNamesWithHostname, disc}},
           {cluster_formation, [
-              {randomized_startup_delay_range, {1, 20}}
+              {internal_lock_retries, 10}
           ]}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
@@ -123,7 +117,7 @@ init_per_testcase(no_nodes_configured = Testcase, Config) ->
       {rabbit, [
           {cluster_nodes, {[], disc}},
           {cluster_formation, [
-              {randomized_startup_delay_range, {1, 20}}
+              {internal_lock_retries, 10}
           ]}
       ]}),
     rabbit_ct_helpers:run_steps(Config3,
@@ -147,41 +141,21 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %%
 successful_discovery(Config) ->
-    with_retry(Config, [1, 2], fun () ->
-        ?awaitMatch(
-            {M1, M2} when length(M1) =:= 3; length(M2) =:= 3,
-            {cluster_members_online(Config, 0),
-            cluster_members_online(Config, 1)},
-            ?TIMEOUT)
-    end).
+  ?awaitMatch(
+     {M1, M2} when length(M1) =:= 3; length(M2) =:= 3,
+                   {cluster_members_online(Config, 0),
+                    cluster_members_online(Config, 1)},
+                   ?TIMEOUT).
 
 successful_discovery_with_a_subset_of_nodes_coming_online(Config) ->
-    with_retry(Config, [1], fun () ->
-        ?awaitMatch(
-            {M1, M2} when length(M1) =:= 2; length(M2) =:= 2,
-            {cluster_members_online(Config, 0),
-            cluster_members_online(Config, 1)},
-            ?TIMEOUT)
-    end).
+  ?awaitMatch(
+     {M1, M2} when length(M1) =:= 2; length(M2) =:= 2,
+                   {cluster_members_online(Config, 0),
+                    cluster_members_online(Config, 1)},
+                   ?TIMEOUT).
 
 no_nodes_configured(Config) ->
-    with_retry(Config, [1], fun () ->
-        ?awaitMatch(
-            M when length(M) < 2,
+  ?awaitMatch(
+     M when length(M) < 2,
             cluster_members_online(Config, 0),
-            ?TIMEOUT)
-    end).
-
-reset_and_restart_node(Config, I) when is_integer(I) andalso I >= 0 ->
-    Name = rabbit_ct_broker_helpers:get_node_config(Config, I, nodename),
-    rabbit_control_helper:command(stop_app, Name).
-
-with_retry(Config, Nodes, Fun) ->
-    try
-        Fun()
-    catch
-        error:{awaitMatch, _} ->
-            ct:pal(?LOW_IMPORTANCE, "Possible dead-lock; resetting/restarting these nodes: ~p", [Nodes]),
-            [reset_and_restart_node(Config, N) || N <- Nodes],
-            Fun()
-    end.
+            ?TIMEOUT).
