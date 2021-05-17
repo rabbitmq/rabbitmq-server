@@ -28,7 +28,7 @@
     <properties>
         <stream-client.version>0.1.0-SNAPSHOT</stream-client.version>
         <proton-j.version>0.33.8</proton-j.version>
-        <junit.jupiter.version>5.7.1</junit.jupiter.version>
+        <junit.jupiter.version>5.7.2</junit.jupiter.version>
         <assertj.version>3.19.0</assertj.version>
         <okhttp.version>4.9.1</okhttp.version>
         <logback.version>1.2.3</logback.version>
