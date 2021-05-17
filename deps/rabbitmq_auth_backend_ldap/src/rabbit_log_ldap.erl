@@ -20,7 +20,7 @@
 
 -include("logging.hrl").
 
--compile({no_auto_import, [error/2]}).
+-compile({no_auto_import, [error/2, error/3]}).
 
 %%----------------------------------------------------------------------------
 
