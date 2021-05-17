@@ -116,6 +116,12 @@ erlang_lib(
         runtime_deps = [
             "@cowlib//:bazel_erlang_lib",
         ],
+        erlc_opts = [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warn_shadow_vars",
+            "+warn_obsolete_guard",
+        ],
     )
 
     http_archive(
