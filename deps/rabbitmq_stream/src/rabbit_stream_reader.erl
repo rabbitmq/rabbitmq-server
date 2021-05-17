@@ -543,8 +543,8 @@ listen_loop_post_auth(Transport,
                                   State1,
                                   Configuration);
         {'$gen_cast',
-         {queue_event, _QueueResource,
-          {osiris_written, _QueueResource, undefined, CorrelationList}}} ->
+         {queue_event, _,
+          {osiris_written, _, undefined, CorrelationList}}} ->
             {FirstPublisherId, _FirstPublishingId} =
                 lists:nth(1, CorrelationList),
             {LastPublisherId, LastPublishingIds, LastCount} =
