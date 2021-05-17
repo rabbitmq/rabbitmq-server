@@ -242,11 +242,6 @@ recover_segment(State, ContainsCheckFun, CountersRef, Fd,
                 Unacked) ->
     Offset = ?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE,
     case file:pread(Fd, Offset, 24) of
-        %% We found an ack, remove 1 from Unacked and continue.
-        {ok, <<2,_/bits>>} ->
-            recover_segment(State, ContainsCheckFun, CountersRef,
-                Fd, Segment, ThisEntry + 1, SegmentEntryCount,
-                Unacked - 1);
         %% We found a non-ack persistent entry. Check that the corresponding
         %% message exists in the message store. If not, mark this message as
         %% acked.
@@ -280,10 +275,8 @@ recover_segment(State, ContainsCheckFun, CountersRef, Fd,
             recover_segment(State, ContainsCheckFun, CountersRef,
                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                             Unacked - 1);
-        %% We found a non-entry. Mark it as acked because we will be using
-        %% a new segment file for incoming messages.
-        {ok, <<0,_/bits>>} ->
-            file:pwrite(Fd, Offset, <<2>>),
+        %% We found a non-entry or an acked entry. Consider it acked.
+        {ok, _} ->
             recover_segment(State, ContainsCheckFun, CountersRef,
                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                             Unacked - 1)
@@ -420,11 +413,8 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0 },
     SegmentEntryCount = segment_entry_count(),
     %% First we prepare the writes sorted by segment.
     {Writes, WriteBuffer} = maps:fold(fun
-        %% @todo By making "ack" and "non-entry" the same, we can
-        %%       avoid writing altogether when messages are immediately
-        %%       sent and acked before the buffer is flushed.
         (SeqId, ack, {WritesAcc, BufferAcc}) ->
-            {acc_write(SeqId, SegmentEntryCount, <<2>>, +0, WritesAcc),
+            {acc_write(SeqId, SegmentEntryCount, <<0>>, +0, WritesAcc),
              BufferAcc};
         (SeqId, deliver, {WritesAcc, BufferAcc}) ->
             {acc_write(SeqId, SegmentEntryCount, <<1>>, +1, WritesAcc),
@@ -466,7 +456,7 @@ build_entry({Id, _SeqId, Props, IsPersistent, IsDelivered}) ->
         undefined -> 0;
         _ -> Expiry0
     end,
-    << 1:8,                   %% Status. 0 = no entry, 1 = entry exists, 2 = entry acked
+    << 1:8,                   %% Status. 0 = no entry or entry acked, 1 = entry exists.
        IsDeliveredFlag:8,     %% Deliver.
        Flags:8,               %% IsPersistent flag (least significant bit).
        0:8,                   %% Reserved. Makes entries 32B in size to match page alignment on disk.
@@ -569,13 +559,17 @@ ack(SeqIds0, State0 = #mqistate{ write_buffer = WriteBuffer0,
     {WriteBuffer, NumUpdates} = lists:foldl(fun
         (SeqId, {FoldBuffer, FoldUpdates}) ->
             case FoldBuffer of
-                %% Ack if the entry was already marked for delivery or acked.
-                %% @todo Is this possible to have ack here? Shouldn't this be an error to ack twice?
-                #{SeqId := Write} when Write =:= deliver; Write =:= ack ->
+                %% Ack if the entry was already marked for delivery.
+                #{SeqId := deliver} ->
                     {FoldBuffer#{SeqId => ack},
                      FoldUpdates};
-                %% Otherwise unconditionally ack. We replace the entry if any.
-                _ ->
+                %% Remove the write if there is one scheduled. In that case
+                %% we will never write this entry to disk.
+                #{SeqId := Write} when is_tuple(Write) ->
+                    {maps:remove(SeqId, FoldBuffer),
+                     FoldUpdates};
+                %% Otherwise ack an entry that is already on disk.
+                _ when not is_map_key(SeqId, FoldBuffer) ->
                     {FoldBuffer#{SeqId => ack},
                      FoldUpdates + 1}
             end
@@ -744,7 +738,7 @@ parse_entries(<< Status:8,
             end,
             parse_entries(Rest, SeqId + 1, WriteBuffer,
                           [{Id, SeqId, Props, IsPersistent =:= 1, IsDelivered}|Acc]);
-        _ -> %% 0 (no entry) or 2 (acked)
+        0 -> %% No entry or acked entry.
             %% @todo It would be good to keep track of how many "misses"
             %%       we have. We can use it to confirm the correct behavior
             %%       of the module in tests, as well as an occasionally
@@ -851,25 +845,13 @@ queue_index_walker_segment(_, _, N, N) ->
 queue_index_walker_segment(Fd, Gatherer, N, Total) ->
     Offset = ?HEADER_SIZE + N * ?ENTRY_SIZE,
     case file:pread(Fd, Offset, 20) of
-        %% We found an ack, skip the entry.
-        {ok, <<2,_/bits>>} ->
-            queue_index_walker_segment(Fd, Gatherer, N + 1, Total);
         %% We found a non-ack persistent entry. Gather it.
         {ok, <<1,_,1,_,Id:16/binary>>} ->
             gatherer:sync_in(Gatherer, {Id, 1}),
             queue_index_walker_segment(Fd, Gatherer, N + 1, Total);
-        %% We found a non-ack transient entry. Skip it. It will
-        %% be marked as acked later during the recover phase.
-        %%
-        %% @todo It might save us some cycles if we just did it here.
-        {ok, <<1,_/bits>>} ->
-            queue_index_walker_segment(Fd, Gatherer, N + 1, Total);
-        %% We found a non-entry. This is the end of the segment file.
-        %%
-        %% @todo It might also be a hole, but I'm not sure it is
-        %%       even possible to have holes. See comments in recover.
-        {ok, <<0,_/bits>>} ->
-            ok
+        %% We found an ack, a transient entry or a non-entry. Skip it.
+        {ok, _} ->
+            queue_index_walker_segment(Fd, Gatherer, N + 1, Total)
     end.
 
 stop(VHost) ->
