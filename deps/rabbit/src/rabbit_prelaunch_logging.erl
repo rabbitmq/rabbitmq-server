@@ -245,6 +245,8 @@ setup(Context) ->
 %%
 %% @param Level the new log level.
 
+%% TODO: Adjust burst_limit_enable when setting the log level to `debug'.
+
 set_log_level(Level) ->
     %% Primary log level.
     ?LOG_DEBUG(
@@ -1415,16 +1417,28 @@ filter_log_event(LogEvent, FilterConfig) ->
 %%
 %% If a filter is more permissive, we need to adapt the handler log level so
 %% the message makes it to the filter.
+%%
+%% Also, if the log level is set to `debug', we turn off burst limit to make
+%% sure all debug messages make it.
 
 adjust_log_levels(Handlers) ->
     maps:map(
-      fun(_, #{level := GeneralLevel, filters := Filters} = Handler) ->
+      fun(_, #{config := Config,
+               level := GeneralLevel,
+               filters := Filters} = Handler) ->
               {_, FilterConfig} = proplists:get_value(?FILTER_NAME, Filters),
               Level = maps:fold(
                         fun(_, LvlA, LvlB) ->
                                 get_less_severe_level(LvlA, LvlB)
                         end, GeneralLevel, FilterConfig),
-              Handler#{level => Level}
+              Handler1 = Handler#{level => Level},
+              case Level of
+                  debug ->
+                      Config1 = Config#{burst_limit_enable => false},
+                      Handler1#{config => Config1};
+                  _ ->
+                      Handler1
+              end
       end, Handlers).
 
 -spec assign_handler_ids(#{handler_key() => logger:handler_config()}) ->
