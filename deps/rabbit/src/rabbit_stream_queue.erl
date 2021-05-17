@@ -500,7 +500,7 @@ i(committed_offset, Q) ->
     %% TODO should it be on a metrics table?
     %% The queue could be removed between the list() and this call
     %% to retrieve the overview. Let's default to '' if it's gone.
-    Data = osiris_counters:overview(),
+    Data = seshat_counters:overview(osiris),
     maps:get(committed_offset,
              maps:get({osiris_writer, amqqueue:get_name(Q)}, Data, #{}), '');
 i(policy, Q) ->
@@ -569,7 +569,7 @@ get_counters(Q) ->
     lists:filter(fun (X) -> X =/= undefined end, Counters).
 
 safe_get_overview(Node) ->
-    case rpc:call(Node, osiris_counters, overview, []) of
+    case rpc:call(Node, seshat_counters, overview, [osiris]) of
         {badrpc, _} ->
             #{node => Node};
         Data ->
@@ -614,7 +614,7 @@ tracking_status(Vhost, QueueName) ->
 
 readers(QName) ->
     try
-        Data = osiris_counters:overview(),
+        Data = seshat_counters:overview(osiris),
         Readers = case maps:get({osiris_writer, QName}, Data, not_found) of
                       not_found ->
                           maps:get(readers, maps:get({osiris_replica, QName}, Data, #{}), 0);

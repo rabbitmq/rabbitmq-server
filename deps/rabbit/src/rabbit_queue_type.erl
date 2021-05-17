@@ -452,28 +452,28 @@ deliver0(Qs, Delivery, stateless) ->
     case Qs of
         [] ->
             case Delivery#delivery.mandatory of
-                false -> rabbit_global_counters:messages_unroutable_dropped(1);
-                true -> rabbit_global_counters:messages_unroutable_returned(1)
+                false -> rabbit_messages_counters:messages_unroutable_dropped(global, global, 1);
+                true -> rabbit_messages_counters:messages_unroutable_returned(global, global, 1)
             end;
         _ ->
-            rabbit_global_counters:messages_routed(1),
+            rabbit_messages_counters:messages_routed(global, global, 1),
             _ = lists:map(fun(Q) ->
                                 Mod = amqqueue:get_type(Q),
                                 _ = Mod:deliver([{Q, stateless}], Delivery)
                         end, Qs),
-            rabbit_global_counters:messages_published(length(Qs))
+            rabbit_messages_counters:messages_published(global, global, length(Qs))
     end,
     {ok, stateless, []};
 deliver0(Qs, Delivery, #?STATE{} = State0) ->
     case Qs of
         [] ->
             case Delivery#delivery.mandatory of
-                false -> rabbit_global_counters:messages_unroutable_dropped(1);
-                true -> rabbit_global_counters:messages_unroutable_returned(1)
+                false -> rabbit_messages_counters:messages_unroutable_dropped(global, global, 1);
+                true -> rabbit_messages_counters:messages_unroutable_returned(global, global, 1)
             end,
             return_ok(State0, []);
         _ ->
-            rabbit_global_counters:messages_routed(1),
+            rabbit_messages_counters:messages_routed(global, global, 1),
             %% TODO: optimise single queue case?
             %% sort by queue type - then dispatch each group
             ByType = lists:foldl(
@@ -488,7 +488,7 @@ deliver0(Qs, Delivery, #?STATE{} = State0) ->
             %%% dispatch each group to queue type interface?
             {Xs, Actions} = maps:fold(fun(Mod, QTSs, {X0, A0}) ->
                                             {X, A} = Mod:deliver(QTSs, Delivery),
-                                            rabbit_global_counters:messages_published(length(Qs)),
+                                            rabbit_messages_counters:messages_published(global, global, length(Qs)),
                                             {X0 ++ X, A0 ++ A}
                                     end, {[], []}, ByType),
             State = lists:foldl(
@@ -540,12 +540,12 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
     case Mod:dequeue(NoAck, LimiterPid, CTag, State0) of
         {ok, Num, Msg, State} ->
             case NoAck of
-                false -> rabbit_global_counters:messages_delivered_get_ack(1);
-                true -> rabbit_global_counters:messages_delivered_get_autoack(1)
+                false -> rabbit_messages_counters:messages_delivered_get_ack(global, global, 1);
+                true -> rabbit_messages_counters:messages_delivered_get_autoack(global, global, 1)
             end,
             {ok, Num, Msg, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {empty, State} ->
-            rabbit_global_counters:basic_get_empty(1),
+            rabbit_messages_counters:basic_get_empty(global, global, 1),
             {empty, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {error, _} = Err ->
             Err;
