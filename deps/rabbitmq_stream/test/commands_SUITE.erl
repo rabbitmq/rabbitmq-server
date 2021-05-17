@@ -7,9 +7,10 @@
 
 -module(commands_SUITE).
 
+-compile(nowarn_export_all).
 -compile([export_all]).
 
--include_lib("common_test/include/ct.hrl").
+% -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
@@ -82,13 +83,13 @@ list_connections_run(Config) ->
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
 
-    S1 = start_stream_connection(StreamPort),
+    {S1, C1} = start_stream_connection(StreamPort),
     wait_until_connection_count(Config, 1),
 
     [[{conn_name, _}]] =
         to_list(?COMMAND_LIST_CONNECTIONS:run([<<"conn_name">>], Opts)),
 
-    S2 = start_stream_connection(StreamPort),
+    {S2, C2} = start_stream_connection(StreamPort),
     wait_until_connection_count(Config, 2),
 
     [[{conn_name, _}], [{conn_name, _}]] =
@@ -127,8 +128,8 @@ list_connections_run(Config) ->
     ?assertEqual([], Keys -- ?INFO_ITEMS),
     ?assertEqual([], ?INFO_ITEMS -- Keys),
 
-    rabbit_stream_SUITE:test_close(S1),
-    rabbit_stream_SUITE:test_close(S2),
+    rabbit_stream_SUITE:test_close(S1, C1),
+    rabbit_stream_SUITE:test_close(S2, C2),
     ok.
 
 list_consumers_merge_defaults(_Config) ->
@@ -158,19 +159,19 @@ list_consumers_run(Config) ->
     [] = to_list(?COMMAND_LIST_CONSUMERS:run([], Opts)),
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
-    S1 = start_stream_connection(StreamPort),
+    {S1, C1} = start_stream_connection(StreamPort),
     wait_until_connection_count(Config, 1),
 
     Stream = <<"list_consumers_run">>,
-    create_stream(S1, Stream),
+    C1_1 = create_stream(S1, Stream, C1),
     SubId = 42,
-    subscribe(S1, SubId, Stream),
+    C1_2 = subscribe(S1, SubId, Stream, C1_1),
 
     wait_until_consumer_count(Config, 1),
 
-    S2 = start_stream_connection(StreamPort),
+    {S2, C2} = start_stream_connection(StreamPort),
     wait_until_connection_count(Config, 2),
-    subscribe(S2, SubId, Stream),
+    C2_1 = subscribe(S2, SubId, Stream, C2),
 
     wait_until_consumer_count(Config, 2),
 
@@ -192,11 +193,11 @@ list_consumers_run(Config) ->
     ?assertEqual([], Keys -- InfoItems),
     ?assertEqual([], InfoItems -- Keys),
 
-    delete_stream(S1, Stream),
-    metadata_update_stream_deleted(S1, Stream),
-    metadata_update_stream_deleted(S2, Stream),
-    close(S1),
-    close(S2),
+    C1_3 = delete_stream(S1, Stream, C1_2),
+    % metadata_update_stream_deleted(S1, Stream),
+    metadata_update_stream_deleted(S2, Stream, C2_1),
+    close(S1, C1_3),
+    close(S2, C2_1),
     wait_until_consumer_count(Config, 0),
     ok.
 
@@ -227,19 +228,19 @@ list_publishers_run(Config) ->
     [] = to_list(?COMMAND_LIST_PUBLISHERS:run([], Opts)),
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
-    S1 = start_stream_connection(StreamPort),
+    {S1, C1} = start_stream_connection(StreamPort),
     wait_until_connection_count(Config, 1),
 
     Stream = <<"list_publishers_run">>,
-    create_stream(S1, Stream),
+    C1_1 = create_stream(S1, Stream, C1),
     PubId = 42,
-    declare_publisher(S1, PubId, Stream),
+    C1_2 = declare_publisher(S1, PubId, Stream, C1_1),
 
     wait_until_publisher_count(Config, 1),
 
-    S2 = start_stream_connection(StreamPort),
+    {S2, C2} = start_stream_connection(StreamPort),
     wait_until_connection_count(Config, 2),
-    declare_publisher(S2, PubId, Stream),
+    C2_1 = declare_publisher(S2, PubId, Stream, C2),
 
     wait_until_publisher_count(Config, 2),
 
@@ -261,31 +262,31 @@ list_publishers_run(Config) ->
     ?assertEqual([], Keys -- InfoItems),
     ?assertEqual([], InfoItems -- Keys),
 
-    delete_stream(S1, Stream),
-    metadata_update_stream_deleted(S1, Stream),
-    metadata_update_stream_deleted(S2, Stream),
-    close(S1),
-    close(S2),
+    C1_3 = delete_stream(S1, Stream, C1_2),
+    % metadata_update_stream_deleted(S1, Stream),
+    C2_2 = metadata_update_stream_deleted(S2, Stream, C2_1),
+    close(S1, C1_3),
+    close(S2, C2_2),
     wait_until_publisher_count(Config, 0),
     ok.
 
-create_stream(S, Stream) ->
-    rabbit_stream_SUITE:test_create_stream(S, Stream).
+create_stream(S, Stream, C0) ->
+    rabbit_stream_SUITE:test_create_stream(S, Stream, C0).
 
-subscribe(S, SubId, Stream) ->
-    rabbit_stream_SUITE:test_subscribe(S, SubId, Stream).
+subscribe(S, SubId, Stream, C) ->
+    rabbit_stream_SUITE:test_subscribe(S, SubId, Stream, C).
 
-declare_publisher(S, PubId, Stream) ->
-    rabbit_stream_SUITE:test_declare_publisher(S, PubId, Stream).
+declare_publisher(S, PubId, Stream, C) ->
+    rabbit_stream_SUITE:test_declare_publisher(S, PubId, Stream, C).
 
-delete_stream(S, Stream) ->
-    rabbit_stream_SUITE:test_delete_stream(S, Stream).
+delete_stream(S, Stream, C) ->
+    rabbit_stream_SUITE:test_delete_stream(S, Stream, C).
 
-metadata_update_stream_deleted(S, Stream) ->
-    rabbit_stream_SUITE:test_metadata_update_stream_deleted(S, Stream).
+metadata_update_stream_deleted(S, Stream, C) ->
+    rabbit_stream_SUITE:test_metadata_update_stream_deleted(S, Stream, C).
 
-close(S) ->
-    rabbit_stream_SUITE:test_close(S).
+close(S, C) ->
+    rabbit_stream_SUITE:test_close(S, C).
 
 options(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -332,9 +333,10 @@ wait_until_publisher_count(Config, Expected) ->
 start_stream_connection(Port) ->
     {ok, S} =
         gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
-    rabbit_stream_SUITE:test_peer_properties(S),
-    rabbit_stream_SUITE:test_authenticate(S),
-    S.
+    C0 = rabbit_stream_core:init(0),
+    C1 = rabbit_stream_SUITE:test_peer_properties(S, C0),
+    C = rabbit_stream_SUITE:test_authenticate(S, C1),
+    {S, C}.
 
 start_amqp_connection(Type, Node, Port) ->
     Params = amqp_params(Type, Node, Port),
