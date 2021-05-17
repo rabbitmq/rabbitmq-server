@@ -8,6 +8,7 @@ jobs:
       matrix:
         erlang_version:
         - "23"
+        - "24"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -61,6 +62,7 @@ jobs:
       matrix:
         erlang_version:
         - "23"
+        - "24"
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY

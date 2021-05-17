@@ -29,6 +29,19 @@ platform(
     },
 )
 
+platform(
+    name = "erlang_24_platform",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+        "@bazel_tools//tools/cpp:clang",
+    ],
+    exec_properties = {
+        "OSFamily": "Linux",
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:09d379e889dedfa492736584721d74e580d35b31ee2b3f996320872d1f76505e",
+    },
+)
+
 rabbitmq_home(
     name = "broker-home",
     plugins = [
