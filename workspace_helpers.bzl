@@ -163,6 +163,12 @@ erlang_lib(
         runtime_deps = [
             "@goldrush//:bazel_erlang_lib",
         ],
+        erlc_opts = [
+            "+debug_info",
+            "+warn_export_vars",
+            "+warn_shadow_vars",
+            "+warn_obsolete_guard",
+        ],
     )
 
     github_bazel_erlang_lib(
