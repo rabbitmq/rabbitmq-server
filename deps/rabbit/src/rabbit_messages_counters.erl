@@ -88,7 +88,7 @@
 init() ->
     seshat_counters:new_group(queue),
     seshat_counters:new_group(global),
-    new(global, global, []),
+    persistent_term:put({?MODULE, global}, new(global, global, [])),
     ok.
 
 new(Group, Object, Fields) ->
@@ -97,41 +97,46 @@ new(Group, Object, Fields) ->
 
 % TODO - these are received by queues, not from clients (doesn't account for unroutable)
 messages_published(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_PUBLISHED, Num).
+    counters:add(fetch(Group, Object), ?MESSAGES_PUBLISHED, Num).
 
 % formerly known as queue_messages_published_total
 messages_routed(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_ROUTED, Num).
+    counters:add(fetch(Group, Object), ?MESSAGES_ROUTED, Num).
 
 messages_delivered_consume_ack(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_DELIVERED_CONSUME_ACK, Num).
+    counters:add(fetch(Group, Object), ?MESSAGES_DELIVERED_CONSUME_ACK, Num).
 
 messages_delivered_consume_autoack(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_DELIVERED_CONSUME_AUTOACK, Num).
+    counters:add(fetch(Group, Object), ?MESSAGES_DELIVERED_CONSUME_AUTOACK, Num).
 
 messages_delivered_get_ack(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_DELIVERED_GET_ACK, Num).
+    counters:add(fetch(Group, Object), ?MESSAGES_DELIVERED_GET_ACK, Num).
 
 messages_delivered_get_autoack(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_DELIVERED_GET_AUTOACK, Num).
+    counters:add(fetch(Group, Object), ?MESSAGES_DELIVERED_GET_AUTOACK, Num).
 
 % not implemented yet
 messages_redelivered(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_REDELIVERED, Num).
+    counters:add(fetch(Group, Object), ?MESSAGES_REDELIVERED, Num).
 
 basic_get_empty(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?BASIC_GET_EMPTY, Num).
+    counters:add(fetch(Group, Object), ?BASIC_GET_EMPTY, Num).
 
 % implemented in rabbit_core_metrics (it doesn't reach a queue)
 messages_unroutable_returned(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_UNROUTABLE_RETURNED, Num).
+    counters:add(fetch(Group, Object), ?MESSAGES_UNROUTABLE_RETURNED, Num).
 
 % implemented in rabbit_core_metrics (it doesn't reach a queue)
 messages_unroutable_dropped(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_UNROUTABLE_DROPPED, Num).
+    counters:add(fetch(Group, Object), ?MESSAGES_UNROUTABLE_DROPPED, Num).
 
 messages_confirmed(Group, Object, Num) ->
-    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_CONFIRMED, Num).
+    counters:add(fetch(Group, Object), ?MESSAGES_CONFIRMED, Num).
+
+fetch(global, global) ->
+    persistent_term:get({?MODULE, global});
+fetch(Group, Object) ->
+    seshat_counters:fetch(Group, Object).
 
 % TODO
 %  channel_messages_redelivered_total "Total number of messages redelivered to consumers"

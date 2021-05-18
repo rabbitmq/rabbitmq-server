@@ -448,56 +448,45 @@ deliver(Qs, Delivery, State) ->
             {error, Reason}
     end.
 
+deliver0([], #delivery{mandatory = false} = Delivery, State0) ->
+    rabbit_messages_counters:messages_unroutable_dropped(global, global, 1),
+    {ok, State0, []};
+deliver0([], #delivery{mandatory = true} = Delivery, State0) ->
+    rabbit_messages_counters:messages_unroutable_returned(global, global, 1),
+    {ok, State0, []};
 deliver0(Qs, Delivery, stateless) ->
-    case Qs of
-        [] ->
-            case Delivery#delivery.mandatory of
-                false -> rabbit_messages_counters:messages_unroutable_dropped(global, global, 1);
-                true -> rabbit_messages_counters:messages_unroutable_returned(global, global, 1)
-            end;
-        _ ->
-            rabbit_messages_counters:messages_routed(global, global, 1),
-            _ = lists:map(fun(Q) ->
-                                Mod = amqqueue:get_type(Q),
-                                _ = Mod:deliver([{Q, stateless}], Delivery)
-                        end, Qs),
-            rabbit_messages_counters:messages_published(global, global, length(Qs))
-    end,
+    rabbit_messages_counters:messages_routed(global, global, 1),
+    _ = lists:map(fun(Q) ->
+                          Mod = amqqueue:get_type(Q),
+                          _ = Mod:deliver([{Q, stateless}], Delivery)
+                  end, Qs),
+    rabbit_messages_counters:messages_published(global, global, length(Qs)),
     {ok, stateless, []};
 deliver0(Qs, Delivery, #?STATE{} = State0) ->
-    case Qs of
-        [] ->
-            case Delivery#delivery.mandatory of
-                false -> rabbit_messages_counters:messages_unroutable_dropped(global, global, 1);
-                true -> rabbit_messages_counters:messages_unroutable_returned(global, global, 1)
-            end,
-            return_ok(State0, []);
-        _ ->
-            rabbit_messages_counters:messages_routed(global, global, 1),
-            %% TODO: optimise single queue case?
-            %% sort by queue type - then dispatch each group
-            ByType = lists:foldl(
-                    fun (Q, Acc) ->
-                            T = amqqueue:get_type(Q),
-                            Ctx = get_ctx(Q, State0),
-                            maps:update_with(
-                                T, fun (A) ->
-                                            [{Q, Ctx#ctx.state} | A]
-                                    end, [{Q, Ctx#ctx.state}], Acc)
-                    end, #{}, Qs),
-            %%% dispatch each group to queue type interface?
-            {Xs, Actions} = maps:fold(fun(Mod, QTSs, {X0, A0}) ->
-                                            {X, A} = Mod:deliver(QTSs, Delivery),
-                                            rabbit_messages_counters:messages_published(global, global, length(Qs)),
-                                            {X0 ++ X, A0 ++ A}
-                                    end, {[], []}, ByType),
-            State = lists:foldl(
-                    fun({Q, S}, Acc) ->
-                            Ctx = get_ctx_with(Q, Acc, S),
-                            set_ctx(qref(Q), Ctx#ctx{state = S}, Acc)
-                    end, State0, Xs),
-            return_ok(State, Actions)
-    end.
+    rabbit_messages_counters:messages_routed(global, global, 1),
+    %% TODO: optimise single queue case?
+    %% sort by queue type - then dispatch each group
+    ByType = lists:foldl(
+               fun (Q, Acc) ->
+                       T = amqqueue:get_type(Q),
+                       Ctx = get_ctx(Q, State0),
+                       maps:update_with(
+                         T, fun (A) ->
+                                    [{Q, Ctx#ctx.state} | A]
+                            end, [{Q, Ctx#ctx.state}], Acc)
+               end, #{}, Qs),
+    %% dispatch each group to queue type interface
+    {Xs, Actions} = maps:fold(fun(Mod, QTSs, {X0, A0}) ->
+                                      {X, A} = Mod:deliver(QTSs, Delivery),
+                                      rabbit_messages_counters:messages_published(global, global, length(Qs)),
+                                      {X0 ++ X, A0 ++ A}
+                              end, {[], []}, ByType),
+    State = lists:foldl(
+              fun({Q, S}, Acc) ->
+                      Ctx = get_ctx_with(Q, Acc, S),
+                      set_ctx(qref(Q), Ctx#ctx{state = S}, Acc)
+              end, State0, Xs),
+    return_ok(State, Actions).
 
 
 -spec settle(queue_ref(), settle_op(), rabbit_types:ctag(),
