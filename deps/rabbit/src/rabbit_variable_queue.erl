@@ -2621,6 +2621,11 @@ maybe_deltas_to_betas(DelsAndAcksFun,
              end_seq_id   = DeltaSeqIdEnd } = Delta,
     DeltaSeqId1 =
         lists:min([?INDEX:next_segment_boundary(DeltaSeqId),
+                   %% We must limit the number of messages read at once
+                   %% otherwise the queue will attempt to read up to 65536
+                   %% messages from the new index each time. The value
+                   %% chosen here is arbitrary.
+                   DeltaSeqId + 2048,
                    DeltaSeqIdEnd]),
     {List, IndexState1} = ?INDEX:read(DeltaSeqId, DeltaSeqId1,
                                                   IndexState),
