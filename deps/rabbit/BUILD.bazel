@@ -356,6 +356,12 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "clustering_management_SUITE",
     size = "large",
+    groups = [
+        "unclustered_2_nodes",
+        "unclustered_3_nodes",
+        "clustered_2_nodes",
+        "clustered_4_nodes",
+    ],
 )
 
 rabbitmq_integration_suite(
