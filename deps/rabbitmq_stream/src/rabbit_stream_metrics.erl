@@ -20,8 +20,8 @@
 
 %% API
 -export([init/0]).
--export([consumer_created/7,
-         consumer_updated/7,
+-export([consumer_created/8,
+         consumer_updated/8,
          consumer_cancelled/3]).
 -export([publisher_created/4,
          publisher_updated/7,
@@ -40,11 +40,13 @@ consumer_created(Connection,
                  Credits,
                  MessageCount,
                  Offset,
+                 OffsetLag,
                  Properties) ->
     Values =
         [{credits, Credits},
          {consumed, MessageCount},
          {offset, Offset},
+         {offset_lag, OffsetLag},
          {properties, Properties}],
     ets:insert(?TABLE_CONSUMER,
                {{StreamResource, Connection, SubscriptionId}, Values}),
@@ -69,11 +71,13 @@ consumer_updated(Connection,
                  Credits,
                  MessageCount,
                  Offset,
+                 OffsetLag,
                  Properties) ->
     Values =
         [{credits, Credits},
          {consumed, MessageCount},
          {offset, Offset},
+         {offset_lag, OffsetLag},
          {properties, Properties}],
     ets:insert(?TABLE_CONSUMER,
                {{StreamResource, Connection, SubscriptionId}, Values}),

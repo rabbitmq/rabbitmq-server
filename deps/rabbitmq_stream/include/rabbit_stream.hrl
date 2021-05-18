@@ -77,19 +77,20 @@
     ]).
 
 -define(CONSUMER_INFO_ITEMS, [
-  stream,
   connection_pid,
   subscription_id,
-  credits,
-  messages,
+  stream,
+  messages_consumed,
   offset,
+  offset_lag,
+  credits,
   properties
   ]).
 
 -define(PUBLISHER_INFO_ITEMS, [
-  stream,
   connection_pid,
   publisher_id,
+  stream,
   reference,
   messages_published,
   messages_confirmed,

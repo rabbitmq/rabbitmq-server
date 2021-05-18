@@ -3,10 +3,11 @@
       <thead>
         <tr>
           <th>Subscription ID</th>
-          <th>Queue</th>
-          <th>Credits</th>
-          <th>Offset</th>
+          <th>Stream</th>
           <th>Messages Consumed</th>
+          <th>Offset</th>
+          <th>Offset Lag</th>
+          <th>Credits</th>
         </tr>
       </thead>
 <%
@@ -16,9 +17,10 @@
       <tr<%= alt_rows(i) %>>
         <td><%= consumer.subscription_id %></td>
         <td><%= link_queue(consumer.queue.vhost, consumer.queue.name) %></td>
-        <td class="c"><%= consumer.credits %></td>
-        <td class="c"><%= consumer.offset %></td>
         <td class="c"><%= consumer.consumed %></td>
+        <td class="c"><%= consumer.offset %></td>
+        <td class="c"><%= consumer.offset_lag %></td>
+        <td class="c"><%= consumer.credits %></td>
       </tr>
 <% } %>
     </table>

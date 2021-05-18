@@ -13,7 +13,7 @@ defmodule RabbitMQ.CLI.Streams.Commands.StreamStatusCommand do
   def merge_defaults(args, opts), do: {args, Map.merge(%{tracking: false, vhost: "/"}, opts)}
 
   def switches(), do: [tracking: :boolean]
-  
+
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Streams.Commands.StreamStatusCommand do
 
       {:error, :quorum_queue_not_supported} ->
         {:error, "Cannot get stream status of a quorum queue"}
-        
+
       other ->
         other
     end
@@ -36,7 +36,7 @@ defmodule RabbitMQ.CLI.Streams.Commands.StreamStatusCommand do
 
       {:error, :quorum_queue_not_supported} ->
         {:error, "Cannot get stream status of a quorum queue"}
-        
+
       other ->
         other
     end
@@ -47,12 +47,12 @@ defmodule RabbitMQ.CLI.Streams.Commands.StreamStatusCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
 
   def usage() do
-    "stream_status [--vhost <vhost>] [--tracking] <queue>"
+    "stream_status [--vhost <vhost>] [--tracking] <stream>"
   end
 
   def usage_additional do
     [
-      ["<queue>", "Name of the queue"]
+      ["<stream>", "Name of the stream"]
     ]
   end
 
@@ -64,8 +64,8 @@ defmodule RabbitMQ.CLI.Streams.Commands.StreamStatusCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Displays the status of a stream queue"
+  def description(), do: "Displays the status of a stream"
 
   def banner([name], %{node: node_name}),
-    do: "Status of stream queue #{name} on node #{node_name} ..."
+    do: "Status of stream #{name} on node #{node_name} ..."
 end
