@@ -80,7 +80,7 @@
       stream_name(),
       offset_spec(),
       credit(),
-      Properties :: map()} |
+      Properties :: #{binary() => binary()}} |
      {commit_offset, offset_ref(), stream_name(), osiris:offset()} |
      {query_offset, offset_ref(), stream_name()} |
      {unsubscribe, subscription_id()} |
@@ -121,24 +121,6 @@
      {route, response_code(), stream_name()} |
      {partitions, response_code(), [stream_name()]}} |
     {unknown, binary()}.
-
-    %% not used by stream plugin - receiving side only
-
-     %% correlation_id is not used
-
-     %% TODO: look into
-
-                         %% only for code 'ok' - else it may have additiona data
-
-     %% commit offset has no response
-     % {commit_offset, offset_ref(), stream_name(), osiris:offset()} |
-
-     %% either response code or sasl fragment
-
-     %% NB: does not write corrlation id
-     %% needs special case
-
-     %% TODO should route return a list of routed streams?
 
 -spec init(term()) -> state().
 init(_) ->
@@ -597,7 +579,7 @@ parse_request(<<?REQUEST:1,
             <<_Count:32, Bin/binary>> ->
                 parse_map(Bin, #{});
             _ ->
-                rabbit_log:warning("Incorrect binary for subscription properties: ~p",
+                rabbit_log:warning("Incorrect binary for subscription properties: ~w",
                                    [PropsBin]),
                 #{}
         end,
