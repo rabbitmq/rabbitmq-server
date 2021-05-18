@@ -1394,7 +1394,7 @@ handle_frame_post_auth(Transport,
                             {Connection, State};
                         false ->
                             rabbit_log:info("Creating subscription ~p to ~p, with offset specificat"
-                                            "ion ~p, properties ~p",
+                                            "ion ~p, properties ~0p",
                                             [SubscriptionId,
                                              Stream,
                                              OffsetSpec,
