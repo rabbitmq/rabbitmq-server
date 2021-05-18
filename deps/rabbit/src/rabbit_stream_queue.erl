@@ -155,8 +155,8 @@ policy_changed(Q) ->
     _ = rabbit_stream_coordinator:policy_changed(Q),
     ok.
 
-stat(_) ->
-    {ok, 0, 0}.
+stat(Q) ->
+    {ok, i(messages, Q), 0}.
 
 consume(Q, #{prefetch_count := 0}, _)
   when ?amqqueue_is_stream(Q) ->

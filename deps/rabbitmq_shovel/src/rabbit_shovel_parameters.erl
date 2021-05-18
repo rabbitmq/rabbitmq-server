@@ -121,6 +121,7 @@ amqp091_src_validation(_Def, User) ->
      {<<"src-exchange-key">>, fun rabbit_parameter_validation:binary/2, optional},
      {<<"src-queue">>,        fun rabbit_parameter_validation:binary/2, optional},
      {<<"src-queue-args">>,   fun validate_queue_args/2, optional},
+     {<<"src-consumer-args">>, fun validate_consumer_args/2, optional},
      {<<"prefetch-count">>,   fun rabbit_parameter_validation:number/2, optional},
      {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      %% a deprecated pre-3.7 setting
@@ -212,6 +213,11 @@ validate_queue_args(Name, Term0) ->
     Term = rabbit_data_coercion:to_proplist(Term0),
 
     rabbit_parameter_validation:proplist(Name, rabbit_amqqueue:declare_args(), Term).
+
+validate_consumer_args(Name, Term0) ->
+    Term = rabbit_data_coercion:to_proplist(Term0),
+
+    rabbit_parameter_validation:proplist(Name, rabbit_amqqueue:consume_args(), Term).
 
 validate_amqp10_map(Name, Terms0) ->
     Terms = rabbit_data_coercion:to_proplist(Terms0),
@@ -376,7 +382,8 @@ parse_amqp10_source(Def) ->
        uris => Uris,
        source_address => Address,
        delete_after => opt_b2a(DeleteAfter),
-       prefetch_count => PrefetchCount}, Headers}.
+       prefetch_count => PrefetchCount,
+       consumer_args => []}, Headers}.
 
 parse_amqp091_source(Def) ->
     SrcURIs  = get_uris(<<"src-uri">>, Def),
@@ -384,6 +391,7 @@ parse_amqp091_source(Def) ->
     SrcXKey  = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
     SrcQ     = pget(<<"src-queue">>, Def, none),
     SrcQArgs = pget(<<"src-queue-args">>,   Def, #{}),
+    SrcCArgs = rabbit_misc:to_amqp_table(pget(<<"src-consumer-args">>, Def, [])),
     {SrcDeclFun, Queue, DestHeaders} =
     case SrcQ of
         none -> {fun (_Conn, Ch) ->
@@ -411,7 +419,8 @@ parse_amqp091_source(Def) ->
                   resource_decl => SrcDeclFun,
                   queue => Queue,
                   delete_after => opt_b2a(DeleteAfter),
-                  prefetch_count => PrefetchCount
+                  prefetch_count => PrefetchCount,
+                  consumer_args => SrcCArgs
                  }, Details), DestHeaders}.
 
 get_uris(Key, Def) ->

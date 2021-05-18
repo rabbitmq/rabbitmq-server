@@ -66,7 +66,8 @@ parse(_Name, {source, Conf}) ->
       uris => Uris,
       prefetch_count => pget(prefetch_count, Conf, 1000),
       delete_after => pget(delete_after, Conf, never),
-      source_address => pget(source_address, Conf)}.
+      source_address => pget(source_address, Conf),
+      consumer_args => pget(consumer_args, Conf, [])}.
 
 -spec connect_source(state()) -> state().
 connect_source(State = #{name := Name,

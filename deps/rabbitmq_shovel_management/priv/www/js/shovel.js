@@ -22,6 +22,10 @@ dispatcher_add(function(sammy) {
             if (redirect !== undefined) {
                 delete this.params['redirect'];
             }
+            var stream_offset = this.params['src-consumer-args-stream-offset'];
+            var src_consumer_args = {'x-stream-offset': stream_offset};
+            delete this.params['src-consumer-args-stream-offset'];
+            this.params['src-consumer-args'] = src_consumer_args;
             put_parameter(this, [], num_keys, bool_keys, arrayable_keys);
             if (redirect !== undefined) {
                 go_to(redirect);

@@ -15,7 +15,8 @@
 all() ->
     [
       {group, core_tests},
-      {group, quorum_queue_tests}
+      {group, quorum_queue_tests},
+      {group, stream_queue_tests}
     ].
 
 groups() ->
@@ -38,6 +39,10 @@ groups() ->
 
         {quorum_queue_tests, [], [
           quorum_queues
+        ]},
+
+        {stream_queue_tests, [], [
+          stream_queues
         ]}
     ].
 
@@ -63,6 +68,11 @@ init_per_group(quorum_queue_tests, Config) ->
     case os:getenv("SECONDARY_UMBRELLA") of
         false -> Config;
         _     -> {skip, "quorum queue tests are skipped in mixed mode"}
+    end;
+init_per_group(stream_queue_tests, Config) ->
+    case os:getenv("SECONDARY_UMBRELLA") of
+        false -> Config;
+        _     -> {skip, "stream queue tests are skipped in mixed mode"}
     end;
 init_per_group(_, Config) ->
     Config.
@@ -100,6 +110,20 @@ quorum_queues(Config) ->
                              {<<"dest-queue">>,      <<"dest">>},
                              {<<"src-queue-args">>,  #{<<"x-queue-type">> => <<"quorum">>}},
                              {<<"dest-queue-args">>, #{<<"x-queue-type">> => <<"quorum">>}}
+                            ]),
+              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
+      end).
+
+stream_queues(Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              shovel_test_utils:set_param(
+                Config,
+                <<"test">>, [
+                             {<<"src-queue">>,       <<"src">>},
+                             {<<"dest-queue">>,      <<"dest">>},
+                             {<<"src-queue-args">>,  #{<<"x-queue-type">> => <<"stream">>}},
+                             {<<"src-consumer-args">>,  #{<<"x-stream-offset">> => <<"first">>}}
                             ]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
