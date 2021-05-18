@@ -261,7 +261,7 @@ recover_segment(State, ContainsCheckFun, CountersRef, Fd,
                                     Unacked);
                 %% Message is not in the store. Mark it as acked.
                 false ->
-                    file:pwrite(Fd, Offset, <<2>>),
+                    file:pwrite(Fd, Offset, <<0>>),
                     recover_segment(State, ContainsCheckFun, CountersRef,
                                     Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                                     Unacked - 1)
@@ -270,7 +270,7 @@ recover_segment(State, ContainsCheckFun, CountersRef, Fd,
         %% without checking with the message store, because it already dropped
         %% this message.
         {ok, <<1,_,0,_/bits>>} ->
-            file:pwrite(Fd, Offset, <<2>>),
+            file:pwrite(Fd, Offset, <<0>>),
             recover_segment(State, ContainsCheckFun, CountersRef,
                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                             Unacked - 1);
