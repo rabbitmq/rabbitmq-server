@@ -8,7 +8,6 @@
 -module(rabbit_vhost).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/logging.hrl").
 
 -include_lib("khepri/include/khepri.hrl").
 
@@ -25,6 +24,7 @@
 -export([delete_storage/1]).
 -export([vhost_down/1]).
 -export([put_vhost/5]).
+-export([mnesia_write_to_khepri/1, mnesia_delete_to_khepri/1]).
 -export([khepri_vhosts_path/0, khepri_vhost_path/1]).
 
 %%
@@ -621,6 +621,22 @@ info_all(Ref, AggregatorPid)        -> info_all(?INFO_KEYS, Ref, AggregatorPid).
 info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
        AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, all()).
+
+mnesia_write_to_khepri(VHost) when ?is_vhost(VHost) ->
+    Name = vhost:get_name(VHost),
+    Path = khepri_vhost_path(Name),
+    case rabbit_khepri:insert(Path, VHost) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end.
+
+mnesia_delete_to_khepri(VHost) when ?is_vhost(VHost) ->
+    Name = vhost:get_name(VHost),
+    Path = khepri_vhost_path(Name),
+    case rabbit_khepri:delete(Path) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end.
 
 khepri_vhosts_path()     -> [?MODULE].
 khepri_vhost_path(VHost) -> [?MODULE, VHost].

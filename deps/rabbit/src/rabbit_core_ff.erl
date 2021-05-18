@@ -7,12 +7,21 @@
 
 -module(rabbit_core_ff).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+
+-include("include/vhost.hrl").
+-include("include/internal_user.hrl").
+
 -export([quorum_queue_migration/3,
          stream_queue_migration/3,
          implicit_default_bindings_migration/3,
          virtual_host_metadata_migration/3,
          maintenance_mode_status_migration/3,
-         user_limits_migration/3]).
+         user_limits_migration/3,
+         mds_phase1_migration/3]).
 
 -rabbit_feature_flag(
    {quorum_queue,
@@ -58,6 +67,15 @@
      #{desc          => "Configure connection and channel limits for a user",
        stability     => stable,
        migration_fun => {?MODULE, user_limits_migration}
+     }}).
+
+-rabbit_feature_flag(
+   {raft_based_metadata_store_phase1,
+    #{desc          => "Use the new Raft-based metadata store [phase 1]",
+      doc_url       => "", %% TODO
+      stability     => experimental,
+      depends_on    => [virtual_host_metadata, user_limits],
+      migration_fun => {?MODULE, mds_phase1_migration}
      }}).
 
 %% -------------------------------------------------------------------
@@ -111,7 +129,7 @@ implicit_default_bindings_migration(FeatureName, _FeatureProps,
     rabbit_table:wait([rabbit_queue]),
     Queues = mnesia:dirty_all_keys(rabbit_queue),
     remove_explicit_default_bindings(FeatureName, Queues);
-implicit_default_bindings_migration(_Feature_Name, _FeatureProps,
+implicit_default_bindings_migration(_FeatureName, _FeatureProps,
                                     is_enabled) ->
     undefined.
 
@@ -171,9 +189,250 @@ user_limits_migration(_FeatureName, _FeatureProps, enable) ->
     Tab = rabbit_user,
     rabbit_table:wait([Tab], _Retry = true),
     Fun = fun(Row) -> internal_user:upgrade_to(internal_user_v2, Row) end,
-    case mnesia:transform_table(Tab, Fun, internal_user:fields(internal_user_v2)) of
+    Ret = mnesia:transform_table(
+            Tab, Fun, internal_user:fields(internal_user_v2)),
+    case Ret of
         {atomic, ok}      -> ok;
         {aborted, Reason} -> {error, Reason}
     end;
 user_limits_migration(_FeatureName, _FeatureProps, is_enabled) ->
-    mnesia:table_info(rabbit_user, attributes) =:= internal_user:fields(internal_user_v2).
+    mnesia:table_info(rabbit_user, attributes) =:=
+    internal_user:fields(internal_user_v2).
+
+%% -------------------------------------------------------------------
+%% Raft-based metadata store (phase 1).
+%% -------------------------------------------------------------------
+
+%% Phase 1 covers the migration of the following data:
+%%     * virtual hosts
+%%     * users and their permissions
+%%     * runtime parameters
+%% They all depend on each others in Mnesia transactions. That's why they must
+%% be migrated atomically.
+
+%% This table order is important. For instance, user permissions depend on
+%% both vhosts and users to exist in the metadata store.
+-define(mds_phase1_tables, [rabbit_vhost,
+                            rabbit_user,
+                            rabbit_user_permission,
+                            rabbit_topic_permission]).
+
+mds_phase1_migration(FeatureName, _FeatureProps, enable) ->
+    Tables = ?mds_phase1_tables,
+    rabbit_table:wait(Tables, _Retry = true),
+    ?LOG_NOTICE(
+       "Feature flag `~s`:   starting migration from Mnesia to Khepri; "
+       "expect decrease in performance and increase in memory footprint",
+       [FeatureName]),
+    migrate_tables_to_khepri(FeatureName, Tables),
+    ?LOG_NOTICE(
+       "Feature flag `~s`:   migration from Mnesia to Khepri finished",
+       [FeatureName]);
+mds_phase1_migration(FeatureName, _FeatureProps, is_enabled) ->
+    %% Migrated tables do not exist anymore.
+    lists:all(
+      fun(Table) ->
+              try
+                  _ = mnesia:table_info(Table, type),
+                  ?LOG_DEBUG(
+                     "Feature flag `~s`:   table ~s exists, feature flag "
+                     "disabled",
+                     [FeatureName, Table]),
+                  false
+              catch
+                  exit:{aborted, {no_exists, Table, type}} ->
+                      true
+              end
+      end, ?mds_phase1_tables).
+
+migrate_tables_to_khepri(FeatureName, Tables) ->
+    Pid = spawn(
+            fun() -> migrate_tables_to_khepri_run(FeatureName, Tables) end),
+    MonitorRef = erlang:monitor(process, Pid),
+    receive
+        {'DOWN', MonitorRef, process, Pid, normal} ->
+            ok;
+        {'DOWN', MonitorRef, process, Pid, Info} ->
+            ?LOG_ERROR(
+               "Feature flag `~s`:   "
+               "failed to migrate Mnesia tables to Khepri:~n  ~p",
+               [FeatureName, Info]),
+            {error, {migration_failure, Info}}
+    end.
+
+migrate_tables_to_khepri_run(FeatureName, Tables) ->
+    %% Subscribe to Mnesia events: we want to know about all writes and
+    %% deletions happening in parallel to the copy we are about to start.
+    ?LOG_DEBUG(
+       "Feature flag `~s`:   subscribe to Mnesia writes",
+       [FeatureName]),
+    ok = subscribe_to_mnesia_changes(FeatureName, Tables),
+
+    %% Copy from Mnesia to Khepri. Tables are copied in a specific order to
+    %% make sure that if term A depends on term B, term B was copied before.
+    ?LOG_DEBUG(
+       "Feature flag `~s`:   copy records from Mnesia to Khepri",
+       [FeatureName]),
+    ok = copy_from_mnesia_to_khepri(FeatureName, Tables),
+
+    %% Mnesia transaction to handle received Mnesia events and tables removal.
+    ?LOG_DEBUG(
+       "Feature flag `~s`:   final sync and Mnesia table removal",
+       [FeatureName]),
+    ok = final_sync_from_mnesia_to_khepri(FeatureName, Tables).
+
+subscribe_to_mnesia_changes(FeatureName, [Table | Rest]) ->
+    ?LOG_DEBUG(
+       "Feature flag `~s`:     subscribe to writes to ~s",
+       [FeatureName, Table]),
+    case mnesia:subscribe({table, Table, simple}) of
+        {ok, _} -> subscribe_to_mnesia_changes(FeatureName, Rest);
+        Error   -> Error
+    end;
+subscribe_to_mnesia_changes(_, []) ->
+    ok.
+
+copy_from_mnesia_to_khepri(
+  FeatureName, [rabbit_vhost = Table | Rest]) ->
+    Fun = fun rabbit_vhost:mnesia_write_to_khepri/1,
+    do_copy_from_mnesia_to_khepri(FeatureName, Table, Fun),
+    copy_from_mnesia_to_khepri(FeatureName, Rest);
+copy_from_mnesia_to_khepri(
+  FeatureName, [rabbit_user = Table | Rest]) ->
+    Fun = fun rabbit_auth_backend_internal:mnesia_write_to_khepri/1,
+    do_copy_from_mnesia_to_khepri(FeatureName, Table, Fun),
+    copy_from_mnesia_to_khepri(FeatureName, Rest);
+copy_from_mnesia_to_khepri(
+  FeatureName, [rabbit_user_permission = Table | Rest]) ->
+    Fun = fun rabbit_auth_backend_internal:mnesia_write_to_khepri/1,
+    do_copy_from_mnesia_to_khepri(FeatureName, Table, Fun),
+    copy_from_mnesia_to_khepri(FeatureName, Rest);
+copy_from_mnesia_to_khepri(
+  FeatureName, [rabbit_topic_permission = Table | Rest]) ->
+    Fun = fun rabbit_auth_backend_internal:mnesia_write_to_khepri/1,
+    do_copy_from_mnesia_to_khepri(FeatureName, Table, Fun),
+    copy_from_mnesia_to_khepri(FeatureName, Rest);
+copy_from_mnesia_to_khepri(_, []) ->
+    ok.
+
+do_copy_from_mnesia_to_khepri(FeatureName, Table, Fun) ->
+    Count = mnesia:table_info(Table, size),
+    ?LOG_DEBUG(
+       "Feature flag `~s`:     table ~s: about ~b record to copy",
+       [FeatureName, Table, Count]),
+    _ = mnesia:transaction(
+          fun() ->
+                  _ = mnesia:foldl(
+                        fun(Record, Copied) ->
+                                Copied1 = Copied + 1,
+                                ?LOG_DEBUG(
+                                   "Feature flag `~s`:     table ~s: copying "
+                                   "record ~b/~b",
+                                   [FeatureName, Table, Copied1, Count]),
+                                ok = Fun(Record),
+                                Copied1
+                        end, 0, Table)
+          end),
+    ok.
+
+final_sync_from_mnesia_to_khepri(FeatureName, Tables) ->
+    %% Switch all tables to read-only. All concurrent and future Mnesia
+    %% transaction involving a write to one of them will fail with the
+    %% `{no_exists, Table}` exception.
+    lists:foreach(
+      fun(Table) ->
+              ?LOG_DEBUG(
+                 "Feature flag `~s`:     switch table ~s to read-only",
+                 [FeatureName, Table]),
+              {atomic, ok} = mnesia:change_table_access_mode(Table, read_only)
+      end, Tables),
+
+%    mnesia:transaction(
+%      fun() ->
+%              %% Acquire "write" lock on all tables: we will delete them at the
+%              %% end of the transaction and we want to make sure we catch all
+%              %% writes (i.e. there will be none happening in parallel).
+%              ?LOG_DEBUG(
+%                 "Feature flag `~s`:     acquiring write lock on tables ~0p",
+%                 [FeatureName, Tables]),
+%              lists:foreach(
+%                fun(Table) -> mnesia:lock({table, Table}, write) end,
+%                Tables),
+
+    %% During the first round of copy, we received all write events as
+    %% messages (parallel writes were authorized). Now, we want to consume
+    %% those messages to record the writes we probably missed.
+    ok = consume_mnesia_events(FeatureName),
+
+%    %% We can now remove the Mnesia tables as everything was copied.  Mnesia
+%    %% transactions which want to write to those tables in parallel of this
+%    %% one should fail and restart: this is their chance to switch to Khepri.
+%    ?LOG_DEBUG(
+%       "Feature flag `~s`:     removing tables ~0p",
+%       [FeatureName, Tables]),
+%    lists:foreach(
+%      fun(Table) -> {atomic, ok} = mnesia:delete_table(Table) end,
+%      Tables).
+
+    ok.
+
+consume_mnesia_events(FeatureName) ->
+    {_, Count} = erlang:process_info(self(), message_queue_len),
+    ?LOG_DEBUG(
+       "Feature flag `~s`:     handling queued Mnesia events "
+       "(about ~b events)",
+       [FeatureName, Count]),
+    consume_mnesia_events(FeatureName, Count, 0).
+
+consume_mnesia_events(FeatureName, Count, Handled) ->
+    Handled1 = Handled + 1,
+    receive
+        {write, NewRecord, _} ->
+            ?LOG_DEBUG(
+               "Feature flag `~s`:       handling event ~b/~b (write)",
+               [FeatureName, Handled1, Count]),
+            handle_mnesia_write(NewRecord),
+            consume_mnesia_events(FeatureName, Count, Handled1);
+        {delete_object, OldRecord, _} ->
+            ?LOG_DEBUG(
+               "Feature flag `~s`:       handling event ~b/~b (delete)",
+               [FeatureName, Handled1, Count]),
+            handle_mnesia_delete(OldRecord),
+            consume_mnesia_events(FeatureName, Count, Handled1);
+        {delete, {Table, Key}, _} ->
+            ?LOG_DEBUG(
+               "Feature flag `~s`:       handling event ~b/~b (delete)",
+               [FeatureName, Handled1, Count]),
+            handle_mnesia_delete(Table, Key),
+            consume_mnesia_events(FeatureName, Count, Handled1)
+    after 0 ->
+              %% TODO: Wait for confirmation from Khepri.
+              ok
+    end.
+
+handle_mnesia_write(NewRecord) when ?is_vhost(NewRecord) ->
+    rabbit_vhost:mnesia_write_to_khepri(NewRecord);
+handle_mnesia_write(NewRecord) when ?is_internal_user(NewRecord) ->
+    rabbit_auth_backend_internal:mnesia_write_to_khepri(NewRecord);
+handle_mnesia_write(NewRecord) when is_record(NewRecord, user_permission) ->
+    rabbit_auth_backend_internal:mnesia_write_to_khepri(NewRecord);
+handle_mnesia_write(NewRecord) when is_record(NewRecord, topic_permission) ->
+    rabbit_auth_backend_internal:mnesia_write_to_khepri(NewRecord).
+
+handle_mnesia_delete(OldRecord) when ?is_vhost(OldRecord) ->
+    rabbit_vhost:mnesia_delete_to_khepri(OldRecord);
+handle_mnesia_delete(OldRecord) when ?is_internal_user(OldRecord) ->
+    rabbit_auth_backend_internal:mnesia_delete_to_khepri(OldRecord);
+handle_mnesia_delete(OldRecord) when is_record(OldRecord, user_permission) ->
+    rabbit_auth_backend_internal:mnesia_delete_to_khepri(OldRecord);
+handle_mnesia_delete(OldRecord) when is_record(OldRecord, topic_permission) ->
+    rabbit_auth_backend_internal:mnesia_delete_to_khepri(OldRecord).
+
+handle_mnesia_delete(rabbit_vhost, VHost) ->
+    rabbit_vhost:mnesia_delete_to_khepri(VHost);
+handle_mnesia_delete(rabbit_user, Username) ->
+    rabbit_auth_backend_internal:mnesia_delete_to_khepri(Username);
+handle_mnesia_delete(rabbit_user_permission, UserVHost) ->
+    rabbit_auth_backend_internal:mnesia_delete_to_khepri(UserVHost);
+handle_mnesia_delete(rabbit_topic_permission, TopicPermissionKey) ->
+    rabbit_auth_backend_internal:mnesia_delete_to_khepri(TopicPermissionKey).

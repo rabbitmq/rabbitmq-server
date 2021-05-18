@@ -9,10 +9,12 @@
 
 -include_lib("kernel/include/logger.hrl").
 
+-include_lib("khepri/include/khepri.hrl").
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 
--include_lib("khepri/include/khepri.hrl").
+-include("include/internal_user.hrl").
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
@@ -42,6 +44,7 @@
          list_user_topic_permissions/1, list_vhost_topic_permissions/1, list_user_vhost_topic_permissions/2]).
 
 -export([state_can_expire/0]).
+-export([mnesia_write_to_khepri/1, mnesia_delete_to_khepri/1]).
 -export([khepri_users_path/0, khepri_user_path/1]).
 
 %% for testing
@@ -1394,6 +1397,79 @@ notify_limit_clear(Username, ActingUser) ->
     rabbit_event:notify(user_limits_cleared,
         [{name, <<"limits">>}, {user_who_performed_action, ActingUser},
         {username, Username}]).
+
+mnesia_write_to_khepri(User) when ?is_internal_user(User) ->
+    Username = internal_user:get_username(User),
+    Path = khepri_user_path(Username),
+    case rabbit_khepri:insert(Path, User) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end;
+mnesia_write_to_khepri(
+  #user_permission{
+     user_vhost = #user_vhost{
+                     username = Username,
+                     virtual_host = VHost}} = UserPermission) ->
+    Path = khepri_user_permission_path(
+             #if_all{conditions =
+                     [Username,
+                      #if_node_exists{exists = true}]},
+             VHost),
+    Extra = #{keep_until => [rabbit_vhost:khepri_vhost_path(VHost)]},
+    case rabbit_khepri:machine_insert(Path, UserPermission, Extra) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end;
+mnesia_write_to_khepri(
+  #topic_permission{
+     topic_permission_key =
+     #topic_permission_key{
+        user_vhost = #user_vhost{
+                        username = Username,
+                        virtual_host = VHost},
+        exchange = Exchange}} = TopicPermission) ->
+    Path = khepri_topic_permission_path(
+             #if_all{conditions =
+                     [Username,
+                      #if_node_exists{exists = true}]},
+             VHost,
+             Exchange),
+    Extra = #{keep_until => [rabbit_vhost:khepri_vhost_path(VHost)]},
+    case rabbit_khepri:machine_insert(Path, TopicPermission, Extra) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end.
+
+mnesia_delete_to_khepri(User) when ?is_internal_user(User) ->
+    Username = internal_user:get_username(User),
+    Path = khepri_user_path(Username),
+    case rabbit_khepri:delete(Path) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end;
+mnesia_delete_to_khepri(
+  #user_permission{
+     user_vhost = #user_vhost{
+                     username = Username,
+                     virtual_host = VHost}}) ->
+    Path = khepri_user_permission_path(Username, VHost),
+    case rabbit_khepri:delete(Path) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end;
+mnesia_delete_to_khepri(
+  #topic_permission{
+     topic_permission_key =
+     #topic_permission_key{
+        user_vhost = #user_vhost{
+                        username = Username,
+                        virtual_host = VHost},
+        exchange = Exchange}}) ->
+    Path = khepri_topic_permission_path(Username, VHost, Exchange),
+    case rabbit_khepri:delete(Path) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end.
 
 khepri_users_path()        -> [?MODULE, users].
 khepri_user_path(Username) -> [?MODULE, users, Username].
