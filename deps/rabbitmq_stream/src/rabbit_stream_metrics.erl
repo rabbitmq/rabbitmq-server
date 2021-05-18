@@ -20,8 +20,8 @@
 
 %% API
 -export([init/0]).
--export([consumer_created/6,
-         consumer_updated/6,
+-export([consumer_created/7,
+         consumer_updated/7,
          consumer_cancelled/3]).
 -export([publisher_created/4,
          publisher_updated/7,
@@ -39,9 +39,13 @@ consumer_created(Connection,
                  SubscriptionId,
                  Credits,
                  MessageCount,
-                 Offset) ->
+                 Offset,
+                 Properties) ->
     Values =
-        [{credits, Credits}, {consumed, MessageCount}, {offset, Offset}],
+        [{credits, Credits},
+         {consumed, MessageCount},
+         {offset, Offset},
+         {properties, Properties}],
     ets:insert(?TABLE_CONSUMER,
                {{StreamResource, Connection, SubscriptionId}, Values}),
     rabbit_core_metrics:consumer_created(Connection,
@@ -52,7 +56,7 @@ consumer_created(Connection,
                                          0,
                                          true,
                                          up,
-                                         []),
+                                         rabbit_misc:to_amqp_table(Properties)),
     ok.
 
 consumer_tag(SubscriptionId) ->
@@ -64,9 +68,13 @@ consumer_updated(Connection,
                  SubscriptionId,
                  Credits,
                  MessageCount,
-                 Offset) ->
+                 Offset,
+                 Properties) ->
     Values =
-        [{credits, Credits}, {consumed, MessageCount}, {offset, Offset}],
+        [{credits, Credits},
+         {consumed, MessageCount},
+         {offset, Offset},
+         {properties, Properties}],
     ets:insert(?TABLE_CONSUMER,
                {{StreamResource, Connection, SubscriptionId}, Values}),
     ok.
@@ -77,6 +85,11 @@ consumer_cancelled(Connection, StreamResource, SubscriptionId) ->
     rabbit_core_metrics:consumer_deleted(Connection,
                                          consumer_tag(SubscriptionId),
                                          StreamResource),
+    %% FIXME send consumer_deleted event when this function is called
+    %% otherwise the consumer is not fully cleaned up and can still show up in the REST API
+    %%    rabbit_event:notify(consumer_deleted, [{consumer_tag, consumer_tag(SubscriptionId)},
+    %%        {channel, self()},
+    %%        {queue, StreamResource}]),
     ok.
 
 publisher_created(Connection,

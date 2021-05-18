@@ -1467,7 +1467,8 @@ handle_frame_post_auth(Transport,
                                                                    SubscriptionId,
                                                                    Credit1,
                                                                    messages_consumed(ConsumerCounters1),
-                                                                   ConsumerOffset),
+                                                                   ConsumerOffset,
+                                                                   Properties),
                             {Connection1#stream_connection{stream_subscriptions
                                                                =
                                                                StreamSubscriptions1},
@@ -2276,11 +2277,13 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
                                             Id,
                                             Credit,
                                             messages_consumed(Counters),
-                                            consumer_offset(Counters))
+                                            consumer_offset(Counters),
+                                            Properties)
      || #consumer{stream = S,
                   subscription_id = Id,
                   credit = Credit,
-                  counters = Counters}
+                  counters = Counters,
+                  properties = Properties}
             <- maps:values(Consumers)],
     [rabbit_stream_metrics:publisher_updated(self(),
                                              stream_r(S, Connection),

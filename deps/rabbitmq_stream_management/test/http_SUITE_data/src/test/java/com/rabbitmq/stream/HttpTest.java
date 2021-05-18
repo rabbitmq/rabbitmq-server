@@ -53,6 +53,7 @@ import org.assertj.core.api.Condition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -224,7 +225,9 @@ public class HttpTest {
       assertThat(consumers).hasSize(2);
       consumers.forEach(
           c -> {
-            assertThat(c).containsKeys("subscription_id", "credits", "connection_details", "queue");
+            assertThat(c)
+                .containsKeys(
+                    "subscription_id", "credits", "connection_details", "queue", "properties");
             assertThat(c)
                 .extractingByKey("connection_details", as(MAP))
                 .containsValue(connectionName(c1));
@@ -434,8 +437,20 @@ public class HttpTest {
     waitUntil(() -> request.call().size() == initialCount);
   }
 
-  @Test
-  void consumers() throws Exception {
+  static Stream<Map<String, String>> subscriptionProperties() {
+    return Stream.of(Collections.emptyMap(), map());
+  }
+
+  static Map<String, String> map() {
+    Map<String, String> map = new LinkedHashMap<>();
+    map.put("key1", "value1");
+    map.put("key2", "value2");
+    return map;
+  }
+
+  @ParameterizedTest
+  @MethodSource("subscriptionProperties")
+  void consumers(Map<String, String> subscriptionProperties) throws Exception {
     Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/consumers"));
     int initialCount = request.call().size();
     String connectionProvidedName = UUID.randomUUID().toString();
@@ -449,7 +464,7 @@ public class HttpTest {
                         client1.credit(subscriptionId, 1))
                 .shutdownListener(shutdownContext -> closed.set(true)));
 
-    client.subscribe((byte) 0, stream, OffsetSpecification.first(), 10);
+    client.subscribe((byte) 0, stream, OffsetSpecification.first(), 10, subscriptionProperties);
     waitUntil(() -> request.call().size() == initialCount + 1);
     waitUntil(() -> entities(request.call(), client).size() == 1);
 
@@ -458,6 +473,8 @@ public class HttpTest {
     assertThat(((Number) consumer.get("consumed")).intValue()).isEqualTo(0);
     assertThat(((Number) consumer.get("offset")).intValue()).isEqualTo(0);
     assertThat(((Number) consumer.get("subscription_id")).intValue()).isEqualTo(0);
+    assertThat(consumer.get("properties")).isNotNull().isEqualTo(subscriptionProperties);
+
     assertThat(connectionDetails(consumer))
         .containsEntry("name", connectionName(client))
         .containsEntry("user", "guest")
