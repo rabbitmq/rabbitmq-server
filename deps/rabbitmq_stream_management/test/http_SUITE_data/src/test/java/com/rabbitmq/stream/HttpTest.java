@@ -150,6 +150,17 @@ public class HttpTest {
     return new TestRequest(endpoint, expectedCount);
   }
 
+  static Stream<Map<String, String>> subscriptionProperties() {
+    return Stream.of(Collections.emptyMap(), map());
+  }
+
+  static Map<String, String> map() {
+    Map<String, String> map = new LinkedHashMap<>();
+    map.put("key1", "value1");
+    map.put("key2", "value2");
+    return map;
+  }
+
   @Test
   void connections() throws Exception {
     Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/connections"));
@@ -437,17 +448,6 @@ public class HttpTest {
     waitUntil(() -> request.call().size() == initialCount);
   }
 
-  static Stream<Map<String, String>> subscriptionProperties() {
-    return Stream.of(Collections.emptyMap(), map());
-  }
-
-  static Map<String, String> map() {
-    Map<String, String> map = new LinkedHashMap<>();
-    map.put("key1", "value1");
-    map.put("key2", "value2");
-    return map;
-  }
-
   @ParameterizedTest
   @MethodSource("subscriptionProperties")
   void consumers(Map<String, String> subscriptionProperties) throws Exception {
@@ -694,8 +694,10 @@ public class HttpTest {
     assertThatThrownBy(() -> get(endpoint)).hasMessageContaining("404");
   }
 
-  @Test
-  void streamConsumersShouldShowUpAsRegularConsumers() throws Exception {
+  @ParameterizedTest
+  @MethodSource("subscriptionProperties")
+  void streamConsumersShouldShowUpAsRegularConsumers(Map<String, String> subscriptionProperties)
+      throws Exception {
     Callable<List<Map<String, Object>>> consumersRequest = () -> toMaps(get("/consumers"));
     int initialCount = consumersRequest.call().size();
     String connectionProvidedName = UUID.randomUUID().toString();
@@ -707,58 +709,65 @@ public class HttpTest {
                 .clientProperty("connection_name", connectionProvidedName)
                 .shutdownListener(shutdownContext -> closed.set(true)));
 
-    client.create(s);
-    client.subscribe((byte) 0, s, OffsetSpecification.first(), 10);
-    waitUntil(() -> consumersRequest.call().size() == initialCount + 1);
+    try {
 
-    String consumerTagPrefix = "stream.subid-";
-    Map<String, Object> consumersConsumer =
-        entity(
-            consumersRequest.call(),
-            m ->
-                m.get("consumer_tag").toString().startsWith(consumerTagPrefix)
-                    && m.get("channel_details") != null
-                    && m.get("channel_details") instanceof Map
-                    && connectionName(client)
-                        .equals(
-                            ((Map<String, Object>) m.get("channel_details"))
-                                .get("connection_name")));
+      client.create(s);
+      client.subscribe((byte) 0, s, OffsetSpecification.first(), 10, subscriptionProperties);
+      waitUntil(() -> consumersRequest.call().size() == initialCount + 1);
 
-    Callable<Map<String, Object>> queueRequest = () -> toMap(get("/queues/%2F/" + s));
-    Map<String, Object> queueDetails = queueRequest.call();
+      String consumerTagPrefix = "stream.subid-";
+      Map<String, Object> consumersConsumer =
+          entity(
+              consumersRequest.call(),
+              m ->
+                  m.get("consumer_tag").toString().startsWith(consumerTagPrefix)
+                      && m.get("channel_details") != null
+                      && m.get("channel_details") instanceof Map
+                      && connectionName(client)
+                          .equals(
+                              ((Map<String, Object>) m.get("channel_details"))
+                                  .get("connection_name")));
 
-    assertThat(queueDetails).containsKey("consumer_details");
-    assertThat(queueDetails.get("consumer_details")).isInstanceOf(List.class).asList().hasSize(1);
-    Map<String, Object> queueConsumer =
-        ((List<Map<String, Object>>) queueDetails.get("consumer_details")).get(0);
+      Callable<Map<String, Object>> queueRequest = () -> toMap(get("/queues/%2F/" + s));
+      Map<String, Object> queueDetails = queueRequest.call();
 
-    Stream.of(consumersConsumer, queueConsumer)
-        .forEach(
-            consumer -> {
-              assertThat(consumer)
-                  .isNotNull()
-                  .containsEntry("ack_required", false)
-                  .containsEntry("active", true)
-                  .containsEntry("activity_status", "up")
-                  .containsEntry("consumer_tag", consumerTagPrefix + "0")
-                  .containsEntry("exclusive", false)
-                  .hasEntrySatisfying(
-                      "prefetch_count", o -> assertThat(((Number) o).intValue()).isZero());
+      assertThat(queueDetails).containsKey("consumer_details");
+      assertThat(queueDetails.get("consumer_details")).isInstanceOf(List.class).asList().hasSize(1);
+      Map<String, Object> queueConsumer =
+          ((List<Map<String, Object>>) queueDetails.get("consumer_details")).get(0);
 
-              Map<String, String> queue = (Map<String, String>) consumer.get("queue");
-              assertThat(queue).isNotNull().containsEntry("name", s);
+      Stream.of(consumersConsumer, queueConsumer)
+          .forEach(
+              consumer -> {
+                assertThat(consumer)
+                    .isNotNull()
+                    .containsEntry("ack_required", false)
+                    .containsEntry("active", true)
+                    .containsEntry("activity_status", "up")
+                    .containsEntry("consumer_tag", consumerTagPrefix + "0")
+                    .containsEntry("exclusive", false)
+                    .containsEntry("arguments", subscriptionProperties)
+                    .hasEntrySatisfying(
+                        "prefetch_count", o -> assertThat(((Number) o).intValue()).isZero());
 
-              Map<String, Object> channel = (Map<String, Object>) consumer.get("channel_details");
-              assertThat(channel)
-                  .isNotNull()
-                  .containsEntry("connection_name", connectionName(client))
-                  .containsEntry("name", "")
-                  .hasEntrySatisfying("number", o -> assertThat(((Number) o).intValue()).isZero())
-                  .containsEntry("user", "guest")
-                  .containsKeys("node", "peer_host", "peer_port");
-            });
-    client.delete(s);
-    waitUntil(() -> consumersRequest.call().size() == initialCount);
+                Map<String, String> queue = (Map<String, String>) consumer.get("queue");
+                assertThat(queue).isNotNull().containsEntry("name", s);
+
+                Map<String, Object> channel = (Map<String, Object>) consumer.get("channel_details");
+                assertThat(channel)
+                    .isNotNull()
+                    .containsEntry("connection_name", connectionName(client))
+                    .containsEntry("name", "")
+                    .hasEntrySatisfying("number", o -> assertThat(((Number) o).intValue()).isZero())
+                    .containsEntry("user", "guest")
+                    .containsKeys("node", "peer_host", "peer_port");
+              });
+      Client.Response response = client.unsubscribe((byte) 0);
+      assertThat(response.isOk()).isTrue();
+      waitUntil(() -> consumersRequest.call().size() == initialCount);
+    } finally {
+      client.delete(s);
+    }
   }
 
   static class PermissionsTestConfiguration {

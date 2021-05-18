@@ -85,11 +85,9 @@ consumer_cancelled(Connection, StreamResource, SubscriptionId) ->
     rabbit_core_metrics:consumer_deleted(Connection,
                                          consumer_tag(SubscriptionId),
                                          StreamResource),
-    %% FIXME send consumer_deleted event when this function is called
-    %% otherwise the consumer is not fully cleaned up and can still show up in the REST API
-    %%    rabbit_event:notify(consumer_deleted, [{consumer_tag, consumer_tag(SubscriptionId)},
-    %%        {channel, self()},
-    %%        {queue, StreamResource}]),
+    rabbit_event:notify(consumer_deleted,
+                        [{consumer_tag, consumer_tag(SubscriptionId)},
+                         {channel, self()}, {queue, StreamResource}]),
     ok.
 
 publisher_created(Connection,
