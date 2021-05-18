@@ -20,7 +20,8 @@
          messages_redelivered/3,
          basic_get_empty/3,
          messages_unroutable_dropped/3,
-         messages_unroutable_returned/3
+         messages_unroutable_returned/3,
+         messages_confirmed/3
        ]).
 
 
@@ -34,6 +35,7 @@
 -define(BASIC_GET_EMPTY, 8).
 -define(MESSAGES_UNROUTABLE_DROPPED, 9).
 -define(MESSAGES_UNROUTABLE_RETURNED, 10).
+-define(MESSAGES_CONFIRMED, 11).
 
 -define(COUNTERS,
             [
@@ -76,6 +78,10 @@
                 {
                     messages_unroutable_returned_total, ?MESSAGES_UNROUTABLE_RETURNED, counter,
                    "Total number of messages published as mandatory into an exchange and returned to the publisher as unroutable"
+                },
+                {
+                    messages_confirmed_total, ?MESSAGES_CONFIRMED, counter,
+                    "Total number of messages confirmed to publishers"
                 }
             ]).
 
@@ -123,6 +129,9 @@ messages_unroutable_returned(Group, Object, Num) ->
 % implemented in rabbit_core_metrics (it doesn't reach a queue)
 messages_unroutable_dropped(Group, Object, Num) ->
     counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_UNROUTABLE_DROPPED, Num).
+
+messages_confirmed(Group, Object, Num) ->
+    counters:add(seshat_counters:fetch(Group, Object), ?MESSAGES_CONFIRMED, Num).
 
 % TODO
 %  channel_messages_redelivered_total "Total number of messages redelivered to consumers"

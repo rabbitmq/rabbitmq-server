@@ -274,6 +274,7 @@ has_enough_credits_to_unblock(CreditReference,
     atomics:get(CreditReference, 1) > CreditsRequiredForUnblocking.
 
 increase_messages_consumed(Counters, Count) ->
+    rabbit_messages_counters:messages_delivered_consume_ack(global, global, Count),
     counters:add(Counters, ?CONSUMER_CONSUMED, Count).
 
 set_consumer_credit(Counters, Credit) ->
@@ -283,9 +284,11 @@ set_consumer_offset(Counters, Offset) ->
     counters:put(Counters, ?CONSUMER_OFFSET, Offset).
 
 increase_messages_published(Counters, Count) ->
+    rabbit_messages_counters:messages_published(global, global, Count),
     counters:add(Counters, ?PUBLISHER_PUBLISHED, Count).
 
 increase_messages_confirmed(Counters, Count) ->
+    rabbit_messages_counters:messages_confirmed(global, global, Count),
     counters:add(Counters, ?PUBLISHER_CONFIRMED, Count).
 
 increase_messages_errored(Counters, Count) ->
