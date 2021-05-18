@@ -22,6 +22,7 @@
 
 -include("rabbit_stream.hrl").
 -include("rabbit_stream_metrics.hrl").
+
 -compile(nowarn_export_all).
 -compile(export_all).
 
@@ -188,17 +189,19 @@ test_peer_properties(S, C0) ->
         rabbit_stream_core:frame({request, 1, {peer_properties, #{}}}),
     ok = gen_tcp:send(S, PeerPropertiesFrame),
     {C, [Cmd]} = receive_commands(S, C0),
-    ?assertMatch({response, 1, {peer_properties, ?RESPONSE_CODE_OK, _}}, Cmd),
+    ?assertMatch({response, 1, {peer_properties, ?RESPONSE_CODE_OK, _}},
+                 Cmd),
     C.
 
 test_authenticate(S, C0) ->
-    SaslHandshakeFrame = rabbit_stream_core:frame({request, 1, sasl_handshake}),
+    SaslHandshakeFrame =
+        rabbit_stream_core:frame({request, 1, sasl_handshake}),
     ok = gen_tcp:send(S, SaslHandshakeFrame),
     Plain = <<"PLAIN">>,
     AmqPlain = <<"AMQPLAIN">>,
     {C1, [Cmd]} = receive_commands(S, C0),
     case Cmd of
-        {response, _, {sasl_handshake,  ?RESPONSE_CODE_OK, Mechanisms}} ->
+        {response, _, {sasl_handshake, ?RESPONSE_CODE_OK, Mechanisms}} ->
             ?assertEqual([AmqPlain, Plain], lists:sort(Mechanisms));
         _ ->
             ct:fail("invalid cmd ~p", [Cmd])
@@ -215,35 +218,41 @@ test_authenticate(S, C0) ->
     ok = gen_tcp:send(S, SaslAuthenticateFrame),
     {C2, [SaslAuth | Cmds2]} = receive_commands(S, C1),
     {response, 2, {sasl_authenticate, ?RESPONSE_CODE_OK}} = SaslAuth,
-    {C3, Tune} = case Cmds2 of
-                     [] ->
-                         {C2b, [X]} = receive_commands(S, C2),
-                         {C2b, X};
-                     [T] ->
-                         {C2, T}
-                 end,
+    {C3, Tune} =
+        case Cmds2 of
+            [] ->
+                {C2b, [X]} = receive_commands(S, C2),
+                {C2b, X};
+            [T] ->
+                {C2, T}
+        end,
 
     {tune, ?DEFAULT_FRAME_MAX, ?DEFAULT_HEARTBEAT} = Tune,
 
-    TuneFrame = rabbit_stream_core:frame({response, 0, {tune, ?DEFAULT_FRAME_MAX, 0}}),
+    TuneFrame =
+        rabbit_stream_core:frame({response, 0,
+                                  {tune, ?DEFAULT_FRAME_MAX, 0}}),
     ok = gen_tcp:send(S, TuneFrame),
 
     VirtualHost = <<"/">>,
-    OpenFrame = rabbit_stream_core:frame({request, 3, {open, VirtualHost}}),
+    OpenFrame =
+        rabbit_stream_core:frame({request, 3, {open, VirtualHost}}),
     ok = gen_tcp:send(S, OpenFrame),
-    {C4, [{response, 3, {open, ?RESPONSE_CODE_OK}}]} = receive_commands(S, C3),
+    {C4, [{response, 3, {open, ?RESPONSE_CODE_OK}}]} =
+        receive_commands(S, C3),
     C4.
 
 test_create_stream(S, Stream, C0) ->
-    CreateStreamFrame = rabbit_stream_core:frame({request, 1,
-                                                  {create_stream, Stream, #{}}}),
+    CreateStreamFrame =
+        rabbit_stream_core:frame({request, 1, {create_stream, Stream, #{}}}),
     ok = gen_tcp:send(S, CreateStreamFrame),
     {C, [Cmd]} = receive_commands(S, C0),
     ?assertMatch({response, 1, {create_stream, ?RESPONSE_CODE_OK}}, Cmd),
     C.
 
 test_delete_stream(S, Stream, C0) ->
-    DeleteStreamFrame = rabbit_stream_core:frame({request, 1, {delete_stream, Stream}}),
+    DeleteStreamFrame =
+        rabbit_stream_core:frame({request, 1, {delete_stream, Stream}}),
     ok = gen_tcp:send(S, DeleteStreamFrame),
     {C1, [Cmd | MaybeMetaData]} = receive_commands(S, C0),
     ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, Cmd),
@@ -251,7 +260,8 @@ test_delete_stream(S, Stream, C0) ->
         [] ->
             test_metadata_update_stream_deleted(S, Stream, C1);
         [Meta] ->
-            {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta,
+            {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} =
+                Meta,
             C1
     end.
 
@@ -260,20 +270,24 @@ test_metadata_update_stream_deleted(S, Stream, C0) ->
     {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta,
     C1.
 
-
 test_declare_publisher(S, PublisherId, Stream, C0) ->
     DeclarePublisherFrame =
         rabbit_stream_core:frame({request, 1,
-                                  {declare_publisher, PublisherId, <<>>, Stream}}),
+                                  {declare_publisher,
+                                   PublisherId,
+                                   <<>>,
+                                   Stream}}),
     ok = gen_tcp:send(S, DeclarePublisherFrame),
     {C, [Cmd]} = receive_commands(S, C0),
-    ?assertMatch({response,1, {declare_publisher, ?RESPONSE_CODE_OK}}, Cmd),
+    ?assertMatch({response, 1, {declare_publisher, ?RESPONSE_CODE_OK}},
+                 Cmd),
     C.
 
 test_publish_confirm(S, PublisherId, Body, C0) ->
     BodySize = byte_size(Body),
     Messages = [<<1:64, 0:1, BodySize:31, Body:BodySize/binary>>],
-    PublishFrame = rabbit_stream_core:frame({publish, PublisherId, 1, Messages}),
+    PublishFrame =
+        rabbit_stream_core:frame({publish, PublisherId, 1, Messages}),
     ok = gen_tcp:send(S, PublishFrame),
     {C, [Cmd]} = receive_commands(S, C0),
     ?assertMatch({publish_confirm, PublisherId, [1]}, Cmd),
@@ -303,7 +317,8 @@ test_deliver(S, SubscriptionId, Body, C0) ->
       _ReservedBytes:32,
       0:1,
       BodySize:31/unsigned,
-      Body:BodySize/binary>> = Chunk,
+      Body:BodySize/binary>> =
+        Chunk,
     C.
 
 test_metadata_update_stream_deleted(S, Stream) ->
@@ -321,9 +336,12 @@ test_metadata_update_stream_deleted(S, Stream) ->
 
 test_close(S, C0) ->
     CloseReason = <<"OK">>,
-    CloseFrame = rabbit_stream_core:frame({request, 1, {close, ?RESPONSE_CODE_OK, CloseReason}}),
+    CloseFrame =
+        rabbit_stream_core:frame({request, 1,
+                                  {close, ?RESPONSE_CODE_OK, CloseReason}}),
     ok = gen_tcp:send(S, CloseFrame),
-    {C, [{response, 1, {close,  ?RESPONSE_CODE_OK}}]} = receive_commands(S, C0),
+    {C, [{response, 1, {close, ?RESPONSE_CODE_OK}}]} =
+        receive_commands(S, C0),
     C.
 
 wait_for_socket_close(_S, 0) ->
@@ -351,4 +369,3 @@ receive_commands(S, C0) ->
             ct:pal("error receiving data ~w", [Err]),
             {C0, []}
     end.
-
