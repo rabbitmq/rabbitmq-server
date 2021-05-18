@@ -5,6 +5,7 @@ load(
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
+    "rabbitmq_suite",
 )
 
 APP_NAME = "rabbitmq_stream"
@@ -72,6 +73,11 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "config_schema_SUITE",
+)
+
+rabbitmq_suite(
+    name = "rabbit_stream_core_SUITE",
+    size = "small",
 )
 
 rabbitmq_integration_suite(

@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         erlang_version:
-        - "24"
+        - "24" # This number is mostly irrelevant - the OCI image effectively determines the Erlang version tested
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
