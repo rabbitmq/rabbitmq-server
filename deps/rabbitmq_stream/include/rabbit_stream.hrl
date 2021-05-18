@@ -82,7 +82,8 @@
   subscription_id,
   credits,
   messages,
-  offset
+  offset,
+  properties
   ]).
 
 -define(PUBLISHER_INFO_ITEMS, [

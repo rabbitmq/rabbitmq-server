@@ -2340,7 +2340,9 @@ consumer_i(offset, #consumer{counters = Counters}) ->
 consumer_i(connection_pid, _) ->
     self();
 consumer_i(stream, #consumer{stream = S}) ->
-    S.
+    S;
+consumer_i(properties, #consumer{properties = Properties}) ->
+    Properties.
 
 publishers_info(Pid, InfoItems) ->
     case InfoItems -- ?PUBLISHER_INFO_ITEMS of
