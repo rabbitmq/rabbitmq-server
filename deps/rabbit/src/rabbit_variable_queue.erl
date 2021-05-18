@@ -1971,7 +1971,7 @@ maybe_batch_write_index_to_disk(_Force, MsgStatus, State) ->
 maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
                                     index_on_disk = true }, State) ->
     {MsgStatus, State};
-maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
+maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
                                    msg           = Msg,
                                    msg_id        = MsgId,
                                    seq_id        = SeqId,
@@ -1981,8 +1981,7 @@ maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
                           State = #vqstate{target_ram_count = TargetRamCount,
                                            disk_write_count = DiskWriteCount,
                                            index_state      = IndexState})
-%  when Force orelse IsPersistent ->
-->
+  when Force orelse IsPersistent ->
     {MsgOrId, DiskWriteCount1} =
         case persist_to(MsgStatus) of
             msg_store   -> {MsgId, DiskWriteCount};
