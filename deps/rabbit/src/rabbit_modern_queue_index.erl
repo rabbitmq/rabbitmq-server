@@ -162,8 +162,7 @@ reset_state(State = #mqistate{ queue_name     = Name,
 -define(RECOVER_BYTES, 2).
 %% @todo Also count the number of entries dropped because the message wasn't in the store,
 %%       and log something at the end. We could also count the number of bytes dropped.
-%% @todo We may also want to log holes inside files (not holes as in files missing, as
-%%       those can happen in normal conditions, albeit rarely).
+%% @todo We may also want to log holes inside files.
 
 recover(#resource{ virtual_host = VHost } = Name, Terms, IsMsgStoreClean,
         ContainsCheckFun, OnSyncFun, _OnSyncMsgFun) ->
@@ -622,16 +621,11 @@ read(FromSeqId, ToSeqId, State)
     ?DEBUG("~0p ~0p ~0p", [FromSeqId, ToSeqId, State]),
     {[], State};
 %% Read the messages requested.
-read(FromSeqId, ToSeqId, State) ->
-    ?DEBUG("~0p ~0p ~0p", [FromSeqId, ToSeqId, State]),
-    %% @todo Best if we don't do this at all.
-    SeqIdsToRead = lists:seq(FromSeqId, ToSeqId - 1),
-    read(SeqIdsToRead, State).
-
-read(SeqIdsToRead, State0 = #mqistate{ write_buffer = WriteBuffer }) ->
+read(FromSeqId, ToSeqId, State0 = #mqistate{ write_buffer = WriteBuffer }) ->
+    ?DEBUG("~0p ~0p ~0p", [FromSeqId, ToSeqId, State0]),
     %% We first try to read from the write buffer what we can,
     %% then we read the rest from disk.
-    {Reads0, SeqIdsOnDisk} = read_from_buffer(SeqIdsToRead,
+    {Reads0, SeqIdsOnDisk} = read_from_buffer(FromSeqId, ToSeqId,
                                               WriteBuffer,
                                               [], []),
     {Reads1, State} = read_from_disk(SeqIdsOnDisk,
@@ -641,18 +635,18 @@ read(SeqIdsToRead, State0 = #mqistate{ write_buffer = WriteBuffer }) ->
     Reads = lists:keysort(2, Reads1),
     {Reads, State}.
 
-read_from_buffer([], _, SeqIdsOnDisk, Reads) ->
+read_from_buffer(ToSeqId, ToSeqId, _, SeqIdsOnDisk, Reads) ->
     %% We must do a lists:reverse here so that we are able
     %% to read multiple continuous messages from disk in one call.
     {Reads, lists:reverse(SeqIdsOnDisk)};
-read_from_buffer([SeqId|Tail], WriteBuffer, SeqIdsOnDisk, Reads) ->
+read_from_buffer(SeqId, ToSeqId, WriteBuffer, SeqIdsOnDisk, Reads) ->
     case WriteBuffer of
         #{SeqId := ack} ->
-            read_from_buffer(Tail, WriteBuffer, SeqIdsOnDisk, Reads);
+            read_from_buffer(SeqId + 1, ToSeqId, WriteBuffer, SeqIdsOnDisk, Reads);
         #{SeqId := Entry} when is_tuple(Entry) ->
-            read_from_buffer(Tail, WriteBuffer, SeqIdsOnDisk, [Entry|Reads]);
+            read_from_buffer(SeqId + 1, ToSeqId, WriteBuffer, SeqIdsOnDisk, [Entry|Reads]);
         _ ->
-            read_from_buffer(Tail, WriteBuffer, [SeqId|SeqIdsOnDisk], Reads)
+            read_from_buffer(SeqId + 1, ToSeqId, WriteBuffer, [SeqId|SeqIdsOnDisk], Reads)
     end.
 
 %% We try to minimize the number of file:read calls when reading from
@@ -915,6 +909,8 @@ segment_entry_count() ->
     %% @todo A value lower than the max write_buffer size results in nothing needing
     %%       to be written to disk as long as the consumer consumes as fast as the
     %%       producer produces. Accidental memory queue?
+    %%
+    %% @todo Probably put this in the state rather than read it all the time.
     SegmentEntryCount =
         application:get_env(rabbit, modern_queue_index_segment_entry_count, 65536),
     SegmentEntryCount.
