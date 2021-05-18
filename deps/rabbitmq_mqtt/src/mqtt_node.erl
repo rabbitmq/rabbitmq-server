@@ -65,7 +65,7 @@ start(Delay, AttemptsLeft) ->
           _ ->
               join_peers(NodeId, Nodes),
               ra:restart_server(NodeId),
-              ra:trigger_election(NodeId)
+              ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
     end,
     ok.
 
@@ -89,7 +89,7 @@ start_server() ->
     ra:start_server(Conf).
 
 trigger_election() ->
-    ra:trigger_election(server_id()).
+    ra:trigger_election(server_id(), ?RA_OPERATION_TIMEOUT).
 
 join_peers(_NodeId, []) ->
     ok;
