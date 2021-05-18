@@ -394,37 +394,37 @@ maybe_mark_unconfirmed(MsgId, SeqId, #message_properties{ needs_confirming = tru
 maybe_mark_unconfirmed(_, _, _, State) ->
     State.
 
-%% @todo Perhaps make the two limits configurable.
+%% @todo Perhaps make the two limits configurable. Also refine the default.
 maybe_flush_buffer(State = #mqistate { write_buffer = WriteBuffer })
         when map_size(WriteBuffer) < 2000 ->
     State;
-maybe_flush_buffer(State = #mqistate { write_buffer_updates = NumUpdates }) ->
-    FlushType = case NumUpdates >= 100 of
-        true -> updates;
-        false -> full
+maybe_flush_buffer(State = #mqistate { write_buffer = WriteBuffer,
+                                       write_buffer_updates = NumUpdates }) ->
+    %% We want a full write when we have accumulated many entries.
+    FlushType = case (map_size(WriteBuffer) - NumUpdates) >= 100 of
+        true -> full;
+        false -> updates
     end,
     flush_buffer(State, FlushType).
 
-%% When there are less than 100 entries, we only write updates
-%% (deliver | ack) and get the buffer back to a comfortable level.
-
-flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0 },
+flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0,
+                                  segments = Segments },
              FlushType) ->
     SegmentEntryCount = segment_entry_count(),
     %% First we prepare the writes sorted by segment.
     {Writes, WriteBuffer} = maps:fold(fun
         (SeqId, ack, {WritesAcc, BufferAcc}) ->
-            {acc_write(SeqId, SegmentEntryCount, <<0>>, +0, WritesAcc),
+            {write_ack(SeqId, SegmentEntryCount, Segments, WritesAcc),
              BufferAcc};
         (SeqId, deliver, {WritesAcc, BufferAcc}) ->
-            {acc_write(SeqId, SegmentEntryCount, <<1>>, +1, WritesAcc),
+            {write_deliver(SeqId, SegmentEntryCount, WritesAcc),
              BufferAcc};
         (SeqId, Entry, {WritesAcc, BufferAcc}) when FlushType =:= updates ->
             {WritesAcc,
              BufferAcc#{SeqId => Entry}};
         %% Otherwise we write the entire buffer.
         (SeqId, Entry, {WritesAcc, BufferAcc}) ->
-            {acc_write(SeqId, SegmentEntryCount, build_entry(Entry), +0, WritesAcc),
+            {write_entry(SeqId, SegmentEntryCount, Entry, WritesAcc),
              BufferAcc}
     end, {#{}, #{}}, WriteBuffer0),
     %% Then we do the writes for each segment.
@@ -437,10 +437,31 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0 },
     State#mqistate{ write_buffer = WriteBuffer,
                     write_buffer_updates = 0 }.
 
-acc_write(SeqId, SegmentEntryCount, Bytes, EntryOffset, WritesAcc) ->
-    {Segment, Offset} = locate(SeqId, SegmentEntryCount),
+write_ack(SeqId, SegmentEntryCount, Segments, WritesAcc) ->
+    Segment = SeqId div SegmentEntryCount,
+    %% We only want to write acks to segments that currently exist.
+    %% We need to do this because we indiscriminately added acks to
+    %% the write buffer before, even when we were deleting segments.
+    case maps:is_key(Segment, Segments) of
+        true ->
+            Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
+            LocBytesAcc = maps:get(Segment, WritesAcc, []),
+            WritesAcc#{Segment => [{Offset, <<0>>}|LocBytesAcc]};
+        false ->
+            WritesAcc
+    end.
+
+write_deliver(SeqId, SegmentEntryCount, WritesAcc) ->
+    Segment = SeqId div SegmentEntryCount,
+    Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
     LocBytesAcc = maps:get(Segment, WritesAcc, []),
-    WritesAcc#{Segment => [{Offset + EntryOffset, Bytes}|LocBytesAcc]}.
+    WritesAcc#{Segment => [{Offset + 1, <<1>>}|LocBytesAcc]}.
+
+write_entry(SeqId, SegmentEntryCount, Entry, WritesAcc) ->
+    Segment = SeqId div SegmentEntryCount,
+    Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
+    LocBytesAcc = maps:get(Segment, WritesAcc, []),
+    WritesAcc#{Segment => [{Offset, build_entry(Entry)}|LocBytesAcc]}.
 
 build_entry({Id, _SeqId, Props, IsPersistent, IsDelivered}) ->
     IsDeliveredFlag = case IsDelivered of
@@ -517,45 +538,18 @@ deliver(SeqIds, State = #mqistate { write_buffer = WriteBuffer0,
 ack([], State) ->
     ?DEBUG("[] ~0p", [State]),
     State;
-ack(SeqIds0, State0 = #mqistate{ write_buffer = WriteBuffer0,
-                                 write_buffer_updates = NumUpdates0 }) ->
-    ?DEBUG("~0p ~0p", [SeqIds0, State0]),
+ack(SeqIds, State0 = #mqistate{ write_buffer = WriteBuffer0,
+                                write_buffer_updates = NumUpdates0 }) ->
+    ?DEBUG("~0p ~0p", [SeqIds, State0]),
     %% We start by updating the ack state information. We then
-    %% use this information to determine if we can delete
-    %% segment files on disk.
-    {Delete, State1} = update_ack_state(SeqIds0, State0),
+    %% use this information to delete segment files on disk that
+    %% were fully acked.
+    {Delete, State1} = update_ack_state(SeqIds, State0),
     State = delete_segments(Delete, State1),
-    HighestSegmentDeleted = case Delete of
-        [] -> undefined;
-        _ -> hd(lists:reverse(lists:sort(Delete)))
-    end,
-    %% When there were deleted files, we remove the seq_id()s that
-    %% belong to deleted files from the acked list, as well as any
-    %% write instructions in the buffer targeting those files.
-    {SeqIds, WriteBuffer2, NumUpdates2} = case HighestSegmentDeleted of
-        undefined ->
-            {SeqIds0, WriteBuffer0, NumUpdates0};
-        _ ->
-            %% All seq_id()s below this belong to a segment that has been
-            %% fully acked and is no longer tracked by the index.
-            LowestSeqId = (1 + HighestSegmentDeleted) * segment_entry_count(),
-            SeqIds1 = lists:filter(fun(FilterSeqId) ->
-                FilterSeqId >= LowestSeqId
-            end, SeqIds0),
-            {WriteBuffer1, NumUpdates1} = maps:fold(fun
-                (FoldSeqId, Write, {FoldBuffer, FoldUpdates}) when FoldSeqId < LowestSeqId ->
-                    Num = case Write of
-                        deliver -> 1;
-                        ack -> 1;
-                        _ -> 0
-                    end,
-                    {FoldBuffer, FoldUpdates - Num};
-                (SeqId, Write, {FoldBuffer, FoldUpdates}) ->
-                    {FoldBuffer#{SeqId => Write}, FoldUpdates}
-            end, {#{}, NumUpdates0}, WriteBuffer0),
-            {SeqIds1, WriteBuffer1, NumUpdates1}
-    end,
-    %% Finally we add any remaining acks to the write buffer.
+    %% We add acks to the write buffer. We also add acks for segments that
+    %% have been deleted. We will be ignoring them when flushing buffers.
+    %% We do it like this because it is far more rare to delete a segment
+    %% than not.
     {WriteBuffer, NumUpdates} = lists:foldl(fun
         (SeqId, {FoldBuffer, FoldUpdates}) ->
             case FoldBuffer of
@@ -573,7 +567,7 @@ ack(SeqIds0, State0 = #mqistate{ write_buffer = WriteBuffer0,
                     {FoldBuffer#{SeqId => ack},
                      FoldUpdates + 1}
             end
-    end, {WriteBuffer2, NumUpdates2}, SeqIds),
+    end, {WriteBuffer0, NumUpdates0}, SeqIds),
     maybe_flush_buffer(State#mqistate{ write_buffer = WriteBuffer,
                                        write_buffer_updates = NumUpdates }).
 
@@ -685,7 +679,8 @@ read_from_disk(SeqIdsToRead0, State0 = #mqistate{ write_buffer = WriteBuffer }, 
 
 get_fd(SeqId, State = #mqistate{ fds = OpenFds }) ->
     SegmentEntryCount = segment_entry_count(),
-    {Segment, Offset} = locate(SeqId, SegmentEntryCount),
+    Segment = SeqId div SegmentEntryCount,
+    Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
     case OpenFds of
         #{ Segment := Fd } ->
             {Fd, Offset, State};
@@ -693,11 +688,6 @@ get_fd(SeqId, State = #mqistate{ fds = OpenFds }) ->
             {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
             {Fd, Offset, State#mqistate{ fds = OpenFds#{ Segment => Fd }}}
     end.
-
-locate(SeqId, SegmentEntryCount) ->
-    Segment = SeqId div SegmentEntryCount,
-    Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
-    {Segment, Offset}.
 
 %% When recovering from a dirty shutdown, we may end up reading entries that
 %% have already been acked. We do not add them to the Acc in that case, and
