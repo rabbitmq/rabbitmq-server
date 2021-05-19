@@ -82,6 +82,7 @@
          list/2,
          enable/1,
          enable_all/0,
+         enable_all/1,
          disable/1,
          disable_all/0,
          is_supported/1,
@@ -337,6 +338,21 @@ enable(FeatureNames) when is_list(FeatureNames) ->
 
 enable_all() ->
     with_feature_flags(maps:keys(list(all)), fun enable/1).
+
+-spec enable_all(stability()) -> ok | {error, any()}.
+%% @doc
+%% Enables all supported feature flags matching the given stability.
+%%
+%% @param Stability The level of stability used to filter the feature flags to
+%%   enable.
+%% @returns `ok' if the feature flags were successfully enabled,
+%%   or `{error, Reason}' if one feature flag could not be enabled
+%%   (subsequent feature flags in the dependency tree are left
+%%   unchanged).
+
+enable_all(Stability)
+  when Stability =:= stable orelse Stability =:= experimental ->
+    with_feature_flags(maps:keys(list(all, Stability)), fun enable/1).
 
 -spec disable(feature_name() | [feature_name()]) -> ok | {error, any()}.
 %% @doc
@@ -2087,9 +2103,9 @@ sync_feature_flags_with_cluster([], NodeIsVirgin, _) ->
                 [] when FeatureNames =:= undefined ->
                     rabbit_log_feature_flags:debug(
                       "Feature flags: starting an unclustered node "
-                      "for the first time: all feature flags will be "
-                      "enabled by default"),
-                    enable_all();
+                      "for the first time: all stable feature flags "
+                      "will be enabled by default"),
+                    enable_all(stable);
                 [] ->
                     case FeatureNames of
                         [] ->
