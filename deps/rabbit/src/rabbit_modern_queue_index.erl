@@ -339,56 +339,36 @@ publish(MsgId, SeqId, Props, IsPersistent, IsDelivered, TargetRamCount,
     ThisSegment = SeqId div SegmentEntryCount,
     State2 = case maps:is_key(ThisSegment, Segments) of
         true -> State1;
-        false -> ensure_segment_file(ThisSegment, State1)
+        false -> new_segment_file(ThisSegment, State1)
     end,
     %% When publisher confirms have been requested for this
     %% message we mark the message as unconfirmed.
     State = maybe_mark_unconfirmed(MsgId, SeqId, Props, State2),
     maybe_flush_buffer(State).
 
-ensure_segment_file(Segment, State0 = #mqistate{ segments = Segments,
-                                                 fds = OpenFds }) ->
+new_segment_file(Segment, State = #mqistate{ segments = Segments,
+                                             fds = OpenFds }) ->
     SegmentEntryCount = segment_entry_count(),
-    %% The file might have already be opened during recovery. Don't open it again.
-    Fd = case OpenFds of
-        #{Segment := Fd0} ->
-            Fd0;
-        _ ->
-            false = maps:is_key(Segment, OpenFds), %% assert
-            {ok, Fd0} = file:open(segment_file(Segment, State0), [read, write, raw, binary]),
-            Fd0
-    end,
-    %% When we are recovering from a shutdown we may need to check
-    %% whether the file already has content. If it does, we do
-    %% nothing. Otherwise, as well as in the normal case, we
-    %% pre-allocate the file size and write in the file header.
-    {ok, #file_info{ size = Size }} = file:read_file_info(Fd),
-    IsNewFile = Size =:= 0,
-    State = case IsNewFile of
-        true ->
-            %% We preallocate space for the file when possible.
-            %% We don't worry about failure here because an error
-            %% is returned when the system doesn't support this feature.
-            %% The index will simply be less efficient in that case.
-            _ = file:allocate(Fd, 0, ?HEADER_SIZE + SegmentEntryCount * ?ENTRY_SIZE),
-            %% We then write the segment file header. It contains
-            %% some useful info and some reserved bytes for future use.
-            %% We currently do not make use of this information. It is
-            %% only there for forward compatibility purposes (for example
-            %% to support an index with mixed segment_entry_count() values).
-            FromSeqId = Segment * SegmentEntryCount,
-            ToSeqId = FromSeqId + SegmentEntryCount,
-            ok = file:write(Fd, << ?MAGIC:32,
-                                   ?VERSION:8,
-                                   FromSeqId:64/unsigned,
-                                   ToSeqId:64/unsigned,
-                                   0:344 >>),
-            State0#mqistate{ segments = Segments#{Segment => SegmentEntryCount }};
-        false ->
-            State0
-    end,
+    false = maps:is_key(Segment, OpenFds), %% assert
+    {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
+    %% We preallocate space for the file when possible.
+    %% @todo We NEED this to work. Can this fail on any supported platform?
+    ok = file:allocate(Fd, 0, ?HEADER_SIZE + SegmentEntryCount * ?ENTRY_SIZE),
+    %% We then write the segment file header. It contains
+    %% some useful info and some reserved bytes for future use.
+    %% We currently do not make use of this information. It is
+    %% only there for forward compatibility purposes (for example
+    %% to support an index with mixed segment_entry_count() values).
+    FromSeqId = Segment * SegmentEntryCount,
+    ToSeqId = FromSeqId + SegmentEntryCount,
+    ok = file:write(Fd, << ?MAGIC:32,
+                           ?VERSION:8,
+                           FromSeqId:64/unsigned,
+                           ToSeqId:64/unsigned,
+                           0:344 >>),
     %% Keep the file open.
-    State#mqistate{ fds = OpenFds#{Segment => Fd} }.
+    State#mqistate{ segments = Segments#{Segment => SegmentEntryCount},
+                    fds = OpenFds#{Segment => Fd} }.
 
 maybe_mark_unconfirmed(MsgId, SeqId, #message_properties{ needs_confirming = true },
         State = #mqistate { confirms = Confirms }) ->
