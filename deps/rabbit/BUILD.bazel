@@ -886,7 +886,10 @@ rabbitmq_integration_suite(
         "single_node_parallel": {"groups": ["single_node_parallel"]},
         "cluster_size_2": {"groups": ["cluster_size_2"]},
         "cluster_size_2_parallel": {"groups": ["cluster_size_2_parallel"]},
-        "cluster_size_3": {"groups": ["cluster_size_3"]},
+        "cluster_size_3": {
+            "groups": ["cluster_size_3"],
+            "flaky": True,
+        },
         "cluster_size_3_parallel": {
             "groups": ["cluster_size_3_parallel"],
             "flaky": True,
