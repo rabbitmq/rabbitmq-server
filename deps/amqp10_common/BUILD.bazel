@@ -46,10 +46,16 @@ genrule(
     tools = [":codegen"],
 )
 
+APP_NAME = "amqp10_common"
+
+BUILD_DEPS = [
+    "@lager//:bazel_erlang_lib",
+]
+
 app_file(
     name = "app_file",
     app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",
-    app_name = "amqp10_common",
+    app_name = APP_NAME,
     app_version = APP_VERSION,
     modules = [":beam_files"],
 )
@@ -60,13 +66,14 @@ erlc(
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     dest = "ebin",
     erlc_opts = RABBITMQ_ERLC_OPTS,
+    deps = BUILD_DEPS,
 )
 
 bazel_erlang_lib(
     name = "bazel_erlang_lib",
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     app = ":app_file",
-    app_name = "amqp10_common",
+    app_name = APP_NAME,
     beam = [":beam_files"],
     visibility = ["//visibility:public"],
 )
@@ -77,6 +84,7 @@ erlc(
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     dest = "test",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    deps = BUILD_DEPS,
 )
 
 bazel_erlang_lib(
@@ -84,7 +92,7 @@ bazel_erlang_lib(
     testonly = True,
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     app = ":app_file",
-    app_name = "amqp10_common",
+    app_name = APP_NAME,
     beam = [":test_beam_files"],
     visibility = ["//visibility:public"],
 )
@@ -92,9 +100,15 @@ bazel_erlang_lib(
 ct_suite(
     name = "binary_generator_SUITE",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
 )
 
 ct_suite(
     name = "binary_parser_SUITE",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    deps = [
+        "@lager//:bazel_erlang_lib",
+    ],
 )
