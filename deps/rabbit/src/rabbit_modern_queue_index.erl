@@ -216,69 +216,72 @@ recover_segments(State, _, _, []) ->
 recover_segments(State0, ContainsCheckFun, CountersRef, [Segment|Tail]) ->
     %% @todo We may want to check that the file sizes are correct before attempting
     %%       to parse them, and to correct the file sizes.
-    %%
-    %% @todo We could benefit from read_ahead here.
-    {Fd, State1} = get_fd_for_segment(Segment, State0),
     SegmentEntryCount = segment_entry_count(),
-    State = recover_segment(State1, ContainsCheckFun, CountersRef, Fd,
+    {ok, Fd} = file:open(segment_file(Segment, State0), [read, read_ahead, write, raw, binary]),
+    {ok, <<?MAGIC:32,?VERSION:8,
+           _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,
+           _/bits>>} = file:read(Fd, ?HEADER_SIZE),
+    State = recover_segment(State0, ContainsCheckFun, CountersRef, Fd,
                             Segment, 0, SegmentEntryCount,
-                            SegmentEntryCount),
+                            SegmentEntryCount, []),
+    ok = file:close(Fd),
     recover_segments(State, ContainsCheckFun, CountersRef, Tail).
 
-recover_segment(State = #mqistate{ segments = Segments }, _, _, _,
+recover_segment(State = #mqistate{ segments = Segments }, _, _, Fd,
                 Segment, ThisEntry, SegmentEntryCount,
-                Unacked)
+                Unacked, LocBytes)
                 when ThisEntry =:= SegmentEntryCount ->
     case Unacked of
         0 ->
             %% There are no more messages in this segment file.
             delete_segment(Segment, State);
         _ ->
+            %% We must update some messages on disk (ack or deliver).
+            ok = file:pwrite(Fd, LocBytes),
             State#mqistate{ segments = Segments#{ Segment => Unacked }}
     end;
 recover_segment(State, ContainsCheckFun, CountersRef, Fd,
                 Segment, ThisEntry, SegmentEntryCount,
-                Unacked) ->
-    Offset = ?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE,
-    case file:pread(Fd, Offset, 24) of
+                Unacked, LocBytes0) ->
+    case file:read(Fd, ?ENTRY_SIZE) of
         %% We found a non-ack persistent entry. Check that the corresponding
         %% message exists in the message store. If not, mark this message as
         %% acked.
-        {ok, <<1,IsDelivered:8,1,_:8,Id:16/binary,Size:32/unsigned>>} ->
+        {ok, <<1,IsDelivered:8,1,_:8,Id:16/binary,Size:32/unsigned,_/bits>>} ->
             case ContainsCheckFun(Id) of
                 %% Message is in the store. We mark all those
                 %% messages as delivered if they were not already
                 %% (like the old index).
                 true ->
-                    case IsDelivered of
-                        1 -> ok;
-                        0 -> file:pwrite(Fd, Offset + 1, <<1>>)
+                    LocBytes = case IsDelivered of
+                        1 -> LocBytes0;
+                        0 -> [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE + 1, <<1>>}|LocBytes0]
                     end,
                     counters:add(CountersRef, ?RECOVER_COUNT, 1),
                     counters:add(CountersRef, ?RECOVER_BYTES, Size),
                     recover_segment(State, ContainsCheckFun, CountersRef,
                                     Fd, Segment, ThisEntry + 1, SegmentEntryCount,
-                                    Unacked);
+                                    Unacked, LocBytes);
                 %% Message is not in the store. Mark it as acked.
                 false ->
-                    file:pwrite(Fd, Offset, <<0>>),
+                    LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
                     recover_segment(State, ContainsCheckFun, CountersRef,
                                     Fd, Segment, ThisEntry + 1, SegmentEntryCount,
-                                    Unacked - 1)
+                                    Unacked - 1, LocBytes)
             end;
         %% We found a non-ack transient entry. We mark the message as acked
         %% without checking with the message store, because it already dropped
-        %% this message.
+        %% this message via the queue walker functions.
         {ok, <<1,_,0,_/bits>>} ->
-            file:pwrite(Fd, Offset, <<0>>),
+            LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
             recover_segment(State, ContainsCheckFun, CountersRef,
                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
-                            Unacked - 1);
+                            Unacked - 1, LocBytes);
         %% We found a non-entry or an acked entry. Consider it acked.
         {ok, _} ->
             recover_segment(State, ContainsCheckFun, CountersRef,
                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
-                            Unacked - 1)
+                            Unacked - 1, LocBytes0)
     end.
 
 -spec terminate(rabbit_types:vhost(), [any()], State) -> State when State::mqistate().
@@ -693,7 +696,7 @@ parse_entries(<< Status:8,
                  IsDelivered0:8,
                  _:7, IsPersistent:1,
                  _:8,
-                 Id0:128,
+                 Id0:16/binary,
                  Size:32/unsigned,
                  Expiry0:64/unsigned,
                  Rest/bits >>, SeqId, WriteBuffer, Acc) ->
@@ -704,7 +707,7 @@ parse_entries(<< Status:8,
             %% We get the Id binary in two steps because we do not want
             %% to create a sub-binary and keep the larger binary around
             %% in memory.
-            Id = <<Id0:128>>,
+            Id = binary:copy(Id0),
             Expiry = case Expiry0 of
                 0 -> undefined;
                 _ -> Expiry0
@@ -811,11 +814,11 @@ queue_index_walker_reader(#resource{ virtual_host = VHost } = Name, Gatherer) ->
     ok = gatherer:finish(Gatherer).
 
 queue_index_walker_segment(F, Gatherer) ->
-    {ok, Fd} = file:open(F, [read, raw, binary]),
-    case file:read(Fd, 21) of
-        {ok, <<?MAGIC:32, ?VERSION:8,
-               FromSeqId:64/unsigned,
-               ToSeqId:64/unsigned>>} ->
+    {ok, Fd} = file:open(F, [read, read_ahead, raw, binary]),
+    case file:read(Fd, ?HEADER_SIZE) of
+        {ok, <<?MAGIC:32,?VERSION:8,
+               FromSeqId:64/unsigned,ToSeqId:64/unsigned,
+               _/bits>>} ->
             queue_index_walker_segment(Fd, Gatherer, 0, ToSeqId - FromSeqId);
         _ ->
             %% Invalid segment file. Skip.
@@ -827,10 +830,9 @@ queue_index_walker_segment(_, _, N, N) ->
     %% We reached the end of the segment file.
     ok;
 queue_index_walker_segment(Fd, Gatherer, N, Total) ->
-    Offset = ?HEADER_SIZE + N * ?ENTRY_SIZE,
-    case file:pread(Fd, Offset, 20) of
+    case file:read(Fd, ?ENTRY_SIZE) of
         %% We found a non-ack persistent entry. Gather it.
-        {ok, <<1,_,1,_,Id:16/binary>>} ->
+        {ok, <<1,_,1,_,Id:16/binary,_/bits>>} ->
             gatherer:sync_in(Gatherer, {Id, 1}),
             queue_index_walker_segment(Fd, Gatherer, N + 1, Total);
         %% We found an ack, a transient entry or a non-entry. Skip it.
