@@ -973,7 +973,6 @@ check_queue_leader_locator_arg(Val, _Args) when is_binary(Val) ->
 check_queue_leader_locator_arg(_Val, _Args) ->
     {error, invalid_queue_locator_arg}.
 
--define(KNOWN_OFFSETS, [<<"first">>, <<"last">>, <<"next">>]).
 check_stream_offset_arg(Val, _Args) ->
     case rabbit_stream_queue:parse_offset_arg(Val) of
         {ok, _} ->

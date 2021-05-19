@@ -1,5 +1,6 @@
 -module(rabbit_stream_core_SUITE).
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 %% Common Test callb

@@ -226,7 +226,9 @@ parse_offset_arg({longstr, V}) ->
             {ok, {timestamp, erlang:system_time(millisecond) - Ms}}
     end;
 parse_offset_arg({_, V}) ->
-    {ok, V}.
+    {ok, V};
+parse_offset_arg(V) ->
+    {error, {invalid_offset_arg, V}}.
 
 get_local_pid(#stream_client{local_pid = Pid} = State)
   when is_pid(Pid) ->
