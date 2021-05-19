@@ -77,6 +77,8 @@
 
 -module(rabbit_feature_flags).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([list/0,
          list/1,
          list/2,
@@ -1650,7 +1652,7 @@ mark_as_enabled(FeatureName, IsEnabled) ->
     end.
 
 -spec mark_as_enabled_locally(feature_name(), feature_state()) ->
-    any() | {error, any()} | no_return().
+    ok | {error, any()} | no_return().
 %% @private
 
 mark_as_enabled_locally(FeatureName, IsEnabled) ->
@@ -1673,9 +1675,20 @@ mark_as_enabled_locally(FeatureName, IsEnabled) ->
                             ok =:= try_to_write_enabled_feature_flags_list(
                                      NewEnabledFeatureNames)
                     end,
-    initialize_registry(#{},
-                        #{FeatureName => IsEnabled},
-                        WrittenToDisk).
+    Ret = initialize_registry(#{},
+                              #{FeatureName => IsEnabled},
+                              WrittenToDisk),
+    case Ret of
+        ok when IsEnabled ->
+            ?assert(is_enabled(FeatureName, non_blocking)),
+            spawn(
+              fun() ->
+                      _ = run_migration_fun(FeatureName, post_enabled_locally)
+              end);
+        _ ->
+            ok
+    end,
+    Ret.
 
 -spec mark_as_enabled_remotely(feature_name(), feature_state()) ->
     any() | {error, any()} | no_return().

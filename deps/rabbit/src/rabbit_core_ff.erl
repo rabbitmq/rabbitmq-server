@@ -77,7 +77,9 @@ quorum_queue_migration(_FeatureName, _FeatureProps, is_enabled) ->
     rabbit_table:wait(Tables, _Retry = true),
     Fields = amqqueue:fields(amqqueue_v2),
     mnesia:table_info(rabbit_queue, attributes) =:= Fields andalso
-    mnesia:table_info(rabbit_durable_queue, attributes) =:= Fields.
+    mnesia:table_info(rabbit_durable_queue, attributes) =:= Fields;
+quorum_queue_migration(_FeatureName, _FeatureProps, post_enabled_locally) ->
+    ok.
 
 stream_queue_migration(_FeatureName, _FeatureProps, _Enable) ->
     ok.
@@ -111,9 +113,12 @@ implicit_default_bindings_migration(FeatureName, _FeatureProps,
     rabbit_table:wait([rabbit_queue]),
     Queues = mnesia:dirty_all_keys(rabbit_queue),
     remove_explicit_default_bindings(FeatureName, Queues);
-implicit_default_bindings_migration(_Feature_Name, _FeatureProps,
+implicit_default_bindings_migration(_FeatureName, _FeatureProps,
                                     is_enabled) ->
-    undefined.
+    undefined;
+implicit_default_bindings_migration(_FeatureName, _FeatureProps,
+                                    post_enabled_locally) ->
+    ok.
 
 remove_explicit_default_bindings(_FeatureName, []) ->
     ok;
@@ -139,7 +144,10 @@ virtual_host_metadata_migration(_FeatureName, _FeatureProps, enable) ->
         {aborted, Reason} -> {error, Reason}
     end;
 virtual_host_metadata_migration(_FeatureName, _FeatureProps, is_enabled) ->
-    mnesia:table_info(rabbit_vhost, attributes) =:= vhost:fields(vhost_v2).
+    mnesia:table_info(rabbit_vhost, attributes) =:= vhost:fields(vhost_v2);
+virtual_host_metadata_migration(
+  _FeatureName, _FeatureProps, post_enabled_locally) ->
+    ok.
 
 %% -------------------------------------------------------------------
 %% Maintenance mode.
@@ -161,7 +169,10 @@ maintenance_mode_status_migration(FeatureName, _FeatureProps, enable) ->
           [Reason])
     end;
 maintenance_mode_status_migration(_FeatureName, _FeatureProps, is_enabled) ->
-    rabbit_table:exists(rabbit_maintenance:status_table_name()).
+    rabbit_table:exists(rabbit_maintenance:status_table_name());
+maintenance_mode_status_migration(
+  _FeatureName, _FeatureProps, post_enabled_locally) ->
+    ok.
 
 %% -------------------------------------------------------------------
 %% User limits.
@@ -171,9 +182,14 @@ user_limits_migration(_FeatureName, _FeatureProps, enable) ->
     Tab = rabbit_user,
     rabbit_table:wait([Tab], _Retry = true),
     Fun = fun(Row) -> internal_user:upgrade_to(internal_user_v2, Row) end,
-    case mnesia:transform_table(Tab, Fun, internal_user:fields(internal_user_v2)) of
+    Ret = mnesia:transform_table(
+            Tab, Fun, internal_user:fields(internal_user_v2)),
+    case Ret of
         {atomic, ok}      -> ok;
         {aborted, Reason} -> {error, Reason}
     end;
 user_limits_migration(_FeatureName, _FeatureProps, is_enabled) ->
-    mnesia:table_info(rabbit_user, attributes) =:= internal_user:fields(internal_user_v2).
+    mnesia:table_info(rabbit_user, attributes) =:=
+    internal_user:fields(internal_user_v2);
+user_limits_migration(_FeatureName, _FeatureProps, post_enabled_locally) ->
+    ok.
