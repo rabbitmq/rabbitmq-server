@@ -1,4 +1,5 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
+load("@bazel-erlang//:xref.bzl", "xref")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
@@ -159,6 +160,8 @@ RUNTIME_DEPS = [
     "@systemd//:bazel_erlang_lib",
 ]
 
+APP_MODULE = "rabbit"
+
 APP_REGISTERED = [
     "rabbit_amqqueue_sup",
     "rabbit_direct_client_sup",
@@ -195,7 +198,7 @@ EXTRA_ERLC_OPTS = [
 rabbitmq_lib(
     app_description = "RabbitMQ",
     app_env = _APP_ENV,
-    app_module = "rabbit",
+    app_module = APP_MODULE,
     app_name = "rabbit",
     app_registered = APP_REGISTERED,
     erlc_opts = RABBITMQ_ERLC_OPTS + EXTRA_ERLC_OPTS,
@@ -204,6 +207,13 @@ rabbitmq_lib(
     test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS + EXTRA_ERLC_OPTS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
+)
+
+xref(
+    checks = [
+        "undefined_function_calls",
+        "locals_not_used",
+    ],
 )
 
 bats(

@@ -1,6 +1,16 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
+load(
+    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "app_file",
+    "bazel_erlang_lib",
+    "erlc",
+)
 load("@bazel-erlang//:ct.bzl", "ct_suite")
-load("//:rabbitmq.bzl", "APP_VERSION")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+)
 
 py_binary(
     name = "codegen",
@@ -49,6 +59,7 @@ erlc(
     srcs = ["src/amqp10_framing0.erl"] + glob(["src/*.erl"]),
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     dest = "ebin",
+    erlc_opts = RABBITMQ_ERLC_OPTS,
 )
 
 bazel_erlang_lib(
@@ -60,15 +71,30 @@ bazel_erlang_lib(
     visibility = ["//visibility:public"],
 )
 
+erlc(
+    name = "test_beam_files",
+    srcs = ["src/amqp10_framing0.erl"] + glob(["src/*.erl"]),
+    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    dest = "test",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+)
+
 bazel_erlang_lib(
     name = "test_bazel_erlang_lib",
+    testonly = True,
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     app = ":app_file",
     app_name = "amqp10_common",
-    beam = [":beam_files"],
+    beam = [":test_beam_files"],
     visibility = ["//visibility:public"],
 )
 
 ct_suite(
     name = "binary_generator_SUITE",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+)
+
+ct_suite(
+    name = "binary_parser_SUITE",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
