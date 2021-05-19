@@ -50,17 +50,21 @@ groups() ->
                 delete_immediately_by_resource
                ],
     [
-     {parallel_tests, [],
-      [
+     {parallel_tests, [], [
        {classic_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds,
                                                 trigger_message_store_compaction]},
        {mirrored_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds,
                                                  trigger_message_store_compaction]},
-       {quorum_queue, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
+       {quorum_queue, [parallel], AllTests ++ [
+           delete_immediately_by_pid_fails,
+           extra_bcc_option
+       ]},
        {quorum_queue_in_memory_limit, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
        {quorum_queue_in_memory_bytes, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
        {stream_queue, [parallel], [publish,
-                                   subscribe]}
+                                   subscribe,
+                                   extra_bcc_option]}
+
       ]}
     ].
 
@@ -667,15 +671,43 @@ delete_immediately_by_resource(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     ok.
 
+extra_bcc_option(Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = <<"a_queue_with_extra_bcc">>,
+    delete_queue(Ch, QName),
+    declare_queue(Ch, Config, QName),
+
+    ExtraBCC = <<"extra.bcc">>,
+    delete_queue(Ch, ExtraBCC),
+    declare_bcc_queue(Ch, ExtraBCC),
+    set_queue_options(Config, QName, #{
+        extra_bcc => ExtraBCC
+    }),
+
+    publish(Ch, QName, [<<"msg1">>, <<"msg2">>, <<"msg3">>]),
+    wait_for_messages(Config, [[QName, <<"3">>, <<"3">>, <<"0">>]]),
+    wait_for_messages(Config, [[ExtraBCC, <<"3">>, <<"3">>, <<"0">>]]),
+
+    delete_queue(Ch, QName),
+    delete_queue(Ch, ExtraBCC).
+
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Test helpers
 %%%%%%%%%%%%%%%%%%%%%%%%
+
 declare_queue(Ch, Config, QName) ->
     Args = ?config(queue_args, Config),
     Durable = ?config(queue_durable, Config),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
                                                                    arguments = Args,
                                                                    durable = Durable}).
+
+declare_bcc_queue(Ch, QName) ->
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                                                   durable = true}).
+
+delete_queue(Ch, QName) ->
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}).
 
 publish(Ch, QName, Payloads) ->
     [amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload})
@@ -723,3 +755,14 @@ flush(T) ->
     after T ->
               ok
     end.
+
+set_queue_options(Config, QName, Options) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set_queue_options1, [QName, Options]).
+
+set_queue_options1(QName, Options) ->
+    rabbit_misc:execute_mnesia_transaction(fun() ->
+        rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
+            fun(Q) ->
+                amqqueue:set_options(Q, Options)
+            end)
+    end).
