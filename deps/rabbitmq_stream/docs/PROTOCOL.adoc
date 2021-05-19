@@ -191,7 +191,7 @@ used to make the difference between a request (0) and a response (1). Example fo
 |Yes
 
 |<<open>>
-|Server
+|Client
 |21
 |Yes
 
