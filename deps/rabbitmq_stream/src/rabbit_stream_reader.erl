@@ -645,17 +645,25 @@ listen_loop_post_auth(Transport,
                                                case Credit of
                                                    0 -> Consumer;
                                                    _ ->
-                                                       {{segment, Segment1},
-                                                        {credit, Credit1}} =
+                                                       case
                                                            send_chunks(Transport,
                                                                        Consumer,
-                                                                       SendFileOct),
-                                                       Consumer#consumer{segment
-                                                                             =
-                                                                             Segment1,
-                                                                         credit
-                                                                             =
-                                                                             Credit1}
+                                                                       SendFileOct)
+                                                       of
+                                                           {error, Reason} ->
+                                                               rabbit_log:info("Error while sending chunks: ~p", [Reason]),
+                                                               %% likely a connection problem
+                                                               Consumer;
+                                                           {{segment, Segment1},
+                                                            {credit,
+                                                             Credit1}} ->
+                                                               Consumer#consumer{segment
+                                                                                     =
+                                                                                     Segment1,
+                                                                                 credit
+                                                                                     =
+                                                                                     Credit1}
+                                                       end
                                                end,
                                            ConsumersAcc#{CorrelationId =>
                                                              Consumer1}
@@ -2243,6 +2251,10 @@ send_chunks(Transport,
             send_chunks(Transport, State, Segment1, Credit - 1, true, Counter);
         {error, closed} ->
             {error, closed};
+        {error, enotconn} ->
+            {error, closed};
+        {error, Reason} ->
+            {error, Reason};
         {end_of_stream, Segment1} ->
             case Retry of
                 true ->
