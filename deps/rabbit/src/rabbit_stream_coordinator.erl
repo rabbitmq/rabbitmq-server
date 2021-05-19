@@ -16,7 +16,6 @@
 
 -behaviour(ra_machine).
 
--export([start/0]).
 -export([format_ra_event/2]).
 
 -export([init/1,
@@ -51,7 +50,6 @@
          evaluate_stream/3]).
 -endif.
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_stream_coordinator.hrl").
 -include("amqqueue.hrl").
 
@@ -87,37 +85,13 @@
 
 -export_type([command/0]).
 
-start() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-    ServerId = {?MODULE, node()},
-    case ra:restart_server(?RA_SYSTEM, ServerId) of
-        {error, Reason} when Reason == not_started orelse
-                             Reason == name_not_registered ->
-            case ra:start_server(?RA_SYSTEM, make_ra_conf(node(), Nodes)) of
-                ok ->
-                    global:set_lock(?STREAM_COORDINATOR_STARTUP),
-                    case find_members(Nodes) of
-                        [] ->
-                            %% We're the first (and maybe only) one
-                            ra:trigger_election(ServerId);
-                        Members ->
-                            %% What to do if we get a timeout?
-                            {ok, _, _} = ra:add_member(Members, ServerId, 30000)
-                    end,
-                    global:del_lock(?STREAM_COORDINATOR_STARTUP),
-                    _ = ra:members(ServerId),
-                    ok;
-                Error ->
-                    exit(Error)
-            end;
-        ok ->
-            ok;
-        Error ->
-            exit(Error)
-    end.
-
 recover() ->
-    ra:restart_server(?RA_SYSTEM, {?MODULE, node()}).
+    case erlang:whereis(?MODULE) of
+        undefined ->
+            ra:restart_server(?RA_SYSTEM, {?MODULE, node()});
+        _Pid ->
+            ok
+    end.
 
 %% new api
 
@@ -1538,19 +1512,6 @@ maybe_sleep({noproc, _}) ->
     timer:sleep(5000);
 maybe_sleep(_) ->
     ok.
-
-find_members([]) ->
-    [];
-find_members([Node | Nodes]) ->
-    case ra:members({?MODULE, Node}) of
-        {_, Members, _} ->
-            Members;
-        {error, noproc} ->
-            find_members(Nodes);
-        {timeout, _} ->
-            %% not sure what to do here
-            find_members(Nodes)
-    end.
 
 set_running_to_stopped(Members) ->
     maps:map(fun (_, #member{target = running} = M) ->
