@@ -306,7 +306,7 @@ DeletePublisherResponse => Key Version CorrelationId ResponseCode
 === Subscribe
 
 ```
-Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification Credit
+Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification Credit Properties
   Key => uint16 // 7
   Version => uint16
   CorrelationId => uint32 // correlation id to correlate the response
@@ -316,6 +316,10 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
   OffsetType => uint16 // 1 (first), 2 (last), 3 (next), 4 (offset), 5 (timestamp)
   Offset => uint64 (for offset) | int64 (for timestamp)
   Credit => uint16
+  Properties => [Property]
+  Property => Key Value
+  Key => string
+  Value => string
 ```
 
 === Deliver
