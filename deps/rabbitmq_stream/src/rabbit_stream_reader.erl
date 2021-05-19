@@ -372,7 +372,7 @@ listen_loop_pre_auth(Transport,
             rabbit_log:info("Socket ~w closed [~w]", [S, self()]),
             ok;
         {Error, S, Reason} ->
-            rabbit_log:info("Socket error ~p [~w]", [Reason, S, self()]);
+            rabbit_log:info("Socket error ~p [~w] [~w]", [Reason, S, self()]);
         M ->
             rabbit_log:warning("Unknown message ~p", [M]),
             close(Transport, S, State)
@@ -743,7 +743,7 @@ listen_loop_post_auth(Transport,
             demonitor_all_streams(Connection),
             rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State),
-            rabbit_log:error("Socket error ~p [~w]", [Reason, S, self()]);
+            rabbit_log:error("Socket error ~p [~w] [~w]", [Reason, S, self()]);
         M ->
             rabbit_log:warning("Unknown message ~p", [M]),
             %% FIXME send close
@@ -792,7 +792,7 @@ listen_loop_post_close(Transport,
             rabbit_log:info("Socket ~w closed [~w]", [S, self()]),
             ok;
         {Error, S, Reason} ->
-            rabbit_log:info("Socket error ~p [~w]", [Reason, S, self()]),
+            rabbit_log:info("Socket error ~p [~w] [~w]", [Reason, S, self()]),
             close(Transport, S, State),
             rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State);
