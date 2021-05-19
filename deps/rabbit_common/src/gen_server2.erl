@@ -1365,7 +1365,7 @@ format_status(Opt, StatusData) ->
                       Name
               end,
     Header = lists:concat(["Status for generic server ", NameTag]),
-    Log = sys:get_debug(log, Debug, []),
+    Log = sys:get_log(Debug),
     Specfic = callback(Mod, format_status, [Opt, [PDict, State]],
                        fun () -> [{data, [{"State", State}]}] end),
     Messages = callback(Mod, format_message_queue, [Opt, Queue],

@@ -210,12 +210,7 @@ rabbitmq_lib(
     deps = DEPS,
 )
 
-xref(
-    checks = [
-        "undefined_function_calls",
-        "locals_not_used",
-    ],
-)
+xref()
 
 bats(
     srcs = glob(["test/**/*.bats"]),
