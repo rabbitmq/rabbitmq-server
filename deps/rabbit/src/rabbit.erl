@@ -10,6 +10,8 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 
+-ignore_xref({rabbit_direct, force_event_refresh, 1}).
+-ignore_xref({rabbit_networking, force_connection_event_refresh, 1}).
 %% Transitional step until we can require Erlang/OTP 21 and
 %% use the now recommended try/catch syntax for obtaining the stack trace.
 -compile(nowarn_deprecated_function).
