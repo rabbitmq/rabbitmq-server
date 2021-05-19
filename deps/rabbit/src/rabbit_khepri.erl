@@ -27,7 +27,10 @@
          list_matching_with_props/2,
          delete/1,
          dir/0,
-         i/0]).
+         i/0,
+         is_enabled/0,
+         is_enabled/1,
+         try_mnesia_or_khepri/2]).
 
 -compile({no_auto_import, [get/2]}).
 
@@ -35,6 +38,10 @@
 -define(STORE_NAME, ?RA_SYSTEM).
 -define(MDSTORE_SARTUP_LOCK, {?MODULE, self()}).
 -define(PT_KEY, ?MODULE).
+
+%% -------------------------------------------------------------------
+%% API wrapping Khepri.
+%% -------------------------------------------------------------------
 
 setup(_) ->
     ClusterName = ?RA_SYSTEM,
@@ -103,3 +110,48 @@ delete(Path) ->
 
 i() ->
     khepri:i(?STORE_NAME).
+
+%% -------------------------------------------------------------------
+%% Raft-based metadata store (phase 1).
+%% -------------------------------------------------------------------
+
+is_enabled() ->
+    rabbit_feature_flags:is_enabled(raft_based_metadata_store_phase1).
+
+is_enabled(Blocking) ->
+    rabbit_feature_flags:is_enabled(
+      raft_based_metadata_store_phase1, Blocking) =:= true.
+
+try_mnesia_or_khepri(MnesiaFun, KhepriFun) ->
+    case rabbit_khepri:is_enabled(non_blocking) of
+        true ->
+            KhepriFun();
+        false ->
+            try
+                MnesiaFun()
+            catch
+                exit:{aborted, {no_exists, Table}} = Reason:Stacktrace ->
+                    case is_mnesia_table_covered_by_feature_flag(Table) of
+                        true ->
+                            %% We wait for the feature flag(s) to be enabled
+                            %% or disabled (this is a blocking call) and
+                            %% retry.
+                            ?LOG_DEBUG(
+                               "Mnesia function failed because table ~s "
+                               "is gone or read-only; checking if the new "
+                               "metadata store was enabled in parallel and "
+                               "retry",
+                               [Table]),
+                            _ = rabbit_khepri:is_enabled(),
+                            try_mnesia_or_khepri(MnesiaFun, KhepriFun);
+                        false ->
+                            erlang:raise(exit, Reason, Stacktrace)
+                    end
+            end
+    end.
+
+is_mnesia_table_covered_by_feature_flag(rabbit_vhost)            -> true;
+is_mnesia_table_covered_by_feature_flag(rabbit_user)             -> true;
+is_mnesia_table_covered_by_feature_flag(rabbit_user_permission)  -> true;
+is_mnesia_table_covered_by_feature_flag(rabbit_topic_permission) -> true;
+is_mnesia_table_covered_by_feature_flag(_)                       -> false.

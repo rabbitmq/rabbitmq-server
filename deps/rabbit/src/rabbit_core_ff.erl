@@ -230,6 +230,21 @@ user_limits_migration(_FeatureName, _FeatureProps, post_enabled_locally) ->
                             rabbit_user_permission,
                             rabbit_topic_permission]).
 
+mds_phase1_migration(FeatureName, _FeatureProps, is_enabled) ->
+    %% Migrated tables do not exist anymore.
+    lists:all(
+      fun(Table) ->
+              case does_table_exist(Table) of
+                  true ->
+                      ?LOG_DEBUG(
+                         "Feature flag `~s`:   table ~s exists, feature flag "
+                         "disabled",
+                         [FeatureName, Table]),
+                      false;
+                  false ->
+                      true
+              end
+      end, ?mds_phase1_tables);
 mds_phase1_migration(FeatureName, _FeatureProps, enable) ->
     Tables = ?mds_phase1_tables,
     rabbit_table:wait(Tables, _Retry = true),
@@ -237,26 +252,23 @@ mds_phase1_migration(FeatureName, _FeatureProps, enable) ->
        "Feature flag `~s`:   starting migration from Mnesia to Khepri; "
        "expect decrease in performance and increase in memory footprint",
        [FeatureName]),
-    migrate_tables_to_khepri(FeatureName, Tables),
+    Ret = migrate_tables_to_khepri(FeatureName, Tables),
     ?LOG_NOTICE(
        "Feature flag `~s`:   migration from Mnesia to Khepri finished",
-       [FeatureName]);
-mds_phase1_migration(FeatureName, _FeatureProps, is_enabled) ->
-    %% Migrated tables do not exist anymore.
-    lists:all(
-      fun(Table) ->
-              try
-                  _ = mnesia:table_info(Table, type),
-                  ?LOG_DEBUG(
-                     "Feature flag `~s`:   table ~s exists, feature flag "
-                     "disabled",
-                     [FeatureName, Table]),
-                  false
-              catch
-                  exit:{aborted, {no_exists, Table, type}} ->
-                      true
-              end
-      end, ?mds_phase1_tables).
+       [FeatureName]),
+    Ret;
+mds_phase1_migration(FeatureName, _FeatureProps, post_enabled_locally) ->
+    ?assert(rabbit_khepri:is_enabled(non_blocking)),
+    drop_unused_mnesia_tables(FeatureName, ?mds_phase1_tables).
+
+does_table_exist(Table) ->
+    try
+        _ = mnesia:table_info(Table, type),
+        true
+    catch
+        exit:{aborted, {no_exists, Table, type}} ->
+            false
+    end.
 
 migrate_tables_to_khepri(FeatureName, Tables) ->
     Pid = spawn(
@@ -360,32 +372,10 @@ final_sync_from_mnesia_to_khepri(FeatureName, Tables) ->
               {atomic, ok} = mnesia:change_table_access_mode(Table, read_only)
       end, Tables),
 
-%    mnesia:transaction(
-%      fun() ->
-%              %% Acquire "write" lock on all tables: we will delete them at the
-%              %% end of the transaction and we want to make sure we catch all
-%              %% writes (i.e. there will be none happening in parallel).
-%              ?LOG_DEBUG(
-%                 "Feature flag `~s`:     acquiring write lock on tables ~0p",
-%                 [FeatureName, Tables]),
-%              lists:foreach(
-%                fun(Table) -> mnesia:lock({table, Table}, write) end,
-%                Tables),
-
     %% During the first round of copy, we received all write events as
     %% messages (parallel writes were authorized). Now, we want to consume
     %% those messages to record the writes we probably missed.
     ok = consume_mnesia_events(FeatureName),
-
-%    %% We can now remove the Mnesia tables as everything was copied.  Mnesia
-%    %% transactions which want to write to those tables in parallel of this
-%    %% one should fail and restart: this is their chance to switch to Khepri.
-%    ?LOG_DEBUG(
-%       "Feature flag `~s`:     removing tables ~0p",
-%       [FeatureName, Tables]),
-%    lists:foreach(
-%      fun(Table) -> {atomic, ok} = mnesia:delete_table(Table) end,
-%      Tables).
 
     ok.
 
@@ -449,3 +439,20 @@ handle_mnesia_delete(rabbit_user_permission, UserVHost) ->
     rabbit_auth_backend_internal:mnesia_delete_to_khepri(UserVHost);
 handle_mnesia_delete(rabbit_topic_permission, TopicPermissionKey) ->
     rabbit_auth_backend_internal:mnesia_delete_to_khepri(TopicPermissionKey).
+
+drop_unused_mnesia_tables(FeatureName, [Table | Rest]) ->
+    ?LOG_DEBUG(
+       "Feature flag `~s`:   dropping unused Mnesia table ~s",
+       [FeatureName, Table]),
+    case does_table_exist(Table) of
+        true ->
+            %% The feature flag is enabled at this point. It means there
+            %% should be no code trying to read or write the Mnesia tables.
+            {atomic, ok} = mnesia:change_table_access_mode(Table, read_write),
+            {atomic, ok} = mnesia:delete_table(Table);
+        false ->
+            ok
+    end,
+    drop_unused_mnesia_tables(FeatureName, Rest);
+drop_unused_mnesia_tables(_, []) ->
+    ok.
