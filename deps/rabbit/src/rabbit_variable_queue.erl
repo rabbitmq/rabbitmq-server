@@ -1626,6 +1626,15 @@ remove(false, MsgStatus = #msg_status {
 %%
 %% remove/3 also updates the out_counter in every call, but here we do
 %% it just once at the end.
+%%
+%% @todo This function is really bad. If there are 1 million messages
+%%       expired, it will first collect the 1 million messages and then
+%%       process them. It should probably limit the number of messages
+%%       it removes at once and loop until satisfied instead. It could
+%%       also let the index first figure out until what seq_id() to read
+%%       (since the index has expiration encoded, it could use binary
+%%       search to find where it should stop reading) and then in a second
+%%       step do the reading with a limit for each read and drop only that.
 remove_by_predicate(Pred, State = #vqstate {out_counter = OutCount}) ->
     {MsgProps, QAcc, State1} =
         collect_by_predicate(Pred, ?QUEUE:new(), State),
@@ -1647,6 +1656,8 @@ remove_by_predicate(Pred, State = #vqstate {out_counter = OutCount}) ->
 %% Fun is the function passed to fetchwhile/4 that's
 %% applied to every fetched message and used to build the fetchwhile/4
 %% result accumulator FetchAcc.
+%%
+%% @todo See todo in remove_by_predicate/2 function.
 fetch_by_predicate(Pred, Fun, FetchAcc,
                    State = #vqstate {
                               index_state = IndexState,
