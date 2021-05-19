@@ -3,14 +3,14 @@
   [{rabbitmq_stream,[{tcp_listeners,[12345]}]}],
   [rabbitmq_stream]},
  {listeners_ip,
-  "stream.listeners.tcp.1 = 127.0.0.1:5551
-   stream.listeners.tcp.2 = ::1:5551",
-  [{rabbitmq_stream,[{tcp_listeners,[{"127.0.0.1",5551},{"::1",5551}]}]}],
+  "stream.listeners.tcp.1 = 127.0.0.1:5552
+   stream.listeners.tcp.2 = ::1:5552",
+  [{rabbitmq_stream,[{tcp_listeners,[{"127.0.0.1",5552},{"::1",5552}]}]}],
   [rabbitmq_stream]},
 
  {listener_tcp_options,
-  "stream.listeners.tcp.1 = 127.0.0.1:5551
-   stream.listeners.tcp.2 = ::1:5551
+  "stream.listeners.tcp.1 = 127.0.0.1:5552
+   stream.listeners.tcp.2 = ::1:5552
 
    stream.tcp_listen_options.backlog = 2048
    stream.tcp_listen_options.recbuf = 8192
@@ -25,8 +25,8 @@
 ",
   [{rabbitmq_stream,[
                     {tcp_listeners,[
-                                    {"127.0.0.1",5551},
-                                    {"::1",5551}
+                                    {"127.0.0.1",5552},
+                                    {"::1",5552}
                                    ]}
                     , {tcp_listen_options, [
                                             {backlog, 2048},

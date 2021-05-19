@@ -16,8 +16,8 @@
 %   [%% Network Configuration - the format is generally the same as for the broker
 
 %% Listen only on localhost (ipv4 & ipv6) on a specific port.
-%% {tcp_listeners, [{"127.0.0.1", 5551},
-%%                  {"::1",       5551}]},
+%% {tcp_listeners, [{"127.0.0.1", 5552},
+%%                  {"::1",       5552}]},
 
 {mapping, "stream.listeners.tcp", "rabbitmq_stream.tcp_listeners",[
     {datatype, {enum, [none]}}

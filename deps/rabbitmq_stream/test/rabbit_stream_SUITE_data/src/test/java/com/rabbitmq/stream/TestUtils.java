@@ -36,7 +36,7 @@ import org.junit.jupiter.api.extension.*;
 public class TestUtils {
 
   static int streamPortNode1() {
-    String port = System.getProperty("node1.stream.port", "5551");
+    String port = System.getProperty("node1.stream.port", "5552");
     return Integer.valueOf(port);
   }
 
