@@ -47,6 +47,8 @@
 -export([update_stream_conf/2]).
 -export([readers/1]).
 
+-export([parse_offset_arg/1]).
+
 -export([status/2,
          tracking_status/2]).
 
@@ -182,10 +184,10 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
               args := Args,
               ok_msg := OkMsg} = Spec,
             QName = amqqueue:get_name(Q),
-            case parse_offset(rabbit_misc:table_lookup(Args, <<"x-stream-offset">>)) of
+            case parse_offset_arg(rabbit_misc:table_lookup(Args, <<"x-stream-offset">>)) of
                 {error, _} = Err ->
                     Err;
-                OffsetSpec ->
+                {ok, OffsetSpec} ->
                     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                                          not NoAck, QName,
                                                          ConsumerPrefetchCount, false,
@@ -200,25 +202,31 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
             Err
     end.
 
-parse_offset(undefined) ->
-    next;
-parse_offset({_, <<"first">>}) ->
-    first;
-parse_offset({_, <<"last">>}) ->
-    last;
-parse_offset({_, <<"next">>}) ->
-    next;
-parse_offset({timestamp, V}) ->
-    {timestamp, V * 1000};
-parse_offset({longstr, V}) ->
+-spec parse_offset_arg(undefined |
+                       osiris:offset() |
+                       {longstr, binary()} |
+                       {timestamp, non_neg_integer()} |
+                       {term(), non_neg_integer()}) ->
+    {ok, osiris:offset_spec()} | {error, term()}.
+parse_offset_arg(undefined) ->
+    {ok, next};
+parse_offset_arg({_, <<"first">>}) ->
+    {ok, first};
+parse_offset_arg({_, <<"last">>}) ->
+    {ok, last};
+parse_offset_arg({_, <<"next">>}) ->
+    {ok, next};
+parse_offset_arg({timestamp, V}) ->
+    {ok, {timestamp, V * 1000}};
+parse_offset_arg({longstr, V}) ->
     case rabbit_amqqueue:check_max_age(V) of
         {error, _} = Err ->
             Err;
         Ms ->
-            {timestamp, erlang:system_time(millisecond) - Ms}
+            {ok, {timestamp, erlang:system_time(millisecond) - Ms}}
     end;
-parse_offset({_, V}) ->
-    V.
+parse_offset_arg({_, V}) ->
+    {ok, V}.
 
 get_local_pid(#stream_client{local_pid = Pid} = State)
   when is_pid(Pid) ->

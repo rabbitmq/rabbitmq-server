@@ -1559,6 +1559,3 @@ set_running_to_stopped(Members) ->
                      M
              end, Members).
 
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.

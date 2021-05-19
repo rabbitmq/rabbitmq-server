@@ -75,8 +75,6 @@
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long,
                             unsignedbyte, unsignedshort, unsignedint]).
 
--define(MORE_CONSUMER_CREDIT_AFTER, 50).
-
 -define(IS_CLASSIC(QPid), is_pid(QPid)).
 -define(IS_QUORUM(QPid), is_tuple(QPid)).
 %%----------------------------------------------------------------------------
@@ -976,17 +974,13 @@ check_queue_leader_locator_arg(_Val, _Args) ->
     {error, invalid_queue_locator_arg}.
 
 -define(KNOWN_OFFSETS, [<<"first">>, <<"last">>, <<"next">>]).
-check_stream_offset_arg({longstr, Val}, _Args) ->
-    case lists:member(Val, ?KNOWN_OFFSETS) of
-        true  -> ok;
-        false -> {error, invalid_stream_offset_arg}
-    end;
-check_stream_offset_arg({timestamp, Val}, _Args) when is_integer(Val) ->
-    ok;
-check_stream_offset_arg({_, Val}, _Args) when is_integer(Val) ->
-    ok;
-check_stream_offset_arg(_Val, _Args) ->
-    {error, invalid_stream_offset_arg}.
+check_stream_offset_arg(Val, _Args) ->
+    case rabbit_stream_queue:parse_offset_arg(Val) of
+        {ok, _} ->
+            ok;
+        {error, _} ->
+            {error, {invalid_stream_offset_arg, Val}}
+    end.
 
 -define(KNOWN_QUEUE_MODES, [<<"default">>, <<"lazy">>]).
 check_queue_mode({longstr, Val}, _Args) ->

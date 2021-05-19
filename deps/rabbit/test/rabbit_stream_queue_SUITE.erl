@@ -20,6 +20,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 suite() ->
@@ -1020,7 +1021,8 @@ consume_and_ack(Config) ->
             %% It will succeed as ack is now a credit operation. We should be
             %% able to redeclare a queue (gen_server call op) as the channel
             %% should still be open and declare is an idempotent operation
-            ?assertEqual({'queue.declare_ok', Q, 0, 0},
+            %%
+            ?assertMatch({'queue.declare_ok', Q, _MsgCount, 0},
                          declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
             quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
     after 5000 ->
