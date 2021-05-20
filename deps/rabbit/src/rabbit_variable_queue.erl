@@ -1774,22 +1774,21 @@ purge_betas_and_deltas(DelsAndAcksFun, State = #vqstate { mode = Mode }) ->
 
 remove_queue_entries(Q, DelsAndAcksFun,
                      State = #vqstate{msg_store_clients = MSCState}) ->
-    {MsgIdsByStore, Delivers, Acks, State1} =
+    {MsgIdsByStore, Acks, State1} =
         ?QUEUE:foldl(fun remove_queue_entries1/2,
-                     {maps:new(), [], [], State}, Q),
+                     {maps:new(), [], State}, Q),
     remove_msgs_by_id(MsgIdsByStore, MSCState),
-    DelsAndAcksFun(Delivers, Acks, State1).
+    DelsAndAcksFun([], Acks, State1).
 
 remove_queue_entries1(
-  #msg_status { msg_id = MsgId, seq_id = SeqId, is_delivered = IsDelivered,
+  #msg_status { msg_id = MsgId, seq_id = SeqId,
                 msg_in_store = MsgInStore, index_on_disk = IndexOnDisk,
                 is_persistent = IsPersistent} = MsgStatus,
-  {MsgIdsByStore, Delivers, Acks, State}) ->
+  {MsgIdsByStore, Acks, State}) ->
     {case MsgInStore of
          true  -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
          false -> MsgIdsByStore
      end,
-     cons_if(IndexOnDisk andalso not IsDelivered, SeqId, Delivers),
      cons_if(IndexOnDisk, SeqId, Acks),
      stats({-1, 0}, {MsgStatus, none}, 0, State)}.
 
