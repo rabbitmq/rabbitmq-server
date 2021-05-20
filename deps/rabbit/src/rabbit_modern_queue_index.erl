@@ -421,17 +421,9 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0,
 
 write_ack(SeqId, SegmentEntryCount, Segments, WritesAcc) ->
     Segment = SeqId div SegmentEntryCount,
-    %% We only want to write acks to segments that currently exist.
-    %% We need to do this because we indiscriminately added acks to
-    %% the write buffer before, even when we were deleting segments.
-    case maps:is_key(Segment, Segments) of
-        true ->
-            Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
-            LocBytesAcc = maps:get(Segment, WritesAcc, []),
-            WritesAcc#{Segment => [{Offset, <<0>>}|LocBytesAcc]};
-        false ->
-            WritesAcc
-    end.
+    Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
+    LocBytesAcc = maps:get(Segment, WritesAcc, []),
+    WritesAcc#{Segment => [{Offset, <<0>>}|LocBytesAcc]}.
 
 write_deliver(SeqId, SegmentEntryCount, WritesAcc) ->
     Segment = SeqId div SegmentEntryCount,
@@ -526,30 +518,24 @@ ack(SeqIds, State0 = #mqistate{ write_buffer = WriteBuffer0,
     %% We start by updating the ack state information. We then
     %% use this information to delete segment files on disk that
     %% were fully acked.
-    {Delete, State1} = update_ack_state(SeqIds, State0),
-    State = delete_segments(Delete, State1),
-    %% We add acks to the write buffer. We also add acks for segments that
-    %% have been deleted. We will be ignoring them when flushing buffers.
-    %% We do it like this because it is far more rare to delete a segment
-    %% than not.
-    {WriteBuffer, NumUpdates} = lists:foldl(fun
-        (SeqId, {FoldBuffer, FoldUpdates}) ->
-            case FoldBuffer of
-                %% Ack if the entry was already marked for delivery.
-                #{SeqId := deliver} ->
-                    {FoldBuffer#{SeqId => ack},
-                     FoldUpdates};
-                %% Remove the write if there is one scheduled. In that case
-                %% we will never write this entry to disk.
-                #{SeqId := Write} when is_tuple(Write) ->
-                    {maps:remove(SeqId, FoldBuffer),
-                     FoldUpdates};
-                %% Otherwise ack an entry that is already on disk.
-                _ when not is_map_key(SeqId, FoldBuffer) ->
-                    {FoldBuffer#{SeqId => ack},
-                     FoldUpdates + 1}
-            end
-    end, {WriteBuffer0, NumUpdates0}, SeqIds),
+    {Deletes, State1} = update_ack_state(SeqIds, State0),
+    State = delete_segments(Deletes, State1),
+    %% We add acks to the write buffer. We take special care not to add
+    %% acks for segments that have been deleted. We do this using a
+    %% separate fold fun when there have been deletes to avoid having
+    %% extra overhead in the normal case.
+    {WriteBuffer, NumUpdates} = case Deletes of
+        [] ->
+            lists:foldl(fun ack_fold_fun/2,
+                        {WriteBuffer0, NumUpdates0},
+                        SeqIds);
+        _ ->
+            {WriteBuffer1, NumUpdates1, _, _} = lists:foldl(
+                        fun ack_with_deletes_fold_fun/2,
+                        {WriteBuffer0, NumUpdates0, Deletes, segment_entry_count()},
+                        SeqIds),
+            {WriteBuffer1, NumUpdates1}
+    end,
     maybe_flush_buffer(State#mqistate{ write_buffer = WriteBuffer,
                                        write_buffer_updates = NumUpdates }).
 
@@ -586,6 +572,54 @@ delete_segment(Segment, State0 = #mqistate{ segments = Segments,
     %% Then we can delete the segment file.
     ok = file:delete(segment_file(Segment, State)),
     State.
+
+ack_fold_fun(SeqId, {Buffer, Updates}) ->
+    case Buffer of
+        %% Remove the write if there is one scheduled. In that case
+        %% we will never write this entry to disk.
+        #{SeqId := Write} when is_tuple(Write) ->
+            {maps:remove(SeqId, Buffer), Updates};
+        %% Ack if an on-disk entry was marked for delivery.
+        #{SeqId := deliver} ->
+            {Buffer#{SeqId => ack}, Updates};
+        %% Otherwise ack an entry that is already on disk.
+        _ when not is_map_key(SeqId, Buffer) ->
+            {Buffer#{SeqId => ack}, Updates + 1}
+    end.
+
+ack_with_deletes_fold_fun(SeqId, {Buffer, Updates, Deletes, SegmentEntryCount}) ->
+    case Buffer of
+        %% Remove the write if there is one scheduled. In that case
+        %% we will never write this entry to disk.
+        #{SeqId := Write} when is_tuple(Write) ->
+            {maps:remove(SeqId, Buffer), Updates,
+             Deletes, SegmentEntryCount};
+        %% Ack if an on-disk entry was marked for delivery,
+        %% or remove the deliver if the segment file has been deleted.
+        #{SeqId := deliver} ->
+            IsDeleted = lists:member(SeqId div SegmentEntryCount, Deletes),
+            case IsDeleted of
+                false ->
+                    {Buffer#{SeqId => ack}, Updates,
+                     Deletes, SegmentEntryCount};
+                true ->
+                    {maps:remove(SeqId, Buffer), Updates - 1,
+                     Deletes, SegmentEntryCount}
+            end;
+        %% Otherwise ack an entry that is already on disk,
+        %% unless the segment file has been deleted, in which
+        %% case we do not do anything.
+        _ when not is_map_key(SeqId, Buffer) ->
+            IsDeleted = lists:member(SeqId div SegmentEntryCount, Deletes),
+            case IsDeleted of
+                false ->
+                    {Buffer#{SeqId => ack}, Updates + 1,
+                     Deletes, SegmentEntryCount};
+                true ->
+                    {Buffer, Updates,
+                     Deletes, SegmentEntryCount}
+            end
+    end.
 
 %% A better interface for read/3 would be to request a maximum
 %% of N messages, rather than first call next_segment_boundary/3
