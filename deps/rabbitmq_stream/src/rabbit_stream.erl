@@ -33,9 +33,12 @@
          list/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 start(_Type, _Args) ->
     rabbit_stream_metrics:init(),
+    rabbit_global_counters:init([{protocol, stream}]),
+    rabbit_global_counters:init([{protocol, stream}, {queue_type, ?STREAM_QUEUE_TYPE}]),
     rabbit_stream_sup:start_link().
 
 host() ->

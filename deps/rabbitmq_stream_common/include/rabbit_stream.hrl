@@ -59,6 +59,8 @@
 -define(DEFAULT_FRAME_MAX, 1048576). %% 1 MiB
 -define(DEFAULT_HEARTBEAT, 60). %% 60 seconds
 
+-define(STREAM_QUEUE_TYPE, rabbit_stream_queue).
+
 -define(INFO_ITEMS,
   [conn_name,
     port,
