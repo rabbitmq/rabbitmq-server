@@ -434,7 +434,9 @@ parse_usertoken("") ->
     none;
 parse_usertoken(U) ->
     [User, Pass] = string:tokens(U, ":"),
-    {plain, to_binary(http_uri:decode(User)), to_binary(http_uri:decode(Pass))}.
+    {plain,
+     to_binary(uri_string:percent_decode(User)),
+     to_binary(uri_string:percent_decode(Pass))}.
 
 parse_tls_opts(M) ->
     lists:sort(maps:fold(fun parse_tls_opt/3, [], M)).
