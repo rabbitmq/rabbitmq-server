@@ -467,7 +467,7 @@ listen_loop_post_auth(Transport,
                     rabbit_networking:unregister_non_amqp_connection(self()),
                     notify_connection_closed(Connection1, State1);
                 close_sent ->
-                    rabbit_log:debug("Transitioned to close_sent ~n"),
+                    rabbit_log:debug("Transitioned to close_sent"),
                     Transport:setopts(S, [{active, once}]),
                     listen_loop_post_close(Transport,
                                            Connection1,
@@ -691,7 +691,7 @@ listen_loop_post_auth(Transport,
                     close(Transport, C1, State)
             end;
         heartbeat_timeout ->
-            rabbit_log:info("Heartbeat timeout, closing connection~n"),
+            rabbit_log:debug("Heartbeat timeout, closing connection"),
             C1 = demonitor_all_streams(Connection),
             close(Transport, C1, State);
         {infos, From} ->
@@ -1079,7 +1079,7 @@ handle_frame_pre_auth(Transport,
 
     {Connection1, State};
 handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
-    rabbit_log:info("Received heartbeat frame pre auth~n"),
+    rabbit_log:info("Received heartbeat frame pre auth"),
     {Connection, State};
 handle_frame_pre_auth(_Transport, Connection, State, Command) ->
     rabbit_log:warning("unknown command ~w, closing connection.",
@@ -1658,7 +1658,7 @@ handle_frame_post_auth(Transport,
                          #{leader_node := LeaderPid,
                            replica_nodes := ReturnedReplicas}} ->
                             rabbit_log:info("Created cluster with leader on ~p and replicas "
-                                            "on ~p~n",
+                                            "on ~p",
                                             [LeaderPid, ReturnedReplicas]),
                             response_ok(Transport,
                                         Connection,
@@ -1924,7 +1924,7 @@ handle_frame_post_auth(Transport,
     {Connection#stream_connection{connection_step = closing},
      State}; %% we ignore any subsequent frames
 handle_frame_post_auth(_Transport, Connection, State, heartbeat) ->
-    rabbit_log:info("Received heartbeat frame post auth~n"),
+    rabbit_log:debug("Received heartbeat frame post auth"),
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
@@ -1968,10 +1968,10 @@ handle_frame_post_close(_Transport,
                         Connection,
                         State,
                         {response, _CorrelationId, {close, _Code}}) ->
-    rabbit_log:info("Received close confirmation~n"),
+    rabbit_log:info("Received close confirmation"),
     {Connection#stream_connection{connection_step = closing_done}, State};
 handle_frame_post_close(_Transport, Connection, State, heartbeat) ->
-    rabbit_log:info("Received heartbeat command post close~n"),
+    rabbit_log:debug("Received heartbeat command post close"),
     {Connection, State};
 handle_frame_post_close(_Transport, Connection, State, Command) ->
     rabbit_log:warning("ignored command on close ~p .", [Command]),
