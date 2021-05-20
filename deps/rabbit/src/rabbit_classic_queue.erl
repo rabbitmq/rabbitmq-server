@@ -443,7 +443,7 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
 
 capabilities() ->
     #{unsupported_policies => [ %% Stream policies
-                                <<"max-age">>, <<"max-segment-size">>,
+                                <<"max-age">>, <<"stream-max-segment-size-bytes">>,
                                 <<"queue-leader-locator">>, <<"initial-cluster-size">>],
       queue_arguments => [<<"x-expires">>, <<"x-message-ttl">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,

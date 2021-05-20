@@ -203,8 +203,8 @@ var HELP = {
     'queue-max-age':
       'How long a message published to a stream queue can live before it is discarded.',
 
-    'queue-max-segment-size':
-      'Total segment size for stream segments on disk.<br/>(Sets the x-max-segment-size argument.)',
+    'queue-stream-max-segment-size-bytes':
+      'Total segment size for stream segments on disk.<br/>(Sets the x-stream-max-segment-size-bytes argument.)',
 
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
