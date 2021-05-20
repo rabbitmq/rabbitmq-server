@@ -13,7 +13,9 @@
 
 build_dispatcher() ->
     {ok, _} = application:ensure_all_started(prometheus),
-    prometheus_registry:register_collectors([prometheus_rabbitmq_core_metrics_collector]),
+    prometheus_registry:register_collectors([
+        prometheus_rabbitmq_core_metrics_collector,
+        prometheus_rabbitmq_global_metrics_collector]),
     prometheus_registry:register_collectors('per-object', [
         prometheus_vm_system_info_collector,
         prometheus_vm_dist_collector,
@@ -21,7 +23,8 @@ build_dispatcher() ->
         prometheus_mnesia_collector,
         prometheus_vm_statistics_collector,
         prometheus_vm_msacc_collector,
-        prometheus_rabbitmq_core_metrics_collector
+        prometheus_rabbitmq_core_metrics_collector,
+        prometheus_rabbitmq_global_metrics_collector
         ]),
     rabbit_prometheus_handler:setup(),
     cowboy_router:compile([{'_', dispatcher()}]).

@@ -236,6 +236,17 @@ erlang_lib(
         sha256 = "5721c6b6d50122d8f68cccac712caa1231f97894bab779eff5ff0f886cb44648",
     )
 
+    github_bazel_erlang_lib(
+        name = "seshat",
+        org = "rabbitmq",
+        ref = "main",
+        version = "main",
+        extra_apps = [
+            "sasl",
+            "crypto",
+        ],
+    )
+
     hex_pm_bazel_erlang_lib(
         name = "stdout_formatter",
         version = "0.2.4",

@@ -32,11 +32,15 @@ groups() ->
         {config_port, [], generic_tests()},
         {aggregated_metrics, [], [
             aggregated_metrics_test,
-            specific_erlang_metrics_present_test
+            specific_erlang_metrics_present_test,
+            global_metrics_present_test,
+            global_metrics_single_metric_family_test
         ]},
         {per_object_metrics, [], [
             globally_configure_per_object_metrics_test,
-            specific_erlang_metrics_present_test
+            specific_erlang_metrics_present_test,
+            global_metrics_present_test,
+            global_metrics_single_metric_family_test
         ]},
         {per_object_endpoint_metrics, [], [
             endpoint_per_object_metrics,
@@ -286,6 +290,28 @@ identity_info_test(Config) ->
 specific_erlang_metrics_present_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
     ?assertEqual(match, re:run(Body, "^erlang_vm_dist_node_queue_size_bytes{", [{capture, none}, multiline])).
+
+global_metrics_present_test(Config) ->
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_received_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_received_confirm_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_routed_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_unroutable_dropped_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_unroutable_returned_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_confirmed_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_delivered_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_delivered_consume_manual_ack_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_delivered_consume_auto_ack_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_delivered_get_manual_ack_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_delivered_get_auto_ack_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_get_empty_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_redelivered_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_acknowledged_total{", [{capture, none}, multiline])).
+
+global_metrics_single_metric_family_test(Config) ->
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
+    {match, MetricFamilyMatches} = re:run(Body, "TYPE rabbitmq_global_messages_acknowledged_total", [global]),
+    ?assertEqual(1, length(MetricFamilyMatches)).
 
 http_get(Config, ReqHeaders, CodeExp) ->
     Path = proplists:get_value(prometheus_path, Config, "/metrics"),
