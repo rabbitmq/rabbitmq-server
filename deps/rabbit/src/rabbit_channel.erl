@@ -2188,7 +2188,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
               [rabbit_misc:rs(Resource)])
     end.
 
--spec infer_extra_bcc(amqqueue:amqqueue()) -> [[amqqueue:name()]].
+-spec infer_extra_bcc([amqqueue:amqqueue()]) -> [rabbit_amqqueue:name()].
 infer_extra_bcc([]) ->
     [];
 infer_extra_bcc([Q]) ->
