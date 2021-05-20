@@ -96,7 +96,7 @@ all_tests() ->
      max_age,
      invalid_policy,
      max_age_policy,
-     max_segment_size_policy,
+     max_segment_size_bytes_policy,
      purge,
      update_retention_policy,
      queue_info
@@ -1359,7 +1359,7 @@ max_length_bytes(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                  {<<"x-max-length-bytes">>, long, 500},
-                                 {<<"x-max-segment-size">>, long, 250}])),
+                                 {<<"x-stream-max-segment-size-bytes">>, long, 250}])),
 
     Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
 
@@ -1386,7 +1386,7 @@ max_age(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                  {<<"x-max-age">>, longstr, <<"10s">>},
-                                 {<<"x-max-segment-size">>, long, 250}])),
+                                 {<<"x-stream-max-segment-size-bytes">>, long, 250}])),
 
     Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
 
@@ -1806,7 +1806,7 @@ update_retention_policy(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-max-segment-size">>, long, 200}
+                                 {<<"x-stream-max-segment-size-bytes">>, long, 200}
                                 ])),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"0">>, <<"0">>, <<"0">>]]),
     [publish(Ch, Q, <<"msg">>) || _ <- lists:seq(1, 10000)],
@@ -1847,7 +1847,7 @@ queue_info(Config) ->
       end),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
-max_segment_size_policy(Config) ->
+max_segment_size_bytes_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -1855,14 +1855,14 @@ max_segment_size_policy(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"segment">>, <<"max_segment_size.*">>, <<"queues">>,
-           [{<<"max-segment-size">>, 5000}]),
+           Config, 0, <<"segment">>, <<"max_segment_size_bytes.*">>, <<"queues">>,
+           [{<<"stream-max-segment-size-bytes">>, 5000}]),
 
     Info = find_queue_info(Config, [policy, operator_policy, effective_policy_definition]),
 
     ?assertEqual(<<"segment">>, proplists:get_value(policy, Info)),
     ?assertEqual('', proplists:get_value(operator_policy, Info)),
-    ?assertEqual([{<<"max-segment-size">>, 5000}],
+    ?assertEqual([{<<"stream-max-segment-size-bytes">>, 5000}],
                  proplists:get_value(effective_policy_definition, Info)),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"segment">>),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).

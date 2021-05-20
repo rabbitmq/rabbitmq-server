@@ -542,7 +542,7 @@ status(Vhost, QueueName) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             _Pid = amqqueue:get_pid(Q),
-            % Max = maps:get(max_segment_size, Conf, osiris_log:get_default_max_segment_size()),
+            % Max = maps:get(max_segment_size_bytes, Conf, osiris_log:get_default_max_segment_size_bytes()),
             [begin
                  [{role, Role},
                   get_key(node, C),
@@ -732,7 +732,7 @@ make_stream_conf(Node, Q) ->
     %% MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
     MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun max_age/2, Q)),
-    MaxSegmentSize = args_policy_lookup(<<"max-segment-size">>, fun min/2, Q),
+    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun min/2, Q),
     LeaderLocator = queue_leader_locator(args_policy_lookup(<<"queue-leader-locator">>,
                                                             fun res_arg/2, Q)),
     InitialClusterSize = initial_cluster_size(
@@ -746,7 +746,7 @@ make_stream_conf(Node, Q) ->
                                      R =/= undefined
                              end, [{max_bytes, MaxBytes},
                                    {max_age, MaxAge}]),
-    add_if_defined(max_segment_size, MaxSegmentSize, #{reference => QName,
+    add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes, #{reference => QName,
                                                        name => Name,
                                                        retention => Retention,
                                                        nodes => [Node | Replicas],
@@ -778,12 +778,12 @@ update_stream_conf(undefined, #{} = Conf) ->
 update_stream_conf(Q, #{} = Conf) when ?is_amqqueue(Q) ->
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
     MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun max_age/2, Q)),
-    MaxSegmentSize = args_policy_lookup(<<"max-segment-size">>, fun min/2, Q),
+    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun min/2, Q),
     Retention = lists:filter(fun({_, R}) ->
                                      R =/= undefined
                              end, [{max_bytes, MaxBytes},
                                    {max_age, MaxAge}]),
-    add_if_defined(max_segment_size, MaxSegmentSize,
+    add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes,
                    Conf#{retention => Retention}).
 
 add_if_defined(_, undefined, Map) ->
@@ -940,7 +940,7 @@ capabilities() ->
       queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
                           <<"x-max-length">>, <<"x-max-length-bytes">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-max-age">>, <<"x-max-segment-size">>,
+                          <<"x-max-age">>, <<"x-stream-max-segment-size-bytes">>,
                           <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-stream-offset">>],
       server_named => false}.

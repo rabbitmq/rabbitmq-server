@@ -380,7 +380,7 @@ capabilities() ->
             <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
             <<"queue-master-locator">>,
             %% Stream policies
-            <<"max-age">>, <<"max-segment-size">>,
+            <<"max-age">>, <<"stream-max-segment-size-bytes">>,
             <<"queue-leader-locator">>, <<"initial-cluster-size">>],
       queue_arguments => [<<"x-expires">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,

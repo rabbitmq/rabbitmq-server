@@ -40,7 +40,7 @@ register() ->
                           {policy_validator, <<"overflow">>},
                           {policy_validator, <<"delivery-limit">>},
                           {policy_validator, <<"max-age">>},
-                          {policy_validator, <<"max-segment-size">>},
+                          {policy_validator, <<"stream-max-segment-size-bytes">>},
                           {policy_validator, <<"queue-leader-locator">>},
                           {policy_validator, <<"initial-cluster-size">>},
                           {operator_policy_validator, <<"expires">>},
@@ -164,10 +164,10 @@ validate_policy0(<<"initial-cluster-size">>, Value)
 validate_policy0(<<"initial-cluster-size">>, Value) ->
     {error, "~p is not a valid cluster size", [Value]};
 
-validate_policy0(<<"max-segment-size">>, Value)
+validate_policy0(<<"stream-max-segment-size-bytes">>, Value)
   when is_integer(Value), Value >= 0 ->
     ok;
-validate_policy0(<<"max-segment-size">>, Value) ->
+validate_policy0(<<"stream-max-segment-size-bytes">>, Value) ->
     {error, "~p is not a valid segment size", [Value]}.
 
 merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
