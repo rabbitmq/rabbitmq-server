@@ -254,13 +254,12 @@ erlang_lib(
         sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
     )
 
-    new_git_repository(
+    hex_pm_bazel_erlang_lib(
         name = "systemd",
-        remote = "https://github.com/hauleth/erlang-systemd.git",
-        commit = "e732727b0b637eb29e8adc77a4eb46d7ebc0f41a",
-        build_file = rabbitmq_workspace + "//:BUILD.systemd",
-        patch_cmds = [
-            SYSTEMD_INJECT_GIT_VERSION,
+        version = "0.6.1",
+        sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
+        deps = [
+            "@enough//:bazel_erlang_lib",
         ],
     )
 
@@ -270,12 +269,3 @@ erlang_lib(
         branch = "master",
         build_file = rabbitmq_workspace + "//:BUILD.trust_store_http",
     )
-
-SYSTEMD_INJECT_GIT_VERSION = """set -euo pipefail
-V="$(git describe --dirty --abbrev=7 --tags --always --first-parent 2>/dev/null \\
-     || git describe --dirty --abbrev=7 --tags --always 2>/dev/null || true)"
-cat src/systemd.app.src \\
-    | sed "s/{vsn,[[:space:]]git}/{vsn, \\"0.6.0-8-g$V\\"}/" \\
-    > src/systemd.app.src.two
-mv src/systemd.app.src.two src/systemd.app.src
-"""
