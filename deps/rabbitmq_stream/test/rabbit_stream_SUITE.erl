@@ -102,6 +102,7 @@ test_gc_consumers(Config) ->
                                   10,
                                   0,
                                   0,
+                                  0,
                                   #{}]),
     ok = test_utils:wait_until(fun() -> consumer_count(Config) == 0 end),
     ok.

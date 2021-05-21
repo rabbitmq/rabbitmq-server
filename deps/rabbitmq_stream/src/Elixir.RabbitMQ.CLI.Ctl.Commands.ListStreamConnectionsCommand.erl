@@ -35,7 +35,7 @@
          help_section/0]).
 
 formatter() ->
-    'Elixir.RabbitMQ.CLI.Formatters.Table'.
+    'Elixir.RabbitMQ.CLI.Formatters.PrettyTable'.
 
 scopes() ->
     [ctl, diagnostics, streams].

@@ -302,6 +302,9 @@ messages_confirmed(Counters) ->
 messages_errored(Counters) ->
     atomics:get(Counters, 3).
 
+stream_committed_offset(Log) ->
+    osiris_log:committed_offset(Log).
+
 listen_loop_pre_auth(Transport,
                      #stream_connection{socket = S} = Connection,
                      State,
@@ -1371,12 +1374,9 @@ handle_frame_post_auth(Transport,
                          OffsetSpec,
                          Credit,
                          Properties}}) ->
+    QueueResource = #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
     %% FIXME check the max number of subs is not reached already
-    case rabbit_stream_utils:check_read_permitted(#resource{name = Stream,
-                                                            kind = queue,
-                                                            virtual_host =
-                                                                VirtualHost},
-                                                  User, #{})
+    case rabbit_stream_utils:check_read_permitted(QueueResource, User, #{})
     of
         ok ->
             case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream)
@@ -1414,7 +1414,7 @@ handle_frame_post_auth(Transport,
                                              OffsetSpec,
                                              Properties]),
                             CounterSpec =
-                                {{?MODULE, Stream, SubscriptionId, self()}, []},
+                                {{?MODULE, QueueResource, SubscriptionId, self()}, []},
                             {ok, Segment} =
                                 osiris:init_reader(LocalMemberPid, OffsetSpec,
                                                    CounterSpec),
@@ -1469,6 +1469,7 @@ handle_frame_post_auth(Transport,
                                 ConsumerState1,
 
                             ConsumerOffset = osiris_log:next_offset(Segment1),
+                            ConsumerOffsetLag = consumer_i(offset_lag, ConsumerState1),
 
                             rabbit_log:info("Subscription ~p is now at offset ~p with ~p message(s) "
                                             "distributed after subscription",
@@ -1482,6 +1483,7 @@ handle_frame_post_auth(Transport,
                                                                    Credit1,
                                                                    messages_consumed(ConsumerCounters1),
                                                                    ConsumerOffset,
+                                                                   ConsumerOffsetLag,
                                                                    Properties),
                             {Connection1#stream_connection{stream_subscriptions
                                                                =
@@ -2296,12 +2298,13 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
                                             Credit,
                                             messages_consumed(Counters),
                                             consumer_offset(Counters),
+                                            consumer_i(offset_lag, Consumer),
                                             Properties)
      || #consumer{stream = S,
                   subscription_id = Id,
                   credit = Credit,
                   counters = Counters,
-                  properties = Properties}
+                  properties = Properties} = Consumer
             <- maps:values(Consumers)],
     [rabbit_stream_metrics:publisher_updated(self(),
                                              stream_r(S, Connection),
@@ -2351,16 +2354,18 @@ consumer_i(subscription_id, #consumer{subscription_id = SubId}) ->
     SubId;
 consumer_i(credits, #consumer{credit = Credits}) ->
     Credits;
-consumer_i(messages, #consumer{counters = Counters}) ->
+consumer_i(messages_consumed, #consumer{counters = Counters}) ->
     messages_consumed(Counters);
 consumer_i(offset, #consumer{counters = Counters}) ->
     consumer_offset(Counters);
+consumer_i(offset_lag, #consumer{counters = Counters, segment = Log}) ->
+    stream_committed_offset(Log) - consumer_offset(Counters);
 consumer_i(connection_pid, _) ->
     self();
-consumer_i(stream, #consumer{stream = S}) ->
-    S;
 consumer_i(properties, #consumer{properties = Properties}) ->
-    Properties.
+    Properties;
+consumer_i(stream, #consumer{stream = Stream}) ->
+    Stream.
 
 publishers_info(Pid, InfoItems) ->
     case InfoItems -- ?PUBLISHER_INFO_ITEMS of
