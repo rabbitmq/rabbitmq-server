@@ -577,6 +577,7 @@ process_recovery_terms(Terms) ->
 
 terminate(_Reason, State) ->
     State1 = #vqstate { virtual_host      = VHost,
+                        next_seq_id       = NextSeqId,
                         persistent_count  = PCount,
                         persistent_bytes  = PBytes,
                         index_state       = IndexState,
@@ -588,7 +589,8 @@ terminate(_Reason, State) ->
                             rabbit_msg_store:client_ref(MSCStateP)
            end,
     ok = rabbit_msg_store:client_delete_and_terminate(MSCStateT),
-    Terms = [{persistent_ref,   PRef},
+    Terms = [{next_seq_id,      NextSeqId},
+             {persistent_ref,   PRef},
              {persistent_count, PCount},
              {persistent_bytes, PBytes}],
     a(State1#vqstate {
@@ -1366,12 +1368,14 @@ expand_delta(_SeqId, #delta { count       = Count,
 
 init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
      PersistentClient, TransientClient, VHost) ->
-    {LowSeqId, NextSeqId, IndexState1} = ?INDEX:bounds(IndexState),
+    {LowSeqId, NextSeqId0, IndexState1} = ?INDEX:bounds(IndexState),
 
-    {DeltaCount1, DeltaBytes1} =
+    {NextSeqId, DeltaCount1, DeltaBytes1} =
         case Terms of
-            non_clean_shutdown -> {DeltaCount, DeltaBytes};
-            _                  -> {proplists:get_value(persistent_count,
+            non_clean_shutdown -> {NextSeqId0, DeltaCount, DeltaBytes};
+            _                  -> {proplists:get_value(next_seq_id,
+                                                       Terms, 0),
+                                   proplists:get_value(persistent_count,
                                                        Terms, DeltaCount),
                                    proplists:get_value(persistent_bytes,
                                                        Terms, DeltaBytes)}
