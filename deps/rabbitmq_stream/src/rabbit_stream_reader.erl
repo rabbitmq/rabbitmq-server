@@ -651,7 +651,8 @@ listen_loop_post_auth(Transport,
                                                                        SendFileOct)
                                                        of
                                                            {error, Reason} ->
-                                                               rabbit_log:info("Error while sending chunks: ~p", [Reason]),
+                                                               rabbit_log:info("Error while sending chunks: ~p",
+                                                                               [Reason]),
                                                                %% likely a connection problem
                                                                Consumer;
                                                            {{segment, Segment1},
@@ -866,13 +867,6 @@ handle_frame_pre_auth(Transport,
                     end,
                     #{}, RawConfigServerProps),
 
-    %% FIXME move advertised host and port transmission after authentication
-    %% e.g. in in OPEN. They would be part of "connection properties".
-    AdvertisedHost = rabbit_stream:host(),
-    AdvertisedPort =
-        rabbit_data_coercion:to_binary(
-            rabbit_stream:port()),
-
     ServerProperties0 =
         maps:merge(ConfigServerProperties,
                    #{<<"product">> => Product,
@@ -880,9 +874,7 @@ handle_frame_pre_auth(Transport,
                      <<"cluster_name">> => rabbit_nodes:cluster_name(),
                      <<"platform">> => rabbit_misc:platform_and_version(),
                      <<"copyright">> => ?COPYRIGHT_MESSAGE,
-                     <<"information">> => ?INFORMATION_MESSAGE,
-                     <<"advertised_host">> => AdvertisedHost,
-                     <<"advertised_port">> => AdvertisedPort}),
+                     <<"information">> => ?INFORMATION_MESSAGE}),
     ServerProperties =
         maps:map(fun(_, V) -> rabbit_data_coercion:to_binary(V) end,
                  ServerProperties0),
@@ -1063,17 +1055,31 @@ handle_frame_pre_auth(Transport,
                                                      VirtualHost,
                                                      {socket, S},
                                                      #{}),
-            response_ok(Transport, Connection, open, CorrelationId),
+            AdvertisedHost = rabbit_stream:host(),
+            AdvertisedPort =
+                rabbit_data_coercion:to_binary(
+                    rabbit_stream:port()),
+
+            ConnectionProperties =
+                #{<<"advertised_host">> => AdvertisedHost,
+                  <<"advertised_port">> => AdvertisedPort},
+
+            Frame =
+                rabbit_stream_core:frame({response, CorrelationId,
+                                          {open, ?RESPONSE_CODE_OK,
+                                           ConnectionProperties}}),
+
+            send(Transport, S, Frame),
             %% FIXME check if vhost is alive (see rabbit_reader:is_vhost_alive/2)
             Connection#stream_connection{connection_step = opened,
                                          virtual_host = VirtualHost}
         catch
             exit:_ ->
-                response(Transport,
-                         Connection,
-                         open,
-                         CorrelationId,
-                         ?RESPONSE_VHOST_ACCESS_FAILURE),
+                F = rabbit_stream_core:frame({response, CorrelationId,
+                                              {open,
+                                               ?RESPONSE_VHOST_ACCESS_FAILURE,
+                                               #{}}}),
+                send(Transport, S, F),
                 Connection#stream_connection{connection_step = failure}
         end,
 

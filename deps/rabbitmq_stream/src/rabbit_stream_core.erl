@@ -101,11 +101,11 @@
       unsubscribe |
       create_stream |
       delete_stream |
-      open |
       close |
       sasl_authenticate,
       response_code()} |
      {query_publisher_sequence, response_code(), sequence()} |
+     {open, response_code(), #{binary() => binary()}} |
      {query_offset, response_code(), osiris:offset()} |
      {metadata, Endpoints :: [endpoint()],
       Metadata ::
@@ -262,6 +262,22 @@ frame({response, _Corr, {tune, FrameMax, Heartbeat}}) ->
                     ?VERSION_1:16,
                     FrameMax:32,
                     Heartbeat:32>>);
+frame({response, Corr, {open, ResponseCode, ConnectionProperties}}) ->
+    ConnPropsCount = map_size(ConnectionProperties),
+    ConnectionPropertiesBin =
+        case ConnPropsCount of
+            0 ->
+                <<>>;
+            _ ->
+                PropsBin = generate_map(ConnectionProperties),
+                [<<ConnPropsCount:32>>, PropsBin]
+        end,
+    wrap_in_frame([<<?RESPONSE:1,
+                     ?COMMAND_OPEN:15,
+                     ?VERSION_1:16,
+                     Corr:32,
+                     ResponseCode:16>>,
+                   ConnectionPropertiesBin]);
 frame({response, CorrelationId, Body}) ->
     {CommandId, BodyBin} = response_body(Body),
     wrap_in_frame([<<?RESPONSE:1,
@@ -726,6 +742,12 @@ parse_response(<<?RESPONSE:1,
 parse_response(Bin) ->
     {unknown, Bin}.
 
+parse_response_body(?COMMAND_OPEN, <<ResponseCode:16>>) ->
+    {open, ResponseCode, #{}};
+parse_response_body(?COMMAND_OPEN,
+                    <<ResponseCode:16, _ConnectionPropertiesCount:32,
+                      ConnectionProperties/binary>>) ->
+    {open, ResponseCode, parse_map(ConnectionProperties, #{})};
 parse_response_body(?COMMAND_QUERY_PUBLISHER_SEQUENCE,
                     <<ResponseCode:16, Sequence:64>>) ->
     {query_publisher_sequence, ResponseCode, Sequence};

@@ -239,7 +239,8 @@ test_authenticate(S, C0) ->
     OpenFrame =
         rabbit_stream_core:frame({request, 3, {open, VirtualHost}}),
     ok = gen_tcp:send(S, OpenFrame),
-    {C4, [{response, 3, {open, ?RESPONSE_CODE_OK}}]} =
+    {C4,
+     [{response, 3, {open, ?RESPONSE_CODE_OK, _ConnectionProperties}}]} =
         receive_commands(S, C3),
     C4.
 
