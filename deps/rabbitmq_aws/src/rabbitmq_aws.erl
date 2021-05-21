@@ -83,9 +83,9 @@ refresh_credentials() ->
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
 %% @end
 refresh_credentials(State) ->
-  rabbit_log:debug("Refreshing AWS credentials..."),
+  _ = rabbit_log:debug("Refreshing AWS credentials..."),
   {_, NewState} = load_credentials(State),
-  rabbit_log:debug("AWS credentials have been refreshed."),
+  _ = rabbit_log:debug("AWS credentials have been refreshed."),
   set_credentials(NewState).
 
 
@@ -497,15 +497,15 @@ sign_headers(#state{access_key = AccessKey,
 %% @doc Determine whether or not an Imdsv2Token has expired.
 %% @end
 expired_imdsv2_token(undefined) ->
-  rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained."),
+  _ = rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained."),
   true;
 expired_imdsv2_token({_, _, undefined}) ->
-  rabbit_log:debug("EC2 IMDSv2 token is not available."),
+  _ = rabbit_log:debug("EC2 IMDSv2 token is not available."),
   true;
 expired_imdsv2_token({_, _, Expiration}) ->
   Now = calendar:datetime_to_gregorian_seconds(local_time()),
   HasExpired = Now >= Expiration,
-  rabbit_log:debug("EC2 IMDSv2 token has expired: ~p", [HasExpired]),
+  _ = rabbit_log:debug("EC2 IMDSv2 token has expired: ~p", [HasExpired]),
   HasExpired.
 
 
@@ -527,7 +527,7 @@ ensure_imdsv2_token_valid() ->
 %%      If the credentials are not available or have expired, then refresh them before performing the request.
 %% @end
 ensure_credentials_valid() ->
-  rabbit_log:debug("Making sure AWS credentials are available and still valid."),
+  _ = rabbit_log:debug("Making sure AWS credentials are available and still valid."),
   {ok, State} = gen_server:call(rabbitmq_aws, get_state),
   case has_credentials(State) of
     true -> case expired_credentials(State#state.expiration) of
@@ -542,10 +542,10 @@ ensure_credentials_valid() ->
 %% @doc Invoke an API call to an AWS service.
 %% @end
 api_get_request(Service, Path) ->
-  rabbit_log:debug("Invoking AWS request {Service: ~p; Path: ~p}...", [Service, Path]),
+  _ = rabbit_log:debug("Invoking AWS request {Service: ~p; Path: ~p}...", [Service, Path]),
   ensure_credentials_valid(),
   case get(Service, Path) of
-    {ok, {_Headers, Payload}} -> rabbit_log:debug("AWS request: ~s~nResponse: ~p", [Path, Payload]),
+    {ok, {_Headers, Payload}} -> _ = rabbit_log:debug("AWS request: ~s~nResponse: ~p", [Path, Payload]),
                                  {ok, Payload};
     {error, {credentials, _}} -> {error, credentials};
     {error, Message, _}       -> {error, Message}
