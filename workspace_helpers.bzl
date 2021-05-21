@@ -19,6 +19,12 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         version = "0.5.6",
     )
 
+    hex_pm_bazel_erlang_lib(
+        name = "base64url",
+        version = "1.0.1",
+        sha256 = "f9b3add4731a02a9b0410398b475b33e7566a695365237a6bdee1bb447719f5c",
+    )
+
     new_git_repository(
         name = "bats",
         remote = "https://github.com/sstephenson/bats",

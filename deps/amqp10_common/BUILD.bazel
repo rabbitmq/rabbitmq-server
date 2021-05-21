@@ -4,6 +4,7 @@ load(
     "bazel_erlang_lib",
     "erlc",
 )
+load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load(
     "//:rabbitmq.bzl",
@@ -96,6 +97,8 @@ bazel_erlang_lib(
     beam = [":test_beam_files"],
     visibility = ["//visibility:public"],
 )
+
+xref(tags = ["xref"])
 
 ct_suite(
     name = "binary_generator_SUITE",
