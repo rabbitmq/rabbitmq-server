@@ -19,6 +19,7 @@
                              ra_name/1,
                              is_mixed_versions/0]).
 
+-compile([nowarn_export_all, export_all]).
 -compile(export_all).
 
 suite() ->
@@ -150,12 +151,10 @@ memory_tests() ->
 init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:merge_app_env(
-               Config0, {rabbit, [{quorum_tick_interval, 1000}]}),
-    Config = rabbit_ct_helpers:merge_app_env(
-               Config1, {aten, [{poll_interval, 1000}]}),
-    rabbit_ct_helpers:run_setup_steps(
-      Config,
-      [fun rabbit_ct_broker_helpers:configure_dist_proxy/1]).
+                Config0, {rabbit, [{quorum_tick_interval, 1000}]}),
+    rabbit_ct_helpers:merge_app_env(
+      Config1, {aten, [{poll_interval, 1000}]}),
+    rabbit_ct_helpers:run_setup_steps(Config1, []).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -164,11 +163,14 @@ init_per_group(clustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(unclustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
-init_per_group(clustered_with_partitions, Config) ->
+init_per_group(clustered_with_partitions, Config0) ->
     case is_mixed_versions() of
         true ->
             {skip, "clustered_with_partitions is too unreliable in mixed mode"};
         false ->
+            Config = rabbit_ct_helpers:run_setup_steps(
+                       Config0,
+                       [fun rabbit_ct_broker_helpers:configure_dist_proxy/1]),
             rabbit_ct_helpers:set_config(Config, [{net_ticktime, 10}])
     end;
 init_per_group(Group, Config) ->
