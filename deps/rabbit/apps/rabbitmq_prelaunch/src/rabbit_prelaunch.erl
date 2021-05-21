@@ -113,6 +113,13 @@ do_run() ->
     %% 4. Write PID file.
     _ = rabbit_log_prelaunch:debug(""),
     _ = write_pid_file(Context),
+
+    %% Garbage collect before returning because we do not want
+    %% to keep memory around forever unnecessarily, even if just
+    %% a few MiBs, because it will pollute output from tools like
+    %% Observer or observer_cli.
+    _ = erlang:garbage_collect(),
+
     ignore.
 
 assert_mnesia_is_stopped() ->
