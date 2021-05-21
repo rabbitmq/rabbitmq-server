@@ -104,11 +104,13 @@ stream_queue_arguments(ArgumentsAcc,
                            ++ ArgumentsAcc,
                            maps:remove(<<"max-age">>, Arguments));
 stream_queue_arguments(ArgumentsAcc,
-                       #{<<"stream-max-segment-size-bytes">> := Value} = Arguments) ->
+                       #{<<"stream-max-segment-size-bytes">> := Value} =
+                           Arguments) ->
     stream_queue_arguments([{<<"x-stream-max-segment-size-bytes">>, long,
                              binary_to_integer(Value)}]
                            ++ ArgumentsAcc,
-                           maps:remove(<<"stream-max-segment-size-bytes">>, Arguments));
+                           maps:remove(<<"stream-max-segment-size-bytes">>,
+                                       Arguments));
 stream_queue_arguments(ArgumentsAcc,
                        #{<<"initial-cluster-size">> := Value} = Arguments) ->
     stream_queue_arguments([{<<"x-initial-cluster-size">>, long,

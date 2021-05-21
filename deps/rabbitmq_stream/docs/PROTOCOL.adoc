@@ -540,11 +540,15 @@ OpenRequest => Key Version CorrelationId VirtualHost
   CorrelationId => uint32
   VirtualHost => string
 
-OpenResponse => Key Version CorrelationId ResponseCode
+OpenResponse => Key Version CorrelationId ResponseCode ConnectionProperties
   Key => uint16 // 21
   Version => uint16
   CorrelationId => uint32
   ResponseCode => uint16
+  ConnectionProperties => [ConnectionProperty]
+  ConnectionProperty => Key Value
+  Key => string
+  Value => string
 ```
 
 === Close
