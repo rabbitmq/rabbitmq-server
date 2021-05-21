@@ -200,7 +200,6 @@ test_server(Transport, Port) ->
     C6 = test_subscribe(Transport, S, SubscriptionId, Stream, C5),
     C7 = test_deliver(Transport, S, SubscriptionId, Body, C6),
     C8 = test_delete_stream(Transport, S, Stream, C7),
-    % test_metadata_update_stream_deleted(S, Stream),
     _C9 = test_close(Transport, S, C8),
     closed = wait_for_socket_close(Transport, S, 10),
     ok.
@@ -280,7 +279,7 @@ test_delete_stream(Transport, S, Stream, C0) ->
     ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, Cmd),
     case MaybeMetaData of
         [] ->
-            test_metadata_update_stream_deleted(S, Stream, C1);
+            test_metadata_update_stream_deleted(Transport, S, Stream, C1);
         [Meta] ->
             {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} =
                 Meta,
@@ -342,22 +341,6 @@ test_deliver(Transport, S, SubscriptionId, Body, C0) ->
       Body:BodySize/binary>> =
         Chunk,
     C.
-
-test_metadata_update_stream_deleted(S, Stream) ->
-    test_metadata_update_stream_deleted(gen_tcp, S, Stream).
-
-test_metadata_update_stream_deleted(Transport, S, Stream) ->
-    StreamSize = byte_size(Stream),
-    FrameSize = 2 + 2 + 2 + 2 + StreamSize,
-    {ok,
-     <<FrameSize:32,
-       ?REQUEST:1,
-       ?COMMAND_METADATA_UPDATE:15,
-       ?VERSION_1:16,
-       ?RESPONSE_CODE_STREAM_NOT_AVAILABLE:16,
-       StreamSize:16,
-       Stream/binary>>} =
-        Transport:recv(S, 0, 5000).
 
 test_close(Transport, S, C0) ->
     CloseReason = <<"OK">>,

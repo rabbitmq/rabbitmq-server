@@ -30,12 +30,12 @@ init([]) ->
     {ok, Listeners} = application:get_env(rabbitmq_stream, tcp_listeners),
     NumTcpAcceptors =
         application:get_env(rabbitmq_stream, num_tcp_acceptors, 10),
-    {ok, SocketOpts} =
-        application:get_env(rabbitmq_stream, tcp_listen_options),
+    SocketOpts =
+        application:get_env(rabbitmq_stream, tcp_listen_options, []),
 
     {ok, SslListeners0} = application:get_env(rabbitmq_stream, ssl_listeners),
-    {ok, SslSocketOpts} =
-        application:get_env(rabbitmq_stream, ssl_listen_options),
+    SslSocketOpts =
+        application:get_env(rabbitmq_stream, ssl_listen_options, []),
     {SslOpts, NumSslAcceptors, SslListeners}
         = case SslListeners0 of
               [] -> {none, 0, []};

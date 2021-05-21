@@ -128,8 +128,8 @@ list_connections_run(Config) ->
     ?assertEqual([], Keys -- ?INFO_ITEMS),
     ?assertEqual([], ?INFO_ITEMS -- Keys),
 
-    rabbit_stream_SUITE:test_close(S1, C1),
-    rabbit_stream_SUITE:test_close(S2, C2),
+    rabbit_stream_SUITE:test_close(gen_tcp, S1, C1),
+    rabbit_stream_SUITE:test_close(gen_tcp, S2, C2),
     ok.
 
 list_consumers_merge_defaults(_Config) ->
@@ -271,22 +271,22 @@ list_publishers_run(Config) ->
     ok.
 
 create_stream(S, Stream, C0) ->
-    rabbit_stream_SUITE:test_create_stream(S, Stream, C0).
+    rabbit_stream_SUITE:test_create_stream(gen_tcp, S, Stream, C0).
 
 subscribe(S, SubId, Stream, C) ->
-    rabbit_stream_SUITE:test_subscribe(S, SubId, Stream, C).
+    rabbit_stream_SUITE:test_subscribe(gen_tcp, S, SubId, Stream, C).
 
 declare_publisher(S, PubId, Stream, C) ->
-    rabbit_stream_SUITE:test_declare_publisher(S, PubId, Stream, C).
+    rabbit_stream_SUITE:test_declare_publisher(gen_tcp, S, PubId, Stream, C).
 
 delete_stream(S, Stream, C) ->
-    rabbit_stream_SUITE:test_delete_stream(S, Stream, C).
+    rabbit_stream_SUITE:test_delete_stream(gen_tcp, S, Stream, C).
 
 metadata_update_stream_deleted(S, Stream, C) ->
-    rabbit_stream_SUITE:test_metadata_update_stream_deleted(S, Stream, C).
+    rabbit_stream_SUITE:test_metadata_update_stream_deleted(gen_tcp, S, Stream, C).
 
 close(S, C) ->
-    rabbit_stream_SUITE:test_close(S, C).
+    rabbit_stream_SUITE:test_close(gen_tcp, S, C).
 
 options(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -334,8 +334,8 @@ start_stream_connection(Port) ->
     {ok, S} =
         gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
     C0 = rabbit_stream_core:init(0),
-    C1 = rabbit_stream_SUITE:test_peer_properties(S, C0),
-    C = rabbit_stream_SUITE:test_authenticate(S, C1),
+    C1 = rabbit_stream_SUITE:test_peer_properties(gen_tcp, S, C0),
+    C = rabbit_stream_SUITE:test_authenticate(gen_tcp, S, C1),
     {S, C}.
 
 start_amqp_connection(Type, Node, Port) ->
