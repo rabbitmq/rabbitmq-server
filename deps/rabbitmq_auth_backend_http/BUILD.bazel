@@ -1,3 +1,4 @@
+load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load(
     "//:rabbitmq.bzl",
@@ -43,6 +44,8 @@ rabbitmq_lib(
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
+
+xref(tags = ["xref"])
 
 broker_for_integration_suites()
 

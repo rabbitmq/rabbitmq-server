@@ -1,4 +1,5 @@
 load("@bazel-erlang//:eunit.bzl", "eunit")
+load("@bazel-erlang//:xref.bzl", "xref")
 load("//:rabbitmq.bzl", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
 
 APP_NAME = "rabbitmq_aws"
@@ -29,6 +30,16 @@ rabbitmq_lib(
     app_registered = APP_REGISTERED,
     build_deps = BUILD_DEPS,
     extra_apps = EXTRA_APPS,
+)
+
+xref(
+    additional_libs = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@credentials_obfuscation//:bazel_erlang_lib",
+        "@jsx//:bazel_erlang_lib",
+        "@recon//:bazel_erlang_lib",
+    ],
+    tags = ["xref"],
 )
 
 eunit(

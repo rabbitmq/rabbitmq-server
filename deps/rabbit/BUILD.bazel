@@ -209,7 +209,7 @@ rabbitmq_lib(
     deps = DEPS,
 )
 
-xref()
+xref(tags = ["xref"])
 
 bats(
     srcs = glob(["test/**/*.bats"]),

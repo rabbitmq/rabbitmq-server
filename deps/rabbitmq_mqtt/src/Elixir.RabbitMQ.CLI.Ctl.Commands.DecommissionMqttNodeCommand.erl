@@ -10,6 +10,8 @@
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
+-ignore_xref({'Elixir.RabbitMQ.CLI.DefaultOutput', output, 1}).
+
 -export([scopes/0,
          switches/0,
          aliases/0,
