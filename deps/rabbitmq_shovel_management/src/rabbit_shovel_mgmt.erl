@@ -47,9 +47,9 @@ resource_exists(ReqData, Context) ->
                             %% Deleting or restarting a shovel
                             case rabbit_shovel_status:lookup({VHost, Name}) of
                                 not_found ->
-                                    rabbit_log:error("Shovel with the name '~s' was not found "
-                                                     "on the target node '~s' and / or virtual host '~s'",
-                                                     [Name, node(), VHost]),
+                                    _ = rabbit_log:error("Shovel with the name '~s' was not found "
+                                                         "on the target node '~s' and / or virtual host '~s'",
+                                                         [Name, node(), VHost]),
                                     false;
                                 _ ->
                                     true
@@ -76,14 +76,14 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                         true ->
                             case rabbit_shovel_util:restart_shovel(VHost, Name) of
                                 {error, ErrMsg} ->
-                                    rabbit_log:error("Error restarting shovel: ~s", [ErrMsg]),
+                                    _ = rabbit_log:error("Error restarting shovel: ~s", [ErrMsg]),
                                     false;
                                 ok -> true
                             end;
                         _ ->
                             case rabbit_shovel_util:delete_shovel(VHost, Name, Username) of
                                 {error, ErrMsg} ->
-                                    rabbit_log:error("Error deleting shovel: ~s", [ErrMsg]),
+                                    _ = rabbit_log:error("Error deleting shovel: ~s", [ErrMsg]),
                                     false;
                                 ok -> true
                             end
