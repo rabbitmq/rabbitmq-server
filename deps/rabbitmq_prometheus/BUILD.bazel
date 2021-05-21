@@ -51,4 +51,5 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbit_prometheus_http_SUITE",
     size = "small",
+    flaky = True,
 )
