@@ -41,7 +41,6 @@ groups() ->
                         {uncluster_size_2, [], [add_member]}
                        ]},
      {clustered, [], [
-                      {cluster_size_2, [], [cleanup_data_dir]},
                       {cluster_size_2, [], [add_member_not_running,
                                             add_member_classic,
                                             add_member_already_a_member,
@@ -51,9 +50,9 @@ groups() ->
                                             delete_member_queue_not_found,
                                             delete_member,
                                             delete_member_not_a_member,
-                                            node_removal_is_quorum_critical]
-                       ++ all_tests()},
-                      {cluster_size_2, [], memory_tests()},
+                                            node_removal_is_quorum_critical,
+                                            cleanup_data_dir]
+                       ++ memory_tests()},
                       {cluster_size_3, [], [
                                             declare_during_node_down,
                                             simple_confirm_availability_on_leader_change,
@@ -72,7 +71,8 @@ groups() ->
                                             file_handle_reservations,
                                             file_handle_reservations_above_limit,
                                             node_removal_is_not_quorum_critical
-                                            ]},
+                                            ]
+                       ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
                                             start_queue_concurrent,
                                             quorum_cluster_size_3,
