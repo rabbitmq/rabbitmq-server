@@ -8,6 +8,7 @@
 -module(rabbit_core_ff).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
