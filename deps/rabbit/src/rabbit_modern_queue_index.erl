@@ -180,10 +180,6 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, IsMsgStoreClean,
             State1 = State0#mqistate{ segments = Segments0 },
             %% The queue has stored the count/bytes values inside
             %% Terms so we don't need to provide them again.
-            %% However I can see this being a problem if
-            %% there's been corruption on the disk. But
-            %% a better fix would be to rework the way
-            %% rabbit_variable_queue works.
             {undefined,
              undefined,
              State1};
@@ -217,14 +213,19 @@ recover_segments(State0, ContainsCheckFun, CountersRef, [Segment|Tail]) ->
     %% @todo We may want to check that the file sizes are correct before attempting
     %%       to parse them, and to correct the file sizes.
     SegmentEntryCount = segment_entry_count(),
-    {ok, Fd} = file:open(segment_file(Segment, State0), [read, read_ahead, write, raw, binary]),
+    SegmentFile = segment_file(Segment, State0),
+    {ok, Fd} = file:open(SegmentFile, [read, read_ahead, write, raw, binary]),
     {ok, <<?MAGIC:32,?VERSION:8,
            _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,
            _/bits>>} = file:read(Fd, ?HEADER_SIZE),
-    State = recover_segment(State0, ContainsCheckFun, CountersRef, Fd,
-                            Segment, 0, SegmentEntryCount,
-                            SegmentEntryCount, []),
+    {Action, State} = recover_segment(State0, ContainsCheckFun, CountersRef, Fd,
+                                      Segment, 0, SegmentEntryCount,
+                                      SegmentEntryCount, []),
     ok = file:close(Fd),
+    ok = case Action of
+        delete -> file:delete(SegmentFile);
+        keep -> ok
+    end,
     recover_segments(State, ContainsCheckFun, CountersRef, Tail).
 
 recover_segment(State = #mqistate{ segments = Segments }, _, _, Fd,
@@ -234,11 +235,11 @@ recover_segment(State = #mqistate{ segments = Segments }, _, _, Fd,
     case Unacked of
         0 ->
             %% There are no more messages in this segment file.
-            delete_segment(Segment, State);
+            {delete, State};
         _ ->
             %% We must update some messages on disk (ack or deliver).
             ok = file:pwrite(Fd, LocBytes),
-            State#mqistate{ segments = Segments#{ Segment => Unacked }}
+            {keep, State#mqistate{ segments = Segments#{ Segment => Unacked }}}
     end;
 recover_segment(State, ContainsCheckFun, CountersRef, Fd,
                 Segment, ThisEntry, SegmentEntryCount,
@@ -377,26 +378,30 @@ maybe_mark_unconfirmed(_, _, _, State) ->
     State.
 
 %% @todo Perhaps make the two limits configurable. Also refine the default.
-maybe_flush_buffer(State = #mqistate { write_buffer = WriteBuffer })
-        when map_size(WriteBuffer) < 2000 ->
-    State;
 maybe_flush_buffer(State = #mqistate { write_buffer = WriteBuffer,
                                        write_buffer_updates = NumUpdates }) ->
-    %% We want a full write when we have accumulated many entries.
-    FlushType = case (map_size(WriteBuffer) - NumUpdates) >= 100 of
-        true -> full;
-        false -> updates
-    end,
-    flush_buffer(State, FlushType).
+    if
+        %% When we have at least 100 entries, we always want to flush,
+        %% in order to limit the memory usage and avoid losing too much
+        %% data on crashes.
+        (map_size(WriteBuffer) - NumUpdates) >= 100 ->
+            flush_buffer(State, full);
+        %% We may want to flush updates (acks | delivers) when
+        %% too many have accumulated.
+        NumUpdates >= 2000 ->
+            flush_buffer(State, updates);
+        %% Otherwise we do not flush this time.
+        true ->
+            State
+    end.
 
-flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0,
-                                  segments = Segments },
+flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0 },
              FlushType) ->
     SegmentEntryCount = segment_entry_count(),
     %% First we prepare the writes sorted by segment.
     {Writes, WriteBuffer} = maps:fold(fun
         (SeqId, ack, {WritesAcc, BufferAcc}) ->
-            {write_ack(SeqId, SegmentEntryCount, Segments, WritesAcc),
+            {write_ack(SeqId, SegmentEntryCount, WritesAcc),
              BufferAcc};
         (SeqId, deliver, {WritesAcc, BufferAcc}) ->
             {write_deliver(SeqId, SegmentEntryCount, WritesAcc),
@@ -419,7 +424,7 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0,
     State#mqistate{ write_buffer = WriteBuffer,
                     write_buffer_updates = 0 }.
 
-write_ack(SeqId, SegmentEntryCount, Segments, WritesAcc) ->
+write_ack(SeqId, SegmentEntryCount, WritesAcc) ->
     Segment = SeqId div SegmentEntryCount,
     Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
     LocBytesAcc = maps:get(Segment, WritesAcc, []),
@@ -545,6 +550,8 @@ update_ack_state(SeqIds, State = #mqistate{ segments = Segments0 }) ->
         Segment = SeqId div SegmentEntryCount,
         case Segments1 of
             #{Segment := 1} ->
+                %% We remove the segment information immediately.
+                %% The file itself will be removed after we return.
                 {[Segment|DeleteAcc], maps:remove(Segment, Segments1)};
             #{Segment := Unacked} ->
                 {DeleteAcc, Segments1#{Segment => Unacked - 1}}
@@ -557,18 +564,15 @@ delete_segments([], State) ->
 delete_segments([Segment|Tail], State) ->
     delete_segments(Tail, delete_segment(Segment, State)).
 
-delete_segment(Segment, State0 = #mqistate{ segments = Segments,
-                                            fds = OpenFds0 }) ->
+delete_segment(Segment, State0 = #mqistate{ fds = OpenFds0 }) ->
     %% We close the open fd if any.
-    State1 = case maps:take(Segment, OpenFds0) of
+    State = case maps:take(Segment, OpenFds0) of
         {Fd, OpenFds} ->
             ok = file:close(Fd),
             State0#mqistate{ fds = OpenFds };
         error ->
             State0
     end,
-    %% We also remove the segment information from the state.
-    State = State1#mqistate{ segments = maps:remove(Segment, Segments) },
     %% Then we can delete the segment file.
     ok = file:delete(segment_file(Segment, State)),
     State.
@@ -920,13 +924,12 @@ next_segment_boundary(SeqId) ->
 %% Internal.
 
 segment_entry_count() ->
-    %% @todo Figure out what the best default would be.
-    %%
     %% @todo A value lower than the max write_buffer size results in nothing needing
     %%       to be written to disk as long as the consumer consumes as fast as the
     %%       producer produces. Accidental memory queue?
     %%
     %% @todo Probably put this in the state rather than read it all the time.
+    %%       But we must change next_segment_boundary to allow that.
     SegmentEntryCount =
         application:get_env(rabbit, modern_queue_index_segment_entry_count, 65536),
     SegmentEntryCount.
