@@ -1,4 +1,5 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
+load("@bazel-erlang//:xref.bzl", "xref")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_TEST_ERLC_OPTS",
@@ -49,6 +50,8 @@ rabbitmq_lib(
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
+
+xref(tags = ["xref"])
 
 broker_for_integration_suites()
 

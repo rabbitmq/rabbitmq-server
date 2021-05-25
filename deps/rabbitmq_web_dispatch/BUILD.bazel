@@ -1,4 +1,5 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib", "test_erlang_lib")
+load("@bazel-erlang//:xref.bzl", "xref")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
@@ -46,6 +47,8 @@ test_erlang_lib(
     ],
     deps = DEPS,
 )
+
+xref(tags = ["xref"])
 
 rabbitmq_home(
     name = "broker-for-tests-home",
