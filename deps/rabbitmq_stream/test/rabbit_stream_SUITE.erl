@@ -196,11 +196,13 @@ test_server(Transport, Port) ->
     C4 = test_declare_publisher(Transport, S, PublisherId, Stream, C3),
     Body = <<"hello">>,
     C5 = test_publish_confirm(Transport, S, PublisherId, Body, C4),
+    C6 = test_publish_confirm(Transport, S, PublisherId, Body, C5),
     SubscriptionId = 42,
-    C6 = test_subscribe(Transport, S, SubscriptionId, Stream, C5),
-    C7 = test_deliver(Transport, S, SubscriptionId, Body, C6),
-    C8 = test_delete_stream(Transport, S, Stream, C7),
-    _C9 = test_close(Transport, S, C8),
+    C7 = test_subscribe(Transport, S, SubscriptionId, Stream, C6),
+    C8 = test_deliver(Transport, S, SubscriptionId, 0, Body, C7),
+    C9 = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
+    C10 = test_delete_stream(Transport, S, Stream, C9),
+    _C11 = test_close(Transport, S, C10),
     closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
@@ -322,7 +324,7 @@ test_subscribe(Transport, S, SubscriptionId, Stream, C0) ->
     ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_OK}}, Cmd),
     C.
 
-test_deliver(Transport, S, SubscriptionId, Body, C0) ->
+test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
     {C, [{deliver, SubscriptionId, Chunk}]} = receive_commands(Transport, S, C0),
     <<5:4/unsigned,
       0:4/unsigned,
@@ -331,7 +333,7 @@ test_deliver(Transport, S, SubscriptionId, Body, C0) ->
       1:32,
       _Timestamp:64,
       _Epoch:64,
-      0:64,
+      COffset:64,
       _Crc:32,
       _DataLength:32,
       _TrailerLength:32,
