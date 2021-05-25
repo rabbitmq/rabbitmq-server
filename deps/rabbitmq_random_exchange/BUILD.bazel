@@ -1,3 +1,4 @@
+load("@bazel-erlang//:xref.bzl", "xref")
 load("//:rabbitmq.bzl", "rabbitmq_lib")
 
 APP_NAME = "rabbitmq_random_exchange"
@@ -19,3 +20,5 @@ rabbitmq_lib(
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
+
+xref(tags = ["xref"])
