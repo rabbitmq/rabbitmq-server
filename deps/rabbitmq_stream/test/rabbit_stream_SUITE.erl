@@ -31,7 +31,10 @@ all() ->
 
 groups() ->
     [{single_node, [],
-      [test_stream, test_stream_tls, test_gc_consumers, test_gc_publishers]},
+      [test_stream,
+       test_stream_tls,
+       test_gc_consumers,
+       test_gc_publishers]},
      {cluster, [], [test_stream, test_stream_tls, java]}].
 
 init_per_suite(Config) ->
@@ -44,7 +47,9 @@ end_per_suite(Config) ->
 init_per_group(single_node, Config) ->
     Config1 =
         rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]),
-    Config2 = rabbit_ct_helpers:set_config(Config1, {rabbitmq_ct_tls_verify, verify_none}),
+    Config2 =
+        rabbit_ct_helpers:set_config(Config1,
+                                     {rabbitmq_ct_tls_verify, verify_none}),
     rabbit_ct_helpers:run_setup_steps(Config2,
                                       [fun(StepConfig) ->
                                           rabbit_ct_helpers:merge_app_env(StepConfig,
@@ -61,7 +66,9 @@ init_per_group(cluster = Group, Config) ->
                                      [{rmq_nodes_count, 3},
                                       {rmq_nodename_suffix, Group},
                                       {tcp_ports_base}]),
-    Config3 = rabbit_ct_helpers:set_config(Config2, {rabbitmq_ct_tls_verify, verify_none}),
+    Config3 =
+        rabbit_ct_helpers:set_config(Config2,
+                                     {rabbitmq_ct_tls_verify, verify_none}),
     rabbit_ct_helpers:run_setup_steps(Config3,
                                       [fun(StepConfig) ->
                                           rabbit_ct_helpers:merge_app_env(StepConfig,
@@ -153,11 +160,13 @@ java(Config) ->
         rabbit_ct_helpers:make(Config, DataDir,
                                ["tests",
                                 {"NODE1_STREAM_PORT=~b", [StreamPortNode1]},
-                                {"NODE1_STREAM_PORT_TLS=~b", [StreamPortTlsNode1]},
+                                {"NODE1_STREAM_PORT_TLS=~b",
+                                 [StreamPortTlsNode1]},
                                 {"NODE1_NAME=~p", [Node1Name]},
                                 {"NODE2_NAME=~p", [Node2Name]},
                                 {"NODE2_STREAM_PORT=~b", [StreamPortNode2]},
-                                {"NODE2_STREAM_PORT_TLS=~b", [StreamPortTlsNode2]},
+                                {"NODE2_STREAM_PORT_TLS=~b",
+                                 [StreamPortTlsNode2]},
                                 {"RABBITMQCTL=~p", [RabbitMqCtl]}]),
     {ok, _} = MakeResult.
 
@@ -186,7 +195,8 @@ get_node_name(Config, Node) ->
 
 test_server(Transport, Port) ->
     {ok, S} =
-        Transport:connect("localhost", Port, [{active, false}, {mode, binary}]),
+        Transport:connect("localhost", Port,
+                          [{active, false}, {mode, binary}]),
     C0 = rabbit_stream_core:init(0),
     C1 = test_peer_properties(Transport, S, C0),
     C2 = test_authenticate(Transport, S, C1),
@@ -325,7 +335,8 @@ test_subscribe(Transport, S, SubscriptionId, Stream, C0) ->
     C.
 
 test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
-    {C, [{deliver, SubscriptionId, Chunk}]} = receive_commands(Transport, S, C0),
+    {C, [{deliver, SubscriptionId, Chunk}]} =
+        receive_commands(Transport, S, C0),
     <<5:4/unsigned,
       0:4/unsigned,
       0:8,

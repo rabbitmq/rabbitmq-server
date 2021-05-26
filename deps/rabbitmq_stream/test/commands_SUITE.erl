@@ -277,13 +277,20 @@ subscribe(S, SubId, Stream, C) ->
     rabbit_stream_SUITE:test_subscribe(gen_tcp, S, SubId, Stream, C).
 
 declare_publisher(S, PubId, Stream, C) ->
-    rabbit_stream_SUITE:test_declare_publisher(gen_tcp, S, PubId, Stream, C).
+    rabbit_stream_SUITE:test_declare_publisher(gen_tcp,
+                                               S,
+                                               PubId,
+                                               Stream,
+                                               C).
 
 delete_stream(S, Stream, C) ->
     rabbit_stream_SUITE:test_delete_stream(gen_tcp, S, Stream, C).
 
 metadata_update_stream_deleted(S, Stream, C) ->
-    rabbit_stream_SUITE:test_metadata_update_stream_deleted(gen_tcp, S, Stream, C).
+    rabbit_stream_SUITE:test_metadata_update_stream_deleted(gen_tcp,
+                                                            S,
+                                                            Stream,
+                                                            C).
 
 close(S, C) ->
     rabbit_stream_SUITE:test_close(gen_tcp, S, C).

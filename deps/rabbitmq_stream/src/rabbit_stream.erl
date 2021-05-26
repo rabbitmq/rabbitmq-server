@@ -21,6 +21,7 @@
 -export([start/2,
          host/0,
          port/0,
+         tls_port/0,
          kill_connection/1]).
 -export([stop/1]).
 -export([emit_connection_info_local/3,
@@ -71,6 +72,28 @@ port_from_listener() ->
     Listeners = rabbit_networking:node_listeners(node()),
     Port =
         lists:foldl(fun (#listener{port = Port, protocol = stream}, _Acc) ->
+                            Port;
+                        (_, Acc) ->
+                            Acc
+                    end,
+                    undefined, Listeners),
+    Port.
+
+tls_port() ->
+    case application:get_env(rabbitmq_stream, advertised_tls_port,
+                             undefined)
+    of
+        undefined ->
+            tls_port_from_listener();
+        Port ->
+            Port
+    end.
+
+tls_port_from_listener() ->
+    Listeners = rabbit_networking:node_listeners(node()),
+    Port =
+        lists:foldl(fun (#listener{port = Port, protocol = 'stream/ssl'},
+                         _Acc) ->
                             Port;
                         (_, Acc) ->
                             Acc

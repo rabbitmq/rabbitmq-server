@@ -196,3 +196,7 @@ end}.
 {mapping, "stream.advertised_port", "rabbitmq_stream.advertised_port", [
     {datatype, integer}
 ]}.
+
+{mapping, "stream.advertised_tls_port", "rabbitmq_stream.advertised_tls_port", [
+    {datatype, integer}
+]}.

@@ -80,7 +80,7 @@
          resource_alarm :: boolean(),
          send_file_oct ::
              atomics:atomics_ref(), % number of bytes sent with send_file (for metrics)
-         transport :: 'tcp' | 'ssl'}).
+         transport :: tcp | ssl}).
 -record(configuration,
         {initial_credits :: integer(),
          credits_required_for_unblocking :: integer(),
@@ -1378,9 +1378,13 @@ handle_frame_post_auth(Transport,
                          OffsetSpec,
                          Credit,
                          Properties}}) ->
-    QueueResource = #resource{name = Stream, kind = queue, virtual_host = VirtualHost},
+    QueueResource =
+        #resource{name = Stream,
+                  kind = queue,
+                  virtual_host = VirtualHost},
     %% FIXME check the max number of subs is not reached already
-    case rabbit_stream_utils:check_read_permitted(QueueResource, User, #{})
+    case rabbit_stream_utils:check_read_permitted(QueueResource, User,
+                                                  #{})
     of
         ok ->
             case rabbit_stream_manager:lookup_local_member(VirtualHost, Stream)
@@ -1418,10 +1422,16 @@ handle_frame_post_auth(Transport,
                                              OffsetSpec,
                                              Properties]),
                             CounterSpec =
-                                {{?MODULE, QueueResource, SubscriptionId, self()}, []},
+                                {{?MODULE,
+                                  QueueResource,
+                                  SubscriptionId,
+                                  self()},
+                                 []},
                             {ok, Segment} =
-                                osiris:init_reader(LocalMemberPid, OffsetSpec,
-                                                   CounterSpec, ConnTransport),
+                                osiris:init_reader(LocalMemberPid,
+                                                   OffsetSpec,
+                                                   CounterSpec,
+                                                   ConnTransport),
                             rabbit_log:info("Next offset for subscription ~p is ~p",
                                             [SubscriptionId,
                                              osiris_log:next_offset(Segment)]),
@@ -1473,7 +1483,8 @@ handle_frame_post_auth(Transport,
                                 ConsumerState1,
 
                             ConsumerOffset = osiris_log:next_offset(Segment1),
-                            ConsumerOffsetLag = consumer_i(offset_lag, ConsumerState1),
+                            ConsumerOffsetLag =
+                                consumer_i(offset_lag, ConsumerState1),
 
                             rabbit_log:info("Subscription ~p is now at offset ~p with ~p message(s) "
                                             "distributed after subscription",
@@ -1773,7 +1784,8 @@ handle_frame_post_auth(Transport,
     end;
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
-                                          virtual_host = VirtualHost} =
+                                          virtual_host = VirtualHost,
+                                          transport = TransportLayer} =
                            Connection,
                        State,
                        {request, CorrelationId, {metadata, Streams}}) ->
@@ -1816,8 +1828,13 @@ handle_frame_post_auth(Transport,
             maps:keys(NodesMap)),
     NodeEndpoints =
         lists:foldr(fun(Node, Acc) ->
+                       PortFunction =
+                           case TransportLayer of
+                               tcp -> port;
+                               ssl -> tls_port
+                           end,
                        Host = rpc:call(Node, rabbit_stream, host, []),
-                       Port = rpc:call(Node, rabbit_stream, port, []),
+                       Port = rpc:call(Node, rabbit_stream, PortFunction, []),
                        case {is_binary(Host), is_integer(Port)} of
                            {true, true} -> Acc#{Node => {Host, Port}};
                            _ ->
@@ -2308,7 +2325,8 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
                   subscription_id = Id,
                   credit = Credit,
                   counters = Counters,
-                  properties = Properties} = Consumer
+                  properties = Properties} =
+            Consumer
             <- maps:values(Consumers)],
     [rabbit_stream_metrics:publisher_updated(self(),
                                              stream_r(S, Connection),
@@ -2362,7 +2380,8 @@ consumer_i(messages_consumed, #consumer{counters = Counters}) ->
     messages_consumed(Counters);
 consumer_i(offset, #consumer{counters = Counters}) ->
     consumer_offset(Counters);
-consumer_i(offset_lag, #consumer{counters = Counters, segment = Log}) ->
+consumer_i(offset_lag,
+           #consumer{counters = Counters, segment = Log}) ->
     stream_committed_offset(Log) - consumer_offset(Counters);
 consumer_i(connection_pid, _) ->
     self();
