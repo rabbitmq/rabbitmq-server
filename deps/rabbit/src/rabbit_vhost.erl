@@ -10,14 +10,14 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("vhost.hrl").
 
--export([recover/0, recover/1]).
+-export([recover/0, recover/1, read_config/1]).
 -export([add/2, add/4, delete/2, exists/1, with/2, with_user_and_vhost/3, assert/1, update/2,
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0]).
 -export([parse_tags/1, update_metadata/2, tag_with/2, untag_from/2, update_tags/2, update_tags/3]).
 -export([lookup/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
--export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0]).
+-export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1]).
 -export([delete_storage/1]).
 -export([vhost_down/1]).
 -export([put_vhost/5]).
@@ -53,6 +53,7 @@ recover(VHost) ->
     VHostStubFile = filename:join(VHostDir, ".vhost"),
     ok = rabbit_file:ensure_dir(VHostStubFile),
     ok = file:write_file(VHostStubFile, VHost),
+    ok = ensure_config_file(VHost),
     {Recovered, Failed} = rabbit_amqqueue:recover(VHost),
     AllQs = Recovered ++ Failed,
     QNames = [amqqueue:get_name(Q) || Q <- AllQs],
@@ -61,6 +62,42 @@ recover(VHost) ->
     %% Start queue mirrors.
     ok = rabbit_mirror_queue_misc:on_vhost_up(VHost),
     ok.
+
+ensure_config_file(VHost) ->
+    Path = config_file_path(VHost),
+    case filelib:is_regular(Path) of
+        %% The config file exists. Do nothing.
+        true ->
+            ok;
+        %% The config file does not exist.
+        %% Check if there are queues in this vhost.
+        false ->
+            QueueDirs = rabbit_queue_index:all_queue_directory_names(VHost),
+            SegmentEntryCount = case QueueDirs of
+                %% There are no queues. Write the configured value for
+                %% the segment entry count, or the new RabbitMQ default
+                %% introduced in v3.8.17. The new default provides much
+                %% better memory footprint when many queues are used.
+                [] ->
+                    application:get_env(rabbit, queue_index_segment_entry_count,
+                        2048);
+                %% There are queues already. Write the historic RabbitMQ
+                %% default of 16384 for forward compatibility. Historic
+                %% default calculated as trunc(math:pow(2,?REL_SEQ_BITS)).
+                _ ->
+                    16384
+            end,
+            rabbit_log:info("Setting segment_entry_count for vhost '~s' with ~b queues to '~b'",
+                            [VHost, length(QueueDirs), SegmentEntryCount]),
+            file:write_file(Path, io_lib:format(
+                "%% This file is auto-generated! Edit at your own risk!~n"
+                "{segment_entry_count, ~b}.",
+                [SegmentEntryCount]))
+    end.
+
+read_config(VHost) ->
+    {ok, Config} = file:consult(config_file_path(VHost)),
+    maps:from_list(Config).
 
 -define(INFO_KEYS, vhost:info_keys()).
 
@@ -445,6 +482,10 @@ msg_store_dir_wildcard() ->
 msg_store_dir_base() ->
     Dir = rabbit_mnesia:dir(),
     filename:join([Dir, "msg_stores", "vhosts"]).
+
+config_file_path(VHost) ->
+    VHostDir = msg_store_dir_path(VHost),
+    filename:join(VHostDir, ".config").
 
 -spec trim_tag(list() | binary() | atom()) -> atom().
 trim_tag(Val) ->
