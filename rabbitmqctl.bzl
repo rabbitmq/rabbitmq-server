@@ -10,8 +10,11 @@ def _impl(ctx):
         fail("Mismatched erlang versions", erlang_version, rabbitmq_home.erlang_version)
 
     script = """
-    exec ./{}/sbin/rabbitmqctl $@
-    """.format(ctx.attr.home.label.name)
+    exec ./{home}/sbin/{cmd} $@
+    """.format(
+        home = ctx.attr.home.label.name,
+        cmd = ctx.label.name,
+    )
 
     ctx.actions.write(
         output = ctx.outputs.executable,
