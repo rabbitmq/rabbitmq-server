@@ -78,7 +78,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
   def usage_additional do
     [
       ["<node>", "node name to place replicas on"],
-      ["<all | even>", "how many matching quorum queues should have a replica added on this node: all or half (evenly numbered)?"],
+      ["<all | even>", "add a member for all matching queues or just those whose membership count is an even number"],
       ["--queue-pattern <pattern>", "regular expression to match queue names"],
       ["--vhost-pattern <pattern>", "regular expression to match virtual host names"],
       ["--errors-only", "only list queues which reported an error"]
@@ -93,7 +93,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
 
   def help_section, do: :cluster_management
 
-  def description, do: "Grows quorum queue clusters by adding a member (replica) to all or half of matching quorum queues on the given node."
+  def description, do: "Grows quorum queue clusters by adding a member (replica) on the specified node for all matching queues"
 
   def banner([node, strategy], _) do
     "Growing #{strategy} quorum queues on #{node}..."
