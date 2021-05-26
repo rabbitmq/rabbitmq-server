@@ -24,6 +24,9 @@
          read_global_recovery_terms/1,
          cleanup_global_recovery_terms/0]).
 
+%% Used by rabbit_vhost to set the segment_entry_count.
+-export([all_queue_directory_names/1]).
+
 -define(CLEAN_FILENAME, "clean.dot").
 
 %%----------------------------------------------------------------------------
@@ -280,6 +283,8 @@ reset_state(#qistate{ queue_name     = Name,
                  on_sync_fun(), on_sync_fun()) -> qistate().
 
 init(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
+    #{segment_entry_count := SegmentEntryCount} = rabbit_vhost:read_config(VHost),
+    put(segment_entry_count, SegmentEntryCount),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     State = #qistate { dir = Dir } = blank_state(VHostDir, Name),
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
@@ -294,6 +299,8 @@ init(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
 
 recover(#resource{ virtual_host = VHost } = Name, Terms, MsgStoreRecovered,
         ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
+    #{segment_entry_count := SegmentEntryCount} = rabbit_vhost:read_config(VHost),
+    put(segment_entry_count, SegmentEntryCount),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     State = blank_state(VHostDir, Name),
     State1 = State #qistate{on_sync     = OnSyncFun,
@@ -728,6 +735,9 @@ queue_index_walker_reader(QueueName, Gatherer) ->
     ok = gatherer:finish(Gatherer).
 
 scan_queue_segments(Fun, Acc, #resource{ virtual_host = VHost } = QueueName) ->
+    %% Set the segment_entry_count for this worker process.
+    #{segment_entry_count := SegmentEntryCount} = rabbit_vhost:read_config(VHost),
+    put(segment_entry_count, SegmentEntryCount),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     scan_queue_segments(Fun, Acc, VHostDir, QueueName).
 
@@ -1167,9 +1177,7 @@ array_new(Default) ->
     array:new([{default, Default}, fixed, {size, segment_entry_count()}]).
 
 segment_entry_count() ->
-    {ok, SegmentEntryCount} =
-        application:get_env(rabbit, queue_index_segment_entry_count),
-    SegmentEntryCount.
+    get(segment_entry_count).
 
 bool_to_int(true ) -> 1;
 bool_to_int(false) -> 0.
