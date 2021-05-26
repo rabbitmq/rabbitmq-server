@@ -53,7 +53,7 @@ init() ->
                                                  {attributes, record_info(fields, chx_hash_ring)},
                                                  {type, ordered_set}]),
     mnesia:add_table_copy(?HASH_RING_STATE_TABLE, node(), ram_copies),
-    mnesia:wait_for_tables([?HASH_RING_STATE_TABLE], 30000),
+    rabbit_table:wait([?HASH_RING_STATE_TABLE]),
     recover(),
     ok.
 
