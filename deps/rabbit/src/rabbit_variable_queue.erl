@@ -2356,7 +2356,13 @@ next({delta, #delta{start_seq_id = SeqId,
 next({delta, #delta{start_seq_id = SeqId,
                     end_seq_id   = SeqIdEnd} = Delta, State}, IndexState) ->
     SeqIdB = ?INDEX:next_segment_boundary(SeqId),
-    SeqId1 = lists:min([SeqIdB, SeqIdEnd]),
+    SeqId1 = lists:min([SeqIdB,
+                        %% We must limit the number of messages read at once
+                        %% otherwise the queue will attempt to read up to 65536
+                        %% messages from the new index each time. The value
+                        %% chosen here is arbitrary.
+                        SeqId + 2048,
+                        SeqIdEnd]),
     {List, IndexState1} = ?INDEX:read(SeqId, SeqId1, IndexState),
     next({delta, Delta#delta{start_seq_id = SeqId1}, List, State}, IndexState1);
 next({delta, Delta, [], State}, IndexState) ->
