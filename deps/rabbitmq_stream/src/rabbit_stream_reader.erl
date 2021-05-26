@@ -1051,7 +1051,10 @@ handle_frame_pre_auth(_Transport,
                                   heartbeater = Heartbeater},
      State};
 handle_frame_pre_auth(Transport,
-                      #stream_connection{user = User, socket = S} = Connection,
+                      #stream_connection{user = User,
+                                         socket = S,
+                                         transport = TransportLayer} =
+                          Connection,
                       State,
                       {request, CorrelationId, {open, VirtualHost}}) ->
     %% FIXME enforce connection limit (see rabbit_reader:is_over_connection_limit/2)
@@ -1063,8 +1066,14 @@ handle_frame_pre_auth(Transport,
                                                      #{}),
             AdvertisedHost = rabbit_stream:host(),
             AdvertisedPort =
-                rabbit_data_coercion:to_binary(
-                    rabbit_stream:port()),
+                case TransportLayer of
+                    tcp ->
+                        rabbit_data_coercion:to_binary(
+                            rabbit_stream:port());
+                    ssl ->
+                        rabbit_data_coercion:to_binary(
+                            rabbit_stream:tls_port())
+                end,
 
             ConnectionProperties =
                 #{<<"advertised_host">> => AdvertisedHost,
