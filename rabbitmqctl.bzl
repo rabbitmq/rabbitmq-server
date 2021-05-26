@@ -7,8 +7,11 @@ def _impl(ctx):
     rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
 
     script = """
-    exec ./{}/sbin/rabbitmqctl $@
-    """.format(ctx.attr.home.label.name)
+    exec ./{home}/sbin/{cmd} $@
+    """.format(
+        home = ctx.attr.home.label.name,
+        cmd = ctx.label.name,
+    )
 
     ctx.actions.write(
         output = ctx.outputs.executable,

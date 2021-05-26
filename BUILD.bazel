@@ -140,3 +140,8 @@ rabbitmqctl(
     home = ":broker-home",
     visibility = ["//visibility:public"],
 )
+
+rabbitmqctl(
+    name = "rabbitmq-plugins",
+    home = ":broker-home",
+)
