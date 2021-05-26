@@ -128,7 +128,7 @@ setup_schema() ->
                               {record_name, cached},
                               {type, set}]),
     mnesia:add_table_copy(?RH_TABLE, node(), ram_copies),
-    mnesia:wait_for_tables([?RH_TABLE], 30000),
+    rabbit_table:wait([?RH_TABLE]),
     ok.
 
 disable_plugin() ->
