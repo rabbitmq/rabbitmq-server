@@ -781,7 +781,8 @@ needs_sync(State = #mqistate{ confirms = Confirms }) ->
 flush(State) ->
     ?DEBUG("~0p", [State]),
     %% Flushing to disk is the same operation as sync
-    %% except it is called before hibernating.
+    %% except it is called before hibernating or when
+    %% reducing memory use.
     sync(State).
 
 %% ----
