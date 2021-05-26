@@ -2481,6 +2481,8 @@ reduce_memory_use(State = #vqstate {
             _  ->
                 {false, State1}
         end,
+    #vqstate{ index_state = IndexState } = State3,
+    State4 = State3#vqstate{ index_state = ?INDEX:flush(IndexState) },
     %% We can be blocked by the credit flow, or limited by a batch size,
     %% or finished with flushing.
     %% If blocked by the credit flow - the credit grant will resume processing,
@@ -2490,15 +2492,15 @@ reduce_memory_use(State = #vqstate {
     Blocked = credit_flow:blocked(),
     case {Blocked, NeedResumeA2B orelse NeedResumeB2D} of
         %% Credit bump will continue paging
-        {true, _}      -> State3;
+        {true, _}      -> State4;
         %% Finished with paging
-        {false, false} -> State3;
+        {false, false} -> State4;
         %% Planning next batch
         {false, true}  ->
             %% We don't want to use self-credit-flow, because it's harder to
             %% reason about. So the process sends a (prioritised) message to
             %% itself and sets a waiting_bump value to keep the message box clean
-            maybe_bump_reduce_memory_use(State3)
+            maybe_bump_reduce_memory_use(State4)
     end;
 %% When using lazy queues, there are no alphas, so we don't need to
 %% call push_alphas_to_betas/2.
@@ -2522,8 +2524,10 @@ reduce_memory_use(State = #vqstate {
             S2 ->
                 push_betas_to_deltas(S2, State1)
         end,
+    #vqstate{ index_state = IndexState } = State3,
+    State4 = State3#vqstate{ index_state = ?INDEX:flush(IndexState) },
     garbage_collect(),
-    State3.
+    State4.
 
 maybe_bump_reduce_memory_use(State = #vqstate{ waiting_bump = true }) ->
     State;
