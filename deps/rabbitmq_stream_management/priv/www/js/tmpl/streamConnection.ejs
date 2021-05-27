@@ -35,6 +35,13 @@
   <td><%= fmt_timestamp(connection.connected_at) %></td>
 </tr>
 
+<% if (connection.ssl) { %>
+<tr>
+ <th>SSL</th>
+ <td><%= fmt_boolean(connection.ssl) %></td>
+</tr>
+<% } %>
+
 <% if (connection.auth_mechanism) { %>
 <tr>
  <th>Authentication</th>
@@ -63,6 +70,50 @@
 
 </div>
 </div>
+
+<% if (connection.ssl) { %>
+<div class="section">
+<h2>SSL</h2>
+<div class="hider">
+
+<table class="facts">
+  <tr>
+    <th>Protocol Version</th>
+    <td><%= connection.ssl_protocol %></td>
+  </tr>
+  <tr>
+    <th>Key Exchange Algorithm</th>
+    <td><%= connection.ssl_key_exchange %></td>
+  </tr>
+  <tr>
+    <th>Cipher Algorithm</th>
+    <td><%= connection.ssl_cipher %></td>
+  </tr>
+  <tr>
+    <th>Hash Algorithm</th>
+    <td><%= connection.ssl_hash %></td>
+  </tr>
+</table>
+
+<% if (connection.peer_cert_issuer != '') { %>
+<table class="facts">
+  <tr>
+    <th>Peer Certificate Issuer</th>
+    <td><%= connection.peer_cert_issuer %></td>
+  </tr>
+  <tr>
+    <th>Peer Certificate Subject</th>
+    <td><%= connection.peer_cert_subject %></td>
+  </tr>
+  <tr>
+    <th>Peer Certificate Validity</th>
+    <td><%= connection.peer_cert_validity %></td>
+  </tr>
+</table>
+<% } %>
+</div>
+</div>
+<% } %>
 
 <div class="section">
   <h2>Publishers</h2>

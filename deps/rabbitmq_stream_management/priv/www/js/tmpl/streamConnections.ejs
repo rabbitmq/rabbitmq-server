@@ -32,6 +32,12 @@
 <% if (show_column('streamConnections',      'state')) { %>
     <th><%= fmt_sort('State',          'state') %></th>
 <% } %>
+<% if (show_column('streamConnections',      'ssl')) { %>
+    <th><%= fmt_sort('SSL / TLS',      'ssl') %></th>
+<% } %>
+<% if (show_column('streamConnections',      'ssl_info')) { %>
+    <th>SSL Details</th>
+<% } %>
 <% if (show_column('streamConnections',      'protocol')) { %>
     <th><%= fmt_sort('Protocol',       'protocol') %></th>
 <% } %>
@@ -85,6 +91,21 @@
 <% if (!disable_stats) { %>
 <% if (show_column('streamConnections', 'state')) { %>
     <td><%= fmt_object_state(connection) %></td>
+<% } %>
+<% if (show_column('streamConnections', 'ssl')) { %>
+    <td class="c"><%= fmt_boolean(connection.ssl, '') %></td>
+<% } %>
+<% if (show_column('streamConnections', 'ssl_info')) { %>
+    <td>
+    <% if (connection.ssl) { %>
+      <%= connection.ssl_protocol %>
+      <sub>
+        <%= connection.ssl_key_exchange %>
+        <%= connection.ssl_cipher %>
+        <%= connection.ssl_hash %>
+      </sub>
+    <% } %>
+    </td>
 <% } %>
 <% if (show_column('streamConnections', 'protocol')) { %>
     <td class="c"><%= connection.protocol %></td>
