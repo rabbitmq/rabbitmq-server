@@ -2489,22 +2489,22 @@ i(host, #stream_connection{host = Host}, _) ->
     Host;
 i(peer_host, #stream_connection{peer_host = PeerHost}, _) ->
     PeerHost;
-i(ssl, _, _) ->
-    false;
-i(peer_cert_subject, _, _) ->
-    '';
-i(peer_cert_issuer, _, _) ->
-    '';
-i(peer_cert_validity, _, _) ->
-    '';
-i(ssl_protocol, _, _) ->
-    '';
-i(ssl_key_exchange, _, _) ->
-    '';
-i(ssl_cipher, _, _) ->
-    '';
-i(ssl_hash, _, _) ->
-    '';
+i(ssl, #stream_connection{socket = Socket}, _) ->
+    rabbit_net:is_ssl(Socket);
+i(peer_cert_subject, S, _) ->
+    cert_info(fun rabbit_ssl:peer_cert_subject/1, S);
+i(peer_cert_issuer, S, _) ->
+    cert_info(fun rabbit_ssl:peer_cert_issuer/1, S);
+i(peer_cert_validity, S, _) ->
+    cert_info(fun rabbit_ssl:peer_cert_validity/1, S);
+i(ssl_protocol, S, _) ->
+    ssl_info(fun({P, _}) -> P end, S);
+i(ssl_key_exchange, S, _) ->
+    ssl_info(fun({_, {K, _, _}}) -> K end, S);
+i(ssl_cipher, S, _) ->
+    ssl_info(fun({_, {_, C, _}}) -> C end, S);
+i(ssl_hash, S, _) ->
+    ssl_info(fun({_, {_, _, H}}) -> H end, S);
 i(channels, _, _) ->
     0;
 i(protocol, _, _) ->
@@ -2545,3 +2545,28 @@ i(Item, #stream_connection{}, _) ->
 -spec send(module(), rabbit_net:socket(), iodata()) -> ok.
 send(Transport, Socket, Data) when is_atom(Transport) ->
     Transport:send(Socket, Data).
+
+cert_info(F, #stream_connection{socket = Sock}) ->
+    case rabbit_net:peercert(Sock) of
+        nossl ->
+            '';
+        {error, _} ->
+            '';
+        {ok, Cert} ->
+            list_to_binary(F(Cert))
+    end.
+
+ssl_info(F, #stream_connection{socket = Sock}) ->
+    case rabbit_net:ssl_info(Sock) of
+        nossl ->
+            '';
+        {error, _} ->
+            '';
+        {ok, Items} ->
+            P = proplists:get_value(protocol, Items),
+            #{cipher := C,
+              key_exchange := K,
+              mac := H} =
+                proplists:get_value(selected_cipher_suite, Items),
+            F({P, {K, C, H}})
+    end.

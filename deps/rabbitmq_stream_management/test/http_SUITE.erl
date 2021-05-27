@@ -28,7 +28,10 @@ init_per_suite(Config) ->
     Config1 =
         rabbit_ct_helpers:set_config(Config,
                                      [{rmq_nodename_suffix, ?MODULE}]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
+    Config2 =
+        rabbit_ct_helpers:set_config(Config1,
+                                     {rabbitmq_ct_tls_verify, verify_none}),
+    rabbit_ct_helpers:run_setup_steps(Config2,
                                       [fun(StepConfig) ->
                                           rabbit_ct_helpers:merge_app_env(StepConfig,
                                                                           {rabbit,
@@ -87,11 +90,14 @@ stream_management(Config) ->
                                                   Vhost2),
 
     StreamPortNode = get_stream_port(Config),
+    StreamPortTlsNode = get_stream_port_tls(Config),
     ManagementPortNode = get_management_port(Config),
     DataDir = rabbit_ct_helpers:get_config(Config, data_dir),
     MakeResult =
         rabbit_ct_helpers:make(Config, DataDir,
-                               ["tests", {"STREAM_PORT=~b", [StreamPortNode]},
+                               ["tests",
+                                {"STREAM_PORT=~b", [StreamPortNode]},
+                                {"STREAM_PORT_TLS=~b", [StreamPortTlsNode]},
                                 {"MANAGEMENT_PORT=~b", [ManagementPortNode]}]),
     {ok, _} = MakeResult.
 
@@ -100,3 +106,7 @@ get_stream_port(Config) ->
 
 get_management_port(Config) ->
     rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt).
+
+get_stream_port_tls(Config) ->
+    rabbit_ct_broker_helpers:get_node_config(Config, 0,
+                                             tcp_port_stream_tls).

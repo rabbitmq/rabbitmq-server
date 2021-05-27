@@ -29,7 +29,8 @@ all() ->
 
 groups() ->
     [{list_connections, [],
-      [list_connections_merge_defaults, list_connections_run]},
+      [list_connections_merge_defaults, list_connections_run,
+       list_tls_connections_run]},
      {list_consumers, [],
       [list_consumers_merge_defaults, list_consumers_run]},
      {list_publishers, [],
@@ -39,8 +40,11 @@ init_per_suite(Config) ->
     Config1 =
         rabbit_ct_helpers:set_config(Config,
                                      [{rmq_nodename_suffix, ?MODULE}]),
+    Config2 =
+        rabbit_ct_helpers:set_config(Config1,
+                                     {rabbitmq_ct_tls_verify, verify_none}),
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config1,
+    rabbit_ct_helpers:run_setup_steps(Config2,
                                       rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_suite(Config) ->
@@ -88,6 +92,8 @@ list_connections_run(Config) ->
 
     [[{conn_name, _}]] =
         to_list(?COMMAND_LIST_CONNECTIONS:run([<<"conn_name">>], Opts)),
+    [[{ssl, false}]] =
+        to_list(?COMMAND_LIST_CONNECTIONS:run([<<"ssl">>], Opts)),
 
     {S2, C2} = start_stream_connection(StreamPort),
     wait_until_connection_count(Config, 2),
@@ -130,6 +136,30 @@ list_connections_run(Config) ->
 
     rabbit_stream_SUITE:test_close(gen_tcp, S1, C1),
     rabbit_stream_SUITE:test_close(gen_tcp, S2, C2),
+    ok.
+
+list_tls_connections_run(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Opts =
+        #{node => Node,
+          timeout => 10000,
+          verbose => false},
+
+    %% No connections
+    [] = to_list(?COMMAND_LIST_CONNECTIONS:run([], Opts)),
+
+    StreamTlsPort = rabbit_stream_SUITE:get_stream_port_tls(Config),
+    application:ensure_all_started(ssl),
+
+    {S1, C1} = start_stream_tls_connection(StreamTlsPort),
+    wait_until_connection_count(Config, 1),
+
+    [[{conn_name, _}]] =
+        to_list(?COMMAND_LIST_CONNECTIONS:run([<<"conn_name">>], Opts)),
+    [[{ssl, true}]] =
+        to_list(?COMMAND_LIST_CONNECTIONS:run([<<"ssl">>], Opts)),
+
+    rabbit_stream_SUITE:test_close(ssl, S1, C1),
     ok.
 
 list_consumers_merge_defaults(_Config) ->
@@ -338,11 +368,18 @@ wait_until_publisher_count(Config, Expected) ->
                               end).
 
 start_stream_connection(Port) ->
+    start_stream_connection(gen_tcp, Port).
+
+start_stream_tls_connection(Port) ->
+    start_stream_connection(ssl, Port).
+
+start_stream_connection(Transport, Port) ->
     {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+        Transport:connect("localhost", Port,
+                          [{active, false}, {mode, binary}]),
     C0 = rabbit_stream_core:init(0),
-    C1 = rabbit_stream_SUITE:test_peer_properties(gen_tcp, S, C0),
-    C = rabbit_stream_SUITE:test_authenticate(gen_tcp, S, C1),
+    C1 = rabbit_stream_SUITE:test_peer_properties(Transport, S, C0),
+    C = rabbit_stream_SUITE:test_authenticate(Transport, S, C1),
     {S, C}.
 
 start_amqp_connection(Type, Node, Port) ->

@@ -25,12 +25,16 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import javax.net.ssl.X509TrustManager;
 import okhttp3.Authenticator;
 import okhttp3.Credentials;
+import org.assertj.core.api.Condition;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
@@ -42,6 +46,11 @@ public class TestUtils {
 
   static int streamPort() {
     String port = System.getProperty("stream.port", "5552");
+    return Integer.valueOf(port);
+  }
+
+  static int streamPortTls() {
+    String port = System.getProperty("stream.port.tls", "5551");
     return Integer.valueOf(port);
   }
 
@@ -218,5 +227,34 @@ public class TestUtils {
         c.close();
       }
     }
+  }
+
+  static class TrustEverythingTrustManager implements X509TrustManager {
+    @Override
+    public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+
+    @Override
+    public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+
+    @Override
+    public X509Certificate[] getAcceptedIssuers() {
+      return new X509Certificate[0];
+    }
+  }
+
+  static Condition<Object> booleanTrue() {
+    return new Condition<>(obj -> obj.equals(Boolean.TRUE), "true");
+  }
+
+  static Condition<Object> booleanFalse() {
+    return new Condition<>(obj -> obj.equals(Boolean.FALSE), "false");
+  }
+
+  static Condition<Object> notNull() {
+    return new Condition<>(Objects::nonNull, "not null");
+  }
+
+  static Condition<Object> isNull() {
+    return new Condition<>(Objects::isNull, "null");
   }
 }

@@ -16,6 +16,10 @@
 
 package com.rabbitmq.stream;
 
+import static com.rabbitmq.stream.TestUtils.booleanFalse;
+import static com.rabbitmq.stream.TestUtils.booleanTrue;
+import static com.rabbitmq.stream.TestUtils.isNull;
+import static com.rabbitmq.stream.TestUtils.notNull;
 import static com.rabbitmq.stream.TestUtils.waitUntil;
 import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.as;
@@ -26,8 +30,11 @@ import static org.assertj.core.api.InstanceOfAssertFactories.MAP;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.rabbitmq.stream.TestUtils.ClientFactory;
+import com.rabbitmq.stream.TestUtils.TrustEverythingTrustManager;
 import com.rabbitmq.stream.impl.Client;
 import com.rabbitmq.stream.impl.Client.ClientParameters;
+import io.netty.channel.EventLoopGroup;
+import io.netty.handler.ssl.SslContextBuilder;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -62,6 +69,7 @@ public class HttpTest {
 
   static OkHttpClient httpClient = httpClient("guest");
   static Gson gson = new GsonBuilder().create();
+  EventLoopGroup eventLoopGroup;
   ClientFactory cf;
   String stream;
 
@@ -184,6 +192,13 @@ public class HttpTest {
     String connectionName = connectionName(client);
     assertThat(c).containsEntry("name", connectionName);
 
+    assertThat(c)
+        .hasEntrySatisfying("ssl", booleanFalse())
+        .hasEntrySatisfying("ssl_cipher", isNull())
+        .hasEntrySatisfying("ssl_hash", isNull())
+        .hasEntrySatisfying("ssl_key_exchange", isNull())
+        .hasEntrySatisfying("ssl_protocol", isNull());
+
     Callable<Map<String, Object>> cRequest =
         () -> toMap(get("/stream/connections/%2F/" + connectionName));
     // wait until some stats are in the response
@@ -202,6 +217,43 @@ public class HttpTest {
     waitUntil(closed::get);
 
     assertThatThrownBy(cRequest::call).isInstanceOf(IOException.class);
+    waitUntil(() -> request.call().size() == initialCount);
+  }
+
+  @Test
+  void tlsConnections() throws Exception {
+    Callable<List<Map<String, Object>>> request = () -> toMaps(get("/stream/connections"));
+    int initialCount = request.call().size();
+    String connectionProvidedName = UUID.randomUUID().toString();
+    try (Client client =
+        new Client(
+            new ClientParameters()
+                .eventLoopGroup(this.eventLoopGroup)
+                .sslContext(
+                    SslContextBuilder.forClient()
+                        .trustManager(new TrustEverythingTrustManager())
+                        .build())
+                .port(TestUtils.streamPortTls())
+                .clientProperty("connection_name", connectionProvidedName))) {
+
+      waitUntil(() -> request.call().size() == initialCount + 1);
+
+      Map<String, Object> c =
+          request.call().stream()
+              .filter(conn -> connectionProvidedName.equals(conn.get("user_provided_name")))
+              .findFirst()
+              .get();
+
+      String connectionName = connectionName(client);
+      assertThat(c).containsEntry("name", connectionName);
+
+      assertThat(c)
+          .hasEntrySatisfying("ssl", booleanTrue())
+          .hasEntrySatisfying("ssl_cipher", notNull())
+          .hasEntrySatisfying("ssl_hash", notNull())
+          .hasEntrySatisfying("ssl_key_exchange", notNull())
+          .hasEntrySatisfying("ssl_protocol", notNull());
+    }
     waitUntil(() -> request.call().size() == initialCount);
   }
 
