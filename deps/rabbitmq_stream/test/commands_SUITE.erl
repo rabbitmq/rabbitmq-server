@@ -13,8 +13,11 @@
 % -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -include("rabbit_stream.hrl").
+
+-define(WAIT, 5000).
 
 -define(COMMAND_LIST_CONNECTIONS,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand').
@@ -88,7 +91,7 @@ list_connections_run(Config) ->
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
 
     {S1, C1} = start_stream_connection(StreamPort),
-    wait_until_connection_count(Config, 1),
+    ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     [[{conn_name, _}]] =
         to_list(?COMMAND_LIST_CONNECTIONS:run([<<"conn_name">>], Opts)),
@@ -96,7 +99,7 @@ list_connections_run(Config) ->
         to_list(?COMMAND_LIST_CONNECTIONS:run([<<"ssl">>], Opts)),
 
     {S2, C2} = start_stream_connection(StreamPort),
-    wait_until_connection_count(Config, 2),
+    ?awaitMatch(2, connection_count(Config), ?WAIT),
 
     [[{conn_name, _}], [{conn_name, _}]] =
         to_list(?COMMAND_LIST_CONNECTIONS:run([<<"conn_name">>], Opts)),
@@ -152,7 +155,7 @@ list_tls_connections_run(Config) ->
     application:ensure_all_started(ssl),
 
     {S1, C1} = start_stream_tls_connection(StreamTlsPort),
-    wait_until_connection_count(Config, 1),
+    ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     [[{conn_name, _}]] =
         to_list(?COMMAND_LIST_CONNECTIONS:run([<<"conn_name">>], Opts)),
@@ -190,20 +193,20 @@ list_consumers_run(Config) ->
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
     {S1, C1} = start_stream_connection(StreamPort),
-    wait_until_connection_count(Config, 1),
+    ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     Stream = <<"list_consumers_run">>,
     C1_1 = create_stream(S1, Stream, C1),
     SubId = 42,
     C1_2 = subscribe(S1, SubId, Stream, C1_1),
 
-    wait_until_consumer_count(Config, 1),
+    ?awaitMatch(1, consumer_count(Config), ?WAIT),
 
     {S2, C2} = start_stream_connection(StreamPort),
-    wait_until_connection_count(Config, 2),
+    ?awaitMatch(2, connection_count(Config), ?WAIT),
     C2_1 = subscribe(S2, SubId, Stream, C2),
 
-    wait_until_consumer_count(Config, 2),
+    ?awaitMatch(2, consumer_count(Config), ?WAIT),
 
     %% Verbose returns all keys
     InfoItems = ?CONSUMER_INFO_ITEMS,
@@ -228,7 +231,7 @@ list_consumers_run(Config) ->
     metadata_update_stream_deleted(S2, Stream, C2_1),
     close(S1, C1_3),
     close(S2, C2_1),
-    wait_until_consumer_count(Config, 0),
+    ?awaitMatch(0, consumer_count(Config), ?WAIT),
     ok.
 
 list_publishers_merge_defaults(_Config) ->
@@ -259,20 +262,20 @@ list_publishers_run(Config) ->
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
     {S1, C1} = start_stream_connection(StreamPort),
-    wait_until_connection_count(Config, 1),
+    ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     Stream = <<"list_publishers_run">>,
     C1_1 = create_stream(S1, Stream, C1),
     PubId = 42,
     C1_2 = declare_publisher(S1, PubId, Stream, C1_1),
 
-    wait_until_publisher_count(Config, 1),
+    ?awaitMatch(1, publisher_count(Config), ?WAIT),
 
     {S2, C2} = start_stream_connection(StreamPort),
-    wait_until_connection_count(Config, 2),
+    ?awaitMatch(2, connection_count(Config), ?WAIT),
     C2_1 = declare_publisher(S2, PubId, Stream, C2),
 
-    wait_until_publisher_count(Config, 2),
+    ?awaitMatch(2, publisher_count(Config), ?WAIT),
 
     %% Verbose returns all keys
     InfoItems = ?PUBLISHER_INFO_ITEMS,
@@ -297,7 +300,7 @@ list_publishers_run(Config) ->
     C2_2 = metadata_update_stream_deleted(S2, Stream, C2_1),
     close(S1, C1_3),
     close(S2, C2_2),
-    wait_until_publisher_count(Config, 0),
+    ?awaitMatch(0, publisher_count(Config), ?WAIT),
     ok.
 
 create_stream(S, Stream, C0) ->
@@ -344,28 +347,13 @@ connection_count(Config) ->
     command_result_count(?COMMAND_LIST_CONNECTIONS:run([<<"conn_name">>],
                                                        options(Config))).
 
-wait_until_connection_count(Config, Expected) ->
-    ok =
-        test_utils:wait_until(fun() -> connection_count(Config) == Expected
-                              end).
-
 consumer_count(Config) ->
     command_result_count(?COMMAND_LIST_CONSUMERS:run([<<"stream">>],
                                                      options(Config))).
 
-wait_until_consumer_count(Config, Expected) ->
-    ok =
-        test_utils:wait_until(fun() -> consumer_count(Config) == Expected
-                              end).
-
 publisher_count(Config) ->
     command_result_count(?COMMAND_LIST_PUBLISHERS:run([<<"stream">>],
                                                       options(Config))).
-
-wait_until_publisher_count(Config, Expected) ->
-    ok =
-        test_utils:wait_until(fun() -> publisher_count(Config) == Expected
-                              end).
 
 start_stream_connection(Port) ->
     start_stream_connection(gen_tcp, Port).

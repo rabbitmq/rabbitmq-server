@@ -1,4 +1,3 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:xref.bzl", "xref")
 load(
     "//:rabbitmq.bzl",
@@ -20,6 +19,9 @@ APP_ENV = """[
 	{num_tcp_acceptors, 10},
 	{tcp_listen_options, [{backlog,   128},
                           {nodelay,   true}]},
+	{ssl_listeners, []},
+	{num_ssl_acceptors, 10},
+	{ssl_listen_options, []},
 	{initial_credits, 50000},
 	{credits_required_for_unblocking, 12500},
 	{frame_max, 1048576},
@@ -53,22 +55,11 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_stream"
 
-erlc(
-    name = "test_utils",
-    testonly = True,
-    srcs = [
-        "test/test_utils.erl",
-    ],
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-)
-
 rabbitmq_integration_suite(
     PACKAGE,
     name = "commands_SUITE",
     additional_beam = [
         ":rabbit_stream_SUITE_beam_files",
-        ":test_utils",
     ],
     data = glob(["test/rabbit_stream_SUITE_data/**/*"]),
 )
@@ -86,7 +77,8 @@ rabbitmq_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbit_stream_SUITE",
-    additional_beam = [
-        ":test_utils",
+    groups = [
+        "single_node",
+        "cluster",
     ],
 )

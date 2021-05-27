@@ -19,12 +19,15 @@
 % -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -include("rabbit_stream.hrl").
 -include("rabbit_stream_metrics.hrl").
 
 -compile(nowarn_export_all).
 -compile(export_all).
+
+-define(WAIT, 5000).
 
 all() ->
     [{group, single_node}, {group, cluster}].
@@ -119,7 +122,7 @@ test_gc_consumers(Config) ->
                                   0,
                                   0,
                                   #{}]),
-    ok = test_utils:wait_until(fun() -> consumer_count(Config) == 0 end),
+    ?awaitMatch(0, consumer_count(Config), ?WAIT),
     ok.
 
 test_gc_publishers(Config) ->
@@ -134,7 +137,7 @@ test_gc_publishers(Config) ->
                                             virtual_host = <<"/">>},
                                   0,
                                   <<"ref">>]),
-    ok = test_utils:wait_until(fun() -> publisher_count(Config) == 0 end),
+    ?awaitMatch(0, publisher_count(Config), ?WAIT),
     ok.
 
 consumer_count(Config) ->
