@@ -223,7 +223,7 @@ test_peer_properties(Transport, S, C0) ->
     PeerPropertiesFrame =
         rabbit_stream_core:frame({request, 1, {peer_properties, #{}}}),
     ok = Transport:send(S, PeerPropertiesFrame),
-    {C, [Cmd]} = receive_commands(Transport, S, C0),
+    {Cmd, C} = receive_commands(Transport, S, C0),
     ?assertMatch({response, 1, {peer_properties, ?RESPONSE_CODE_OK, _}},
                  Cmd),
     C.
@@ -234,7 +234,7 @@ test_authenticate(Transport, S, C0) ->
     ok = Transport:send(S, SaslHandshakeFrame),
     Plain = <<"PLAIN">>,
     AmqPlain = <<"AMQPLAIN">>,
-    {C1, [Cmd]} = receive_commands(Transport, S, C0),
+    {Cmd, C1} = receive_commands(Transport, S, C0),
     case Cmd of
         {response, _, {sasl_handshake, ?RESPONSE_CODE_OK, Mechanisms}} ->
             ?assertEqual([AmqPlain, Plain], lists:sort(Mechanisms));
@@ -251,17 +251,9 @@ test_authenticate(Transport, S, C0) ->
         rabbit_stream_core:frame({request, 2,
                                   {sasl_authenticate, Plain, PlainSasl}}),
     ok = Transport:send(S, SaslAuthenticateFrame),
-    {C2, [SaslAuth | Cmds2]} = receive_commands(Transport, S, C1),
+    {SaslAuth, C2} = receive_commands(Transport, S, C1),
     {response, 2, {sasl_authenticate, ?RESPONSE_CODE_OK}} = SaslAuth,
-    {C3, Tune} =
-        case Cmds2 of
-            [] ->
-                {C2b, [X]} = receive_commands(Transport, S, C2),
-                {C2b, X};
-            [T] ->
-                {C2, T}
-        end,
-
+    {Tune, C3} = receive_commands(Transport, S, C2),
     {tune, ?DEFAULT_FRAME_MAX, ?DEFAULT_HEARTBEAT} = Tune,
 
     TuneFrame =
@@ -273,8 +265,7 @@ test_authenticate(Transport, S, C0) ->
     OpenFrame =
         rabbit_stream_core:frame({request, 3, {open, VirtualHost}}),
     ok = Transport:send(S, OpenFrame),
-    {C4,
-     [{response, 3, {open, ?RESPONSE_CODE_OK, _ConnectionProperties}}]} =
+    {{response, 3, {open, ?RESPONSE_CODE_OK, _ConnectionProperties}}, C4} =
         receive_commands(Transport, S, C3),
     C4.
 
@@ -282,7 +273,7 @@ test_create_stream(Transport, S, Stream, C0) ->
     CreateStreamFrame =
         rabbit_stream_core:frame({request, 1, {create_stream, Stream, #{}}}),
     ok = Transport:send(S, CreateStreamFrame),
-    {C, [Cmd]} = receive_commands(Transport, S, C0),
+    {Cmd, C} = receive_commands(Transport, S, C0),
     ?assertMatch({response, 1, {create_stream, ?RESPONSE_CODE_OK}}, Cmd),
     C.
 
@@ -290,19 +281,12 @@ test_delete_stream(Transport, S, Stream, C0) ->
     DeleteStreamFrame =
         rabbit_stream_core:frame({request, 1, {delete_stream, Stream}}),
     ok = Transport:send(S, DeleteStreamFrame),
-    {C1, [Cmd | MaybeMetaData]} = receive_commands(Transport, S, C0),
+    {Cmd, C1} = receive_commands(Transport, S, C0),
     ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, Cmd),
-    case MaybeMetaData of
-        [] ->
-            test_metadata_update_stream_deleted(Transport, S, Stream, C1);
-        [Meta] ->
-            {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} =
-                Meta,
-            C1
-    end.
+    test_metadata_update_stream_deleted(Transport, S, Stream, C1).
 
 test_metadata_update_stream_deleted(Transport, S, Stream, C0) ->
-    {C1, [Meta]} = receive_commands(Transport, S, C0),
+    {Meta, C1} = receive_commands(Transport, S, C0),
     {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta,
     C1.
 
@@ -314,7 +298,7 @@ test_declare_publisher(Transport, S, PublisherId, Stream, C0) ->
                                    <<>>,
                                    Stream}}),
     ok = Transport:send(S, DeclarePublisherFrame),
-    {C, [Cmd]} = receive_commands(Transport, S, C0),
+    {Cmd, C} = receive_commands(Transport, S, C0),
     ?assertMatch({response, 1, {declare_publisher, ?RESPONSE_CODE_OK}},
                  Cmd),
     C.
@@ -325,7 +309,7 @@ test_publish_confirm(Transport, S, PublisherId, Body, C0) ->
     PublishFrame =
         rabbit_stream_core:frame({publish, PublisherId, 1, Messages}),
     ok = Transport:send(S, PublishFrame),
-    {C, [Cmd]} = receive_commands(Transport, S, C0),
+    {Cmd, C} = receive_commands(Transport, S, C0),
     ?assertMatch({publish_confirm, PublisherId, [1]}, Cmd),
     C.
 
@@ -333,12 +317,14 @@ test_subscribe(Transport, S, SubscriptionId, Stream, C0) ->
     SubCmd = {request, 1, {subscribe, SubscriptionId, Stream, 0, 10}},
     SubscribeFrame = rabbit_stream_core:frame(SubCmd),
     ok = Transport:send(S, SubscribeFrame),
-    {C, [Cmd]} = receive_commands(Transport, S, C0),
+    {Cmd, C} = receive_commands(Transport, S, C0),
     ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_OK}}, Cmd),
     C.
 
 test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
-    {C, [{deliver, SubscriptionId, Chunk}]} =
+
+    ct:pal("test_deliver ", []),
+    {{deliver, SubscriptionId, Chunk}, C} =
         receive_commands(Transport, S, C0),
     <<5:4/unsigned,
       0:4/unsigned,
@@ -364,7 +350,7 @@ test_close(Transport, S, C0) ->
         rabbit_stream_core:frame({request, 1,
                                   {close, ?RESPONSE_CODE_OK, CloseReason}}),
     ok = Transport:send(S, CloseFrame),
-    {C, [{response, 1, {close, ?RESPONSE_CODE_OK}}]} =
+    {{response, 1, {close, ?RESPONSE_CODE_OK}}, C} =
         receive_commands(Transport, S, C0),
     C.
 
@@ -379,17 +365,22 @@ wait_for_socket_close(Transport, S, Attempt) ->
     end.
 
 receive_commands(Transport, S, C0) ->
-    case Transport:recv(S, 0, 5000) of
-        {ok, Data} ->
-            case rabbit_stream_core:incoming_data(Data, C0) of
-                {C1, []} ->
-                    %% no command received, try once more
-                    {ok, Data2} = Transport:recv(S, 0, 5000),
-                    rabbit_stream_core:incoming_data(Data2, C1);
-                {_C, _Cmds} = Ret ->
-                    Ret
+    case rabbit_stream_core:next_command(C0) of
+        empty ->
+            case Transport:recv(S, 0, 5000) of
+                {ok, Data} ->
+                    C1 = rabbit_stream_core:incoming_data(Data, C0),
+                    case rabbit_stream_core:next_command(C1) of
+                        empty ->
+                            {ok, Data2} =  Transport:recv(S, 0, 5000),
+                            rabbit_stream_core:next_command(
+                              rabbit_stream_core:incoming_data(Data2, C1));
+                        Res ->
+                            Res
+                    end;
+                {error, Err} ->
+                    ct:fail("error receiving data ~w", [Err])
             end;
-        {error, Err} ->
-            ct:pal("error receiving data ~w", [Err]),
-            {C0, []}
+        Res ->
+            Res
     end.

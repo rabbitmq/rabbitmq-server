@@ -163,5 +163,6 @@ roundtrip_metadata_no_leader(_Config) ->
 test_roundtrip(Cmd) ->
     Init = rabbit_stream_core:init(undefined),
     Frame = iolist_to_binary(rabbit_stream_core:frame(Cmd)),
-    {_, [Cmd]} = rabbit_stream_core:incoming_data(Frame, Init),
+    {[Cmd], _} = rabbit_stream_core:all_commands(
+                   rabbit_stream_core:incoming_data(Frame, Init)),
     ok.

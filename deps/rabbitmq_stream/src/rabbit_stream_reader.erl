@@ -833,17 +833,14 @@ handle_inbound_data(Transport,
                     #stream_connection_state{data = CoreState0} = State,
                     Data,
                     HandleFrameFun) ->
-    case rabbit_stream_core:incoming_data(Data, CoreState0) of
-        {CoreState, []} ->
-            {Connection, State#stream_connection_state{data = CoreState}};
-        {CoreState, Commands} ->
-            lists:foldl(fun(Command, {C, S}) ->
-                           HandleFrameFun(Transport, C, S, Command)
-                        end,
-                        {Connection,
-                         State#stream_connection_state{data = CoreState}},
-                        Commands)
-    end.
+    CoreState1 = rabbit_stream_core:incoming_data(Data, CoreState0),
+    {Commands, CoreState} = rabbit_stream_core:all_commands(CoreState1),
+    lists:foldl(fun(Command, {C, S}) ->
+                        HandleFrameFun(Transport, C, S, Command)
+                end,
+                {Connection,
+                 State#stream_connection_state{data = CoreState}},
+                Commands).
 
 publishing_ids_from_messages(<<>>) ->
     [];
@@ -1058,6 +1055,7 @@ handle_frame_pre_auth(Transport,
                       State,
                       {request, CorrelationId, {open, VirtualHost}}) ->
     %% FIXME enforce connection limit (see rabbit_reader:is_over_connection_limit/2)
+    rabbit_log:info("Open received for ~s", [VirtualHost]),
     Connection1 =
         try
             rabbit_access_control:check_vhost_access(User,
@@ -1079,6 +1077,7 @@ handle_frame_pre_auth(Transport,
                 #{<<"advertised_host">> => AdvertisedHost,
                   <<"advertised_port">> => AdvertisedPort},
 
+                rabbit_log:info("sending open response ok ~s", [VirtualHost]),
             Frame =
                 rabbit_stream_core:frame({response, CorrelationId,
                                           {open, ?RESPONSE_CODE_OK,
