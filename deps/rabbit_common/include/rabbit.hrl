@@ -266,3 +266,6 @@
 %% Execution timeout of connection and channel tracking operations
 -define(TRACKING_EXECUTION_TIMEOUT,
         rabbit_misc:get_env(rabbit, tracking_execution_timeout, 5000)).
+
+%% 3.6, 3.7, early 3.8
+-define(LEGACY_INDEX_SEGMENT_ENTRY_COUNT, 16384).

@@ -15,7 +15,7 @@
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, parse_tags/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
--export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1]).
+-export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1, ensure_config_file/1]).
 -export([delete_storage/1]).
 -export([vhost_down/1]).
 -export([put_vhost/5]).
@@ -80,7 +80,7 @@ ensure_config_file(VHost) ->
                 %% default of 16384 for forward compatibility. Historic
                 %% default calculated as trunc(math:pow(2,?REL_SEQ_BITS)).
                 _ ->
-                    16384
+                    ?LEGACY_INDEX_SEGMENT_ENTRY_COUNT
             end,
             _ = rabbit_log:info("Setting segment_entry_count for vhost '~s' with ~b queues to '~b'",
                                 [VHost, length(QueueDirs), SegmentEntryCount]),
@@ -91,8 +91,15 @@ ensure_config_file(VHost) ->
     end.
 
 read_config(VHost) ->
-    {ok, Config} = file:consult(config_file_path(VHost)),
-    maps:from_list(Config).
+    Config = case file:consult(config_file_path(VHost)) of
+        {ok, Val}       -> Val;
+        %% the file does not exist yet, likely due to an upgrade from a pre-3.7
+        %% message store layout so use the history default.
+        {error, _}      -> #{
+            segment_entry_count => ?LEGACY_INDEX_SEGMENT_ENTRY_COUNT
+        }
+    end,
+    rabbit_data_coercion:to_map(Config).
 
 -define(INFO_KEYS, vhost:info_keys()).
 
