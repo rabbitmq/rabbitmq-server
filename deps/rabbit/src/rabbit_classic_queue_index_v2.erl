@@ -174,7 +174,7 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, IsMsgStoreClean,
     %% message store has/had to recover. Otherwise we just
     %% take our state from Terms.
     IsIndexClean = Terms =/= non_clean_shutdown,
-    {Count, Bytes, State} = case IsIndexClean andalso IsMsgStoreClean of
+    case IsIndexClean andalso IsMsgStoreClean of
         true ->
             Segments0 = proplists:get_value(mqi_state, Terms, #{}),
             State1 = State0#mqistate{ segments = Segments0 },
@@ -189,9 +189,7 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, IsMsgStoreClean,
             {counters:get(CountersRef, ?RECOVER_COUNT),
              counters:get(CountersRef, ?RECOVER_BYTES),
              State1}
-    end,
-    %% We can now ensure the current segment file is in a good state and return.
-    {Count, Bytes, State}.
+    end.
 
 recover_segments(State = #mqistate { dir = Dir }, ContainsCheckFun, CountersRef) ->
     SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
@@ -796,6 +794,7 @@ start(VHost, DurableQueueNames) ->
     {OrderedTerms, {fun queue_index_walker/1, FunState}}.
 
 queue_index_walker({start, DurableQueues}) when is_list(DurableQueues) ->
+    ?DEBUG("~0p", [{start, DurableQueues}]),
     {ok, Gatherer} = gatherer:start_link(),
     [begin
          ok = gatherer:fork(Gatherer),
@@ -807,8 +806,8 @@ queue_index_walker({start, DurableQueues}) when is_list(DurableQueues) ->
                 end)
      end || QueueName <- DurableQueues],
     queue_index_walker({next, Gatherer});
-
 queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
+    ?DEBUG("~0p", [{next, Gatherer}]),
     case gatherer:out(Gatherer) of
         empty ->
             ok = gatherer:stop(Gatherer),
@@ -818,6 +817,7 @@ queue_index_walker({next, Gatherer}) when is_pid(Gatherer) ->
     end.
 
 queue_index_walker_reader(#resource{ virtual_host = VHost } = Name, Gatherer) ->
+    ?DEBUG("~0p ~0p", [Name, Gatherer]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = queue_dir(VHostDir, Name),
     SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
@@ -825,6 +825,7 @@ queue_index_walker_reader(#resource{ virtual_host = VHost } = Name, Gatherer) ->
     ok = gatherer:finish(Gatherer).
 
 queue_index_walker_segment(F, Gatherer) ->
+    ?DEBUG("~0p ~0p", [F, Gatherer]),
     {ok, Fd} = file:open(F, [read, read_ahead, raw, binary]),
     case file:read(Fd, ?HEADER_SIZE) of
         {ok, <<?MAGIC:32,?VERSION:8,
