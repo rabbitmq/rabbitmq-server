@@ -1368,11 +1368,11 @@ expand_delta(_SeqId, #delta { count       = Count,
 
 init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
      PersistentClient, TransientClient, VHost) ->
-    {LowSeqId, NextSeqId0, IndexState1} = ?INDEX:bounds(IndexState),
+    {LowSeqId, HiSeqId, IndexState1} = ?INDEX:bounds(IndexState),
 
     {NextSeqId, DeltaCount1, DeltaBytes1} =
         case Terms of
-            non_clean_shutdown -> {NextSeqId0, DeltaCount, DeltaBytes};
+            non_clean_shutdown -> {HiSeqId, DeltaCount, DeltaBytes};
             _                  -> {proplists:get_value(next_seq_id,
                                                        Terms, 0),
                                    proplists:get_value(persistent_count,
@@ -1385,7 +1385,7 @@ init(IsDurable, IndexState, DeltaCount, DeltaBytes, Terms,
                 false -> d(#delta { start_seq_id = LowSeqId,
                                     count        = DeltaCount1,
                                     transient    = 0,
-                                    end_seq_id   = NextSeqId })
+                                    end_seq_id   = HiSeqId })
             end,
     Now = erlang:monotonic_time(),
     IoBatchSize = rabbit_misc:get_env(rabbit, msg_store_io_batch_size,
