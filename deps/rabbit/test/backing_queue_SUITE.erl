@@ -16,7 +16,7 @@
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
--define(INDEX, rabbit_modern_queue_index).
+-define(INDEX, rabbit_classic_queue_index_v2).
 
 -define(TIMEOUT, 30000).
 -define(VHOST, <<"/">>).

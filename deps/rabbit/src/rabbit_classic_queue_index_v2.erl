@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(rabbit_modern_queue_index).
+-module(rabbit_classic_queue_index_v2).
 
 -export([erase/1, init/3, reset_state/1, recover/6,
          terminate/3, delete_and_terminate/1,
@@ -317,8 +317,6 @@ delete_and_terminate(State = #mqistate { dir = Dir,
     ok = erase_index_dir(Dir),
     State#mqistate{ segments = #{},
                     fds = #{} }.
-
-%% All messages must be published sequentially to the modern index.
 
 -spec publish(rabbit_types:msg_id(), seq_id(),
                     rabbit_types:message_properties(), boolean(), boolean(),
@@ -926,7 +924,7 @@ segment_entry_count() ->
     %% @todo Probably put this in the state rather than read it all the time.
     %%       But we must change next_segment_boundary to allow that.
     SegmentEntryCount =
-        application:get_env(rabbit, modern_queue_index_segment_entry_count, 65536),
+        application:get_env(rabbit, classic_queue_index_v2_segment_entry_count, 65536),
     SegmentEntryCount.
 
 erase_index_dir(Dir) ->
