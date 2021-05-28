@@ -427,13 +427,12 @@ request_body({subscribe = Tag,
                 <<>>;
             _ ->
                 PropsBin = generate_map(Properties),
-                <<(map_size(Properties)):32, PropsBin/binary>>
+                [<<(map_size(Properties)):32>>, PropsBin]
         end,
     {Tag,
-     <<SubscriptionId:8,
-       ?STRING(Stream),
-       Data/binary,
-       PropertiesBin/binary>>};
+     [<<SubscriptionId:8,
+        ?STRING(Stream),
+        Data/binary>> | PropertiesBin]};
 request_body({commit_offset = Tag, OffsetRef, Stream, Offset}) ->
     {Tag, <<?STRING(OffsetRef), ?STRING(Stream), Offset:64>>};
 request_body({query_offset = Tag, OffsetRef, Stream}) ->

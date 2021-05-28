@@ -327,7 +327,7 @@ test_publish_confirm(Transport, S, PublisherId, Body, C0) ->
     C.
 
 test_subscribe(Transport, S, SubscriptionId, Stream, C0) ->
-    SubCmd = {request, 1, {subscribe, SubscriptionId, Stream, 0, 10}},
+    SubCmd = {request, 1, {subscribe, SubscriptionId, Stream, 0, 10, #{<<"random">> => <<"thing">>}}},
     SubscribeFrame = rabbit_stream_core:frame(SubCmd),
     ok = Transport:send(S, SubscribeFrame),
     {C, [Cmd]} = receive_commands(Transport, S, C0),
