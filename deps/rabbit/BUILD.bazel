@@ -1,5 +1,6 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
@@ -205,6 +206,23 @@ rabbitmq_lib(
 )
 
 xref(tags = ["xref"])
+
+plt_apps = [
+    "mnesia",
+] + EXTRA_APPS
+
+plt_apps.remove("rabbitmq_prelaunch")
+
+plt(
+    name = "base_plt",
+    apps = plt_apps,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    plt = ":base_plt",
+    tags = ["dialyze"],
+)
 
 bats(
     srcs = glob(["test/**/*.bats"]),

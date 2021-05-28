@@ -1,6 +1,6 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "DEFAULT_PLT_APPS", "dialyze", "plt")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load("@bazel-erlang//:ct.bzl", "ct_test")
 load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "RABBITMQ_TEST_ERLC_OPTS")
 
@@ -171,12 +171,12 @@ xref(tags = ["xref"])
 
 plt(
     name = "base_plt",
-    plt = "//:base_plt",
     apps = [
         "mnesia",
         "crypto",
         "ssl",
     ] + EXTRA_APPS,
+    plt = "//:base_plt",
 )
 
 dialyze(
