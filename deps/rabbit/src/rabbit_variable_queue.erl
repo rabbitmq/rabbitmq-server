@@ -2855,7 +2855,7 @@ move_messages_to_vhost_store(Queues) ->
     lists:foreach(
         fun(Queue) ->
             QueueName = amqqueue:get_name(Queue),
-            ?INDEX:move_to_per_vhost_stores(QueueName)
+            rabbit_queue_index:move_to_per_vhost_stores(QueueName)
         end,
         Queues),
     %% Legacy (global) msg_store may require recovery.
@@ -2919,7 +2919,7 @@ migrate_queue({QueueName = #resource{virtual_host = VHost, name = Name},
     NewStoreClient = get_per_vhost_store_client(QueueName, NewStore),
     %% WARNING: During scan_queue_segments queue index state is being recovered
     %% and terminated. This can cause side effects!
-    ?INDEX:scan_queue_segments(
+    rabbit_queue_index:scan_queue_segments(
         %% We migrate only persistent messages which are found in message store
         %% and are not acked yet
         fun (_SeqId, MsgId, _MsgProps, true, _IsDelivered, no_ack, OldC)
@@ -2939,7 +2939,7 @@ migrate_queue({QueueName = #resource{virtual_host = VHost, name = Name},
         Term when is_list(Term) ->
             NewRecoveryTerm = lists:keyreplace(persistent_ref, 1, RecoveryTerm,
                                                {persistent_ref, NewClientRef}),
-            ?INDEX:update_recovery_term(QueueName, NewRecoveryTerm)
+            rabbit_queue_index:update_recovery_term(QueueName, NewRecoveryTerm)
     end,
     log_upgrade_verbose("Finished migrating queue ~s in vhost ~s", [Name, VHost]),
     {QueueName, NewClientRef}.
@@ -2977,7 +2977,7 @@ read_old_recovery_terms([]) ->
     {[], [], ?EMPTY_START_FUN_STATE};
 read_old_recovery_terms(Queues) ->
     QueueNames = [amqqueue:get_name(Q) || Q <- Queues],
-    {AllTerms, StartFunState} = ?INDEX:read_global_recovery_terms(QueueNames),
+    {AllTerms, StartFunState} = rabbit_queue_index:read_global_recovery_terms(QueueNames),
     Refs = [Ref || Terms <- AllTerms,
                    Terms /= non_clean_shutdown,
                    begin
