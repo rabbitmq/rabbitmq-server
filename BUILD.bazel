@@ -1,3 +1,4 @@
+load("@bazel-erlang//:dialyze.bzl", "plt")
 load("elixir_home.bzl", "elixir_home")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
@@ -40,6 +41,11 @@ platform(
         "OSFamily": "Linux",
         "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:09d379e889dedfa492736584721d74e580d35b31ee2b3f996320872d1f76505e",
     },
+)
+
+plt(
+    name = "base_plt",
+    visibility = ["//visibility:public"],
 )
 
 rabbitmq_home(
