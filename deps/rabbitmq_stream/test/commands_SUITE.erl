@@ -18,7 +18,6 @@
 -include("rabbit_stream.hrl").
 
 -define(WAIT, 5000).
-
 -define(COMMAND_LIST_CONNECTIONS,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand').
 -define(COMMAND_LIST_CONSUMERS,

@@ -836,17 +836,26 @@ handle_inbound_data(Transport,
     CoreState1 = rabbit_stream_core:incoming_data(Data, CoreState0),
     {Commands, CoreState} = rabbit_stream_core:all_commands(CoreState1),
     lists:foldl(fun(Command, {C, S}) ->
-                        HandleFrameFun(Transport, C, S, Command)
+                   HandleFrameFun(Transport, C, S, Command)
                 end,
-                {Connection,
-                 State#stream_connection_state{data = CoreState}},
+                {Connection, State#stream_connection_state{data = CoreState}},
                 Commands).
 
 publishing_ids_from_messages(<<>>) ->
     [];
 publishing_ids_from_messages(<<PublishingId:64,
-                               MessageSize:32,
+                               0:1,
+                               MessageSize:31,
                                _Message:MessageSize/binary,
+                               Rest/binary>>) ->
+    [PublishingId | publishing_ids_from_messages(Rest)];
+publishing_ids_from_messages(<<PublishingId:64,
+                               1:1,
+                               _CompressionType:3,
+                               _Unused:4,
+                               _MessageCount:16,
+                               BatchSize:32,
+                               _Batch:BatchSize/binary,
                                Rest/binary>>) ->
     [PublishingId | publishing_ids_from_messages(Rest)].
 
@@ -1077,7 +1086,7 @@ handle_frame_pre_auth(Transport,
                 #{<<"advertised_host">> => AdvertisedHost,
                   <<"advertised_port">> => AdvertisedPort},
 
-                rabbit_log:info("sending open response ok ~s", [VirtualHost]),
+            rabbit_log:info("sending open response ok ~s", [VirtualHost]),
             Frame =
                 rabbit_stream_core:frame({response, CorrelationId,
                                           {open, ?RESPONSE_CODE_OK,

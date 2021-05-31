@@ -12,7 +12,8 @@
 %% holds static or rarely changing fields
 -record(cfg, {}).
 -record(?MODULE,
-        {cfg :: #cfg{}, frames = [] :: [iodata()],
+        {cfg :: #cfg{},
+         frames = [] :: [iodata()],
          %% partial data
          data ::
              undefined |
@@ -145,52 +146,61 @@ all_commands(#?MODULE{commands = Commands0} = State) ->
 %% returns frames
 -spec incoming_data(binary(), state()) -> state().
 %% TODO: check max frame size
-incoming_data(<<>>, #?MODULE{frames = Frames, commands = Commands} = State) ->
+incoming_data(<<>>,
+              #?MODULE{frames = Frames, commands = Commands} = State) ->
     State#?MODULE{frames = [], commands = parse_frames(Frames, Commands)};
 incoming_data(<<Size:32, Frame:Size/binary, Rem/binary>>,
               #?MODULE{frames = Frames, data = undefined} = State) ->
     incoming_data(Rem,
                   State#?MODULE{frames = [Frame | Frames], data = undefined});
 incoming_data(<<Size:32, Rem/binary>>,
-              #?MODULE{frames = Frames, data = undefined,
-                       commands = Commands} = State) ->
+              #?MODULE{frames = Frames,
+                       data = undefined,
+                       commands = Commands} =
+                  State) ->
     %% not enough data to complete frame, stash and await more data
-    State#?MODULE{frames = [], data = {Size - byte_size(Rem), Rem},
+    State#?MODULE{frames = [],
+                  data = {Size - byte_size(Rem), Rem},
                   commands = parse_frames(Frames, Commands)};
 incoming_data(Data,
-              #?MODULE{frames = Frames, data = undefined,
-                       commands = Commands} = State)
-  when byte_size(Data) < 4 ->
+              #?MODULE{frames = Frames,
+                       data = undefined,
+                       commands = Commands} =
+                  State)
+    when byte_size(Data) < 4 ->
     %% not enough data to even know the size required
     %% just stash binary and hit last clause next
-    State#?MODULE{frames = [], data = Data,
+    State#?MODULE{frames = [],
+                  data = Data,
                   commands = parse_frames(Frames, Commands)};
 incoming_data(Data,
-              #?MODULE{frames = Frames, data = {Size, Partial},
-                       commands = Commands} = State) ->
+              #?MODULE{frames = Frames,
+                       data = {Size, Partial},
+                       commands = Commands} =
+                  State) ->
     case Data of
         <<Part:Size/binary, Rem/binary>> ->
             incoming_data(Rem,
                           State#?MODULE{frames =
-                                        [append_data(Partial, Part)
-                                         | Frames],
+                                            [append_data(Partial, Part)
+                                             | Frames],
                                         data = undefined});
         Rem ->
             State#?MODULE{frames = [],
                           data =
-                          {Size - byte_size(Rem),
-                           append_data(Partial, Rem)},
+                              {Size - byte_size(Rem),
+                               append_data(Partial, Rem)},
                           commands = parse_frames(Frames, Commands)}
     end;
 incoming_data(Data, #?MODULE{data = Partial} = State)
-  when is_binary(Partial) ->
+    when is_binary(Partial) ->
     incoming_data(<<Partial/binary, Data/binary>>,
                   State#?MODULE{data = undefined}).
 
 parse_frames(Frames, Queue) ->
-    lists:foldr(fun(Frame, Acc) ->
-                        queue:in(parse_command(Frame), Acc)
-                end, Queue, Frames).
+    lists:foldr(fun(Frame, Acc) -> queue:in(parse_command(Frame), Acc)
+                end,
+                Queue, Frames).
 
 -spec frame(command()) -> iodata().
 frame({publish_confirm, PublisherId, PublishingIds}) ->

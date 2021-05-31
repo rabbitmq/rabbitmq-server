@@ -265,7 +265,8 @@ test_authenticate(Transport, S, C0) ->
     OpenFrame =
         rabbit_stream_core:frame({request, 3, {open, VirtualHost}}),
     ok = Transport:send(S, OpenFrame),
-    {{response, 3, {open, ?RESPONSE_CODE_OK, _ConnectionProperties}}, C4} =
+    {{response, 3, {open, ?RESPONSE_CODE_OK, _ConnectionProperties}},
+     C4} =
         receive_commands(Transport, S, C3),
     C4.
 
@@ -322,7 +323,6 @@ test_subscribe(Transport, S, SubscriptionId, Stream, C0) ->
     C.
 
 test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
-
     ct:pal("test_deliver ", []),
     {{deliver, SubscriptionId, Chunk}, C} =
         receive_commands(Transport, S, C0),
@@ -372,9 +372,9 @@ receive_commands(Transport, S, C0) ->
                     C1 = rabbit_stream_core:incoming_data(Data, C0),
                     case rabbit_stream_core:next_command(C1) of
                         empty ->
-                            {ok, Data2} =  Transport:recv(S, 0, 5000),
+                            {ok, Data2} = Transport:recv(S, 0, 5000),
                             rabbit_stream_core:next_command(
-                              rabbit_stream_core:incoming_data(Data2, C1));
+                                rabbit_stream_core:incoming_data(Data2, C1));
                         Res ->
                             Res
                     end;
