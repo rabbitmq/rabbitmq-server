@@ -27,6 +27,10 @@
 %% Used by rabbit_vhost to set the segment_entry_count.
 -export([all_queue_directory_names/1]).
 
+%% Used by rabbit_classic_queue_index_v2 when upgrading
+%% after a non-clean shutdown.
+-export([queue_index_walker_reader/2]).
+
 -define(CLEAN_FILENAME, "clean.dot").
 
 %%----------------------------------------------------------------------------
