@@ -1,4 +1,5 @@
 load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -39,6 +40,17 @@ rabbitmq_lib(
 )
 
 xref(tags = ["xref"])
+
+plt(
+    name = "base_plt",
+    apps = EXTRA_APPS,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    plt = ":base_plt",
+    tags = ["dialyze"],
+)
 
 rabbitmq_suite(
     name = "msg_SUITE",
