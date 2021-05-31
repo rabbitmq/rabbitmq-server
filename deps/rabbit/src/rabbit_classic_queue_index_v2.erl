@@ -26,7 +26,7 @@
 -define(SEGMENT_EXTENSION, ".midx").
 
 -define(MAGIC, 16#524D5149). %% "RMQI"
--define(VERSION, 1).
+-define(VERSION, 2).
 -define(HEADER_SIZE, 64). %% bytes
 -define(ENTRY_SIZE,  32). %% bytes
 
@@ -141,7 +141,8 @@ ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) 
     QueueNameFile = filename:join(Dir, ?QUEUE_NAME_STUB_FILE),
     ok = filelib:ensure_dir(QueueNameFile),
     ok = file:write_file(QueueNameFile, <<"VHOST: ", VHost/binary, "\n",
-                                          "QUEUE: ", QName/binary, "\n">>).
+                                          "QUEUE: ", QName/binary, "\n",
+                                          "INDEX: v2\n">>).
 
 -spec reset_state(State) -> State when State::mqistate().
 
