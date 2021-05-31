@@ -1,4 +1,5 @@
 load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "broker_for_integration_suites",
@@ -41,6 +42,11 @@ rabbitmq_lib(
 )
 
 xref(tags = ["xref"])
+
+dialyze(
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)
 
 broker_for_integration_suites()
 
