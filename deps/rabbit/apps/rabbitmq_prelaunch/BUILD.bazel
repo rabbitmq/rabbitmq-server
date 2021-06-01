@@ -24,6 +24,9 @@ rabbitmq_lib(
 )
 
 xref(
+    additional_libs = [
+        "@cuttlefish//:bazel_erlang_lib",
+    ],
     tags = ["xref"],
 )
 
