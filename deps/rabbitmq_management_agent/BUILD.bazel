@@ -1,7 +1,9 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -53,6 +55,22 @@ rabbitmq_lib(
 )
 
 xref(tags = ["xref"])
+
+plt_apps = list(EXTRA_APPS)
+
+plt_apps.remove("ranch")
+
+plt(
+    name = "base_plt",
+    apps = plt_apps,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":base_plt",
+    tags = ["dialyze"],
+)
 
 broker_for_integration_suites()
 

@@ -1,5 +1,6 @@
 load("@bazel-erlang//:eunit.bzl", "eunit")
 load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq.bzl", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
 
 APP_NAME = "rabbitmq_aws"
@@ -42,6 +43,17 @@ xref(
         "@recon//:bazel_erlang_lib",
     ],
     tags = ["xref"],
+)
+
+plt(
+    name = "base_plt",
+    apps = EXTRA_APPS,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    plt = ":base_plt",
+    tags = ["dialyze"],
 )
 
 eunit(

@@ -1,4 +1,5 @@
 load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -15,6 +16,10 @@ APP_ENV = """[
 	    {writer_gc_threshold, 1000000000}
 	  ]"""
 
+EXTRA_APPS = [
+    "xmerl",
+]
+
 DEPS = [
     "//deps/rabbit_common:bazel_erlang_lib",
     "@lager//:bazel_erlang_lib",
@@ -28,9 +33,7 @@ rabbitmq_lib(
     app_registered = [
         "amqp_sup",
     ],
-    extra_apps = [
-        "xmerl",
-    ],
+    extra_apps = EXTRA_APPS,
     first_srcs = [
         "src/amqp_gen_connection.erl",
         "src/amqp_gen_consumer.erl",
@@ -39,6 +42,17 @@ rabbitmq_lib(
 )
 
 xref(tags = ["xref"])
+
+plt(
+    name = "base_plt",
+    apps = EXTRA_APPS,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    plt = ":base_plt",
+    tags = ["dialyze"],
+)
 
 rabbitmq_home(
     name = "broker-for-tests-home",

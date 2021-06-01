@@ -1,5 +1,6 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
 load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load("@bazel-erlang//:ct.bzl", "ct_test")
 load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "RABBITMQ_TEST_ERLC_OPTS")
 
@@ -59,6 +60,17 @@ RUNTIME_DEPS = [
 
 APP_NAME = "rabbit_common"
 
+EXTRA_APPS = [
+    "compiler",
+    "crypto",
+    "public_key",
+    "sasl",
+    "ssl",
+    "syntax_tools",
+    "tools",
+    "xmerl",
+]
+
 HDRS = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"]
 
 app_file(
@@ -66,16 +78,7 @@ app_file(
     app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
     app_name = APP_NAME,
     app_version = APP_VERSION,
-    extra_apps = [
-        "compiler",
-        "crypto",
-        "public_key",
-        "sasl",
-        "ssl",
-        "syntax_tools",
-        "tools",
-        "xmerl",
-    ],
+    extra_apps = EXTRA_APPS,
     modules = [":beam_files"],
     deps = DEPS + RUNTIME_DEPS,
 )
@@ -167,6 +170,21 @@ bazel_erlang_lib(
 )
 
 xref(tags = ["xref"])
+
+plt(
+    name = "base_plt",
+    apps = [
+        "mnesia",
+        "crypto",
+        "ssl",
+    ] + EXTRA_APPS,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    plt = ":base_plt",
+    tags = ["dialyze"],
+)
 
 erlc(
     name = "rabbit_env_SUITE_beam_files",

@@ -1,5 +1,10 @@
 load("@bazel-erlang//:xref.bzl", "xref")
-load("//:rabbitmq.bzl", "rabbitmq_lib")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "rabbitmq_lib",
+)
 
 APP_NAME = "rabbitmq_random_exchange"
 
@@ -22,3 +27,9 @@ rabbitmq_lib(
 )
 
 xref(tags = ["xref"])
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)

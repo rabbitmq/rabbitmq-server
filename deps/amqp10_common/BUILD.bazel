@@ -5,6 +5,7 @@ load(
     "erlc",
 )
 load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load(
     "//:rabbitmq.bzl",
@@ -99,6 +100,11 @@ bazel_erlang_lib(
 )
 
 xref(tags = ["xref"])
+
+dialyze(
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)
 
 ct_suite(
     name = "binary_generator_SUITE",

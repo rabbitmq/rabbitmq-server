@@ -1,9 +1,11 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -60,6 +62,12 @@ rabbitmq_lib(
 )
 
 xref(tags = ["xref"])
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)
 
 rabbitmq_home(
     name = "broker-for-tests-home",

@@ -67,9 +67,10 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         org = "extend",
     )
 
-    github_bazel_erlang_lib(
+    hex_pm_bazel_erlang_lib(
         name = "cuttlefish",
-        org = "Kyorai",
+        version = "3.0.1",
+        sha256 = "3feff3ae4ed1f0ca6df87ac89235068fbee9242ee85d2ac17fb1b8ce0e30f1a6",
     )
 
     hex_pm_bazel_erlang_lib(

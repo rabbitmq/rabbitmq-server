@@ -35,6 +35,11 @@ RABBITMQ_TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
     "+nowarn_export_all",
 ]
 
+RABBITMQ_DIALYZER_OPTS = [
+    "-Werror_handling",
+    "-Wunmatched_returns",
+]
+
 APP_VERSION = "3.9.0"
 
 LABELS_WITH_TEST_VERSIONS = [

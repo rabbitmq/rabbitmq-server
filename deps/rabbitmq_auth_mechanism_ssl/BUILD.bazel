@@ -1,8 +1,13 @@
 load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load("@bazel-erlang//:ct.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
-load("//:rabbitmq.bzl", "rabbitmq_lib")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "rabbitmq_lib",
+)
 
 APP_NAME = "rabbitmq_auth_mechanism_ssl"
 
@@ -37,3 +42,9 @@ rabbitmq_lib(
 )
 
 xref(tags = ["xref"])
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)
