@@ -1632,10 +1632,17 @@ handle_cast({force_event_refresh, Ref},
                Args, Ref, ActingUser) ||
                 {Ch, CTag, AckRequired, Prefetch, _, _, Args, ActingUser}
                     <- AllConsumers];
-        {Ch, CTag} ->
-            [{Ch, CTag, AckRequired, Prefetch, _, _, Args, ActingUser}] = AllConsumers,
-            emit_consumer_created(
-              Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref, ActingUser)
+        {_Ch, CTag} ->
+            case AllConsumers of
+                [] -> ok;
+                Cs ->
+                    case lists:keyfind(CTag, 1, Cs) of
+                        false -> ok;
+                        {Ch, CTag, AckRequired, Prefetch, _, _, Args, ActingUser} ->
+                            emit_consumer_created(
+                                Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref, ActingUser)
+                    end
+            end
     end,
     noreply(rabbit_event:init_stats_timer(State, #q.stats_timer));
 
