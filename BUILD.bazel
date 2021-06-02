@@ -129,6 +129,11 @@ rabbitmqctl(
 )
 
 rabbitmqctl(
+    name = "rabbitmq-diagnostics",
+    home = ":broker-home",
+)
+
+rabbitmqctl(
     name = "rabbitmq-plugins",
     home = ":broker-home",
 )

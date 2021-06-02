@@ -131,6 +131,7 @@ rabbitmq_home = rule(
         "_scripts": attr.label_list(
             default = [
                 "//deps/rabbit:scripts/rabbitmq-defaults",
+                "//deps/rabbit:scripts/rabbitmq-diagnostics",
                 "//deps/rabbit:scripts/rabbitmq-env",
                 "//deps/rabbit:scripts/rabbitmq-plugins",
                 "//deps/rabbit:scripts/rabbitmq-queues",

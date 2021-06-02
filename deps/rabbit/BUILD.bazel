@@ -16,6 +16,7 @@ load(":bats.bzl", "bats")
 
 exports_files([
     "scripts/rabbitmq-defaults",
+    "scripts/rabbitmq-diagnostics",
     "scripts/rabbitmq-env",
     "scripts/rabbitmq-plugins",
     "scripts/rabbitmq-queues",
