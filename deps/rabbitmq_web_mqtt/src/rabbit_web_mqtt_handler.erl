@@ -79,6 +79,7 @@ init(Req, Opts) ->
                       }, WsOpts}.
 
 websocket_init(State0 = #state{socket = Sock, peername = PeerAddr}) ->
+    ok = file_handle_cache:obtain(),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
             State = State0#state{
@@ -236,6 +237,7 @@ stop(State) ->
     stop(State, 1000, "MQTT died").
 
 stop(State, CloseCode, Error0) ->
+    ok = file_handle_cache:release(),
     stop_rabbit_mqtt_processor(State),
     Error1 = rabbit_data_coercion:to_binary(Error0),
     {[{close, CloseCode, Error1}], State}.
