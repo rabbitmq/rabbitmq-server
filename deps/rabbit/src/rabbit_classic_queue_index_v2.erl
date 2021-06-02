@@ -86,10 +86,8 @@
     %% segment file can be deleted.
     segments = #{} :: #{non_neg_integer() => pos_integer()},
 
-    %% File descriptors.
-    %% @todo The current implementation does not limit the number of FDs open.
-    %%       This is most likely not desirable... Perhaps we can have a limit
-    %%       per queue index instead of relying on file_handle_cache.
+    %% File descriptors. We will keep up to 4 FDs
+    %% at a time. See comments in reduce_fd_usage/2.
     fds = #{} :: #{non_neg_integer() => file:fd()},
 
     %% This fun must be called when messages that expect
@@ -442,14 +440,14 @@ publish(MsgId, SeqId, Props, IsPersistent, IsDelivered, TargetRamCount,
     State = maybe_mark_unconfirmed(MsgId, SeqId, Props, State2),
     maybe_flush_buffer(State).
 
-new_segment_file(Segment, State = #mqistate{ segments = Segments,
-                                             fds = OpenFds }) ->
-    SegmentEntryCount = segment_entry_count(),
+new_segment_file(Segment, State = #mqistate{ segments = Segments }) ->
+    #mqistate{ fds = OpenFds } = reduce_fd_usage(Segment, State),
     false = maps:is_key(Segment, OpenFds), %% assert
     {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
     %% We must preallocate space for the file. We want the space
     %% to be allocated to not have to worry about errors when
     %% writing later on.
+    SegmentEntryCount = segment_entry_count(),
     Size = ?HEADER_SIZE + SegmentEntryCount * ?ENTRY_SIZE,
     case file:allocate(Fd, 0, Size) of
         ok ->
@@ -478,6 +476,45 @@ new_segment_file(Segment, State = #mqistate{ segments = Segments,
     %% Keep the file open.
     State#mqistate{ segments = Segments#{Segment => SegmentEntryCount},
                     fds = OpenFds#{Segment => Fd} }.
+
+%% We try to keep the number of FDs open at 4 at a maximum.
+%% Under normal circumstances we will end up with 1 or 2
+%% open (roughly one for reading, one for writing, when
+%% the consumer lags a little) so this is mostly to avoid
+%% using too many FDs when the consumer lags a lot. We
+%% limit at 4 because we try to keep up to 2 for reading
+%% and 2 for writing.
+reduce_fd_usage(_, State = #mqistate{ fds = OpenFds })
+        when map_size(OpenFds) < 4 ->
+    State;
+reduce_fd_usage(SegmentToOpen, State = #mqistate{ fds = OpenFds0 }) ->
+    case OpenFds0 of
+        #{SegmentToOpen := _} ->
+            State;
+        _ ->
+            %% We know we have 4 FDs open. Because we are typically reading
+            %% or acking the oldest and writing to the newest, we will close
+            %% the FDs in the middle here.
+            [_Left, MidLeft, MidRight, _Right] = lists:sort(maps:keys(OpenFds0)),
+            SegmentToClose = if
+                %% We are opening a segment after the mid right FD. Close it.
+                SegmentToOpen > MidRight ->
+                    MidRight;
+                %% We are opening a segment before the mid left FD. Close it.
+                SegmentToOpen < MidLeft ->
+                    MidLeft;
+                %% Otherwise pick the middle segment close to where we are located.
+                %% When we are located at equal distance we arbitrarily favor the
+                %% right segment.
+                MidRight - SegmentToOpen < SegmentToOpen - MidLeft ->
+                    MidRight;
+                true ->
+                    MidLeft
+            end,
+            {Fd, OpenFds} = maps:take(SegmentToClose, OpenFds0),
+            ok = file:close(Fd),
+            State#mqistate{ fds = OpenFds }
+    end.
 
 maybe_mark_unconfirmed(MsgId, SeqId, #message_properties{ needs_confirming = true },
         State = #mqistate { confirms = Confirms }) ->
@@ -524,7 +561,8 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0 },
     end, {#{}, #{}}, WriteBuffer0),
     %% Then we do the writes for each segment.
     State = maps:fold(fun(Segment, LocBytes, FoldState0) ->
-        {Fd, FoldState} = get_fd_for_segment(Segment, FoldState0),
+        FoldState1 = reduce_fd_usage(Segment, FoldState0),
+        {Fd, FoldState} = get_fd_for_segment(Segment, FoldState1),
         ok = file:pwrite(Fd, LocBytes),
         FoldState
     end, State0, Writes),
@@ -781,17 +819,13 @@ read_from_disk(SeqIdsToRead0, State0 = #mqistate{ write_buffer = WriteBuffer }, 
     Acc = parse_entries(EntriesBin, FirstSeqId, WriteBuffer, Acc0),
     read_from_disk(SeqIdsToRead, State, Acc).
 
-get_fd(SeqId, State = #mqistate{ fds = OpenFds }) ->
+get_fd(SeqId, State0) ->
     SegmentEntryCount = segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
     Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
-    case OpenFds of
-        #{ Segment := Fd } ->
-            {Fd, Offset, State};
-        _ ->
-            {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
-            {Fd, Offset, State#mqistate{ fds = OpenFds#{ Segment => Fd }}}
-    end.
+    State1 = reduce_fd_usage(Segment, State0),
+    {Fd, State} = get_fd_for_segment(Segment, State1),
+    {Fd, Offset, State}.
 
 %% When recovering from a dirty shutdown, we may end up reading entries that
 %% have already been acked. We do not add them to the Acc in that case, and
