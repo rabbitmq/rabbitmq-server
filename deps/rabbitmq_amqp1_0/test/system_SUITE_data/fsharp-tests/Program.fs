@@ -399,7 +399,6 @@ module Test =
             use ac = connect uri
             let dest = "/amq/queue/test"
             let receiver = ReceiverLink(ac.Session, "test-receiver", dest)
-            receiver.Receive()
             receiver.Close()
             failwith "expected exception not received"
         with
@@ -414,14 +413,10 @@ module Test =
             use ac = connect uri
             let dest = "/amq/queue/test"
             let receiver = ReceiverLink(ac.Session, "test-receiver", dest)
-            receiver.Receive()
             receiver.Close()
             failwith "expected exception not received"
         with
         | :? Amqp.AmqpException as ex ->
-            printfn "Exception %A" ex
-            ()
-        | :? System.ObjectDisposedException as ex ->
             printfn "Exception %A" ex
             ()
 
