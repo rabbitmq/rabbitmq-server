@@ -564,6 +564,7 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0 },
         FoldState1 = reduce_fd_usage(Segment, FoldState0),
         {Fd, FoldState} = get_fd_for_segment(Segment, FoldState1),
         ok = file:pwrite(Fd, LocBytes),
+        file_handle_cache_stats:update(queue_index_write),
         FoldState
     end, State0, Writes),
     %% Finally we update the state.
@@ -813,6 +814,7 @@ read_from_disk(SeqIdsToRead0, State0 = #mqistate{ write_buffer = WriteBuffer }, 
     %% @todo We should limit the read size to avoid creating 2MB binaries all of a sudden...
     ReadSize = (LastSeqId - FirstSeqId + 1) * ?ENTRY_SIZE,
     {Fd, OffsetForSeqId, State} = get_fd(FirstSeqId, State0),
+    file_handle_cache_stats:update(queue_index_read),
     {ok, EntriesBin} = file:pread(Fd, OffsetForSeqId, ReadSize),
     %% We cons new entries into the Acc and only reverse it when we
     %% are completely done reading new entries.
