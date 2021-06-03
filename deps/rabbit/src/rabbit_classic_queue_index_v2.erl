@@ -495,7 +495,8 @@ reduce_fd_usage(SegmentToOpen, State = #mqistate{ fds = OpenFds0 }) ->
             %% We know we have 4 FDs open. Because we are typically reading
             %% or acking the oldest and writing to the newest, we will close
             %% the FDs in the middle here.
-            [_Left, MidLeft, MidRight, _Right] = lists:sort(maps:keys(OpenFds0)),
+            OpenSegments = lists:sort(maps:keys(OpenFds0)),
+            [_Left, MidLeft, MidRight, _Right] = OpenSegments,
             SegmentToClose = if
                 %% We are opening a segment after the mid right FD. Close it.
                 SegmentToOpen > MidRight ->
@@ -511,6 +512,7 @@ reduce_fd_usage(SegmentToOpen, State = #mqistate{ fds = OpenFds0 }) ->
                 true ->
                     MidLeft
             end,
+            ?DEBUG("~0p ~0p ~0p", [SegmentToOpen, OpenSegments, SegmentToClose]),
             {Fd, OpenFds} = maps:take(SegmentToClose, OpenFds0),
             ok = file:close(Fd),
             State#mqistate{ fds = OpenFds }
