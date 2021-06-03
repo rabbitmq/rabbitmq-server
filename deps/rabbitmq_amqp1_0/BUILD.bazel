@@ -42,9 +42,13 @@ rabbitmq_lib(
     deps = DEPS,
 )
 
-xref(tags = ["xref"])
+xref(
+    size = "small",
+    tags = ["xref"],
+)
 
 dialyze(
+    size = "small",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = "//:base_plt",
     tags = ["dialyze"],
@@ -57,6 +61,7 @@ PACKAGE = "deps/rabbitmq_amqp1_0"
 rabbitmq_integration_suite(
     PACKAGE,
     name = "amqp10_client_SUITE",
+    size = "small",
     runtime_deps = [
         "//deps/amqp10_client:bazel_erlang_lib",
     ],
@@ -65,6 +70,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "command_SUITE",
+    size = "small",
     deps = [
         "//deps/amqp10_common:bazel_erlang_lib",
     ],
@@ -73,11 +79,13 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "proxy_protocol_SUITE",
+    size = "small",
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "system_SUITE",
+    flaky = True,
     groups = [
         "dotnet",
         "java",
@@ -92,6 +100,7 @@ rabbitmq_integration_suite(
 
 rabbitmq_suite(
     name = "unit_SUITE",
+    size = "small",
     deps = [
         "//deps/amqp10_common:bazel_erlang_lib",
     ],
