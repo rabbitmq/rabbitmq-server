@@ -162,6 +162,10 @@ defmodule TestHelper do
               [queue_name, durable, auto_delete, args, owner, "acting-user"])
   end
 
+  def declare_stream(name, vhost) do
+    declare_queue(name, vhost, true, false, [{"x-queue-type", :longstr, "stream"}])
+  end
+
   def delete_queue(name, vhost) do
     queue_name = :rabbit_misc.r(vhost, :queue, name)
     :rpc.call(get_rabbit_hostname(),

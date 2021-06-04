@@ -29,6 +29,8 @@ defmodule RabbitMQ.CLI.Streams.Commands.DeleteReplicaCommand do
       {:error, :quorum_queue_not_supported} ->
         {:error, "Cannot delete replicas from a quorum queue"}
 
+      {:error, :last_stream_member} ->
+        {:error, "Cannot delete the last member of a stream"}
       other ->
         other
     end
