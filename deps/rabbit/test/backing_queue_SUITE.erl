@@ -124,8 +124,8 @@ setup_file_handle_cache(Config) ->
 
 setup_file_handle_cache1() ->
     %% FIXME: Why are we doing this?
-    application:set_env(rabbit, file_handles_high_watermark, 10),
-    ok = file_handle_cache:set_limit(10),
+    application:set_env(rabbit, file_handles_high_watermark, 100),
+    ok = file_handle_cache:set_limit(100),
     ok.
 
 end_per_group(Group, Config) ->
