@@ -73,8 +73,10 @@ is_process_running(Node, Process) ->
 -spec cluster_name() -> binary().
 
 cluster_name() ->
-    rabbit_runtime_parameters:value_global(
-      cluster_name, cluster_name_default()).
+    case rabbit_runtime_parameters:value_global(cluster_name) of 
+        not_found -> cluster_name_default();
+        Name -> Name
+    end.
 
 cluster_name_default() ->
     {ID, _} = parts(node()),
