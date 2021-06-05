@@ -1628,7 +1628,7 @@ handle_cast({force_event_refresh, Ref},
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State), Ref),
     QName = qname(State),
     AllConsumers = rabbit_queue_consumers:all(Consumers),
-    rabbit_log:debug("Queue ~s forced to re-emit events, consumers: ~p", [rabbit_misc:rs(QName), AllConsumers]),
+    _ = rabbit_log:debug("Queue ~s forced to re-emit events, consumers: ~p", [rabbit_misc:rs(QName), AllConsumers]),
     [emit_consumer_created(
        Ch, CTag, ActiveOrExclusive, AckRequired, QName, Prefetch,
        Args, Ref, ActingUser) ||

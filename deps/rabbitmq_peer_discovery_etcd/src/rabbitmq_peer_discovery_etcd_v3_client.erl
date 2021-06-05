@@ -38,7 +38,7 @@
 %% don't allow node lease key TTL to be lower than this
 %% as overly low values can cause annoying timeouts in etcd client operations
 -define(MINIMUM_NODE_KEY_LEASE_TTL, 15).
-%% default randomized delay range is 5s to 60s, so this value
+%% default randomized delay range was 5s to 60s, so this value
 %% produces a comparable delay
 -define(DEFAULT_LOCK_WAIT_TTL, 70).
 %% don't allow lock lease TTL to be lower than this

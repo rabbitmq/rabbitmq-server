@@ -100,9 +100,7 @@ list_nodes() ->
 -spec supports_registration() -> boolean().
 
 supports_registration() ->
-    %% see rabbitmq-peer-discovery-aws#17
-    true.
-
+    false.
 
 -spec register() -> ok.
 register() ->
@@ -117,15 +115,44 @@ unregister() ->
 post_registration() ->
     ok.
 
--spec lock(Node :: atom()) -> not_supported.
+-spec lock(Node :: node()) -> {ok, {ResourceId :: string(), LockRequesterId :: node()}} | {error, Reason :: string()}.
 
-lock(_Node) ->
-    not_supported.
+lock(Node) ->
+  %% call list_nodes/0 externally such that meck can mock the function
+  case ?MODULE:list_nodes() of
+    {ok, {[], disc}} ->
+          {error, "Cannot lock since no nodes got discovered."};
+    {ok, {Nodes, disc}} ->
+      case lists:member(Node, Nodes) of
+        true ->
+          _ = rabbit_log:info("Will try to lock connecting to nodes ~p", [Nodes]),
+          LockId = rabbit_nodes:lock_id(Node),
+          Retries = rabbit_nodes:lock_retries(),
+          case global:set_lock(LockId, Nodes, Retries) of
+            true ->
+              {ok, LockId};
+            false ->
+              {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
+          end;
+        false ->
+          %% Don't try to acquire the global lock when our own node is not discoverable by peers.
+          %% We shouldn't run into this branch because our node is running and should have been discovered.
+          {error, lists:flatten(io_lib:format("Local node ~s is not part of discovered nodes ~p", [Node, Nodes]))}
+      end;
+    {error, _} = Error ->
+      Error
+  end.
 
--spec unlock(Data :: term()) -> ok.
+-spec unlock({ResourceId :: string(), LockRequesterId :: node()}) -> ok | {error, Reason :: string()}.
 
-unlock(_Data) ->
-    ok.
+unlock(LockId) ->
+  case ?MODULE:list_nodes() of
+    {ok, {Nodes, disc}} ->
+      global:del_lock(LockId, Nodes),
+      ok;
+    {error, _} = Error ->
+      Error
+  end.
 
 %%
 %% Implementation

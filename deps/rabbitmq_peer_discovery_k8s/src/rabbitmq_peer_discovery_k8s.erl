@@ -5,15 +5,14 @@
 %% Copyright (c) 2007-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
-%% This module exists as an alias for rabbit_peer_discovery_aws.
+%% This module exists as an alias for rabbit_peer_discovery_k8s.
 %% Some users assume that the discovery module is the same as plugin
 %% name. This module tries to fill the naming gap between module and plugin names.
 -module(rabbitmq_peer_discovery_k8s).
 -behaviour(rabbit_peer_discovery_backend).
 
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1, randomized_startup_delay_range/0,
-         send_event/3, generate_v1_event/7]).
+         post_registration/0, lock/1, unlock/1, send_event/3, generate_v1_event/7]).
 
 -define(DELEGATE, rabbit_peer_discovery_k8s).
 
@@ -45,17 +44,13 @@ unregister() ->
 post_registration() ->
     ?DELEGATE:post_registration().
 
--spec lock(Node :: atom()) -> not_supported.
+-spec lock(Node :: node()) -> {ok, {ResourceId :: string(), LockRequesterId :: node()}} | {error, Reason :: string()}.
 lock(Node) ->
     ?DELEGATE:lock(Node).
 
--spec unlock(Data :: term()) -> ok.
+-spec unlock({ResourceId :: string(), LockRequesterId :: node()}) -> ok | {error, Reason :: string()}.
 unlock(Data) ->
     ?DELEGATE:unlock(Data).
-
--spec randomized_startup_delay_range() -> {integer(), integer()}.
-randomized_startup_delay_range() ->
-    ?DELEGATE:randomized_startup_delay_range().
 
 generate_v1_event(Namespace, Name, Type, Message, Reason, Timestamp, HostName) ->
     ?DELEGATE:generate_v1_event(Namespace, Name, Type, Message, Reason, Timestamp, HostName).

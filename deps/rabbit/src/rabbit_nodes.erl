@@ -15,6 +15,7 @@
          boot/0]).
 -export([persistent_cluster_id/0, seed_internal_cluster_id/0, seed_user_provided_cluster_name/0]).
 -export([all_running_with_hashes/0]).
+-export([lock_id/1, lock_retries/0]).
 
 -include_lib("kernel/include/inet.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -22,6 +23,12 @@
 -define(SAMPLING_INTERVAL, 1000).
 
 -define(INTERNAL_CLUSTER_ID_PARAM_NAME, internal_cluster_id).
+
+% Retries as passed to https://erlang.org/doc/man/global.html#set_lock-3
+% To understand how retries map to the timeout, read
+% https://github.com/erlang/otp/blob/d256ae477014158a49bb860b283df9c040011197/lib/kernel/src/global.erl#L2062-L2075
+% 80 corresponds to a timeout of ca 300 seconds.
+-define(DEFAULT_LOCK_RETRIES, 80).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -162,3 +169,16 @@ await_running_count_with_retries(TargetCount, Retries) ->
 -spec all_running_with_hashes() -> #{non_neg_integer() => node()}.
 all_running_with_hashes() ->
     maps:from_list([{erlang:phash2(Node), Node} || Node <- all_running()]).
+
+-spec lock_id(Node :: node()) -> {ResourceId :: string(), LockRequesterId :: node()}.
+lock_id(Node) ->
+  {cookie_hash(), Node}.
+
+-spec lock_retries() -> integer().
+lock_retries() ->
+  case application:get_env(rabbit, cluster_formation) of
+      {ok, PropList} ->
+        proplists:get_value(internal_lock_retries, PropList, ?DEFAULT_LOCK_RETRIES);
+      undefined ->
+          ?DEFAULT_LOCK_RETRIES
+  end.
