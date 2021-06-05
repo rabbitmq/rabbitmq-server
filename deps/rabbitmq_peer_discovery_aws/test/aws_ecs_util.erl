@@ -23,7 +23,7 @@
          public_dns_names/1,
          fetch_nodes_endpoint/2]).
 
--define(ECS_CLUSTER_TIMEOUT, 120000).
+-define(ECS_CLUSTER_TIMEOUT, 120_000).
 
 %% NOTE:
 %% These helpers assume certain permissions associated with the aws credentials

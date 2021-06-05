@@ -14,7 +14,8 @@
 
 all() ->
     [
-     {group, unit}
+     {group, unit},
+     {group, lock}
     ].
 
 groups() ->
@@ -23,7 +24,14 @@ groups() ->
                  maybe_add_tag_filters,
                  get_hostname_name_from_reservation_set,
                  registration_support
-                ]}].
+                ]},
+     {lock, [], [
+                 lock_single_node,
+                 lock_multiple_nodes,
+                 lock_local_node_not_discovered,
+                 lock_list_nodes_fails
+                ]}
+    ].
 
 %%%
 %%% Testcases
@@ -63,7 +71,36 @@ get_hostname_name_from_reservation_set(_Config) ->
     }.
 
 registration_support(_Config) ->
-    ?assertEqual(rabbit_peer_discovery_aws:supports_registration(), true).
+    ?assertEqual(false, rabbit_peer_discovery_aws:supports_registration()).
+
+lock_single_node(_Config) ->
+  LocalNode = node(),
+  meck:expect(rabbit_peer_discovery_aws, list_nodes, 0, {ok, {[LocalNode], disc}}),
+
+  {ok, LockId} = rabbit_peer_discovery_aws:lock(LocalNode),
+  ?assertEqual(ok, rabbit_peer_discovery_aws:unlock(LockId)).
+
+lock_multiple_nodes(_Config) ->
+  application:set_env(rabbit, cluster_formation, [{internal_lock_retries, 2}]),
+  LocalNode = node(),
+  OtherNode = other@host,
+  meck:expect(rabbit_peer_discovery_aws, list_nodes, 0, {ok, {[OtherNode, LocalNode], disc}}),
+
+  {ok, {LockResourceId, OtherNode}} = rabbit_peer_discovery_aws:lock(OtherNode),
+  ?assertEqual({error, "Acquiring lock taking too long, bailing out after 2 retries"},
+               rabbit_peer_discovery_aws:lock(LocalNode)),
+  ?assertEqual(ok, rabbitmq_peer_discovery_aws:unlock({LockResourceId, OtherNode})),
+  ?assertEqual({ok, {LockResourceId, LocalNode}}, rabbit_peer_discovery_aws:lock(LocalNode)),
+  ?assertEqual(ok, rabbitmq_peer_discovery_aws:unlock({LockResourceId, LocalNode})).
+
+lock_local_node_not_discovered(_Config) ->
+  meck:expect(rabbit_peer_discovery_aws, list_nodes, 0, {ok, {[n1@host, n2@host], disc}} ),
+  Expectation = {error, "Local node me@host is not part of discovered nodes [n1@host,n2@host]"},
+  ?assertEqual(Expectation, rabbit_peer_discovery_aws:lock(me@host)).
+
+lock_list_nodes_fails(_Config) ->
+  meck:expect(rabbit_peer_discovery_aws, list_nodes, 0, {error, "failed for some reason"}),
+  ?assertEqual({error, "failed for some reason"}, rabbit_peer_discovery_aws:lock(me@host)).
 
 %%%
 %%% Implementation

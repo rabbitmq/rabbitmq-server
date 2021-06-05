@@ -82,4 +82,7 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "unit_SUITE",
     size = "small",
+    runtime_deps = [
+        "@meck//:bazel_erlang_lib",
+    ],
 )

@@ -14,9 +14,9 @@
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
 -include("rabbit_peer_discovery_k8s.hrl").
 
+
 -export([init/0, list_nodes/0, supports_registration/0, register/0, unregister/0,
-         post_registration/0, lock/1, unlock/1, randomized_startup_delay_range/0,
-         send_event/3, generate_v1_event/7]).
+         post_registration/0, lock/1, unlock/1, send_event/3, generate_v1_event/7]).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -38,24 +38,27 @@ init() ->
 -spec list_nodes() -> {ok, {Nodes :: list(), NodeType :: rabbit_types:node_type()}} | {error, Reason :: string()}.
 
 list_nodes() ->
-    case make_request() of
-	{ok, Response} ->
-	    Addresses = extract_node_list(Response),
-	    {ok, {lists:map(fun node_name/1, Addresses), disc}};
-	{error, Reason} ->
-	    Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~s", [Reason]),
-        rabbit_log:error(Details),
-        send_event("Warning", "Failed", Details),
-  	    {error, Reason}
-    end.
+  case make_request() of
+    {ok, Response} ->
+      Addresses = extract_node_list(Response),
+      Nodes = lists:map(fun node_name/1, Addresses),
+      {ok, {Nodes, disc}};
+    {error, Reason} ->
+      Details = io_lib:format("Failed to fetch a list of nodes from Kubernetes API: ~s", [Reason]),
+      rabbit_log:error(Details),
+      send_event("Warning", "Failed", Details),
+      {error, Reason}
+  end.
 
 -spec supports_registration() -> boolean().
 
 supports_registration() ->
-    %% see rabbitmq-peer-discovery-aws#17,
-    %%     rabbitmq-peer-discovery-k8s#23
-    true.
+    true. %% to send event in post_registration/0
 
+-spec post_registration() -> ok | {error, Reason :: string()}.
+post_registration() ->
+    Details = io_lib:format("Node ~s is registered", [node()]),
+    send_event("Normal", "Created", Details).
 
 -spec register() -> ok.
 register() ->
@@ -65,28 +68,43 @@ register() ->
 unregister() ->
     ok.
 
--spec post_registration() -> ok | {error, Reason :: string()}.
-post_registration() ->
-    Details = io_lib:format("Node ~s is registered", [node()]),
-    send_event("Normal", "Created", Details).
+-spec lock(Node :: node()) -> {ok, {ResourceId :: string(), LockRequesterId :: node()}} | {error, Reason :: string()}.
 
--spec lock(Node :: atom()) -> not_supported.
+lock(Node) ->
+  %% call list_nodes/0 externally such that meck can mock the function
+  case ?MODULE:list_nodes() of
+    {ok, {Nodes, disc}} ->
+      case lists:member(Node, Nodes) of
+        true ->
+          rabbit_log:info("Will try to lock connecting to nodes ~p", [Nodes]),
+          LockId = rabbit_nodes:lock_id(Node),
+          Retries = rabbit_nodes:lock_retries(),
+          case global:set_lock(LockId, Nodes, Retries) of
+            true ->
+              {ok, LockId};
+            false ->
+              {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
+          end;
+        false ->
+          %% Don't try to acquire the global lock when local node is not discoverable by peers.
+          %% This branch is just an additional safety check. We should never run into this branch
+          %% because the local Pod is in state 'Running' and we listed both ready and not-ready addresses.
+          {error, lists:flatten(io_lib:format("Local node ~s is not part of discovered nodes ~p", [Node, Nodes]))}
+      end;
+    {error, _} = Error ->
+      Error
+  end.
 
-lock(_Node) ->
-    not_supported.
+-spec unlock({ResourceId :: string(), LockRequesterId :: node()}) -> ok | {error, Reason :: string()}.
 
--spec unlock(Data :: term()) -> ok.
-
-unlock(_Data) ->
-    ok.
-
--spec randomized_startup_delay_range() -> {integer(), integer()}.
-
-randomized_startup_delay_range() ->
-    %% Pods in a stateful set are initialized one by one,
-    %% so RSD is not really necessary for this plugin.
-    %% See https://www.rabbitmq.com/cluster-formation.html#peer-discovery-k8s for details.
-    {0, 2}.
+unlock(LockId) ->
+  case ?MODULE:list_nodes() of
+    {ok, {Nodes, disc}} ->
+      global:del_lock(LockId, Nodes),
+      ok;
+    {error, _} = Error ->
+      Error
+  end.
 
 %%
 %% Implementation
@@ -125,32 +143,28 @@ node_name(Address) ->
     ?UTIL_MODULE:node_name(
        ?UTIL_MODULE:as_string(Address) ++ get_config_key(k8s_hostname_suffix, M)).
 
-
-%% @spec maybe_ready_address(k8s_subsets()) -> list()
-%% @doc Return a list of ready nodes
-%% SubSet can contain also "notReadyAddresses"
+%% @spec address(k8s_subsets()) -> list()
+%% @doc Return a list of both ready and not-ready nodes.
+%% For the purpose of peer discovery, consider both ready and not-ready addresses.
+%% Discover peers as quickly as possible not waiting for their readiness check to succeed.
 %% @end
 %%
--spec maybe_ready_address([map()]) -> list().
+-spec address([map()]) -> list().
 
-maybe_ready_address(Subset) ->
-    case maps:get(<<"notReadyAddresses">>, Subset, undefined) of
-      undefined -> ok;
-      NotReadyAddresses ->
-            Formatted = string:join([binary_to_list(get_address(X)) || X <- NotReadyAddresses], ", "),
-            rabbit_log:info("k8s endpoint listing returned nodes not yet ready: ~s", [Formatted])
-    end,
-    maps:get(<<"addresses">>, Subset, []).
+address(Subset) ->
+  maps:get(<<"notReadyAddresses">>, Subset, []) ++
+  maps:get(<<"addresses">>, Subset, []).
 
 %% @doc Return a list of nodes
-%%    see https://kubernetes.io/docs/api-reference/v1/definitions/#_v1_endpoints
+%% "The set of all endpoints is the union of all subsets."
+%%  https://kubernetes.io/docs/reference/kubernetes-api/service-resources/endpoints-v1/
 %% @end
 %%
 -spec extract_node_list(map()) -> list().
 
 extract_node_list(Response) ->
     IpLists = [[get_address(Address)
-		|| Address <- maybe_ready_address(Subset)] || Subset <- maps:get(<<"subsets">>, Response, [])],
+		|| Address <- address(Subset)] || Subset <- maps:get(<<"subsets">>, Response, [])],
     sets:to_list(sets:union(lists:map(fun sets:from_list/1, IpLists))).
 
 
