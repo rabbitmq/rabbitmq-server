@@ -129,6 +129,13 @@ handle_info(#'basic.ack'{} = Ack, State = #state{writer_pid = WriterPid,
         F <- rabbit_amqp1_0_session:flow_fields(Reply, Session)],
     {noreply, state(Session1, State)};
 
+handle_info(#'basic.nack'{} = Nack, State = #state{writer_pid = WriterPid,
+                                                   session  = Session}) ->
+    {Reply, Session1} = rabbit_amqp1_0_session:nack(Nack, Session),
+    [rabbit_amqp1_0_writer:send_command(WriterPid, F) ||
+        F <- rabbit_amqp1_0_session:flow_fields(Reply, Session)],
+    {noreply, state(Session1, State)};
+
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     {noreply, State};
