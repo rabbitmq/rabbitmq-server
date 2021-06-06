@@ -15,6 +15,7 @@ endif
 # --------------------------------------------------------------------
 
 DIALYZER_OPTS ?= -Werror_handling -Wrace_conditions
+DIALYZER_DIRS = -r ebin
 
 # --------------------------------------------------------------------
 # %-on-concourse dependencies.

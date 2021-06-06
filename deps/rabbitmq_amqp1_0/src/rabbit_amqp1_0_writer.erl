@@ -14,7 +14,9 @@
 -export([send_command/2, send_command/3,
          send_command_sync/2, send_command_sync/3,
          send_command_and_notify/4, send_command_and_notify/5]).
--export([internal_send_command/4, internal_send_command/6]).
+-export([internal_send_command/4
+         % internal_send_command/6
+        ]).
 
 %% internal
 -export([mainloop/1, mainloop1/1]).
@@ -25,6 +27,7 @@
 -define(HIBERNATE_AFTER, 5000).
 -define(AMQP_SASL_FRAME_TYPE, 1).
 
+-type frame_type() :: amqp10_framing | rabbit_amqp1_0_sasl.
 %%---------------------------------------------------------------------------
 
 -spec start
@@ -62,13 +65,13 @@
         -> 'ok'.
 -spec internal_send_command
         (rabbit_net:socket(), rabbit_channel:channel_number(),
-         rabbit_framing:amqp_method_record(), rabbit_types:protocol())
+         rabbit_framing:amqp_method_record(), frame_type())
         -> 'ok'.
--spec internal_send_command
-        (rabbit_net:socket(), rabbit_channel:channel_number(),
-         rabbit_framing:amqp_method_record(), rabbit_types:content(),
-         non_neg_integer(), rabbit_types:protocol())
-        -> 'ok'.
+% -spec internal_send_command
+%         (rabbit_net:socket(), rabbit_channel:channel_number(),
+%          rabbit_framing:amqp_method_record(), rabbit_types:content(),
+%          non_neg_integer(), frame_type())
+%         -> 'ok'.
 
 %%---------------------------------------------------------------------------
 
@@ -226,12 +229,12 @@ tcp_send(Sock, Data) ->
 internal_send_command(Sock, Channel, MethodRecord, Protocol) ->
     ok = tcp_send(Sock, assemble_frame(Channel, MethodRecord, Protocol)).
 
-internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax,
-                      Protocol) ->
-    ok = lists:foldl(fun (Frame,     ok) -> tcp_send(Sock, Frame);
-                         (_Frame, Other) -> Other
-                     end, ok, assemble_frames(Channel, MethodRecord,
-                                              Content, FrameMax, Protocol)).
+% internal_send_command(Sock, Channel, MethodRecord, Content, FrameMax,
+%                       Protocol) ->
+%     ok = lists:foldl(fun (Frame,     ok) -> tcp_send(Sock, Frame);
+%                          (_Frame, Other) -> Other
+%                      end, ok, assemble_frames(Channel, MethodRecord,
+%                                               Content, FrameMax, Protocol)).
 
 internal_send_command_async(MethodRecord,
                             State = #wstate{channel   = Channel,

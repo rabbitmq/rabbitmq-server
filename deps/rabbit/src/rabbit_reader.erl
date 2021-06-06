@@ -221,7 +221,7 @@ conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
     ok.
 
--spec server_properties(rabbit_types:protocol()) ->
+-spec server_properties(rabbit_types:protocol_name() | rabbit_types:protocol()) ->
           rabbit_framing:amqp_table().
 
 server_properties(Protocol) ->
@@ -257,6 +257,8 @@ maybe_list_to_binary(V) when is_binary(V) -> V;
 maybe_list_to_binary(V) when is_list(V)   -> list_to_binary(V).
 
 server_capabilities(rabbit_framing_amqp_0_9_1) ->
+    server_capabilities(amqp0_9_1);
+server_capabilities(amqp0_9_1) ->
     [{<<"publisher_confirms">>,           bool, true},
      {<<"exchange_exchange_bindings">>,   bool, true},
      {<<"basic.nack">>,                   bool, true},

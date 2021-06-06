@@ -1,7 +1,7 @@
 PROJECT = amqp10_common
 PROJECT_DESCRIPTION = Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client
 
-DIALYZER_OPTS += --src -r test
+DIALYZER_OPTS += -r test
 
 BUILD_DEPS = rabbit_common
 
