@@ -222,8 +222,9 @@ is_enabled(Type) ->
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(Q, Node) ->
-    Mod = amqqueue:get_type(Q),
-    Mod:declare(Q, Node).
+    Q0 = rabbit_queue_decorator:set(rabbit_policy:set(Q)),
+    Mod = amqqueue:get_type(Q0),
+    Mod:declare(Q0, Node).
 
 -spec delete(amqqueue:amqqueue(), boolean(),
              boolean(), rabbit_types:username()) ->
