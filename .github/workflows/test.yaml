@@ -34,6 +34,8 @@ jobs:
           build --@bazel-erlang//:erlang_home=/usr/lib/erlang
           build --//:elixir_home=/usr/local
 
+          build --incompatible_strict_action_env
+
           build --bes_results_url=https://app.buildbuddy.io/invocation/
           build --bes_backend=grpcs://cloud.buildbuddy.io
           build --remote_cache=grpcs://cloud.buildbuddy.io
@@ -82,6 +84,8 @@ jobs:
           build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@bazel-erlang//:erlang_home=${ERLANG_HOME}
           build --//:elixir_home=${ELIXIR_HOME}
+
+          build --incompatible_strict_action_env
 
           build --bes_results_url=https://app.buildbuddy.io/invocation/
           build --bes_backend=grpcs://cloud.buildbuddy.io
