@@ -375,7 +375,7 @@ recover_index_v1_loop(State0 = #mqistate{ queue_name = Name },
                          HiSeqId]),
     {Messages, V1State} = rabbit_queue_index:read(LoSeqId, UpSeqId, V1State0),
     %% We do a garbage collect immediately after the old index read
-    %% and ack because they may have created a lot of garbage.
+    %% because they may have created a lot of garbage.
     garbage_collect(),
     MessagesCount = length(Messages),
     counters:add(CountersRef, ?RECOVER_COUNT, MessagesCount),
