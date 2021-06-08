@@ -31,6 +31,9 @@
 %% after a non-clean shutdown.
 -export([queue_index_walker_reader/2]).
 
+%% Used to upgrade to the modern index.
+-export([delete_segment_file_for_seq_id/2]).
+
 -define(CLEAN_FILENAME, "clean.dot").
 
 %%----------------------------------------------------------------------------
@@ -1543,3 +1546,22 @@ cleanup_global_recovery_terms() ->
 update_recovery_term(#resource{virtual_host = VHost} = QueueName, Term) ->
     Key = queue_name_to_dir_name(QueueName),
     rabbit_recovery_terms:store(VHost, Key, Term).
+
+
+%%----------------------------------------------------------------------------
+%% Upgrade to the modern index
+%%----------------------------------------------------------------------------
+
+%% This function is only used when upgrading to the new index.
+%% We delete the segment file without updating the state.
+%% We will drop the state later on so we don't care much
+%% about how accurate it is as long as we can read from
+%% subsequent segment files.
+delete_segment_file_for_seq_id(SeqId, #qistate { segments = Segments }) ->
+    {Seg, _} = seq_id_to_seg_and_rel_seq_id(SeqId),
+    case segment_find(Seg, Segments) of
+        {ok, #segment { path = Path }} ->
+            ok = rabbit_file:delete(Path);
+        error ->
+            ok
+    end.
