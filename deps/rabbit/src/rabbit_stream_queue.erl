@@ -729,15 +729,15 @@ delete_replica(VHost, Name, Node) ->
 make_stream_conf(Node, Q) ->
     QName = amqqueue:get_name(Q),
     Name = stream_name(QName),
-    %% MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
-    MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
-    MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun max_age/2, Q)),
-    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun min/2, Q),
+    %% MaxLength = args_policy_lookup(<<"max-length">>, policy_precedence/2, Q),
+    MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun policy_precedence/2, Q),
+    MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun policy_precedence/2, Q)),
+    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun policy_precedence/2, Q),
     LeaderLocator = queue_leader_locator(args_policy_lookup(<<"queue-leader-locator">>,
-                                                            fun res_arg/2, Q)),
+                                                            fun policy_precedence/2, Q)),
     InitialClusterSize = initial_cluster_size(
                            args_policy_lookup(<<"initial-cluster-size">>,
-                                              fun res_arg/2, Q)),
+                                              fun policy_precedence/2, Q)),
     Replicas0 = rabbit_mnesia:cluster_nodes(all) -- [Node],
     %% TODO: try to avoid nodes that are not connected
     Replicas = select_stream_nodes(InitialClusterSize - 1, Replicas0),
@@ -776,9 +776,9 @@ select_stream_nodes(Size, Rest, Selected) ->
 update_stream_conf(undefined, #{} = Conf) ->
     Conf;
 update_stream_conf(Q, #{} = Conf) when ?is_amqqueue(Q) ->
-    MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
-    MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun max_age/2, Q)),
-    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun min/2, Q),
+    MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun policy_precedence/2, Q),
+    MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun policy_precedence/2, Q)),
+    MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun policy_precedence/2, Q),
     Retention = lists:filter(fun({_, R}) ->
                                      R =/= undefined
                              end, [{max_bytes, MaxBytes},
@@ -801,9 +801,6 @@ max_age(Bin) when is_binary(Bin) ->
 max_age(Age) ->
     Age.
 
-max_age(Age1, Age2) ->
-    min(rabbit_amqqueue:check_max_age(Age1), rabbit_amqqueue:check_max_age(Age2)).
-
 queue_leader_locator(undefined) -> <<"client-local">>;
 queue_leader_locator(Val) -> Val.
 
@@ -812,8 +809,8 @@ initial_cluster_size(undefined) ->
 initial_cluster_size(Val) ->
     Val.
 
-res_arg(PolVal, undefined) -> PolVal;
-res_arg(_, ArgVal) ->  ArgVal.
+policy_precedence(PolVal, _ArgVal) ->
+    PolVal.
 
 stream_name(#resource{virtual_host = VHost, name = Name}) ->
     Timestamp = erlang:integer_to_binary(erlang:system_time()),

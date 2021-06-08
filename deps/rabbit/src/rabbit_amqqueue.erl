@@ -222,7 +222,7 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
     Type = get_queue_type(Args),
     case rabbit_queue_type:is_enabled(Type) of
         true ->
-            Q0 = amqqueue:new(QueueName,
+            Q = amqqueue:new(QueueName,
                               none,
                               Durable,
                               AutoDelete,
@@ -231,8 +231,6 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
                               VHost,
                               #{user => ActingUser},
                               Type),
-            Q = rabbit_queue_decorator:set(
-                  rabbit_policy:set(Q0)),
             rabbit_queue_type:declare(Q, Node);
         false ->
             {protocol_error, internal_error,

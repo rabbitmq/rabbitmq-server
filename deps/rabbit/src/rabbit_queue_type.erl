@@ -221,7 +221,8 @@ is_enabled(Type) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
-declare(Q, Node) ->
+declare(Q0, Node) ->
+    Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
     Mod = amqqueue:get_type(Q),
     Mod:declare(Q, Node).
 

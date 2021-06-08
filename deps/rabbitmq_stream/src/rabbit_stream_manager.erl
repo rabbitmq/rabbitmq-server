@@ -182,7 +182,7 @@ handle_call({create, VirtualHost, Reference, Arguments, Username},
                         {reply, {error, reference_already_exists}, State};
                     {error, not_found} ->
                         try
-                            case rabbit_stream_queue:declare(Q0, node()) of
+                            case rabbit_queue_type:declare(Q0, node()) of
                                 {new, Q} ->
                                     {reply, {ok, amqqueue:get_type_state(Q)},
                                      State};
