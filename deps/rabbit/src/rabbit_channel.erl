@@ -2641,6 +2641,9 @@ handle_method(#'queue.delete'{queue     = QueueNameBin,
             precondition_failed("~s in use", [rabbit_misc:rs(QueueName)]);
         {error, not_empty} ->
             precondition_failed("~s not empty", [rabbit_misc:rs(QueueName)]);
+        {error, {exit, _, _}} ->
+            %% rabbit_amqqueue:delete()/delegate:invoke might return {error, {exit, _, _}}
+            {ok, 0};
         {ok, Count} ->
             {ok, Count}
     end;
