@@ -520,8 +520,8 @@ write(MsgId, Msg, CState) -> client_write(MsgId, Msg, noflow, CState).
 
 %% Used when upgrading to the modern index.
 sync_write(MsgId, Msg,
-             CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
-                                        client_ref         = CRef }) ->
+           CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
+                                      client_ref         = CRef }) ->
     file_handle_cache_stats:update(msg_store_write),
     ok = client_update_flying(+1, MsgId, CState),
     ok = update_msg_cache(CurFileCacheEts, MsgId, Msg),
