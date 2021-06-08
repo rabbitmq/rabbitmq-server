@@ -1444,11 +1444,12 @@ handle_frame_post_auth(Transport,
                                   SubscriptionId,
                                   self()},
                                  []},
-                            {ok, Segment} =
-                                osiris:init_reader(LocalMemberPid,
-                                                   OffsetSpec,
-                                                   CounterSpec,
-                                                   ConnTransport),
+                            Options = #{transport => ConnTransport,
+                                        chunk_selector => get_chunk_selector(Properties)},
+                            {ok, Segment} = osiris:init_reader(LocalMemberPid,
+                                                               OffsetSpec,
+                                                               CounterSpec,
+                                                               Options),
                             rabbit_log:info("Next offset for subscription ~p is ~p",
                                             [SubscriptionId,
                                              osiris_log:next_offset(Segment)]),
@@ -2578,3 +2579,6 @@ ssl_info(F, #stream_connection{socket = Sock}) ->
                 proplists:get_value(selected_cipher_suite, Items),
             F({P, {K, C, H}})
     end.
+
+get_chunk_selector(Properties) ->
+    binary_to_atom(maps:get(<<"chunk_selector">>, Properties, <<"user_data">>)).
