@@ -580,6 +580,7 @@
 ## If a message delivered to a consumer has not been acknowledge before this timer
 ## triggers the channel will be force closed by the broker. This ensure that
 ## faultly consumers that never ack will not hold on to messages indefinitely.
+## Set it to 'false' to disable.
 ##
 # consumer_timeout = 900000
 
