@@ -335,6 +335,21 @@ listen_loop_pre_auth(Transport,
             rabbit_log:info("Transitioned from ~p to ~p",
                             [ConnectionStep0, ConnectionStep]),
             case ConnectionStep of
+                peer_properties_exchanged when ConnectionStep0 =:= tcp_connected ->
+                    listen_loop_pre_auth(Transport,
+                                         Connection1,
+                                         State1,
+                                         Configuration);
+                authenticating when ConnectionStep0 =:= peer_properties_exchanged ->
+                    listen_loop_pre_auth(Transport,
+                                         Connection1,
+                                         State1,
+                                         Configuration);
+                tuned when ConnectionStep0 =:= tuning ->
+                    listen_loop_pre_auth(Transport,
+                                         Connection1,
+                                         State1,
+                                         Configuration);
                 authenticated ->
                     Frame =
                         rabbit_stream_core:frame({tune, FrameMax, Heartbeat}),
@@ -366,19 +381,23 @@ listen_loop_pre_auth(Transport,
                                           Connection3,
                                           State1,
                                           Configuration);
-                failure ->
-                    close(Transport, S, State);
                 _ ->
-                    listen_loop_pre_auth(Transport,
-                                         Connection1,
-                                         State1,
-                                         Configuration)
+                    rabbit_log:warning("Closing socket ~w because transition from ~p to ~p is not allowed",
+                                    [S, ConnectionStep0, ConnectionStep]),
+                    case Connection1#stream_connection.authentication_state of
+                      done ->
+                        close(Transport, S, State);
+                      _ ->
+                        % for unauthenticated clients, shut down socket immediately
+                        Transport:shutdown(S, read),
+                        Transport:close(S)
+                    end
             end;
         {Closed, S} ->
-            rabbit_log:info("Socket ~w closed [~w]", [S, self()]),
+            rabbit_log:info("Socket ~w closed", [S]),
             ok;
         {Error, S, Reason} ->
-            rabbit_log:info("Socket error ~p [~w] [~w]", [Reason, S, self()]);
+            rabbit_log:info("Socket error ~p [~w]", [Reason, S]);
         M ->
             rabbit_log:warning("Unknown message ~p", [M]),
             close(Transport, S, State)
@@ -896,9 +915,9 @@ handle_frame_pre_auth(Transport,
                                    ServerProperties}}),
     send(Transport, S, Frame),
     {Connection#stream_connection{client_properties = ClientProperties,
-                                  authentication_state =
-                                      peer_properties_exchanged},
-     State};
+                                  authentication_state = peer_properties_exchanged,
+                                  connection_step = peer_properties_exchanged
+                                 }, State};
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S} = Connection,
                       State,
@@ -909,7 +928,7 @@ handle_frame_pre_auth(Transport,
                                   {sasl_handshake, ?RESPONSE_CODE_OK,
                                    Mechanisms}}),
     send(Transport, S, Frame),
-    {Connection, State};
+    {Connection#stream_connection{connection_step = authenticating}, State};
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S,
                                          authentication_state = AuthState0,
