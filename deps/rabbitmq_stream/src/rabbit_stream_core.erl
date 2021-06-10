@@ -72,6 +72,7 @@
     {deliver, subscription_id(), Chunk :: binary()} |
     {credit, subscription_id(), Credit :: non_neg_integer()} |
     {metadata_update, stream_name(), response_code()} |
+    {commit_offset, offset_ref(), stream_name(), osiris:offset()} |
     heartbeat |
     {tune, FrameMax :: non_neg_integer(),
      HeartBeat :: non_neg_integer()} |
@@ -85,7 +86,6 @@
       offset_spec(),
       credit(),
       Properties :: #{binary() => binary()}} |
-     {commit_offset, offset_ref(), stream_name(), osiris:offset()} |
      {query_offset, offset_ref(), stream_name()} |
      {unsubscribe, subscription_id()} |
      {create_stream, stream_name(), Args :: #{binary() => binary()}} |
@@ -236,6 +236,17 @@ frame({metadata_update, Stream, ResponseCode}) ->
                     ResponseCode:16,
                     StreamSize:16,
                     Stream/binary>>);
+frame({commit_offset, Reference, Stream, Offset}) ->
+    ReferenceSize = byte_size(Reference),
+    StreamSize = byte_size(Stream),
+    wrap_in_frame(<<?REQUEST:1,
+                    ?COMMAND_COMMIT_OFFSET:15,
+                    ?VERSION_1:16,
+                    ReferenceSize:16,
+                    Reference/binary,
+                    StreamSize:16,
+                    Stream/binary,
+                    Offset:64>>);
 frame(heartbeat) ->
     wrap_in_frame(<<?REQUEST:1, ?COMMAND_HEARTBEAT:15, ?VERSION_1:16>>);
 frame({credit, SubscriptionId, Credit}) ->
@@ -461,9 +472,7 @@ request_body({subscribe = Tag,
                 [<<(map_size(Properties)):32>>, PropsBin]
         end,
     {Tag,
-     [<<SubscriptionId:8,
-        ?STRING(Stream),
-        Data/binary>> | PropertiesBin]};
+     [<<SubscriptionId:8, ?STRING(Stream), Data/binary>> | PropertiesBin]};
 request_body({commit_offset = Tag, OffsetRef, Stream, Offset}) ->
     {Tag, <<?STRING(OffsetRef), ?STRING(Stream), Offset:64>>};
 request_body({query_offset = Tag, OffsetRef, Stream}) ->
@@ -565,6 +574,13 @@ parse_request(<<?REQUEST:1,
                 StreamSize:16,
                 Stream:StreamSize/binary>>) ->
     {metadata_update, Stream, ResponseCode};
+parse_request(<<?REQUEST:1,
+                ?COMMAND_COMMIT_OFFSET:15,
+                ?VERSION_1:16,
+                ?STRING(RefSize, OffsetRef),
+                ?STRING(SSize, Stream),
+                Offset:64>>) ->
+    {commit_offset, OffsetRef, Stream, Offset};
 parse_request(<<?REQUEST:1, ?COMMAND_HEARTBEAT:15, ?VERSION_1:16>>) ->
     heartbeat;
 parse_request(<<?REQUEST:1,
@@ -636,15 +652,6 @@ parse_request(<<?REQUEST:1,
              OffsetSpec,
              Credit,
              Properties});
-parse_request(<<?REQUEST:1,
-                ?COMMAND_COMMIT_OFFSET:15,
-                ?VERSION_1:16,
-                CorrelationId:32,
-                ?STRING(RefSize, OffsetRef),
-                ?STRING(SSize, Stream),
-                Offset:64>>) ->
-    %% NB: this request has no response so ignoring correlation id here
-    request(CorrelationId, {commit_offset, OffsetRef, Stream, Offset});
 parse_request(<<?REQUEST:1,
                 ?COMMAND_QUERY_OFFSET:15,
                 ?VERSION_1:16,

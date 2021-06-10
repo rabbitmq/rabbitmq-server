@@ -60,6 +60,7 @@ roundtrip(_Config) ->
     test_roundtrip({credit, 53, 12}),
     test_roundtrip({metadata_update, <<"stream1">>,
                     ?RESPONSE_VHOST_ACCESS_FAILURE}),
+    test_roundtrip({commit_offset, <<"offset_ref">>, <<"stream">>, 12}),
     test_roundtrip(heartbeat),
     test_roundtrip({tune, 53, 12}),
     %% REQUESTS
@@ -80,8 +81,6 @@ roundtrip(_Config) ->
                 first,
                 65432,
                 {timestamp, erlang:system_time(millisecond)}]],
-    test_roundtrip({request, 99,
-                    {commit_offset, <<"offset_ref">>, <<"stream">>, 12}}),
     test_roundtrip({request, 99,
                     {query_offset, <<"offset_ref">>, <<"stream">>}}),
     test_roundtrip({request, 99, {unsubscribe, 53}}),
