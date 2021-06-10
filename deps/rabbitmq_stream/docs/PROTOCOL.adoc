@@ -369,7 +369,6 @@ NB: the server sent a response only in case of problem, e.g. crediting an unknow
 CommitOffset => Key Version Reference Stream Offset
   Key => uint16 // 10
   Version => uint16
-  CorrelationId => uint32 // not used yet
   Reference => string // max 256 characters
   SubscriptionId => uint8
   Offset => uint64

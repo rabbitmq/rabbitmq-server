@@ -1444,12 +1444,15 @@ handle_frame_post_auth(Transport,
                                   SubscriptionId,
                                   self()},
                                  []},
-                            Options = #{transport => ConnTransport,
-                                        chunk_selector => get_chunk_selector(Properties)},
-                            {ok, Segment} = osiris:init_reader(LocalMemberPid,
-                                                               OffsetSpec,
-                                                               CounterSpec,
-                                                               Options),
+                            Options =
+                                #{transport => ConnTransport,
+                                  chunk_selector =>
+                                      get_chunk_selector(Properties)},
+                            {ok, Segment} =
+                                osiris:init_reader(LocalMemberPid,
+                                                   OffsetSpec,
+                                                   CounterSpec,
+                                                   Options),
                             rabbit_log:info("Next offset for subscription ~p is ~p",
                                             [SubscriptionId,
                                              osiris_log:next_offset(Segment)]),
@@ -1586,8 +1589,7 @@ handle_frame_post_auth(_Transport,
                                           user = User} =
                            Connection,
                        State,
-                       {request, _CorrelationId,
-                        {commit_offset, Reference, Stream, Offset}}) ->
+                       {commit_offset, Reference, Stream, Offset}) ->
     case rabbit_stream_utils:check_write_permitted(#resource{name =
                                                                  Stream,
                                                              kind = queue,
@@ -2581,4 +2583,5 @@ ssl_info(F, #stream_connection{socket = Sock}) ->
     end.
 
 get_chunk_selector(Properties) ->
-    binary_to_atom(maps:get(<<"chunk_selector">>, Properties, <<"user_data">>)).
+    binary_to_atom(maps:get(<<"chunk_selector">>, Properties,
+                            <<"user_data">>)).
