@@ -282,16 +282,16 @@ test_successful_connection_with_keycloak_token(Config) ->
 
 test_successful_token_refresh(Config) ->
     Duration = 5,
-    {_Algo, Token} = generate_expirable_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
-                                                       <<"rabbitmq.write:vhost1/*">>,
-                                                       <<"rabbitmq.read:vhost1/*">>],
-                                                       Duration),
+    {_, Token} = generate_expirable_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
+                                                   <<"rabbitmq.write:vhost1/*">>,
+                                                   <<"rabbitmq.read:vhost1/*">>],
+                                                   Duration),
     Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
 
-    {_Algo, Token2} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
-                                                    <<"rabbitmq.write:vhost1/*">>,
-                                                    <<"rabbitmq.read:vhost1/*">>]),
+    {_, Token2} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
+                                                <<"rabbitmq.write:vhost1/*">>,
+                                                <<"rabbitmq.read:vhost1/*">>]),
     ?UTIL_MOD:wait_for_token_to_expire(timer:seconds(Duration)),
     ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2, <<"token refresh">>)),
 
@@ -335,17 +335,17 @@ test_failed_connection_with_a_token_with_insufficient_resource_permission(Config
     close_connection(Conn).
 
 test_failed_token_refresh_case1(Config) ->
-    {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
-                                                   <<"rabbitmq.write:vhost4/*">>,
-                                                   <<"rabbitmq.read:vhost4/*">>]),
+    {_, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
+                                               <<"rabbitmq.write:vhost4/*">>,
+                                               <<"rabbitmq.read:vhost4/*">>]),
     Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
 
-    {_Algo, Token2} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
-                                                      <<"rabbitmq.write:vhost4/*">>,
-                                                      <<"rabbitmq.read:vhost4/*">>]),
+    {_, Token2} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
+                                                  <<"rabbitmq.write:vhost4/*">>,
+                                                  <<"rabbitmq.read:vhost4/*">>]),
     %% the error is communicated asynchronously via a connection-level error
     ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2, <<"token refresh">>)),
 
