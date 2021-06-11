@@ -307,8 +307,10 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, MsgStoreRecovered,
                             on_sync_msg = OnSyncMsgFun},
     CleanShutdown = Terms /= non_clean_shutdown,
     case CleanShutdown andalso MsgStoreRecovered of
-        true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
-                 init_clean(RecoveredCounts, State1);
+        true  -> case proplists:get_value(segments, Terms, non_clean_shutdown) of
+                     non_clean_shutdown -> init_dirty(false, ContainsCheckFun, State1);
+                     RecoveredCounts    -> init_clean(RecoveredCounts, State1)
+                 end;
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
