@@ -89,6 +89,7 @@ dep_rabbitmq_shovel                   = git_rmq-subfolder rabbitmq-shovel $(curr
 dep_rabbitmq_shovel_management        = git_rmq-subfolder rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_stomp                    = git_rmq-subfolder rabbitmq-stomp $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_stream                   = git_rmq-subfolder rabbitmq-stream $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_stream_common            = git_rmq-subfolder rabbitmq-stream-common $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_stream_management        = git_rmq-subfolder rabbitmq-stream-management $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_stream_prometheus        = git_rmq-subfolder rabbitmq-stream-prometheus $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_toke                     = git_rmq           rabbitmq-toke $(current_rmq_ref) $(base_rmq_ref) master
@@ -176,6 +177,7 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_shovel_management \
 		      rabbitmq_stomp \
 		      rabbitmq_stream \
+		      rabbitmq_stream_common \
 		      rabbitmq_stream_management \
 		      rabbitmq_stream_prometheus \
 		      rabbitmq_toke \

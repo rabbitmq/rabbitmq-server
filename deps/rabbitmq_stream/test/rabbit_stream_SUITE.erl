@@ -21,7 +21,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--include("rabbit_stream.hrl").
+-include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 -include("rabbit_stream_metrics.hrl").
 
 -compile(nowarn_export_all).

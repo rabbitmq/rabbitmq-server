@@ -21,7 +21,7 @@ define PROJECT_ENV
 endef
 
 
-DEPS = rabbit
+DEPS = rabbit rabbitmq_stream_common
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk

@@ -1,0 +1,23 @@
+= RabbitMQ Stream Common Plugin
+
+== Project Maturity
+
+The project is in early stages of development and is considered experimental.
+It is not ready for production use.
+
+== Support
+
+* For questions: https://groups.google.com/forum/#!forum/rabbitmq-users[RabbitMQ Users]
+* For bugs and feature requests: https://github.com/rabbitmq/rabbitmq-server/issues[GitHub Issues]
+
+The project is currently under development, there is no guarantee yet that it will be maintained and supported
+in the future (read: you are welcome to experiment with it and give feedback, but please do not base
+your whole business on it).
+
+== Licensing
+
+Released under the link:LICENSE-MPL-RabbitMQ[MPL 2.0].
+
+== Copyright
+
+(c) 2020-2021 VMware, Inc. or its affiliates.

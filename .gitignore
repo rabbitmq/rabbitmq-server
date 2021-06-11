@@ -40,6 +40,7 @@
 !/deps/rabbitmq_shovel_management/
 !/deps/rabbitmq_stomp/
 !/deps/rabbitmq_stream/
+!/deps/rabbitmq_stream_common/
 !/deps/rabbitmq_stream_management/
 !/deps/rabbitmq_stream_prometheus/
 !/deps/rabbitmq_top/
