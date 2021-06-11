@@ -37,7 +37,10 @@ groups() ->
       [test_stream,
        test_stream_tls,
        test_gc_consumers,
-       test_gc_publishers]},
+       test_gc_publishers,
+       unauthenticated_client_rejected_tcp_connected,
+       unauthenticated_client_rejected_peer_properties_exchanged,
+       unauthenticated_client_rejected_authenticating]},
      {cluster, [], [test_stream, test_stream_tls, java]}].
 
 init_per_suite(Config) ->
@@ -139,6 +142,29 @@ test_gc_publishers(Config) ->
                                   <<"ref">>]),
     ?awaitMatch(0, publisher_count(Config), ?WAIT),
     ok.
+
+unauthenticated_client_rejected_tcp_connected(Config) ->
+    Port = get_stream_port(Config),
+    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    ?assertEqual(ok, gen_tcp:send(S, <<"invalid data">>)),
+    ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+unauthenticated_client_rejected_peer_properties_exchanged(Config) ->
+    Port = get_stream_port(Config),
+    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    C0 = rabbit_stream_core:init(0),
+    test_peer_properties(gen_tcp, S, C0),
+    ?assertEqual(ok, gen_tcp:send(S, <<"invalid data">>)),
+    ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+unauthenticated_client_rejected_authenticating(Config) ->
+    Port = get_stream_port(Config),
+    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    C0 = rabbit_stream_core:init(0),
+    test_peer_properties(gen_tcp, S, C0),
+    SaslHandshakeFrame = rabbit_stream_core:frame({request, 1, sasl_handshake}),
+    ?assertEqual(ok, gen_tcp:send(S, SaslHandshakeFrame)),
+    ?awaitMatch({error, closed}, gen_tcp:send(S, <<"invalid data">>), ?WAIT).
 
 consumer_count(Config) ->
     ets_count(Config, ?TABLE_CONSUMER).

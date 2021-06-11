@@ -218,7 +218,7 @@ init([KeepaliveSup,
                                                 heartbeat = Heartbeat});
         {Error, Reason} ->
             rabbit_net:fast_close(RealSocket),
-            rabbit_log:warning("Closing connection because of ~p ~p",
+            rabbit_log_connection:warning("Closing connection because of ~p ~p",
                                [Error, Reason])
     end.
 
@@ -237,7 +237,7 @@ socket_op(Sock, Fun) ->
         {ok, Res} ->
             Res;
         {error, Reason} ->
-            rabbit_log:warning("Error during socket operation ~p", [Reason]),
+            rabbit_log_connection:warning("Error during socket operation ~p", [Reason]),
             rabbit_net:fast_close(RealSocket),
             exit(normal)
     end.
@@ -335,6 +335,21 @@ listen_loop_pre_auth(Transport,
             rabbit_log:info("Transitioned from ~p to ~p",
                             [ConnectionStep0, ConnectionStep]),
             case ConnectionStep of
+                peer_properties_exchanged when ConnectionStep0 =:= tcp_connected ->
+                    listen_loop_pre_auth(Transport,
+                                         Connection1,
+                                         State1,
+                                         Configuration);
+                authenticating when ConnectionStep0 =:= peer_properties_exchanged ->
+                    listen_loop_pre_auth(Transport,
+                                         Connection1,
+                                         State1,
+                                         Configuration);
+                tuned when ConnectionStep0 =:= tuning ->
+                    listen_loop_pre_auth(Transport,
+                                         Connection1,
+                                         State1,
+                                         Configuration);
                 authenticated ->
                     Frame =
                         rabbit_stream_core:frame({tune, FrameMax, Heartbeat}),
@@ -366,19 +381,23 @@ listen_loop_pre_auth(Transport,
                                           Connection3,
                                           State1,
                                           Configuration);
-                failure ->
-                    close(Transport, S, State);
                 _ ->
-                    listen_loop_pre_auth(Transport,
-                                         Connection1,
-                                         State1,
-                                         Configuration)
+                    rabbit_log_connection:warning("Closing socket ~w because transition from ~p to ~p is not allowed",
+                                    [S, ConnectionStep0, ConnectionStep]),
+                    case Connection1#stream_connection.authentication_state of
+                      done ->
+                        close(Transport, S, State);
+                      _ ->
+                        % for unauthenticated clients, shut down socket immediately
+                        Transport:shutdown(S, read),
+                        Transport:close(S)
+                    end
             end;
         {Closed, S} ->
-            rabbit_log:info("Socket ~w closed [~w]", [S, self()]),
+            rabbit_log_connection:info("Socket ~w closed", [S]),
             ok;
         {Error, S, Reason} ->
-            rabbit_log:info("Socket error ~p [~w] [~w]", [Reason, S, self()]);
+            rabbit_log_connection:info("Socket error ~p [~w]", [Reason, S]);
         M ->
             rabbit_log:warning("Unknown message ~p", [M]),
             close(Transport, S, State)
@@ -425,7 +444,7 @@ listen_loop_post_auth(Transport,
     {OK, Closed, Error, _Passive} = Transport:messages(),
     receive
         {resource_alarm, IsThereAlarm} ->
-            rabbit_log:debug("Connection ~p received resource alarm. Alarm "
+            rabbit_log_connection:debug("Connection ~p received resource alarm. Alarm "
                              "on? ~p",
                              [ConnectionName, IsThereAlarm]),
             EnoughCreditsToUnblock =
@@ -438,18 +457,18 @@ listen_loop_post_auth(Transport,
                     {false, EnoughCredits} ->
                         not EnoughCredits
                 end,
-            rabbit_log:debug("Connection ~p had blocked status set to ~p, new "
+            rabbit_log_connection:debug("Connection ~p had blocked status set to ~p, new "
                              "blocked status is now ~p",
                              [ConnectionName, Blocked, NewBlockedState]),
             case {Blocked, NewBlockedState} of
                 {true, false} ->
                     Transport:setopts(S, [{active, once}]),
                     ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-                    rabbit_log:debug("Unblocking connection ~p",
+                    rabbit_log_connection:debug("Unblocking connection ~p",
                                      [ConnectionName]);
                 {false, true} ->
                     ok = rabbit_heartbeat:pause_monitor(Heartbeater),
-                    rabbit_log:debug("Blocking connection ~p after resource alarm",
+                    rabbit_log_connection:debug("Blocking connection ~p after resource alarm",
                                      [ConnectionName]);
                 _ ->
                     ok
@@ -473,7 +492,7 @@ listen_loop_post_auth(Transport,
                     rabbit_networking:unregister_non_amqp_connection(self()),
                     notify_connection_closed(Connection1, State1);
                 close_sent ->
-                    rabbit_log:debug("Transitioned to close_sent"),
+                    rabbit_log_connection:debug("Transitioned to close_sent"),
                     Transport:setopts(S, [{active, once}]),
                     listen_loop_post_close(Transport,
                                            Connection1,
@@ -657,7 +676,7 @@ listen_loop_post_auth(Transport,
                                                                        SendFileOct)
                                                        of
                                                            {error, Reason} ->
-                                                               rabbit_log:info("Error while sending chunks: ~p",
+                                                               rabbit_log_connection:info("Error while sending chunks: ~p",
                                                                                [Reason]),
                                                                %% likely a connection problem
                                                                Consumer;
@@ -692,13 +711,13 @@ listen_loop_post_auth(Transport,
                                           State,
                                           Configuration);
                 Unexpected ->
-                    rabbit_log:info("Heartbeat send error ~p, closing connection",
+                    rabbit_log_connection:info("Heartbeat send error ~p, closing connection",
                                     [Unexpected]),
                     C1 = demonitor_all_streams(Connection),
                     close(Transport, C1, State)
             end;
         heartbeat_timeout ->
-            rabbit_log:debug("Heartbeat timeout, closing connection"),
+            rabbit_log_connection:debug("Heartbeat timeout, closing connection"),
             C1 = demonitor_all_streams(Connection),
             close(Transport, C1, State);
         {infos, From} ->
@@ -733,7 +752,7 @@ listen_loop_post_auth(Transport,
         {'$gen_call', From, {shutdown, Explanation}} ->
             % likely closing call from the management plugin
             gen_server:reply(From, ok),
-            rabbit_log:info("Forcing stream connection ~p closing: ~p",
+            rabbit_log_connection:info("Forcing stream connection ~p closing: ~p",
                             [self(), Explanation]),
             demonitor_all_streams(Connection),
             rabbit_networking:unregister_non_amqp_connection(self()),
@@ -744,15 +763,15 @@ listen_loop_post_auth(Transport,
             demonitor_all_streams(Connection),
             rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State),
-            rabbit_log:warning("Socket ~w closed [~w]", [S, self()]),
+            rabbit_log_connection:warning("Socket ~w closed [~w]", [S, self()]),
             ok;
         {Error, S, Reason} ->
             demonitor_all_streams(Connection),
             rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State),
-            rabbit_log:error("Socket error ~p [~w] [~w]", [Reason, S, self()]);
+            rabbit_log_connection:error("Socket error ~p [~w] [~w]", [Reason, S, self()]);
         M ->
-            rabbit_log:warning("Unknown message ~p", [M]),
+            rabbit_log_connection:warning("Unknown message ~p", [M]),
             %% FIXME send close
             listen_loop_post_auth(Transport, Connection, State, Configuration)
     end.
@@ -782,7 +801,7 @@ listen_loop_post_close(Transport,
             #stream_connection{connection_step = Step} = Connection1,
             case Step of
                 closing_done ->
-                    rabbit_log:debug("Received close confirmation from client"),
+                    rabbit_log_connection:debug("Received close confirmation from client"),
                     close(Transport, S, State),
                     rabbit_networking:unregister_non_amqp_connection(self()),
                     notify_connection_closed(Connection1, State1);
@@ -796,15 +815,15 @@ listen_loop_post_close(Transport,
         {Closed, S} ->
             rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State),
-            rabbit_log:info("Socket ~w closed [~w]", [S, self()]),
+            rabbit_log_connection:info("Socket ~w closed [~w]", [S, self()]),
             ok;
         {Error, S, Reason} ->
-            rabbit_log:info("Socket error ~p [~w] [~w]", [Reason, S, self()]),
+            rabbit_log_connection:info("Socket error ~p [~w] [~w]", [Reason, S, self()]),
             close(Transport, S, State),
             rabbit_networking:unregister_non_amqp_connection(self()),
             notify_connection_closed(Connection, State);
         M ->
-            rabbit_log:warning("Ignored message on closing ~p", [M])
+            rabbit_log_connection:warning("Ignored message on closing ~p", [M])
     end.
 
 handle_inbound_data_pre_auth(Transport, Connection, State, Data) ->
@@ -896,9 +915,9 @@ handle_frame_pre_auth(Transport,
                                    ServerProperties}}),
     send(Transport, S, Frame),
     {Connection#stream_connection{client_properties = ClientProperties,
-                                  authentication_state =
-                                      peer_properties_exchanged},
-     State};
+                                  authentication_state = peer_properties_exchanged,
+                                  connection_step = peer_properties_exchanged
+                                 }, State};
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S} = Connection,
                       State,
@@ -909,7 +928,7 @@ handle_frame_pre_auth(Transport,
                                   {sasl_handshake, ?RESPONSE_CODE_OK,
                                    Mechanisms}}),
     send(Transport, S, Frame),
-    {Connection, State};
+    {Connection#stream_connection{connection_step = authenticating}, State};
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S,
                                          authentication_state = AuthState0,
@@ -939,7 +958,7 @@ handle_frame_pre_auth(Transport,
                                                                     Username,
                                                                     stream),
                             auth_fail(Username, Msg, Args, C1, State),
-                            rabbit_log:warning(Msg, Args),
+                            rabbit_log_connection:warning(Msg, Args),
                             {C1#stream_connection{connection_step = failure},
                              {sasl_authenticate,
                               ?RESPONSE_AUTHENTICATION_FAILURE, <<>>}};
@@ -954,7 +973,7 @@ handle_frame_pre_auth(Transport,
                                                                     Args)}],
                                                C1,
                                                State),
-                            rabbit_log:warning(Msg, Args),
+                            rabbit_log_connection:warning(Msg, Args),
                             {C1#stream_connection{connection_step = failure},
                              {sasl_authenticate, ?RESPONSE_SASL_ERROR, <<>>}};
                         {challenge, Challenge, AuthState1} ->
@@ -992,7 +1011,7 @@ handle_frame_pre_auth(Transport,
                                     rabbit_core_metrics:auth_attempt_failed(RemoteAddress,
                                                                             Username,
                                                                             stream),
-                                    rabbit_log:warning("User '~s' can only connect via localhost",
+                                    rabbit_log_connection:warning("User '~s' can only connect via localhost",
                                                        [Username]),
                                     {C1#stream_connection{connection_step =
                                                               failure},
@@ -1030,7 +1049,7 @@ handle_frame_pre_auth(_Transport,
                           Connection,
                       State,
                       {tune, FrameMax, Heartbeat}) ->
-    rabbit_log:debug("Tuning response ~p ~p ", [FrameMax, Heartbeat]),
+    rabbit_log_connection:debug("Tuning response ~p ~p ", [FrameMax, Heartbeat]),
     Parent = self(),
     %% sending a message to the main process so the heartbeat frame is sent from this main process
     %% otherwise heartbeat frames can interleave with chunk delivery
@@ -1111,7 +1130,7 @@ handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
     rabbit_log:info("Received heartbeat frame pre auth"),
     {Connection, State};
 handle_frame_pre_auth(_Transport, Connection, State, Command) ->
-    rabbit_log:warning("unknown command ~w, closing connection.",
+    rabbit_log_connection:warning("unknown command ~w, closing connection.",
                        [Command]),
     {Connection#stream_connection{connection_step = failure}, State}.
 
@@ -1155,7 +1174,7 @@ handle_frame_post_auth(Transport,
                          PublisherId,
                          _WriterRef,
                          Stream}}) ->
-    rabbit_log:info("Cannot create publisher ~p on stream ~p, connection "
+    rabbit_log_connection:info("Cannot create publisher ~p on stream ~p, connection "
                     "is blocked because of resource alarm",
                     [PublisherId, Stream]),
     response(Transport,
