@@ -43,11 +43,15 @@ http_get(Config, Path, User, Pass, CodeExp) ->
     assert_code(CodeExp, CodeAct, "GET", Path, ResBody),
     decode(CodeExp, Headers, ResBody).
 
-http_get_no_map(Config, Path) ->
+http_get_as_proplist(Config, Path) ->
     {ok, {{_HTTP, CodeAct, _}, _Headers, ResBody}} =
         req(Config, get, Path, [auth_header("guest", "guest")]),
     assert_code(?OK, CodeAct, "GET", Path, ResBody),
-    cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody), [])).
+    JSON = rabbit_data_coercion:to_binary(ResBody),
+    cleanup(rabbit_json:decode(JSON, [{return_maps, false}])).
+
+http_get_no_map(Config, Path) ->
+    http_get_as_proplist(Config, Path).
 
 http_get_no_auth(Config, Path, CodeExp) ->
     {ok, {{_HTTP, CodeAct, _}, Headers, ResBody}} =
@@ -246,7 +250,8 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     end.
 
 decode(?OK, _Headers,  ResBody) ->
-    cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)));
+    JSON = rabbit_data_coercion:to_binary(ResBody),
+    cleanup(rabbit_json:decode(JSON));
 decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->
