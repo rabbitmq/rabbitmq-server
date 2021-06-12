@@ -15,16 +15,8 @@
 decode(Value) when is_list(Value) ->
   decode(list_to_binary(Value));
 decode(Value) when is_binary(Value) ->
-  % We set an empty list of options because we don't want the default
-  % options set in rabbit_json:cecode/1. And we can't override
-  % 'return_maps' with '{return_maps, false}' because of a bug in jsx's
-  % options handler.
-  % See https://github.com/talentdeficit/jsx/pull/115
-  Decoded0 = rabbit_json:decode(Value, []),
-  Decoded = if
-    is_map(Decoded0)  -> maps:to_list(Decoded0);
-    is_list(Decoded0) -> Decoded0
-  end,
+  Decoded0 = rabbit_json:decode(Value, [{return_maps, false}]),
+  Decoded  = rabbit_data_coercion:to_proplist(Decoded0),
   convert_binary_values(Decoded, []).
 
 

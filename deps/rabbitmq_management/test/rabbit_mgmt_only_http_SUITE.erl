@@ -17,7 +17,7 @@
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
-                                http_get_no_map/2,
+                                http_get_as_proplist/2,
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
                                 http_upload_raw/8,
@@ -612,7 +612,7 @@ queues_well_formed_json_test(Config) ->
     http_put(Config, "/queues/%2F/foo", Good, {group, '2xx'}),
     http_put(Config, "/queues/%2F/baz", Good, {group, '2xx'}),
 
-    Queues = http_get_no_map(Config, "/queues/%2F"),
+    Queues = http_get_as_proplist(Config, "/queues/%2F"),
     %% Ensure keys are unique
     [begin
      Sorted = lists:sort(Q),
