@@ -244,7 +244,8 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     end.
 
 decode(?OK, _Headers,  ResBody) ->
-    cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)));
+    JSON = rabbit_data_coercion:to_binary(ResBody),
+    cleanup(rabbit_json:decode(JSON));
 decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->
