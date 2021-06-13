@@ -199,29 +199,30 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, IsMsgStoreClean,
              State}
     end.
 
-recover_segments(State = #mqistate { dir = Dir }, Terms, IsMsgStoreClean,
+recover_segments(State0 = #mqistate { dir = Dir }, Terms, IsMsgStoreClean,
                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun, CountersRef) ->
     SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
-    case SegmentFiles of
-        %% No segments found. We try to see if there are segment files
-        %% from the old index.
+    State = case SegmentFiles of
+        %% No segments found.
         [] ->
-            case rabbit_file:wildcard(".*\\.idx", Dir) of
-                %% We are recovering a dirty queue that was using the old index.
-                [_|_] ->
-                    recover_index_v1_dirty(State, Terms, IsMsgStoreClean,
-                                           ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
-                                           CountersRef);
-                %% Otherwise keep default values.
-                [] ->
-                    State
-            end;
+            State0;
         %% Count unackeds in the segments.
         _ ->
             Segments = lists:sort([
                 list_to_integer(filename:basename(F, ?SEGMENT_EXTENSION))
             || F <- SegmentFiles]),
-            recover_segments(State, ContainsCheckFun, CountersRef, Segments)
+            recover_segments(State0, ContainsCheckFun, CountersRef, Segments)
+    end,
+    %% We always try to see if there are segment files from the old index as well.
+    case rabbit_file:wildcard(".*\\.idx", Dir) of
+        %% We are recovering a dirty queue that was using the old index.
+        [_|_] ->
+            recover_index_v1_dirty(State, Terms, IsMsgStoreClean,
+                                   ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
+                                   CountersRef);
+        %% Otherwise keep default values.
+        [] ->
+            State
     end.
 
 recover_segments(State, _, _, []) ->
@@ -384,7 +385,7 @@ recover_index_v1_loop(State0 = #mqistate{ queue_name = Name },
         MsgId = case MsgOrId of
             Msg = #basic_message{ id = MsgId0 } ->
                 %% We must do a synchronous write to avoid overloading the message store.
-                rabbit_msg_store:sync_write(MsgId0, Msg, MSClient),
+                rabbit_msg_store:blocking_write(MsgId0, Msg, MSClient),
                 MsgId0;
             MsgId0 ->
                 MsgId0
@@ -395,6 +396,7 @@ recover_index_v1_loop(State0 = #mqistate{ queue_name = Name },
         publish(MsgId, SeqId, Props, IsPersistent, IsDelivered, infinity, State1)
     end, State0, Messages),
     State = flush(State2),
+    rabbit_msg_store:force_sync(MSClient),
     %% We have written everything to disk. We can delete the old segment file
     %% to free up much needed space, to avoid doubling disk usage during the upgrade.
     rabbit_queue_index:delete_segment_file_for_seq_id(LoSeqId, V1State),
@@ -997,17 +999,17 @@ queue_index_walker_reader(#resource{ virtual_host = VHost } = Name, Gatherer) ->
     ?DEBUG("~0p ~0p", [Name, Gatherer]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = queue_dir(VHostDir, Name),
+    SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
+    _ = [queue_index_walker_segment(filename:join(Dir, F), Gatherer) || F <- SegmentFiles],
     %% When there are files belonging to the old index, we go through
-    %% the old index walker function. We will upgrade to the new index
-    %% in the recover step.
+    %% the old index walker function as well.
     case rabbit_file:wildcard(".*\\.idx", Dir) of
         [_|_] ->
             rabbit_queue_index:queue_index_walker_reader(Name, Gatherer);
         [] ->
-            SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
-            _ = [queue_index_walker_segment(filename:join(Dir, F), Gatherer) || F <- SegmentFiles],
-            ok = gatherer:finish(Gatherer)
-    end.
+            ok
+    end,
+    ok = gatherer:finish(Gatherer).
 
 queue_index_walker_segment(F, Gatherer) ->
     ?DEBUG("~0p ~0p", [F, Gatherer]),
