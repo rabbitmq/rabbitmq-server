@@ -298,7 +298,7 @@ list_op(VHost) ->
     list0_op(VHost, fun ident/1).
 
 list_formatted_op(VHost) ->
-    order_policies(list0_op(VHost, fun rabbit_json:encode/1)).
+    sort_by_priority(list0_op(VHost, fun rabbit_json:encode/1)).
 
 list_formatted_op(VHost, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(AggregatorPid, Ref,
@@ -316,7 +316,7 @@ list(VHost) ->
     list0(VHost, fun ident/1).
 
 list_formatted(VHost) ->
-    order_policies(list0(VHost, fun rabbit_json:encode/1)).
+    sort_by_priority(list0(VHost, fun rabbit_json:encode/1)).
 
 list_formatted(VHost, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(AggregatorPid, Ref,
@@ -325,8 +325,8 @@ list_formatted(VHost, Ref, AggregatorPid) ->
 list0(VHost, DefnFun) ->
     [p(P, DefnFun) || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
 
-order_policies(PropList) ->
-    lists:sort(fun (A, B) -> not sort_pred(A, B) end, PropList).
+sort_by_priority(PropList) ->
+    lists:sort(fun (A, B) -> not priority_comparator(A, B) end, PropList).
 
 p(Parameter, DefnFun) ->
     Value = pget(value, Parameter),
@@ -457,7 +457,7 @@ match(Name, Policies) ->
     end.
 
 match_all(Name, Policies) ->
-   lists:sort(fun sort_pred/2, [P || P <- Policies, matches(Name, P)]).
+   lists:sort(fun priority_comparator/2, [P || P <- Policies, matches(Name, P)]).
 
 matches(#resource{name = Name, kind = Kind, virtual_host = VHost} = Resource, Policy) ->
     matches_type(Kind, pget('apply-to', Policy)) andalso
@@ -471,7 +471,7 @@ matches_type(exchange, <<"all">>)       -> true;
 matches_type(queue,    <<"all">>)       -> true;
 matches_type(_,        _)               -> false.
 
-sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
+priority_comparator(A, B) -> pget(priority, A) >= pget(priority, B).
 
 is_applicable(#resource{kind = queue} = Resource, Policy) ->
     rabbit_amqqueue:is_policy_applicable(Resource, to_list(Policy));
