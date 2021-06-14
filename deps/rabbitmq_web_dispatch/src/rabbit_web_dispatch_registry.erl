@@ -157,9 +157,9 @@ listener_info(Listener) ->
                        P
                end,
     Port = pget(port, Listener),
-    [{Protocol, IPAddress, Port}
-     || {IPAddress, _Port, _Family}
-        <- rabbit_networking:tcp_listener_addresses(Port)].
+    [{IPAddress, _Port, _Family} | _]
+        = rabbit_networking:tcp_listener_addresses(Port),
+    [{Protocol, IPAddress, Port}].
 
 lookup_dispatch(Lsnr) ->
     case ets:lookup(?ETS, pget(port, Lsnr)) of
