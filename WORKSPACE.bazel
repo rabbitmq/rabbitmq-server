@@ -1,4 +1,5 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 http_archive(
     name = "io_buildbuddy_buildbuddy_toolchain",
@@ -29,22 +30,22 @@ load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
 
 rabbitmq_external_deps(rabbitmq_workspace = "@")
 
-http_archive(
+git_repository(
     name = "rabbitmq_ct_helpers",
+    branch = "v3.8.x",
     repo_mapping = {
         "@rabbitmq-server": "@",
     },
-    strip_prefix = "rabbitmq-ct-helpers-3.8.x",
-    urls = ["https://github.com/rabbitmq/rabbitmq-ct-helpers/archive/refs/heads/v3.8.x.zip"],
+    remote = "https://github.com/rabbitmq/rabbitmq-ct-helpers.git",
 )
 
-http_archive(
+git_repository(
     name = "rabbitmq_ct_client_helpers",
+    branch = "v3.8.x",
     repo_mapping = {
         "@rabbitmq-server": "@",
     },
-    strip_prefix = "rabbitmq-ct-client-helpers-3.8.x",
-    urls = ["https://github.com/rabbitmq/rabbitmq-ct-client-helpers/archive/refs/heads/v3.8.x.zip"],
+    remote = "https://github.com/rabbitmq/rabbitmq-ct-client-helpers.git",
 )
 
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
