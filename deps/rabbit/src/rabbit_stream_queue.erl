@@ -118,6 +118,7 @@ create_stream(Q0, Node) ->
                                          {durable, true},
                                          {auto_delete, false},
                                          {arguments, Arguments},
+                                         {type, amqqueue:get_type(Q1)},
                                          {user_who_performed_action,
                                           ActingUser}]),
                     {new, Q};

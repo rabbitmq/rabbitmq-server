@@ -203,6 +203,8 @@ start_cluster(Q) ->
                                         [{name, QName},
                                          {durable, Durable},
                                          {auto_delete, AutoDelete},
+                                         {exclusive, false},
+                                         {type, amqqueue:get_type(Q)},
                                          {arguments, Arguments},
                                          {user_who_performed_action,
                                           ActingUser}]),

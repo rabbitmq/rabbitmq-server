@@ -351,22 +351,22 @@ validate(_VHost, <<"operator_policy">>, Name, Term, _User) ->
       Name, operator_policy_validation(), Term).
 
 notify(VHost, <<"policy">>, Name, Term0, ActingUser) ->
-    update_policies(VHost),
     Term = rabbit_data_coercion:atomize_keys(Term0),
+    update_matched_objects(VHost, Term, ActingUser),
     rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost},
                                      {user_who_performed_action, ActingUser} | Term]);
 notify(VHost, <<"operator_policy">>, Name, Term0, ActingUser) ->
-    update_policies(VHost),
     Term = rabbit_data_coercion:atomize_keys(Term0),
+    update_matched_objects(VHost, Term, ActingUser),
     rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost},
                                      {user_who_performed_action, ActingUser} | Term]).
 
 notify_clear(VHost, <<"policy">>, Name, ActingUser) ->
-    update_policies(VHost),
+    update_matched_objects(VHost, undefined, ActingUser),
     rabbit_event:notify(policy_cleared, [{name, Name}, {vhost, VHost},
                                          {user_who_performed_action, ActingUser}]);
 notify_clear(VHost, <<"operator_policy">>, Name, ActingUser) ->
-    update_policies(VHost),
+    update_matched_objects(VHost, undefined, ActingUser),
     rabbit_event:notify(operator_policy_cleared,
                         [{name, Name}, {vhost, VHost},
                          {user_who_performed_action, ActingUser}]).
@@ -378,10 +378,10 @@ notify_clear(VHost, <<"operator_policy">>, Name, ActingUser) ->
 %% the comment in rabbit_binding:lock_route_tables/0 for more rationale.
 %% [2] We could be here in a post-tx fun after the vhost has been
 %% deleted; in which case it's fine to do nothing.
-update_policies(VHost) ->
+update_matched_objects(VHost, PolicyDef, ActingUser) ->
     Tabs = [rabbit_queue,    rabbit_durable_queue,
             rabbit_exchange, rabbit_durable_exchange],
-    {Xs, Qs} = rabbit_misc:execute_mnesia_transaction(
+    {XUpdateResults, QUpdateResults} = rabbit_misc:execute_mnesia_transaction(
         fun() ->
             [mnesia:lock({table, T}, write) || T <- Tabs], %% [1]
             case catch {list(VHost), list_op(VHost)} of
@@ -396,8 +396,8 @@ update_policies(VHost) ->
                         Q <- rabbit_amqqueue:list(VHost)]}
                 end
         end),
-    [catch notify(X) || X <- Xs],
-    [catch notify(Q) || Q <- Qs],
+    [catch maybe_notify_of_policy_change(XRes, PolicyDef, ActingUser) || XRes <- XUpdateResults],
+    [catch maybe_notify_of_policy_change(QRes, PolicyDef, ActingUser) || QRes <- QUpdateResults],
     ok.
 
 update_exchange(X = #exchange{name = XName,
@@ -443,11 +443,27 @@ update_queue(Q0, Policies, OpPolicies) when ?is_amqqueue(Q0) ->
              end
     end.
 
-notify(no_change)->
+maybe_notify_of_policy_change(no_change, _PolicyDef, _ActingUser)->
     ok;
-notify({X1 = #exchange{}, X2 = #exchange{}}) ->
+maybe_notify_of_policy_change({X1 = #exchange{}, X2 = #exchange{}}, _PolicyDef, _ActingUser) ->
     rabbit_exchange:policy_changed(X1, X2);
-notify({Q1, Q2}) when ?is_amqqueue(Q1), ?is_amqqueue(Q2) ->
+%% policy has been cleared
+maybe_notify_of_policy_change({Q1, Q2}, undefined, ActingUser) when ?is_amqqueue(Q1), ?is_amqqueue(Q2) ->
+    rabbit_event:notify(queue_policy_cleared, [
+        {name, amqqueue:get_name(Q2)},
+        {vhost, amqqueue:get_vhost(Q2)},
+        {type, amqqueue:get_type(Q2)},
+        {user_who_performed_action, ActingUser}
+    ]),
+    rabbit_amqqueue:policy_changed(Q1, Q2);
+%% policy has been added or updated
+maybe_notify_of_policy_change({Q1, Q2}, PolicyDef, ActingUser) when ?is_amqqueue(Q1), ?is_amqqueue(Q2) ->
+    rabbit_event:notify(queue_policy_updated, [
+        {name, amqqueue:get_name(Q2)},
+        {vhost, amqqueue:get_vhost(Q2)},
+        {type, amqqueue:get_type(Q2)},
+        {user_who_performed_action, ActingUser} | PolicyDef
+    ]),
     rabbit_amqqueue:policy_changed(Q1, Q2).
 
 match(Name, Policies) ->
