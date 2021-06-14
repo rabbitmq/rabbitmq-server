@@ -13,7 +13,6 @@ APP_NAME = "rabbitmq_stream_common"
 APP_DESCRIPTION = "RabbitMQ Stream Common"
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(

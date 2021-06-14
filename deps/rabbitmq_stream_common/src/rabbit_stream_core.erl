@@ -641,8 +641,8 @@ parse_request(<<?REQUEST:1,
             <<_Count:32, Bin/binary>> ->
                 parse_map(Bin, #{});
             _ ->
-                rabbit_log:warning("Incorrect binary for subscription properties: ~w",
-                                   [PropsBin]),
+                logger:warning("Incorrect binary for subscription properties: ~w",
+                               [PropsBin]),
                 #{}
         end,
     request(CorrelationId,
