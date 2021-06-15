@@ -13,4 +13,4 @@
 %% take them into account in operations such as memory calculation and data cleanup.
 %% Hardcoded atm
 list_not_quorum_clusters() ->
-    [rabbit_stream_coordinator].
+    [rabbit_stream_coordinator, metadata_store].

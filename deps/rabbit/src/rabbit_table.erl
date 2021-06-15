@@ -389,7 +389,7 @@ definitions() ->
         ++ mirrored_supervisor:table_definitions().
 
 pre_khepri_definitions() ->
-    case rabbit_khepri:is_enabled() of
+    case rabbit_khepri:is_enabled(non_blocking) of
         true ->
             [];
         false ->

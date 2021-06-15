@@ -247,20 +247,71 @@ mds_phase1_migration(FeatureName, _FeatureProps, is_enabled) ->
               end
       end, ?mds_phase1_tables);
 mds_phase1_migration(FeatureName, _FeatureProps, enable) ->
-    Tables = ?mds_phase1_tables,
-    rabbit_table:wait(Tables, _Retry = true),
-    ?LOG_NOTICE(
-       "Feature flag `~s`:   starting migration from Mnesia to Khepri; "
-       "expect decrease in performance and increase in memory footprint",
+    %% Initialize Khepri cluster based on Mnesia running nodes. Verify that
+    %% all Mnesia nodes are running (all == running). It would be more
+    %% difficult to add them later to the node when they start.
+    ?LOG_DEBUG(
+       "Feature flag `~s`:   making sure all Mnesia nodes are running",
        [FeatureName]),
-    Ret = migrate_tables_to_khepri(FeatureName, Tables),
-    ?LOG_NOTICE(
-       "Feature flag `~s`:   migration from Mnesia to Khepri finished",
-       [FeatureName]),
-    Ret;
+    AllMnesiaNodes = lists:sort(rabbit_mnesia:cluster_nodes(all)),
+    RunningMnesiaNodes = lists:sort(rabbit_mnesia:cluster_nodes(running)),
+    MissingMnesiaNodes = AllMnesiaNodes -- RunningMnesiaNodes,
+    case MissingMnesiaNodes of
+        [] ->
+            %% This is the first time Khepri will be used for real. Therefore
+            %% we need to make sure the Khepri cluster matches the Mnesia
+            %% cluster.
+            %%
+            %% Even if some nodes are already part of the Khepri cluster, we
+            %% reset every nodes (except the one running this function) and
+            %% add them to this node's Khepri cluster.
+            KhepriNodes = lists:sort(rabbit_khepri:nodes()),
+            OtherMnesiaNodes = AllMnesiaNodes -- KhepriNodes,
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   updating the Khepri cluster to match the "
+               "Mnesia cluster by adding the following nodes: ~p",
+               [FeatureName, OtherMnesiaNodes]),
+            case expand_khepri_cluster(OtherMnesiaNodes) of
+                ok ->
+                    Tables = ?mds_phase1_tables,
+                    rabbit_table:wait(Tables, _Retry = true),
+                    ?LOG_NOTICE(
+                       "Feature flag `~s`:   starting migration from Mnesia "
+                       "to Khepri; expect decrease in performance and "
+                       "increase in memory footprint",
+                       [FeatureName]),
+                    Ret = migrate_tables_to_khepri(FeatureName, Tables),
+                    ?LOG_NOTICE(
+                       "Feature flag `~s`:   migration from Mnesia to Khepri "
+                       "finished",
+                       [FeatureName]),
+                    Ret;
+                Error ->
+                    ?LOG_ERROR(
+                       "Feature flag `~s`:   failed to migrate from Mnesia "
+                       "to Khepri: failed to create Khepri cluster: ~p",
+                       [FeatureName, Error]),
+                    Error
+            end;
+        _ ->
+            ?LOG_ERROR(
+               "Feature flag `~s`:   failed to migrate from Mnesia to Khepri: "
+               "all Mnesia nodes must run; the following nodes are missing: "
+               "~p",
+               [FeatureName, MissingMnesiaNodes]),
+            {error, all_mnesia_nodes_must_run}
+    end;
 mds_phase1_migration(FeatureName, _FeatureProps, post_enabled_locally) ->
     ?assert(rabbit_khepri:is_enabled(non_blocking)),
     drop_unused_mnesia_tables(FeatureName, ?mds_phase1_tables).
+
+expand_khepri_cluster([MnesiaNode | Rest]) ->
+    case rabbit_khepri:add_member(MnesiaNode) of
+        ok    -> expand_khepri_cluster(Rest);
+        Error -> Error
+    end;
+expand_khepri_cluster([]) ->
+    ok.
 
 does_table_exist(Table) ->
     try
@@ -442,18 +493,20 @@ handle_mnesia_delete(rabbit_topic_permission, TopicPermissionKey) ->
     rabbit_auth_backend_internal:mnesia_delete_to_khepri(TopicPermissionKey).
 
 drop_unused_mnesia_tables(FeatureName, [Table | Rest]) ->
+    %% The feature flag is enabled at this point. It means there should be no
+    %% code trying to read or write the Mnesia tables.
     ?LOG_DEBUG(
        "Feature flag `~s`:   dropping unused Mnesia table ~s",
        [FeatureName, Table]),
-    case does_table_exist(Table) of
-        true ->
-            %% The feature flag is enabled at this point. It means there
-            %% should be no code trying to read or write the Mnesia tables.
-            {atomic, ok} = mnesia:change_table_access_mode(Table, read_write),
-            {atomic, ok} = mnesia:delete_table(Table);
-        false ->
+    case mnesia:change_table_access_mode(Table, read_write) of
+        {atomic, ok} ->
+            case mnesia:delete_table(Table) of
+                {atomic, ok}                       -> ok;
+                {aborted, {no_exists, {Table, _}}} -> ok
+            end;
+        {aborted, {no_exists, {Table, _}}} ->
             ok
     end,
     drop_unused_mnesia_tables(FeatureName, Rest);
 drop_unused_mnesia_tables(_, []) ->
-    ok.
+            ok.

@@ -12,6 +12,9 @@
 -include_lib("rabbit_common/include/logging.hrl").
 
 -export([setup/1,
+         add_member/1,
+         members/0,
+         nodes/0,
          get_store_id/0,
          machine_insert/3,
          insert/2,
@@ -27,14 +30,17 @@
          list_matching_with_props/2,
          delete/1,
          dir/0,
-         i/0,
+         info/0,
          is_enabled/0,
          is_enabled/1,
          try_mnesia_or_khepri/2]).
+-export([priv_reset/0]).
 
 -compile({no_auto_import, [get/2]}).
 
 -define(RA_SYSTEM, metadata_store). %% FIXME: Also hard-coded in rabbit.erl.
+-define(RA_CLUSTER_NAME, ?RA_SYSTEM).
+-define(RA_FRIENDLY_NAME, "RabbitMQ metadata store").
 -define(STORE_NAME, ?RA_SYSTEM).
 -define(MDSTORE_SARTUP_LOCK, {?MODULE, self()}).
 -define(PT_KEY, ?MODULE).
@@ -44,13 +50,8 @@
 %% -------------------------------------------------------------------
 
 setup(_) ->
-    ClusterName = ?RA_SYSTEM,
-    FriendlyName = "RabbitMQ metadata store",
-
-    %% FIXME: We want to get rid of Mnesia cluster here :)
-    Nodes = rabbit_mnesia:cluster_nodes(all),
-
-    case khepri:new(?RA_SYSTEM, ClusterName, FriendlyName, Nodes) of
+    ok = ensure_ra_system_started(?RA_SYSTEM),
+    case khepri:start(?RA_SYSTEM, ?RA_CLUSTER_NAME, ?RA_FRIENDLY_NAME) of
         {ok, ?STORE_NAME} ->
             ?LOG_DEBUG(
                "Khepri-based metadata store ready",
@@ -61,11 +62,100 @@ setup(_) ->
             exit(Error)
     end.
 
+add_member(NewNode) when NewNode =/= node() ->
+    %% Ensure the remote node is reachable before we add it.
+    pong = net_adm:ping(NewNode),
+
+    ?LOG_DEBUG(
+       "Resetting Khepri on remote node ~s",
+       [NewNode],
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    Ret1 = rpc:call(NewNode, rabbit_khepri, priv_reset, []),
+    case Ret1 of
+        ok ->
+            ?LOG_DEBUG(
+               "Adding remote node ~s to Khepri cluster \"~s\"",
+               [NewNode, ?RA_CLUSTER_NAME],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            ok = ensure_ra_system_started(?RA_SYSTEM),
+            Ret2 = khepri:add_member(
+                     ?RA_SYSTEM, ?RA_CLUSTER_NAME, ?RA_FRIENDLY_NAME,
+                     NewNode),
+            case Ret2 of
+                ok ->
+                    ?LOG_DEBUG(
+                       "Node ~s added to Khepri cluster \"~s\"",
+                       [NewNode, ?RA_CLUSTER_NAME],
+                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+                    ok = rpc:call(NewNode, rabbit, start, []);
+                {error, _} = Error ->
+                    ?LOG_ERROR(
+                       "Failed to add remote node ~s to Khepri cluster "
+                       "\"~s\": ~p",
+                       [NewNode, ?RA_CLUSTER_NAME, Error],
+                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+                    Error
+            end;
+        Error ->
+            ?LOG_ERROR(
+               "Failed to reset Khepri on remote node ~s: ~p",
+               [NewNode, Error],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            Error
+    end.
+
+priv_reset() ->
+    ok = rabbit:stop(),
+    {ok, _} = application:ensure_all_started(khepri),
+    ok = ensure_ra_system_started(?RA_SYSTEM),
+    ok = khepri:reset(?RA_SYSTEM, ?RA_CLUSTER_NAME).
+
+ensure_ra_system_started(RaSystem) ->
+    Default = ra_system:default_config(),
+    MDStoreDir = filename:join(
+                   [rabbit_mnesia:dir(), "metadata_store", node()]),
+    RaSystemConfig = Default#{name => RaSystem,
+                              data_dir => MDStoreDir,
+                              wal_data_dir => MDStoreDir,
+                              wal_max_size_bytes => 1024 * 1024,
+                              names => ra_system:derive_names(RaSystem)},
+    ?LOG_DEBUG(
+       "Starting Ra system for Khepri with configuration:~n~p",
+       [RaSystemConfig],
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    case ra_system:start(RaSystemConfig) of
+        {ok, _} ->
+            ?LOG_DEBUG(
+               "Ra system for Khepri ready",
+               [],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            ok;
+        {error, {already_started, _}} ->
+            ?LOG_DEBUG(
+               "Ra system for Khepri ready",
+               [],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            ok;
+        Error ->
+            ?LOG_ERROR(
+               "Failed to start Ra system for Khepri: ~p",
+               [Error],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            throw(Error)
+    end.
+
+members() ->
+    khepri:members(?RA_CLUSTER_NAME).
+
+nodes() ->
+    khepri:nodes(?RA_CLUSTER_NAME).
+
 get_store_id() ->
     ?STORE_NAME.
 
 dir() ->
     filename:join(rabbit_mnesia:dir(), atom_to_list(?STORE_NAME)).
+
 machine_insert(PathPattern, Data, Extra) ->
     khepri_machine:insert(?STORE_NAME, PathPattern, Data, Extra).
 
@@ -108,8 +198,8 @@ list_with_props(Path) ->
 delete(Path) ->
     khepri:delete(?STORE_NAME, Path).
 
-i() ->
-    khepri:i(?STORE_NAME).
+info() ->
+    khepri:info(?STORE_NAME).
 
 %% -------------------------------------------------------------------
 %% Raft-based metadata store (phase 1).
