@@ -15,7 +15,7 @@
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand').
 
--include("rabbit_stream.hrl").
+-include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 

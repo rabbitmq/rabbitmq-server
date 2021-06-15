@@ -21,7 +21,7 @@
 -export([start_link/0]).
 -export([init/1]).
 
--include("rabbit_stream.hrl").
+-include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).

@@ -38,6 +38,10 @@ BUILD_DEPS = [
     "@ranch//:bazel_erlang_lib",
 ]
 
+DEPS = [
+    "//deps/rabbitmq_stream_common:bazel_erlang_lib",
+]
+
 RUNTIME_DEPS = [
     "//deps/rabbit:bazel_erlang_lib",
 ]
@@ -49,6 +53,7 @@ rabbitmq_lib(
     app_name = APP_NAME,
     build_deps = BUILD_DEPS,
     runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
 )
 
 xref(tags = ["xref"])
@@ -70,16 +75,14 @@ rabbitmq_integration_suite(
         ":rabbit_stream_SUITE_beam_files",
     ],
     data = glob(["test/rabbit_stream_SUITE_data/**/*"]),
+    deps = [
+        "//deps/rabbitmq_stream_common:bazel_erlang_lib",
+    ],
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "config_schema_SUITE",
-)
-
-rabbitmq_suite(
-    name = "rabbit_stream_core_SUITE",
-    size = "small",
 )
 
 rabbitmq_integration_suite(
@@ -88,5 +91,8 @@ rabbitmq_integration_suite(
     groups = [
         "single_node",
         "cluster",
+    ],
+    deps = [
+        "//deps/rabbitmq_stream_common:bazel_erlang_lib",
     ],
 )

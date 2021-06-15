@@ -17,8 +17,7 @@
 -module(rabbit_stream_reader).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
-
--include("rabbit_stream.hrl").
+-include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 -type stream() :: binary().
 -type publisher_id() :: byte().

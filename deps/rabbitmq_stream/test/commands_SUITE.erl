@@ -14,8 +14,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
-
--include("rabbit_stream.hrl").
+-include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 -define(WAIT, 5000).
 -define(COMMAND_LIST_CONNECTIONS,
