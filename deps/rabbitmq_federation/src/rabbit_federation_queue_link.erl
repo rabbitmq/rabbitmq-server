@@ -208,10 +208,15 @@ go(S0 = #not_started{run             = Run,
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
               check_upstream_suitable(Conn),
-              amqp_channel:call(Ch, #'queue.declare'{queue       = name(UQueue),
-                                                     durable     = Durable,
-                                                     auto_delete = AutoDelete,
-                                                     arguments   = Args}),
+              Declare = #'queue.declare'{queue       = name(UQueue),
+                                         durable     = Durable,
+                                         auto_delete = AutoDelete,
+                                         arguments   = Args},
+              rabbit_federation_link_util:disposable_channel_call(
+                Conn, Declare#'queue.declare'{passive = true},
+                fun(?NOT_FOUND, _Text) ->
+                        amqp_channel:call(Ch, Declare)
+                end),
               case Upstream#upstream.ack_mode of
                   'no-ack' -> ok;
                   _        -> amqp_channel:call(
