@@ -220,7 +220,8 @@ try_mnesia_or_khepri(MnesiaFun, KhepriFun) ->
             try
                 MnesiaFun()
             catch
-                exit:{aborted, {no_exists, Table}} = Reason:Stacktrace ->
+                Class:{Type, {no_exists, Table}} = Reason:Stacktrace
+                  when Type =:= aborted orelse Type =:= error ->
                     case is_mnesia_table_covered_by_feature_flag(Table) of
                         true ->
                             %% We wait for the feature flag(s) to be enabled
@@ -235,7 +236,7 @@ try_mnesia_or_khepri(MnesiaFun, KhepriFun) ->
                             _ = rabbit_khepri:is_enabled(),
                             try_mnesia_or_khepri(MnesiaFun, KhepriFun);
                         false ->
-                            erlang:raise(exit, Reason, Stacktrace)
+                            erlang:raise(Class, Reason, Stacktrace)
                     end
             end
     end.
