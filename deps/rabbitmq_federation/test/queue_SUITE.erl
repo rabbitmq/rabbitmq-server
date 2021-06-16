@@ -17,7 +17,7 @@
         [wait_for_federation/2, expect/3, expect/4,
          set_upstream/4, set_upstream/5, clear_upstream/3, set_policy/5, clear_policy/3,
          set_policy_pattern/5, set_policy_upstream/5, q/2, with_ch/3,
-         declare_queue/2, delete_queue/2,
+         maybe_declare_queue/3, delete_queue/2,
          federation_links_in_vhost/3]).
 
 -define(INITIAL_WAIT, 6000).
@@ -311,8 +311,8 @@ dynamic_plugin_stop_start(Config) ->
           expect_no_federation(Ch, UpQ, DownQ1),
           expect_no_federation(Ch, UpQ, DownQ2),
 
-          declare_queue(Ch, q(DownQ1, Args)),
-          declare_queue(Ch, q(DownQ2, Args)),
+          maybe_declare_queue(Config, Ch, q(DownQ1, Args)),
+          maybe_declare_queue(Config, Ch, q(DownQ2, Args)),
           ct:pal("Re-starting rabbitmq_federation"),
           ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_federation"),
           timer:sleep(?INITIAL_WAIT),
@@ -346,8 +346,8 @@ restart_upstream(Config) ->
 
     SourceArgs = ?config(source_queue_args, Config),
     TargetArgs = ?config(target_queue_args, Config),
-    declare_queue(Upstream, q(<<"test">>, SourceArgs)),
-    declare_queue(Downstream, q(<<"test">>, TargetArgs)),
+    maybe_declare_queue(Config, Upstream, q(<<"test">>, SourceArgs)),
+    maybe_declare_queue(Config, Downstream, q(<<"test">>, TargetArgs)),
     Seq = lists:seq(1, 100),
     [publish(Upstream, <<>>, <<"test">>, <<"bulk">>) || _ <- Seq],
     expect(Upstream, <<"test">>, repeat(25, <<"bulk">>)),
