@@ -395,22 +395,36 @@ copy_from_mnesia_to_khepri(_, []) ->
 do_copy_from_mnesia_to_khepri(FeatureName, Table, Fun) ->
     Count = mnesia:table_info(Table, size),
     ?LOG_DEBUG(
-       "Feature flag `~s`:     table ~s: about ~b record to copy",
+       "Feature flag `~s`:     table ~s: about ~b record(s) to copy",
        [FeatureName, Table, Count]),
-    _ = mnesia:transaction(
-          fun() ->
-                  _ = mnesia:foldl(
-                        fun(Record, Copied) ->
-                                Copied1 = Copied + 1,
-                                ?LOG_DEBUG(
-                                   "Feature flag `~s`:     table ~s: copying "
-                                   "record ~b/~b",
-                                   [FeatureName, Table, Copied1, Count]),
-                                ok = Fun(Record),
-                                Copied1
-                        end, 0, Table)
-          end),
-    ok.
+    FirstKey = mnesia:dirty_first(Table),
+    do_copy_from_mnesia_to_khepri(
+      FeatureName, Table, FirstKey, Fun, Count, 0).
+
+do_copy_from_mnesia_to_khepri(
+  FeatureName, Table, '$end_of_table', _, Count, Copied) ->
+    ?LOG_DEBUG(
+       "Feature flag `~s`:     table ~s: copy of ~b record(s) (out of ~b "
+       "initially) finished",
+       [FeatureName, Table, Copied, Count]),
+    ok;
+do_copy_from_mnesia_to_khepri(
+  FeatureName, Table, Key, Fun, Count, Copied) ->
+    case Copied rem 100 of
+        0 ->
+            ?LOG_DEBUG(
+               "Feature flag `~s`:     table ~s: copying record ~b/~b",
+               [FeatureName, Table, Copied, Count]);
+        _ ->
+            ok
+    end,
+    case mnesia:dirty_read(Table, Key) of
+        [Record] -> ok = Fun(Record);
+        []       -> ok
+    end,
+    NextKey = mnesia:dirty_next(Table, Key),
+    do_copy_from_mnesia_to_khepri(
+      FeatureName, Table, NextKey, Fun, Count, Copied + 1).
 
 final_sync_from_mnesia_to_khepri(FeatureName, Tables) ->
     %% Switch all tables to read-only. All concurrent and future Mnesia
@@ -442,37 +456,44 @@ consume_mnesia_events(FeatureName) ->
 consume_mnesia_events(FeatureName, Count, Handled) ->
     Handled1 = Handled + 1,
     receive
-        {write, NewRecord, _} ->
+        {mnesia_table_event, {write, NewRecord, _}} ->
             ?LOG_DEBUG(
                "Feature flag `~s`:       handling event ~b/~b (write)",
                [FeatureName, Handled1, Count]),
             handle_mnesia_write(NewRecord),
             consume_mnesia_events(FeatureName, Count, Handled1);
-        {delete_object, OldRecord, _} ->
+        {mnesia_table_event, {delete_object, OldRecord, _}} ->
             ?LOG_DEBUG(
                "Feature flag `~s`:       handling event ~b/~b (delete)",
                [FeatureName, Handled1, Count]),
             handle_mnesia_delete(OldRecord),
             consume_mnesia_events(FeatureName, Count, Handled1);
-        {delete, {Table, Key}, _} ->
+        {mnesia_table_event, {delete, {Table, Key}, _}} ->
             ?LOG_DEBUG(
                "Feature flag `~s`:       handling event ~b/~b (delete)",
                [FeatureName, Handled1, Count]),
             handle_mnesia_delete(Table, Key),
             consume_mnesia_events(FeatureName, Count, Handled1)
     after 0 ->
+              {_, MsgCount} = erlang:process_info(self(), message_queue_len),
+              ?LOG_DEBUG(
+                 "Feature flag `~s`:     ~b messages remaining",
+                 [FeatureName, MsgCount]),
               %% TODO: Wait for confirmation from Khepri.
               ok
     end.
 
 handle_mnesia_write(NewRecord) when ?is_vhost(NewRecord) ->
     rabbit_vhost:mnesia_write_to_khepri(NewRecord);
-handle_mnesia_write(NewRecord) when ?is_internal_user(NewRecord) ->
-    rabbit_auth_backend_internal:mnesia_write_to_khepri(NewRecord);
 handle_mnesia_write(NewRecord) when is_record(NewRecord, user_permission) ->
     rabbit_auth_backend_internal:mnesia_write_to_khepri(NewRecord);
 handle_mnesia_write(NewRecord) when is_record(NewRecord, topic_permission) ->
-    rabbit_auth_backend_internal:mnesia_write_to_khepri(NewRecord).
+    rabbit_auth_backend_internal:mnesia_write_to_khepri(NewRecord);
+handle_mnesia_write(NewRecord) ->
+    %% The record and the Mnesia table have different names.
+    NewRecord1 = erlang:setelement(1, NewRecord, internal_user),
+    true = ?is_internal_user(NewRecord1),
+    rabbit_auth_backend_internal:mnesia_write_to_khepri(NewRecord1).
 
 handle_mnesia_delete(OldRecord) when ?is_vhost(OldRecord) ->
     rabbit_vhost:mnesia_delete_to_khepri(OldRecord);
