@@ -332,14 +332,14 @@ links(#'exchange.declare'{exchange = Name}) ->
 
 xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 
-with_ch(Config, Fun, Qs) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    declare_all(Config, Ch, Qs),
+with_ch(Config, Fun, Methods) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    declare_all(Config, Ch, Methods),
     %% Clean up queues even after test failure.
     try
         Fun(Ch)
     after
-        delete_all(Ch, Qs),
+        delete_all(Ch, Methods),
         rabbit_ct_client_helpers:close_channel(Ch)
     end,
     ok.
@@ -349,13 +349,13 @@ delete_all(Ch, Methods) ->
     [delete_queue(Ch, Q) || #'queue.declare'{queue = Q} <- Methods].
 
 maybe_declare_queue(Config, Ch, Method) ->
-    OneOffCh = rabbit_ct_client_helpers:open_channel(Config, 0),
+    OneOffCh = rabbit_ct_client_helpers:open_channel(Config),
     try
         amqp_channel:call(OneOffCh, Method#'queue.declare'{passive = true})
     catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Message}}, _} ->
         amqp_channel:call(Ch, Method)
     after
-        catch amqp_channel:close(OneOffCh)
+        catch rabbit_ct_client_helpers:close_channel(OneOffCh)
     end.
 
 delete_queue(Ch, Q) ->
@@ -364,6 +364,8 @@ delete_queue(Ch, Q) ->
 q(Name) ->
     q(Name, []).
 
+q(Name, undefined) ->
+    q(Name, []);
 q(Name, Args) ->
     #'queue.declare'{queue   = Name,
                      durable = true,
