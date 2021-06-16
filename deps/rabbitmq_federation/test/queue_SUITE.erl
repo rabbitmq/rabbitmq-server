@@ -10,13 +10,14 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -import(rabbit_federation_test_util,
         [wait_for_federation/2, expect/3, expect/4,
          set_upstream/4, set_upstream/5, clear_upstream/3, set_policy/5, clear_policy/3,
          set_policy_pattern/5, set_policy_upstream/5, q/2, with_ch/3,
-         declare_queue/2, delete_queue/2,
+         maybe_declare_queue/3, delete_queue/2,
          federation_links_in_vhost/3]).
 
 -define(INITIAL_WAIT, 6000).
@@ -25,7 +26,8 @@
 all() ->
     [
      {group, classic_queue},
-     {group, quorum_queue}
+     {group, quorum_queue},
+     {group, mixed}
     ].
 
 groups() ->
@@ -54,7 +56,16 @@ groups() ->
                          {with_disambiguate, [], [
                                                   {cluster_size_2, [], ClusterSize2}
                                                   ]}
-                        ]}].
+                        ]},
+     {mixed, [], [
+                  {without_disambiguate, [], [
+                                              {cluster_size_1, [], ClusterSize1}
+                                             ]},
+                  {with_disambiguate, [], [
+                                           {cluster_size_2, [], ClusterSize2}
+                                          ]}
+                 ]}
+    ].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -70,13 +81,30 @@ end_per_suite(Config) ->
 init_per_group(classic_queue, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
-      [{queue_type, classic},
-       {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]}]);
+      [
+       {source_queue_type, classic},
+       {source_queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
+       {target_queue_type, classic},
+       {target_queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]}
+      ]);
 init_per_group(quorum_queue, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
-      [{queue_type, quorum},
-       {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}]);
+      [
+       {source_queue_type, quorum},
+       {source_queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+       {target_queue_type, quorum},
+       {target_queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
+      ]);
+init_per_group(mixed, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [
+       {source_queue_type, classic},
+       {source_queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
+       {target_queue_type, quorum},
+       {target_queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
+      ]);
 init_per_group(without_disambiguate, Config) ->
     rabbit_ct_helpers:set_config(Config,
       {disambiguate_step, []});
@@ -129,6 +157,8 @@ end_per_group(classic_queue, Config) ->
     Config;
 end_per_group(quorum_queue, Config) ->
     Config;
+end_per_group(mixed, Config) ->
+    Config;
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
@@ -145,21 +175,21 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 simple(Config) ->
-    Args = ?config(queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
-      end, upstream_downstream(Args)).
+      end, upstream_downstream(Config)).
 
 multiple_upstreams(Config) ->
-    Args = ?config(queue_args, Config),
+    SourceArgs = ?config(source_queue_args, Config),
+    TargetArgs = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
               expect_federation(Ch, <<"upstream">>, <<"fed12.downstream">>),
               expect_federation(Ch, <<"upstream2">>, <<"fed12.downstream">>)
-      end, [q(<<"upstream">>, Args),
-            q(<<"upstream2">>, Args),
-            q(<<"fed12.downstream">>, Args)]).
+      end, [q(<<"upstream">>, SourceArgs),
+            q(<<"upstream2">>, SourceArgs),
+            q(<<"fed12.downstream">>, TargetArgs)]).
 
 multiple_upstreams_pattern(Config) ->
     set_upstream(Config, 0, <<"local453x">>,
@@ -179,30 +209,32 @@ multiple_upstreams_pattern(Config) ->
 
     set_policy_pattern(Config, 0, <<"pattern">>, <<"^pattern\.">>, <<"local\\d+x">>),
 
-    Args = ?config(queue_args, Config),
+    SourceArgs = ?config(source_queue_args, Config),
+    TargetArgs = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
               expect_federation(Ch, <<"upstream">>, <<"pattern.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
               expect_federation(Ch, <<"upstream2">>, <<"pattern.downstream">>, ?EXPECT_FEDERATION_TIMEOUT)
-      end, [q(<<"upstream">>, Args),
-            q(<<"upstream2">>, Args),
-            q(<<"pattern.downstream">>, Args)]),
+      end, [q(<<"upstream">>, SourceArgs),
+            q(<<"upstream2">>, SourceArgs),
+            q(<<"pattern.downstream">>, TargetArgs)]),
 
     clear_upstream(Config, 0, <<"local453x">>),
     clear_upstream(Config, 0, <<"local3214x">>),
     clear_policy(Config, 0, <<"pattern">>).
 
 multiple_downstreams(Config) ->
-    Args = ?config(queue_args, Config),
+    Args = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
               timer:sleep(?INITIAL_WAIT),
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>, ?EXPECT_FEDERATION_TIMEOUT)
-      end, upstream_downstream(Args) ++ [q(<<"fed.downstream2">>, Args)]).
+      end, upstream_downstream(Config) ++ [q(<<"fed.downstream2">>, Args)]).
 
 bidirectional(Config) ->
-    Args = ?config(queue_args, Config),
+    %% TODO: specifc source / target here
+    Args = ?config(source_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
               timer:sleep(?INITIAL_WAIT),
@@ -223,7 +255,6 @@ bidirectional(Config) ->
             q(<<"two">>, Args)]).
 
 dynamic_reconfiguration(Config) ->
-    Args = ?config(queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
               timer:sleep(?INITIAL_WAIT),
@@ -241,10 +272,10 @@ dynamic_reconfiguration(Config) ->
               set_upstream(Config, 0, <<"localhost">>, URI),
               set_upstream(Config, 0, <<"localhost">>, URI),
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
-      end, upstream_downstream(Args)).
+      end, upstream_downstream(Config)).
 
 federate_unfederate(Config) ->
-    Args = ?config(queue_args, Config),
+    Args = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
               timer:sleep(?INITIAL_WAIT),
@@ -260,11 +291,11 @@ federate_unfederate(Config) ->
               rabbit_ct_broker_helpers:set_policy(Config, 0,
                 <<"fed">>, <<"^fed\.">>, <<"all">>, [
                 {<<"federation-upstream-set">>, <<"upstream">>}])
-      end, upstream_downstream(Args) ++ [q(<<"fed.downstream2">>, Args)]).
+      end, upstream_downstream(Config) ++ [q(<<"fed.downstream2">>, Args)]).
 
 dynamic_plugin_stop_start(Config) ->
     DownQ2 = <<"fed.downstream2">>,
-    Args = ?config(queue_args, Config),
+    Args = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
           timer:sleep(?INITIAL_WAIT),
@@ -280,8 +311,8 @@ dynamic_plugin_stop_start(Config) ->
           expect_no_federation(Ch, UpQ, DownQ1),
           expect_no_federation(Ch, UpQ, DownQ2),
 
-          declare_queue(Ch, q(DownQ1, Args)),
-          declare_queue(Ch, q(DownQ2, Args)),
+          maybe_declare_queue(Config, Ch, q(DownQ1, Args)),
+          maybe_declare_queue(Config, Ch, q(DownQ2, Args)),
           ct:pal("Re-starting rabbitmq_federation"),
           ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_federation"),
           timer:sleep(?INITIAL_WAIT),
@@ -302,7 +333,7 @@ dynamic_plugin_stop_start(Config) ->
                     length(L) =:= 2
             end),
           expect_federation(Ch, UpQ, DownQ1, 120000)
-      end, upstream_downstream(Args) ++ [q(DownQ2, Args)]).
+      end, upstream_downstream(Config) ++ [q(DownQ2, Args)]).
 
 restart_upstream(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
@@ -313,9 +344,10 @@ restart_upstream(Config) ->
     Downstream = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
     Upstream   = rabbit_ct_client_helpers:open_channel(Config, Hare),
 
-    Args = ?config(queue_args, Config),
-    declare_queue(Upstream, q(<<"test">>, Args)),
-    declare_queue(Downstream, q(<<"test">>, Args)),
+    SourceArgs = ?config(source_queue_args, Config),
+    TargetArgs = ?config(target_queue_args, Config),
+    maybe_declare_queue(Config, Upstream, q(<<"test">>, SourceArgs)),
+    maybe_declare_queue(Config, Downstream, q(<<"test">>, TargetArgs)),
     Seq = lists:seq(1, 100),
     [publish(Upstream, <<>>, <<"test">>, <<"bulk">>) || _ <- Seq],
     expect(Upstream, <<"test">>, repeat(25, <<"bulk">>)),
@@ -375,5 +407,7 @@ expect_no_federation(Ch, UpstreamQ, DownstreamQ) ->
 upstream_downstream() ->
     upstream_downstream([]).
 
-upstream_downstream(Args) ->
-    [q(<<"upstream">>, Args), q(<<"fed.downstream">>, Args)].
+upstream_downstream(Config) ->
+    SourceArgs = ?config(source_queue_args, Config),
+    TargetArgs = ?config(target_queue_args, Config),
+    [q(<<"upstream">>, SourceArgs), q(<<"fed.downstream">>, TargetArgs)].
