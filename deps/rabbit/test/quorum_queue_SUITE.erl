@@ -258,14 +258,20 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
             end
     end;
 init_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
-    Q = rabbit_data_coercion:to_binary(Testcase),
-    Config2 = rabbit_ct_helpers:set_config(Config1,
-                                           [{queue_name, Q},
-                                            {alt_queue_name, <<Q/binary, "_alt">>}
-                                           ]),
-    rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
+    IsMixed = is_mixed_versions(),
+    case Testcase of
+        simple_confirm_availability_on_leader_change when IsMixed ->
+            {skip, "simple_confirm_availability_on_leader_change isn't mixed versions compatible"};
+        _ ->
+            Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
+            rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
+            Q = rabbit_data_coercion:to_binary(Testcase),
+            Config2 = rabbit_ct_helpers:set_config(Config1,
+                                                   [{queue_name, Q},
+                                                    {alt_queue_name, <<Q/binary, "_alt">>}
+                                                   ]),
+            rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps())
+    end.
 
 merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(
