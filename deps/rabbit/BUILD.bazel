@@ -779,6 +779,7 @@ rabbitmq_integration_suite(
         },
         "clustered-cluster_size_3": {
             "groups": ["cluster_size_3"],
+            "flaky": True,
         },
         "clustered-cluster_size_5": {
             "groups": ["cluster_size_5"],
