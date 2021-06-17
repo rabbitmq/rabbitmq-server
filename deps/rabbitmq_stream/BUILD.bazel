@@ -88,10 +88,15 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbit_stream_SUITE",
-    groups = [
-        "single_node",
-        "cluster",
-    ],
+    matrix = {
+        "single_node": {
+            "groups": ["single_node"],
+        },
+        "cluster": {
+            "groups": ["cluster"],
+            "flaky": True,
+        },
+    },
     deps = [
         "//deps/rabbitmq_stream_common:bazel_erlang_lib",
     ],
