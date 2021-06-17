@@ -7,13 +7,13 @@
 -module(dynamic_qq_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -import(quorum_queue_utils, [wait_for_messages_ready/3,
                              ra_name/1]).
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -57,27 +57,33 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
-    ClusterSize = ?config(rmq_nodes_count, Config),
-    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
-    Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Testcase},
-        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
-        {queue_name, Q},
-        {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
-      ]),
-    Config2 = rabbit_ct_helpers:run_steps(
-                Config1,
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
-        ok ->
-            Config2;
-        Skip ->
-            end_per_testcase(Testcase, Config2),
-            Skip
+    case quorum_queue_utils:is_mixed_versions() andalso
+         Testcase == quorum_unaffected_after_vhost_failure of
+        true ->
+            {skip, "test case not mixed versions compatible"};
+        false ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase),
+            ClusterSize = ?config(rmq_nodes_count, Config),
+            TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+            Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
+            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
+            Config1 = rabbit_ct_helpers:set_config(Config, [
+                                                            {rmq_nodename_suffix, Testcase},
+                                                            {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
+                                                            {queue_name, Q},
+                                                            {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
+                                                           ]),
+            Config2 = rabbit_ct_helpers:run_steps(
+                        Config1,
+                        rabbit_ct_broker_helpers:setup_steps() ++
+                        rabbit_ct_client_helpers:setup_steps()),
+            case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
+                ok ->
+                    Config2;
+                Skip ->
+                    end_per_testcase(Testcase, Config2),
+                    Skip
+            end
     end.
 
 end_per_testcase(Testcase, Config) ->
@@ -246,3 +252,7 @@ recover_follower_after_standalone_restart(Config) ->
 forget_cluster_node(Config, Node, NodeToRemove) ->
     rabbit_ct_broker_helpers:rabbitmqctl(
       Config, Node, ["forget_cluster_node", "--offline", NodeToRemove]).
+
+
+is_mixed_versions() ->
+    not (false == os:getenv("SECONDARY_UMBRELLA")).
