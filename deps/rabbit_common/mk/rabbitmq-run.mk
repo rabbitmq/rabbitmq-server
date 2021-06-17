@@ -68,7 +68,11 @@ node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
 ifeq ($(PLATFORM),msys2)
 HOSTNAME := $(COMPUTERNAME)
 else
+ifeq ($(PLATFORM),solaris)
+HOSTNAME := $(shell hostname | sed 's@\..*@@')
+else
 HOSTNAME := $(shell hostname -s)
+endif
 endif
 
 RABBITMQ_NODENAME ?= rabbit@$(HOSTNAME)

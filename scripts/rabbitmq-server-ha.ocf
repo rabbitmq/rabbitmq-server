@@ -612,10 +612,19 @@ master_score() {
 
 # Return either FQDN or shortname, depends on the OCF_RESKEY_use_fqdn.
 get_hostname() {
+    local os=$(uname -s)
     if [ "${OCF_RESKEY_use_fqdn}" = 'false' ] ; then
-        echo "$(hostname -s)"
+        if [ "$os" == "SunOS" ]; then
+            echo "$(hostname | sed 's@\..*@@')"
+        else
+            echo "$(hostname -s)"
+        fi
     else
-        echo "$(hostname -f)"
+        if [ "$os" == "SunOS" ]; then
+            echo "$(hostname)"
+        else
+            echo "$(hostname -f)"
+        fi 
     fi
 }
 
