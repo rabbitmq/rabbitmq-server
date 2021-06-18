@@ -16,6 +16,8 @@
 
 -module(rabbit_stream_metrics_gc).
 
+-behaviour(gen_server).
+
 -include_lib("rabbitmq_stream/include/rabbit_stream_metrics.hrl").
 
 -record(state, {timer, interval}).
