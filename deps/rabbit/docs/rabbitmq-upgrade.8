@@ -5,7 +5,7 @@
 .\"
 .\" Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
 .\"
-.Dd December 13, 2020
+.Dd June 19, 2021
 .Dt RABBITMQ-UPGRADE 8
 .Os "RabbitMQ Server"
 .Sh NAME
@@ -101,7 +101,7 @@ This makes sure that no queues would lose their quorum if the target node is shu
 .It Cm drain
 .Pp
 Puts the node in maintenance mode. Such nodes will not serve any
-client traffic or considered for hosting any primary queue replicas.
+client traffic or considered for hosting any queue leader replicas.
 .Pp
 To learn more, see the
 .Lk https://www.rabbitmq.com/upgrade.html#maintenance-mode "RabbitMQ Upgrade guide"
@@ -109,7 +109,7 @@ To learn more, see the
 .It Cm revive
 .Pp
 Puts the node out of maintenance and into regular operating mode.
-Such nodes will again serve client traffic and considered for primary queue replica placement.
+Such nodes will again serve client traffic and considered for queue leader replica placement.
 .Pp
 To learn more, see the
 .Lk https://www.rabbitmq.com/upgrade.html#maintenance-mode "RabbitMQ Upgrade guide"
