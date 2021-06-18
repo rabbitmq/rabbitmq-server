@@ -108,6 +108,8 @@ def broker_for_integration_suites():
 
 def rabbitmq_integration_suite(
         package,
+        name = None,
+        tags = [],
         data = [],
         erlc_opts = [],
         test_env = {},
@@ -116,6 +118,9 @@ def rabbitmq_integration_suite(
         runtime_deps = [],
         **kwargs):
     ct_suite(
+        name = name,
+        suite_name = name,
+        tags = tags,
         erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
         data = [
             "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
