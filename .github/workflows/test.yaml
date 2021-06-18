@@ -8,7 +8,6 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "23"
         - "24"
     timeout-minutes: 120
     steps:
