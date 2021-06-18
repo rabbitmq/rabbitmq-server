@@ -610,9 +610,10 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         true  -> lists:nth(I + 1, WithPlugins0);
         false -> WithPlugins0
     end,
+    CanUseSecondary = (I + 1) rem 2 =:= 0,
     UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
                                false -> false;
-                               _     -> (I + 1) rem 2 =:= 0
+                               _     -> CanUseSecondary
                            end,
     SrcDir = case WithPlugins of
         false when UseSecondaryUmbrella -> ?config(secondary_rabbit_srcdir,
@@ -744,12 +745,15 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                     {skip, "Failed to initialize RabbitMQ"}
             end;
         RunCmd ->
-            case rabbit_ct_helpers:exec([RunCmd, "-C", SrcDir] ++ Cmd) of
+            RmqRun = case CanUseSecondary of
+                false -> RunCmd;
+                _ -> rabbit_ct_helpers:get_config(Config, rabbitmq_run_secondary_cmd, RunCmd)
+            end,
+            case rabbit_ct_helpers:exec([RmqRun, "-C", SrcDir] ++ Cmd) of
                 {ok, _} ->
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
-                                    [{effective_srcdir, SrcDir},
-                                    {make_vars_for_node_startup, MakeVars}]),
+                                    [{make_vars_for_node_startup, MakeVars}]),
                     query_node(Config, NodeConfig1);
                 _ ->
                     AbortCmd = ["stop-node" | MakeVars],
