@@ -51,3 +51,10 @@ git_repository(
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
 
 activemq_archive()
+
+http_archive(
+    name = "rabbitmq-server-generic-unix-3.8.17",
+    build_file = "@//:BUILD.package_generic_unix",
+    strip_prefix = "rabbitmq_server-3.8.17",
+    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.17/rabbitmq-server-generic-unix-3.8.17.tar.xz"],
+)

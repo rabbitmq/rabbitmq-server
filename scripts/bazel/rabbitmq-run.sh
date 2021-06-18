@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# https://stackoverflow.com/a/4774063
-SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
+if [ -z ${TEST_SRCDIR+x} ]; then
+BASE_DIR=$PWD
+else
+BASE_DIR=$TEST_SRCDIR/$TEST_WORKSPACE
+fi
 
 if [ $1 = "-C" ]; then
     cd $2
@@ -32,13 +35,13 @@ for arg in "$@"; do
     esac
 done
 
-DEFAULT_PLUGINS_DIR=${SCRIPTPATH}/{RABBITMQ_HOME}/plugins
+DEFAULT_PLUGINS_DIR=${BASE_DIR}/{RABBITMQ_HOME}/plugins
 if [ ! -z ${EXTRA_PLUGINS_DIR+x} ]; then
     DEFAULT_PLUGINS_DIR=${DEFAULT_PLUGINS_DIR}:${EXTRA_PLUGINS_DIR}
 fi
 
 TEST_TMPDIR=${TEST_TMPDIR:=${TMPDIR}/rabbitmq-test-instances}
-RABBITMQ_SCRIPTS_DIR=${SCRIPTPATH}/{RABBITMQ_HOME}/sbin
+RABBITMQ_SCRIPTS_DIR=${BASE_DIR}/{RABBITMQ_HOME}/sbin
 RABBITMQ_PLUGINS=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-plugins
 RABBITMQ_SERVER=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server
 RABBITMQCTL=${RABBITMQ_SCRIPTS_DIR}/rabbitmqzctl
@@ -161,12 +164,12 @@ case $CMD in
             while ps -p "$pid" >/dev/null 2>&1; do sleep 1; done
         ;;
     set-resource-alarm)
-        ERL_LIBS="{ERL_LIBS}" \
+        ERL_LIBS="${BASE_DIR}/{ERL_LIBS}" \
            ${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl -n ${RABBITMQ_NODENAME} \
             eval "rabbit_alarm:set_alarm({{resource_limit, ${SOURCE}, node()}, []})."
         ;;
     clear-resource-alarm)
-        ERL_LIBS="{ERL_LIBS}" \
+        ERL_LIBS="${BASE_DIR}/{ERL_LIBS}" \
             ${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl -n ${RABBITMQ_NODENAME} \
             eval "rabbit_alarm:clear_alarm({resource_limit, ${SOURCE}, node()})."
         ;;
