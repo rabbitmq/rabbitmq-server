@@ -674,13 +674,14 @@ renaming_json_fields_works(Config) ->
                  integer => 1,
                  string => "string",
                  list => ["s", a, 3]},
-    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata, []),
+    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata, [return_maps]),
 
     RandomMsgBin = list_to_binary(RandomMsg),
-    ?assertEqual(
-       [{int, 1},
-        {m, RandomMsgBin}],
-       Term).
+    ?assertMatch(
+       #{int := 1,
+         m := RandomMsgBin} = M
+       when map_size(M) == 2,
+            Term).
 
 removing_specific_json_fields_works(Config) ->
     Context = default_context(Config),
@@ -699,14 +700,14 @@ removing_specific_json_fields_works(Config) ->
                  integer => 1,
                  string => "string",
                  list => ["s", a, 3]},
-    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata, []),
+    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata, [return_maps]),
 
     RandomMsgBin = list_to_binary(RandomMsg),
     ?assertMatch(
-       [{integer, 1},
-        {msg, RandomMsgBin} | _],
-       Term),
-    ?assertMatch(<<"string">>, proplists:get_value(string, Term)).
+       #{integer := 1,
+         msg := RandomMsgBin,
+         string := <<"string">>},
+       Term).
 
 removing_non_mentionned_json_fields_works(Config) ->
     Context = default_context(Config),
@@ -725,13 +726,14 @@ removing_non_mentionned_json_fields_works(Config) ->
                  integer => 1,
                  string => "string",
                  list => ["s", a, 3]},
-    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata, []),
+    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata, [return_maps]),
 
     RandomMsgBin = list_to_binary(RandomMsg),
-    ?assertEqual(
-       [{integer, 1},
-        {msg, RandomMsgBin}],
-       Term).
+    ?assertMatch(
+        #{integer := 1,
+          msg := RandomMsgBin} = M
+       when map_size(M) == 2,
+            Term).
 
 configuring_verbosity_works(Config) ->
     Context = default_context(Config),
@@ -750,13 +752,14 @@ configuring_verbosity_works(Config) ->
     rabbit_prelaunch_logging:clear_config_run_number(),
     rabbit_prelaunch_logging:setup(Context),
 
-    {RandomMsg, Term} = log_and_return_json_object(Context, #{}, []),
+    {RandomMsg, Term} = log_and_return_json_object(Context, #{}, [return_maps]),
 
     RandomMsgBin = list_to_binary(RandomMsg),
-    ?assertEqual(
-       [{v, 1},
-        {msg, RandomMsgBin}],
-       Term).
+    ?assertMatch(
+       #{v := 1,
+         msg := RandomMsgBin} = M
+       when map_size(M) == 2,
+            Term).
 
 logging_to_stdout_configured_in_env_works(Config) ->
     #{var_origins := Origins0} = Context0 = default_context(Config),
