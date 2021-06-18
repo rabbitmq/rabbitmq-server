@@ -44,8 +44,11 @@
          list_user_topic_permissions/1, list_vhost_topic_permissions/1, list_user_vhost_topic_permissions/2]).
 
 -export([state_can_expire/0]).
--export([mnesia_write_to_khepri/1, mnesia_delete_to_khepri/1]).
--export([khepri_users_path/0, khepri_user_path/1]).
+-export([clear_data_in_khepri/0,
+         mnesia_write_to_khepri/1,
+         mnesia_delete_to_khepri/1]).
+-export([khepri_users_path/0,
+         khepri_user_path/1]).
 
 %% for testing
 -export([hashing_module_for_user/1, expand_topic_permission/2]).
@@ -1435,6 +1438,13 @@ notify_limit_clear(Username, ActingUser) ->
     rabbit_event:notify(user_limits_cleared,
         [{name, <<"limits">>}, {user_who_performed_action, ActingUser},
         {username, Username}]).
+
+clear_data_in_khepri() ->
+    Path = khepri_users_path(),
+    case rabbit_khepri:delete(Path) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end.
 
 mnesia_write_to_khepri(User) when ?is_internal_user(User) ->
     Username = internal_user:get_username(User),

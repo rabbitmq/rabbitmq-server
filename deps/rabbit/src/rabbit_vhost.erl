@@ -24,8 +24,11 @@
 -export([delete_storage/1]).
 -export([vhost_down/1]).
 -export([put_vhost/5]).
--export([mnesia_write_to_khepri/1, mnesia_delete_to_khepri/1]).
--export([khepri_vhosts_path/0, khepri_vhost_path/1]).
+-export([clear_data_in_khepri/0,
+         mnesia_write_to_khepri/1,
+         mnesia_delete_to_khepri/1]).
+-export([khepri_vhosts_path/0,
+         khepri_vhost_path/1]).
 
 %%
 %% API
@@ -676,6 +679,13 @@ info_all(Ref, AggregatorPid)        -> info_all(?INFO_KEYS, Ref, AggregatorPid).
 info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
        AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, all()).
+
+clear_data_in_khepri() ->
+    Path = khepri_vhosts_path(),
+    case rabbit_khepri:delete(Path) of
+        {ok, _} -> ok;
+        Error   -> throw(Error)
+    end.
 
 mnesia_write_to_khepri(VHost) when ?is_vhost(VHost) ->
     Name = vhost:get_name(VHost),

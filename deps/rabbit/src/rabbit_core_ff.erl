@@ -338,6 +338,15 @@ migrate_tables_to_khepri(FeatureName, Tables) ->
     end.
 
 migrate_tables_to_khepri_run(FeatureName, Tables) ->
+    %% Clear data in Khepri which could come from a previously aborted copy
+    %% attempt. The table list order is important so we need to reverse that
+    %% order to clear the data.
+    ?LOG_DEBUG(
+       "Feature flag `~s`:   clear data from any aborted migration attempts "
+       "(if any)",
+       [FeatureName]),
+    ok = clear_data_from_previous_attempt(FeatureName, lists:reverse(Tables)),
+
     %% Subscribe to Mnesia events: we want to know about all writes and
     %% deletions happening in parallel to the copy we are about to start.
     ?LOG_DEBUG(
@@ -357,6 +366,23 @@ migrate_tables_to_khepri_run(FeatureName, Tables) ->
        "Feature flag `~s`:   final sync and Mnesia table removal",
        [FeatureName]),
     ok = final_sync_from_mnesia_to_khepri(FeatureName, Tables).
+
+clear_data_from_previous_attempt(
+  FeatureName, [rabbit_vhost | Rest]) ->
+    ok = rabbit_vhost:clear_data_in_khepri(),
+    clear_data_from_previous_attempt(FeatureName, Rest);
+clear_data_from_previous_attempt(
+  FeatureName, [rabbit_user | Rest]) ->
+    ok = rabbit_auth_backend_internal:clear_data_in_khepri(),
+    clear_data_from_previous_attempt(FeatureName, Rest);
+clear_data_from_previous_attempt(
+  FeatureName, [rabbit_user_permission | Rest]) ->
+    clear_data_from_previous_attempt(FeatureName, Rest);
+clear_data_from_previous_attempt(
+  FeatureName, [rabbit_topic_permission | Rest]) ->
+    clear_data_from_previous_attempt(FeatureName, Rest);
+clear_data_from_previous_attempt(_, []) ->
+    ok.
 
 subscribe_to_mnesia_changes(FeatureName, [Table | Rest]) ->
     ?LOG_DEBUG(
@@ -410,6 +436,8 @@ do_copy_from_mnesia_to_khepri(
     ok;
 do_copy_from_mnesia_to_khepri(
   FeatureName, Table, Key, Fun, Count, Copied) ->
+    %% TODO: Batch several records in a single Khepri insert.
+    %% TODO: Can/should we parallelize?
     case Copied rem 100 of
         0 ->
             ?LOG_DEBUG(
@@ -454,6 +482,7 @@ consume_mnesia_events(FeatureName) ->
     consume_mnesia_events(FeatureName, Count, 0).
 
 consume_mnesia_events(FeatureName, Count, Handled) ->
+    %% TODO: Batch several events in a single Khepri command.
     Handled1 = Handled + 1,
     receive
         {mnesia_table_event, {write, NewRecord, _}} ->
@@ -525,7 +554,13 @@ drop_unused_mnesia_tables(FeatureName, [Table | Rest]) ->
                 {atomic, ok}                       -> ok;
                 {aborted, {no_exists, {Table, _}}} -> ok
             end;
+        {aborted, {already_exists, Table, read_write}} ->
+            case mnesia:delete_table(Table) of
+                {atomic, ok}                       -> ok;
+                {aborted, {no_exists, {Table, _}}} -> ok
+            end;
         {aborted, {no_exists, {Table, _}}} ->
+            %% Another node already took care of this table.
             ok
     end,
     drop_unused_mnesia_tables(FeatureName, Rest);

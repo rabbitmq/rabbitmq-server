@@ -14,7 +14,9 @@
 -export([setup/1,
          add_member/1,
          members/0,
+         locally_known_members/0,
          nodes/0,
+         locally_known_nodes/0,
          get_store_id/0,
          machine_insert/3,
          insert/2,
@@ -63,45 +65,63 @@ setup(_) ->
     end.
 
 add_member(NewNode) when NewNode =/= node() ->
-    %% Ensure the remote node is reachable before we add it.
-    pong = net_adm:ping(NewNode),
-
     ?LOG_DEBUG(
-       "Resetting Khepri on remote node ~s",
-       [NewNode],
+       "Trying to add node ~s to Khepri cluster \"~s\" from node ~s",
+       [NewNode, ?RA_CLUSTER_NAME, node()],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-    Ret1 = rpc:call(NewNode, rabbit_khepri, priv_reset, []),
-    case Ret1 of
-        ok ->
+
+    %% Check if the node is already part of the cluster. We query the local Ra
+    %% server only, in case the cluster can't elect a leader right now.
+    CurrentNodes = locally_known_nodes(),
+    case lists:member(NewNode, CurrentNodes) of
+        false ->
+            %% Ensure the remote node is reachable before we add it.
+            pong = net_adm:ping(NewNode),
+
             ?LOG_DEBUG(
-               "Adding remote node ~s to Khepri cluster \"~s\"",
-               [NewNode, ?RA_CLUSTER_NAME],
+               "Resetting Khepri on remote node ~s",
+               [NewNode],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            ok = ensure_ra_system_started(?RA_SYSTEM),
-            Ret2 = khepri:add_member(
-                     ?RA_SYSTEM, ?RA_CLUSTER_NAME, ?RA_FRIENDLY_NAME,
-                     NewNode),
-            case Ret2 of
+            Ret1 = rpc:call(NewNode, rabbit_khepri, priv_reset, []),
+            case Ret1 of
                 ok ->
                     ?LOG_DEBUG(
-                       "Node ~s added to Khepri cluster \"~s\"",
+                       "Adding remote node ~s to Khepri cluster \"~s\"",
                        [NewNode, ?RA_CLUSTER_NAME],
                        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-                    ok = rpc:call(NewNode, rabbit, start, []);
-                {error, _} = Error ->
+                    ok = ensure_ra_system_started(?RA_SYSTEM),
+                    Ret2 = khepri:add_member(
+                             ?RA_SYSTEM, ?RA_CLUSTER_NAME, ?RA_FRIENDLY_NAME,
+                             NewNode),
+                    case Ret2 of
+                        ok ->
+                            ?LOG_DEBUG(
+                               "Node ~s added to Khepri cluster \"~s\"",
+                               [NewNode, ?RA_CLUSTER_NAME],
+                               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+                            ok = rpc:call(NewNode, rabbit, start, []);
+                        {error, _} = Error ->
+                            ?LOG_ERROR(
+                               "Failed to add remote node ~s to Khepri "
+                               "cluster \"~s\": ~p",
+                               [NewNode, ?RA_CLUSTER_NAME, Error],
+                               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+                            Error
+                    end;
+                Error ->
                     ?LOG_ERROR(
-                       "Failed to add remote node ~s to Khepri cluster "
-                       "\"~s\": ~p",
-                       [NewNode, ?RA_CLUSTER_NAME, Error],
+                       "Failed to reset Khepri on remote node ~s: ~p",
+                       [NewNode, Error],
                        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
                     Error
             end;
-        Error ->
-            ?LOG_ERROR(
-               "Failed to reset Khepri on remote node ~s: ~p",
-               [NewNode, Error],
+        true ->
+            ?LOG_INFO(
+               "Asked to add node ~s to Khepri cluster \"~s\" but already a "
+               "member of it: ~p",
+               [NewNode, ?RA_CLUSTER_NAME, lists:sort(CurrentNodes)],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            Error
+            ok
     end.
 
 priv_reset() ->
@@ -147,8 +167,14 @@ ensure_ra_system_started(RaSystem) ->
 members() ->
     khepri:members(?RA_CLUSTER_NAME).
 
+locally_known_members() ->
+    khepri:locally_known_members(?RA_CLUSTER_NAME).
+
 nodes() ->
     khepri:nodes(?RA_CLUSTER_NAME).
+
+locally_known_nodes() ->
+    khepri:locally_known_nodes(?RA_CLUSTER_NAME).
 
 get_store_id() ->
     ?STORE_NAME.
