@@ -138,26 +138,25 @@ erlang_lib(
         urls = ["https://github.com/rabbitmq/inet_tcp_proxy/archive/master.zip"],
     )
 
-    hex_pm_bazel_erlang_lib(
+    github_bazel_erlang_lib(
         name = "jose",
-        version = "1.11.1",
-        sha256 = "078f6c9fb3cd2f4cfafc972c814261a7d1e8d2b3685c0a76eb87e158efff1ac5",
+        repo = "erlang-jose",
+        org = "potatosalad",
+        ref = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
+        version = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
         first_srcs = [
             "src/jose_block_encryptor.erl",
             "src/jwk/jose_jwk_use_enc.erl",
             "src/jwk/jose_jwk_use_sig.erl",
             "src/jwk/jose_jwk_oct.erl",
         ],
+        sha256 = "7816f39d00655f2605cfac180755e97e268dba86c2f71037998ff63792ca727b",
     )
 
     hex_pm_bazel_erlang_lib(
         name = "jsx",
-        version = "2.11.0",
-        sha256 = "eed26a0d04d217f9eecefffb89714452556cf90eb38f290a27a4d45b9988f8c0",
-        erlc_opts = [
-            "+debug_info",
-            "-Dmaps_support=1",
-        ],
+        version = "3.1.0",
+        sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
     )
 
     hex_pm_bazel_erlang_lib(
