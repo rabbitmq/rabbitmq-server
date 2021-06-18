@@ -149,6 +149,42 @@ def rabbitmq_integration_suite(
         ] + deps,
         **kwargs
     )
+
+    ct_suite(
+        name = "{}-mixed".format(name),
+        suite_name = name,
+        tags = tags + ["mixed-version-cluster"],
+        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
+        data = [
+            "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
+            "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
+        ] + data,
+        test_env = dict({
+            "SKIP_MAKE_TEST_DIST": "true",
+            "RABBITMQ_FEATURE_FLAGS": "",
+            "RABBITMQ_RUN": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/rabbitmq-for-tests-run".format(package),
+            "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
+            "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
+            "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
+            "RABBITMQ_RUN_SECONDARY": "$TEST_SRCDIR/rabbitmq-server-generic-unix-3.8.17/rabbitmq-run",
+        }.items() + test_env.items()),
+        tools = [
+            ":rabbitmq-for-tests-run",
+            "@rabbitmq-server-generic-unix-3.8.17//:rabbitmq-run",
+        ] + tools,
+        runtime_deps = [
+            "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+            "//deps/rabbitmq_cli:rabbitmqctl",
+            "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
+        ] + runtime_deps,
+        deps = [
+            "//deps/amqp_client:bazel_erlang_lib",
+            "//deps/rabbit_common:bazel_erlang_lib",
+            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+        ] + deps,
+        **kwargs
+    )
+
     return kwargs["name"]
 
 def assert_suites(suite_names, suite_files):
