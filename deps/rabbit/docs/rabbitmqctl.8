@@ -28,7 +28,13 @@
 RabbitMQ is an open source multi-protocol messaging broker.
 .Pp
 .Nm
-is a command line tool for managing a RabbitMQ server node.
+is the main command line tool for managing a RabbitMQ server node,
+together with
+.Cm rabbitmq-diagnostics
+,
+.Cm rabbitmq-upgrade
+, and others.
+.Pp
 It performs all actions by connecting to the target RabbitMQ node
 on a dedicated CLI tool communication port and authenticating
 using a shared secret (known as the cookie file).
