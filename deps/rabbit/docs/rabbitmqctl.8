@@ -4,8 +4,8 @@
 .\" file, You can obtain one at https://mozilla.org/MPL/2.0/.
 .\"
 .\" Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
-
-.Dd September 28, 2019
+.\"
+.Dd June 19, 2021
 .Dt RABBITMQCTL 8
 .Os "RabbitMQ Server"
 .Sh NAME
@@ -150,20 +150,14 @@ For example, to reset the RabbitMQ node:
 .Pp
 Instructs the RabbitMQ node to perform internal log rotation.
 .Pp
-Log rotation is performed according to lager settings specified in
-configuration file.
+Log rotation is performed according to the logging settings specified in the configuration file.
+The rotation operation is asynchronous, there is no guarantee that it has completed when this command returns.
 .Pp
-Note that there is no need to call this command in case of external log
-rotation (e.g. from logrotate(8)), because lager detects renames and
-automatically reopens log files.
+Note that there is no need to call this command in case of external log rotation (e.g. from logrotate(8)).
 .Pp
-For example, this command starts internal log rotation
-process:
+For example, to initial log rotation:
 .sp
 .Dl rabbitmqctl rotate_logs
-.Pp
-Rotation is performed asynchronously, so there is no guarantee that it
-will be completed when this command returns.
 .\" ------------------------------------------------------------------
 .It Cm shutdown
 .Pp
@@ -720,7 +714,7 @@ is an administrator:
 .sp
 .Dl rabbitmqctl set_user_tags janeway administrator
 .Pp
-This has no effect when the user logs in via AMQP, but can be used to
+This has no effect when the user authenticates using a messaging protocol, but can be used to
 permit the user to manage users, virtual hosts and permissions when
 the user logs in via some other means (for example with the management
 plugin).
@@ -1957,6 +1951,10 @@ Enables a feature flag on the target node.
 Example:
 .Sp
 .Dl rabbitmqctl enable_feature_flag quorum_queue
+.Pp
+You can also enable all feature flags by specifying "all":
+.Sp
+.Dl rabbitmqctl enable_feature_flag "all"
 .\" ------------------------------------------------------------------
 .It Cm list_feature_flags Op Ar column ...
 .Pp
