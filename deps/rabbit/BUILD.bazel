@@ -561,6 +561,14 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     PACKAGE,
+    name = "logging_SUITE",
+    runtime_deps = [
+        "@syslog//:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_integration_suite(
+    PACKAGE,
     name = "maintenance_mode_SUITE",
     size = "medium",
     additional_beam = [
