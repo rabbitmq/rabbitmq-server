@@ -1,4 +1,5 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
+load("@bazel-erlang//:ct.bzl", "ct_group_case_matrix", "ct_group_matrix")
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
@@ -357,13 +358,13 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "clustering_management_SUITE",
     size = "large",
-    groups = [
+    flaky = True,
+    matrix = ct_group_matrix([
         "unclustered_2_nodes",
         "unclustered_3_nodes",
         "clustered_2_nodes",
         "clustered_4_nodes",
-    ],
-    flaky = True,
+    ]),
 )
 
 rabbitmq_integration_suite(
@@ -422,7 +423,7 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "dynamic_ha_SUITE",
     size = "large",
-    groups = {
+    matrix = ct_group_case_matrix({
         "cluster_size_5": [
             "change_cluster",
         ],
@@ -449,7 +450,7 @@ rabbitmq_integration_suite(
             "rebalance_nodes",
             "rebalance_multiple_blocked",
         ],
-    },
+    }),
     deps = [
         "@proper//:bazel_erlang_lib",
     ],
@@ -474,18 +475,16 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":sync_detection_SUITE_beam_files",
     ],
-    groups = {
+    flaky = True,
+    matrix = ct_group_case_matrix({
         "non_parallel_tests": [
-            {
-                "case": "eager_sync",
-                "flaky": True,
-            },
+            "eager_sync",
             "eager_sync_cancel",
             "eager_sync_auto",
             "eager_sync_auto_on_policy_change",
             "eager_sync_requeue",
         ],
-    },
+    }),
     tags = ["classic-queue"],
 )
 
@@ -631,19 +630,14 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "peer_discovery_classic_config_SUITE",
     size = "medium",
-    groups = {
+    flaky = True,
+    matrix = ct_group_case_matrix({
         "non_parallel": [
-            {
-                "case": "successful_discovery",
-                "flaky": True,
-            },
-            {
-                "case": "successful_discovery_with_a_subset_of_nodes_coming_online",
-                "flaky": True,
-            },
+            "successful_discovery",
+            "successful_discovery_with_a_subset_of_nodes_coming_online",
             "no_nodes_configured",
         ],
-    },
+    }),
 )
 
 rabbitmq_integration_suite(
@@ -758,14 +752,14 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
-    groups = [
+    matrix = ct_group_matrix([
         "classic_queue",
         "mirrored_queue",
         "quorum_queue",
         "quorum_queue_in_memory_limit",
         "quorum_queue_in_memory_bytes",
         "stream_queue",
-    ],
+    ]),
 )
 
 rabbitmq_integration_suite(
@@ -968,10 +962,10 @@ rabbitmq_integration_suite(
         ":rabbit_ha_test_consumer",
         ":rabbit_ha_test_producer",
     ],
-    groups = [
+    matrix = ct_group_matrix([
         "cluster_size_2",
         "cluster_size_3",
-    ],
+    ]),
 )
 
 rabbitmq_integration_suite(
@@ -981,10 +975,10 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
-    groups = [
+    matrix = ct_group_matrix([
         "classic_queue",
         "quorum_queue",
-    ],
+    ]),
 )
 
 rabbitmq_integration_suite(
@@ -1208,10 +1202,10 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "vhost_SUITE",
     size = "medium",
-    groups = [
+    matrix = ct_group_matrix([
         "cluster_size_1_network",
         "cluster_size_2_network",
         "cluster_size_1_direct",
         "cluster_size_2_direct",
-    ],
+    ]),
 )
