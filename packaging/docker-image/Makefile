@@ -35,6 +35,7 @@ endif
 OTP_VERSION ?= 23.2.4
 OTP_SHA256 ?= e72aa084907e0f34f932cf00caa33aba93147b0a7c9c35569d6bd1c402f532de
 REPO ?= pivotalrabbitmq/rabbitmq
+SKIP_PGP_VERIFY ?= false
 PGP_KEYSERVER ?= pgpkeys.eu
 ALT1_PGP_KEYSERVER ?= keyserver.ubuntu.com
 ALT2_PGP_KEYSERVER ?= pgpkeys.uk
@@ -44,6 +45,7 @@ all: dist
 dist:
 	xzcat $(GENERIC_UNIX_ARCHIVE) | tar xvf -
 	docker build --pull \
+	  --build-arg SKIP_PGP_VERIFY=$(SKIP_PGP_VERIFY) \
 	  --build-arg PGP_KEYSERVER=$(PGP_KEYSERVER) \
 	  --build-arg OTP_VERSION=$(OTP_VERSION) \
 	  --build-arg OTP_SHA256=$(OTP_SHA256) \
