@@ -363,6 +363,7 @@ rabbitmq_integration_suite(
         "clustered_2_nodes",
         "clustered_4_nodes",
     ],
+    flaky = True,
 )
 
 rabbitmq_integration_suite(
