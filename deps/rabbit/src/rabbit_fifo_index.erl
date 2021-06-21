@@ -14,7 +14,7 @@
 
 %% the empty atom is a lot smaller (4 bytes) than e.g. `undefined` (13 bytes).
 %% This matters as the data map gets persisted as part of the snapshot
--define(NIL, '').
+-define(NIL, []).
 
 -record(?MODULE, {data = #{} :: #{integer() => ?NIL},
                   smallest :: undefined | non_neg_integer(),
@@ -40,10 +40,19 @@ append(Key,
        #?MODULE{data = Data,
                 smallest = Smallest,
                 largest = Largest} = State)
-  when Key > Largest orelse Largest =:= undefined ->
+  when Key > Largest orelse
+       Largest =:= undefined ->
     State#?MODULE{data = maps:put(Key, ?NIL, Data),
                   smallest = ra_lib:default(Smallest, Key),
-                  largest = Key}.
+                  largest = Key};
+append(Key,
+       #?MODULE{data = Data,
+                largest = Largest,
+                smallest = Smallest} = State) ->
+    State#?MODULE{data = maps:put(Key, ?NIL, Data),
+                  smallest = min(Key, ra_lib:default(Smallest, Key)),
+                  largest = max(Key, ra_lib:default(Largest, Key))
+                  }.
 
 -spec delete(Index :: integer(), state()) -> state().
 delete(Smallest, #?MODULE{data = Data0,
