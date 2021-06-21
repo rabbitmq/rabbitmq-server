@@ -12,6 +12,9 @@ RUN set -eux; \
 # verify that the "gosu" binary works
 	gosu nobody true
 
+# PGP key servers are too flaky for us to verify during every CI triggered build
+# https://github.com/docker-library/official-images/issues/4252
+ARG SKIP_PGP_VERIFY=false
 # Default to a PGP keyserver that pgp-happy-eyeballs recognizes, but allow for substitutions locally
 ARG PGP_KEYSERVER=ha.pool.sks-keyservers.net
 # If you are building this image locally and are getting `gpg: keyserver receive failed: No data` errors,
@@ -65,7 +68,7 @@ RUN set -eux; \
 	for key in $OPENSSL_PGP_KEY_IDS; do \
 		gpg --batch --keyserver "$PGP_KEYSERVER" --recv-keys "$key" || true; \
 	done; \
-	gpg --batch --verify "$OPENSSL_PATH.tar.gz.asc" "$OPENSSL_PATH.tar.gz"; \
+	test "$SKIP_PGP_VERIFY" == "true" || gpg --batch --verify "$OPENSSL_PATH.tar.gz.asc" "$OPENSSL_PATH.tar.gz"; \
 	gpgconf --kill all; \
 	rm -rf "$GNUPGHOME"; \
 	echo "$OPENSSL_SOURCE_SHA256 *$OPENSSL_PATH.tar.gz" | sha256sum --check --strict -; \
