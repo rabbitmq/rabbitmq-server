@@ -30,6 +30,7 @@ build --@bazel-erlang//:erlang_home=/path/to/erlang/installation
 build --@bazel-erlang//:erlang_version=23.1
 build --@bazel-erlang//:elixir_home=/path/to/elixir/installation
 build --test_strategy=exclusive
+build --incompatible_strict_action_env
 ```
 
 Additionally, on **macOS**, you will likely need to add
