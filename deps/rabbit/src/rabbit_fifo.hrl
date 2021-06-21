@@ -1,10 +1,23 @@
 
+%% macros for memory optimised tuple structures
+-define(TUPLE(A, B), [A | B]).
+
+-define(DISK_MSG_TAG, '$disk').
+% -define(PREFIX_DISK_MSG_TAG, '$prefix_disk').
+-define(PREFIX_MEM_MSG_TAG, '$prefix_inmem').
+
+-define(DISK_MSG(Header), [Header | ?DISK_MSG_TAG]).
+-define(MSG(Header, RawMsg), [Header | RawMsg]).
+-define(INDEX_MSG(Index, Msg), [Index | Msg]).
+% -define(PREFIX_DISK_MSG(Header), [?PREFIX_DISK_MSG_TAG | Header]).
+% -define(PREFIX_DISK_MSG(Header), ?DISK_MSG(Header)).
+-define(PREFIX_MEM_MSG(Header), [?PREFIX_MEM_MSG_TAG | Header]).
+
 -type option(T) :: undefined | T.
 
 -type raw_msg() :: term().
 %% The raw message. It is opaque to rabbit_fifo.
 
--type msg_in_id() :: non_neg_integer().
 % a queue scoped monotonically incrementing integer used to enforce order
 % in the unassigned messages map
 
@@ -26,17 +39,19 @@
 %%                 A non-zero value indicates a previous attempt.
 %% If it only contains the size it can be condensed to an integer only
 
--type msg() :: {msg_header(), raw_msg()}.
+-type msg() :: ?MSG(msg_header(), raw_msg()) |
+               ?DISK_MSG(msg_header()) |
+               ?PREFIX_MEM_MSG(msg_header()).
 %% message with a header map.
 
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type indexed_msg() :: {ra:index(), msg()}.
+-type indexed_msg() :: ?INDEX_MSG(ra:index(), msg()).
 
 -type prefix_msg() :: {'$prefix_msg', msg_header()}.
 
--type delivery_msg() :: {msg_id(), msg()}.
+-type delivery_msg() :: {msg_id(), {msg_header(), term()}}.
 %% A tuple consisting of the message id and the headered message.
 
 -type consumer_tag() :: binary().
@@ -79,7 +94,7 @@
 
 -record(consumer,
         {meta = #{} :: consumer_meta(),
-         checked_out = #{} :: #{msg_id() => {msg_in_id(), indexed_msg()}},
+         checked_out = #{} :: #{msg_id() => indexed_msg()},
          next_msg_id = 0 :: msg_id(), % part of snapshot data
          %% max number of messages that can be sent
          %% decremented for each delivery
@@ -145,12 +160,11 @@
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
-         messages = lqueue:new() :: lqueue:lqueue({msg_in_id(), indexed_msg()}),
+         messages = lqueue:new() :: lqueue:lqueue(indexed_msg()),
          % defines the next message id
-         next_msg_num = 1 :: msg_in_id(),
+         messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
-         returns = lqueue:new() :: lqueue:lqueue(prefix_msg() |
-                                                 {msg_in_id(), indexed_msg()}),
+         returns = lqueue:new() :: lqueue:lqueue(term()),
          % a counter of enqueues - used to trigger shadow copy points
          enqueue_count = 0 :: non_neg_integer(),
          % a map containing all the live processes that have ever enqueued
