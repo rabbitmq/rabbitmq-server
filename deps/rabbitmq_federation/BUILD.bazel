@@ -1,4 +1,5 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
+load("@bazel-erlang//:ct.bzl", "ct_group_matrix")
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
@@ -80,12 +81,12 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":rabbit_federation_test_util",
     ],
-    groups = [
+    matrix = ct_group_matrix([
         "without_automatic_setup",
         "channel_use_mode_single",
         "without_disambiguate",
         "with_disambiguate",
-    ],
+    ]),
 )
 
 rabbitmq_integration_suite(

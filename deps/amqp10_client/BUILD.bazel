@@ -1,6 +1,6 @@
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
-load("@bazel-erlang//:ct.bzl", "ct_suite")
+load("@bazel-erlang//:ct.bzl", "ct_group_matrix", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
@@ -90,13 +90,13 @@ rabbitmq_integration_suite(
     erlc_opts = [
         "-I deps/amqp10_client",
     ],
-    groups = [
+    matrix = ct_group_matrix([
         "rabbitmq",
         "rabbitmq_strict",
         "activemq",
         "activemq_no_anon",
         "mock",
-    ],
+    ]),
     test_env = {
         "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq",
     },

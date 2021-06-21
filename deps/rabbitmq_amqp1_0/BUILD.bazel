@@ -1,3 +1,4 @@
+load("@bazel-erlang//:ct.bzl", "ct_group_matrix")
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
@@ -87,10 +88,10 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "system_SUITE",
     flaky = True,
-    groups = [
+    matrix = ct_group_matrix([
         "dotnet",
         "java",
-    ],
+    ]),
     tags = [
         "dotnet",
     ],
