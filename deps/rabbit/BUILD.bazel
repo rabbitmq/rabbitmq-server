@@ -336,10 +336,15 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "cluster_rename_SUITE",
     size = "medium",
-    groups = [
-        "cluster_size_2",
-        "cluster_size_3",
-    ],
+    matrix = {
+        "cluster_size_2": {
+            "groups": ["cluster_size_2"],
+        },
+        "cluster_size_3": {
+            "groups": ["cluster_size_3"],
+            "flaky": True,
+        },
+    },
 )
 
 rabbitmq_integration_suite(
@@ -397,6 +402,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
+    flaky = True,
 )
 
 rabbitmq_integration_suite(
