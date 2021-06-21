@@ -1551,19 +1551,7 @@ rpc(_Config, Node, Module, Function, Args, Timeout)
 when is_atom(Node) andalso Node =/= undefined ->
     %% We add some directories to the broker node search path.
     add_code_path_to_node(Node, Module),
-    %% If there is an exception, rpc:call/{4,5} returns the exception as
-    %% a "normal" return value. If there is an exit signal, we raise
-    %% it again. In both cases, we have no idea of the module and line
-    %% number which triggered the issue.
-    Ret = case Timeout of
-        infinity -> rpc:call(Node, Module, Function, Args);
-        _        -> rpc:call(Node, Module, Function, Args, Timeout)
-    end,
-    case Ret of
-        {badrpc, {'EXIT', Reason}} -> exit(Reason);
-        {badrpc, Reason}           -> exit(Reason);
-        Ret                        -> Ret
-    end;
+    erpc:call(Node, Module, Function, Args, Timeout);
 rpc(Config, I, Module, Function, Args, Timeout)
 when is_integer(I) andalso I >= 0 ->
     Node = get_node_config(Config, I, nodename),
