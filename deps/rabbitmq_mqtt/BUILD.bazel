@@ -130,6 +130,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "java_SUITE",
+    flaky = True,
 )
 
 rabbitmq_suite(
