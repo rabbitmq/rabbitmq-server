@@ -1,4 +1,5 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
+load("@bazel-erlang//:ct.bzl", "ct_group_matrix")
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
@@ -132,11 +133,11 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "python_SUITE",
-    groups = [
+    matrix = ct_group_matrix([
         "tls",
         "implicit_connect",
         "main",
-    ],
+    ]),
 )
 
 rabbitmq_integration_suite(
