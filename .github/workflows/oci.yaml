@@ -38,7 +38,7 @@ jobs:
       - name: Build container image
         working-directory: packaging/docker-image
         run: |
-          make dist
+          make dist SKIP_PGP_VERIFY=true
 
       - name: Login to DockerHub
         working-directory: packaging/docker-image
