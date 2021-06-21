@@ -75,10 +75,14 @@ shrink(Config) ->
     #'queue.declare_ok'{} = declare_qq(Ch, QName),
     {ok, Out1} = rabbitmq_queues(Config, 0, ["shrink", Nodename2]),
     ?assertMatch(#{{"/", "shrink1"} := {2, ok}}, parse_result(Out1)),
+    %% removing a node can trigger a leader election, give this QQ some time
+    %% to do it
     timer:sleep(1500),
     Nodename1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
     {ok, Out2} = rabbitmq_queues(Config, 0, ["shrink", Nodename1]),
     ?assertMatch(#{{"/", "shrink1"} := {1, ok}}, parse_result(Out2)),
+    %% removing a node can trigger a leader election, give this QQ some time
+    %% to do it
     timer:sleep(1500),
     Nodename0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     {ok, Out3} = rabbitmq_queues(Config, 0, ["shrink", Nodename0]),
