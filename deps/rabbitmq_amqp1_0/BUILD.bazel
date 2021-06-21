@@ -87,7 +87,6 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "system_SUITE",
-    flaky = True,
     matrix = ct_group_matrix([
         "dotnet",
         "java",

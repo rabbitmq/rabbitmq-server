@@ -49,7 +49,10 @@ rabbitmq_lib(
     deps = DEPS,
 )
 
-xref(tags = ["xref"])
+xref(
+    size = "small",
+    tags = ["xref"],
+)
 
 plt(
     name = "base_plt",
@@ -58,6 +61,7 @@ plt(
 )
 
 dialyze(
+    size = "small",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
     tags = ["dialyze"],
@@ -83,12 +87,13 @@ PACKAGE = "deps/rabbitmq_trust_store"
 rabbitmq_integration_suite(
     PACKAGE,
     name = "config_schema_SUITE",
+    size = "small",
+    flaky = False,
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "system_SUITE",
-    flaky = True,
     matrix = ct_group_matrix([
         "file_provider_tests",
         "http_provider_tests",

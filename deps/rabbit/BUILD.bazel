@@ -347,7 +347,6 @@ rabbitmq_integration_suite(
         },
         "cluster_size_3": {
             "groups": ["cluster_size_3"],
-            "flaky": True,
         },
     },
 )
@@ -362,7 +361,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "clustering_management_SUITE",
     size = "large",
-    flaky = True,
     matrix = ct_group_matrix([
         "unclustered_2_nodes",
         "unclustered_3_nodes",
@@ -378,6 +376,7 @@ rabbitmq_integration_suite(
     data = [
         "test/definition_import_SUITE_data/case1.json",
     ],
+    flaky = False,
 )
 
 rabbitmq_integration_suite(
@@ -408,7 +407,6 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
-    flaky = True,
 )
 
 rabbitmq_integration_suite(
@@ -479,7 +477,6 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":sync_detection_SUITE_beam_files",
     ],
-    flaky = True,
     matrix = ct_group_case_matrix({
         "non_parallel_tests": [
             "eager_sync",
@@ -525,7 +522,6 @@ rabbitmq_integration_suite(
         "enabling_in_cluster-enable_feature_flag_when_ff_file_is_unwritable": {
             "groups": ["enabling_in_cluster"],
             "cases": ["enable_feature_flag_when_ff_file_is_unwritable"],
-            "flaky": True,
             # The enabling_* tests chmod files and then expect writes to be blocked.
             # This probably doesn't work because we are root in the remote docker image.
             "tags": ["exclusive"],
@@ -540,7 +536,6 @@ rabbitmq_integration_suite(
         },
         "clustering": {
             "groups": ["clustering"],
-            "flaky": True,
         },
         "activating_plugin": {
             "groups": ["activating_plugin"],
@@ -626,7 +621,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "peer_discovery_classic_config_SUITE",
     size = "medium",
-    flaky = True,
     matrix = ct_group_case_matrix({
         "non_parallel": [
             "successful_discovery",
@@ -773,7 +767,6 @@ rabbitmq_integration_suite(
         },
         "clustered-cluster_size_2": {
             "groups": ["cluster_size_2"],
-            "flaky": True,
         },
         "clustered-cluster_size_3": {
             "groups": ["cluster_size_3"],
