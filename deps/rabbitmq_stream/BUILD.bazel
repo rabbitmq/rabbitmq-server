@@ -1,3 +1,4 @@
+load("@bazel-erlang//:ct.bzl", "ct_group_matrix")
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
@@ -83,20 +84,16 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "config_schema_SUITE",
+    flaky = False,
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbit_stream_SUITE",
-    matrix = {
-        "single_node": {
-            "groups": ["single_node"],
-        },
-        "cluster": {
-            "groups": ["cluster"],
-            "flaky": True,
-        },
-    },
+    matrix = ct_group_matrix([
+        "single_node",
+        "cluster",
+    ]),
     deps = [
         "//deps/rabbitmq_stream_common:bazel_erlang_lib",
     ],

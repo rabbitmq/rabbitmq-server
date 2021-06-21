@@ -120,6 +120,7 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "config_schema_SUITE",
     size = "small",
+    flaky = False,
 )
 
 rabbitmq_suite(
