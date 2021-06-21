@@ -91,7 +91,6 @@ dep_rabbitmq_stomp                    = git_rmq-subfolder rabbitmq-stomp $(curre
 dep_rabbitmq_stream                   = git_rmq-subfolder rabbitmq-stream $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_stream_common            = git_rmq-subfolder rabbitmq-stream-common $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_stream_management        = git_rmq-subfolder rabbitmq-stream-management $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_stream_prometheus        = git_rmq-subfolder rabbitmq-stream-prometheus $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_toke                     = git_rmq           rabbitmq-toke $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_top                      = git_rmq-subfolder rabbitmq-top $(current_rmq_ref) $(base_rmq_ref) master
 dep_rabbitmq_tracing                  = git_rmq-subfolder rabbitmq-tracing $(current_rmq_ref) $(base_rmq_ref) master
@@ -179,7 +178,6 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_stream \
 		      rabbitmq_stream_common \
 		      rabbitmq_stream_management \
-		      rabbitmq_stream_prometheus \
 		      rabbitmq_toke \
 		      rabbitmq_top \
 		      rabbitmq_tracing \
