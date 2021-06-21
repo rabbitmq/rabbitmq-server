@@ -4,6 +4,8 @@
 %%
 %% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
+%%
+%% before post gc 1M msg: 203MB, after recovery + gc: 203MB
 
 -module(rabbit_fifo).
 
@@ -123,11 +125,12 @@
               state/0,
               config/0]).
 
--define(MSG(Header, RawMsg), {Header, RawMsg}).
--define(DISK_MSG(Header), {Header, empty}).
--define(INDEX_MSG(Index, Msg), {Index, Msg}).
--define(PREFIX_DISK_MSG(Header), {'$empty_msg', Header}).
--define(PREFIX_MEM_MSG(Header), {'$prefix_msg', Header}).
+-define(TUPLE(A, B), [A | B]).
+-define(MSG(Header, RawMsg), [Header | RawMsg]).
+-define(DISK_MSG(Header), [Header | empty]).
+-define(INDEX_MSG(Index, Msg), [Index | Msg]).
+-define(PREFIX_DISK_MSG(Header), ['$empty_msg' | Header]).
+-define(PREFIX_MEM_MSG(Header), ['$prefix_msg' | Header]).
 
 -spec init(config()) -> state().
 init(#{name := Name,
@@ -1196,7 +1199,7 @@ apply_enqueue(#{index := RaftIdx} = Meta, From, Seq, RawMsg, State0) ->
 
 drop_head(#?MODULE{ra_indexes = Indexes0} = State0, Effects0) ->
     case take_next_msg(State0) of
-        {FullMsg = {_MsgId, ?INDEX_MSG(RaftIdxToDrop, ?MSG(Header, _) = Msg)},
+        {FullMsg = ?INDEX_MSG(RaftIdxToDrop, ?MSG(Header, _) = Msg),
          State1} ->
             Indexes = rabbit_fifo_index:delete(RaftIdxToDrop, Indexes0),
             State2 = add_bytes_drop(Header, State1#?MODULE{ra_indexes = Indexes}),
@@ -1217,8 +1220,7 @@ drop_head(#?MODULE{ra_indexes = Indexes0} = State0, Effects0) ->
             {State0, Effects0}
     end.
 
-enqueue(RaftIdx, RawMsg, #?MODULE{messages = Messages,
-                                  next_msg_num = NextMsgNum} = State0) ->
+enqueue(RaftIdx, RawMsg, #?MODULE{messages = Messages} = State0) ->
     %% the initial header is an integer only - it will get expanded to a map
     %% when the next required key is added
     Header = message_size(RawMsg),
@@ -1234,8 +1236,7 @@ enqueue(RaftIdx, RawMsg, #?MODULE{messages = Messages,
         end,
     State = add_bytes_enqueue(Header, State1),
     %% TODO: msg num isn't needed
-    State#?MODULE{messages = lqueue:in({NextMsgNum, Msg}, Messages),
-                  next_msg_num = NextMsgNum + 1}.
+    State#?MODULE{messages = lqueue:in(Msg, Messages)}.
 
 append_to_master_index(RaftIdx,
                        #?MODULE{ra_indexes = Indexes0} = State0) ->
@@ -1335,8 +1336,8 @@ return(#{index := IncomingRaftIdx} = Meta, ConsumerId, Returned,
                                   return_one(Meta, MsgId, 0, Msg, S0, E0, ConsumerId);
                               (MsgId, ?PREFIX_DISK_MSG(_) = Msg, {S0, E0}) ->
                                   return_one(Meta, MsgId, 0, Msg, S0, E0, ConsumerId);
-                             (MsgId, {MsgNum, Msg}, {S0, E0}) ->
-                                  return_one(Meta, MsgId, MsgNum, Msg, S0, E0,
+                             (MsgId, Msg, {S0, E0}) ->
+                                  return_one(Meta, MsgId, 0, Msg, S0, E0,
                                              ConsumerId)
                           end, {State0, Effects0}, Returned),
     State2 =
@@ -1481,7 +1482,7 @@ update_header(Key, UpdateFun, Default, Header) ->
     maps:update_with(Key, UpdateFun, Default, Header).
 
 
-return_one(Meta, MsgId, 0, {Tag, Header0},
+return_one(Meta, MsgId, 0, ?TUPLE(Tag, Header0),
            #?MODULE{returns = Returns,
                     consumers = Consumers,
                     cfg = #cfg{delivery_limit = DeliveryLimit}} = State0,
@@ -1489,7 +1490,7 @@ return_one(Meta, MsgId, 0, {Tag, Header0},
   when Tag == '$prefix_msg'; Tag == '$empty_msg' ->
     #consumer{checked_out = Checked} = Con0 = maps:get(ConsumerId, Consumers),
     Header = update_header(delivery_count, fun (C) -> C+1 end, 1, Header0),
-    Msg0 = {Tag, Header},
+    Msg0 = ?TUPLE(Tag, Header),
     case maps:get(delivery_count, Header) of
         DeliveryCount when DeliveryCount > DeliveryLimit ->
             complete(Meta, ConsumerId, #{MsgId => Msg0}, Con0, Effects0, State0);
@@ -1512,17 +1513,17 @@ return_one(Meta, MsgId, 0, {Tag, Header0},
                               returns = lqueue:in(Msg, Returns)}),
              Effects0}
     end;
-return_one(Meta, MsgId, MsgNum, ?INDEX_MSG(RaftId, ?MSG(Header0, RawMsg)),
+return_one(Meta, MsgId, _MsgNum, ?INDEX_MSG(RaftId, ?MSG(Header0, RawMsg)),
            #?MODULE{returns = Returns,
                     consumers = Consumers,
                     cfg = #cfg{delivery_limit = DeliveryLimit}} = State0,
            Effects0, ConsumerId) ->
     #consumer{checked_out = Checked} = Con0 = maps:get(ConsumerId, Consumers),
-    Header = update_header(delivery_count, fun (C) -> C+1 end, 1, Header0),
+    Header = update_header(delivery_count, fun (C) -> C + 1 end, 1, Header0),
     IdxMsg0 = ?INDEX_MSG(RaftId, ?MSG(Header, RawMsg)),
     case maps:get(delivery_count, Header) of
         DeliveryCount when DeliveryCount > DeliveryLimit ->
-            DlMsg = {MsgNum, IdxMsg0},
+            DlMsg = IdxMsg0,
             Effects = dead_letter_effects(delivery_limit, #{none => DlMsg},
                                           State0, Effects0),
             complete(Meta, ConsumerId, #{MsgId => DlMsg}, Con0, Effects, State0);
@@ -1543,7 +1544,7 @@ return_one(Meta, MsgId, MsgNum, ?INDEX_MSG(RaftId, ?MSG(Header0, RawMsg)),
             {add_bytes_return(
                Header,
                State1#?MODULE{consumers = Consumers#{ConsumerId => Con},
-                              returns = lqueue:in({MsgNum, Msg}, Returns)}),
+                              returns = lqueue:in(Msg, Returns)}),
              Effects0}
     end.
 
@@ -1557,8 +1558,8 @@ return_all(Meta, #?MODULE{consumers = Cons} = State0, Effects0, ConsumerId,
                         return_one(Meta, MsgId, 0, Msg, S, E, ConsumerId);
                     ({MsgId, ?PREFIX_DISK_MSG(_) = Msg}, {S, E}) ->
                         return_one(Meta, MsgId, 0, Msg, S, E, ConsumerId);
-                    ({MsgId, {MsgNum, Msg}}, {S, E}) ->
-                        return_one(Meta, MsgId, MsgNum, Msg, S, E, ConsumerId)
+                    ({MsgId, Msg}, {S, E}) ->
+                        return_one(Meta, MsgId, 0, Msg, S, E, ConsumerId)
                 end, {State, Effects0}, Checked).
 
 %% checkout new messages to consumers
@@ -1931,9 +1932,9 @@ dehydrate_state(#?MODULE{messages = Messages,
                                    [Header | Acc];
                                (?PREFIX_DISK_MSG(_) = Msg, Acc) ->
                                    [Msg | Acc];
-                               ({_, ?INDEX_MSG(_, ?DISK_MSG(Header))}, Acc) ->
+                               (?INDEX_MSG(_, ?DISK_MSG(Header)), Acc) ->
                                    [?PREFIX_DISK_MSG(Header) | Acc];
-                               ({_, ?INDEX_MSG(_, ?MSG(Header, _))}, Acc) ->
+                               (?INDEX_MSG(_, ?MSG(Header, _)), Acc) ->
                                    [Header | Acc]
                            end, [], lqueue:to_list(Returns)),
     PrefRet = PrefRet0 ++ PrefRet1,
@@ -1957,9 +1958,9 @@ dehydrate_state(#?MODULE{messages = Messages,
 dehydrate_messages(Msgs0, Acc0)  ->
     {OutRes, Msgs} = lqueue:out(Msgs0),
     case OutRes of
-        {value, {_MsgId, ?INDEX_MSG(_, ?DISK_MSG(_) = Msg)}} ->
+        {value, ?INDEX_MSG(_, ?DISK_MSG(_) = Msg)} ->
             dehydrate_messages(Msgs, [Msg | Acc0]);
-        {value, {_MsgId, ?INDEX_MSG(_, ?MSG(Header, _))}} ->
+        {value, ?INDEX_MSG(_, ?MSG(Header, _))} ->
             dehydrate_messages(Msgs, [Header | Acc0]);
         empty ->
             lists:reverse(Acc0)
@@ -1970,9 +1971,9 @@ dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
                                M;
                            (_, ?PREFIX_DISK_MSG(_) = M) ->
                                M;
-                           (_, {_, ?INDEX_MSG(_, ?DISK_MSG(Header))}) ->
+                           (_, ?INDEX_MSG(_, ?DISK_MSG(Header))) ->
                                ?PREFIX_DISK_MSG(Header);
-                           (_, {_, ?INDEX_MSG(_, ?MSG(Header, _))}) ->
+                           (_, ?INDEX_MSG(_, ?MSG(Header, _))) ->
                                ?PREFIX_MEM_MSG(Header)
                        end, Checked0),
     Con#consumer{checked_out = Checked}.
