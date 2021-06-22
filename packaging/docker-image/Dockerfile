@@ -142,7 +142,6 @@ RUN set -eux; \
 		--without-diameter \
 		--without-edoc \
 		--without-erl_docgen \
-		--without-erl_interface \
 		--without-et \
 		--without-eunit \
 		--without-ftp \
