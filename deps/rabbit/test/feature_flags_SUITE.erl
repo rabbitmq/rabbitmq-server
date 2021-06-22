@@ -679,10 +679,10 @@ mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
         FeatureName,
         true,
         RemoteNodes},
-       rabbit_ct_broker_helpers:rpc(
-         Config, B,
-         rabbit_feature_flags, mark_as_enabled_remotely,
-         [RemoteNodes, FeatureName, true, 20000])),
+       catch rabbit_ct_broker_helpers:rpc(
+               Config, B,
+               rabbit_feature_flags, mark_as_enabled_remotely,
+               [RemoteNodes, FeatureName, true, 20000])),
 
     RepairFun = fun() ->
                         %% Wait a few seconds before we repair the network.
