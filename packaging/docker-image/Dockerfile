@@ -1,6 +1,6 @@
 # The official Canonical Ubuntu Bionic image is ideal from a security perspective,
 # especially for the enterprises that we, the RabbitMQ team, have to deal with
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
 RUN set -eux; \
 	apt-get update; \
@@ -50,6 +50,7 @@ RUN set -eux; \
 		ca-certificates \
 		dpkg-dev \
 		gcc \
+		g++ \
 		gnupg \
 		libncurses5-dev \
 		make \
@@ -127,6 +128,7 @@ RUN set -eux; \
 		--disable-hipe \
 		--disable-sctp \
 		--disable-silent-rules \
+		--enable-jit \
 		--enable-clock-gettime \
 		--enable-hybrid-heap \
 		--enable-kernel-poll \
