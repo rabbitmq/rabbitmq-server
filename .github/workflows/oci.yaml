@@ -21,15 +21,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      # RabbitMQ master requires Erlang 23 (correct at Mar 2021)
+      # RabbitMQ master supports Erlang 24 (correct at June 2021)
       # Source of truth for released versions: https://www.rabbitmq.com/which-erlang.html
       #
       # For Elixir: https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
-      - name: Set up min required Erlang & Elixir
-        uses: erlef/setup-beam@v1
+      - name: Set up max supported Erlang & Elixir
+        uses: erlef/setup-beam@v1.7
         with:
-          otp-version: '23.2'
-          elixir-version: '1.11.4'
+          otp-version: '24.0.2'
+          elixir-version: '1.12.1'
 
       - name: Build generic unix package
         run: |
@@ -37,8 +37,12 @@ jobs:
 
       - name: Build container image
         working-directory: packaging/docker-image
-        run: |
-          make dist SKIP_PGP_VERIFY=true
+        run: >-
+          make dist
+          IMAGE_TAG=${GITHUB_REF##*/}
+          SKIP_PGP_VERIFY=true
+          OTP_VERSION=24.0.2
+          OTP_SHA256=4abca2cda7fc962ad65575e5ed834dd69c745e7e637f92cfd49f384a281d0f18
 
       - name: Login to DockerHub
         working-directory: packaging/docker-image
