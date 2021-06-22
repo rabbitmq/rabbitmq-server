@@ -127,6 +127,13 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({rabbit_global_counters,
+                   [{description, "global counters"},
+                    {mfa,         {rabbit_global_counters, boot_step,
+                                   []}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({rabbit_event,
                    [{description, "statistics event manager"},
                     {mfa,         {rabbit_sup, start_restartable_child,

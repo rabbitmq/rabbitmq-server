@@ -275,15 +275,19 @@ has_enough_credits_to_unblock(CreditReference,
     atomics:get(CreditReference, 1) > CreditsRequiredForUnblocking.
 
 increase_messages_consumed(Counters, Count) ->
+    rabbit_global_counters:messages_delivered(stream, ?STREAM_QUEUE_TYPE, Count),
     atomics:add(Counters, 1, Count).
 
 set_consumer_offset(Counters, Offset) ->
     atomics:put(Counters, 2, Offset).
 
-increase_messages_published(Counters, Count) ->
+increase_messages_received(Counters, Count) ->
+    rabbit_global_counters:messages_received(stream, Count),
+    rabbit_global_counters:messages_received_confirm(stream, Count),
     atomics:add(Counters, 1, Count).
 
 increase_messages_confirmed(Counters, Count) ->
+    rabbit_global_counters:messages_confirmed(stream, Count),
     atomics:add(Counters, 2, Count).
 
 increase_messages_errored(Counters, Count) ->
@@ -1279,7 +1283,7 @@ handle_frame_post_auth(Transport,
                        leader = Leader,
                        message_counters = Counters} =
                 Publisher,
-            increase_messages_published(Counters, MessageCount),
+            increase_messages_received(Counters, MessageCount),
             case rabbit_stream_utils:check_write_permitted(#resource{name =
                                                                          Stream,
                                                                      kind =

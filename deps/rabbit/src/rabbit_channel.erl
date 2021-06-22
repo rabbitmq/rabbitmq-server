@@ -1285,6 +1285,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    confirm_enabled  = ConfirmEnabled,
                                    delivery_flow    = Flow
                                    }) ->
+    rabbit_global_counters:messages_received(amqp091, 1),
     check_msg_size(Content, MaxMessageSize, GCThreshold),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
     check_write_permitted(ExchangeName, User, AuthzContext),
@@ -1302,7 +1303,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     {MsgSeqNo, State1} =
         case DoConfirm orelse Mandatory of
             false -> {undefined, State};
-            true  -> SeqNo = State#ch.publish_seqno,
+            true  -> rabbit_global_counters:messages_received_confirm(amqp091, 1),
+                     SeqNo = State#ch.publish_seqno,
                      {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
         end,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
@@ -1314,9 +1316,11 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                 Username, TraceState),
             DQ = {Delivery#delivery{flow = Flow}, QNames},
             {noreply, case Tx of
-                          none         -> deliver_to_queues(DQ, State1);
-                          {Msgs, Acks} -> Msgs1 = ?QUEUE:in(DQ, Msgs),
-                                          State1#ch{tx = {Msgs1, Acks}}
+                          none ->
+                              deliver_to_queues(DQ, State1);
+                          {Msgs, Acks} ->
+                              Msgs1 = ?QUEUE:in(DQ, Msgs),
+                              State1#ch{tx = {Msgs1, Acks}}
                       end};
         {error, Reason} ->
             precondition_failed("invalid message: ~p", [Reason])
@@ -1360,14 +1364,14 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
                      DeliveryTag, QueueStates0)
            end) of
         {ok, MessageCount, Msg, QueueStates} ->
+            {ok, QueueType} = rabbit_queue_type:module(QueueName, QueueStates),
             handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount, Msg,
-                             State#ch{queue_states = QueueStates});
+                             QueueType, State#ch{queue_states = QueueStates});
         {empty, QueueStates} ->
+            {ok, QueueType} = rabbit_queue_type:module(QueueName, QueueStates),
+            rabbit_global_counters:messages_get_empty(amqp091, QueueType, 1),
             ?INCR_STATS(queue_stats, QueueName, 1, get_empty, State),
             {reply, #'basic.get_empty'{}, State#ch{queue_states = QueueStates}};
-        empty ->
-            ?INCR_STATS(queue_stats, QueueName, 1, get_empty, State),
-            {reply, #'basic.get_empty'{}, State};
         {error, {unsupported, single_active_consumer}} ->
             rabbit_misc:protocol_error(
               resource_locked,
@@ -1692,9 +1696,9 @@ handle_method(#'tx.select'{}, _, State) ->
 handle_method(#'tx.commit'{}, _, #ch{tx = none}) ->
     precondition_failed("channel is not transactional");
 
-handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Msgs, Acks},
+handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Deliveries, Acks},
                                              limiter = Limiter}) ->
-    State1 = queue_fold(fun deliver_to_queues/2, State, Msgs),
+    State1 = queue_fold(fun deliver_to_queues/2, State, Deliveries),
     Rev = fun (X) -> lists:reverse(lists:sort(X)) end,
     {State2, Actions2} =
         lists:foldl(fun ({ack,     A}, {Acc, Actions}) ->
@@ -1954,7 +1958,7 @@ internal_reject(Requeue, Acked, Limiter,
     ok = notify_limiter(Limiter, Acked),
     {State#ch{queue_states = QueueStates}, Actions}.
 
-record_sent(Type, Tag, AckRequired,
+record_sent(Type, QueueType, Tag, AckRequired,
             Msg = {QName, _QPid, MsgId, Redelivered, _Message},
             State = #ch{cfg = #conf{channel = ChannelNum,
                                     trace_state = TraceState,
@@ -1964,15 +1968,28 @@ record_sent(Type, Tag, AckRequired,
                         unacked_message_q = UAMQ,
                         next_tag          = DeliveryTag
                        }) ->
-    ?INCR_STATS(queue_stats, QName, 1, case {Type, AckRequired} of
-                                           {get, true}      -> get;
-                                           {get, false}     -> get_no_ack;
-                                           {deliver, true}  -> deliver;
-                                           {deliver, false} -> deliver_no_ack
-                                       end, State),
+    rabbit_global_counters:messages_delivered(amqp091, QueueType, 1),
+    ?INCR_STATS(queue_stats, QName, 1,
+                case {Type, AckRequired} of
+                    {get, true} ->
+                        rabbit_global_counters:messages_delivered_get_manual_ack(amqp091, QueueType, 1),
+                        get;
+                    {get, false} ->
+                        rabbit_global_counters:messages_delivered_get_auto_ack(amqp091, QueueType, 1),
+                        get_no_ack;
+                    {deliver, true} ->
+                        rabbit_global_counters:messages_delivered_consume_manual_ack(amqp091, QueueType, 1),
+                        deliver;
+                    {deliver, false} ->
+                        rabbit_global_counters:messages_delivered_consume_auto_ack(amqp091, QueueType, 1),
+                        deliver_no_ack
+                end, State),
     case Redelivered of
-        true  -> ?INCR_STATS(queue_stats, QName, 1, redeliver, State);
-        false -> ok
+        true ->
+            rabbit_global_counters:messages_redelivered(amqp091, QueueType, 1),
+            ?INCR_STATS(queue_stats, QName, 1, redeliver, State);
+        false ->
+            ok
     end,
     DeliveredAt = os:system_time(millisecond),
     rabbit_trace:tap_out(Msg, ConnName, ChannelNum, Username, TraceState),
@@ -2034,8 +2051,14 @@ ack(Acked, State = #ch{queue_states = QueueStates0}) ->
     ok = notify_limiter(State#ch.limiter, Acked),
     {State#ch{queue_states = QueueStates}, Actions}.
 
-incr_queue_stats(QName, MsgIds, State) ->
+incr_queue_stats(QName, MsgIds, State = #ch{queue_states = QueueStates}) ->
     Count = length(MsgIds),
+    case rabbit_queue_type:module(QName, QueueStates) of
+        {ok, QueueType} ->
+            rabbit_global_counters:messages_acknowledged(amqp091, QueueType, Count);
+        _ ->
+            noop
+    end,
     ?INCR_STATS(queue_stats, QName, Count, ack, State).
 
 %% {Msgs, Acks}
@@ -2108,15 +2131,16 @@ notify_limiter(Limiter, Acked) ->
 deliver_to_queues({#delivery{message   = #basic_message{exchange_name = XName},
                              confirm   = false,
                              mandatory = false},
-                   _RoutedToQueueNames = []}, State) -> %% optimisation
+                   _RoutedToQueueNames = []}, State) -> %% optimisation when there are no queues
     ?INCR_STATS(exchange_stats, XName, 1, publish, State),
+    rabbit_global_counters:messages_unroutable_dropped(amqp091, 1),
     ?INCR_STATS(exchange_stats, XName, 1, drop_unroutable, State),
     State;
 deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{exchange_name = XName},
                                         mandatory  = Mandatory,
                                         confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
-                   _RoutedToQueueNames = [QName]}, State0 = #ch{queue_states = QueueStates0}) ->
+                   _RoutedToQueueNames = [QName]}, State0 = #ch{queue_states = QueueStates0}) -> %% optimisation when there is one queue
     AllNames = case rabbit_amqqueue:lookup(QName) of
         {ok, Q0} ->
            case amqqueue:get_options(Q0) of
@@ -2128,6 +2152,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
     Qs = rabbit_amqqueue:lookup(AllNames),
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
+            rabbit_global_counters:messages_routed(amqp091, length(Qs)),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
             ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
@@ -2164,6 +2189,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
          end,
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
+            rabbit_global_counters:messages_routed(amqp091, length(Qs)),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
             ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
@@ -2213,11 +2239,13 @@ infer_extra_bcc(Qs) ->
 process_routing_mandatory(_Mandatory = true,
                           _RoutedToQs = [],
                           Msg, State) ->
+    rabbit_global_counters:messages_unroutable_returned(amqp091, 1),
     ok = basic_return(Msg, State, no_route),
     ok;
 process_routing_mandatory(_Mandatory = false,
                           _RoutedToQs = [],
                           #basic_message{exchange_name = ExchangeName}, State) ->
+    rabbit_global_counters:messages_unroutable_dropped(amqp091, 1),
     ?INCR_STATS(exchange_stats, ExchangeName, 1, drop_unroutable, State),
     ok;
 process_routing_mandatory(_, _, _, _) ->
@@ -2245,6 +2273,7 @@ send_confirms_and_nacks(State = #ch{tx = none, confirmed = C, rejected = R}) ->
     case rabbit_node_monitor:pause_partition_guard() of
         ok      ->
             Confirms = lists:append(C),
+            rabbit_global_counters:messages_confirmed(amqp091, length(Confirms)),
             Rejects = lists:append(R),
             ConfirmMsgSeqNos =
                 lists:foldl(
@@ -2721,8 +2750,9 @@ handle_deliver0(ConsumerTag, AckRequired,
                                redelivered  = Redelivered,
                                exchange     = ExchangeName#resource.name,
                                routing_key  = RoutingKey},
-    case rabbit_queue_type:module(QName, Qs) of
-        {ok, rabbit_classic_queue} ->
+    {ok, QueueType} = rabbit_queue_type:module(QName, Qs),
+    case QueueType of
+        rabbit_classic_queue ->
             ok = rabbit_writer:send_command_and_notify(
                    WriterPid, QPid, self(), Deliver, Content);
         _ ->
@@ -2732,13 +2762,14 @@ handle_deliver0(ConsumerTag, AckRequired,
         undefined -> ok;
         _         -> rabbit_basic:maybe_gc_large_msg(Content, GCThreshold)
     end,
-    record_sent(deliver, ConsumerTag, AckRequired, Msg, State).
+    record_sent(deliver, QueueType, ConsumerTag, AckRequired, Msg, State).
 
 handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
                  Msg = {_QName, _QPid, _MsgId, Redelivered,
                         #basic_message{exchange_name = ExchangeName,
                                        routing_keys  = [RoutingKey | _CcRoutes],
-                                       content       = Content}}, State) ->
+                                       content       = Content}},
+                 QueueType, State) ->
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.get_ok'{delivery_tag  = DeliveryTag,
@@ -2747,7 +2778,7 @@ handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
                            routing_key   = RoutingKey,
                            message_count = MessageCount},
            Content),
-    {noreply, record_sent(get, DeliveryTag, not(NoAck), Msg, State)}.
+    {noreply, record_sent(get, QueueType, DeliveryTag, not(NoAck), Msg, State)}.
 
 init_tick_timer(State = #ch{tick_timer = undefined}) ->
     {ok, Interval} = application:get_env(rabbit, channel_tick_interval),
@@ -2783,10 +2814,10 @@ get_operation_timeout_and_deadline() ->
     Deadline =  now_millis() + Timeout,
     {Timeout, Deadline}.
 
-queue_fold(Fun, Init, Q) ->
-    case ?QUEUE:out(Q) of
-        {empty, _Q}      -> Init;
-        {{value, V}, Q1} -> queue_fold(Fun, Fun(V, Init), Q1)
+queue_fold(Fun, Acc, Queue) ->
+    case ?QUEUE:out(Queue) of
+        {empty, _Queue}      -> Acc;
+        {{value, Item}, Queue1} -> queue_fold(Fun, Fun(Item, Acc), Queue1)
     end.
 
 evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,

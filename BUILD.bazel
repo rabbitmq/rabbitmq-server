@@ -77,7 +77,6 @@ ALL_PLUGINS = [
     "//deps/rabbitmq_stomp:bazel_erlang_lib",
     "//deps/rabbitmq_stream:bazel_erlang_lib",
     "//deps/rabbitmq_stream_management:bazel_erlang_lib",
-    "//deps/rabbitmq_stream_prometheus:bazel_erlang_lib",
     "//deps/rabbitmq_top:bazel_erlang_lib",
     "//deps/rabbitmq_tracing:bazel_erlang_lib",
     "//deps/rabbitmq_trust_store:bazel_erlang_lib",
