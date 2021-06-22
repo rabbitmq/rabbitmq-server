@@ -1240,7 +1240,7 @@ add_vhost(Config, Node, VHost) ->
     add_vhost(Config, Node, VHost, <<"acting-user">>).
 
 add_vhost(Config, Node, VHost, Username) ->
-    rpc(Config, Node, rabbit_vhost, add, [VHost, Username]).
+    catch rpc(Config, Node, rabbit_vhost, add, [VHost, Username]).
 
 delete_vhost(Config, VHost) ->
     delete_vhost(Config, 0, VHost).
@@ -1249,7 +1249,7 @@ delete_vhost(Config, Node, VHost) ->
     delete_vhost(Config, Node, VHost, <<"acting-user">>).
 
 delete_vhost(Config, Node, VHost, Username) ->
-    rpc(Config, Node, rabbit_vhost, delete, [VHost, Username]).
+    catch rpc(Config, Node, rabbit_vhost, delete, [VHost, Username]).
 
 force_vhost_failure(Config, VHost) -> force_vhost_failure(Config, 0, VHost).
 
@@ -1333,17 +1333,17 @@ add_user(Config, Node, Username, Password) ->
     add_user(Config, Node, Username, Password, <<"acting-user">>).
 
 add_user(Config, Node, Username, Password, AuditUsername) ->
-    rpc(Config, Node, rabbit_auth_backend_internal, add_user,
-        [rabbit_data_coercion:to_binary(Username),
-         rabbit_data_coercion:to_binary(Password),
-         AuditUsername]).
+    catch rpc(Config, Node, rabbit_auth_backend_internal, add_user,
+              [rabbit_data_coercion:to_binary(Username),
+               rabbit_data_coercion:to_binary(Password),
+               AuditUsername]).
 
 set_user_tags(Config, Node, Username, Tags) ->
     set_user_tags(Config, Node, Username, Tags, <<"acting-user">>).
 
 set_user_tags(Config, Node, Username, Tags, AuditUsername) ->
-    rpc(Config, Node, rabbit_auth_backend_internal, set_tags,
-        [Username, Tags, AuditUsername]).
+    catch rpc(Config, Node, rabbit_auth_backend_internal, set_tags,
+              [Username, Tags, AuditUsername]).
 
 delete_user(Config, Username) ->
     delete_user(Config, 0, Username).
@@ -1352,8 +1352,8 @@ delete_user(Config, Node, Username) ->
     delete_user(Config, Node, Username, <<"acting-user">>).
 
 delete_user(Config, Node, Username, AuditUsername) ->
-    rpc(Config, Node, rabbit_auth_backend_internal, delete_user,
-        [Username, AuditUsername]).
+    catch rpc(Config, Node, rabbit_auth_backend_internal, delete_user,
+              [Username, AuditUsername]).
 
 change_password(Config, Username, Password) ->
     change_password(Config, 0, Username, Password, <<"acting-user">>).
@@ -1425,12 +1425,12 @@ clear_permissions(Config, Node, Username, VHost) ->
     clear_permissions(Config, Node, Username, VHost, <<"acting-user">>).
 
 clear_permissions(Config, Node, Username, VHost, ActingUser) ->
-    rpc(Config, Node,
-        rabbit_auth_backend_internal,
-        clear_permissions,
-        [rabbit_data_coercion:to_binary(Username),
-         rabbit_data_coercion:to_binary(VHost),
-         ActingUser]).
+    catch rpc(Config, Node,
+              rabbit_auth_backend_internal,
+              clear_permissions,
+              [rabbit_data_coercion:to_binary(Username),
+               rabbit_data_coercion:to_binary(VHost),
+               ActingUser]).
 
 set_vhost_limit(Config, Node, VHost, Limit0, Value) ->
     Limit = case Limit0 of
