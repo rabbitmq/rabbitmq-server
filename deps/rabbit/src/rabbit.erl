@@ -823,14 +823,16 @@ start(normal, []) ->
             #{product_overridden := true,
               product_base_name := BaseName,
               product_base_version := BaseVersion} ->
-                _ = rabbit_log:info("~n Starting ~s ~s on Erlang ~s~n Based on ~s ~s~n ~s~n ~s~n",
+                _ = rabbit_log:info("~n Starting ~s ~s on Erlang ~s [~s]~n Based on ~s ~s~n ~s~n ~s~n",
                                 [product_name(), product_version(), rabbit_misc:otp_release(),
+                                 emu_flavor(),
                                  BaseName, BaseVersion,
                                  ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]);
             _ ->
-                _ = rabbit_log:info("~n Starting ~s ~s on Erlang ~s~n ~s~n ~s~n",
+                _ = rabbit_log:info("~n Starting ~s ~s on Erlang ~s [~s]~n ~s~n ~s",
                                 [product_name(), product_version(), rabbit_misc:otp_release(),
-                                 ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE])
+                                 emu_flavor(),
+                                 ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]);
         end,
         log_motd(),
         {ok, SupPid} = rabbit_sup:start_link(),
@@ -1147,18 +1149,33 @@ print_banner() ->
     io:format(Logo ++
               "~n" ++
               MOTDFormat ++
-              "~n  Doc guides: https://rabbitmq.com/documentation.html"
-              "~n  Support:    https://rabbitmq.com/contact.html"
-              "~n  Tutorials:  https://rabbitmq.com/getstarted.html"
-              "~n  Monitoring: https://rabbitmq.com/monitoring.html"
+              "~n  Erlang:      ~ts [~ts]"
+              "~n  SSL Library: ~ts"
+              "~n"
+              "~n  Doc guides:  https://rabbitmq.com/documentation.html"
+              "~n  Support:     https://rabbitmq.com/contact.html"
+              "~n  Tutorials:   https://rabbitmq.com/getstarted.html"
+              "~n  Monitoring:  https://rabbitmq.com/monitoring.html"
               "~n"
               "~n  Logs: ~ts" ++ LogFmt ++ "~n"
               "~n  Config file(s): ~ts" ++ CfgFmt ++ "~n"
               "~n  Starting broker...",
               [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE] ++
+              [rabbit_misc:otp_release(), emu_flavor(), crypto_version()] ++
               MOTDArgs ++
               LogLocations ++
               CfgLocations).
+
+emu_flavor() ->
+    %% emu_flavor was introduced in Erlang 24 so we need to catch the error on Erlang 23
+    case catch(erlang:system_info(emu_flavor)) of
+        {'EXIT', _} -> "emu";
+        EmuFlavor -> EmuFlavor
+    end.
+
+crypto_version() ->
+    [{CryptoLibName, _, CryptoLibVersion}] = crypto:info_lib(),
+    [CryptoLibName, " - ", CryptoLibVersion].
 
 log_motd() ->
     case motd() of
