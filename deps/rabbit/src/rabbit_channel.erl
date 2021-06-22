@@ -1519,6 +1519,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
                              Username, QueueStates0)
                    end) of
                 {ok, QueueStates} ->
+                    rabbit_global_counters:consumer_deleted(amqp091),
                     {noreply, NewState#ch{queue_states = QueueStates}};
                 {error, not_found} ->
                     %% Spec requires we ignore this situation.
@@ -1778,6 +1779,7 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                     Q}
            end) of
         {{ok, QueueStates, Actions}, Q} when ?is_amqqueue(Q) ->
+            rabbit_global_counters:consumer_created(amqp091),
             CM1 = maps:put(
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
@@ -1852,6 +1854,7 @@ cancel_consumer(CTag, QName,
                                                   nowait       = true}, State);
         _            -> ok
     end,
+    rabbit_global_counters:consumer_deleted(amqp091),
     rabbit_event:notify(consumer_deleted, [{consumer_tag, CTag},
                                            {channel,      self()},
                                            {queue,        QName}]),
