@@ -32,7 +32,7 @@ rabbitmq_external_deps(rabbitmq_workspace = "@")
 
 git_repository(
     name = "rabbitmq_ct_helpers",
-    branch = "master",
+    branch = "v3.9.x",
     remote = "https://github.com/rabbitmq/rabbitmq-ct-helpers.git",
     repo_mapping = {
         "@rabbitmq-server": "@",
@@ -41,7 +41,7 @@ git_repository(
 
 git_repository(
     name = "rabbitmq_ct_client_helpers",
-    branch = "master",
+    branch = "v3.9.x",
     remote = "https://github.com/rabbitmq/rabbitmq-ct-client-helpers.git",
     repo_mapping = {
         "@rabbitmq-server": "@",
