@@ -56,11 +56,11 @@ PACKAGE = "deps/rabbitmq_prometheus"
 rabbitmq_integration_suite(
     PACKAGE,
     name = "config_schema_SUITE",
-    flaky = False,
 )
 
 rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbit_prometheus_http_SUITE",
     size = "small",
+    flaky = True,
 )

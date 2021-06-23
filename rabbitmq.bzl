@@ -134,7 +134,6 @@ def rabbitmq_integration_suite(
         tools = [],
         deps = [],
         runtime_deps = [],
-        flaky = True,
         **kwargs):
     ct_suite(
         erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
@@ -164,6 +163,5 @@ def rabbitmq_integration_suite(
             "@lager//:bazel_erlang_lib",
             "@rabbitmq_ct_helpers//:bazel_erlang_lib",
         ] + deps,
-        flaky = flaky,
         **kwargs
     )

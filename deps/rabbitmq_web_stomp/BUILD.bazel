@@ -88,7 +88,6 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "config_schema_SUITE",
-    flaky = False,
 )
 
 rabbitmq_integration_suite(
