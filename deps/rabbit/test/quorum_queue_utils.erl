@@ -13,8 +13,7 @@
          dirty_query/3,
          ra_name/1,
          fifo_machines_use_same_version/1,
-         fifo_machines_use_same_version/2,
-         is_mixed_versions/0
+         fifo_machines_use_same_version/2
         ]).
 
 wait_for_messages_ready(Servers, QName, Ready) ->

@@ -57,7 +57,7 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
-    case quorum_queue_utils:is_mixed_versions() andalso
+    case rabbit_ct_helpers:is_mixed_versions(Config) andalso
          Testcase == quorum_unaffected_after_vhost_failure of
         true ->
             {skip, "test case not mixed versions compatible"};
@@ -252,7 +252,3 @@ recover_follower_after_standalone_restart(Config) ->
 forget_cluster_node(Config, Node, NodeToRemove) ->
     rabbit_ct_broker_helpers:rabbitmqctl(
       Config, Node, ["forget_cluster_node", "--offline", NodeToRemove]).
-
-
-is_mixed_versions() ->
-    not (false == os:getenv("SECONDARY_UMBRELLA")).
