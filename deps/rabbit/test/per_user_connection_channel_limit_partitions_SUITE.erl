@@ -50,8 +50,16 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(net_ticktime_1 = Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{net_ticktime, 1}]),
-    init_per_multinode_group(Group, Config1, 3).
+    case rabbit_ct_helpers:is_mixed_versions(Config) of
+        true ->
+            %% In a mixed 3.8/3.9 cluster, changes to rabbit_core_ff.erl imply that some
+            %% feature flag related migrations cannot occur, and therefore user_limits
+            %% cannot be enabled in a 3.8/3.9 mixed cluster
+            {skip, "group is not mixed version compatible"};
+        _ ->
+            Config1 = rabbit_ct_helpers:set_config(Config, [{net_ticktime, 1}]),
+            init_per_multinode_group(Group, Config1, 3)
+    end.
 
 init_per_multinode_group(Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
@@ -67,9 +75,12 @@ init_per_multinode_group(Group, Config, NodeCount) ->
     case EnableFF of
         ok ->
             Config2;
-        Skip ->
+        {skip, _} = Skip ->
             end_per_group(Group, Config2),
-            Skip
+            Skip;
+        Other ->
+            end_per_group(Group, Config2),
+            {skip, Other}
     end.
 
 end_per_group(_Group, Config) ->

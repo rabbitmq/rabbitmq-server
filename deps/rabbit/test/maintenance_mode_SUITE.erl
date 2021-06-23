@@ -42,10 +42,20 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(quorum_queues, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions(Config) of
+        true ->
+            %% In a mixed 3.8/3.9 cluster, unless the 3.8 node is the
+            %% one in maintenance mode, a quorum won't be available
+            %% due to mixed ra major versions
+            {skip, "test not supported in mixed version mode"};
+        _ ->
+            rabbit_ct_helpers:set_config(Config,
+                                         [{rmq_nodes_count, 3}])
+    end;
 init_per_group(_Group, Config) ->
-    rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 3}
-      ]).
+    rabbit_ct_helpers:set_config(Config,
+                                 [{rmq_nodes_count, 3}]).
 
 end_per_group(_, Config) ->
     Config.
