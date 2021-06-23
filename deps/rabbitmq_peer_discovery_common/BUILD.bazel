@@ -69,5 +69,4 @@ PACKAGE = "deps/rabbitmq_peer_discovery_common"
 rabbitmq_integration_suite(
     PACKAGE,
     name = "config_schema_SUITE",
-    flaky = False,
 )

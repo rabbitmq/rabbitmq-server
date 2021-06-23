@@ -39,7 +39,6 @@ PACKAGE = "deps/rabbitmq_event_exchange"
 rabbitmq_integration_suite(
     PACKAGE,
     name = "config_schema_SUITE",
-    flaky = False,
 )
 
 rabbitmq_integration_suite(

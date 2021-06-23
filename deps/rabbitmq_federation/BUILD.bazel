@@ -101,10 +101,15 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":rabbit_federation_test_util",
     ],
-    matrix = ct_group_matrix([
-        "classic_queue",
-        "quorum_queue",
-    ]),
+    matrix = {
+        "classic_queue": {
+            "groups": ["classic_queue"],
+        },
+        "quorum_queue": {
+            "groups": ["quorum_queue"],
+            "flaky": True,
+        },
+    },
 )
 
 rabbitmq_integration_suite(
