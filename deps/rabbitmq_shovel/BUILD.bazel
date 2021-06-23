@@ -137,6 +137,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":shovel_test_utils",
     ],
+    flaky = True,
 )
 
 rabbitmq_suite(
