@@ -57,7 +57,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "config_schema_SUITE",
     size = "small",
-    flaky = False,
 )
 
 # NOTE: integration_SUITE requires aws credentials and a docker image.
