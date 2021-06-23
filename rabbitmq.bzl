@@ -5,7 +5,7 @@ load(
     "erlang_lib",
     "test_erlang_lib",
 )
-load("@bazel-erlang//:ct_sharded.bzl", "ct_suite")
+load("@bazel-erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 
@@ -112,6 +112,8 @@ def rabbitmq_integration_suite(
         tags = [],
         data = [],
         erlc_opts = [],
+        additional_hdrs = [],
+        additional_srcs = [],
         test_env = {},
         tools = [],
         deps = [],
@@ -122,6 +124,8 @@ def rabbitmq_integration_suite(
         suite_name = name,
         tags = tags,
         erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
+        additional_hdrs = additional_hdrs,
+        additional_srcs = additional_srcs,
         data = [
             "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
             "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
@@ -150,11 +154,10 @@ def rabbitmq_integration_suite(
         **kwargs
     )
 
-    ct_suite(
-        name = "{}-mixed".format(name),
+    ct_suite_variant(
+        name = name + "-mixed",
         suite_name = name,
         tags = tags + ["mixed-version-cluster"],
-        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
         data = [
             "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
             "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",

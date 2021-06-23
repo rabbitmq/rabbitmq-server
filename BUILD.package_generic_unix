@@ -5,7 +5,10 @@ rabbitmq_package_generic_unix(
     name = "broker-home",
     sbin = glob(["sbin/*"]),
     escript = glob(["escript/*"]),
-    plugins = glob(["plugins/*"]),
+    plugins = [
+        "//plugins:standard_plugins",
+        "//plugins:inet_tcp_proxy_ez",
+    ],
 )
 
 rabbitmq_run(

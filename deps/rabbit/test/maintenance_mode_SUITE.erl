@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -247,15 +248,14 @@ quorum_queue_leadership_transfer(Config) ->
                    Config, Nodenames),
     case AllTheSame of
         true ->
-            rabbit_ct_helpers:await_condition(
-              fun () ->
-                      LocalLeaders = rabbit_ct_broker_helpers:rpc(
-                                       Config, A,
-                                       rabbit_amqqueue,
-                                       list_local_leaders,
-                                       []),
-                      length(LocalLeaders) =:= 0
-              end, 20000);
+            ?awaitMatch(
+               LocalLeaders when length(LocalLeaders) == 0,
+                                 rabbit_ct_broker_helpers:rpc(
+                                   Config, A,
+                                   rabbit_amqqueue,
+                                   list_local_leaders,
+                                   []),
+                                 20000);
         false ->
             ct:pal(
               ?LOW_IMPORTANCE,
