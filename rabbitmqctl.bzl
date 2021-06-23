@@ -6,9 +6,6 @@ def _impl(ctx):
 
     rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
 
-    if rabbitmq_home.erlang_version != erlang_version:
-        fail("Mismatched erlang versions", erlang_version, rabbitmq_home.erlang_version)
-
     script = """
     exec ./{home}/sbin/{cmd} $@
     """.format(
