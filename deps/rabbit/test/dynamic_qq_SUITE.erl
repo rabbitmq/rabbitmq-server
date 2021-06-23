@@ -57,7 +57,7 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() andalso
+    case rabbit_ct_helpers:is_mixed_versions(Config) andalso
          Testcase == quorum_unaffected_after_vhost_failure of
         true ->
             {skip, "test case not mixed versions compatible"};
