@@ -149,7 +149,7 @@ do_http_req(Path0, Query) ->
             {ok, Val2} -> Val2;
             _ -> RequestTimeout
         end,
-    rabbit_log:debug("auth_backend_http: request timeout: ~p, connection timeout: ~p", [RequestTimeout, ConnectionTimeout]),
+    _ = rabbit_log:debug("auth_backend_http: request timeout: ~p, connection timeout: ~p", [RequestTimeout, ConnectionTimeout]),
     HttpOpts = case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
         {ok, Opts} when is_list(Opts) ->
             [
