@@ -188,13 +188,6 @@ erlang_lib(
         sha256 = "3418e319764b9dff1f469e43cbdffd7fd54ea47cbf765027c557abd146a19fb3",
     )
 
-    http_archive(
-        name = "osiris",
-        build_file = rabbitmq_workspace + "//:BUILD.osiris",
-        strip_prefix = "osiris-master",
-        urls = ["https://github.com/rabbitmq/osiris/archive/master.zip"],
-    )
-
     github_bazel_erlang_lib(
         name = "prometheus",
         org = "deadtrickster",

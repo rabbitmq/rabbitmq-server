@@ -131,9 +131,6 @@ cat << EOF > ${RABBITMQ_CONFIG_FILE}
           {alert,     "\\\e[1;44m" },
           {emergency, "\\\e[1;41m" }
       ]}
-    ]},
-  {osiris, [
-      {data_dir, "${RABBITMQ_STREAM_DIR}"}
     ]}
 ].
 EOF
