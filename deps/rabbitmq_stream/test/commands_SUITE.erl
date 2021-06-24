@@ -25,7 +25,8 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand').
 
 all() ->
-    [{group, list_connections}, {group, list_consumers},
+    [{group, list_connections},
+     {group, list_consumers},
      {group, list_publishers}].
 
 groups() ->
