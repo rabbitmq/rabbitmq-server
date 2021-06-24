@@ -851,8 +851,9 @@ start(normal, []) ->
               product_base_name := BaseName,
               product_base_version := BaseVersion} ->
                 ?LOG_INFO(
-                   "~n Starting ~s ~s on Erlang ~s~n Based on ~s ~s~n ~s~n ~s",
+                   "~n Starting ~s ~s on Erlang ~s [~s]~n Based on ~s ~s~n ~s~n ~s",
                    [product_name(), product_version(), rabbit_misc:otp_release(),
+                    emu_flavor(),
                     BaseName, BaseVersion,
                     ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE],
                    #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
