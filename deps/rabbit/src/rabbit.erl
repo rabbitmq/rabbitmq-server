@@ -1186,7 +1186,7 @@ print_banner() ->
               "~n" ++
               MOTDFormat ++
               "~n  Erlang:      ~ts [~ts]"
-              "~n  SSL Library: ~ts"
+              "~n  TLS Library: ~ts"
               "~n"
               "~n  Doc guides:  https://rabbitmq.com/documentation.html"
               "~n  Support:     https://rabbitmq.com/contact.html"
