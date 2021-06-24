@@ -20,8 +20,8 @@
 {mapping, "auth_http.topic_path", "rabbitmq_auth_backend_http.topic_path",
     [{datatype, string}, {validators, ["uri"]}]}.
 
-{mapping, "auth_http.timeout", "rabbitmq_auth_backend_http.timeout",
+{mapping, "auth_http.request_timeout", "rabbitmq_auth_backend_http.request_timeout",
     [{datatype, integer}]}.
 
-{mapping, "auth_http.connect_timeout", "rabbitmq_auth_backend_http.connect_timeout",
+{mapping, "auth_http.connection_timeout", "rabbitmq_auth_backend_http.connection_timeout",
     [{datatype, integer}]}.

@@ -4,9 +4,9 @@ PROJECT_MOD = rabbit_auth_backend_http_app
 
 define PROJECT_ENV
 [
-	    {http_method,   get},
-	    {timeout,   10000},
-	    {connect_timeout,   5000},
+	    {http_method,   	 get},
+	    {request_timeout,    15000},
+	    {connection_timeout, 15000},
 	    {user_path,     "http://localhost:8000/auth/user"},
 	    {vhost_path,    "http://localhost:8000/auth/vhost"},
 	    {resource_path, "http://localhost:8000/auth/resource"},

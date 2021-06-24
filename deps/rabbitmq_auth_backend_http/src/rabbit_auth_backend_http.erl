@@ -139,19 +139,28 @@ do_http_req(Path0, Query) ->
             rabbit_log:debug("auth_backend_http: POST ~s", [Path0]),
             {Path0, [{"Host", HostHdr}], "application/x-www-form-urlencoded", Query}
     end,
-    Timeout = case application:get_env(rabbitmq_auth_backend_http, timeout) of
-                {ok, TimeoutValue} -> TimeoutValue;
-                _ -> infinity
-    end,
-    ConnectTimeout = case application:get_env(rabbitmq_auth_backend_http, connect_timeout) of
-                       {ok, ConnectTimeoutValue} -> ConnectTimeoutValue;
-                       _ -> Timeout
-    end,
-    rabbit_log:debug("auth_backend_http: timeout=~p, connect_timeout=~p.", [Timeout, ConnectTimeout]),
-    HttpOpts = case application:get_env(rabbitmq_auth_backend_http,
-                                        ssl_options) of
-        {ok, Opts} when is_list(Opts) -> [{ssl, Opts}, {timeout, Timeout}, {connect_timeout, ConnectTimeout}];
-        _                             -> [{timeout, Timeout}, {connect_timeout, ConnectTimeout}]
+    RequestTimeout =
+        case application:get_env(rabbitmq_auth_backend_http, request_timeout) of
+            {ok, Val1} -> Val1;
+            _ -> infinity
+        end,
+    ConnectionTimeout =
+        case application:get_env(rabbitmq_auth_backend_http, connection_timeout) of
+            {ok, Val2} -> Val2;
+            _ -> RequestTimeout
+        end,
+    rabbit_log:debug("auth_backend_http: request timeout: ~p, connection timeout: ~p", [RequestTimeout, ConnectionTimeout]),
+    HttpOpts = case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
+        {ok, Opts} when is_list(Opts) ->
+            [
+                {ssl, Opts},
+                {timeout, RequestTimeout},
+                {connect_timeout, ConnectionTimeout}];
+        _                             ->
+            [
+                {timeout, RequestTimeout},
+                {connect_timeout, ConnectionTimeout}
+            ]
     end,
 
     case httpc:request(Method, Request, HttpOpts, []) of
