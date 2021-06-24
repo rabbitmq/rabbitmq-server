@@ -832,7 +832,7 @@ start(normal, []) ->
                 _ = rabbit_log:info("~n Starting ~s ~s on Erlang ~s [~s]~n ~s~n ~s",
                                 [product_name(), product_version(), rabbit_misc:otp_release(),
                                  emu_flavor(),
-                                 ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE]);
+                                 ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE])
         end,
         log_motd(),
         {ok, SupPid} = rabbit_sup:start_link(),
