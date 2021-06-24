@@ -112,7 +112,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "clustering_SUITE",
-    flaky = "True",
+    flaky = True,
     deps = [
         "//deps/rabbitmq_management_agent:bazel_erlang_lib",
     ],
