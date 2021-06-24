@@ -139,10 +139,19 @@ do_http_req(Path0, Query) ->
             rabbit_log:debug("auth_backend_http: POST ~s", [Path0]),
             {Path0, [{"Host", HostHdr}], "application/x-www-form-urlencoded", Query}
     end,
+    Timeout = case application:get_env(rabbitmq_auth_backend_http, timeout) of
+                {ok, TimeoutValue} -> TimeoutValue;
+                _ -> infinity
+    end,
+    ConnectTimeout = case application:get_env(rabbitmq_auth_backend_http, connect_timeout) of
+                       {ok, ConnectTimeoutValue} -> ConnectTimeoutValue;
+                       _ -> Timeout
+    end,
+    rabbit_log:debug("auth_backend_http: timeout=~p, connect_timeout=~p.", [Timeout, ConnectTimeout]),
     HttpOpts = case application:get_env(rabbitmq_auth_backend_http,
                                         ssl_options) of
-        {ok, Opts} when is_list(Opts) -> [{ssl, Opts}];
-        _                             -> []
+        {ok, Opts} when is_list(Opts) -> [{ssl, Opts}, {timeout, Timeout}, {connect_timeout, ConnectTimeout}];
+        _                             -> [{timeout, Timeout}, {connect_timeout, ConnectTimeout}]
     end,
 
     case httpc:request(Method, Request, HttpOpts, []) of
