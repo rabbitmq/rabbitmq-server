@@ -464,6 +464,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
+    flaky = True,
     deps = [
         "@proper//:bazel_erlang_lib",
     ],
