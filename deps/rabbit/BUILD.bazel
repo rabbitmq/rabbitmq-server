@@ -942,6 +942,7 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbitmqctl_integration_SUITE",
     size = "medium",
+    flaky = True,
 )
 
 rabbitmq_integration_suite(
