@@ -1,3 +1,4 @@
+load("@bazel-erlang//:ct.bzl", "ct_group_matrix")
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
@@ -75,6 +76,12 @@ rabbitmq_integration_suite(
         ":rabbit_stream_SUITE_beam_files",
     ],
     data = glob(["test/rabbit_stream_SUITE_data/**/*"]),
+    flaky = True,
+    matrix = ct_group_matrix([
+        "list_connections",
+        "list_consumers",
+        "list_publishers",
+    ]),
     deps = [
         "//deps/rabbitmq_stream_common:bazel_erlang_lib",
     ],
