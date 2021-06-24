@@ -10,26 +10,55 @@ on:
       - Makefile
       - plugins.mk
       - rabbitmq-components.mk
+      - .github/workflows/oci.yaml
 env:
   GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/PACKAGES/rabbitmq-server-generic-unix-${{ github.sha }}.tar.xz
   RABBITMQ_VERSION: ${{ github.sha }}
   VERSION: ${{ github.sha }}
 jobs:
+
+  # This job will build one docker image per supported Erlang major version.
+  # Each image will have two tags (one containing the Git commit SHA, one containing the branch name).
+  #
+  # For example, for Git commit SHA '1111aaa' and branch name 'main' and maximum supported Erlang major version '25',
+  # the following 3 images and 6 tags will be pushed to Dockerhub:
+  #
+  # * 1111aaa-otp-max (image OTP 25)
+  # * main-otp-max (image OTP 25)
+  # * 1111aaa-otp-max-1 (image OTP 24)
+  # * main-otp-max-1 (image OTP 24)
+  # * 1111aaa-otp-max-2 (image OTP 23)
+  # * main-otp-max-2 (image OTP 23)
+
   build-publish-dev:
     runs-on: ubuntu-latest
+    strategy:
+        matrix:
+            # Build image for every supported Erlang major version.
+            # Source of truth for released versions: https://www.rabbitmq.com/which-erlang.html
+            # For Elixir: https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
+            # As of June 2021:
+            otp: ['24.0.2', '23.2.1']
+            include:
+            - otp: '24.0.2'
+              otp_sha256: 4abca2cda7fc962ad65575e5ed834dd69c745e7e637f92cfd49f384a281d0f18
+              elixir: '1.12.1'
+              image_tag_suffix: '-otp-max'
+            - otp: '23.2.1'
+              otp_sha256: e7034e2cfe50d7570ac8f70ea7ba69ea013f10863043e25132f0a5d3d0d8d3a7
+              elixir: '1.11.4'
+              image_tag_suffix: '-otp-max-1'
+    env:
+      IMAGE_TAG_1: ${{ github.sha }}${{ matrix.image_tag_suffix }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
 
-      # RabbitMQ master supports Erlang 24 (correct at June 2021)
-      # Source of truth for released versions: https://www.rabbitmq.com/which-erlang.html
-      #
-      # For Elixir: https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
-      - name: Set up max supported Erlang & Elixir
+      - name: Set up Erlang & Elixir
         uses: erlef/setup-beam@v1.7
         with:
-          otp-version: '24.0.2'
-          elixir-version: '1.12.1'
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
 
       - name: Build generic unix package
         run: |
@@ -37,12 +66,11 @@ jobs:
 
       - name: Build container image
         working-directory: packaging/docker-image
-        run: >-
-          make dist
-          IMAGE_TAG=${GITHUB_REF##*/}
-          SKIP_PGP_VERIFY=true
-          OTP_VERSION=24.0.2
-          OTP_SHA256=4abca2cda7fc962ad65575e5ed834dd69c745e7e637f92cfd49f384a281d0f18
+        env:
+          OTP_VERSION: ${{ matrix.otp }}
+          OTP_SHA256: ${{ matrix.otp_sha256 }}
+        run: |
+          make dist SKIP_PGP_VERIFY=true
 
       - name: Login to DockerHub
         working-directory: packaging/docker-image
@@ -51,7 +79,12 @@ jobs:
             --username '${{ secrets.DOCKERHUB_USERNAME }}' \
             --password '${{ secrets.DOCKERHUB_PASSWORD }}'
 
+      # Push the same image with two different tags:
+      # 1. <git_commit_sha>-otp-max[-1|-2]
+      # 2. <branch_name>-otp-max[-1|-2]
       - name: Push container image to DockerHub
         working-directory: packaging/docker-image
+        env:
+          IMAGE_TAG_SUFFIX: ${{ matrix.image_tag_suffix }}
         run: |
-          make push
+          make push IMAGE_TAG_2=${GITHUB_REF##*/}${IMAGE_TAG_SUFFIX}
