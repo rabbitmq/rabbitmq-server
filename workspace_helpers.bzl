@@ -104,13 +104,9 @@ erlang_lib(
         sha256 = "0460c7abda5f5e0ea592b12bc6976b8a5c4b96e42f332059cd396525374bf9a1",
     )
 
-    github_bazel_erlang_lib(
-        repo = "gen-batch-server",
+    hex_pm_bazel_erlang_lib(
         name = "gen_batch_server",
-        org = "rabbitmq",
-        sha256 = "9e9f2aa6ee8e3354f03a3f78283fde93bbe5b1d6f6732caa05d3e43efe02e42c",
-        ref = "v0.8.4",
-        version = "0.8.4",
+        version = "0.8.6",
     )
 
     hex_pm_bazel_erlang_lib(
