@@ -15,34 +15,38 @@ env:
   RABBITMQ_VERSION: ${{ github.sha }}
   VERSION: ${{ github.sha }}
 jobs:
-  # This job will build two docker images (one with minimum required OTP, one with maximum supported OTP).
+
+  # This job will build one docker image per supported Erlang major version.
   # Each image will have two tags (one containing the Git commit SHA, one containing the branch name).
   #
-  # For example, for Git commit SHA '1111aaa' and branch name 'main', the following four tags will be pushed to Dockerhub:
-  # * 1111aaa-otp-min (image 1)
-  # * main-otp-min (image 1)
-  # * 1111aaa-otp-max (image 2)
-  # * main-otp-max (image 2)
+  # For example, for Git commit SHA '1111aaa' and branch name 'main' and maximum supported Erlang major version '25',
+  # the following 3 images and 6 tags will be pushed to Dockerhub:
+  #
+  # * 1111aaa-otp-max (image OTP 25)
+  # * main-otp-max (image OTP 25)
+  # * 1111aaa-otp-max-1 (image OTP 24)
+  # * main-otp-max-1 (image OTP 24)
+  # * 1111aaa-otp-max-2 (image OTP 23)
+  # * main-otp-max-2 (image OTP 23)
+
   build-publish-dev:
     runs-on: ubuntu-latest
     strategy:
         matrix:
-            # Build two images:
-            # 1. with minimum required Erlang
-            # 2. with maximum supported Erlang
+            # Build image for every supported Erlang major version.
             # Source of truth for released versions: https://www.rabbitmq.com/which-erlang.html
             # For Elixir: https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
             # As of June 2021:
-            otp: ['23.2.1', '24.0.2']
+            otp: ['24.0.2', '23.2.1']
             include:
-            - otp: '23.2.1'
-              otp_sha256: e7034e2cfe50d7570ac8f70ea7ba69ea013f10863043e25132f0a5d3d0d8d3a7
-              elixir: '1.11.4'
-              image_tag_suffix: '-otp-min'
             - otp: '24.0.2'
               otp_sha256: 4abca2cda7fc962ad65575e5ed834dd69c745e7e637f92cfd49f384a281d0f18
               elixir: '1.12.1'
               image_tag_suffix: '-otp-max'
+            - otp: '23.2.1'
+              otp_sha256: e7034e2cfe50d7570ac8f70ea7ba69ea013f10863043e25132f0a5d3d0d8d3a7
+              elixir: '1.11.4'
+              image_tag_suffix: '-otp-max-1'
     env:
       IMAGE_TAG_1: ${{ github.sha }}${{ matrix.image_tag_suffix }}
     steps:
@@ -75,8 +79,8 @@ jobs:
             --password '${{ secrets.DOCKERHUB_PASSWORD }}'
 
       # Push the same image with two different tags:
-      # 1. <git_commit_sha>-otp-[min|max]
-      # 2. <branch_name>-otp-[min|max]
+      # 1. <git_commit_sha>-otp-max[-1|-2]
+      # 2. <branch_name>-otp-max[-1|-2]
       - name: Push container image to DockerHub
         working-directory: packaging/docker-image
         env:
