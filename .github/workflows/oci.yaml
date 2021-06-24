@@ -10,6 +10,7 @@ on:
       - Makefile
       - plugins.mk
       - rabbitmq-components.mk
+      - .github/workflows/oci.yaml
 env:
   GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/PACKAGES/rabbitmq-server-generic-unix-${{ github.sha }}.tar.xz
   RABBITMQ_VERSION: ${{ github.sha }}
