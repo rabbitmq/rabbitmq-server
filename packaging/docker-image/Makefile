@@ -39,6 +39,7 @@ SKIP_PGP_VERIFY ?= false
 PGP_KEYSERVER ?= pgpkeys.eu
 ALT1_PGP_KEYSERVER ?= keyserver.ubuntu.com
 ALT2_PGP_KEYSERVER ?= pgpkeys.uk
+IMAGE_TAG_1 ?= $(subst +,-,$(VERSION))
 
 all: dist
 
@@ -50,16 +51,14 @@ dist:
 	  --build-arg OTP_VERSION=$(OTP_VERSION) \
 	  --build-arg OTP_SHA256=$(OTP_SHA256) \
 	  --build-arg RABBITMQ_BUILD=rabbitmq_server-$(VERSION) \
-	  --tag $(REPO):$(subst +,-,$(VERSION)) \
+	  --tag $(REPO):$(IMAGE_TAG_1) \
 	  .
-ifdef IMAGE_TAG
-	docker tag $(REPO):$(subst +,-,$(VERSION)) $(REPO):$(IMAGE_TAG)
-endif
 
 push:
-	docker push $(REPO):$(subst +,-,$(VERSION))
-ifdef IMAGE_TAG
-	docker push $(REPO):$(IMAGE_TAG)
+	docker push $(REPO):$(IMAGE_TAG_1)
+ifdef IMAGE_TAG_2
+	docker tag $(REPO):$(IMAGE_TAG_1) $(REPO):$(IMAGE_TAG_2)
+	docker push $(REPO):$(IMAGE_TAG_2)
 endif
 
 clean:
