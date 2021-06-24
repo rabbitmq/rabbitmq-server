@@ -102,6 +102,7 @@ PACKAGE = "deps/rabbitmq_management"
 rabbitmq_integration_suite(
     PACKAGE,
     name = "clustering_prop_SUITE",
+    size = "large",
     deps = [
         "//deps/rabbitmq_management_agent:bazel_erlang_lib",
         "@proper//:bazel_erlang_lib",
@@ -111,6 +112,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "clustering_SUITE",
+    flaky = "True",
     deps = [
         "//deps/rabbitmq_management_agent:bazel_erlang_lib",
     ],
