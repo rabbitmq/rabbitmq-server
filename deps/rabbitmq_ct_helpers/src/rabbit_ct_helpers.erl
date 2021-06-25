@@ -9,6 +9,8 @@
 
 -include_lib("common_test/include/ct.hrl").
 
+-deprecated({is_mixed_versions,1,"Use is_mixed_versions/0 instead"}).
+
 -export([
     log_environment/0,
     run_steps/2,
@@ -43,6 +45,7 @@
     convert_to_unicode_binary/1,
     cover_work_factor/2,
 
+    is_mixed_versions/0,
     is_mixed_versions/1,
 
     await_condition/1,
@@ -1030,6 +1033,10 @@ convert_to_unicode_binary(Arg) when is_list(Arg) ->
     unicode:characters_to_binary(Arg);
 convert_to_unicode_binary(Arg) when is_binary(Arg) ->
     Arg.
+
+is_mixed_versions() ->
+    os:getenv("SECONDARY_UMBRELLA") =/= false
+        orelse os:getenv("RABBITMQ_RUN_SECONDARY") =/= false.
 
 is_mixed_versions(Config) ->
     get_config(Config, secondary_umbrella, false) =/= false
