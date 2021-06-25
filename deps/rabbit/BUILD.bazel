@@ -424,6 +424,7 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "dynamic_ha_SUITE",
     size = "large",
+    flaky = True,
     matrix = ct_group_case_matrix({
         "cluster_size_5": [
             "change_cluster",
