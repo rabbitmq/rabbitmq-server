@@ -75,7 +75,7 @@ init_per_group(cluster_size_1_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
     init_per_multinode_group(cluster_size_1_network, Config1, 1);
 init_per_group(cluster_size_2_network, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             %% In a mixed 3.8/3.9 cluster, changes to rabbit_core_ff.erl imply that some
             %% feature flag related migrations cannot occur, and therefore user_limits
@@ -86,7 +86,7 @@ init_per_group(cluster_size_2_network, Config) ->
             init_per_multinode_group(cluster_size_2_network, Config1, 2)
     end;
 init_per_group(cluster_size_2_direct, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "cluster_size_2_network is not mixed version compatible"};
         _ ->

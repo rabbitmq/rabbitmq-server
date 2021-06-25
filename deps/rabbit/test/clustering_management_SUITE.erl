@@ -139,7 +139,7 @@ start_with_invalid_schema_in_path(Config) ->
     end.
 
 persistent_cluster_id(Config) ->
-    case os:getenv("SECONDARY_UMBRELLA") of
+    case rabbit_ct_helpers:is_mixed_versions() of
       false ->
         [Rabbit, Hare] = cluster_members(Config),
         ClusterIDA1 = rpc:call(Rabbit, rabbit_nodes, persistent_cluster_id, []),

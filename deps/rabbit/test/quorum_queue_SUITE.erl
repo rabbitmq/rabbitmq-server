@@ -163,7 +163,7 @@ init_per_group(clustered, Config) ->
 init_per_group(unclustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
 init_per_group(clustered_with_partitions, Config0) ->
-    case rabbit_ct_helpers:is_mixed_versions(Config0) of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "clustered_with_partitions is too unreliable in mixed mode"};
         false ->
@@ -180,7 +180,7 @@ init_per_group(Group, Config) ->
                       cluster_size_3 -> 3;
                       cluster_size_5 -> 5
                   end,
-    IsMixed = not (false == os:getenv("SECONDARY_UMBRELLA")),
+    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
     case ClusterSize of
         2 when IsMixed ->
             {skip, "cluster size 2 isn't mixed versions compatible"};
@@ -226,6 +226,8 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(node_removal_is_not_quorum_critical, _) ->
+    {skip, "testcase is not mixed versions compatible"};
 init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publish;
                                          Testcase == reconnect_consumer_and_wait;
                                          Testcase == reconnect_consumer_and_wait_channel_down ->
@@ -257,7 +259,7 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
             end
     end;
 init_per_testcase(Testcase, Config) ->
-    IsMixed = rabbit_ct_helpers:is_mixed_versions(Config),
+    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
     case Testcase of
         simple_confirm_availability_on_leader_change when IsMixed ->
             {skip, "simple_confirm_availability_on_leader_change isn't mixed versions compatible"};
@@ -432,7 +434,7 @@ start_queue_concurrent(Config) ->
     ok.
 
 quorum_cluster_size_3(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "quorum_cluster_size_3 tests isn't mixed version reliable"};
         false ->
@@ -739,7 +741,7 @@ shrink_all(Config) ->
     ok.
 
 rebalance(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "rebalance tests isn't mixed version compatible"};
         false ->
@@ -1169,7 +1171,7 @@ leadership_takeover(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0).
 
 metrics_cleanup_on_leadership_takeover(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "metrics_cleanup_on_leadership_takeover tests isn't mixed version compatible"};
         false ->
@@ -1253,7 +1255,7 @@ metrics_cleanup_on_leader_crash(Config) ->
 
 
 delete_declare(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "delete_declare isn't mixed version reliable"};
         false ->
@@ -1281,7 +1283,7 @@ delete_declare0(Config) ->
     %% the actual data deletions happen after the call has returned as a quorum
     %% queue leader waits for all nodes to confirm they replicated the poison
     %% pill before terminating itself.
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             %% when in mixed versions the QQ may not be able to apply the posion
             %% pill for all nodes so need to wait longer for forced delete to
@@ -1572,7 +1574,7 @@ node_removal_is_not_quorum_critical(Config) ->
 
 
 file_handle_reservations(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions(Config) of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "file_handle_reservations tests isn't mixed version compatible"};
         false ->

@@ -13,6 +13,8 @@
 
 -compile(export_all).
 
+-deprecated({wait_for_federation,2,"Use rabbit_ct_helpers:await_condition or ?awaitMatch instead"}).
+
 -import(rabbit_misc, [pget/2]).
 
 setup_federation(Config) ->

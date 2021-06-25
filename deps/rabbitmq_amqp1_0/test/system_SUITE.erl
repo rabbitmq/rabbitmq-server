@@ -58,7 +58,7 @@ end_per_suite(Config) ->
     Config.
 
 init_per_group(streams, Config) ->
-    case os:getenv("SECONDARY_UMBRELLA") of
+    case rabbit_ct_helpers:is_mixed_versions() of
         false ->
             Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
             Config1 = rabbit_ct_helpers:set_config(Config, [

@@ -107,29 +107,53 @@ init_per_group(enabling_on_single_node, Config) ->
       Config,
       [{rmq_nodes_count, 1}]);
 init_per_group(enabling_in_cluster, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{rmq_nodes_count, 5}]);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% This test relies on functions only exported for test,
+            %% which is not true of mixed version nodes in bazel
+            {skip, "mixed mode not supported"};
+        _ ->
+            rabbit_ct_helpers:set_config(
+              Config,
+              [{rmq_nodes_count, 5}])
+    end;
 init_per_group(clustering, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(
-                Config,
-                [{rmq_nodes_count, 2},
-                 {rmq_nodes_clustered, false},
-                 {start_rmq_with_plugins_disabled, true}]),
-    rabbit_ct_helpers:run_setup_steps(Config1, [
-        fun prepare_my_plugin/1,
-        fun work_around_cli_and_rabbit_circular_dep/1
-      ]);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% This test relies on functions only exported for test,
+            %% which is not true of mixed version nodes in bazel
+            {skip, "mixed mode not supported"};
+        _ ->
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config,
+                        [{rmq_nodes_count, 2},
+                         {rmq_nodes_clustered, false},
+                         {start_rmq_with_plugins_disabled, true}]),
+            rabbit_ct_helpers:run_setup_steps(Config1, [
+                                                        fun prepare_my_plugin/1,
+                                                        fun work_around_cli_and_rabbit_circular_dep/1
+                                                       ])
+    end;
 init_per_group(activating_plugin, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(
-                Config,
-                [{rmq_nodes_count, 2},
-                 {rmq_nodes_clustered, true},
-                 {start_rmq_with_plugins_disabled, true}]),
-    rabbit_ct_helpers:run_setup_steps(Config1, [
-        fun prepare_my_plugin/1,
-        fun work_around_cli_and_rabbit_circular_dep/1
-      ]);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% mixed mode testing in bazel uses a production build of
+            %% the broker, however this group invokes functions via
+            %% rpc that are only available in test builds
+            {skip, "mixed mode not supported"};
+        _ ->
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config,
+                        [{rmq_nodes_count, 2},
+                         {rmq_nodes_clustered, true},
+                         {start_rmq_with_plugins_disabled, true}]),
+            rabbit_ct_helpers:run_setup_steps(
+              Config1,
+              [
+               fun prepare_my_plugin/1,
+               fun work_around_cli_and_rabbit_circular_dep/1
+              ])
+    end;
 init_per_group(_, Config) ->
     Config.
 

@@ -36,7 +36,7 @@ wait_for_messages(Servers, QName, Number, Fun, N) ->
     ct:pal("Got messages ~p ~p", [QName, Msgs]),
     %% hack to allow the check to succeed in mixed versions clusters if at
     %% least one node matches the criteria rather than all nodes for
-    F = case is_mixed_versions() of
+    F = case rabbit_ct_helpers:is_mixed_versions() of
             true ->
                 any;
             false ->
@@ -161,6 +161,3 @@ fifo_machines_use_same_version(Config, Nodenames)
               rabbit_fifo, version, []))
      || Nodename <- Nodenames],
     lists:all(fun(V) -> V =:= MachineAVersion end, OtherMachinesVersions).
-
-is_mixed_versions() ->
-    not (false == os:getenv("SECONDARY_UMBRELLA")).

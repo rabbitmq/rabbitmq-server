@@ -63,7 +63,7 @@ init_per_group(cluster_size_1_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
     init_per_multinode_group(cluster_size_1_network, Config1, 1);
 init_per_group(cluster_size_2_network, Config) ->
-    case os:getenv("SECONDARY_UMBRELLA") of
+    case rabbit_ct_helpers:is_mixed_versions() of
         false ->
             Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
             init_per_multinode_group(cluster_size_2_network, Config1, 2);

@@ -27,7 +27,7 @@ groups() ->
     ].
 
 init_per_suite(Config) ->
-    case os:getenv("SECONDARY_UMBRELLA") of
+    case rabbit_ct_helpers:is_mixed_versions() of
         false ->
             rabbit_ct_helpers:log_environment(),
             rabbit_ct_helpers:run_setup_steps(Config);
