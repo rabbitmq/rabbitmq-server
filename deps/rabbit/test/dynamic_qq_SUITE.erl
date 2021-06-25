@@ -57,7 +57,7 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
-    case quorum_queue_utils:is_mixed_versions() andalso
+    case rabbit_ct_helpers:is_mixed_versions() andalso
          Testcase == quorum_unaffected_after_vhost_failure of
         true ->
             {skip, "test case not mixed versions compatible"};
@@ -203,7 +203,7 @@ quorum_unaffected_after_vhost_failure(Config) ->
     ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
 
 recover_follower_after_standalone_restart(Config) ->
-    case os:getenv("SECONDARY_UMBRELLA") of
+    case rabbit_ct_helpers:is_mixed_versions() of
       false ->
             %% Tests that followers can be brought up standalone after forgetting the
             %% rest of the cluster. Consensus won't be reached as there is only one node in the
@@ -252,7 +252,3 @@ recover_follower_after_standalone_restart(Config) ->
 forget_cluster_node(Config, Node, NodeToRemove) ->
     rabbit_ct_broker_helpers:rabbitmqctl(
       Config, Node, ["forget_cluster_node", "--offline", NodeToRemove]).
-
-
-is_mixed_versions() ->
-    not (false == os:getenv("SECONDARY_UMBRELLA")).
