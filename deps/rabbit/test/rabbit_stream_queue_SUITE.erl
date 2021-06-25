@@ -156,9 +156,12 @@ init_per_group(Group, Config) ->
                            Config2, 0, application, set_env,
                            [rabbit, channel_tick_interval, 100]),
                     Config2;
-                Skip ->
+                {skip, _} = Skip ->
                     end_per_group(Group, Config2),
-                    Skip
+                    Skip;
+                Other ->
+                    end_per_group(Group, Config2),
+                    {skip, Other}
             end
     end.
 
