@@ -755,6 +755,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":quorum_queue_utils",
     ],
+    flaky = True,
     matrix = ct_group_matrix([
         "classic_queue",
         "mirrored_queue",
