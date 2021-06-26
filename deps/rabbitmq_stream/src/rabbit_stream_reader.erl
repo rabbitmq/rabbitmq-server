@@ -155,7 +155,8 @@
 
 %% gen_statem callbacks
 -export([callback_mode/0,
-         %% not called by gen_statem since we gen_statem:enter_loop/4
+         terminate/3,
+         %% not called by gen_statem since gen_statem:enter_loop/4 is used
          init/1,
          %% states
          tcp_connected/3,
@@ -168,6 +169,9 @@
 
 callback_mode() ->
     state_functions.
+
+terminate(Reason, State, _StatemData) ->
+    rabbit_log:debug("~p terminating in state '~s' with reason '~p'", [?MODULE, State, Reason]).
 
 start_link(KeepaliveSup, Transport, Ref, Opts) ->
     {ok, proc_lib:spawn_link(?MODULE, init, [[KeepaliveSup, Transport, Ref, Opts]])}.
