@@ -1217,7 +1217,7 @@ handle_frame_pre_auth(_Transport,
                                          socket = Sock,
                                          name = ConnectionName} =
                           Connection,
-                      State,
+                      #stream_connection_state{blocked = Blocked} = State,
                       {tune, FrameMax, Heartbeat}) ->
     rabbit_log_connection:debug("Tuning response ~p ~p ", [FrameMax, Heartbeat]),
     Parent = self(),
@@ -1239,7 +1239,12 @@ handle_frame_pre_auth(_Transport,
                                SendFun,
                                Heartbeat,
                                ReceiveFun),
-
+    case Blocked of
+        true ->
+            ok = rabbit_heartbeat:pause_monitor(Heartbeater);
+        _ ->
+            ok
+    end,
     {Connection#stream_connection{connection_step = tuned,
                                   frame_max = FrameMax,
                                   heartbeat = Heartbeat,
