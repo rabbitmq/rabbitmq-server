@@ -535,11 +535,10 @@ open(info,
                         name = ConnectionName,
                         credits = Credits,
                         heartbeater = Heartbeater
-                       } = Connection0,
+                       } = Connection,
         connection_state = #stream_connection_state{blocked = Blocked} = State,
         config = #configuration{credits_required_for_unblocking = CreditsRequiredForUnblocking}
        } = StatemData) ->
-    Connection = ensure_stats_timer(Connection0),
     rabbit_log_connection:debug("Connection ~p received resource alarm. Alarm "
                                 "on? ~p",
                                 [ConnectionName, IsThereAlarm]),
@@ -581,12 +580,11 @@ open(info,
         connection = #stream_connection{socket = S,
                                         credits = Credits,
                                         heartbeater = Heartbeater
-                                       } = Connection0,
+                                       } = Connection,
         connection_state = #stream_connection_state{blocked = Blocked} = State,
         config = Configuration
        } = StatemData)
   when OK =:= tcp; OK =:= ssl ->
-    Connection = ensure_stats_timer(Connection0),
     {Connection1, State1} = handle_inbound_data_post_auth(Transport,
                                                           Connection,
                                                           State,
@@ -662,10 +660,9 @@ open(info,
         transport = Transport,
         connection = #stream_connection{socket = S,
                                         monitors = Monitors
-                                       } = Connection0,
+                                       } = Connection,
         connection_state = State
        } = StatemData) ->
-    Connection = ensure_stats_timer(Connection0),
     {Connection1, State1} =
     case Monitors of
         #{MonitorRef := Stream} ->
@@ -764,13 +761,12 @@ open(cast,
                                         credits = Credits,
                                         heartbeater = Heartbeater,
                                         publishers = Publishers
-                                       } = Connection0,
+                                       } = Connection,
         connection_state = #stream_connection_state{
                               blocked = Blocked
                              } = State,
         config = Configuration
        } = StatemData) ->
-    Connection = ensure_stats_timer(Connection0),
     ByPublisher =
     lists:foldr(fun({PublisherId, PublishingId}, Acc) ->
                         case maps:get(PublisherId, Acc, undefined) of
@@ -820,13 +816,12 @@ open(cast,
                                         heartbeater = Heartbeater,
                                         publishers = Publishers,
                                         publisher_to_ids = PublisherRefToIds
-                                       } = Connection0,
+                                       } = Connection,
         connection_state = #stream_connection_state{
                               blocked = Blocked
                              } = State,
         config = Configuration
        } = StatemData) ->
-    Connection = ensure_stats_timer(Connection0),
     %% FIXME handle case when publisher ID is not found (e.g. deleted before confirms arrive)
     PublisherId =
     maps:get({Stream, PublisherReference}, PublisherRefToIds,
@@ -867,11 +862,10 @@ open(cast,
         connection = #stream_connection{
                         stream_subscriptions = StreamSubscriptions,
                         send_file_oct = SendFileOct
-                       } = Connection0,
+                       } = Connection,
         connection_state = #stream_connection_state{consumers = Consumers} = State
        } = StatemData)
   when Offset > -1 ->
-    Connection = ensure_stats_timer(Connection0),
     {Connection1, State1} =
     case maps:get(StreamName, StreamSubscriptions, undefined) of
         undefined ->
@@ -930,9 +924,8 @@ open(cast,
                    connection = Connection1,
                    connection_state = State1}};
 open(cast, {force_event_refresh, Ref}, #statem_data{
-                                          connection = Connection0,
+                                          connection = Connection,
                                           connection_state = State} = StatemData) ->
-    Connection = ensure_stats_timer(Connection0),
     Infos =
     augment_infos_with_user_provided_connection_name(infos(?CREATION_EVENT_KEYS,
                                                            Connection,
@@ -942,7 +935,8 @@ open(cast, {force_event_refresh, Ref}, #statem_data{
     Connection1 =
     rabbit_event:init_stats_timer(Connection,
                                   #stream_connection.stats_timer),
-    {keep_state, StatemData#statem_data{connection = Connection1}}.
+    Connection2 = ensure_stats_timer(Connection1),
+    {keep_state, StatemData#statem_data{connection = Connection2}}.
 
 close_sent(info, {tcp, S, Data}, #statem_data{
                                     transport = Transport,
