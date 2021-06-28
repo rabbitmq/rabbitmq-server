@@ -80,7 +80,7 @@ jobs:
           --test_env RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES=true \
           --verbose_failures
   test-mixed-version-cluster:
-    name: Test
+    name: Test (Mixed Version Cluster)
     runs-on: ubuntu-18.04
     strategy:
       fail-fast: false
