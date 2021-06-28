@@ -141,7 +141,7 @@ verbose_erlang_distribution(false) ->
 current_node_details() ->
     [{"~nCurrent node details:~n * node name: ~w", [node()]},
      case init:get_argument(home) of
-         {ok, [[Home]]} -> {" * effective user's home directory: ~s", [Home]};
+         {ok, [[Home]]} -> {" * effective user's home directory: ~s", [filename:absname(Home)]};
          Other          -> {" * effective user has no home directory: ~p", [Other]}
      end,
      {" * Erlang cookie hash: ~s", [cookie_hash()]}].

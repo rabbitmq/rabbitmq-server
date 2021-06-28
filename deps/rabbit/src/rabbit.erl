@@ -1470,7 +1470,7 @@ motd() ->
 
 home_dir() ->
     case init:get_argument(home) of
-        {ok, [[Home]]} -> Home;
+        {ok, [[Home]]} -> filename:absname(Home);
         Other          -> Other
     end.
 
