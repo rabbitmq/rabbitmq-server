@@ -548,7 +548,7 @@ split_path(PathString) ->
                      {unix, _} -> ":";
                      {win32, _} -> ";"
                  end,
-    string:tokens(PathString, Delimiters).
+    lists:usort(string:tokens(PathString, Delimiters)).
 
 %% Search for files using glob in a given dir. Returns full filenames of those files.
 full_path_wildcard(Glob, Dir) ->
