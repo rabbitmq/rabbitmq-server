@@ -143,6 +143,8 @@ use_colored_logging(#{log_levels := #{color := true},
 use_colored_logging(_) ->
     false.
 
+enable_quick_dbg(#{dbg_mods := []}) ->
+    ok;
 enable_quick_dbg(#{dbg_output := Output, dbg_mods := Mods}) ->
     case Output of
         stdout -> {ok, _} = dbg:tracer(),
