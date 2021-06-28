@@ -1506,7 +1506,8 @@ i(SockStat,           S) when SockStat =:= recv_oct;
                               SockStat =:= send_pend ->
     socket_info(fun (Sock) -> rabbit_net:getstat(Sock, [SockStat]) end,
                 fun ([{_, I}]) -> I end, S);
-i(ssl,                #v1{sock = Sock}) -> rabbit_net:is_ssl(Sock);
+i(ssl, #v1{sock = Sock, proxy_socket = ProxySock}) ->
+    rabbit_net:proxy_ssl_info(Sock, ProxySock) /= nossl;
 i(ssl_protocol,       S) -> ssl_info(fun ({P,         _}) -> P end, S);
 i(ssl_key_exchange,   S) -> ssl_info(fun ({_, {K, _, _}}) -> K end, S);
 i(ssl_cipher,         S) -> ssl_info(fun ({_, {_, C, _}}) -> C end, S);
@@ -1576,8 +1577,8 @@ socket_info(Get, Select, #v1{sock = Sock}) ->
         {error, _} -> 0
     end.
 
-ssl_info(F, #v1{sock = Sock}) ->
-    case rabbit_net:ssl_info(Sock) of
+ssl_info(F, #v1{sock = Sock, proxy_socket = ProxySock}) ->
+    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
         nossl       -> '';
         {error, _}  -> '';
         {ok, Items} ->
