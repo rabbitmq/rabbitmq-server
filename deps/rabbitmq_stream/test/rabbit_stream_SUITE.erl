@@ -41,6 +41,9 @@ groups() ->
        unauthenticated_client_rejected_tcp_connected,
        unauthenticated_client_rejected_peer_properties_exchanged,
        unauthenticated_client_rejected_authenticating]},
+     %% Run `test_global_counters` on its own so the global metrics are
+     %% initialised to 0 for each testcase
+     {single_node, [], [test_global_counters]},
      {cluster, [], [test_stream, test_stream_tls, java]}].
 
 init_per_suite(Config) ->
@@ -101,6 +104,38 @@ init_per_testcase(_TestCase, Config) ->
     Config.
 
 end_per_testcase(_Test, _Config) ->
+    ok.
+
+test_global_counters(Config) ->
+    Port = get_stream_port(Config),
+    test_server(gen_tcp, Port),
+    ?assertEqual(#{
+                   publishers => 0,
+                   consumers => 0,
+                   messages_confirmed_total => 2,
+                   messages_received_confirm_total => 2,
+                   messages_received_total => 2,
+                   messages_routed_total => 0,
+                   messages_unroutable_dropped_total => 0,
+                   messages_unroutable_returned_total => 0,
+                   stream_error_access_refused => 0,
+                   stream_error_authentication_failure => 0,
+                   stream_error_frame_too_large => 0,
+                   stream_error_internal_error => 0,
+                   stream_error_precondition_failed => 0,
+                   stream_error_publisher_does_not_exist => 0,
+                   stream_error_sasl_authentication_failure_loopback => 0,
+                   stream_error_sasl_challenge => 0,
+                   stream_error_sasl_error => 0,
+                   stream_error_sasl_mechanism_not_supported => 0,
+                   stream_error_stream_already_exists => 0,
+                   stream_error_stream_does_not_exist => 0,
+                   stream_error_stream_not_available => 1,
+                   stream_error_subscription_id_already_exists => 0,
+                   stream_error_subscription_id_does_not_exist => 0,
+                   stream_error_unknown_frame => 0,
+                   stream_error_vhost_access_failure => 0
+                  }, get_global_counters(Config)),
     ok.
 
 test_stream(Config) ->
@@ -422,3 +457,7 @@ receive_commands(Transport, S, C0) ->
         Res ->
             Res
     end.
+
+get_global_counters(Config) ->
+    maps:get([{protocol, stream}],
+             rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, [])).

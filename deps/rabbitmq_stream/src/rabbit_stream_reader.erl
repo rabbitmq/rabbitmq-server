@@ -20,6 +20,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
+-include("rabbit_stream_metrics.hrl").
 
 -type stream() :: binary().
 -type publisher_id() :: byte().
@@ -679,6 +680,7 @@ open(info,
                      ?RESPONSE_CODE_STREAM_NOT_AVAILABLE},
                     Frame = rabbit_stream_core:frame(Command),
                     send(Transport, S, Frame),
+                    rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_NOT_AVAILABLE, 1),
                     {NewConnection, NewState};
                 {not_cleaned, SameConnection, SameState} ->
                     {SameConnection, SameState}
@@ -1351,6 +1353,7 @@ handle_frame_post_auth(Transport,
              declare_publisher,
              CorrelationId,
              ?RESPONSE_CODE_PRECONDITION_FAILED),
+    rabbit_global_counters:increase_protocol_counter(stream, ?PRECONDITION_FAILED, 1),
     {Connection0, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{user = User,
@@ -1377,6 +1380,7 @@ handle_frame_post_auth(Transport,
                                      declare_publisher,
                                      CorrelationId,
                                      ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+                            rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
                             {Connection0, State};
                         {ClusterLeader,
                          #stream_connection{publishers = Publishers0,
@@ -1423,6 +1427,7 @@ handle_frame_post_auth(Transport,
                              declare_publisher,
                              CorrelationId,
                              ?RESPONSE_CODE_PRECONDITION_FAILED),
+                    rabbit_global_counters:increase_protocol_counter(stream, ?PRECONDITION_FAILED, 1),
                     {Connection0, State}
             end;
         error ->
@@ -1431,6 +1436,7 @@ handle_frame_post_auth(Transport,
                      declare_publisher,
                      CorrelationId,
                      ?RESPONSE_CODE_ACCESS_REFUSED),
+            rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
             {Connection0, State}
     end;
 handle_frame_post_auth(Transport,
@@ -1475,6 +1481,7 @@ handle_frame_post_auth(Transport,
                          PublishingIds},
                     Frame = rabbit_stream_core:frame(Command),
                     send(Transport, S, Frame),
+                    rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
                     increase_messages_errored(Counters, MessageCount),
                     {Connection, State}
             end;
@@ -1487,6 +1494,7 @@ handle_frame_post_auth(Transport,
                  PublishingIds},
             Frame = rabbit_stream_core:frame(Command),
             send(Transport, S, Frame),
+            rabbit_global_counters:increase_protocol_counter(stream, ?PUBLISHER_DOES_NOT_EXIST, 1),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -1510,6 +1518,7 @@ handle_frame_post_auth(Transport,
                                                                Stream)
                 of
                     {error, not_found} ->
+                        rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0};
                     {ok, LocalMemberPid} ->
                         {?RESPONSE_CODE_OK,
@@ -1522,6 +1531,7 @@ handle_frame_post_auth(Transport,
                          end}
                 end;
             error ->
+                rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
                 {?RESPONSE_CODE_ACCESS_REFUSED, 0}
         end,
     Frame =
@@ -1564,6 +1574,7 @@ handle_frame_post_auth(Transport,
                      delete_publisher,
                      CorrelationId,
                      ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST),
+            rabbit_global_counters:increase_protocol_counter(stream, ?PUBLISHER_DOES_NOT_EXIST, 1),
             {Connection0, State}
     end;
 handle_frame_post_auth(Transport,
@@ -1600,6 +1611,7 @@ handle_frame_post_auth(Transport,
                              subscribe,
                              CorrelationId,
                              ?RESPONSE_CODE_STREAM_NOT_AVAILABLE),
+                    rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_NOT_AVAILABLE, 1),
                     {Connection, State};
                 {error, not_found} ->
                     response(Transport,
@@ -1607,6 +1619,7 @@ handle_frame_post_auth(Transport,
                              subscribe,
                              CorrelationId,
                              ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+                    rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
                     {Connection, State};
                 {ok, LocalMemberPid} ->
                     case subscription_exists(StreamSubscriptions,
@@ -1618,6 +1631,7 @@ handle_frame_post_auth(Transport,
                                      subscribe,
                                      CorrelationId,
                                      ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
+                            rabbit_global_counters:increase_protocol_counter(stream, ?SUBSCRIPTION_ID_ALREADY_EXISTS, 1),
                             {Connection, State};
                         false ->
                             rabbit_log:info("Creating subscription ~p to ~p, with offset specificat"
@@ -1722,6 +1736,7 @@ handle_frame_post_auth(Transport,
                      subscribe,
                      CorrelationId,
                      ?RESPONSE_CODE_ACCESS_REFUSED),
+            rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -1751,6 +1766,7 @@ handle_frame_post_auth(Transport,
                                                   {credit, Code,
                                                    SubscriptionId}}),
                     send(Transport, S, Frame),
+                    rabbit_global_counters:increase_protocol_counter(stream, ?SUBSCRIPTION_ID_DOES_NOT_EXIST, 1),
                     {Connection1, State1};
                 {{segment, Segment1}, {credit, Credit1}} ->
                     Consumer1 =
@@ -1770,6 +1786,7 @@ handle_frame_post_auth(Transport,
                 rabbit_stream_core:frame({response, 1,
                                           {credit, Code, SubscriptionId}}),
             send(Transport, S, Frame),
+            rabbit_global_counters:increase_protocol_counter(stream, ?SUBSCRIPTION_ID_DOES_NOT_EXIST, 1),
             {Connection, State}
     end;
 handle_frame_post_auth(_Transport,
@@ -1819,6 +1836,7 @@ handle_frame_post_auth(Transport,
             ok ->
                 case lookup_leader(Stream, Connection0) of
                     cluster_not_found ->
+                        rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0, Connection0};
                     {LeaderPid, C} ->
                         {?RESPONSE_CODE_OK,
@@ -1831,6 +1849,7 @@ handle_frame_post_auth(Transport,
                          C}
                 end;
             error ->
+                rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
                 {?RESPONSE_CODE_ACCESS_REFUSED, 0, Connection0}
         end,
     Frame =
@@ -1852,6 +1871,7 @@ handle_frame_post_auth(Transport,
                      unsubscribe,
                      CorrelationId,
                      ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST),
+            rabbit_global_counters:increase_protocol_counter(stream, ?SUBSCRIPTION_ID_DOES_NOT_EXIST, 1),
             {Connection, State};
         true ->
             {Connection1, State1} =
@@ -1902,6 +1922,7 @@ handle_frame_post_auth(Transport,
                                      create_stream,
                                      CorrelationId,
                                      ?RESPONSE_CODE_PRECONDITION_FAILED),
+                            rabbit_global_counters:increase_protocol_counter(stream, ?PRECONDITION_FAILED, 1),
                             {Connection, State};
                         {error, reference_already_exists} ->
                             response(Transport,
@@ -1909,6 +1930,7 @@ handle_frame_post_auth(Transport,
                                      create_stream,
                                      CorrelationId,
                                      ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
+                            rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_ALREADY_EXISTS, 1),
                             {Connection, State};
                         {error, _} ->
                             response(Transport,
@@ -1916,6 +1938,7 @@ handle_frame_post_auth(Transport,
                                      create_stream,
                                      CorrelationId,
                                      ?RESPONSE_CODE_INTERNAL_ERROR),
+                            rabbit_global_counters:increase_protocol_counter(stream, ?INTERNAL_ERROR, 1),
                             {Connection, State}
                     end;
                 error ->
@@ -1924,6 +1947,7 @@ handle_frame_post_auth(Transport,
                              create_stream,
                              CorrelationId,
                              ?RESPONSE_CODE_ACCESS_REFUSED),
+                    rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
                     {Connection, State}
             end;
         _ ->
@@ -1932,6 +1956,7 @@ handle_frame_post_auth(Transport,
                      create_stream,
                      CorrelationId,
                      ?RESPONSE_CODE_PRECONDITION_FAILED),
+            rabbit_global_counters:increase_protocol_counter(stream, ?PRECONDITION_FAILED, 1),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -1969,6 +1994,7 @@ handle_frame_post_auth(Transport,
                                      ?RESPONSE_CODE_STREAM_NOT_AVAILABLE},
                                 Frame = rabbit_stream_core:frame(Command),
                                 send(Transport, S, Frame),
+                                rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_NOT_AVAILABLE, 1),
                                 {NewConnection, NewState};
                             {not_cleaned, SameConnection, SameState} ->
                                 {SameConnection, SameState}
@@ -1980,6 +2006,7 @@ handle_frame_post_auth(Transport,
                              delete_stream,
                              CorrelationId,
                              ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
+                    rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
                     {Connection, State}
             end;
         error ->
@@ -1988,6 +2015,7 @@ handle_frame_post_auth(Transport,
                      delete_stream,
                      CorrelationId,
                      ?RESPONSE_CODE_ACCESS_REFUSED),
+            rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -2103,6 +2131,7 @@ handle_frame_post_auth(Transport,
                 {?RESPONSE_CODE_OK,
                  <<StreamSize:16, Stream:StreamSize/binary>>};
             {error, _} ->
+                rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
                 {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, <<(-1):16>>}
         end,
 
@@ -2135,6 +2164,7 @@ handle_frame_post_auth(Transport,
                                   <<StreamCount:32>>, Streams),
                 {?RESPONSE_CODE_OK, Bin};
             {error, _} ->
+                rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
                 {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, <<0:32>>}
         end,
 
@@ -2175,6 +2205,7 @@ handle_frame_post_auth(Transport,
                                   {close, ?RESPONSE_CODE_UNKNOWN_FRAME,
                                    CloseReason}}),
     send(Transport, S, Frame),
+    rabbit_global_counters:increase_protocol_counter(stream, ?UNKNOWN_FRAME, 1),
     {Connection#stream_connection{connection_step = close_sent}, State}.
 
 notify_connection_closed(#stream_connection{name = Name,
