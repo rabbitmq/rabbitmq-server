@@ -89,9 +89,9 @@ EOF
 """
 
 http_archive(
-    name = "rabbitmq-server-generic-unix-3.8.17",
+    name = "rabbitmq-server-generic-unix-3.8.18",
     build_file = "@//:BUILD.package_generic_unix",
     patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
-    strip_prefix = "rabbitmq_server-3.8.17",
-    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.17/rabbitmq-server-generic-unix-latest-toolchain-3.8.17.tar.xz"],
+    strip_prefix = "rabbitmq_server-3.8.18",
+    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.18/rabbitmq-server-generic-unix-3.8.18.tar.xz"],
 )
