@@ -226,8 +226,6 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(node_removal_is_not_quorum_critical, _) ->
-    {skip, "testcase is not mixed versions compatible"};
 init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publish;
                                          Testcase == reconnect_consumer_and_wait;
                                          Testcase == reconnect_consumer_and_wait_channel_down ->
@@ -261,6 +259,8 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
 init_per_testcase(Testcase, Config) ->
     IsMixed = rabbit_ct_helpers:is_mixed_versions(),
     case Testcase of
+        node_removal_is_not_quorum_critical when IsMixed ->
+            {skip, "node_removal_is_not_quorum_critical isn't mixed versions compatible"};
         simple_confirm_availability_on_leader_change when IsMixed ->
             {skip, "simple_confirm_availability_on_leader_change isn't mixed versions compatible"};
         _ ->
@@ -271,6 +271,15 @@ init_per_testcase(Testcase, Config) ->
                                                    [{queue_name, Q},
                                                     {alt_queue_name, <<Q/binary, "_alt">>}
                                                    ]),
+            EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
+                         Config2, quorum_queue),
+            case EnableFF of
+                ok ->
+                    Config2;
+                Skip ->
+                    end_per_testcase(Testcase, Config2),
+                    Skip
+            end,
             rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps())
     end.
 
