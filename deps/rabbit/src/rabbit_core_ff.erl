@@ -251,6 +251,10 @@ mds_phase1_migration(FeatureName, _FeatureProps, enable) ->
     %% all Mnesia nodes are running (all == running). It would be more
     %% difficult to add them later to the node when they start.
     ?LOG_DEBUG(
+       "Feature flag `~s`:   ensure Khepri Ra system is running",
+       [FeatureName]),
+    ok = rabbit_khepri:setup(),
+    ?LOG_DEBUG(
        "Feature flag `~s`:   making sure all Mnesia nodes are running",
        [FeatureName]),
     AllMnesiaNodes = lists:sort(rabbit_mnesia:cluster_nodes(all)),

@@ -11,7 +11,8 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
--export([setup/1,
+-export([setup/0,
+         setup/1,
          add_member/1,
          members/0,
          locally_known_members/0,
@@ -50,6 +51,9 @@
 %% -------------------------------------------------------------------
 %% API wrapping Khepri.
 %% -------------------------------------------------------------------
+
+setup() ->
+    setup(rabbit_prelaunch:get_context()).
 
 setup(_) ->
     ok = ensure_ra_system_started(?RA_SYSTEM),
@@ -225,6 +229,7 @@ delete(Path) ->
     khepri:delete(?STORE_NAME, Path).
 
 info() ->
+    ok = setup(),
     khepri:info(?STORE_NAME).
 
 %% -------------------------------------------------------------------
