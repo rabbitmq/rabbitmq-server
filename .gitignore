@@ -59,6 +59,7 @@
 /sbin.lock
 .envrc
 *.plt
+*.lock
 
 /topic-branch-scratch/
 
