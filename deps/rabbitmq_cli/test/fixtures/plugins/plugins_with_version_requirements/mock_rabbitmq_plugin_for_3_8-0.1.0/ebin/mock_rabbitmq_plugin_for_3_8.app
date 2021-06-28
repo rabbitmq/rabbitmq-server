@@ -6,5 +6,5 @@
 	{applications, [kernel,stdlib,rabbit]},
 	{mod, {mock_rabbitmq_plugins_01_app, []}},
 	{env, []},
-	{broker_version_requirements, ["3.9.0", "3.10.0"]}
+	{broker_version_requirements, ["3.8.0", "3.9.0", "3.10.0"]}
 ]}.
