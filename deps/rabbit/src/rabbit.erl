@@ -1086,7 +1086,7 @@ set_log_level(Level) ->
 
 -spec log_locations() -> [rabbit_prelaunch_logging:log_location()].
 log_locations() ->
-    rabbit_prelaunch_logging:log_locations().
+    [filename:absname(Path) || Path <- rabbit_prelaunch_logging:log_locations()].
 
 -spec config_locations() -> [rabbit_config:config_location()].
 config_locations() ->
@@ -1512,7 +1512,7 @@ motd() ->
 
 home_dir() ->
     case init:get_argument(home) of
-        {ok, [[Home]]} -> Home;
+        {ok, [[Home]]} -> filename:absname(Home);
         Other          -> Other
     end.
 
