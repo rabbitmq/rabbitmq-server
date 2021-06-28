@@ -264,10 +264,10 @@ find_cuttlefish_schemas([], AllSchemas) ->
     lists:sort(fun(A,B) -> A < B end, AllSchemas).
 
 list_apps(#{os_type := {win32, _}, plugins_path := PluginsPath}) ->
-    PluginsDirs = string:lexemes(PluginsPath, ";"),
+    PluginsDirs = lists:usort(string:lexemes(PluginsPath, ";")),
     list_apps1(PluginsDirs, []);
 list_apps(#{plugins_path := PluginsPath}) ->
-    PluginsDirs = string:lexemes(PluginsPath, ":"),
+    PluginsDirs = lists:usort(string:lexemes(PluginsPath, ":")),
     list_apps1(PluginsDirs, []).
 
 
