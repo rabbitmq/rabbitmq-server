@@ -164,6 +164,8 @@ smoke(Config) ->
     basic_ack(Ch, basic_get(Ch, QName)),
     %% global counters
     publish_and_confirm(Ch, <<"inexistent_queue">>, <<"msg4">>),
+    ConsumerTag3 = <<"ctag3">>,
+    ok = subscribe(Ch, QName, ConsumerTag3),
     ProtocolCounters = maps:get([{protocol, amqp091}], get_global_counters(Config)),
     ?assertEqual(#{
                    messages_confirmed_total => 4,
@@ -171,7 +173,9 @@ smoke(Config) ->
                    messages_received_total => 4,
                    messages_routed_total => 3,
                    messages_unroutable_dropped_total => 1,
-                   messages_unroutable_returned_total => 0
+                   messages_unroutable_returned_total => 0,
+                   consumers => 1,
+                   publishers => 1
                   }, ProtocolCounters),
     QueueType = list_to_atom(
                   "rabbit_" ++

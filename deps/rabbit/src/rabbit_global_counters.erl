@@ -25,7 +25,11 @@
          messages_delivered_get_auto_ack/3,
          messages_get_empty/3,
          messages_redelivered/3,
-         messages_acknowledged/3
+         messages_acknowledged/3,
+         publisher_created/1,
+         publisher_deleted/1,
+         consumer_created/1,
+         consumer_deleted/1
        ]).
 
 %% PROTOCOL COUNTERS:
@@ -35,6 +39,8 @@
 -define(MESSAGES_UNROUTABLE_DROPPED, 4).
 -define(MESSAGES_UNROUTABLE_RETURNED, 5).
 -define(MESSAGES_CONFIRMED, 6).
+-define(PUBLISHERS, 7).
+-define(CONSUMERS, 8).
 -define(PROTOCOL_COUNTERS,
             [
                 {
@@ -60,6 +66,14 @@
                 {
                     messages_confirmed_total, ?MESSAGES_CONFIRMED, counter,
                     "Total number of messages confirmed to publishers"
+                },
+                {
+                    publishers, ?PUBLISHERS, gauge,
+                    "Current number of publishers"
+                },
+                {
+                    consumers, ?CONSUMERS, gauge,
+                    "Current number of consumers"
                 }
             ]).
 
@@ -172,6 +186,18 @@ messages_redelivered(Protocol, QueueType, Num) ->
 
 messages_acknowledged(Protocol, QueueType, Num) ->
     counters:add(fetch(Protocol, QueueType), ?MESSAGES_ACKNOWLEDGED, Num).
+
+publisher_created(Protocol) ->
+    counters:add(fetch(Protocol), ?PUBLISHERS, 1).
+
+publisher_deleted(Protocol) ->
+    counters:add(fetch(Protocol), ?PUBLISHERS, -1).
+
+consumer_created(Protocol) ->
+    counters:add(fetch(Protocol), ?CONSUMERS, 1).
+
+consumer_deleted(Protocol) ->
+    counters:add(fetch(Protocol), ?CONSUMERS, -1).
 
 fetch(Protocol) ->
     persistent_term:get({?MODULE, Protocol}).
