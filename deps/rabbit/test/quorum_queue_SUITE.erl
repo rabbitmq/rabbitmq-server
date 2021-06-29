@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(quorum_queue_utils, [wait_for_messages_ready/3,
                              wait_for_messages_pending_ack/3,
@@ -20,6 +21,8 @@
 
 -compile([nowarn_export_all, export_all]).
 -compile(export_all).
+
+-define(DEFAULT_AWAIT, 10000).
 
 suite() ->
     [{timetrap, 5 * 60000}].
@@ -377,11 +380,14 @@ start_queue(Config) ->
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% Check that the application and one ra node are up
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))),
+    ?awaitMatch({ra, _, _},
+                lists:keyfind(ra, 1,
+                              rpc:call(Server, application, which_applications, [])),
+                ?DEFAULT_AWAIT),
     Expected = Children + 1,
-    ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
+    ?awaitMatch(Expected,
+                length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
+                ?DEFAULT_AWAIT),
 
     %% Test declare an existing queue
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
@@ -467,12 +473,15 @@ quorum_cluster_size_x(Config, Max, Expected) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-quorum-initial-group-size">>, long, Max}])),
-    {ok, Members, _} = ra:members({RaName, Server}),
-    ?assertEqual(Expected, length(Members)),
-    Info = rpc:call(Server, rabbit_quorum_queue, infos,
-                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
-    MembersQ = proplists:get_value(members, Info),
-    ?assertEqual(Expected, length(MembersQ)).
+    ?awaitMatch({ok, Members, _} when length(Members) == Expected,
+                ra:members({RaName, Server}),
+                ?DEFAULT_AWAIT),
+    ?awaitMatch(MembersQ when length(MembersQ) == Expected,
+                begin
+                    Info = rpc:call(Server, rabbit_quorum_queue, infos,
+                                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+                    proplists:get_value(members, Info)
+                end, ?DEFAULT_AWAIT).
 
 stop_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -487,20 +496,25 @@ stop_queue(Config) ->
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% Check that the application and one ra node are up
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))),
+    ?awaitMatch({ra, _, _},
+                lists:keyfind(ra, 1,
+                              rpc:call(Server, application, which_applications, [])),
+                ?DEFAULT_AWAIT),
     Expected = Children + 1,
-    ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
+    ?awaitMatch(Expected,
+                length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
+                ?DEFAULT_AWAIT),
 
     %% Delete the quorum queue
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = LQ})),
     %% Check that the application and process are down
-    wait_until(fun() ->
-                       Children == length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))
-               end),
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))).
+    ?awaitMatch(Children,
+                length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
+                30000),
+    ?awaitMatch({ra, _, _},
+                lists:keyfind(ra, 1,
+                              rpc:call(Server, application, which_applications, [])),
+                ?DEFAULT_AWAIT).
 
 restart_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -544,16 +558,23 @@ idempotent_recover(Config) ->
     %% kill the vhost process to trigger recover
     rpc:call(Server, erlang, exit, [Pid, kill]),
 
-    timer:sleep(1000),
+
     %% validate quorum queue is still functional
-    RaName = ra_name(LQ),
-    {ok, _, _} = ra:members({RaName, Server}),
+    ?awaitMatch({ok, _, _},
+                begin
+                    RaName = ra_name(LQ),
+                    ra:members({RaName, Server})
+                end, ?DEFAULT_AWAIT),
     %% validate vhosts are running - or rather validate that at least one
     %% vhost per cluster is running
-    [begin
-         #{cluster_state := ServerStatuses} = maps:from_list(I),
-         ?assertMatch(#{Server := running}, maps:from_list(ServerStatuses))
-     end || I <- rpc:call(Server, rabbit_vhost,info_all, [])],
+    ?awaitMatch(true,
+                begin
+                    Is = rpc:call(Server, rabbit_vhost,info_all, []),
+                    lists:all(fun (I) ->
+                                      #{cluster_state := ServerStatuses} = maps:from_list(I),
+                                      maps:get(Server, maps:from_list(ServerStatuses)) =:= running
+                              end, Is)
+                end, ?DEFAULT_AWAIT),
     ok.
 
 vhost_with_quorum_queue_is_deleted(Config) ->
@@ -607,18 +628,14 @@ restart_all_types(Config) ->
     %% Check that the application and two ra nodes are up. Queues are restored
     %% after the broker is marked as "ready", that's why we need to wait for
     %% the condition.
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))),
+    ?awaitMatch({ra, _, _},
+                lists:keyfind(ra, 1,
+                              rpc:call(Server, application, which_applications, [])),
+                ?DEFAULT_AWAIT),
     Expected = length(Children) + 2,
-    ok = rabbit_ct_helpers:await_condition(
-           fun() ->
-                   Expected =:= length(
-                                  rpc:call(
-                                    Server,
-                                    supervisor,
-                                    which_children,
-                                    [?SUPNAME]))
-           end, 60000),
+    ?awaitMatch(Expected,
+                length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
+                60000),
     %% Check the classic queues restarted correctly
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
@@ -757,14 +774,17 @@ shrink_all(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({'queue.declare_ok', AQ, 0, 0},
                  declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    timer:sleep(500),
-    Result = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server2]),
-    ?assertMatch([{_, {ok, 2}}, {_, {ok, 2}}], Result),
-    Result1 = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server1]),
-    ?assertMatch([{_, {ok, 1}}, {_, {ok, 1}}], Result1),
-    Result2 = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server0]),
-    ?assertMatch([{_, {error, 1, last_node}},
-                  {_, {error, 1, last_node}}], Result2),
+
+    ?awaitMatch([{_, {ok, 2}}, {_, {ok, 2}}],
+                rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server2]),
+                ?DEFAULT_AWAIT),
+    ?awaitMatch([{_, {ok, 1}}, {_, {ok, 1}}],
+                rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server1]),
+                ?DEFAULT_AWAIT),
+    ?awaitMatch([{_, {error, 1, last_node}},
+                 {_, {error, 1, last_node}}],
+                rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server0]),
+                ?DEFAULT_AWAIT),
     ok.
 
 rebalance(Config) ->
@@ -791,10 +811,13 @@ rebalance0(Config) ->
                  declare(Ch, Q1, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
                  declare(Ch, Q2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    timer:sleep(1000),
 
-    {ok, _, {_, Leader1}} = ra:members({ra_name(Q1), Server0}),
-    {ok, _, {_, Leader2}} = ra:members({ra_name(Q2), Server0}),
+    {ok, _, {_, Leader1}} = ?awaitMatch({ok, _, {_, _}},
+                                        ra:members({ra_name(Q1), Server0}),
+                                        ?DEFAULT_AWAIT),
+    {ok, _, {_, Leader2}} = ?awaitMatch({ok, _, {_, _}},
+                                        ra:members({ra_name(Q2), Server0}),
+                                        ?DEFAULT_AWAIT),
     rabbit_ct_client_helpers:publish(Ch, Q1, 3),
     rabbit_ct_client_helpers:publish(Ch, Q2, 2),
 
@@ -804,20 +827,22 @@ rebalance0(Config) ->
                  declare(Ch, Q4, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({'queue.declare_ok', Q5, 0, 0},
                  declare(Ch, Q5, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    timer:sleep(500),
-    {ok, Summary} = rpc:call(Server0, rabbit_amqqueue, rebalance, [quorum, ".*", ".*"]),
 
     %% Q1 and Q2 should not have moved leader, as these are the queues with more
     %% log entries and we allow up to two queues per node (3 nodes, 5 queues)
-    ?assertMatch({ok, _, {_, Leader1}}, ra:members({ra_name(Q1), Server0})),
-    ?assertMatch({ok, _, {_, Leader2}}, ra:members({ra_name(Q2), Server0})),
+    ?awaitMatch({ok, _, {_, Leader1}}, ra:members({ra_name(Q1), Server0}), ?DEFAULT_AWAIT),
+    ?awaitMatch({ok, _, {_, Leader2}}, ra:members({ra_name(Q2), Server0}), ?DEFAULT_AWAIT),
 
     %% Check that we have at most 2 queues per node
-    ?assert(lists:all(fun(NodeData) ->
-                              lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
-                                           (_) -> true end,
-                                        NodeData)
-                      end, Summary)),
+    ?awaitMatch(true,
+                begin
+                    {ok, Summary} = rpc:call(Server0, rabbit_amqqueue, rebalance, [quorum, ".*", ".*"]),
+                    lists:all(fun(NodeData) ->
+                                      lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
+                                                   (_) -> true end,
+                                                NodeData)
+                              end, Summary)
+                end, ?DEFAULT_AWAIT),
     ok.
 
 subscribe_should_fail_when_global_qos_true(Config) ->
