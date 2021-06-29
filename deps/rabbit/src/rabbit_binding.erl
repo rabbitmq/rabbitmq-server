@@ -80,15 +80,16 @@ new(Src, RoutingKey, Dst, Arguments) ->
                         'ok'.
 
 recover() ->
-    rabbit_misc:table_filter(
-        fun (Route) ->
-            mnesia:read({rabbit_semi_durable_route, Route}) =:= []
-        end,
-        fun (Route,  true) ->
-            ok = mnesia:write(rabbit_semi_durable_route, Route, write);
-            (_Route, false) ->
-                ok
-        end, rabbit_durable_route).
+    rabbit_misc:execute_mnesia_transaction(
+        fun () ->
+            mnesia:lock({table, rabbit_durable_route}, read),
+            mnesia:lock({table, rabbit_semi_durable_route}, write),
+            Routes = rabbit_misc:dirty_read_all(rabbit_durable_route),
+            Fun = fun(Route) ->
+                mnesia:dirty_write(rabbit_semi_durable_route, Route)
+            end,
+        lists:foreach(Fun, Routes)
+    end).
 
 %% Virtual host-specific recovery
 recover(XNames, QNames) ->
