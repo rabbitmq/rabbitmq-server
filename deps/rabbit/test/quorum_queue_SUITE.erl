@@ -33,9 +33,9 @@ all() ->
 
 groups() ->
     [
-     {single_node, [], all_tests()},
-     {single_node, [], memory_tests()},
-     {single_node, [], [node_removal_is_quorum_critical]},
+     {single_node, [], all_tests()
+                       ++ memory_tests()
+                       ++ [node_removal_is_quorum_critical]},
      {unclustered, [], [
                         {uncluster_size_2, [], [add_member]}
                        ]},
@@ -263,6 +263,8 @@ init_per_testcase(Testcase, Config) ->
             {skip, "node_removal_is_not_quorum_critical isn't mixed versions compatible"};
         simple_confirm_availability_on_leader_change when IsMixed ->
             {skip, "simple_confirm_availability_on_leader_change isn't mixed versions compatible"};
+        confirm_availability_on_leader_change when IsMixed ->
+            {skip, "confirm_availability_on_leader_change isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
