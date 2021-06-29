@@ -1202,6 +1202,7 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "vhost_SUITE",
     size = "medium",
+    flaky = True,
     matrix = ct_group_matrix([
         "cluster_size_1_network",
         "cluster_size_2_network",
