@@ -306,7 +306,9 @@ global_metrics_present_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_delivered_get_auto_ack_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_get_empty_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_redelivered_total{", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_acknowledged_total{", [{capture, none}, multiline])).
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_acknowledged_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_publishers{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_consumers{", [{capture, none}, multiline])).
 
 global_metrics_single_metric_family_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),

@@ -18,8 +18,8 @@ buildbuddy(name = "buildbuddy_toolchain")
 
 http_archive(
     name = "bazel-erlang",
-    strip_prefix = "bazel-erlang-master",
-    urls = ["https://github.com/rabbitmq/bazel-erlang/archive/master.zip"],
+    strip_prefix = "bazel-erlang-main",
+    urls = ["https://github.com/rabbitmq/bazel-erlang/archive/main.zip"],
 )
 
 load("@bazel-erlang//:bazel_erlang.bzl", "bazel_erlang_deps")

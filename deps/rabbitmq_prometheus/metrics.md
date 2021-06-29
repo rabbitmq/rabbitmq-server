@@ -64,6 +64,8 @@ To generate these:
 | rabbitmq_global_messages_routed_total                       | Total number of messages routed to queues or streams                                                         |
 | rabbitmq_global_messages_unroutable_dropped_total           | Total number of messages published as non-mandatory into an exchange and dropped as unroutable               |
 | rabbitmq_global_messages_unroutable_returned_total          | Total number of messages published as mandatory into an exchange and returned to the publisher as unroutable |
+| rabbitmq_global_publishers                                  | Publishers currently connected |
+| rabbitmq_global_consumers                                   | Consumers currently connected |
 
 ### Generic
 
