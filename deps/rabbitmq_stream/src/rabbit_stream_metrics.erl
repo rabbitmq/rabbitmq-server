@@ -50,6 +50,7 @@ consumer_created(Connection,
          {properties, Properties}],
     ets:insert(?TABLE_CONSUMER,
                {{StreamResource, Connection, SubscriptionId}, Values}),
+    rabbit_global_counters:consumer_created(stream),
     rabbit_core_metrics:consumer_created(Connection,
                                          consumer_tag(SubscriptionId),
                                          false,
@@ -86,6 +87,7 @@ consumer_updated(Connection,
 consumer_cancelled(Connection, StreamResource, SubscriptionId) ->
     ets:delete(?TABLE_CONSUMER,
                {StreamResource, Connection, SubscriptionId}),
+    rabbit_global_counters:consumer_deleted(stream),
     rabbit_core_metrics:consumer_deleted(Connection,
                                          consumer_tag(SubscriptionId),
                                          StreamResource),
@@ -103,6 +105,7 @@ publisher_created(Connection,
          {published, 0},
          {confirmed, 0},
          {errored, 0}],
+    rabbit_global_counters:publisher_created(stream),
     ets:insert(?TABLE_PUBLISHER,
                {{StreamResource, Connection, PublisherId}, Values}),
     ok.
@@ -126,6 +129,7 @@ publisher_updated(Connection,
 publisher_deleted(Connection, StreamResource, PublisherId) ->
     ets:delete(?TABLE_PUBLISHER,
                {StreamResource, Connection, PublisherId}),
+    rabbit_global_counters:publisher_deleted(stream),
     ok.
 
 format_publisher_reference(undefined) ->

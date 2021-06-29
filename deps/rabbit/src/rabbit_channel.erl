@@ -165,7 +165,8 @@
              delivery_flow,
              interceptor_state,
              queue_states,
-             tick_timer
+             tick_timer,
+             publishing_mode = false :: boolean()
             }).
 
 -define(QUEUE, lqueue).
@@ -878,6 +879,7 @@ terminate(_Reason,
     rabbit_event:if_enabled(State, #ch.stats_timer,
                             fun() -> emit_stats(State) end),
     [delete_stats(Tag) || {Tag, _} <- get()],
+    maybe_decrease_global_publishers(State),
     rabbit_core_metrics:channel_closed(self()),
     rabbit_event:notify(channel_closed, [{pid, self()},
                                          {user_who_performed_action, Username}]).
@@ -1285,6 +1287,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                    confirm_enabled  = ConfirmEnabled,
                                    delivery_flow    = Flow
                                    }) ->
+    State0 = maybe_increase_global_publishers(State),
     rabbit_global_counters:messages_received(amqp091, 1),
     check_msg_size(Content, MaxMessageSize, GCThreshold),
     ExchangeName = rabbit_misc:r(VHostPath, exchange, ExchangeNameBin),
@@ -1302,10 +1305,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     DoConfirm = Tx =/= none orelse ConfirmEnabled,
     {MsgSeqNo, State1} =
         case DoConfirm orelse Mandatory of
-            false -> {undefined, State};
+            false -> {undefined, State0};
             true  -> rabbit_global_counters:messages_received_confirm(amqp091, 1),
-                     SeqNo = State#ch.publish_seqno,
-                     {SeqNo, State#ch{publish_seqno = SeqNo + 1}}
+                     SeqNo = State0#ch.publish_seqno,
+                     {SeqNo, State0#ch{publish_seqno = SeqNo + 1}}
         end,
     case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
@@ -1519,6 +1522,7 @@ handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
                              Username, QueueStates0)
                    end) of
                 {ok, QueueStates} ->
+                    rabbit_global_counters:consumer_deleted(amqp091),
                     {noreply, NewState#ch{queue_states = QueueStates}};
                 {error, not_found} ->
                     %% Spec requires we ignore this situation.
@@ -1778,6 +1782,7 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                     Q}
            end) of
         {{ok, QueueStates, Actions}, Q} when ?is_amqqueue(Q) ->
+            rabbit_global_counters:consumer_created(amqp091),
             CM1 = maps:put(
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
@@ -1852,6 +1857,7 @@ cancel_consumer(CTag, QName,
                                                   nowait       = true}, State);
         _            -> ok
     end,
+    rabbit_global_counters:consumer_deleted(amqp091),
     rabbit_event:notify(consumer_deleted, [{consumer_tag, CTag},
                                            {channel,      self()},
                                            {queue,        QName}]),
@@ -2914,3 +2920,14 @@ find_queue_name_from_quorum_name(Name, QStates) ->
                   end
           end,
     rabbit_queue_type:fold_state(Fun, undefined, QStates).
+
+maybe_increase_global_publishers(#ch{publishing_mode = true} = State0) ->
+    State0;
+maybe_increase_global_publishers(State0) ->
+    rabbit_global_counters:publisher_created(amqp091),
+    State0#ch{publishing_mode = true}.
+
+maybe_decrease_global_publishers(#ch{publishing_mode = true}) ->
+    ok;
+maybe_decrease_global_publishers(#ch{publishing_mode = false}) ->
+    rabbit_global_counters:publisher_deleted(amqp091).
