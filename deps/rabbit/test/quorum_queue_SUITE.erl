@@ -265,6 +265,9 @@ init_per_testcase(Testcase, Config) ->
             {skip, "simple_confirm_availability_on_leader_change isn't mixed versions compatible"};
         confirm_availability_on_leader_change when IsMixed ->
             {skip, "confirm_availability_on_leader_change isn't mixed versions compatible"};
+        recover_from_single_failure when IsMixed ->
+            %% In a 3.8/3.9 cluster this will pass only if the failure occurs on the 3.8 node
+            {skip, "recover_from_single_failure isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
