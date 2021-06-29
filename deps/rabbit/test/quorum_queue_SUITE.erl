@@ -652,16 +652,29 @@ stop_start_rabbit_app(Config) ->
     ?assertEqual({'queue.declare_ok', CQ2, 0, 0}, declare(Ch, CQ2, [])),
     rabbit_ct_client_helpers:publish(Ch, CQ2, 1),
 
-    rabbit_control_helper:command(stop_app, Server),
+    ?assertEqual(ok, rabbit_control_helper:command(stop_app, Server)),
     %% Check the ra application has stopped (thus its supervisor and queues)
-    ?assertMatch(false, lists:keyfind(ra, 1,
-                                      rpc:call(Server, application, which_applications, []))),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            Apps = rpc:call(Server, application, which_applications, []),
+            %% we expect the app to NOT be running
+            case lists:keyfind(ra, 1, Apps) of
+                false      -> true;
+                {ra, _, _} -> false
+            end
+        end),
 
-    rabbit_control_helper:command(start_app, Server),
+    ?assertEqual(ok, rabbit_control_helper:command(start_app, Server)),
 
     %% Check that the application and two ra nodes are up
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            Apps = rpc:call(Server, application, which_applications, []),
+            case lists:keyfind(ra, 1, Apps) of
+                false      -> false;
+                {ra, _, _} -> true
+            end
+        end),
     Expected = Children + 2,
     ?assertMatch(Expected,
                  length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
