@@ -53,6 +53,7 @@ OCF_RESKEY_rmq_feature_health_check_default=true
 OCF_RESKEY_rmq_feature_local_list_queues_default=true
 OCF_RESKEY_limit_nofile_default=65535
 OCF_RESKEY_avoid_using_iptables_default=false
+OCF_RESKEY_allowed_cluster_nodes_default=""
 
 : ${HA_LOGTAG="lrmd"}
 : ${HA_LOGFACILITY="daemon"}
@@ -80,6 +81,7 @@ OCF_RESKEY_avoid_using_iptables_default=false
 : ${OCF_RESKEY_rmq_feature_local_list_queues=${OCF_RESKEY_rmq_feature_local_list_queues_default}}
 : ${OCF_RESKEY_limit_nofile=${OCF_RESKEY_limit_nofile_default}}
 : ${OCF_RESKEY_avoid_using_iptables=${OCF_RESKEY_avoid_using_iptables_default}}
+: ${OCF_RESKEY_allowed_cluster_nodes=${OCF_RESKEY_allowed_cluster_nodes_default}}
 
 #######################################################################
 
@@ -366,6 +368,18 @@ noops. This is useful when we run inside containers.
 </longdesc>
 <shortdesc lang="en">Disable iptables use entirely</shortdesc>
 <content type="boolean" default="${OCF_RESKEY_avoid_using_iptables_default}" />
+</parameter>
+
+<parameter name="allowed_cluster_nodes" unique="0" required="0">
+<longdesc lang="en">
+When set to anything other than the empty string it must container the list of
+cluster node names, separated by spaces, where the rabbitmq resource is allowed to run.
+Tis is needed when rabbitmq is running on a subset of nodes part of a larger
+cluster. The default ("") is to assume that all nodes part of the cluster will
+run the rabbitmq resource.
+</longdesc>
+<shortdesc lang="en">List of cluster nodes where rabbitmq is allowed to run</shortdesc>
+<content type="string" default="${OCF_RESKEY_allowed_cluster_nodes}" />
 </parameter>
 
 $EXTENDED_OCF_PARAMS
@@ -688,7 +702,9 @@ rmq_setup_env() {
     local dir
     H="$(get_hostname)"
     export RABBITMQ_NODENAME=$(rabbit_node_name $H)
-    export RABBITMQ_NODE_PORT=$OCF_RESKEY_node_port
+    if [ "$OCF_RESKEY_node_port" != "$OCF_RESKEY_node_port_default" ]; then
+        export RABBITMQ_NODE_PORT=$OCF_RESKEY_node_port
+    fi
     export RABBITMQ_PID_FILE=$OCF_RESKEY_pid_file
     MNESIA_FILES="${OCF_RESKEY_mnesia_base}/$(rabbit_node_name $H)"
     RMQ_START_TIME="${MNESIA_FILES}/ocf_server_start_time.txt"
@@ -806,6 +822,10 @@ block_client_access()
 
 unblock_client_access()
 {
+    local lhtext="none"
+    if [ -z $1 ] ; then
+        lhtext=$1
+    fi
     # When OCF_RESKEY_avoid_using_iptables is true iptables calls are noops
     if [ "${OCF_RESKEY_avoid_using_iptables}" == 'true' ] ; then
         return
@@ -815,6 +835,7 @@ unblock_client_access()
       iptables --wait -D INPUT -p tcp -m tcp --dport ${OCF_RESKEY_node_port} -m state --state NEW,RELATED,ESTABLISHED \
       -m comment --comment 'temporary RMQ block' -j REJECT --reject-with tcp-reset
     done
+    ocf_log info "${lhtext} unblocked access to RMQ port"
 }
 
 get_nodes__base(){
@@ -854,10 +875,18 @@ get_running_nodes() {
 get_alive_pacemaker_nodes_but()
 {
     if [ -z "$1" ]; then
-        echo `crm_node -l -p | sed -e '/(null)/d'`
+        tmp_pcmk_node_list=`crm_node -l -p | sed -e '/(null)/d'`
     else
-        echo `crm_node -l -p | sed -e "s/${1}//g" | sed -e '/(null)/d'`
+        tmp_pcmk_node_list=`crm_node -l -p | sed -e "s/${1}//g" | sed -e '/(null)/d'`
     fi
+    # If OCF_RESKEY_allowed_cluster_nodes is set then we only want the intersection
+    # of the cluster node output and the allowed_cluster_nodes list
+    if [ -z "${OCF_RESKEY_allowed_cluster_nodes}" ]; then
+      pcmk_node_list=$tmp_pcmk_node_list
+    else
+      pcmk_node_list=`for i in $tmp_pcmk_node_list ${OCF_RESKEY_allowed_cluster_nodes}; do echo $i; done | sort | uniq -d`
+    fi
+    echo $pcmk_node_list
 }
 
 # Get current master. If a parameter is provided,
@@ -1356,7 +1385,7 @@ start_rmq_server_app() {
 
     ocf_log info "${LH} begin."
     # Safe-unblock the rules, if there are any
-    unblock_client_access
+    unblock_client_access "${LH}"
     # Apply the blocking rule
     block_client_access
     rc=$?
@@ -1373,8 +1402,7 @@ start_rmq_server_app() {
         start_beam_process
         rc=$?
         if [ $rc -ne $OCF_SUCCESS ]; then
-            unblock_client_access
-            ocf_log info "${LH} unblocked access to RMQ port"
+            unblock_client_access "${LH}"
             return $OCF_ERR_GENERIC
         fi
     fi
@@ -1390,8 +1418,7 @@ start_rmq_server_app() {
         if [ $rc -ne 0 ] ; then
             ocf_log err "${LH} RMQ-server app can't be stopped. Beam will be killed."
             kill_rmq_and_remove_pid
-            unblock_client_access
-            ocf_log info "${LH} unblocked access to RMQ port"
+            unblock_client_access "${LH}"
             return $OCF_ERR_GENERIC
         fi
     else
@@ -1413,8 +1440,7 @@ start_rmq_server_app() {
                 else
                     ocf_log err "${LH} RMQ-server app can't be stopped during Mnesia cleaning. Beam will be killed."
                     kill_rmq_and_remove_pid
-                    unblock_client_access
-                    ocf_log info "${LH} unblocked access to RMQ port"
+                    unblock_client_access "${LH}"
                     return $OCF_ERR_GENERIC
                 fi
             fi
@@ -1425,8 +1451,7 @@ start_rmq_server_app() {
          kill_rmq_and_remove_pid
     fi
     ocf_log info "${LH} end."
-    unblock_client_access
-    ocf_log info "${LH} unblocked access to RMQ port"
+    unblock_client_access "${LH}"
     return $rc
 }
 
