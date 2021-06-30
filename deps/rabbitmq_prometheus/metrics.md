@@ -67,6 +67,31 @@ To generate these:
 | rabbitmq_global_publishers                                  | Publishers currently connected |
 | rabbitmq_global_consumers                                   | Consumers currently connected |
 
+#### Stream global counters
+
+These metrics are specific to the stream protocol.
+
+| Metric                                                      | Description                                                                                                  |
+| ---                                                         | ---                                                                                                          |
+| stream_error_stream_does_not_exist_total                    | Total number of commands rejected with stream does not exist error |
+| stream_error_subscription_id_already_exists_total           | Total number of commands failed with subscription id already exists |
+| stream_error_subscription_id_does_not_exist_total           | Total number of commands failed with subscription id does not exist |
+| stream_error_stream_already_exists_total                    | Total number of commands failed with stream already exists |
+| stream_error_stream_not_available_total                     | Total number of commands failed with stream not available |
+| stream_error_sasl_mechanism_not_supported_total             | Total number of commands failed with sasl mechanism not supported |
+| stream_error_authentication_failure_total                   | Total number of commands failed with authentication failure |
+| stream_error_sasl_error_total                               | Total number of commands failed with sasl error |
+| stream_error_sasl_challenge_total                           | Total number of commands failed with sasl challenge |
+| stream_error_sasl_authentication_failure_loopback_total     | Total number of commands failed with sasl authentication failure loopback |
+| stream_error_vhost_access_failure_total                     | Total number of commands failed with vhost access failure |
+| stream_error_unknown_frame_total                            | Total number of commands failed with unknown frame |
+| stream_error_frame_too_large_total                          | Total number of commands failed with frame too large |
+| stream_error_internal_error_total                           | Total number of commands failed with internal error |
+| stream_error_access_refused_total                           | Total number of commands failed with access refused |
+| stream_error_precondition_failed_total                      | Total number of commands failed with precondition failed |
+| stream_error_publisher_does_not_exist_total                 | Total number of commands failed with publisher does not exist |
+
+
 ### Generic
 
 | Metric                                    | Description                                        |

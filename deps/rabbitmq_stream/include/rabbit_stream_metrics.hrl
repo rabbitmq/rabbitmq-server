@@ -24,71 +24,71 @@
 -define(PROTOCOL_COUNTERS,
         [
          {
-          stream_error_stream_does_not_exist, ?STREAM_DOES_NOT_EXIST, counter,
-          ""
+          stream_error_stream_does_not_exist_total, ?STREAM_DOES_NOT_EXIST, counter,
+          "Total number of commands rejected with stream does not exist error"
          },
          {
-          stream_error_subscription_id_already_exists, ?SUBSCRIPTION_ID_ALREADY_EXISTS, counter,
-          ""
+          stream_error_subscription_id_already_exists_total, ?SUBSCRIPTION_ID_ALREADY_EXISTS, counter,
+          "Total number of commands failed with subscription id already exists"
          },
          {
-          stream_error_subscription_id_does_not_exist, ?SUBSCRIPTION_ID_DOES_NOT_EXIST, counter,
-          ""
+          stream_error_subscription_id_does_not_exist_total, ?SUBSCRIPTION_ID_DOES_NOT_EXIST, counter,
+          "Total number of commands failed with subscription id does not exist"
          },
          {
-          stream_error_stream_already_exists, ?STREAM_ALREADY_EXISTS, counter,
-          ""
+          stream_error_stream_already_exists_total, ?STREAM_ALREADY_EXISTS, counter,
+          "Total number of commands failed with stream already exists"
          },
          {
-          stream_error_stream_not_available, ?STREAM_NOT_AVAILABLE, counter,
-          ""
+          stream_error_stream_not_available_total, ?STREAM_NOT_AVAILABLE, counter,
+          "Total number of commands failed with stream not available"
          },
          {
-          stream_error_sasl_mechanism_not_supported, ?SASL_MECHANISM_NOT_SUPPORTED, counter,
-          ""
+          stream_error_sasl_mechanism_not_supported_total, ?SASL_MECHANISM_NOT_SUPPORTED, counter,
+          "Total number of commands failed with sasl mechanism not supported"
          },
          {
-          stream_error_authentication_failure, ?AUTHENTICATION_FAILURE, counter,
-          ""
+          stream_error_authentication_failure_total, ?AUTHENTICATION_FAILURE, counter,
+          "Total number of commands failed with authentication failure"
          },
          {
-          stream_error_sasl_error, ?SASL_ERROR, counter,
-          ""
+          stream_error_sasl_error_total, ?SASL_ERROR, counter,
+          "Total number of commands failed with sasl error"
          },
          {
-          stream_error_sasl_challenge, ?SASL_CHALLENGE, counter,
-          ""
+          stream_error_sasl_challenge_total, ?SASL_CHALLENGE, counter,
+          "Total number of commands failed with sasl challenge"
          },
          {
-          stream_error_sasl_authentication_failure_loopback, ?SASL_AUTHENTICATION_FAILURE_LOOPBACK, counter,
-          ""
+          stream_error_sasl_authentication_failure_loopback_total, ?SASL_AUTHENTICATION_FAILURE_LOOPBACK, counter,
+          "Total number of commands failed with sasl authentication failure loopback"
          },
          {
-          stream_error_vhost_access_failure, ?VHOST_ACCESS_FAILURE, counter,
-          ""
+          stream_error_vhost_access_failure_total, ?VHOST_ACCESS_FAILURE, counter,
+          "Total number of commands failed with vhost access failure"
          },
          {
-          stream_error_unknown_frame, ?UNKNOWN_FRAME, counter,
-          ""
+          stream_error_unknown_frame_total, ?UNKNOWN_FRAME, counter,
+          "Total number of commands failed with unknown frame"
          },
          {
-          stream_error_frame_too_large, ?FRAME_TOO_LARGE, counter,
-          ""
+          stream_error_frame_too_large_total, ?FRAME_TOO_LARGE, counter,
+          "Total number of commands failed with frame too large"
          },
          {
-          stream_error_internal_error, ?INTERNAL_ERROR, counter,
-          ""
+          stream_error_internal_error_total, ?INTERNAL_ERROR, counter,
+          "Total number of commands failed with internal error"
          },
          {
-          stream_error_access_refused, ?ACCESS_REFUSED, counter,
-          ""
+          stream_error_access_refused_total, ?ACCESS_REFUSED, counter,
+          "Total number of commands failed with access refused"
          },
          {
-          stream_error_precondition_failed, ?PRECONDITION_FAILED, counter,
-          ""
+          stream_error_precondition_failed_total, ?PRECONDITION_FAILED, counter,
+          "Total number of commands failed with precondition failed"
          },
          {
-          stream_error_publisher_does_not_exist, ?PUBLISHER_DOES_NOT_EXIST, counter,
-          ""
+          stream_error_publisher_does_not_exist_total, ?PUBLISHER_DOES_NOT_EXIST, counter,
+          "Total number of commands failed with publisher does not exist"
          }
         ]).
