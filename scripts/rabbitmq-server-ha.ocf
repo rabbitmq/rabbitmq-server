@@ -24,7 +24,7 @@
 
 #######################################################################
 
-# Fill in some defaults if no values are specified
+# Fill in some defaults if no values are specified!
 
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 
