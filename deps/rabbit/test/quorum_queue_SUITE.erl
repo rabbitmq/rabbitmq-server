@@ -707,6 +707,9 @@ stop_start_rabbit_app(Config) ->
     delete_queues(Ch2, [QQ1, QQ2, CQ1, CQ2]).
 
 publish_confirm(Ch, QName) ->
+    publish_confirm(Ch, QName, 2500).
+
+publish_confirm(Ch, QName, Timeout) ->
     publish(Ch, QName),
     amqp_channel:register_confirm_handler(Ch, self()),
     ct:pal("waiting for confirms from ~s", [QName]),
@@ -717,7 +720,7 @@ publish_confirm(Ch, QName) ->
         #'basic.nack'{} ->
             ct:pal("NOT CONFIRMED! ~s", [QName]),
             fail
-    after 2500 ->
+    after Timeout ->
               exit(confirm_timeout)
     end.
 
@@ -1427,19 +1430,23 @@ confirm_availability_on_leader_change(Config) ->
                  declare(DCh, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     erlang:process_flag(trap_exit, true),
-    Pid = spawn_link(fun () ->
-                             %% open a channel to another node
-                             Ch = rabbit_ct_client_helpers:open_channel(Config, Node1),
-                             #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-                             ConfirmLoop = fun Loop() ->
-                                                     ok = publish_confirm(Ch, QQ),
-                                                     receive {done, P} ->
-                                                                 P ! done,
-                                                                 ok
-                                                     after 0 -> Loop() end
-                                             end,
-                             ConfirmLoop()
-                       end),
+    Publisher = spawn_link(
+                  fun () ->
+                          %% open a channel to another node
+                          Ch = rabbit_ct_client_helpers:open_channel(Config, Node1),
+                          #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+                          ConfirmLoop = fun Loop() ->
+                                                ok = publish_confirm(Ch, QQ, 5000),
+                                                receive
+                                                    {done, P} ->
+                                                        P ! publisher_done,
+                                                        ok
+                                                after 0 ->
+                                                        Loop()
+                                                end
+                                        end,
+                          ConfirmLoop()
+                  end),
 
     timer:sleep(500),
     %% stop the node hosting the leader
@@ -1447,14 +1454,13 @@ confirm_availability_on_leader_change(Config) ->
     %% this should not fail as the channel should detect the new leader and
     %% resend to that
     timer:sleep(500),
-    Pid ! {done, self()},
+    Publisher ! {done, self()},
     receive
-        done -> ok;
-        {'EXIT', Pid, Err} ->
-            exit(Err)
-    after 5500 ->
+        publisher_done -> ok;
+        {'EXIT', Publisher, Err} -> exit(Err)
+    after 30000 ->
               flush(100),
-              exit(bah)
+              exit(nothing_received_from_publisher_process)
     end,
     ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
     ok.
