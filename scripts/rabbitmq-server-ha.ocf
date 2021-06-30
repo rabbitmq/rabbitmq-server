@@ -628,13 +628,13 @@ master_score() {
 get_hostname() {
     local os=$(uname -s)
     if [ "${OCF_RESKEY_use_fqdn}" = 'false' ] ; then
-        if [ "$os" == "SunOS" ]; then
+        if [ "$os" = "SunOS" ]; then
             echo "$(hostname | sed 's@\..*@@')"
         else
             echo "$(hostname -s)"
         fi
     else
-        if [ "$os" == "SunOS" ]; then
+        if [ "$os" = "SunOS" ]; then
             echo "$(hostname)"
         else
             echo "$(hostname -f)"
@@ -707,6 +707,7 @@ rmq_setup_env() {
     fi
     export RABBITMQ_PID_FILE=$OCF_RESKEY_pid_file
     MNESIA_FILES="${OCF_RESKEY_mnesia_base}/$(rabbit_node_name $H)"
+    export RABBITMQ_SERVER_START_ARGS="${RABBITMQ_SERVER_START_ARGS} -mnesia dir \"${MNESIA_FILES}\" -sname $(rabbit_node_name $H)"
     RMQ_START_TIME="${MNESIA_FILES}/ocf_server_start_time.txt"
     MASTER_FLAG_FILE="${MNESIA_FILES}/ocf_master_for_${OCF_RESOURCE_INSTANCE}"
     THIS_PCMK_NODE=$(ocf_attribute_target)
@@ -801,7 +802,7 @@ reset_mnesia() {
 block_client_access()
 {
     # When OCF_RESKEY_avoid_using_iptables is true iptables calls are noops
-    if [ "${OCF_RESKEY_avoid_using_iptables}" == 'true' ] ; then
+    if [ "${OCF_RESKEY_avoid_using_iptables}" = 'true' ] ; then
         return $OCF_SUCCESS
     fi
     # do not add temporary RMQ blocking rule, if it is already exist
@@ -827,7 +828,7 @@ unblock_client_access()
         lhtext=$1
     fi
     # When OCF_RESKEY_avoid_using_iptables is true iptables calls are noops
-    if [ "${OCF_RESKEY_avoid_using_iptables}" == 'true' ] ; then
+    if [ "${OCF_RESKEY_avoid_using_iptables}" = 'true' ] ; then
         return
     fi
     # remove all temporary RMQ blocking rules, if there are more than one exist
@@ -1262,33 +1263,10 @@ start_beam_process() {
     command="${OCF_RESKEY_binary} >> \"${OCF_RESKEY_log_dir}/startup_log\" 2>/dev/null"
     RABBITMQ_NODE_ONLY=1 su rabbitmq -s /bin/sh -c "${command}"&
     ts_end=$(( $(now) + ${OCF_RESKEY_start_time} ))
-    rc=$OCF_ERR_GENERIC
-    while [ $(now) -lt ${ts_end} ]; do
-        # waiting for normal start of beam
-        pid=0
-        pf_end=$(( $(now) + 3 ))
-        while [ $(now) -lt ${pf_end} ]; do
-            # waiting for OCF_RESKEY_pid_file of beam process
-            if [ -f "${OCF_RESKEY_pid_file}" ] ; then
-                pid=$(cat ${OCF_RESKEY_pid_file})
-                break
-            fi
-            sleep 1
-        done
-        if [ "${pid}" != "0" -a -d "/proc/${pid}" ] ; then
-            rc=$OCF_SUCCESS
-            break
-        fi
-        sleep 2
-    done
-    if [ $rc -ne $OCF_SUCCESS ]; then
-        if [ "${pid}" = "0" ] ; then
-            ocf_log warn "${LH} PID-file '${OCF_RESKEY_pid_file}' not found"
-        fi
-        ocf_log err "${LH} RMQ-runtime (beam) didn't start succesfully (rc=${rc})."
-    fi
-
-    return $rc
+    sleep 3  # give it some time, before attempting to start_app
+    # PID-file is now created later, if the application started successfully
+    # So assume beam.smp is started, and defer errors handling for start_app
+    return $OCF_SUCCESS
 }
 
 check_plugins() {
