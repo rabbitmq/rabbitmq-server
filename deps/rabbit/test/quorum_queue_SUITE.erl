@@ -260,6 +260,7 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
             end
     end;
 init_per_testcase(Testcase, Config) ->
+    ClusterSize = ?config(rmq_nodes_count, Config),
     IsMixed = rabbit_ct_helpers:is_mixed_versions(),
     case Testcase of
         node_removal_is_not_quorum_critical when IsMixed ->
@@ -271,6 +272,13 @@ init_per_testcase(Testcase, Config) ->
         recover_from_single_failure when IsMixed ->
             %% In a 3.8/3.9 cluster this will pass only if the failure occurs on the 3.8 node
             {skip, "recover_from_single_failure isn't mixed versions compatible"};
+        shrink_all when IsMixed ->
+            %% In a 3.8/3.9 cluster only the first shrink will work as expected
+            {skip, "skrink_all isn't mixed versions compatible"};
+        delete_immediately_by_resource when IsMixed andalso ClusterSize == 3 ->
+            {skip, "delete_immediately_by_resource isn't mixed versions compatible"};
+        queue_ttl when IsMixed andalso ClusterSize == 3 ->
+            {skip, "queue_ttl isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -1862,11 +1870,12 @@ delete_immediately_by_resource(Config) ->
     ?assertEqual({ok, "ok\n"}, rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, Cmd2)),
 
     %% Check that the application and process are down
-    wait_until(fun() ->
-                       Children == length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))
-               end),
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))).
+    ?awaitMatch(Children,
+                length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
+                60000),
+    ?awaitMatch({ra, _, _}, lists:keyfind(ra, 1,
+                                          rpc:call(Server, application, which_applications, [])),
+                                          ?DEFAULT_AWAIT).
 
 subscribe_redelivery_count(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
