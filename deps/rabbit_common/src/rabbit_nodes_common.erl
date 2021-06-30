@@ -116,7 +116,17 @@ ensure_epmd() ->
 port_shutdown_loop(Port) ->
     receive
         {Port, {exit_status, _Rc}} -> ok;
-        {Port, _}                  -> port_shutdown_loop(Port)
+        {Port, closed}             -> ok;
+        {Port, {data, _}}          -> port_shutdown_loop(Port);
+        {'EXIT', Port, Reason}     ->
+            rabbit_log:error("Failed to start a one-off Erlang VM to keep epmd alive: ~p", [Reason])
+    after 15000 ->
+        %% ensure the port is closed
+        Port ! {self(), close},
+        receive
+            {Port, closed } -> ok
+        after 5000 -> ok
+        end
     end.
 
 cookie_hash() ->
