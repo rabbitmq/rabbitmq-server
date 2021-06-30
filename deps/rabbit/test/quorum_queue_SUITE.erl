@@ -33,9 +33,9 @@ all() ->
 
 groups() ->
     [
-     {single_node, [], all_tests()},
-     {single_node, [], memory_tests()},
-     {single_node, [], [node_removal_is_quorum_critical]},
+     {single_node, [], all_tests()
+                       ++ memory_tests()
+                       ++ [node_removal_is_quorum_critical]},
      {unclustered, [], [
                         {uncluster_size_2, [], [add_member]}
                        ]},
