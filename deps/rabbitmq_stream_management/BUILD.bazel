@@ -25,9 +25,6 @@ BUILD_DEPS = [
 DEPS = [
     "//deps/rabbitmq_management:bazel_erlang_lib",
     "//deps/rabbitmq_stream:bazel_erlang_lib",
-]
-
-RUNTIME_DEPS = [
     "//deps/rabbit:bazel_erlang_lib",
 ]
 
@@ -36,7 +33,6 @@ rabbitmq_lib(
     app_module = APP_MODULE,
     app_name = APP_NAME,
     build_deps = BUILD_DEPS,
-    runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
 
