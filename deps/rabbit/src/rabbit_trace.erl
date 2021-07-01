@@ -74,21 +74,42 @@ tap_out({#resource{name = QName, virtual_host = VHost},
 -spec start(rabbit_types:vhost()) -> 'ok'.
 
 start(VHost) ->
-    rabbit_log:info("Enabling tracing for vhost '~s'", [VHost]),
-    update_config(fun (VHosts) -> [VHost | VHosts -- [VHost]] end).
+    case lists:member(VHost, vhosts_with_tracing_enabled()) of
+        true  ->
+            rabbit_log:info("Tracing is already enabled for vhost '~s'", [VHost]),
+            ok;
+        false ->
+            rabbit_log:info("Enabling tracing for vhost '~s'", [VHost]),
+            update_config(fun (VHosts) ->
+                            lists:usort([VHost | VHosts])
+                          end)
+    end.
 
 -spec stop(rabbit_types:vhost()) -> 'ok'.
 
 stop(VHost) ->
-    rabbit_log:info("Disabling tracing for vhost '~s'", [VHost]),
-    update_config(fun (VHosts) -> VHosts -- [VHost] end).
+    case lists:member(VHost, vhosts_with_tracing_enabled()) of
+        true  ->
+            rabbit_log:info("Disabling tracing for vhost '~s'", [VHost]),
+            update_config(fun (VHosts) -> VHosts -- [VHost] end);
+        false ->
+            rabbit_log:info("Tracing is already disabled for vhost '~s'", [VHost]),
+            ok
+    end.
 
 update_config(Fun) ->
-    {ok, VHosts0} = application:get_env(rabbit, ?TRACE_VHOSTS),
+    VHosts0 = vhosts_with_tracing_enabled(),
     VHosts = Fun(VHosts0),
     application:set_env(rabbit, ?TRACE_VHOSTS, VHosts),
-    rabbit_channel:refresh_config_local(),
+    rabbit_log:debug("Will now refresh channel state after virtual host tracing changes"),
+
+    {Time, _} = timer:tc(fun rabbit_channel:refresh_config_local/0),
+    rabbit_log:debug("Refreshed channel state in ~fs", [Time/1000000]),
+
     ok.
+
+vhosts_with_tracing_enabled() ->
+    application:get_env(rabbit, ?TRACE_VHOSTS, []).
 
 %%----------------------------------------------------------------------------
 
