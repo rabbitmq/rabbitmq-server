@@ -10,8 +10,10 @@
 -export([
          boot_step/0,
          init/1,
+         init/2,
          overview/0,
          prometheus_format/0,
+         increase_protocol_counter/3,
          messages_received/2,
          messages_received_confirm/2,
          messages_routed/2,
@@ -41,6 +43,7 @@
 -define(MESSAGES_CONFIRMED, 6).
 -define(PUBLISHERS, 7).
 -define(CONSUMERS, 8).
+%% Note: ?NUM_PROTOCOL_COUNTERS needs to be up-to-date. See include/rabbit_global_counters.hrl
 -define(PROTOCOL_COUNTERS,
             [
                 {
@@ -86,6 +89,7 @@
 -define(MESSAGES_GET_EMPTY, 6).
 -define(MESSAGES_REDELIVERED, 7).
 -define(MESSAGES_ACKNOWLEDGED, 8).
+%% Note: ?NUM_PROTOCOL_QUEUE_TYPE_COUNTERS needs to be up-to-date. See include/rabbit_global_counters.hrl
 -define(PROTOCOL_QUEUE_TYPE_COUNTERS,
             [
                 {
@@ -128,14 +132,17 @@ boot_step() ->
     init([{protocol, amqp091}, {queue_type, rabbit_quorum_queue}]),
     init([{protocol, amqp091}, {queue_type, rabbit_stream_queue}]).
 
-init(Labels = [{protocol, Protocol}, {queue_type, QueueType}]) ->
+init(Labels) ->
+    init(Labels, []).
+
+init(Labels = [{protocol, Protocol}, {queue_type, QueueType}], Extra) ->
     _ = seshat_counters:new_group(?MODULE),
-    Counters = seshat_counters:new(?MODULE, Labels, ?PROTOCOL_QUEUE_TYPE_COUNTERS),
+    Counters = seshat_counters:new(?MODULE, Labels, ?PROTOCOL_QUEUE_TYPE_COUNTERS ++ Extra),
     persistent_term:put({?MODULE, Protocol, QueueType}, Counters),
     ok;
-init(Labels = [{protocol, Protocol}]) ->
+init(Labels = [{protocol, Protocol}], Extra) ->
     _ = seshat_counters:new_group(?MODULE),
-    Counters = seshat_counters:new(?MODULE, Labels, ?PROTOCOL_COUNTERS),
+    Counters = seshat_counters:new(?MODULE, Labels, ?PROTOCOL_COUNTERS ++ Extra),
     persistent_term:put({?MODULE, Protocol}, Counters),
     ok.
 
@@ -144,6 +151,9 @@ overview() ->
 
 prometheus_format() ->
     seshat_counters:prometheus_format(?MODULE).
+
+increase_protocol_counter(Protocol, Counter, Num) ->
+    counters:add(fetch(Protocol), Counter, Num).
 
 messages_received(Protocol, Num) ->
     counters:add(fetch(Protocol), ?MESSAGES_RECEIVED, Num).
