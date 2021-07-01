@@ -769,11 +769,16 @@ open(cast,
        } = StatemData) ->
     ByPublisher =
     lists:foldr(fun({PublisherId, PublishingId}, Acc) ->
-                        case maps:get(PublisherId, Acc, undefined) of
-                            undefined ->
+                        case maps:is_key(PublisherId, Publishers) of
+                          true ->
+                            case maps:get(PublisherId, Acc, undefined) of
+                              undefined ->
                                 Acc#{PublisherId => [PublishingId]};
-                            Ids ->
+                              Ids ->
                                 Acc#{PublisherId => [PublishingId | Ids]}
+                            end;
+                          false ->
+                            Acc
                         end
                 end,
                 #{}, CorrelationList),
@@ -822,16 +827,18 @@ open(cast,
                              } = State,
         config = Configuration
        } = StatemData) ->
-    %% FIXME handle case when publisher ID is not found (e.g. deleted before confirms arrive)
-    PublisherId =
-    maps:get({Stream, PublisherReference}, PublisherRefToIds,
-             undefined),
-    Command = {publish_confirm, PublisherId, CorrelationList},
-    send(Transport, S, rabbit_stream_core:frame(Command)),
-    #{PublisherId := #publisher{message_counters = Counters}} =
-    Publishers,
     PublishingIdCount = length(CorrelationList),
-    increase_messages_confirmed(Counters, PublishingIdCount),
+    case maps:get({Stream, PublisherReference}, PublisherRefToIds,
+             undefined) of
+      undefined ->
+        ok;
+      PublisherId ->
+        Command = {publish_confirm, PublisherId, CorrelationList},
+        send(Transport, S, rabbit_stream_core:frame(Command)),
+        #{PublisherId := #publisher{message_counters = Counters}} =
+          Publishers,
+        increase_messages_confirmed(Counters, PublishingIdCount)
+    end,
     add_credits(Credits, PublishingIdCount),
     State1 =
     case Blocked of
