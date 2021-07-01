@@ -1,0 +1,45 @@
+## Name of the node
+-sname rabbit
+
+## Cookie for distributed erlang
+#-setcookie rabbit
+
+## Heartbeat management; auto-restarts VM if it dies or becomes unresponsive
+## (Disabled by default..use with caution!)
+##-heart
+
+## Enable kernel poll and a few async threads
+##+K true
+##+A 5
+
+## Increase number of concurrent ports/sockets
+##-env ERL_MAX_PORTS 4096
+
+## Tweak GC to run more often
+##-env ERL_FULLSWEEP_AFTER 10
+
+# +B [c | d | i]
+# Option c makes Ctrl-C interrupt the current shell instead of invoking the emulator break
+# handler. Option d (same as specifying +B without an extra option) disables the break handler. # Option i makes the emulator ignore any break signal.
+# If option c is used with oldshell on Unix, Ctrl-C will restart the shell process rather than
+# interrupt it.
+# Disable the emulator break handler
+# it easy to accidentally type ctrl-c when trying
+# to reach for ctrl-d. ctrl-c on a live node can
+# have very undesirable results
++Bi
+
++W w
+
+-syslog logger []
+-syslog syslog_error_logger false
+
+-env ERL_MAX_ETS_TABLES 50000
+
++P 1048576
++t 5000000
++stbt db
++zdbbl 128000
++sbwt none
++sbwtdcpu none
++sbwtdio none

@@ -1480,9 +1480,9 @@ try_to_write_enabled_feature_flags_list(FeatureNames) ->
 %% @returns the path to the file.
 
 enabled_feature_flags_list_file() ->
-    case application:get_env(rabbit, feature_flags_file) of
-        {ok, Val} -> Val;
-        undefined -> throw(feature_flags_file_not_set)
+    case rabbit_prelaunch:get_context() of
+        #{feature_flags_file := File} -> File;
+        _                             -> throw(feature_flags_file_not_set)
     end.
 
 %% -------------------------------------------------------------------
@@ -2232,9 +2232,10 @@ get_forced_feature_flag_names_from_env() ->
 %% @private
 
 get_forced_feature_flag_names_from_config() ->
-    Value = application:get_env(rabbit,
-                                forced_feature_flags_on_init,
-                                undefined),
+    Value = maps:get(
+              forced_feature_flags_on_init,
+              rabbit_prelaunch:get_context(),
+              undefined),
     case Value of
         undefined ->
             Value;
@@ -2441,12 +2442,13 @@ on_load() ->
             %% application environment variable is defined. With a
             %% feature-flags-enabled node, this application environment
             %% variable is defined by rabbitmq-server(8).
-            case application:get_env(rabbit, feature_flags_file) of
-                {ok, _} ->
-                    %% This is a feature-flags-enabled version. Loading
-                    %% the module is permitted.
-                    ok;
-                _ ->
+            try
+                _ = enabled_feature_flags_list_file(),
+                %% This is a feature-flags-enabled version. Loading
+                %% the module is permitted.
+                ok
+            catch
+                _:_:_ ->
                     %% This is a pre-feature-flags version. We deny the
                     %% load and report why, possibly specifying the
                     %% version of RabbitMQ.

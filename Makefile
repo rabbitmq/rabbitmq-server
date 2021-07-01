@@ -29,6 +29,9 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 
 DISABLE_DISTCLEAN = 1
 
+# Newer version of relx(1) with fixes in the extended start script.
+RELX_URL := https://storage.googleapis.com/rmq/erlang-releases/relx-v3.29.0
+
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 

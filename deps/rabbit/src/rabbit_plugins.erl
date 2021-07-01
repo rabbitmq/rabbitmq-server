@@ -90,9 +90,9 @@ plugins_dir() ->
 
 -spec enabled_plugins_file() -> file:filename().
 enabled_plugins_file() ->
-     case application:get_env(rabbit, enabled_plugins_file) of
-        {ok, Val} ->
-            Val;
+    case rabbit_prelaunch:get_context() of
+        #{enabled_plugins_file := File} ->
+            File;
         _ ->
             filename:join([rabbit_mnesia:dir(), "enabled_plugins"])
     end.

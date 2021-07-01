@@ -289,7 +289,7 @@ i(net_ticktime, State) ->
 i(persister_stats, State) ->
     {State, persister_stats(State)};
 i(enabled_plugins, State) ->
-    {ok, Dir} = application:get_env(rabbit, enabled_plugins_file),
+    Dir = rabbit_plugins:enabled_plugins_file(),
     {State, rabbit_plugins:read_enabled(Dir)};
 i(auth_mechanisms, State) ->
     {ok, Mechanisms} = application:get_env(rabbit, auth_mechanisms),
