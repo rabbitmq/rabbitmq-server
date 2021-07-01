@@ -39,7 +39,6 @@ init([]) ->
         start   => {pg, start_link, [?MANAGEMENT_PG_SCOPE]},
         restart => temporary,
         shutdown => ?SUPERVISOR_WAIT,
-        type    => supervisor,
         modules => []
     },
     Specs = [
