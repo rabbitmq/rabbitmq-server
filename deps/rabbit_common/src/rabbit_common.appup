@@ -1,0 +1,6 @@
+%% vim:ft=erlang:
+{"4.0.0",
+ [{"3.10.0",
+  [{update, rabbit_misc}]}],
+ [{"3.10.0",
+  [{update, rabbit_misc}]}]}.

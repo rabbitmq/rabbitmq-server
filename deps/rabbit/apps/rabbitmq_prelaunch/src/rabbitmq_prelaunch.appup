@@ -1,0 +1,8 @@
+%% vim:ft=erlang:
+{"4.0.0",
+ [{"3.10.0",
+  [{update, rabbit_boot_state_sup, supervisor},
+   {add_module, rabbit_boot_state_xterm_titlebar}]}],
+ [{"3.10.0",
+  [{update, rabbit_boot_state_sup, supervisor},
+   {delete_module, rabbit_boot_state_xterm_titlebar}]}]}.
