@@ -338,7 +338,7 @@ will be lost.
 If the last node to go down is permanently lost then you should use
 .Cm forget_cluster_node Fl -offline
 in preference to this command, as it will ensure that mirrored queues
-which were mastered on the lost node get promoted.
+which had their leader replica on the lost node get promoted.
 .Pp
 For example, this will force the node not to wait for other nodes next
 time it is started:
@@ -1289,11 +1289,11 @@ of the following mutually exclusive options:
 .Bl -tag -width Ds
 .It Fl -offline
 List only those durable queues that are not currently available (more
-specifically, their master node isn't).
+specifically, their leader node isn't).
 .It Fl -online
-List queues that are currently available (their master node is).
+List queues that are currently available (their leader node is).
 .It Fl -local
-List only those queues whose master process is located on the current
+List only those queues whose leader replica is located on the current
 node.
 .El
 .Pp
@@ -1392,7 +1392,7 @@ To learn more, see the
 .Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
 .It Cm synchronised_slave_pids
 If the queue is mirrored, this gives the IDs of the mirrors (follower replicas) which
-are synchronised with the master (leader). To learn more, see the
+are in sync with the leader replica. To learn more, see the
 .Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
 .It Cm state
 The state of the queue.
@@ -1424,8 +1424,8 @@ each queue of the virtual host named
 .Pp
 Tests queues to respond within timeout. Lists those which did not respond
 .Pp
-For example, this command lists only those unresponsive queues whose master process
-is located on the current node.
+For example, this command lists only those unresponsive queues whose leader replica
+is hosted on the target node.
 .Sp
 .Dl rabbitmqctl list_unresponsive_queues --local name
 .\" ------------------------------------------------------------------
