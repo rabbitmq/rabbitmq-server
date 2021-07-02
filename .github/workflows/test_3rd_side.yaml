@@ -1,0 +1,127 @@
+name: "3rd side CI for HA pacemaker OCF RA"
+on:
+  push:
+    branches:
+      - v3.8.x
+      - v3.9.x
+    paths:
+      - scripts/rabbitmq-server-ha.ocf
+      - .github/workflows/test_3rd_side.yaml
+  pull_request:
+    branches:
+      - main
+      - master
+      - v3.8.x
+      - v3.9.x
+    paths:
+      - scripts/rabbitmq-server-ha.ocf
+      - .github/workflows/test_3rd_side.yaml
+env:
+  VAGRANT_VERSION: 2.2.16
+  DOCKER_IMAGE: bogdando/rabbitmq-cluster-ocf:buster_erl24_rmq38181
+  LEIN_IMAGE: bogdando/lein:latest
+
+jobs:
+  # This job bootstraps pacemaker cluster in containers and verifies HA rabbitmq OCF RA
+  rabbitmq-ocf-ra:
+    runs-on: ubuntu-latest
+    strategy:
+        fail-fast: false
+        matrix:
+            # Run a simple smoke test and a custom Jepsen test (flaky)
+            # TODO: cases for pacemaker bundles, quorum queues for jepsen
+            mode: [smoke, jepsen] # jepsen_raft, bundles
+            include:
+            - mode: smoke
+              use_jepsen: false
+              quiet: true
+              wait: 360
+              cpu: 500
+              mem: 512M
+              nodes: "n1 n2"
+              policy: Cg==  # empty string
+            - mode: jepsen
+              use_jepsen: true
+              quiet: false
+              wait: 3600
+              cpu: 250
+              mem: 360M
+              nodes: "n1 n2 n3"
+              # ha-all "jepsen." '{"ha-mode":"exactly", "ha-params":2, "ha-sync-mode":"automatic"}'
+              policy: IyBUaGlzIHNjcmlwdCBpcyBjYWxsZWQgYnkgcmFiYml0bXEtc2VydmVyLWhhLm9jZiBkdXJpbmcgUmFiYml0TVEKIyBjbHVzdGVyIHN0YXJ0IHVwLiBJdCBpcyBhIGNvbnZlbmllbnQgcGxhY2UgdG8gc2V0IHlvdXIgY2x1c3RlcgojIHBvbGljeSBoZXJlLCBmb3IgZXhhbXBsZToKIyAke09DRl9SRVNLRVlfY3RsfSBzZXRfcG9saWN5IGhhLWFsbCAiLiIgJ3siaGEtbW9kZSI6ImFsbCIsICJoYS1zeW5jLW1vZGUiOiJhdXRvbWF0aWMiLCAiaGEtc3luYy1iYXRjaC1zaXplIjoxMDAwMH0nCgojIEVuYWJsZSBoYS1wb2xpY3kgd2l0aCB0aGUgcmVwbGljYSBmYWN0b3Igb2YgNSBmb3IgamVwc2VuIHF1ZXVlcwpvY2ZfbG9nIGluZm8gIiR7TEh9IFNldHRpbmcgSEEgcG9saWN5IGZvciBhbGwgcXVldWVzIgoke09DRl9SRVNLRVlfY3RsfSBzZXRfcG9saWN5IGhhLWFsbCAiamVwc2VuLiIgJ3siaGEtbW9kZSI6ImV4YWN0bHkiLCAiaGEtcGFyYW1zIjoyLCAiaGEtc3luYy1tb2RlIjoiYXV0b21hdGljIn0nCg== 
+
+    steps:
+      - name: Prepare
+        run: |
+          sudo apt-get install -qq git wget
+          mkdir -p releases
+
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        id: cache-images
+        with:
+          path: releases
+          key: rabbitmq_cluster_ocf_buster_erl24_rmq38181
+
+      - name: Load images from cache
+        if: steps.cache-images.outputs.cache-hit == 'true'
+        run: docker load < releases/all.tar
+
+      - name: Login to Docker Hub
+        if: steps.cache-images.outputs.cache-hit != 'true'
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PASS }}
+
+      - name: Prepare vagrant and images
+        run: |
+          cd releases
+          wget --no-verbose https://releases.hashicorp.com/vagrant/${VAGRANT_VERSION}/vagrant_${VAGRANT_VERSION}_x86_64.deb
+          sudo dpkg -i --force-all vagrant_${VAGRANT_VERSION}_x86_64.deb
+          #sudo apt -y install libvirt-dev
+          #vagrant plugin install fog-libvirt
+          docker pull "$DOCKER_IMAGE"
+          docker pull "$LEIN_IMAGE"
+
+      - name: Save images to cache
+        if: steps.cache-images.outputs.cache-hit != 'true'
+        run: >
+          docker save $(docker images -a --filter='dangling=false'
+          --format '{{.Repository}}:{{.Tag}} {{.ID}}')
+          -o releases/all.tar
+
+      - name: Checkout this (rabbitmq-server) repo
+        uses: actions/checkout@v2.3.4
+
+      - name: Copy in-tree OCF RA script
+        env:
+          OCF_RA_PROVIDER: rabbitmq
+        run: |
+          cp -f scripts/rabbitmq-server-ha.ocf "$HOME/$OCF_RA_PROVIDER"
+          chmod +x "$HOME/$OCF_RA_PROVIDER"
+      
+      - name: Checkout local cluster bootstrap code
+        uses: actions/checkout@v2.3.4
+        with:
+          repository: bogdando/rabbitmq-cluster-ocf-vagrant
+          path: releases/rabbitmq-cluster-ocf-vagrant
+      
+      - name: Run tests
+        env:
+          USE_JEPSEN: ${{ matrix.use_jepsen }}
+          QUIET: ${{ matrix.quiet }}
+          SMOKETEST_WAIT: ${{ matrix.wait }}
+          CPU: ${{ matrix.cpu }}
+          MEMORY: ${{ matrix.mem }}
+          NODES: ${{ matrix.nodes }}
+          UPLOAD_METHOD: none
+          STORAGE: /var/tmp/rmq
+          DOCKER_DRIVER: aufs
+          OCF_RA_PROVIDER: rabbitmq
+          OCF_RA_TYPE: rabbitmq-server-ha
+          POLICY_BASE64: ${{ matrix.policy }}
+        run: |
+          export DOCKER_MOUNTS="$HOME/$OCF_RA_PROVIDER:/usr/lib/ocf/resource.d/$OCF_RA_PROVIDER/$OCF_RA_TYPE:ro jepsen:/jepsen"
+          cd releases/rabbitmq-cluster-ocf-vagrant
+          vagrant up
