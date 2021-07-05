@@ -278,7 +278,10 @@ handle_call({init, Overall}, _From,
                            initial_childspecs = ChildSpecs}) ->
     process_flag(trap_exit, true),
     ok = pg:join(Group, Overall),
+    rabbit_log:debug("Mirrored supervisor: initializing, joined group ~p", [Group]),
     Rest = pg:get_members(Group) -- [Overall],
+    Nodes = [node(M) || M <- Rest],
+    rabbit_log:debug("Mirrored supervisor: known group ~p members: ~p on nodes ~p", [Group, Rest, Nodes]),
     case Rest of
         [] -> TxFun(fun() -> delete_all(Group) end);
         _  -> ok
@@ -420,6 +423,7 @@ delete(Group, Id) ->
     ok = mnesia:delete({?TABLE, {Group, Id}}).
 
 start(Delegate, ChildSpec) ->
+    rabbit_log:debug("Mirrored supervisor: asked to start with delegate: ~p, child spec: ~p", [Delegate, ChildSpec]),
     apply(?SUPERVISOR, start_child, [Delegate, ChildSpec]).
 
 stop(Group, TxFun, Delegate, Id) ->
