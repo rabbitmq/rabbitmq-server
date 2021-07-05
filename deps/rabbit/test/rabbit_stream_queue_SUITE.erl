@@ -39,8 +39,9 @@ groups() ->
      {single_node_parallel, [parallel], all_tests()},
      {cluster_size_2, [], [recover]},
      {cluster_size_2_parallel, [parallel], all_tests()},
+     {cluster_size_3, [], [recover]},
      {cluster_size_3, [],
-          [recover,
+          [restart_coordinator_without_queues,
            delete_down_replica,
            replica_recovery,
            leader_failover,
@@ -255,8 +256,7 @@ declare_invalid_properties(Config) ->
          rabbit_ct_client_helpers:open_channel(Config, Server),
          #'queue.declare'{queue     = Q,
                           durable   = false,
-                          arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]})),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+                          arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]})).
 
 declare_server_named(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -368,7 +368,7 @@ add_replicas(Config) ->
     %                       [<<"/">>, Q, Server2])),
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
-    ok.
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 add_replica(Config) ->
     [Server0, Server1, Server2] =
@@ -426,7 +426,7 @@ add_replica(Config) ->
     ?assertEqual(ok, rpc:call(Server0, rabbit_stream_queue, add_replica,
                               [<<"/">>, Q, Server2])),
     check_leader_and_replicas(Config, [Server0, Server1, Server2]),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).        
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 delete_replica(Config) ->
     [Server0, Server1, Server2] =
@@ -469,7 +469,7 @@ delete_last_replica(Config) ->
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
                           [<<"/">>, Q, Server2])),
     %% check they're gone
-    check_leader_and_replicas(Config, [Server0]),
+    check_leader_and_replicas(Config, [Server0], members),
     %% delete the last one
     ?assertEqual({error, last_stream_member},
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
@@ -572,7 +572,7 @@ delete_down_replica(Config) ->
                  rpc:call(Server0, rabbit_stream_queue, delete_replica,
                           [<<"/">>, Q, Server1])),
     %% check it isn't gone
-    check_leader_and_replicas(Config, [Server0, Server1, Server2]),
+    check_leader_and_replicas(Config, [Server0, Server1, Server2], members),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
     rabbit_ct_helpers:await_condition(
       fun() ->
@@ -610,7 +610,11 @@ publish_coordinator_unavailable(Config) ->
       end),
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
     publish(Ch1, Q),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
+
+    #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch1, self()),
+    publish(Ch1, Q),
+    amqp_channel:wait_for_confirms(Ch1, 30),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 publish(Config) ->
@@ -669,25 +673,53 @@ recover(Config) ->
     publish(Ch, Q),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]]),
 
-    [begin
-         ct:pal("recover: running stop start for permuation ~w", [Servers]),
-         [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers],
-         [rabbit_ct_broker_helpers:start_node(Config, S) || S <- lists:reverse(Servers)],
-         ct:pal("recover: running stop waiting for messages ~w", [Servers]),
-         quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 120)
-     end || Servers <- permute(Servers0)],
+    Perm0 = permute(Servers0),
+    Servers = lists:nth(rand:uniform(length(Perm0)), Perm0),
+    %% Such a slow test, let's select a single random permutation and trust that over enough
+    %% ci rounds any failure will eventually show up
 
+    ct:pal("recover: running stop start for permutation ~w", [Servers]),
+    [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers],
+    [rabbit_ct_broker_helpers:start_node(Config, S) || S <- lists:reverse(Servers)],
+    ct:pal("recover: running stop waiting for messages ~w", [Servers]),
+    check_leader_and_replicas(Config, Servers0),
+    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 60),
 
-    [begin
-         ct:pal("recover: running app stop start for permuation ~w", [Servers]),
-         [rabbit_control_helper:command(stop_app, S) || S <- Servers],
-         [rabbit_control_helper:command(start_app, S) || S <- lists:reverse(Servers)],
-         ct:pal("recover: running app stop waiting for messages ~w", [Servers]),
-         quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 120)
-     end || Servers <- permute(Servers0)],
+    %% Another single random permutation
+    Perm1 = permute(Servers0),
+    Servers1 = lists:nth(rand:uniform(length(Perm1)), Perm1),
+
+    ct:pal("recover: running app stop start for permuation ~w", [Servers1]),
+    [rabbit_control_helper:command(stop_app, S) || S <- Servers1],
+    [rabbit_control_helper:command(start_app, S) || S <- lists:reverse(Servers1)],
+    ct:pal("recover: running app stop waiting for messages ~w", [Servers1]),
+    check_leader_and_replicas(Config, Servers0),
+    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]], 60),
+
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     publish(Ch1, Q),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+restart_coordinator_without_queues(Config) ->
+    %% The coordinator failed to restart if stream queues were not present anymore, as
+    %% they wouldn't call recover in all nodes - only the local one was restarted so
+    %% the election wouldn't succeed. Fixed now, but this test checks for that failure
+    [Server | _] = Servers0 = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    publish_confirm(Ch, Q, [<<"msg">>]),
+    ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+
+    [rabbit_ct_broker_helpers:stop_node(Config, S) || S <- Servers0],
+    [rabbit_ct_broker_helpers:start_node(Config, S) || S <- lists:reverse(Servers0)],
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 consume_without_qos(Config) ->
@@ -731,10 +763,7 @@ consume(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [<<"msg">>]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -759,11 +788,8 @@ consume_offset(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
     Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
-    [publish(Ch, Q, Payload) || _ <- lists:seq(1, 1000)],
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 1000)]),
 
     run_proper(
       fun () ->
@@ -784,7 +810,9 @@ consume_offset(Config) ->
                           amqp_channel:call(Ch1, #'basic.cancel'{consumer_tag = <<"ctag">>}),
                           true
                       end)
-      end, [], 25),
+      end, [], 5), %% Run it only 5 times. This test times out quite often, not in the receive
+%% clause but ct itself. Consume so many messages so many times could take too long
+%% in some CPU configurations. Let's trust that many rounds of CI could find any real failure.
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 consume_timestamp_offset(Config) ->
@@ -795,12 +823,7 @@ consume_timestamp_offset(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    Payload = <<"111">>,
-    [publish(Ch, Q, Payload) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5),
-
+    publish_confirm(Ch, Q, [<<"111">> || _ <- lists:seq(1, 100)]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -832,11 +855,7 @@ consume_timestamp_last_offset(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    [publish(Ch, Q, <<"111">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5),
-
+    publish_confirm(Ch, Q, [<<"111">> || _ <- lists:seq(1, 100)]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -910,10 +929,7 @@ consume_and_nack(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [<<"msg">>]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -941,10 +957,7 @@ basic_cancel(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [<<"msg">>]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -982,10 +995,7 @@ consume_and_reject(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [<<"msg">>]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -1012,10 +1022,7 @@ consume_and_ack(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    publish(Ch, Q),
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [<<"msg">>]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -1064,10 +1071,7 @@ consume_from_last(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -1095,8 +1099,10 @@ consume_from_last(Config) ->
              ok
     end,
 
-    %% And receive the messages from the last committed offset to the end of the stream
-    receive_batch(Ch1, CommittedOffset, 99),
+    %% Check that the first received offset is greater than or equal than the committed
+    %% offset. It could have moved since we checked it out - it flakes sometimes!
+    %% Usually when the CommittedOffset detected is 1
+    receive_batch_min_offset(Ch1, CommittedOffset, 99),
 
     %% Publish a few more
     [publish(Ch, Q, <<"msg2">>) || _ <- lists:seq(1, 100)],
@@ -1121,10 +1127,7 @@ consume_from_next(Config, Args) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -1169,10 +1172,7 @@ consume_from_relative_time_offset(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     qos(Ch1, 10, false),
@@ -1199,10 +1199,7 @@ consume_from_replica(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch1, self()),
-    [publish(Ch1, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch1, 5),
+    publish_confirm(Ch1, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
 
     rabbit_ct_helpers:await_condition(
       fun () ->
@@ -1231,12 +1228,9 @@ consume_credit(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
     %% Let's publish a big batch, to ensure we have more than a chunk available
     NumMsgs = 100,
-    [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, NumMsgs)],
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [<<"msg1">> || _ <- lists:seq(1, NumMsgs)]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
 
@@ -1292,12 +1286,9 @@ consume_credit_out_of_order_ack(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    %% Let's publish a big batch, to ensure we have more than a chunk available
     NumMsgs = 100,
-    [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, NumMsgs)],
-    amqp_channel:wait_for_confirms(Ch, 5),
+    %% Let's publish a big batch, to ensure we have more than a chunk available
+    publish_confirm(Ch, Q, [<<"msg1">> || _ <- lists:seq(1, NumMsgs)]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
 
@@ -1354,12 +1345,9 @@ consume_credit_multiple_ack(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
     %% Let's publish a big batch, to ensure we have more than a chunk available
     NumMsgs = 100,
-    [publish(Ch, Q, <<"msg1">>) || _ <- lists:seq(1, NumMsgs)],
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [<<"msg1">> || _ <- lists:seq(1, NumMsgs)]),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
 
@@ -1391,15 +1379,13 @@ max_length_bytes(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-max-length-bytes">>, long, 500},
-                                 {<<"x-stream-max-segment-size-bytes">>, long, 250}])),
+                                 {<<"x-max-length-bytes">>, long, 10000},
+                                 {<<"x-stream-max-segment-size-bytes">>, long, 1000}])),
 
-    Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
+    Payload = << <<"1">> || _ <- lists:seq(1, 100) >>,
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    [publish(Ch, Q, Payload) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 500)]), %% 100 bytes/msg * 500 = 50000 bytes
+    ensure_retention_applied(Config, Server),
 
     %% We don't yet have reliable metrics, as the committed offset doesn't work
     %% as a counter once we start applying retention policies.
@@ -1408,7 +1394,9 @@ max_length_bytes(Config) ->
     qos(Ch1, 100, false),
     subscribe(Ch1, Q, false, 0),
 
-    ?assert(length(receive_batch()) < 100),
+    %% There should be ~100 messages in ~10 segments, but less check that the retention
+    %% cleared just a big bunch
+    ?assert(length(receive_batch()) < 200),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 max_age(Config) ->
@@ -1423,10 +1411,7 @@ max_age(Config) ->
 
     Payload = << <<"1">> || _ <- lists:seq(1, 500) >>,
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch, self()),
-    [publish(Ch, Q, Payload) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch, 5),
+    publish_confirm(Ch, Q, [Payload || _ <- lists:seq(1, 100)]),
 
     timer:sleep(10000),
 
@@ -1450,10 +1435,7 @@ replica_recovery(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch1, self()),
-    [publish(Ch1, Q, <<"msg1">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch1, 5),
+    publish_confirm(Ch1, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
     amqp_channel:close(Ch1),
 
     [begin
@@ -1479,7 +1461,6 @@ replica_recovery(Config) ->
          receive_batch(Ch2, 0, 99),
          amqp_channel:close(Ch2)
      end || PNodes <- permute(Nodes)],
-
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 leader_failover(Config) ->
@@ -1491,12 +1472,8 @@ leader_failover(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
-    amqp_channel:register_confirm_handler(Ch1, self()),
-    [publish(Ch1, Q, <<"msg">>) || _ <- lists:seq(1, 100)],
-    amqp_channel:wait_for_confirms(Ch1, 5),
-
     check_leader_and_replicas(Config, [Server1, Server2, Server3]),
+    publish_confirm(Ch1, Q, [<<"msg">> || _ <- lists:seq(1, 100)]),
 
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
     timer:sleep(30000),
@@ -1583,7 +1560,6 @@ leader_failover_dedupe(Config) ->
     qos(Ch2, 100, false),
     subscribe(Ch2, Q, false, 0),
     validate_dedupe(Ch2, 1, N),
-
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 initial_cluster_size_one(Config) ->
@@ -1833,7 +1809,7 @@ max_age_policy(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 update_retention_policy(Config) ->
-    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
@@ -1841,18 +1817,22 @@ update_retention_policy(Config) ->
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                  {<<"x-stream-max-segment-size-bytes">>, long, 200}
                                 ])),
-    quorum_queue_utils:wait_for_messages(Config, [[Q, <<"0">>, <<"0">>, <<"0">>]]),
-    [publish(Ch, Q, <<"msg">>) || _ <- lists:seq(1, 10000)],
-    quorum_queue_utils:wait_for_min_messages(Config, Q, 10000),
+    check_leader_and_replicas(Config, Servers),
+
+    Msgs = [<<"msg">> || _ <- lists:seq(1, 10000)], %% 3 bytes * 10000 = 30000 bytes
+    publish_confirm(Ch, Q, Msgs),
 
     {ok, Q0} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
                                             [rabbit_misc:r(<<"/">>, queue, Q)]),
-    timer:sleep(2000),
+    %% Don't use time based retention, it's really hard to get those tests right
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, <<"retention">>, <<"update_retention_policy.*">>, <<"queues">>,
-           [{<<"max-age">>, <<"1s">>}]),
+           [{<<"max-length-bytes">>, 10000}]),
+    ensure_retention_applied(Config, Server),
 
-    quorum_queue_utils:wait_for_max_messages(Config, Q, 3000),
+    %% Retention policy should clear approximately 2/3 of the messages, but just to be safe
+    %% let's simply check that it removed half of them
+    quorum_queue_utils:wait_for_max_messages(Config, Q, 5000),
 
     {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup,
                                             [rabbit_misc:r(<<"/">>, queue, Q)]),
@@ -1945,12 +1925,15 @@ get_queue_type(Server, Q0) ->
     amqqueue:get_type(Q1).
 
 check_leader_and_replicas(Config, Members) ->
+    check_leader_and_replicas(Config, Members, online).
+
+check_leader_and_replicas(Config, Members, Tag) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
-              Info = find_queue_info(Config, [leader, members]),
+              Info = find_queue_info(Config, [leader, Tag]),
               ct:pal("~s members ~w ~p", [?FUNCTION_NAME, Members, Info]),
               lists:member(proplists:get_value(leader, Info), Members)
-                  andalso (lists:sort(Members) == lists:sort(proplists:get_value(members, Info)))
+                  andalso (lists:sort(Members) == lists:sort(proplists:get_value(Tag, Info)))
       end, 60000).
 
 publish(Ch, Queue) ->
@@ -1961,6 +1944,12 @@ publish(Ch, Queue, Msg) ->
                            #'basic.publish'{routing_key = Queue},
                            #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                                      payload = Msg}).
+
+publish_confirm(Ch, Q, Msgs) ->
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    [publish(Ch, Q, Msg) || Msg <- Msgs],
+    amqp_channel:wait_for_confirms(Ch, 5).
 
 subscribe(Ch, Queue, NoAck, Offset) ->
     subscribe(Ch, Queue, NoAck, Offset, <<"ctag">>).
@@ -2005,6 +1994,26 @@ validate_dedupe(Ch, N, M) ->
     after 60000 ->
               flush(),
               exit({missing_record, N})
+    end.
+
+receive_batch_min_offset(Ch, N, M) ->
+    %% We are expecting values from the last committed offset - which might have increased
+    %% since we queried it. Accept as first offset anything greater than the last known
+    %% committed offset
+    receive
+        {_,
+         #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, S}]}}}
+          when S < N ->
+            exit({unexpected_offset, S});
+        {#'basic.deliver'{delivery_tag = DeliveryTag},
+         #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, S}]}}} ->
+            ct:pal("Committed offset is ~p but as first offset got ~p", [N, S]),
+            ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                                    multiple     = false}),
+            receive_batch(Ch, S + 1, M)
+    after 60000 ->
+              flush(),
+              exit({missing_offset, N})
     end.
 
 receive_batch(Ch, N, N) ->
@@ -2065,3 +2074,10 @@ flush() ->
 
 permute([]) -> [[]];
 permute(L)  -> [[H|T] || H <- L, T <- permute(L--[H])].
+
+ensure_retention_applied(Config, Server) ->
+    %% Retention is asynchronous, so committing all messages doesn't mean old segments have been
+    %% cleared up.
+    %% Let's force a call on the retention gen_server, any pending retention would have been
+    %% processed when this call returns.
+    rabbit_ct_broker_helpers:rpc(Config, Server, gen_server, call, [osiris_retention, test]).

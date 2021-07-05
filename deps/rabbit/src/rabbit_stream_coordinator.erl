@@ -37,6 +37,12 @@
 -export([log_overview/1]).
 -export([replay/1]).
 
+-rabbit_boot_step({?MODULE,
+                   [{description, "Restart stream coordinator"},
+                    {mfa,         {?MODULE, recover, []}},
+                    {requires,    core_initialized},
+                    {enables,     recovery}]}).
+
 %% exported for unit tests only
 -ifdef(TEST).
 -export([update_stream/3,
@@ -81,8 +87,15 @@
 recover() ->
     case erlang:whereis(?MODULE) of
         undefined ->
-            ra:restart_server(?RA_SYSTEM, {?MODULE, node()});
-        _Pid ->
+            case ra:restart_server(?RA_SYSTEM, {?MODULE, node()}) of
+                {error, Reason} when Reason == not_started;
+                                     Reason == name_not_registered ->
+                    %% First boot, do nothing and wait until the first `declare`
+                    ok;
+                _ ->
+                    ok
+            end;
+        _ ->
             ok
     end.
 
@@ -271,7 +284,7 @@ ensure_coordinator_started() ->
                 ok ->
                     AllNodes;
                 {error, {already_started, _}} ->
-                    AllNodes;
+                            AllNodes;
                 _ ->
                     AllNodes
             end,
