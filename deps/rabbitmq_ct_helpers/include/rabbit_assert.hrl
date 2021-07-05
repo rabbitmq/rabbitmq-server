@@ -1,8 +1,4 @@
--define(AWAIT_MATCH_DEFAULT_POLLING_INTERVAL, 50).
-
--define(awaitMatch(Guard, Expr, Timeout), awaitMatch(Guard, Expr, Timeout, ?AWAIT_MATCH_DEFAULT_POLLING_INTERVAL)).
-
--define(awaitMatch(Guard, Expr, Timeout, PollingInterval),
+-define(awaitMatch(Guard, Expr, Timeout),
         begin
             ((fun AwaitMatchFilter(AwaitMatchHorizon) ->
                       AwaitMatchResult = Expr,
@@ -10,7 +6,7 @@
                           Guard -> AwaitMatchResult;
                           __V -> case erlang:system_time(millisecond) of
                                      AwaitMatchNow when AwaitMatchNow < AwaitMatchHorizon ->
-                                         timer:sleep(min(PollingInterval, AwaitMatchHorizon - AwaitMatchNow)),
+                                         timer:sleep(min(50, AwaitMatchHorizon - AwaitMatchNow)),
                                          AwaitMatchFilter(AwaitMatchHorizon);
                                      _ ->
                                          erlang:error({awaitMatch,
