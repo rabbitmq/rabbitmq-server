@@ -26,22 +26,53 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     EnableUAA = application:get_env(rabbitmq_management, enable_uaa, false),
+    OAuth2Implementation = application:get_env(rabbitmq_management, oauth2_implementation, uaa),
     Data = case EnableUAA of
-               true ->
-                   UAAClientId = application:get_env(rabbitmq_management, uaa_client_id, ""),
-                   UAALocation = application:get_env(rabbitmq_management, uaa_location, ""),
-                   case is_invalid([UAAClientId, UAALocation]) of
-                       true ->
-                           rabbit_log:warning("Disabling OAuth 2 authorization, relevant configuration settings are missing", []),
-                           [{enable_uaa, false}, {uaa_client_id, <<>>}, {uaa_location, <<>>}];
-                       false ->
-                           [{enable_uaa, true},
-                            {uaa_client_id, rabbit_data_coercion:to_binary(UAAClientId)},
-                            {uaa_location, rabbit_data_coercion:to_binary(UAALocation)}]
-                   end;
-               false ->
-                   [{enable_uaa, false}, {uaa_client_id, <<>>}, {uaa_location, <<>>}]
-           end,
+                true ->
+                    case OAuth2Implementation of
+                        uaa ->
+                            UAAClientId = application:get_env(rabbitmq_management, uaa_client_id, ""),
+                            UAALocation = application:get_env(rabbitmq_management, uaa_location, ""),
+                            case is_invalid([UAAClientId, UAALocation]) of
+                                true ->
+                                    log_invalid_configuration(),
+                                    [{enable_uaa, false},
+                                    {uaa_client_id, <<>>},
+                                    {uaa_location, <<>>},
+                                    {oauth2_implementation, uaa}];
+                                false ->
+                                    [{enable_uaa, true},
+                                    {uaa_client_id, rabbit_data_coercion:to_binary(UAAClientId)},
+                                    {uaa_location, rabbit_data_coercion:to_binary(UAALocation)},
+                                    {oauth2_implementation, rabbit_data_coercion:to_binary(OAuth2Implementation)}]
+                            end;
+                        identityserver ->
+                            UAAClientId = application:get_env(rabbitmq_management, uaa_client_id, ""),
+                            UAALocation = application:get_env(rabbitmq_management, uaa_location, ""),
+                            IdentityServerScopes = application:get_env(rabbitmq_management, identityserver_scopes, ""),
+                            case is_invalid([UAAClientId, UAALocation, IdentityServerScopes]) of
+                                true ->
+                                    log_invalid_configuration(),
+                                    [{enable_uaa, false}, 
+                                    {uaa_client_id, <<>>},
+                                    {uaa_location, <<>>},
+                                    {identityserver_scopes, <<>>},
+                                    {oauth2_implementation, identityserver}];
+                                false ->
+                                    [{enable_uaa, true},
+                                    {uaa_client_id, rabbit_data_coercion:to_binary(UAAClientId)},
+                                    {uaa_location, rabbit_data_coercion:to_binary(UAALocation)},
+                                    {identityserver_scopes, rabbit_data_coercion:to_binary(IdentityServerScopes)},
+                                    {oauth2_implementation, rabbit_data_coercion:to_binary(OAuth2Implementation)}]
+                            end
+                        end;
+                false ->
+                        [{enable_uaa, false},
+                        {uaa_client_id, <<>>},
+                        {uaa_location, <<>>},
+                        {identityserver_scopes, <<>>},
+                        {oauth2_implementation, uaa}]
+                end,
     rabbit_mgmt_util:reply(Data, ReqData, Context).
 
 is_authorized(ReqData, Context) ->
@@ -49,3 +80,6 @@ is_authorized(ReqData, Context) ->
 
 is_invalid(List) ->
     lists:any(fun(V) -> V == "" end, List).
+
+log_invalid_configuration() ->
+    rabbit_log:warning("Disabling OAuth 2 authorization, relevant configuration settings are missing", []).

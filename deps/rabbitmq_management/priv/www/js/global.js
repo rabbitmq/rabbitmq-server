@@ -802,3 +802,13 @@ var last_page_out_of_range_error = 0;
 var enable_uaa;
 var uaa_client_id;
 var uaa_location;
+var identityserver_scopes;
+var oauth2_implementation;
+
+var uaa_oauth2_implementation = 'uaa';
+var identityServer_oauth2_implementation = 'identityserver';
+
+var oidcClientSettings;
+var oidcClientEventInitialized = false;
+var oauth2_logout_invoked = false;
+var oidcClient;
