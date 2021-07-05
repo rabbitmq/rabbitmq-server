@@ -2193,9 +2193,10 @@ memory_alarm_rolls_wal(Config) ->
     timer:sleep(1000),
     [Wal2] = filelib:wildcard(WalDataDir ++ "/*.wal"),
     ?assert(Wal1 == Wal2),
-    ok = rpc:call(Server, rabbit_alarm, clear_alarm,
-                  [{{resource_limit, memory, Server}, []}]),
-    timer:sleep(1000),
+    lists:foreach(fun (Node) ->
+        ok = rabbit_ct_broker_helpers:clear_alarm(Config, Node, memory)
+    end, rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
+    ?awaitMatch([], rabbit_ct_broker_helpers:get_alarms(Config, Server), ?DEFAULT_AWAIT),
     ok.
 
 queue_length_limit_drop_head(Config) ->
