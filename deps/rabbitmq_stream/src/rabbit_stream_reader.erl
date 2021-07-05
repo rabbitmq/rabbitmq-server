@@ -1046,6 +1046,7 @@ publishing_ids_from_messages(<<PublishingId:64,
                                _CompressionType:3,
                                _Unused:4,
                                _MessageCount:16,
+                               _UncompressedSize:32,
                                BatchSize:32,
                                _Batch:BatchSize/binary,
                                Rest/binary>>) ->
