@@ -645,7 +645,7 @@ init(Q) when ?is_amqqueue(Q) ->
                                 writer_id = WriterId,
                                 soft_limit = SoftLimit}};
         {error, coordinator_unavailable} = E ->
-            rabbit_log:warning("Failed to start stream queue ~p: coordinator unavailable",
+            rabbit_log:warning("Failed to start stream client ~p: coordinator unavailable",
                                [rabbit_misc:rs(QName)]),
             E
     end.
@@ -819,7 +819,6 @@ stream_name(#resource{virtual_host = VHost, name = Name}) ->
                                                      Timestamp/binary>>)).
 
 recover(Q) ->
-    rabbit_stream_coordinator:recover(),
     {ok, Q}.
 
 check_queue_exists_in_local_node(Q) ->
