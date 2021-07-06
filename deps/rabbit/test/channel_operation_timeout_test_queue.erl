@@ -5,6 +5,7 @@
 %% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
+%% @todo This module also needs to be updated when variable queue changes.
 -module(channel_operation_timeout_test_queue).
 
 -export([init/3, terminate/2, delete_and_terminate/2, delete_crashed/1,
