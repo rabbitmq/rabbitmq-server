@@ -39,7 +39,10 @@
 -export([parse_set/7, set/7, delete/3, lookup/2, list/0, list/1,
          list_formatted/1, list_formatted/3, info_keys/0]).
 -export([parse_set_op/7, set_op/7, delete_op/3, lookup_op/2, list_op/0, list_op/1,
-         list_formatted_op/1, list_formatted_op/3]).
+         list_formatted_op/1, list_formatted_op/3,
+         match_all/2, match_as_map/1, match_op_as_map/1, definition_keys/1,
+         list_in/1, list_in/2, list_as_maps/0, list_as_maps/1, list_op_as_maps/1
+        ]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "policy parameters"},
@@ -98,11 +101,59 @@ set(Q0) when ?is_amqqueue(Q0) ->
 set(X = #exchange{name = Name}) ->
     X#exchange{policy = match(Name), operator_policy = match_op(Name)}.
 
+
+list() ->
+    list('_').
+
+list(VHost) ->
+    list0(VHost, fun ident/1).
+
+list_in(VHost) ->
+    list(VHost).
+
+list_in(VHost, DefinitionKeys) ->
+    [P || P <- list_in(VHost), keys_overlap(definition_keys(P), DefinitionKeys)].
+
+list_as_maps() ->
+    list_as_maps('_').
+
+list_as_maps(VHost) ->
+    [maps:from_list(PL) || PL <- sort_by_priority(list0(VHost, fun maps:from_list/1))].
+
+list_op_as_maps(VHost) ->
+    [maps:from_list(PL) || PL <- sort_by_priority(list0_op(VHost, fun maps:from_list/1))].
+
+list_formatted(VHost) ->
+    sort_by_priority(list0(VHost, fun rabbit_json:encode/1)).
+
+list_formatted(VHost, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map(AggregatorPid, Ref,
+                                     fun(P) -> P end, list_formatted(VHost)).
+
+list_op() ->
+    list_op('_').
+
+list_op(VHost) ->
+    list0_op(VHost, fun ident/1).
+
+list_formatted_op(VHost) ->
+    sort_by_priority(list0_op(VHost, fun rabbit_json:encode/1)).
+
+list_formatted_op(VHost, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map(AggregatorPid, Ref,
+                                     fun(P) -> P end, list_formatted_op(VHost)).
+
 match(Name = #resource{virtual_host = VHost}) ->
     match(Name, list(VHost)).
 
 match_op(Name = #resource{virtual_host = VHost}) ->
     match(Name, list_op(VHost)).
+
+match_as_map(Name = #resource{virtual_host = VHost}) ->
+    [maps:from_list(PL) || PL <- match(Name, list(VHost))].
+
+match_op_as_map(Name = #resource{virtual_host = VHost}) ->
+    [maps:from_list(PL) || PL <- match(Name, list_op(VHost))].
 
 get(Name, Q) when ?is_amqqueue(Q) ->
     Policy = amqqueue:get_policy(Q),
@@ -116,6 +167,21 @@ get(Name, EntityName = #resource{virtual_host = VHost}) ->
     get0(Name,
          match(EntityName, list(VHost)),
          match(EntityName, list_op(VHost))).
+
+match(Name, Policies) ->
+    case match_all(Name, Policies) of
+        []           -> undefined;
+        [Policy | _] -> Policy
+    end.
+
+match_all(Name, Policies) ->
+   lists:sort(fun priority_comparator/2, [P || P <- Policies, matches(Name, P)]).
+
+matches(#resource{name = Name, kind = Kind, virtual_host = VHost} = Resource, Policy) ->
+    matches_type(Kind, pget('apply-to', Policy)) andalso
+        is_applicable(Resource, pget(definition, Policy)) andalso
+        match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
+        VHost =:= pget(vhost, Policy).
 
 get0(_Name, undefined, undefined) -> undefined;
 get0(Name, undefined, OpPolicy) -> pget(Name, pget(definition, OpPolicy, []));
@@ -291,36 +357,9 @@ lookup(VHost, Name) ->
         P          -> p(P, fun ident/1)
     end.
 
-list_op() ->
-    list_op('_').
-
-list_op(VHost) ->
-    list0_op(VHost, fun ident/1).
-
-list_formatted_op(VHost) ->
-    sort_by_priority(list0_op(VHost, fun rabbit_json:encode/1)).
-
-list_formatted_op(VHost, Ref, AggregatorPid) ->
-    rabbit_control_misc:emitting_map(AggregatorPid, Ref,
-                                     fun(P) -> P end, list_formatted_op(VHost)).
-
 list0_op(VHost, DefnFun) ->
     [p(P, DefnFun)
      || P <- rabbit_runtime_parameters:list(VHost, <<"operator_policy">>)].
-
-
-list() ->
-    list('_').
-
-list(VHost) ->
-    list0(VHost, fun ident/1).
-
-list_formatted(VHost) ->
-    sort_by_priority(list0(VHost, fun rabbit_json:encode/1)).
-
-list_formatted(VHost, Ref, AggregatorPid) ->
-    rabbit_control_misc:emitting_map(AggregatorPid, Ref,
-                                     fun(P) -> P end, list_formatted(VHost)).
 
 list0(VHost, DefnFun) ->
     [p(P, DefnFun) || P <- rabbit_runtime_parameters:list(VHost, <<"policy">>)].
@@ -340,6 +379,16 @@ p(Parameter, DefnFun) ->
 ident(X) -> X.
 
 info_keys() -> [vhost, name, 'apply-to', pattern, definition, priority].
+
+definition_keys(Policy) ->
+    case rabbit_data_coercion:to_map(Policy) of
+        #{definition := Def} ->
+            maps:keys(rabbit_data_coercion:to_map(Def));
+        _ -> []
+    end.
+
+keys_overlap(A, B) ->
+    lists:any(fun(Item) -> lists:member(Item, B) end, A).
 
 %%----------------------------------------------------------------------------
 
@@ -466,21 +515,6 @@ maybe_notify_of_policy_change({Q1, Q2}, PolicyDef, ActingUser) when ?is_amqqueue
     ]),
     rabbit_amqqueue:policy_changed(Q1, Q2).
 
-match(Name, Policies) ->
-    case match_all(Name, Policies) of
-        []           -> undefined;
-        [Policy | _] -> Policy
-    end.
-
-match_all(Name, Policies) ->
-   lists:sort(fun priority_comparator/2, [P || P <- Policies, matches(Name, P)]).
-
-matches(#resource{name = Name, kind = Kind, virtual_host = VHost} = Resource, Policy) ->
-    matches_type(Kind, pget('apply-to', Policy)) andalso
-        is_applicable(Resource, pget(definition, Policy)) andalso
-        match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
-        VHost =:= pget(vhost, Policy).
-
 matches_type(exchange, <<"exchanges">>) -> true;
 matches_type(queue,    <<"queues">>)    -> true;
 matches_type(exchange, <<"all">>)       -> true;
@@ -490,14 +524,9 @@ matches_type(_,        _)               -> false.
 priority_comparator(A, B) -> pget(priority, A) >= pget(priority, B).
 
 is_applicable(#resource{kind = queue} = Resource, Policy) ->
-    rabbit_amqqueue:is_policy_applicable(Resource, to_list(Policy));
+    rabbit_amqqueue:is_policy_applicable(Resource, rabbit_data_coercion:to_list(Policy));
 is_applicable(_, _) ->
     true.
-
-to_list(L) when is_list(L) ->
-    L;
-to_list(M) when is_map(M) ->
-    maps:to_list(M).
 
 %%----------------------------------------------------------------------------
 
