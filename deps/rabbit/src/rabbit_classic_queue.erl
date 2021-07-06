@@ -302,6 +302,7 @@ deliver(Qs0, #delivery{flow = Flow,
                        msg_seq_no = MsgNo,
                        message = #basic_message{exchange_name = _Ex},
                        confirm = Confirm} = Delivery) ->
+%% @todo That's where we know we have to duplicate the message. Count Qs0 basically. Unless there can be master/slaves of a queue on the same node?
     %% TODO: record master and slaves for confirm processing
     {MPids, SPids, Qs, Actions} = qpids(Qs0, Confirm, MsgNo),
     QPids = MPids ++ SPids,
