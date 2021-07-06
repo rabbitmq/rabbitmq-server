@@ -27,7 +27,8 @@ all() ->
      {group, cluster_size_3},
      {group, cluster_size_3_1},
      {group, cluster_size_3_2},
-     {group, cluster_size_3_parallel},
+     {group, cluster_size_3_parallel_1},
+     {group, cluster_size_3_parallel_2},
      {group, unclustered_size_3_1},
      {group, unclustered_size_3_2},
      {group, unclustered_size_3_3}
@@ -50,17 +51,18 @@ groups() ->
            leader_locator_policy]},
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
      {cluster_size_3_2, [], [recover]},
-     {cluster_size_3_parallel, [parallel], [delete_replica,
-                                            delete_last_replica,
-                                            delete_classic_replica,
-                                            delete_quorum_replica,
-                                            consume_from_replica,
-                                            initial_cluster_size_one,
-                                            initial_cluster_size_two,
-                                            initial_cluster_size_one_policy,
-                                            leader_locator_client_local,
-                                            leader_locator_random,
-                                            leader_locator_least_leaders] ++ all_tests()},
+     {cluster_size_3_parallel_1, [parallel], [delete_replica,
+                                              delete_last_replica,
+                                              delete_classic_replica,
+                                              delete_quorum_replica,
+                                              consume_from_replica,
+                                              initial_cluster_size_one,
+                                              initial_cluster_size_two,
+                                              initial_cluster_size_one_policy,
+                                              leader_locator_client_local,
+                                              leader_locator_random,
+                                              leader_locator_least_leaders]},
+     {cluster_size_3_parallel_2, [parallel], all_tests()},
      {unclustered_size_3_1, [], [add_replica]},
      {unclustered_size_3_2, [], [consume_without_local_replica]},
      {unclustered_size_3_3, [], [grow_coordinator_cluster]}
@@ -125,7 +127,8 @@ init_per_group(Group, Config) ->
                       cluster_size_2 -> 2;
                       cluster_size_2_parallel -> 2;
                       cluster_size_3 -> 3;
-                      cluster_size_3_parallel -> 3;
+                      cluster_size_3_parallel_1 -> 3;
+                      cluster_size_3_parallel_2 -> 3;
                       cluster_size_3_1 -> 3;
                       cluster_size_3_2 -> 3;
                       unclustered_size_3_1 -> 3;
