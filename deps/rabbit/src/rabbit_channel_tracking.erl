@@ -86,7 +86,7 @@ handle_cast({channel_created, Details}) ->
             ok
     end;
 handle_cast({channel_closed, Details}) ->
-    %% channel has terminated, unregister iff local
+    %% channel has terminated, unregister if local
     case get_tracked_channel_by_pid(pget(pid, Details)) of
         [#tracked_channel{name = Name}] ->
             unregister_tracked(rabbit_tracking:id(node(), Name));
@@ -99,7 +99,7 @@ handle_cast({connection_closed, ConnDetails}) ->
     case pget(node, ConnDetails) of
         ThisNode ->
             TrackedChs = get_tracked_channels_by_connection_pid(ConnPid),
-            rabbit_log_channel:info(
+            rabbit_log_channel:debug(
                 "Closing all channels from connection '~s' "
                 "because it has been closed", [pget(name, ConnDetails)]),
             %% Shutting down channels will take care of unregistering the
