@@ -9,7 +9,7 @@
 
 -export([erase/1, init/3, reset_state/1, recover/6,
          terminate/3, delete_and_terminate/1,
-         publish/7, deliver/2, ack/2, read/3]).
+         publish/8, deliver/2, ack/2, read/3]).
 
 %% Recovery. Unlike other functions in this module, these
 %% apply to all queues all at once.
@@ -18,9 +18,12 @@
 %% rabbit_queue_index/rabbit_variable_queue-specific functions.
 %% Implementation details from the queue index leaking into the
 %% queue implementation itself.
--export([pre_publish/7, flush_pre_publish_cache/2,
+-export([pre_publish/8, flush_pre_publish_cache/2,
          sync/1, needs_sync/1, flush/1,
          bounds/1, next_segment_boundary/1]).
+
+%% Shared with rabbit_classic_queue_store_v2.
+-export([queue_dir/2]).
 
 -define(QUEUE_NAME_STUB_FILE, ".queue_name").
 -define(SEGMENT_EXTENSION, ".midx").
@@ -28,10 +31,10 @@
 -define(MAGIC, 16#524D5149). %% "RMQI"
 -define(VERSION, 2).
 -define(HEADER_SIZE, 64). %% bytes
--define(ENTRY_SIZE,  32). %% bytes
+-define(ENTRY_SIZE,  44). %% bytes
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("kernel/include/file.hrl").
+-include_lib("kernel/include/file.hrl"). %% @todo Is that still necessary?
 
 %% Set to true to get an awful lot of debug logs.
 -if(false).
@@ -45,6 +48,7 @@
 
 -type entry() :: {rabbit_types:msg_id(), seq_id(), rabbit_types:message_properties(), boolean(), boolean()}.
 
+%% @todo Rename into #qi.
 -record(mqistate, {
     %% Queue name (for the stub file).
     queue_name :: rabbit_amqqueue:name(),
@@ -393,7 +397,8 @@ recover_index_v1_loop(State0 = #mqistate{ queue_name = Name },
         %% At this point all messages are persistent because transient messages
         %% were dropped during the old index recovery.
         counters:add(CountersRef, ?RECOVER_BYTES, Props#message_properties.size),
-        publish(MsgId, SeqId, Props, IsPersistent, IsDelivered, infinity, State1)
+        %% @todo Messages should be moved to the per_queue index.
+        publish(MsgId, SeqId, todo, Props, IsPersistent, IsDelivered, infinity, State1)
     end, State0, Messages),
     State = flush(State2),
     rabbit_msg_store:force_sync(MSClient),
@@ -442,19 +447,25 @@ delete_and_terminate(State = #mqistate { dir = Dir,
     State#mqistate{ segments = #{},
                     fds = #{} }.
 
--spec publish(rabbit_types:msg_id(), seq_id(),
+-spec publish(rabbit_types:msg_id(), seq_id(), todo,
                     rabbit_types:message_properties(), boolean(), boolean(),
                     non_neg_integer(), State) -> State when State::mqistate().
 
 %% Because we always persist to the msg_store, the Msg(Or)Id argument
 %% here is always a binary, never a record.
-publish(MsgId, SeqId, Props, IsPersistent, IsDelivered, TargetRamCount,
+%%
+%% @todo MsgId should be the real MsgId, and a separate argument for location.
+%%       Otherwise confirms won't work as intended (for now). Ultimately it
+%%       would be good to get rid of MsgId (at least where we don't need it)
+%%       but for the time being we are stuck with it.
+%%
+%%       Maybe switch confirms to seq_id()? Is that doable?
+publish(MsgId, SeqId, Location, Props, IsPersistent, IsDelivered, TargetRamCount,
         State0 = #mqistate { write_buffer = WriteBuffer0,
-                             segments = Segments })
-        when is_binary(MsgId)  ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [MsgId, SeqId, Props, IsPersistent, TargetRamCount, State0]),
+                             segments = Segments }) ->
+    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount, State0]),
     %% Add the entry to the write buffer.
-    WriteBuffer = WriteBuffer0#{SeqId => {MsgId, SeqId, Props, IsPersistent, IsDelivered}},
+    WriteBuffer = WriteBuffer0#{SeqId => {MsgId, SeqId, Location, Props, IsPersistent, IsDelivered}},
     State1 = State0#mqistate{ write_buffer = WriteBuffer },
     %% When writing to a new segment we must prepare the file
     %% and update our segments state.
@@ -629,7 +640,7 @@ write_entry(SeqId, SegmentEntryCount, Entry, WritesAcc) ->
     LocBytesAcc = maps:get(Segment, WritesAcc, []),
     WritesAcc#{Segment => [{Offset, build_entry(Entry)}|LocBytesAcc]}.
 
-build_entry({Id, _SeqId, Props, IsPersistent, IsDelivered}) ->
+build_entry({Id, _SeqId, Location, Props, IsPersistent, IsDelivered}) ->
     IsDeliveredFlag = case IsDelivered of
         true -> 1;
         false -> 0
@@ -637,6 +648,21 @@ build_entry({Id, _SeqId, Props, IsPersistent, IsDelivered}) ->
     Flags = case IsPersistent of
         true -> 1;
         false -> 0
+    end,
+    LocationBin = case Location of
+        memory ->
+            << 0:8,
+               Id:16/binary,            %% @todo Would be good to remove the need to store the MsgId when message store won't be used.
+               0:96 >>;
+        rabbit_msg_store ->
+            << 1:8,
+               Id:16/binary,            %% Message store ID.
+               0:96 >>;
+        {rabbit_classic_queue_store_v2, StoreOffset, StoreSize} ->
+            << 2:8,
+               Id:16/binary,            %% @todo Would be good to remove the need to store the MsgId when using the per-queue store.
+               StoreOffset:64/unsigned, %% Per-queue store offset.
+               StoreSize:32/unsigned >> %% Per-queue store size.
     end,
     #message_properties{ expiry = Expiry0, size = Size } = Props,
     Expiry = case Expiry0 of
@@ -646,8 +672,9 @@ build_entry({Id, _SeqId, Props, IsPersistent, IsDelivered}) ->
     << 1:8,                   %% Status. 0 = no entry or entry acked, 1 = entry exists.
        IsDeliveredFlag:8,     %% Deliver.
        Flags:8,               %% IsPersistent flag (least significant bit).
-       0:8,                   %% Reserved. Makes entries 32B in size to match page alignment on disk.
-       Id:16/binary,          %% Message store ID.
+       LocationBin/binary,
+       %% The shared message store uses 8 bytes for the size but that was never needed
+       %% as the v1 index always used 4 bytes. So we are using 4 bytes here as well.
        Size:32/unsigned,      %% Message payload size.
        Expiry:64/unsigned >>. %% Expiration time.
 
@@ -703,7 +730,7 @@ deliver(SeqIds, State = #mqistate { write_buffer = WriteBuffer0,
 %% with an empty list. Do nothing.
 ack([], State) ->
     ?DEBUG("[] ~0p", [State]),
-    State;
+    {[], State};
 ack(SeqIds, State0 = #mqistate{ write_buffer = WriteBuffer0,
                                 write_buffer_updates = NumUpdates0 }) ->
     ?DEBUG("~0p ~0p", [SeqIds, State0]),
@@ -729,8 +756,8 @@ ack(SeqIds, State0 = #mqistate{ write_buffer = WriteBuffer0,
                 WriteBuffer1),
             {WriteBuffer2, NumUpdates2}
     end,
-    maybe_flush_buffer(State#mqistate{ write_buffer = WriteBuffer,
-                                       write_buffer_updates = NumUpdates }).
+    {Deletes, maybe_flush_buffer(State#mqistate{ write_buffer = WriteBuffer,
+                                                 write_buffer_updates = NumUpdates })}.
 
 update_ack_state(SeqIds, State = #mqistate{ segments = Segments0 }) ->
     SegmentEntryCount = segment_entry_count(),
@@ -882,8 +909,7 @@ parse_entries(<<>>, _, _, Acc) ->
 parse_entries(<< Status:8,
                  IsDelivered0:8,
                  _:7, IsPersistent:1,
-                 _:8,
-                 Id0:16/binary,
+                 LocationBin:232/bits,
                  Size:32/unsigned,
                  Expiry0:64/unsigned,
                  Rest/bits >>, SeqId, WriteBuffer, Acc) ->
@@ -894,7 +920,15 @@ parse_entries(<< Status:8,
             %% We get the Id binary in two steps because we do not want
             %% to create a sub-binary and keep the larger binary around
             %% in memory.
-            Id = binary:copy(Id0),
+            {Id1, Location} = case LocationBin of
+                << 0:8, Id0:16/binary, 0:96 >> ->
+                    {Id0, memory}; %% @todo I'm not sure it is currently possible to have the message in memory and the index on disk.
+                << 1:8, Id0:16/binary, 0:96 >> ->
+                    {Id0, rabbit_msg_store};
+                << 2:8, Id0:16/binary, StoreOffset:64/unsigned, StoreSize:32/unsigned >> ->
+                    {Id0, {rabbit_classic_queue_store_v2, StoreOffset, StoreSize}}
+            end,
+            Id = binary:copy(Id1),
             Expiry = case Expiry0 of
                 0 -> undefined;
                 _ -> Expiry0
@@ -911,7 +945,7 @@ parse_entries(<< Status:8,
                     end
             end,
             parse_entries(Rest, SeqId + 1, WriteBuffer,
-                          [{Id, SeqId, Props, IsPersistent =:= 1, IsDelivered}|Acc]);
+                          [{Id, SeqId, Location, Props, IsPersistent =:= 1, IsDelivered}|Acc]);
         0 -> %% No entry or acked entry.
             %% @todo It would be good to keep track of how many "misses"
             %%       we have. We can use it to confirm the correct behavior
@@ -937,6 +971,7 @@ sync(State0 = #mqistate{ confirms = Confirms,
         ok = file:sync(Fd)
     end, undefined, OpenFds),
     %% Notify syncs.
+    %% @todo Why is this using a map? Isn't that unnecessary?
     Set = gb_sets:from_list(maps:values(Confirms)),
     OnSyncFun(Set),
     %% Reset confirms.
@@ -1057,9 +1092,9 @@ stop(VHost) ->
 %%       having changed compared to the previous publish call. When the
 %%       old index gets removed we can just drop these functions.
 
-pre_publish(MsgOrId, SeqId, Props, IsPersistent, IsDelivered, TargetRamCount, State) ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [MsgOrId, SeqId, Props, IsPersistent, IsDelivered, TargetRamCount, State]),
-    publish(MsgOrId, SeqId, Props, IsPersistent, IsDelivered, TargetRamCount, State).
+pre_publish(MsgOrId, SeqId, Location, Props, IsPersistent, IsDelivered, TargetRamCount, State) ->
+    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgOrId, SeqId, Location, Props, IsPersistent, IsDelivered, TargetRamCount, State]),
+    publish(MsgOrId, SeqId, Location, Props, IsPersistent, IsDelivered, TargetRamCount, State).
 
 %% @todo -spec flush_pre_publish_cache(???, State) -> State when State::mqistate().
 
@@ -1118,12 +1153,16 @@ segment_entry_count() ->
         application:get_env(rabbit, classic_queue_index_v2_segment_entry_count, 65536),
     SegmentEntryCount.
 
+%% @todo This is a problem if we share the same directory for index and store.
+%%       We should erase the index files only, and if there's nothing left,
+%%       delete the index directory.
 erase_index_dir(Dir) ->
     case rabbit_file:is_dir(Dir) of
         true  -> rabbit_file:recursive_delete([Dir]);
         false -> ok
     end.
 
+%% @todo This must be exported for rabbit_classic_queue_store_v2.
 queue_dir(VHostDir, QueueName) ->
     %% Queue directory is
     %% {node_database_dir}/msg_stores/vhosts/{vhost}/queues/{queue}
