@@ -850,7 +850,8 @@ make_ra_conf(Node, Nodes) ->
       machine => {module, ?MODULE, #{}},
       ra_event_formatter => Formatter}.
 
-filter_command(_Meta, {delete_replica, _, #{node := Node}}, #stream{members = Members0}) ->
+filter_command(_Meta, {delete_replica, _, #{node := Node}}, #stream{id = StreamId,
+                                                                    members = Members0}) ->
     Members = maps:filter(fun(_, #member{target = S}) when S =/= deleted ->
                                   true;
                              (_, _) ->
@@ -859,8 +860,8 @@ filter_command(_Meta, {delete_replica, _, #{node := Node}}, #stream{members = Me
     case maps:size(Members) =< 1 of
         true ->
             rabbit_log:warning(
-              "~s failed to delete ~p replica, last cluster member",
-              [?MODULE, Node]),
+              "~s failed to delete ~p replica for stream queue ~s, last cluster member",
+              [?MODULE, Node, StreamId]),
             {error, last_stream_member};
         false ->
             ok
