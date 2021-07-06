@@ -253,6 +253,7 @@ ENV LANG=C.UTF-8 LANGUAGE=C.UTF-8 LC_ALL=C.UTF-8
 COPY docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]
 
+# EPMD AMQP-TLS AMQP ERLANG
 EXPOSE 4369 5671 5672 25672
 CMD ["rabbitmq-server"]
 
@@ -286,8 +287,24 @@ RUN set -eux; \
 	chmod +x /usr/local/bin/rabbitmqadmin; \
 	apt-get update; apt-get install -y --no-install-recommends python3; rm -rf /var/lib/apt/lists/*; \
 	rabbitmqadmin --version
+# MANAGEMENT-TLS MANAGEMENT
 EXPOSE 15671 15672
 
 RUN rabbitmq-plugins enable --offline rabbitmq_prometheus && \
     rabbitmq-plugins is_enabled rabbitmq_prometheus --offline
-EXPOSE 15692
+# PROMETHEUS-TLS PROMETHEUS
+EXPOSE 15691 15692
+
+RUN rabbitmq-plugins enable --all
+# STREAM-TLS STREAM
+EXPOSE 5551 5552
+# MQTT-TLS MQTT
+EXPOSE 8883 1883
+# WEB-MQTT-TLS WEB-MQTT
+EXPOSE 15676 15675
+# STOMP-TLS STOMP
+EXPOSE 61614 61613
+# WEB-STOMP-TLS WEB-STOMP
+EXPOSE 15673 15674
+# EXAMPLES
+EXPOSE 15670
