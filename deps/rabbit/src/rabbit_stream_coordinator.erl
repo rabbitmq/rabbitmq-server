@@ -470,7 +470,7 @@ tick(_Ts, _State) ->
     [{aux, maybe_resize_coordinator_cluster}].
 
 maybe_resize_coordinator_cluster() ->
-    spawn(fun() ->
+    spawn_link(fun() ->
                   case ra:members({?MODULE, node()}) of
                       {_, Members, _} ->
                           MemberNodes = [Node || {_, Node} <- Members],
@@ -555,7 +555,7 @@ handle_aux(leader, _, {start_writer, StreamId,
     rabbit_log:debug("~s: running action: 'start_writer'"
                      " for ~s on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
-    ActionFun = fun () -> phase_start_writer(StreamId, Args, Conf) end,
+    ActionFun = phase_start_writer(StreamId, Args, Conf),
     run_action(starting, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, {start_replica, StreamId,
                        #{epoch := Epoch, node := Node} = Args, Conf},
@@ -563,7 +563,7 @@ handle_aux(leader, _, {start_replica, StreamId,
     rabbit_log:debug("~s: running action: 'start_replica'"
                      " for ~s on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
-    ActionFun = fun () -> phase_start_replica(StreamId, Args, Conf) end,
+    ActionFun = phase_start_replica(StreamId, Args, Conf),
     run_action(starting, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, {stop, StreamId, #{node := Node,
                                          epoch := Epoch} = Args, Conf},
@@ -571,28 +571,28 @@ handle_aux(leader, _, {stop, StreamId, #{node := Node,
     rabbit_log:debug("~s: running action: 'stop'"
                      " for ~s on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
-    ActionFun = fun () -> phase_stop_member(StreamId, Args, Conf) end,
+    ActionFun = phase_stop_member(StreamId, Args, Conf),
     run_action(stopping, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, {update_mnesia, StreamId, Args, Conf},
            #aux{actions = _Monitors} = Aux, LogState,
            #?MODULE{streams = _Streams}) ->
     rabbit_log:debug("~s: running action: 'update_mnesia'"
                      " for ~s", [?MODULE, StreamId]),
-    ActionFun = fun () -> phase_update_mnesia(StreamId, Args, Conf) end,
+    ActionFun = phase_update_mnesia(StreamId, Args, Conf),
     run_action(updating_mnesia, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, {update_retention, StreamId, Args, _Conf},
            #aux{actions = _Monitors} = Aux, LogState,
            #?MODULE{streams = _Streams}) ->
     rabbit_log:debug("~s: running action: 'update_retention'"
                      " for ~s", [?MODULE, StreamId]),
-    ActionFun = fun () -> phase_update_retention(StreamId, Args) end,
+    ActionFun = phase_update_retention(StreamId, Args),
     run_action(update_retention, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, {delete_member, StreamId, #{node := Node} = Args, Conf},
            #aux{actions = _Monitors} = Aux, LogState,
            #?MODULE{streams = _Streams}) ->
     rabbit_log:debug("~s: running action: 'delete_member'"
                      " for ~s ~s", [?MODULE, StreamId, Node]),
-    ActionFun = fun () -> phase_delete_member(StreamId, Args, Conf) end,
+    ActionFun = phase_delete_member(StreamId, Args, Conf),
     run_action(delete_member, StreamId, Args, ActionFun, Aux, LogState);
 handle_aux(leader, _, fail_active_actions,
            #aux{actions = Monitors} = Aux, LogState,
@@ -630,7 +630,7 @@ handle_aux(_, _, _, AuxState, LogState, _) ->
 run_action(Action, StreamId, #{node := _Node,
                                epoch := _Epoch} = Args,
            ActionFun, #aux{actions = Actions0} = Aux, Log) ->
-    Pid = spawn(ActionFun),
+    Pid = spawn_link(ActionFun),
     Effects = [],
     Actions = Actions0#{Pid => {StreamId, Action, Args}},
     {no_reply, Aux#aux{actions = Actions}, Log, Effects}.
@@ -640,37 +640,36 @@ wrap_reply(From, Reply) ->
 
 phase_start_replica(StreamId, #{epoch := Epoch,
                                 node := Node} = Args, Conf0) ->
-    spawn(
-      fun() ->
-              try osiris_replica:start(Node, Conf0) of
-                  {ok, Pid} ->
-                      rabbit_log:debug("~s: ~s: replica started on ~s in ~b pid ~w",
-                                       [?MODULE, StreamId, Node, Epoch, Pid]),
-                      send_self_command({member_started, StreamId,
-                                         Args#{pid => Pid}});
-                  {error, already_present} ->
-                      %% need to remove child record if this is the case
-                      %% can it ever happen?
-                      _ = osiris_replica:stop(Node, Conf0),
-                      send_action_failed(StreamId, starting, Args);
-                  {error, {already_started, Pid}} ->
-                      %% TODO: we need to check that the current epoch is the same
-                      %% before we can be 100% sure it is started in the correct
-                      %% epoch, can this happen? who knows...
-                      send_self_command({member_started, StreamId,
-                                         Args#{pid => Pid}});
-                  {error, Reason} ->
-                      maybe_sleep(Reason),
-                      rabbit_log:warning("~s: Error while starting replica for ~s : ~W",
-                                         [?MODULE, maps:get(name, Conf0), Reason, 10]),
-                      send_action_failed(StreamId, starting, Args)
-              catch _:E ->
-                        rabbit_log:warning("~s: Error while starting replica for ~s : ~p",
-                                           [?MODULE, maps:get(name, Conf0), E]),
-                        maybe_sleep(E),
-                        send_action_failed(StreamId, starting, Args)
-              end
-      end).
+    fun() ->
+            try osiris_replica:start(Node, Conf0) of
+                {ok, Pid} ->
+                    rabbit_log:debug("~s: ~s: replica started on ~s in ~b pid ~w",
+                                     [?MODULE, StreamId, Node, Epoch, Pid]),
+                    send_self_command({member_started, StreamId,
+                                       Args#{pid => Pid}});
+                {error, already_present} ->
+                    %% need to remove child record if this is the case
+                    %% can it ever happen?
+                    _ = osiris_replica:stop(Node, Conf0),
+                    send_action_failed(StreamId, starting, Args);
+                {error, {already_started, Pid}} ->
+                    %% TODO: we need to check that the current epoch is the same
+                    %% before we can be 100% sure it is started in the correct
+                    %% epoch, can this happen? who knows...
+                    send_self_command({member_started, StreamId,
+                                       Args#{pid => Pid}});
+                {error, Reason} ->
+                    maybe_sleep(Reason),
+                    rabbit_log:warning("~s: Error while starting replica for ~s : ~W",
+                                       [?MODULE, maps:get(name, Conf0), Reason, 10]),
+                    send_action_failed(StreamId, starting, Args)
+            catch _:E ->
+                    rabbit_log:warning("~s: Error while starting replica for ~s : ~p",
+                                       [?MODULE, maps:get(name, Conf0), E]),
+                    maybe_sleep(E),
+                    send_action_failed(StreamId, starting, Args)
+            end
+    end.
 
 send_action_failed(StreamId, Action, Arg) ->
   send_self_command({action_failed, StreamId, Arg#{action => Action}}).
@@ -681,106 +680,99 @@ send_self_command(Cmd) ->
 
 
 phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
-    spawn(
-      fun() ->
-              try osiris_server_sup:delete_child(Node, Conf) of
-                  ok ->
-                      send_self_command({member_deleted, StreamId, Arg});
-                  _ ->
-                      send_action_failed(StreamId, deleting, Arg)
-              catch _:E ->
-                        rabbit_log:warning("~s: Error while deleting member for ~s : on node ~s ~p",
-                                           [?MODULE, StreamId, Node, E]),
-                        maybe_sleep(E),
-                        send_action_failed(StreamId, deleting, Arg)
-              end
-      end).
+    fun() ->
+            try osiris_server_sup:delete_child(Node, Conf) of
+                ok ->
+                    send_self_command({member_deleted, StreamId, Arg});
+                _ ->
+                    send_action_failed(StreamId, deleting, Arg)
+            catch _:E ->
+                    rabbit_log:warning("~s: Error while deleting member for ~s : on node ~s ~p",
+                                       [?MODULE, StreamId, Node, E]),
+                    maybe_sleep(E),
+                    send_action_failed(StreamId, deleting, Arg)
+            end
+    end.
 
 phase_stop_member(StreamId, #{node := Node,
                               epoch := Epoch} = Arg0, Conf) ->
-    spawn(
-      fun() ->
-              try osiris_server_sup:stop_child(Node, StreamId) of
-                  ok ->
-                      %% get tail
-                      try get_replica_tail(Node, Conf) of
-                          {ok, Tail} ->
-                              Arg = Arg0#{tail => Tail},
-                              rabbit_log:debug("~s: ~s: member stopped on ~s in ~b Tail ~w",
-                                               [?MODULE, StreamId, Node, Epoch, Tail]),
-                              send_self_command({member_stopped, StreamId, Arg});
-                          Err ->
-                              rabbit_log:warning("Stream coordinator failed to get tail
+    fun() ->
+            try osiris_server_sup:stop_child(Node, StreamId) of
+                ok ->
+                    %% get tail
+                    try get_replica_tail(Node, Conf) of
+                        {ok, Tail} ->
+                            Arg = Arg0#{tail => Tail},
+                            rabbit_log:debug("~s: ~s: member stopped on ~s in ~b Tail ~w",
+                                             [?MODULE, StreamId, Node, Epoch, Tail]),
+                            send_self_command({member_stopped, StreamId, Arg});
+                        Err ->
+                            rabbit_log:warning("Stream coordinator failed to get tail
                                                   of member ~s ~w Error: ~w",
-                                                 [StreamId, Node, Err]),
-                              send_action_failed(StreamId, stopping, Arg0)
-                      catch _:Err ->
-                                rabbit_log:warning("Stream coordinator failed to get
+                                               [StreamId, Node, Err]),
+                            send_action_failed(StreamId, stopping, Arg0)
+                    catch _:Err ->
+                            rabbit_log:warning("Stream coordinator failed to get
                                                   tail of member ~s ~w Error: ~w",
-                                                   [StreamId, Node, Err]),
-                                send_action_failed(StreamId, stopping, Arg0)
-
-                      end;
-                  Err ->
-                      rabbit_log:warning("Stream coordinator failed to stop
+                                               [StreamId, Node, Err]),
+                            send_action_failed(StreamId, stopping, Arg0)
+                    end;
+                Err ->
+                    rabbit_log:warning("Stream coordinator failed to stop
                                           member ~s ~w Error: ~w",
-                                         [StreamId, Node, Err]),
-                      send_action_failed(StreamId, stopping, Arg0)
-              catch _:Err ->
-                        rabbit_log:warning("Stream coordinator failed to stop
+                                       [StreamId, Node, Err]),
+                    send_action_failed(StreamId, stopping, Arg0)
+            catch _:Err ->
+                    rabbit_log:warning("Stream coordinator failed to stop
                                             member ~s ~w Error: ~w",
-                                           [StreamId, Node, Err]),
-                        maybe_sleep(Err),
-                        send_action_failed(StreamId, stopping, Arg0)
-              end
-      end).
+                                       [StreamId, Node, Err]),
+                    maybe_sleep(Err),
+                    send_action_failed(StreamId, stopping, Arg0)
+            end
+    end.
 
 phase_start_writer(StreamId, #{epoch := Epoch,
                                node := Node} = Args0, Conf) ->
-    spawn(
-      fun() ->
-              try osiris_writer:start(Conf) of
-                  {ok, Pid} ->
-                      Args = Args0#{epoch => Epoch, pid => Pid},
-                      rabbit_log:warning("~s: started writer ~s on ~w in ~b",
-                                         [?MODULE, StreamId, Node, Epoch]),
-                      send_self_command({member_started, StreamId, Args});
-                  Err ->
-                      %% no sleep for writer failures
-                      rabbit_log:warning("~s: failed to start
+    fun() ->
+            try osiris_writer:start(Conf) of
+                {ok, Pid} ->
+                    Args = Args0#{epoch => Epoch, pid => Pid},
+                    rabbit_log:warning("~s: started writer ~s on ~w in ~b",
+                                       [?MODULE, StreamId, Node, Epoch]),
+                    send_self_command({member_started, StreamId, Args});
+                Err ->
+                    %% no sleep for writer failures
+                    rabbit_log:warning("~s: failed to start
                                           writer ~s ~w Error: ~w",
-                                         [?MODULE, StreamId, Node, Err]),
-                      send_action_failed(StreamId, starting, Args0)
-              catch _:Err ->
-                        rabbit_log:warning("~s: failed to start
+                                       [?MODULE, StreamId, Node, Err]),
+                    send_action_failed(StreamId, starting, Args0)
+            catch _:Err ->
+                    rabbit_log:warning("~s: failed to start
                                           writer ~s ~w Error: ~w",
-                                           [?MODULE, StreamId, Node, Err]),
-                        send_action_failed(StreamId, starting, Args0)
-
-              end
-      end).
+                                       [?MODULE, StreamId, Node, Err]),
+                    send_action_failed(StreamId, starting, Args0)
+            end
+    end.
 
 phase_update_retention(StreamId, #{pid := Pid,
                                    retention := Retention} = Args) ->
-    spawn(
-      fun() ->
-              try osiris:update_retention(Pid, Retention) of
-                  ok ->
-                      send_self_command({retention_updated, StreamId, Args});
-                  {error, Err} ->
-                      rabbit_log:warning("~s: failed to update
+    fun() ->
+            try osiris:update_retention(Pid, Retention) of
+                ok ->
+                    send_self_command({retention_updated, StreamId, Args});
+                {error, Err} ->
+                    rabbit_log:warning("~s: failed to update
                                           retention for ~s ~w Error: ~w",
-                                         [?MODULE, StreamId, node(Pid), Err]),
-                      send_action_failed(StreamId, update_retention, Args)
-              catch _:Err ->
-                        rabbit_log:warning("~s: failed to update
+                                       [?MODULE, StreamId, node(Pid), Err]),
+                    send_action_failed(StreamId, update_retention, Args)
+            catch _:Err ->
+                    rabbit_log:warning("~s: failed to update
                                           retention for ~s ~w Error: ~w",
-                                           [?MODULE, StreamId, node(Pid), Err]),
-                        maybe_sleep(Err),
-                        send_action_failed(StreamId, update_retention, Args)
-              end
-      end).
-
+                                       [?MODULE, StreamId, node(Pid), Err]),
+                    maybe_sleep(Err),
+                    send_action_failed(StreamId, update_retention, Args)
+            end
+    end.
 
 get_replica_tail(Node, Conf) ->
     case rpc:call(Node, ?MODULE, log_overview, [Conf]) of
@@ -813,31 +805,30 @@ is_quorum(NumReplicas, NumAlive) ->
 
 phase_update_mnesia(StreamId, Args, #{reference := QName,
                                       leader_pid := LeaderPid} = Conf) ->
-
-    rabbit_log:debug("~s: running mnesia update for ~s: ~W",
-                     [?MODULE, StreamId, Conf, 10]),
-    Fun = fun (Q) ->
-                  amqqueue:set_type_state(amqqueue:set_pid(Q, LeaderPid), Conf)
-          end,
-    spawn(fun() ->
-                  try rabbit_misc:execute_mnesia_transaction(
-                         fun() ->
-                                 rabbit_amqqueue:update(QName, Fun)
-                         end) of
-                      not_found ->
-                          %% This can happen during recovery
-                          [Q] = mnesia:dirty_read(rabbit_durable_queue, QName),
-                          %% TODO: what is the possible return type here?
-                          _ = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q)),
-                          send_self_command({mnesia_updated, StreamId, Args});
-                      _ ->
-                          send_self_command({mnesia_updated, StreamId, Args})
-                  catch _:E ->
-                            rabbit_log:debug("~s: failed to update mnesia for ~s: ~W",
-                                             [?MODULE, StreamId, E, 10]),
-                            send_action_failed(StreamId, updating_mnesia, Args)
-                  end
-          end).
+    fun() ->
+            rabbit_log:debug("~s: running mnesia update for ~s: ~W",
+                             [?MODULE, StreamId, Conf, 10]),
+            Fun = fun (Q) ->
+                          amqqueue:set_type_state(amqqueue:set_pid(Q, LeaderPid), Conf)
+                  end,
+            try rabbit_misc:execute_mnesia_transaction(
+                  fun() ->
+                          rabbit_amqqueue:update(QName, Fun)
+                  end) of
+                not_found ->
+                    %% This can happen during recovery
+                    [Q] = mnesia:dirty_read(rabbit_durable_queue, QName),
+                    %% TODO: what is the possible return type here?
+                    _ = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q)),
+                    send_self_command({mnesia_updated, StreamId, Args});
+                _ ->
+                    send_self_command({mnesia_updated, StreamId, Args})
+            catch _:E ->
+                    rabbit_log:debug("~s: failed to update mnesia for ~s: ~W",
+                                     [?MODULE, StreamId, E, 10]),
+                    send_action_failed(StreamId, updating_mnesia, Args)
+            end
+    end.
 
 format_ra_event(ServerId, Evt) ->
     {stream_coordinator_event, ServerId, Evt}.
