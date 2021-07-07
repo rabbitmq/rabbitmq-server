@@ -257,6 +257,11 @@ end_per_testcase0(T, Config)
     [rabbit_ct_broker_helpers:delete_vhost(Config, Name)
      || #{name := Name} <- Vhosts],
     Config;
+end_per_testcase0(definitions_password_test, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 application, unset_env,
+                                 [rabbit, password_hashing_module]),
+    Config;
 end_per_testcase0(queues_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"downvhost">>),
     Config;
@@ -279,7 +284,7 @@ end_per_testcase0(user_limits_list_test, Config) ->
     Config;
 end_per_testcase0(user_limit_set_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_1">>),
-    rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_user_1_user">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_user_1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_1_user">>),
     Config;
 end_per_testcase0(permissions_vhost_test, Config) ->
