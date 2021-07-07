@@ -12,7 +12,7 @@ DEPS = [
 
 erlang_lib(
     app_name = "osiris",
-    app_version = "master",
+    app_version = "1.0.0",
     app_description = "New project",
     app_module = "osiris_app",
     app_env = APP_ENV,

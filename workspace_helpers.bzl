@@ -169,6 +169,8 @@ erlang_lib(
     github_bazel_erlang_lib(
         name = "osiris",
         org = "rabbitmq",
+        ref = "v1.0.0",
+        version = "1.0.0",
         build_file = rabbitmq_workspace + "//:BUILD.osiris",
     )
 
