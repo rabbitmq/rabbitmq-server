@@ -135,7 +135,7 @@ used to make the difference between a request (0) and a response (1). Example fo
 |9
 |No
 
-|<<commitoffset>>
+|<<storeoffset>>
 |Client
 |10
 |No
@@ -363,10 +363,10 @@ CreditResponse => Key Version ResponseCode SubscriptionId
 
 NB: the server sent a response only in case of problem, e.g. crediting an unknown subscription.
 
-=== CommitOffset
+=== StoreOffset
 
 ```
-CommitOffset => Key Version Reference Stream Offset
+StoreOffset => Key Version Reference Stream Offset
   Key => uint16 // 10
   Version => uint16
   Reference => string // max 256 characters
