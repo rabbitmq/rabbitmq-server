@@ -60,7 +60,7 @@ roundtrip(_Config) ->
     test_roundtrip({credit, 53, 12}),
     test_roundtrip({metadata_update, <<"stream1">>,
                     ?RESPONSE_VHOST_ACCESS_FAILURE}),
-    test_roundtrip({commit_offset, <<"offset_ref">>, <<"stream">>, 12}),
+    test_roundtrip({store_offset, <<"offset_ref">>, <<"stream">>, 12}),
     test_roundtrip(heartbeat),
     test_roundtrip({tune, 53, 12}),
     %% REQUESTS
