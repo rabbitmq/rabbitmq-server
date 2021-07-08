@@ -80,12 +80,6 @@ rabbitmq_integration_suite(
         ":rabbit_federation_test_util",
     ],
     flaky = True,
-    matrix = ct_group_matrix([
-        "without_automatic_setup",
-        "channel_use_mode_single",
-        "without_disambiguate",
-        "with_disambiguate",
-    ]),
 )
 
 rabbitmq_integration_suite(
@@ -103,10 +97,7 @@ rabbitmq_integration_suite(
         ":rabbit_federation_test_util",
     ],
     flaky = True,
-    matrix = ct_group_matrix([
-        "classic_queue",
-        "quorum_queue",
-    ]),
+    shard_count = 6,
 )
 
 rabbitmq_integration_suite(

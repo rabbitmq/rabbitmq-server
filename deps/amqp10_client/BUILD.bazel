@@ -89,13 +89,6 @@ rabbitmq_integration_suite(
     erlc_opts = [
         "-I deps/amqp10_client",
     ],
-    matrix = ct_group_matrix([
-        "rabbitmq",
-        "rabbitmq_strict",
-        "activemq",
-        "activemq_no_anon",
-        "mock",
-    ]),
     test_env = {
         "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq",
     },

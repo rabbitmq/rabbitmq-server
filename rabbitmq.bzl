@@ -5,7 +5,7 @@ load(
     "erlang_lib",
     "test_erlang_lib",
 )
-load("@bazel-erlang//:ct.bzl", "ct_suite", "ct_test")
+load("@bazel-erlang//:ct_sharded.bzl", "ct_suite")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 
