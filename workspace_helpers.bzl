@@ -178,6 +178,8 @@ erlang_lib(
         name = "prometheus",
         org = "deadtrickster",
         repo = "prometheus.erl",
+        ref = "v4.8.1",
+        version = "4.8.1",
         first_srcs = [
             "src/prometheus_collector.erl",
             "src/prometheus_format.erl",
