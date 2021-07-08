@@ -266,7 +266,7 @@ start_tcp_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount) ->
         listener_config(), rabbit_types:infos(), integer()) -> 'ok' | {'error', term()}.
 
 start_ssl_listener(Listener, SslOpts, NumAcceptors) ->
-    start_ssl_listener(Listener, SslOpts, NumAcceptors, 1).
+    start_ssl_listener(Listener, SslOpts, 1, NumAcceptors).
 
 -spec start_ssl_listener(
         listener_config(), rabbit_types:infos(), integer(), integer()) -> 'ok' | {'error', term()}.
