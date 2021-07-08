@@ -146,6 +146,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":rabbit_mgmt_runtime_parameters_util",
     ],
+    shard_count = 3,
 )
 
 rabbitmq_integration_suite(
