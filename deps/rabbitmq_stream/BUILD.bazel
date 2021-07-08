@@ -73,11 +73,6 @@ rabbitmq_integration_suite(
     ],
     data = glob(["test/rabbit_stream_SUITE_data/**/*"]),
     flaky = True,
-    matrix = ct_group_matrix([
-        "list_connections",
-        "list_consumers",
-        "list_publishers",
-    ]),
     deps = [
         "//deps/rabbitmq_stream_common:bazel_erlang_lib",
     ],
@@ -91,15 +86,6 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "rabbit_stream_SUITE",
-    matrix = {
-        "single_node": {
-            "groups": ["single_node"],
-        },
-        "cluster": {
-            "groups": ["cluster"],
-            "flaky": True,
-        },
-    },
     deps = [
         "//deps/rabbit:bazel_erlang_lib",
         "//deps/rabbitmq_stream_common:bazel_erlang_lib",
