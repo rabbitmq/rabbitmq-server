@@ -9,6 +9,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_bazel_erlang_lib(
         name = "accept",
         version = "0.3.5",
+        sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
     )
 
     github_bazel_erlang_lib(
@@ -107,6 +108,7 @@ erlang_lib(
     hex_pm_bazel_erlang_lib(
         name = "gen_batch_server",
         version = "0.8.6",
+        sha256 = "b78679349168f27d7047f3283c9d766760b234d98c762aca9a1907f4ee3fd406",
     )
 
     hex_pm_bazel_erlang_lib(
@@ -174,10 +176,10 @@ erlang_lib(
         build_file = rabbitmq_workspace + "//:BUILD.osiris",
     )
 
-    github_bazel_erlang_lib(
+    hex_pm_bazel_erlang_lib(
         name = "prometheus",
-        org = "deadtrickster",
-        repo = "prometheus.erl",
+        version = "4.8.1",
+        sha256 = "6edfbe928d271c7f657a6f2c46258738086584bd6cae4a000b8b9a6009ba23a5",
         first_srcs = [
             "src/prometheus_collector.erl",
             "src/prometheus_format.erl",
@@ -244,6 +246,7 @@ erlang_lib(
             "sasl",
             "crypto",
         ],
+        sha256 = "fd20039322eabed814d0dfe75743652846007ec93faae3e141c9602c21152b14",
     )
 
     hex_pm_bazel_erlang_lib(
