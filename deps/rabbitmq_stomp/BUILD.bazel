@@ -133,6 +133,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     PACKAGE,
     name = "python_SUITE",
+    flaky = True,
     matrix = ct_group_matrix([
         "tls",
         "implicit_connect",
