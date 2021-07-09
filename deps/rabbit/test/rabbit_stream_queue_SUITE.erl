@@ -39,7 +39,6 @@ groups() ->
      {single_node_parallel, [parallel], all_tests()},
      {cluster_size_2, [], [recover]},
      {cluster_size_2_parallel, [parallel], all_tests()},
-     {cluster_size_3, [], [recover]},
      {cluster_size_3, [],
           [restart_coordinator_without_queues,
            delete_down_replica,
