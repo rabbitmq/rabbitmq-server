@@ -34,19 +34,19 @@ rabbitmq_external_deps(rabbitmq_workspace = "@")
 git_repository(
     name = "rabbitmq_ct_helpers",
     branch = "v3.8.x",
+    remote = "https://github.com/rabbitmq/rabbitmq-ct-helpers.git",
     repo_mapping = {
         "@rabbitmq-server": "@",
     },
-    remote = "https://github.com/rabbitmq/rabbitmq-ct-helpers.git",
 )
 
 git_repository(
     name = "rabbitmq_ct_client_helpers",
     branch = "v3.8.x",
+    remote = "https://github.com/rabbitmq/rabbitmq-ct-client-helpers.git",
     repo_mapping = {
         "@rabbitmq-server": "@",
     },
-    remote = "https://github.com/rabbitmq/rabbitmq-ct-client-helpers.git",
 )
 
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")

@@ -184,10 +184,10 @@ erlang_lib(
         sha256 = "3418e319764b9dff1f469e43cbdffd7fd54ea47cbf765027c557abd146a19fb3",
     )
 
-    github_bazel_erlang_lib(
+    hex_pm_bazel_erlang_lib(
         name = "prometheus",
-        org = "deadtrickster",
-        repo = "prometheus.erl",
+        version = "4.6.0",
+        sha256 = "4905fd2992f8038eccd7aa0cd22f40637ed618c0bed1f75c05aacec15b7545de",
         first_srcs = [
             "src/prometheus_collector.erl",
             "src/prometheus_format.erl",
@@ -211,6 +211,7 @@ erlang_lib(
     hex_pm_bazel_erlang_lib(
         name = "quantile_estimator",
         version = "0.2.1",
+        sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
         erlc_opts = [
             "+debug_info",
         ],
