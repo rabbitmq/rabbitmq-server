@@ -207,6 +207,13 @@
           status = regular,
           context = #{}
         }).
+
+%% Runtime parameter access control list
+-record(runtime_parameters_acl, {
+            component,
+            disallowed_list = []
+        }).
+
 %%----------------------------------------------------------------------------
 
 -define(COPYRIGHT_MESSAGE, "Copyright (c) 2007-2021 VMware, Inc. or its affiliates.").
