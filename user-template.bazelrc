@@ -13,4 +13,4 @@ build --test_strategy=exclusive
 # don't re-run flakes automatically on the local machine
 build --flaky_test_attempts=1
 
-build:rbe --remote_header=x-buildbuddy-api-key=YOUR_API_KEY
+build:buildbuddy --remote_header=x-buildbuddy-api-key=YOUR_API_KEY
