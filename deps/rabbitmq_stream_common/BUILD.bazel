@@ -3,7 +3,6 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
-    "broker_for_integration_suites",
     "rabbitmq_lib",
     "rabbitmq_suite",
 )

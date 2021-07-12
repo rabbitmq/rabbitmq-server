@@ -1,6 +1,5 @@
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
-load("@bazel-erlang//:ct.bzl", "ct_suite")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",

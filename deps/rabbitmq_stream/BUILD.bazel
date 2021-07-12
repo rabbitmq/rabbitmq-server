@@ -4,11 +4,9 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
-    "RABBITMQ_TEST_ERLC_OPTS",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
-    "rabbitmq_suite",
 )
 
 APP_NAME = "rabbitmq_stream"
