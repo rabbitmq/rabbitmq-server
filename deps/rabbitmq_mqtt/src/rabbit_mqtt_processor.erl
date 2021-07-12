@@ -551,7 +551,7 @@ process_login(UserBin, PassBin, ProtoVersion,
                           peer_addr    = Addr}) ->
     {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
-    rabbit_log_connection:info(
+    rabbit_log_connection:debug(
         "MQTT vhost picked using ~s",
         [human_readable_vhost_lookup_strategy(VHostPickedUsing)]),
     RemoteAddress = list_to_binary(inet:ntoa(Addr)),
