@@ -7,8 +7,6 @@ load(
     "//:rabbitmq.bzl",
     "APP_VERSION",
     "RABBITMQ_DIALYZER_OPTS",
-    "RABBITMQ_ERLC_OPTS",
-    "RABBITMQ_TEST_ERLC_OPTS",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
 )

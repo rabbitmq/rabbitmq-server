@@ -1,7 +1,6 @@
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load(":elixir.bzl", "elixir")
-load("//:rabbitmq.bzl", "APP_VERSION")
 
 # This rule simply exposes elixir as a runtime lib for tests in erlang
 elixir(
