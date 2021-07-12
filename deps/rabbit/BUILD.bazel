@@ -543,6 +543,7 @@ suites = [
         PACKAGE,
         name = "per_vhost_connection_limit_SUITE",
         size = "medium",
+        flaky = True,
     ),
     rabbitmq_integration_suite(
         PACKAGE,
