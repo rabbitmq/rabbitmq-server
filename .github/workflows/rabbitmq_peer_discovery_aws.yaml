@@ -54,7 +54,7 @@ jobs:
 
           build --build_metadata=ROLE=CI
           build --build_metadata=VISIBILITY=PRIVATE
-          build --remote_instance_name=buildbuddy-io/buildbuddy/ci-aws
+          build --remote_instance_name=buildbuddy-io/buildbuddy/ci-aws-${{ matrix.erlang_version }}
           build --grpc_keepalive_time=30s
         EOF
     #! - name: Setup tmate session
