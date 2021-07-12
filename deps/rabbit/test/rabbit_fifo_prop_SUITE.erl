@@ -1,5 +1,6 @@
 -module(rabbit_fifo_prop_SUITE).
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -export([
@@ -38,6 +39,7 @@ all_tests() ->
      scenario12,
      scenario13,
      scenario14,
+     scenario14b,
      scenario15,
      scenario16,
      scenario17,
@@ -46,10 +48,19 @@ all_tests() ->
      scenario20,
      scenario21,
      scenario22,
+     scenario23,
+     scenario24,
+     scenario25,
+     scenario26,
+     scenario27,
+     scenario28,
+     scenario29,
+     scenario30,
      single_active,
      single_active_01,
      single_active_02,
      single_active_03,
+     single_active_04,
      single_active_ordering,
      single_active_ordering_01,
      single_active_ordering_03,
@@ -256,6 +267,16 @@ scenario14(_Config) ->
                         max_bytes => 1}, Commands),
     ok.
 
+scenario14b(_Config) ->
+    E = c:pid(0,217,0),
+    Commands = [
+                make_enqueue(E,1,<<0>>),
+                make_enqueue(E,2,<<0>>)
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_bytes => 1}, Commands),
+    ok.
+
 scenario15(_Config) ->
     C1 = {<<>>, c:pid(0,179,1)},
     E = c:pid(0,176,1),
@@ -345,7 +366,7 @@ scenario20(_Config) ->
     C1 = {<<>>, C1Pid},
     E = c:pid(0,176,1),
     Commands = [make_enqueue(E,1,<<>>),
-                make_enqueue(E,2,<<>>),
+                make_enqueue(E,2,<<1>>),
                 make_checkout(C1, {auto,2,simple_prefetch}),
                 {down, C1Pid, noconnection},
                 make_enqueue(E,3,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>),
@@ -355,7 +376,8 @@ scenario20(_Config) ->
                 make_enqueue(E,7,<<0,0,0,0,0,0,0,0,0,0,0,0,0,0>>)
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
-                        max_bytes => 97,
+                        max_length => 4,
+                        % max_bytes => 97,
                         max_in_memory_length => 1}, Commands),
     ok.
 
@@ -392,6 +414,229 @@ scenario22(_Config) ->
                         release_cursor_interval => 1,
                         max_length => 3,
                         dead_letter_handler => {?MODULE, banana, []}},
+                      Commands),
+    ok.
+
+scenario24(_Config) ->
+    C1Pid = c:pid(0,242,0),
+    C1 = {<<>>, C1Pid},
+    C2 = {<<0>>, C1Pid},
+    E = c:pid(0,240,0),
+    Commands = [
+                make_checkout(C1, {auto,2,simple_prefetch}), %% 1
+                make_checkout(C2, {auto,1,simple_prefetch}), %% 2
+                make_enqueue(E,1,<<"1">>), %% 3
+                make_enqueue(E,2,<<"2b">>), %% 4
+                make_enqueue(E,3,<<"3">>), %% 5
+                make_enqueue(E,4,<<"4">>), %% 6
+                {down, E, noconnection} %% 7
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        release_cursor_interval => 0,
+                        deliver_limit => undefined,
+                        max_length => 3,
+                        overflow_strategy => drop_head,
+                        dead_letter_handler => {?MODULE, banana, []}
+                       },
+                      Commands),
+    ok.
+
+scenario25(_Config) ->
+    C1Pid = c:pid(0,282,0),
+    C2Pid = c:pid(0,281,0),
+    C1 = {<<>>, C1Pid},
+    C2 = {<<>>, C2Pid},
+    E = c:pid(0,280,0),
+    Commands = [
+                make_checkout(C1, {auto,2,simple_prefetch}), %% 1
+                make_enqueue(E,1,<<0>>), %% 2
+                make_checkout(C2, {auto,1,simple_prefetch}), %% 3
+                make_enqueue(E,2,<<>>), %% 4
+                make_enqueue(E,3,<<>>), %% 5
+                {down, C1Pid, noproc}, %% 6
+                make_enqueue(E,4,<<>>), %% 7
+                rabbit_fifo:make_purge() %% 8
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        max_bytes => undefined,
+                        release_cursor_interval => 0,
+                        deliver_limit => undefined,
+                        overflow_strategy => drop_head,
+                        dead_letter_handler => {?MODULE, banana, []}
+                       },
+                      Commands),
+    ok.
+
+scenario26(_Config) ->
+    C1Pid = c:pid(0,242,0),
+    C1 = {<<>>, C1Pid},
+    E1 = c:pid(0,436,0),
+    E2 = c:pid(0,435,0),
+    Commands = [
+                make_enqueue(E1,2,<<>>), %% 1
+                make_enqueue(E1,3,<<>>), %% 2
+                make_enqueue(E2,1,<<>>), %% 3
+                make_enqueue(E2,2,<<>>), %% 4
+                make_enqueue(E1,4,<<>>), %% 5
+                make_enqueue(E1,5,<<>>), %% 6
+                make_enqueue(E1,6,<<>>), %% 7
+                make_enqueue(E1,7,<<>>), %% 8
+                make_enqueue(E1,1,<<>>), %% 9
+                make_checkout(C1, {auto,5,simple_prefetch}), %% 1
+                make_enqueue(E1,8,<<>>), %% 2
+                make_enqueue(E1,9,<<>>), %% 2
+                make_enqueue(E1,10,<<>>), %% 2
+                {down, C1Pid, noconnection}
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        release_cursor_interval => 0,
+                        deliver_limit => undefined,
+                        max_length => 8,
+                        overflow_strategy => drop_head,
+                        dead_letter_handler => {?MODULE, banana, []}
+                       },
+                      Commands),
+    ok.
+
+scenario28(_Config) ->
+    E = c:pid(0,151,0),
+    Conf = #{dead_letter_handler => {rabbit_fifo_prop_SUITE,banana,[]},
+             delivery_limit => undefined,
+             max_in_memory_bytes => undefined,
+             max_length => 1,name => ?FUNCTION_NAME,overflow_strategy => drop_head,
+             release_cursor_interval => 100,single_active_consumer_on => false},
+    Commands = [
+                make_enqueue(E,2, <<>>),
+                make_enqueue(E,3, <<>>),
+                make_enqueue(E,1, <<>>)
+               ],
+    ?assert(single_active_prop(Conf, Commands, false)),
+    ok.
+
+scenario27(_Config) ->
+    C1Pid = test_util:fake_pid(fakenode@fake),
+    % C2Pid = c:pid(0,281,0),
+    C1 = {<<>>, C1Pid},
+    C2 = {<<>>, C1Pid},
+    E = c:pid(0,151,0),
+    E2 = c:pid(0,152,0),
+    Commands = [
+                make_enqueue(E,1,<<>>),
+                make_enqueue(E2,1,<<28,202>>),
+                make_enqueue(E,2,<<"Î2">>),
+                {down, E, noproc},
+                make_enqueue(E2,2,<<"ê">>),
+                {nodeup,fakenode@fake},
+                make_enqueue(E2,3,<<>>),
+                make_enqueue(E2,4,<<>>),
+                make_enqueue(E2,5,<<>>),
+                make_enqueue(E2,6,<<>>),
+                make_enqueue(E2,7,<<>>),
+                make_enqueue(E2,8,<<>>),
+                make_enqueue(E2,9,<<>>),
+                {purge},
+                make_enqueue(E2,10,<<>>),
+                make_enqueue(E2,11,<<>>),
+                make_enqueue(E2,12,<<>>),
+                make_enqueue(E2,13,<<>>),
+                make_enqueue(E2,14,<<>>),
+                make_enqueue(E2,15,<<>>),
+                make_enqueue(E2,16,<<>>),
+                make_enqueue(E2,17,<<>>),
+                make_enqueue(E2,18,<<>>),
+                {nodeup,fakenode@fake},
+                make_enqueue(E2,19,<<>>),
+                make_checkout(C1, {auto,77,simple_prefetch}),
+                make_enqueue(E2,20,<<>>),
+                make_enqueue(E2,21,<<>>),
+                make_enqueue(E2,22,<<>>),
+                make_enqueue(E2,23,<<"Ýý">>),
+                make_checkout(C2, {auto,66,simple_prefetch}),
+                {purge},
+                make_enqueue(E2,24,<<>>)
+               ],
+    ?assert(
+       single_active_prop(#{name => ?FUNCTION_NAME,
+                            max_bytes => undefined,
+                            release_cursor_interval => 100,
+                            deliver_limit => 1,
+                            max_bytes => undefined,
+                            max_length => 1,
+                            max_in_memory_length => 8,
+                            max_in_memory_bytes => 691,
+                            overflow_strategy => drop_head,
+                            single_active_consumer_on => true,
+                            dead_letter_handler => {?MODULE, banana, []}
+                           }, Commands, false)),
+    ok.
+
+scenario30(_Config) ->
+    C1Pid = c:pid(0,242,0),
+    C1 = {<<>>, C1Pid},
+    E = c:pid(0,240,0),
+    Commands = [
+                make_enqueue(E,1,<<>>), %% 1
+                make_enqueue(E,2,<<1>>), %% 2
+                make_checkout(C1, {auto,1,simple_prefetch}), %% 3
+                {down, C1Pid, noconnection}, %% 4
+                make_enqueue(E,3,<<>>) %% 5
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        release_cursor_interval => 0,
+                        deliver_limit => undefined,
+                        max_length => 1,
+                        max_in_memory_length => 1,
+                        overflow_strategy => drop_head,
+                        dead_letter_handler => {?MODULE, banana, []},
+                        single_active_consumer_on => true
+                       },
+                      Commands),
+    ok.
+scenario29(_Config) ->
+    C1Pid = c:pid(0,242,0),
+    C1 = {<<>>, C1Pid},
+    E = c:pid(0,240,0),
+    Commands = [
+                make_enqueue(E,1,<<>>), %% 1
+                make_enqueue(E,2,<<>>), %% 2
+                make_checkout(C1, {auto,2,simple_prefetch}), %% 2
+                make_enqueue(E,3,<<>>), %% 3
+                make_enqueue(E,4,<<>>), %% 4
+                make_enqueue(E,5,<<>>), %% 5
+                make_enqueue(E,6,<<>>), %% 6
+                make_enqueue(E,7,<<>>), %% 7
+                {down, E, noconnection} %% 8
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        release_cursor_interval => 0,
+                        deliver_limit => undefined,
+                        max_length => 5,
+                        max_in_memory_length => 1,
+                        overflow_strategy => drop_head,
+                        dead_letter_handler => {?MODULE, banana, []},
+                        single_active_consumer_on => true
+                       },
+                      Commands),
+    ok.
+scenario23(_Config) ->
+    C1Pid = c:pid(0,242,0),
+    C1 = {<<>>, C1Pid},
+    E = c:pid(0,240,0),
+    Commands = [
+                make_enqueue(E,1,<<>>), %% 1
+                make_checkout(C1, {auto,2,simple_prefetch}), %% 2
+                make_enqueue(E,2,<<>>), %% 3
+                make_enqueue(E,3,<<>>), %% 4
+                {down, E, noconnection}, %% 5
+                make_enqueue(E,4,<<>>) %% 6
+               ],
+    run_snapshot_test(#{name => ?FUNCTION_NAME,
+                        release_cursor_interval => 0,
+                        deliver_limit => undefined,
+                        max_length => 2,
+                        overflow_strategy => drop_head,
+                        dead_letter_handler => {?MODULE, banana, []}
+                       },
                       Commands),
     ok.
 
@@ -447,6 +692,27 @@ single_active_03(_Config) ->
                 {nodeup, node()}
                 ],
     Conf = config(?FUNCTION_NAME, 0, 0, true, 0, undefined, undefined),
+    ?assert(single_active_prop(Conf, Commands, true)),
+    ok.
+
+single_active_04(_Config) ->
+    % C1Pid = test_util:fake_pid(node()),
+    % C1 = {<<0>>, C1Pid},
+    % C2Pid = test_util:fake_pid(rabbit@fake_node2),
+    % C2 = {<<>>, C2Pid},
+    % Pid = test_util:fake_pid(node()),
+    E = test_util:fake_pid(rabbit@fake_node2),
+    Commands = [
+
+                % make_checkout(C1, {auto,2,simple_prefetch}),
+                make_enqueue(E, 1, <<>>),
+                make_enqueue(E, 2, <<>>),
+                make_enqueue(E, 3, <<>>),
+                make_enqueue(E, 4, <<>>)
+                % {down, Pid, noconnection},
+                % {nodeup, node()}
+                ],
+    Conf = config(?FUNCTION_NAME, 3, 587, true, 3, 7, undefined),
     ?assert(single_active_prop(Conf, Commands, true)),
     ok.
 
@@ -507,7 +773,7 @@ snapshots(_Config) ->
       end, [], 2500).
 
 single_active(_Config) ->
-    Size = 2000,
+    Size = 300,
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, InMemoryLength, InMemoryBytes},
@@ -520,12 +786,12 @@ single_active(_Config) ->
                                      }}]),
                       begin
                           Config  = config(?FUNCTION_NAME,
-                                               Length,
-                                               Bytes,
-                                               true,
-                                               DeliveryLimit,
-                                               InMemoryLength,
-                                               InMemoryBytes),
+                                           Length,
+                                           Bytes,
+                                           true,
+                                           DeliveryLimit,
+                                           InMemoryLength,
+                                           InMemoryBytes),
                       ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
                               collect({log_size, length(O)},
                                       single_active_prop(Config, O, false)))
@@ -771,6 +1037,8 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
                                          end, Consumers),
                         map_size(Up) =< 1
                 end,
+
+    % ct:pal("State: ~p~n ~p~n", [Conf, Entries]),
     try run_log(test_init(Conf), Entries, Invariant) of
         {_State, Effects} when ValidateOrder ->
             % ct:pal("Effects: ~p~n", [Effects]),
@@ -1124,7 +1392,7 @@ run_snapshot_test(Conf, Commands) ->
     ct:pal("running snapshot test with ~b commands using config ~p",
            [length(Commands), Conf]),
     [begin
-         % ?debugFmt("~w running command to ~w~n", [?FUNCTION_NAME, lists:last(C)]),
+         % ct:pal("~w running commands to ~w~n", [?FUNCTION_NAME, lists:last(C)]),
          run_snapshot_test0(Conf, C)
      end || C <- prefixes(Commands, 1, [])].
 
@@ -1133,13 +1401,14 @@ run_snapshot_test0(Conf, Commands) ->
     Entries = lists:zip(Indexes, Commands),
     {State0, Effects} = run_log(test_init(Conf), Entries),
     State = rabbit_fifo:normalize(State0),
+    Cursors = [ C || {release_cursor, _, _} = C <- Effects],
 
     [begin
-         % ct:pal("release_cursor: ~b~n", [SnapIdx]),
          %% drop all entries below and including the snapshot
          Filtered = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
                                        (_) -> false
                                     end, Entries),
+         % ct:pal("release_cursor: ~b from ~w~n", [SnapIdx, element(1, hd_or(Filtered))]),
          {S0, _} = run_log(SnapState, Filtered),
          S = rabbit_fifo:normalize(S0),
          % assert log can be restored from any release cursor index
@@ -1153,8 +1422,11 @@ run_snapshot_test0(Conf, Commands) ->
                  ct:pal("Expected~n~p~nGot:~n~p", [State, S]),
                  ?assertEqual(State, S)
          end
-     end || {release_cursor, SnapIdx, SnapState} <- Effects],
+     end || {release_cursor, SnapIdx, SnapState} <- Cursors],
     ok.
+
+hd_or([H | _]) -> H;
+hd_or(_) -> {undefined}.
 
 %% transforms [1,2,3] into [[1,2,3], [1,2], [1]]
 prefixes(Source, N, Acc) when N > length(Source) ->

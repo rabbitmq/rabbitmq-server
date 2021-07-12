@@ -14,7 +14,7 @@
 
 %% the empty atom is a lot smaller (4 bytes) than e.g. `undefined` (13 bytes).
 %% This matters as the data map gets persisted as part of the snapshot
--define(NIL, '').
+-define(NIL, []).
 
 -record(?MODULE, {data = #{} :: #{integer() => ?NIL},
                   smallest :: undefined | non_neg_integer(),
