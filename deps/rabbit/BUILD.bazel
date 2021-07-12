@@ -9,6 +9,7 @@ load(
     "RABBITMQ_DIALYZER_OPTS",
     "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
     "rabbitmq_suite",
@@ -305,724 +306,631 @@ erlc(
     ],
 )
 
-rabbitmq_suite(
-    name = "amqqueue_backward_compatibility_SUITE",
-    size = "small",
-)
-
 PACKAGE = "deps/rabbit"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "backing_queue_SUITE",
-    size = "large",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "channel_interceptor_SUITE",
-    size = "medium",
-    additional_srcs = [
-        "test/dummy_interceptor.erl",
-        "test/failing_dummy_interceptor.erl",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "channel_operation_timeout_SUITE",
-    size = "medium",
-    additional_srcs = [
-        "test/channel_operation_timeout_test_queue.erl",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "cluster_rename_SUITE",
-    size = "medium",
-    flaky = True,
-    shard_count = 2,
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "cluster_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "clustering_management_SUITE",
-    size = "large",
-    flaky = True,
-    shard_count = 4,
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
-    size = "medium",
-    data = [
-        "test/definition_import_SUITE_data/case1.json",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "confirms_rejects_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "consumer_timeout_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "crashing_queues_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "dead_lettering_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-    flaky = True,
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "definition_import_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "disconnect_detected_during_alarm_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "dynamic_ha_SUITE",
-    size = "large",
-    flaky = True,
-    shard_count = 20,
-    sharding_method = "case",
-    deps = [
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "dynamic_qq_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-    deps = [
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "eager_sync_SUITE",
-    size = "large",
-    additional_beam = [
-        ":sync_detection_SUITE_beam_files",
-    ],
-    flaky = True,
-    shard_count = 5,
-    sharding_method = "case",
-    tags = ["classic-queue"],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "feature_flags_SUITE",
-    size = "large",
-    flaky = True,
-    shard_count = 5,
-    # The enabling_* tests chmod files and then expect writes to be blocked.
-    # This probably doesn't work because we are root in the remote docker image.
-    tags = ["exclusive"],
-    runtime_deps = [
-        "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "lazy_queue_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "list_consumers_sanity_check_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "list_queues_online_and_offline_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "maintenance_mode_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "many_node_ha_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":rabbit_ha_test_consumer",
-        ":rabbit_ha_test_producer",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "message_size_limit_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "metrics_SUITE",
-    size = "medium",
-    deps = [
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "mirrored_supervisor_SUITE",
-    size = "small",
-    additional_srcs = [
-        "test/mirrored_supervisor_SUITE_gs.erl",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "msg_store_SUITE",
-    size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "peer_discovery_classic_config_SUITE",
-    size = "medium",
-    flaky = True,
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "peer_discovery_dns_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "per_user_connection_channel_limit_partitions_SUITE",
-    size = "large",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "per_user_connection_channel_limit_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "per_user_connection_channel_tracking_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "per_user_connection_tracking_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "per_vhost_connection_limit_partitions_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "per_vhost_connection_limit_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "per_vhost_msg_store_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "per_vhost_queue_limit_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "policy_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "priority_queue_recovery_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "priority_queue_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "product_info_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "proxy_protocol_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "publisher_confirms_parallel_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "queue_length_limits_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "queue_master_location_SUITE",
-    size = "medium",
-    shard_count = 2,
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "queue_parallel_SUITE",
-    size = "large",
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-    flaky = True,
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "quorum_queue_SUITE",
-    size = "large",
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-    flaky = True,
-    shard_count = 6,
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_core_metrics_gc_SUITE",
-    size = "medium",
-)
-
-rabbitmq_suite(
-    name = "rabbit_fifo_int_SUITE",
-    size = "small",
-    runtime_deps = [
-        "@aten//:bazel_erlang_lib",
-        "@gen_batch_server//:bazel_erlang_lib",
-        "@meck//:bazel_erlang_lib",
-        "@ra//:bazel_erlang_lib",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "rabbit_fifo_prop_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":test_util",
-    ],
-    additional_hdrs = [
-        "src/rabbit_fifo.hrl",
-    ],
-    erlc_opts = [
-        "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-    ],
-    runtime_deps = [
-        "@ra//:bazel_erlang_lib",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "rabbit_fifo_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":test_util",
-        ":rabbit_fifo_v0_SUITE_beam_files",
-    ],
-    additional_hdrs = [
-        "src/rabbit_fifo.hrl",
-    ],
-    erlc_opts = [
-        "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-    ],
-    runtime_deps = [
-        "@meck//:bazel_erlang_lib",
-        "@ra//:bazel_erlang_lib",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "rabbit_fifo_v0_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":test_util",
-    ],
-    additional_hdrs = [
-        "src/rabbit_fifo_v0.hrl",
-    ],
-    erlc_opts = [
-        "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-    ],
-    runtime_deps = [
-        "@meck//:bazel_erlang_lib",
-        "@ra//:bazel_erlang_lib",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbitmq_queues_cli_integration_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbitmqctl_integration_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbitmqctl_shutdown_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "signal_handling_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "simple_ha_SUITE",
-    size = "large",
-    additional_beam = [
-        ":rabbit_ha_test_consumer",
-        ":rabbit_ha_test_producer",
-    ],
-    shard_count = 4,
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "single_active_consumer_SUITE",
-    size = "medium",
-    additional_beam = [
-        ":quorum_queue_utils",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "sync_detection_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "term_to_binary_compat_prop_SUITE",
-    deps = [
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "topic_permission_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_access_control_authn_authz_context_propagation_SUITE",
-    size = "medium",
-    additional_srcs = [
-        "test/rabbit_auth_backend_context_propagation_mock.erl",
-        "test/rabbit_foo_protocol_connection_info.erl",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_access_control_credential_validation_SUITE",
-    size = "medium",
-    deps = [
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_access_control_SUITE",
-    size = "medium",
-    additional_srcs = [
-        "test/rabbit_dummy_protocol_connection_info.erl",
-    ],
-)
-
-rabbitmq_suite(
-    name = "unit_amqp091_content_framing_SUITE",
-    size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_amqp091_server_properties_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_app_management_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "unit_cluster_formation_locking_mocks_SUITE",
-    size = "small",
-    runtime_deps = [
-        "@meck//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "unit_collections_SUITE",
-    size = "small",
-    runtime_deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "unit_config_value_encryption_SUITE",
-    size = "medium",
-    runtime_deps = [
-        "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
-        "//deps/rabbit_common:test_bazel_erlang_lib",
-        "@credentials_obfuscation//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_connection_tracking_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_credit_flow_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_disk_monitor_mocks_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_disk_monitor_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_file_handle_cache_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_gen_server2_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "unit_gm_SUITE",
-    size = "small",
-    runtime_deps = [
-        "@meck//:bazel_erlang_lib",
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "unit_log_config_SUITE",
-    size = "small",
-    runtime_deps = [
-        "@syslog//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_log_management_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "unit_operator_policy_SUITE",
-    size = "small",
-    deps = [
-        "//deps/rabbit_common:test_bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "unit_pg_local_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "unit_plugin_directories_SUITE",
-    size = "small",
-    deps = [
-        "//deps/rabbit_common:test_bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_plugin_versioning_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_policy_validators_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "unit_priority_queue_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "unit_queue_consumers_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_stats_and_metrics_SUITE",
-    size = "small",
-    additional_srcs = [
-        "test/dummy_event_receiver.erl",
-    ],
-)
-
-rabbitmq_suite(
-    name = "unit_supervisor2_SUITE",
-    size = "small",
-    additional_srcs = [
-        "test/dummy_supervisor2.erl",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_vm_memory_monitor_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "upgrade_preparation_SUITE",
-    size = "medium",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "vhost_SUITE",
-    size = "medium",
-    flaky = True,
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "backing_queue_SUITE",
+        size = "large",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "channel_interceptor_SUITE",
+        size = "medium",
+        additional_srcs = [
+            "test/dummy_interceptor.erl",
+            "test/failing_dummy_interceptor.erl",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "channel_operation_timeout_SUITE",
+        size = "medium",
+        additional_srcs = [
+            "test/channel_operation_timeout_test_queue.erl",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "cluster_rename_SUITE",
+        size = "medium",
+        flaky = True,
+        shard_count = 2,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "cluster_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "clustering_management_SUITE",
+        size = "large",
+        flaky = True,
+        shard_count = 4,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+        size = "medium",
+        data = [
+            "test/definition_import_SUITE_data/case1.json",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "confirms_rejects_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "consumer_timeout_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":quorum_queue_utils",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "crashing_queues_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "dead_lettering_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":quorum_queue_utils",
+        ],
+        flaky = True,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "definition_import_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "disconnect_detected_during_alarm_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "dynamic_ha_SUITE",
+        size = "large",
+        flaky = True,
+        shard_count = 20,
+        sharding_method = "case",
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "dynamic_qq_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":quorum_queue_utils",
+        ],
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "eager_sync_SUITE",
+        size = "large",
+        additional_beam = [
+            ":sync_detection_SUITE_beam_files",
+        ],
+        flaky = True,
+        shard_count = 5,
+        sharding_method = "case",
+        tags = ["classic-queue"],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "feature_flags_SUITE",
+        size = "large",
+        flaky = True,
+        shard_count = 5,
+        # The enabling_* tests chmod files and then expect writes to be blocked.
+        # This probably doesn't work because we are root in the remote docker image.
+        tags = ["exclusive"],
+        runtime_deps = [
+            "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "lazy_queue_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "list_consumers_sanity_check_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "list_queues_online_and_offline_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "maintenance_mode_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":quorum_queue_utils",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "many_node_ha_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":rabbit_ha_test_consumer",
+            ":rabbit_ha_test_producer",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "message_size_limit_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "metrics_SUITE",
+        size = "medium",
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "mirrored_supervisor_SUITE",
+        size = "small",
+        additional_srcs = [
+            "test/mirrored_supervisor_SUITE_gs.erl",
+        ],
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "msg_store_SUITE",
+        size = "small",
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "peer_discovery_classic_config_SUITE",
+        size = "medium",
+        flaky = True,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "peer_discovery_dns_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "per_user_connection_channel_limit_partitions_SUITE",
+        size = "large",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "per_user_connection_channel_limit_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "per_user_connection_channel_tracking_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "per_user_connection_tracking_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "per_vhost_connection_limit_partitions_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "per_vhost_connection_limit_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "per_vhost_msg_store_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "per_vhost_queue_limit_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "policy_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "priority_queue_recovery_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "priority_queue_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "product_info_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "proxy_protocol_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "publisher_confirms_parallel_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":quorum_queue_utils",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "queue_length_limits_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "queue_master_location_SUITE",
+        size = "medium",
+        shard_count = 2,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "queue_parallel_SUITE",
+        size = "large",
+        additional_beam = [
+            ":quorum_queue_utils",
+        ],
+        flaky = True,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "quorum_queue_SUITE",
+        size = "large",
+        additional_beam = [
+            ":quorum_queue_utils",
+        ],
+        flaky = True,
+        shard_count = 6,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_core_metrics_gc_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_suite(
+        name = "rabbit_fifo_int_SUITE",
+        size = "small",
+        runtime_deps = [
+            "@aten//:bazel_erlang_lib",
+            "@gen_batch_server//:bazel_erlang_lib",
+            "@meck//:bazel_erlang_lib",
+            "@ra//:bazel_erlang_lib",
+        ],
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "rabbit_fifo_prop_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":test_util",
+        ],
+        additional_hdrs = [
+            "src/rabbit_fifo.hrl",
+        ],
+        erlc_opts = [
+            "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
+        ],
+        runtime_deps = [
+            "@ra//:bazel_erlang_lib",
+        ],
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "rabbit_fifo_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":test_util",
+            ":rabbit_fifo_v0_SUITE_beam_files",
+        ],
+        additional_hdrs = [
+            "src/rabbit_fifo.hrl",
+        ],
+        erlc_opts = [
+            "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
+        ],
+        runtime_deps = [
+            "@meck//:bazel_erlang_lib",
+            "@ra//:bazel_erlang_lib",
+        ],
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "rabbit_fifo_v0_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":test_util",
+        ],
+        additional_hdrs = [
+            "src/rabbit_fifo_v0.hrl",
+        ],
+        erlc_opts = [
+            "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
+        ],
+        runtime_deps = [
+            "@meck//:bazel_erlang_lib",
+            "@ra//:bazel_erlang_lib",
+        ],
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbitmq_queues_cli_integration_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbitmqctl_integration_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbitmqctl_shutdown_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "signal_handling_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "simple_ha_SUITE",
+        size = "large",
+        additional_beam = [
+            ":rabbit_ha_test_consumer",
+            ":rabbit_ha_test_producer",
+        ],
+        shard_count = 4,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "single_active_consumer_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":quorum_queue_utils",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "sync_detection_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "term_to_binary_compat_prop_SUITE",
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "topic_permission_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_access_control_authn_authz_context_propagation_SUITE",
+        size = "medium",
+        additional_srcs = [
+            "test/rabbit_auth_backend_context_propagation_mock.erl",
+            "test/rabbit_foo_protocol_connection_info.erl",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_access_control_credential_validation_SUITE",
+        size = "medium",
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_access_control_SUITE",
+        size = "medium",
+        additional_srcs = [
+            "test/rabbit_dummy_protocol_connection_info.erl",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "unit_amqp091_content_framing_SUITE",
+        size = "small",
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_amqp091_server_properties_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_app_management_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_cluster_formation_locking_mocks_SUITE",
+        size = "small",
+        runtime_deps = [
+            "@meck//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "unit_collections_SUITE",
+        size = "small",
+        runtime_deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "unit_config_value_encryption_SUITE",
+        size = "medium",
+        runtime_deps = [
+            "//deps/rabbit/apps/rabbitmq_prelaunch:test_bazel_erlang_lib",
+            "//deps/rabbit_common:test_bazel_erlang_lib",
+            "@credentials_obfuscation//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_connection_tracking_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_credit_flow_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_disk_monitor_mocks_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_disk_monitor_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_file_handle_cache_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_gen_server2_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_gm_SUITE",
+        size = "small",
+        runtime_deps = [
+            "@meck//:bazel_erlang_lib",
+            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "unit_log_config_SUITE",
+        size = "small",
+        runtime_deps = [
+            "@syslog//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_log_management_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_operator_policy_SUITE",
+        size = "small",
+        deps = [
+            "//deps/rabbit_common:test_bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "unit_pg_local_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_plugin_directories_SUITE",
+        size = "small",
+        deps = [
+            "//deps/rabbit_common:test_bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_plugin_versioning_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_policy_validators_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_priority_queue_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_queue_consumers_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_stats_and_metrics_SUITE",
+        size = "small",
+        additional_srcs = [
+            "test/dummy_event_receiver.erl",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "unit_supervisor2_SUITE",
+        size = "small",
+        additional_srcs = [
+            "test/dummy_supervisor2.erl",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_vm_memory_monitor_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "upgrade_preparation_SUITE",
+        size = "medium",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

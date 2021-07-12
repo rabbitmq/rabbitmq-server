@@ -111,6 +111,7 @@ def rabbitmq_suite(deps = [], erlc_opts = [], test_env = {}, **kwargs):
         }.items() + test_env.items()),
         **kwargs
     )
+    return kwargs["name"]
 
 def broker_for_integration_suites():
     rabbitmq_home(
@@ -165,3 +166,10 @@ def rabbitmq_integration_suite(
         ] + deps,
         **kwargs
     )
+    return kwargs["name"]
+
+def assert_suites(suite_names, suite_files):
+    for f in suite_files:
+        sn = f.rpartition("/")[-1].replace(".erl", "")
+        if not sn in suite_names:
+            fail("A bazel rule has not been defined for {} (expected {} in {}".format(f, sn, suite_names))
