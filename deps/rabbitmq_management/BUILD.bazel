@@ -4,6 +4,7 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -86,110 +87,105 @@ erlc(
     ],
 )
 
-rabbitmq_suite(
-    name = "cache_SUITE",
-    size = "small",
-    runtime_deps = [
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
-    deps = [
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
 PACKAGE = "deps/rabbitmq_management"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "clustering_prop_SUITE",
-    size = "large",
-    deps = [
-        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
-        "@proper//:bazel_erlang_lib",
-    ],
-)
+suites = [
+    rabbitmq_suite(
+        name = "cache_SUITE",
+        size = "small",
+        runtime_deps = [
+            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+        ],
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "clustering_prop_SUITE",
+        size = "large",
+        deps = [
+            "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "clustering_SUITE",
+        flaky = True,
+        deps = [
+            "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "listener_config_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_mgmt_http_health_checks_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_mgmt_http_SUITE",
+        size = "large",
+        additional_beam = [
+            ":rabbit_mgmt_runtime_parameters_util",
+        ],
+        shard_count = 3,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_mgmt_only_http_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_mgmt_rabbitmqadmin_SUITE",
+        additional_beam = [
+            ":rabbit_mgmt_runtime_parameters_util",
+        ],
+        data = [
+            ":bin/rabbitmqadmin",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "rabbit_mgmt_stats_SUITE",
+        size = "small",
+        runtime_deps = [
+            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+        ],
+        deps = [
+            "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_mgmt_test_db_SUITE",
+        deps = [
+            "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "rabbit_mgmt_test_unit_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "stats_SUITE",
+        size = "small",
+        deps = [
+            "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "clustering_SUITE",
-    flaky = True,
-    deps = [
-        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "listener_config_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_mgmt_http_health_checks_SUITE",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_mgmt_http_SUITE",
-    size = "large",
-    additional_beam = [
-        ":rabbit_mgmt_runtime_parameters_util",
-    ],
-    shard_count = 3,
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_mgmt_only_http_SUITE",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_mgmt_rabbitmqadmin_SUITE",
-    additional_beam = [
-        ":rabbit_mgmt_runtime_parameters_util",
-    ],
-    data = [
-        ":bin/rabbitmqadmin",
-    ],
-)
-
-rabbitmq_suite(
-    name = "rabbit_mgmt_stats_SUITE",
-    size = "small",
-    runtime_deps = [
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
-    deps = [
-        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_mgmt_test_db_SUITE",
-    deps = [
-        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "rabbit_mgmt_test_unit_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "stats_SUITE",
-    size = "small",
-    deps = [
-        "//deps/rabbitmq_management_agent:bazel_erlang_lib",
-        "@proper//:bazel_erlang_lib",
-    ],
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

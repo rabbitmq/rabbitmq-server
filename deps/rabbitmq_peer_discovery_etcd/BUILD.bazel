@@ -3,6 +3,7 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -46,18 +47,23 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_peer_discovery_etcd"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "system_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_SUITE",
+        size = "small",
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "system_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "unit_SUITE",
-    size = "small",
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

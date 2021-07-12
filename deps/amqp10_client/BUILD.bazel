@@ -1,10 +1,10 @@
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
-load("@bazel-erlang//:ct.bzl", "ct_group_matrix")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
+    "assert_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
     "rabbitmq_suite",
@@ -52,11 +52,6 @@ dialyze(
     tags = ["dialyze"],
 )
 
-rabbitmq_suite(
-    name = "msg_SUITE",
-    deps = DEPS,
-)
-
 rabbitmq_home(
     name = "broker-for-tests-home",
     plugins = [
@@ -72,25 +67,36 @@ rabbitmq_run(
 
 PACKAGE = "deps/amqp10_client"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "system_SUITE",
-    size = "medium",
-    additional_hdrs = [
-        "src/amqp10_client.hrl",
-    ],
-    additional_srcs = [
-        "test/activemq_ct_helpers.erl",
-        "test/mock_server.erl",
-    ],
-    data = [
-        "@activemq//:exec_dir",
-    ],
-    erlc_opts = [
-        "-I deps/amqp10_client",
-    ],
-    test_env = {
-        "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq",
-    },
-    deps = DEPS,
+suites = [
+    rabbitmq_suite(
+        name = "msg_SUITE",
+        deps = DEPS,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "system_SUITE",
+        size = "medium",
+        additional_hdrs = [
+            "src/amqp10_client.hrl",
+        ],
+        additional_srcs = [
+            "test/activemq_ct_helpers.erl",
+            "test/mock_server.erl",
+        ],
+        data = [
+            "@activemq//:exec_dir",
+        ],
+        erlc_opts = [
+            "-I deps/amqp10_client",
+        ],
+        test_env = {
+            "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq",
+        },
+        deps = DEPS,
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

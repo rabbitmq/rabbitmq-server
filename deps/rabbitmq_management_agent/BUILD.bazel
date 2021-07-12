@@ -3,6 +3,7 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -74,33 +75,37 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_management_agent"
 
-rabbitmq_suite(
-    name = "exometer_slide_SUITE",
-    size = "small",
-    deps = [
-        "@proper//:bazel_erlang_lib",
-    ],
-)
+suites = [
+    rabbitmq_suite(
+        name = "exometer_slide_SUITE",
+        size = "small",
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "metrics_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_mgmt_gc_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "rabbit_mgmt_slide_SUITE",
+        size = "small",
+        runtime_deps = [
+            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+        ],
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "metrics_SUITE",
-    size = "small",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_mgmt_gc_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "rabbit_mgmt_slide_SUITE",
-    size = "small",
-    runtime_deps = [
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
-    deps = [
-        "@proper//:bazel_erlang_lib",
-    ],
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

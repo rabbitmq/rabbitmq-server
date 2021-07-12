@@ -1,11 +1,11 @@
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
-load("@bazel-erlang//:ct.bzl", "ct_group_matrix")
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -73,50 +73,61 @@ erlc(
 
 PACKAGE = "deps/rabbitmq_federation"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "exchange_SUITE",
-    additional_beam = [
-        ":rabbit_federation_test_util",
-    ],
-    flaky = True,
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "exchange_SUITE",
+        additional_beam = [
+            ":rabbit_federation_test_util",
+        ],
+        flaky = True,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "federation_status_command_SUITE",
+        additional_beam = [
+            ":rabbit_federation_test_util",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "queue_SUITE",
+        additional_beam = [
+            ":rabbit_federation_test_util",
+        ],
+        flaky = True,
+        shard_count = 6,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_federation_status_SUITE",
+        additional_beam = [
+            ":rabbit_federation_test_util",
+            ":exchange_SUITE_beam_files",
+            ":queue_SUITE_beam_files",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "restart_federation_link_command_SUITE",
+        additional_beam = [
+            ":rabbit_federation_test_util",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_inbroker_SUITE",
+    ),
+    rabbitmq_suite(
+        name = "unit_SUITE",
+        deps = [
+            "//deps/amqp_client:bazel_erlang_lib",
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "federation_status_command_SUITE",
-    additional_beam = [
-        ":rabbit_federation_test_util",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "queue_SUITE",
-    additional_beam = [
-        ":rabbit_federation_test_util",
-    ],
-    flaky = True,
-    shard_count = 6,
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "restart_federation_link_command_SUITE",
-    additional_beam = [
-        ":rabbit_federation_test_util",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_inbroker_SUITE",
-)
-
-rabbitmq_suite(
-    name = "unit_SUITE",
-    deps = [
-        "//deps/amqp_client:bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

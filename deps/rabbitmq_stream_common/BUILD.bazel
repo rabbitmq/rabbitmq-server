@@ -3,6 +3,7 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "rabbitmq_lib",
     "rabbitmq_suite",
 )
@@ -11,13 +12,9 @@ APP_NAME = "rabbitmq_stream_common"
 
 APP_DESCRIPTION = "RabbitMQ Stream Common"
 
-DEPS = [
-]
-
 rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
-    deps = DEPS,
 )
 
 xref(tags = ["xref"])
@@ -28,6 +25,13 @@ dialyze(
     tags = ["dialyze"],
 )
 
-rabbitmq_suite(
-    name = "rabbit_stream_core_SUITE",
+suites = [
+    rabbitmq_suite(
+        name = "rabbit_stream_core_SUITE",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

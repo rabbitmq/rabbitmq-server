@@ -3,6 +3,7 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -35,15 +36,21 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_sharding"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_hash_exchange_SUITE",
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_hash_exchange_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_sharding_SUITE",
+        deps = [
+            "//deps/rabbit:bazel_erlang_lib",
+        ],
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_sharding_SUITE",
-    deps = [
-        "//deps/rabbit:bazel_erlang_lib",
-    ],
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

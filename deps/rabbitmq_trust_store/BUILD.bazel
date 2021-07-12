@@ -1,4 +1,3 @@
-load("@bazel-erlang//:ct.bzl", "ct_group_matrix")
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
@@ -6,6 +5,7 @@ load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
 )
@@ -79,17 +79,23 @@ rabbitmq_run(
 
 PACKAGE = "deps/rabbitmq_trust_store"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "system_SUITE",
+        flaky = True,
+        runtime_deps = [
+            "@ct_helper//:bazel_erlang_lib",
+            "@trust_store_http//:bazel_erlang_lib",
+        ],
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "system_SUITE",
-    flaky = True,
-    runtime_deps = [
-        "@ct_helper//:bazel_erlang_lib",
-        "@trust_store_http//:bazel_erlang_lib",
-    ],
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )
