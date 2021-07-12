@@ -208,10 +208,11 @@
       Module :: module(),
       Args :: term().
 start_link(Mod, Args) ->
-    case Mod of
-        rabbit_channel_sup ->
+    case lists:suffix("_sup", atom_to_list(Mod)) of
+        true ->
+            %% hibernate supervisors
             gen_server:start_link(?MODULE, {self, Mod, Args}, [{hibernate_after, 1000}]);
-        _ ->
+        false ->
             gen_server:start_link(?MODULE, {self, Mod, Args}, [])
     end.
 
