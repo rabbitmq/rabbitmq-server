@@ -88,10 +88,6 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "system_SUITE",
     flaky = True,
-    matrix = ct_group_matrix([
-        "file_provider_tests",
-        "http_provider_tests",
-    ]),
     runtime_deps = [
         "@ct_helper//:bazel_erlang_lib",
         "@trust_store_http//:bazel_erlang_lib",

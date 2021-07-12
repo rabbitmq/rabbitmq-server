@@ -25,11 +25,12 @@ all() ->
      {group, cluster_size_2},
      {group, cluster_size_2_parallel},
      {group, cluster_size_3},
+     {group, cluster_size_3_1},
+     {group, cluster_size_3_2},
      {group, cluster_size_3_parallel},
      {group, unclustered_size_3_1},
      {group, unclustered_size_3_2},
-     {group, unclustered_size_3_3},
-     {group, cluster_size_3_1}
+     {group, unclustered_size_3_3}
     ].
 
 groups() ->
@@ -38,7 +39,6 @@ groups() ->
      {single_node_parallel, [parallel], all_tests()},
      {cluster_size_2, [], [recover]},
      {cluster_size_2_parallel, [parallel], all_tests()},
-     {cluster_size_3, [], [recover]},
      {cluster_size_3, [],
           [restart_coordinator_without_queues,
            delete_down_replica,
@@ -48,6 +48,8 @@ groups() ->
            add_replicas,
            publish_coordinator_unavailable,
            leader_locator_policy]},
+     {cluster_size_3_1, [], [shrink_coordinator_cluster]},
+     {cluster_size_3_2, [], [recover]},
      {cluster_size_3_parallel, [parallel], [delete_replica,
                                             delete_last_replica,
                                             delete_classic_replica,
@@ -61,8 +63,7 @@ groups() ->
                                             leader_locator_least_leaders] ++ all_tests()},
      {unclustered_size_3_1, [], [add_replica]},
      {unclustered_size_3_2, [], [consume_without_local_replica]},
-     {unclustered_size_3_3, [], [grow_coordinator_cluster]},
-     {cluster_size_3_1, [], [shrink_coordinator_cluster]}
+     {unclustered_size_3_3, [], [grow_coordinator_cluster]}
     ].
 
 all_tests() ->
@@ -126,6 +127,7 @@ init_per_group(Group, Config) ->
                       cluster_size_3 -> 3;
                       cluster_size_3_parallel -> 3;
                       cluster_size_3_1 -> 3;
+                      cluster_size_3_2 -> 3;
                       unclustered_size_3_1 -> 3;
                       unclustered_size_3_2 -> 3;
                       unclustered_size_3_3 -> 3

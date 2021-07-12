@@ -134,11 +134,7 @@ rabbitmq_integration_suite(
     PACKAGE,
     name = "python_SUITE",
     flaky = True,
-    matrix = ct_group_matrix([
-        "tls",
-        "implicit_connect",
-        "main",
-    ]),
+    shard_count = 3,
 )
 
 rabbitmq_integration_suite(
