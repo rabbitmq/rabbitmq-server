@@ -75,5 +75,5 @@ rabbitmq-server-*.zip
 traces*
 callgrand*
 
-/.bazelrc
+/user.bazelrc
 /bazel-*
