@@ -18,9 +18,9 @@ buildbuddy(name = "buildbuddy_toolchain")
 
 http_archive(
     name = "bazel-erlang",
-    sha256 = "098975fca1be2cd68d24bb8eefaf16e113f9ccb777bb4345f04cc7590d5c9cb7",
-    strip_prefix = "bazel-erlang-1.0.0",
-    urls = ["https://github.com/rabbitmq/bazel-erlang/archive/refs/tags/1.0.0.zip"],
+    sha256 = "422a9222522216f59a01703a13f578c601d6bddf5617bee8da3c43e3b299fc4e",
+    strip_prefix = "bazel-erlang-1.1.0",
+    urls = ["https://github.com/rabbitmq/bazel-erlang/archive/refs/tags/1.1.0.zip"],
 )
 
 load("@bazel-erlang//:bazel_erlang.bzl", "bazel_erlang_deps")
