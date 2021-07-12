@@ -3,6 +3,7 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -53,36 +54,41 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_peer_discovery_aws"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
-    size = "small",
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+        size = "small",
+    ),
+    # NOTE: integration_SUITE requires aws credentials and a docker image.
+    # They can be supplied with:
+    # --test_env AWS_ACCESS_KEY_ID=... --test_env AWS_SECRET_ACCESS_KEY=...
+    # --test_env RABBITMQ_IMAGE=...
+    # bazel args
+    rabbitmq_suite(
+        name = "integration_SUITE",
+        size = "large",
+        additional_srcs = [
+            "test/aws_ecs_util.erl",
+        ],
+        tags = [
+            "aws",
+            "external",
+        ],
+        deps = [
+            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "unit_SUITE",
+        size = "small",
+        runtime_deps = [
+            "@meck//:bazel_erlang_lib",
+        ],
+    ),
+]
 
-# NOTE: integration_SUITE requires aws credentials and a docker image.
-# They can be supplied with:
-# --test_env AWS_ACCESS_KEY_ID=... --test_env AWS_SECRET_ACCESS_KEY=...
-# --test_env RABBITMQ_IMAGE=...
-# bazel args
-rabbitmq_suite(
-    name = "integration_SUITE",
-    size = "large",
-    additional_srcs = [
-        "test/aws_ecs_util.erl",
-    ],
-    tags = [
-        "aws",
-        "external",
-    ],
-    deps = [
-        "@rabbitmq_ct_helpers//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "unit_SUITE",
-    size = "small",
-    runtime_deps = [
-        "@meck//:bazel_erlang_lib",
-    ],
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

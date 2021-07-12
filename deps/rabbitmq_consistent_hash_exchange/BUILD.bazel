@@ -3,6 +3,7 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -44,7 +45,14 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_consistent_hash_exchange"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_exchange_type_consistent_hash_SUITE",
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_exchange_type_consistent_hash_SUITE",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

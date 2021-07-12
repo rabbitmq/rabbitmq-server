@@ -3,6 +3,7 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -64,26 +65,31 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_auth_backend_http"
 
-rabbitmq_suite(
-    name = "auth_SUITE",
-    size = "small",
-    additional_srcs = [
-        "test/auth_http_mock.erl",
-    ],
-    runtime_deps = [
-        "@cowboy//:bazel_erlang_lib",
-    ],
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
+suites = [
+    rabbitmq_suite(
+        name = "auth_SUITE",
+        size = "small",
+        additional_srcs = [
+            "test/auth_http_mock.erl",
+        ],
+        runtime_deps = [
+            "@cowboy//:bazel_erlang_lib",
+        ],
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_suite(
+        name = "unit_SUITE",
+        size = "small",
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
-)
-
-rabbitmq_suite(
-    name = "unit_SUITE",
-    size = "small",
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

@@ -1,9 +1,9 @@
-load("@bazel-erlang//:ct.bzl", "ct_group_matrix")
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -63,29 +63,34 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_stream"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "commands_SUITE",
-    additional_beam = [
-        ":rabbit_stream_SUITE_beam_files",
-    ],
-    data = glob(["test/rabbit_stream_SUITE_data/**/*"]),
-    flaky = True,
-    deps = [
-        "//deps/rabbitmq_stream_common:bazel_erlang_lib",
-    ],
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "commands_SUITE",
+        additional_beam = [
+            ":rabbit_stream_SUITE_beam_files",
+        ],
+        data = glob(["test/rabbit_stream_SUITE_data/**/*"]),
+        flaky = True,
+        deps = [
+            "//deps/rabbitmq_stream_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_stream_SUITE",
+        deps = [
+            "//deps/rabbit:bazel_erlang_lib",
+            "//deps/rabbitmq_stream_common:bazel_erlang_lib",
+        ],
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_stream_SUITE",
-    deps = [
-        "//deps/rabbit:bazel_erlang_lib",
-        "//deps/rabbitmq_stream_common:bazel_erlang_lib",
-    ],
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

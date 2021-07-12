@@ -5,6 +5,7 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -73,44 +74,46 @@ erlc(
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "amqp_stomp_SUITE",
-    additional_beam = [
-        ":test_util",
-    ],
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "amqp_stomp_SUITE",
+        additional_beam = [
+            ":test_util",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "cowboy_websocket_SUITE",
+        additional_beam = [
+            ":test_util",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "proxy_protocol_SUITE",
+        additional_beam = [
+            ":test_util",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "raw_websocket_SUITE",
+        additional_beam = [
+            ":test_util",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "unit_SUITE",
+        size = "small",
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "cowboy_websocket_SUITE",
-    additional_beam = [
-        ":test_util",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "proxy_protocol_SUITE",
-    additional_beam = [
-        ":test_util",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "raw_websocket_SUITE",
-    additional_beam = [
-        ":test_util",
-    ],
-)
-
-rabbitmq_suite(
-    name = "unit_SUITE",
-    size = "small",
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )
