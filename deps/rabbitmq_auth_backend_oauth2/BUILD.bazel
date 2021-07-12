@@ -5,6 +5,7 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -64,60 +65,61 @@ erlc(
 
 PACKAGE = "deps/rabbitmq_auth_backend_oauth2"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "add_uaa_key_command_SUITE",
-    size = "small",
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "add_uaa_key_command_SUITE",
+        size = "small",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "jwks_SUITE",
+        additional_beam = [
+            ":rabbit_auth_backend_oauth2_test_util",
+        ],
+        additional_srcs = [
+            "test/jwks_http_app.erl",
+            "test/jwks_http_handler.erl",
+            "test/jwks_http_sup.erl",
+        ],
+        runtime_deps = [
+            "@cowboy//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "scope_SUITE",
+        size = "small",
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "system_SUITE",
+        size = "small",
+        additional_beam = [
+            ":rabbit_auth_backend_oauth2_test_util",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "unit_SUITE",
+        size = "small",
+        additional_beam = [
+            ":rabbit_auth_backend_oauth2_test_util",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "wildcard_match_SUITE",
+        size = "small",
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "jwks_SUITE",
-    additional_beam = [
-        ":rabbit_auth_backend_oauth2_test_util",
-    ],
-    additional_srcs = [
-        "test/jwks_http_app.erl",
-        "test/jwks_http_handler.erl",
-        "test/jwks_http_sup.erl",
-    ],
-    runtime_deps = [
-        "@cowboy//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "scope_SUITE",
-    size = "small",
-    deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "system_SUITE",
-    size = "small",
-    additional_beam = [
-        ":rabbit_auth_backend_oauth2_test_util",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "unit_SUITE",
-    size = "small",
-    additional_beam = [
-        ":rabbit_auth_backend_oauth2_test_util",
-    ],
-)
-
-rabbitmq_suite(
-    name = "wildcard_match_SUITE",
-    size = "small",
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

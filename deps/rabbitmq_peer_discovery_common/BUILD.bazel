@@ -5,6 +5,7 @@ load(
     "RABBITMQ_DIALYZER_OPTS",
     "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -70,7 +71,14 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_peer_discovery_common"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

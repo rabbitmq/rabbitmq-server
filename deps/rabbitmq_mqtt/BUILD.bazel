@@ -5,6 +5,7 @@ load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -97,83 +98,80 @@ erlc(
 
 PACKAGE = "deps/rabbitmq_mqtt"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "auth_SUITE",
-    additional_beam = [
-        ":rabbit_auth_backend_mqtt_mock",
-    ],
-    runtime_deps = [
-        "@emqttc//:bazel_erlang_lib",
-    ],
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "auth_SUITE",
+        additional_beam = [
+            ":rabbit_auth_backend_mqtt_mock",
+        ],
+        runtime_deps = [
+            "@emqttc//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "cluster_SUITE",
+        runtime_deps = [
+            "@emqttc//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "command_SUITE",
+        runtime_deps = [
+            "@emqttc//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "java_SUITE",
+        flaky = True,
+    ),
+    rabbitmq_suite(
+        name = "mqtt_machine_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "processor_SUITE",
+        size = "small",
+        deps = [
+            "//deps/amqp_client:bazel_erlang_lib",
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "proxy_protocol_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "reader_SUITE",
+        runtime_deps = [
+            "@emqttc//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "retainer_SUITE",
+        runtime_deps = [
+            "@emqttc//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "util_SUITE",
+        size = "small",
+        data = [
+            "test/rabbitmq_mqtt.app",
+        ],
+    ),
+]
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "cluster_SUITE",
-    runtime_deps = [
-        "@emqttc//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "command_SUITE",
-    runtime_deps = [
-        "@emqttc//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "java_SUITE",
-    flaky = True,
-)
-
-rabbitmq_suite(
-    name = "mqtt_machine_SUITE",
-    size = "small",
-)
-
-rabbitmq_suite(
-    name = "processor_SUITE",
-    size = "small",
-    deps = [
-        "//deps/amqp_client:bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "proxy_protocol_SUITE",
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "reader_SUITE",
-    runtime_deps = [
-        "@emqttc//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "retainer_SUITE",
-    runtime_deps = [
-        "@emqttc//:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "util_SUITE",
-    size = "small",
-    data = [
-        "test/rabbitmq_mqtt.app",
-    ],
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

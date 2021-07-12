@@ -1,8 +1,11 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -61,17 +64,36 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_web_mqtt"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "config_schema_SUITE",
+erlc(
+    name = "test_utils",
+    srcs = glob(["test/src/*.erl"]),
+    hdrs = glob(["test/src/*.hrl"]),
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "proxy_protocol_SUITE",
-    additional_hdrs = glob(["test/src/*.hrl"]),
-    additional_srcs = glob(["test/src/*.erl"]),
-    erlc_opts = [
-        "-I deps/rabbitmq_web_mqtt/test",
-    ],
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "proxy_protocol_SUITE",
+        additional_beam = [":test_utils"],
+        additional_hdrs = glob(["test/src/*.hrl"]),
+        erlc_opts = [
+            "-I deps/rabbitmq_web_mqtt/test",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "system_SUITE",
+        additional_beam = [":test_utils"],
+        additional_hdrs = glob(["test/src/*.hrl"]),
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

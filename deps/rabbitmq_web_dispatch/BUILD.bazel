@@ -7,6 +7,7 @@ load(
     "//:rabbitmq.bzl",
     "APP_VERSION",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
 )
@@ -79,12 +80,18 @@ rabbitmq_run(
 
 PACKAGE = "deps/rabbitmq_web_dispatch"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rabbit_web_dispatch_SUITE",
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_web_dispatch_SUITE",
+    ),
+    rabbitmq_suite(
+        name = "rabbit_web_dispatch_unit_SUITE",
+        size = "small",
+    ),
+]
 
-rabbitmq_suite(
-    name = "rabbit_web_dispatch_unit_SUITE",
-    size = "small",
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

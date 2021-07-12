@@ -6,12 +6,13 @@ load(
 )
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
-load("@bazel-erlang//:ct.bzl", "ct_suite")
 load(
     "//:rabbitmq.bzl",
     "APP_VERSION",
     "RABBITMQ_ERLC_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
+    "rabbitmq_suite",
 )
 
 py_binary(
@@ -106,18 +107,22 @@ dialyze(
     tags = ["dialyze"],
 )
 
-ct_suite(
-    name = "binary_generator_SUITE",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
-)
+suites = [
+    rabbitmq_suite(
+        name = "binary_generator_SUITE",
+        deps = [
+            "@lager//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "binary_parser_SUITE",
+        deps = [
+            "@lager//:bazel_erlang_lib",
+        ],
+    ),
+]
 
-ct_suite(
-    name = "binary_parser_SUITE",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        "@lager//:bazel_erlang_lib",
-    ],
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

@@ -8,7 +8,7 @@
 -module(system_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
--include("emqttc_packet.hrl").
+-include("src/emqttc_packet.hrl").
 
 -compile(export_all).
 

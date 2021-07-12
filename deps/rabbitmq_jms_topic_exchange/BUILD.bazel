@@ -3,6 +3,7 @@ load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
@@ -48,21 +49,26 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_jms_topic_exchange"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "rjms_topic_selector_SUITE",
-)
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rjms_topic_selector_SUITE",
+    ),
+    rabbitmq_suite(
+        name = "rjms_topic_selector_unit_SUITE",
+        size = "small",
+        deps = [
+            "//deps/amqp_client:bazel_erlang_lib",
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "sjx_evaluation_SUITE",
+        size = "small",
+    ),
+]
 
-rabbitmq_suite(
-    name = "rjms_topic_selector_unit_SUITE",
-    size = "small",
-    deps = [
-        "//deps/amqp_client:bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_suite(
-    name = "sjx_evaluation_SUITE",
-    size = "small",
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

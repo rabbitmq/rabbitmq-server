@@ -1,8 +1,19 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc")
+load(
+    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "app_file",
+    "bazel_erlang_lib",
+    "erlc",
+)
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
-load("@bazel-erlang//:ct.bzl", "ct_test")
-load("//:rabbitmq.bzl", "APP_VERSION", "RABBITMQ_ERLC_OPTS", "RABBITMQ_TEST_ERLC_OPTS")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
+    "rabbitmq_suite",
+)
 
 py_binary(
     name = "codegen",
@@ -186,120 +197,40 @@ dialyze(
     tags = ["dialyze"],
 )
 
-erlc(
-    name = "rabbit_env_SUITE_beam_files",
-    testonly = True,
-    srcs = ["test/rabbit_env_SUITE.erl"],
-    hdrs = HDRS,
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        ":test_bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
-    ],
-)
+suites = [
+    rabbitmq_suite(
+        name = "rabbit_env_SUITE",
+        size = "small",
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "supervisor2_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_priority_queue_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_SUITE",
+        size = "medium",
+        additional_srcs = [
+            "test/gen_server2_test_server.erl",
+        ],
+        deps = [
+            "@credentials_obfuscation//:bazel_erlang_lib",
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "worker_pool_SUITE",
+        size = "small",
+    ),
+]
 
-ct_test(
-    name = "rabbit_env_SUITE",
-    size = "small",
-    compiled_suites = [":rabbit_env_SUITE_beam_files"],
-    deps = [
-        ":test_bazel_erlang_lib",
-        "//deps/rabbit:test_bazel_erlang_lib",
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
-erlc(
-    name = "supervisor2_SUITE_beam_files",
-    testonly = True,
-    srcs = ["test/supervisor2_SUITE.erl"],
-    hdrs = HDRS,
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        ":test_bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
-    ],
-)
-
-ct_test(
-    name = "supervisor2_SUITE",
-    size = "small",
-    compiled_suites = [":supervisor2_SUITE_beam_files"],
-    deps = [
-        ":test_bazel_erlang_lib",
-    ],
-)
-
-erlc(
-    name = "unit_priority_queue_SUITE_beam_files",
-    testonly = True,
-    srcs = ["test/unit_priority_queue_SUITE.erl"],
-    hdrs = HDRS,
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        ":test_bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
-    ],
-)
-
-ct_test(
-    name = "unit_priority_queue_SUITE",
-    size = "small",
-    compiled_suites = [":unit_priority_queue_SUITE_beam_files"],
-    deps = [
-        ":test_bazel_erlang_lib",
-    ],
-)
-
-erlc(
-    name = "unit_SUITE_beam_files",
-    testonly = True,
-    srcs = [
-        "test/gen_server2_test_server.erl",
-        "test/unit_SUITE.erl",
-    ],
-    hdrs = HDRS,
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        ":test_bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
-ct_test(
-    name = "unit_SUITE",
-    size = "medium",
-    compiled_suites = [":unit_SUITE_beam_files"],
-    deps = [
-        ":test_bazel_erlang_lib",
-        "@credentials_obfuscation//:bazel_erlang_lib",
-        "@proper//:bazel_erlang_lib",
-    ],
-)
-
-erlc(
-    name = "worker_pool_SUITE_beam_files",
-    testonly = True,
-    srcs = ["test/worker_pool_SUITE.erl"],
-    hdrs = HDRS,
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = [
-        ":test_bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
-    ],
-)
-
-ct_test(
-    name = "worker_pool_SUITE",
-    size = "small",
-    compiled_suites = [":worker_pool_SUITE_beam_files"],
-    deps = [
-        ":test_bazel_erlang_lib",
-    ],
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

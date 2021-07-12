@@ -5,6 +5,7 @@ load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
     "rabbitmq_integration_suite",
     "rabbitmq_lib",
 )
@@ -61,7 +62,14 @@ rabbitmq_run(
 
 PACKAGE = "deps/rabbitmq_shovel_management"
 
-rabbitmq_integration_suite(
-    PACKAGE,
-    name = "http_SUITE",
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "http_SUITE",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )
