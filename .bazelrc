@@ -1,0 +1,31 @@
+build --incompatible_strict_action_env
+
+build:rbe --remote_executor=grpcs://cloud.buildbuddy.io
+build:rbe --host_platform=//:erlang_24_platform
+build:rbe --platforms=//:erlang_24_platform
+build:rbe --extra_execution_platforms=//:erlang_24_platform
+
+build:rbe --crosstool_top=@buildbuddy_toolchain//:toolchain
+build:rbe --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
+build:rbe --javabase=@buildbuddy_toolchain//:javabase_jdk8
+build:rbe --host_javabase=@buildbuddy_toolchain//:javabase_jdk8
+build:rbe --java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+build:rbe --host_java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+
+build:rbe --@bazel-erlang//:erlang_version=24
+build:rbe --@bazel-erlang//:erlang_home=/usr/lib/erlang
+build:rbe --//:elixir_home=/usr/local
+
+build:rbe --bes_results_url=https://app.buildbuddy.io/invocation/
+build:rbe --bes_backend=grpcs://cloud.buildbuddy.io
+build:rbe --remote_cache=grpcs://cloud.buildbuddy.io
+build:rbe --remote_timeout=1200
+
+build:rbe --spawn_strategy=remote
+build:rbe --test_strategy=""
+build:rbe --jobs=50
+
+# Try importing a user specific .bazelrc
+# You can create your own by copying and editing the template-user.bazelrc template:
+# cp template-user.bazelrc user.bazelrc
+try-import %workspace%/user.bazelrc
