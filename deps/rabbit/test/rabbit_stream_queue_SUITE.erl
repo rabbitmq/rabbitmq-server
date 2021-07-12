@@ -186,7 +186,6 @@ merge_app_env(Config) ->
                                       {rabbit, [{core_metrics_gc_interval, 100}]}).
 
 end_per_testcase(Testcase, Config) ->
-    Q = ?config(queue_name, Config),
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
                 rabbit_ct_client_helpers:teardown_steps()),

@@ -1018,16 +1018,14 @@ update_stream0(#{system_time := _Ts},
                             _ ->
                                 false
                         end,
-
     case maps:get(Node, Members0) of
         #member{role = {replica, Epoch},
                 current = {stopping, Idx},
                 state = _} = Member0
           when IsLeaderInCurrent ->
             %% A leader has already been selected so skip straight to ready state
-            Member = Member0#member{state = {ready, Epoch},
-                                    target = Target,
-                                    current = undefined},
+            Member = update_target(Member0#member{state = {ready, Epoch},
+                                                  current = undefined}, Target),
             Members1 = Members0#{Node => Member},
             Stream0#stream{members = Members1};
         #member{role = {_, Epoch},
@@ -1037,9 +1035,8 @@ update_stream0(#{system_time := _Ts},
             %% epoch
             Member = case StoppedEpoch of
                          Epoch ->
-                             Member0#member{state = {stopped, StoppedEpoch, Tail},
-                                            target = Target,
-                                            current = undefined};
+                             update_target(Member0#member{state = {stopped, StoppedEpoch, Tail},
+                                                          current = undefined}, Target);
                          _ ->
                              %% if stopped epoch is from another epoch
                              %% leave target as is to retry stop in current term
@@ -1518,3 +1515,8 @@ set_running_to_stopped(Members) ->
                      M
              end, Members).
 
+update_target(#member{target = deleted} = Member, _) ->
+    %% A deleted member can never transition to another state
+    Member;
+update_target(Member, Target) ->
+    Member#member{target = Target}.
