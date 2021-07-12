@@ -26,7 +26,8 @@ platform(
     ],
     exec_properties = {
         "OSFamily": "Linux",
-        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:1a0335f16ae7e91559441f5b831d0809907fc38743ba66b23b980b77b1d3c33e",
+        # linux-erlang-23.3
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:16439a9c4a519d39acc098fdc4d4002f60d6f19762423e71eac24af85f5fddb7",
     },
 )
 
@@ -39,7 +40,8 @@ platform(
     ],
     exec_properties = {
         "OSFamily": "Linux",
-        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:09d379e889dedfa492736584721d74e580d35b31ee2b3f996320872d1f76505e",
+        # linux-erlang-24.0
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:6d9871a3002bd61a09918f789cd5d9fc744a1d01182f010a7eeba66bce9689d2",
     },
 )
 
