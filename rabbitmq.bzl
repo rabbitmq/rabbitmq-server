@@ -188,7 +188,7 @@ def rabbitmq_integration_suite(
         **kwargs
     )
 
-    return kwargs["name"]
+    return name
 
 def assert_suites(suite_names, suite_files):
     for f in suite_files:

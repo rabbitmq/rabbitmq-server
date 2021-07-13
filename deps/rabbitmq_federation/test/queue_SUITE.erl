@@ -117,10 +117,15 @@ init_per_group(cluster_size_1 = Group, Config) ->
       ]),
     init_per_group1(Group, Config1);
 init_per_group(cluster_size_2 = Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 2}
-      ]),
-    init_per_group1(Group, Config1).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            Config1 = rabbit_ct_helpers:set_config(Config, [
+                {rmq_nodes_count, 2}
+            ]),
+            init_per_group1(Group, Config1)
+    end.
 
 init_per_group1(Group, Config) ->
     SetupFederation = case Group of

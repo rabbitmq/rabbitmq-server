@@ -42,30 +42,37 @@ groups() ->
     ].
 
 init_per_suite(Config) ->
-    inets:start(),
-    rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(
-                Config, [
-                         {ecs_region, "eu-west-1"},
-                         {ecs_cluster_name, os:getenv("AWS_ECS_CLUSTER_NAME", "rabbitmq-peer-discovery-aws")},
-                         {ecs_profile_name, "rabbitmq-peer-discovery-aws-profile"},
-                         {ecs_instance_role, "ecs-peer-discovery-aws"},
-                         {ecs_cluster_size, ?CLUSTER_SIZE},
-                         {rabbitmq_default_user, "test"},
-                         {rabbitmq_default_pass, rabbit_ct_helpers:random_term_checksum()},
-                         {rabbitmq_erlang_cookie, rabbit_ct_helpers:random_term_checksum()}
-                        ]),
-    Config2 = rabbit_ct_helpers:register_teardown_step(Config1, fun aws_ecs_util:destroy_ecs_cluster/1),
-    rabbit_ct_helpers:run_steps(
-      Config2, [
-                fun rabbit_ct_helpers:init_skip_as_error_flag/1,
-                fun rabbit_ct_helpers:start_long_running_testsuite_monitor/1,
-                fun aws_ecs_util:ensure_aws_cli/1,
-                fun aws_ecs_util:ensure_ecs_cli/1,
-                fun aws_ecs_util:init_aws_credentials/1,
-                fun aws_ecs_util:ensure_rabbitmq_image/1,
-                fun aws_ecs_util:start_ecs_cluster/1
-               ]).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% These test would like passed in mixed versions, but they won't
+            %% actually honor mixed versions as currently specified via env var
+            {skip, "not mixed versions compatible"};
+        _ ->
+            inets:start(),
+            rabbit_ct_helpers:log_environment(),
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config, [
+                                {ecs_region, "eu-west-1"},
+                                {ecs_cluster_name, os:getenv("AWS_ECS_CLUSTER_NAME", "rabbitmq-peer-discovery-aws")},
+                                {ecs_profile_name, "rabbitmq-peer-discovery-aws-profile"},
+                                {ecs_instance_role, "ecs-peer-discovery-aws"},
+                                {ecs_cluster_size, ?CLUSTER_SIZE},
+                                {rabbitmq_default_user, "test"},
+                                {rabbitmq_default_pass, rabbit_ct_helpers:random_term_checksum()},
+                                {rabbitmq_erlang_cookie, rabbit_ct_helpers:random_term_checksum()}
+                                ]),
+            Config2 = rabbit_ct_helpers:register_teardown_step(Config1, fun aws_ecs_util:destroy_ecs_cluster/1),
+            rabbit_ct_helpers:run_steps(
+            Config2, [
+                        fun rabbit_ct_helpers:init_skip_as_error_flag/1,
+                        fun rabbit_ct_helpers:start_long_running_testsuite_monitor/1,
+                        fun aws_ecs_util:ensure_aws_cli/1,
+                        fun aws_ecs_util:ensure_ecs_cli/1,
+                        fun aws_ecs_util:init_aws_credentials/1,
+                        fun aws_ecs_util:ensure_rabbitmq_image/1,
+                        fun aws_ecs_util:start_ecs_cluster/1
+                    ])
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).

@@ -91,6 +91,10 @@ end_per_group(_, Config) ->
     Steps = Teardown0 ++ Teardown1,
     rabbit_ct_helpers:run_teardown_steps(Config, Steps).
 
+init_per_testcase(Testcase, Config)
+        when Testcase == is_quorum_critical_test
+            orelse Testcase == is_mirror_sync_critical_test ->
+    {skip, "not mixed versions compatible"};
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
