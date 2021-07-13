@@ -137,13 +137,15 @@ init_per_group1(Group, Config) ->
                                           rabbit_ct_broker_helpers:setup_steps() ++
                                               rabbit_ct_client_helpers:setup_steps() ++
                                               SetupFederation ++ Disambiguate),
-    case ?config(queue_type, Config2) of
+    case ?config(target_queue_type, Config2) of
         quorum ->
             case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
                 ok ->
                     Config2;
-                Skip ->
-                    Skip
+                {skip, Skip} ->
+                    Skip;
+                Other ->
+                    {skip, Other}
             end;
         _ ->
             Config2
