@@ -25,19 +25,13 @@ jobs:
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
           build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${{ matrix.erlang_version }}
-
-          build:rbe --host_platform=//:erlang_${{ matrix.erlang_version }}_platform
-          build:rbe --platforms=//:erlang_${{ matrix.erlang_version }}_platform
-          build:rbe --extra_execution_platforms=//:erlang_${{ matrix.erlang_version }}_platform
-
-          build:rbe --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
       run: |
         bazelisk test //... \
-          --config=rbe \
+          --config=rbe-${{ matrix.erlang_version }} \
           --test_tag_filters=-exclusive,-aws \
           --verbose_failures
   test-exclusive:
