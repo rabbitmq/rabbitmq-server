@@ -10,9 +10,6 @@ build:buildbuddy --build_metadata=REPO_URL=https://github.com/rabbitmq/rabbitmq-
 build:rbe --config=buildbuddy
 
 build:rbe --remote_executor=grpcs://cloud.buildbuddy.io
-build:rbe --host_platform=//:erlang_24_platform
-build:rbe --platforms=//:erlang_24_platform
-build:rbe --extra_execution_platforms=//:erlang_24_platform
 
 build:rbe --crosstool_top=@buildbuddy_toolchain//:toolchain
 build:rbe --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
@@ -21,13 +18,24 @@ build:rbe --host_javabase=@buildbuddy_toolchain//:javabase_jdk8
 build:rbe --java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
 build:rbe --host_java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
 
-build:rbe --@bazel-erlang//:erlang_version=24
 build:rbe --@bazel-erlang//:erlang_home=/usr/lib/erlang
 build:rbe --//:elixir_home=/usr/local
 
 build:rbe --spawn_strategy=remote
 build:rbe --test_strategy=""
 build:rbe --jobs=50
+
+build:rbe-23 --config=rbe
+build:rbe-23 --host_platform=//:erlang_23_platform
+build:rbe-23 --platforms=//:erlang_23_platform
+build:rbe-23 --extra_execution_platforms=//:erlang_23_platform
+build:rbe-23 --@bazel-erlang//:erlang_version=23
+
+build:rbe-24 --config=rbe
+build:rbe-24 --host_platform=//:erlang_24_platform
+build:rbe-24 --platforms=//:erlang_24_platform
+build:rbe-24 --extra_execution_platforms=//:erlang_24_platform
+build:rbe-24 --@bazel-erlang//:erlang_version=24
 
 # Try importing a user specific .bazelrc
 # You can create your own by copying and editing the template-user.bazelrc template:

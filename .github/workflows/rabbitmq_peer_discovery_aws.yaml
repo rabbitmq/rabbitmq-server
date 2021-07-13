@@ -27,17 +27,12 @@ jobs:
         echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
         echo "${{ secrets.BUILDBUDDY_KEY }}" > buildbuddy-key.pem
         cat << EOF >> user.bazelrc
-          build:rbe --host_platform=//:erlang_${{ matrix.erlang_version }}_platform
-          build:rbe --platforms=//:erlang_${{ matrix.erlang_version }}_platform
-          build:rbe --extra_execution_platforms=//:erlang_${{ matrix.erlang_version }}_platform
+          build:buildbuddy --tls_client_certificate=buildbuddy-cert.pem
+          build:buildbuddy --tls_client_key=buildbuddy-key.pem
 
-          build:rbe --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
-          build:rbe --tls_client_certificate=buildbuddy-cert.pem
-          build:rbe --tls_client_key=buildbuddy-key.pem
-
-          build:rbe --build_metadata=ROLE=CI
-          build:rbe --build_metadata=VISIBILITY=PRIVATE
-          build:rbe --remote_instance_name=buildbuddy-io/buildbuddy/ci-aws-${{ matrix.erlang_version }}
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-aws-${{ matrix.erlang_version }}
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
@@ -45,7 +40,7 @@ jobs:
       run: |
         branch_or_tag="${GITHUB_REF##*/}"
         bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
-          --config=rbe \
+          --config=rbe-${{ matrix.erlang_version }} \
           --test_tag_filters=aws \
           --build_tests_only \
           --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
