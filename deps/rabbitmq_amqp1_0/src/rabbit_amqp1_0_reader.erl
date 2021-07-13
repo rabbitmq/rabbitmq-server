@@ -793,8 +793,8 @@ socket_info(Get, Select, #v1{sock = Sock}) ->
         {error, _} -> ''
     end.
 
-ssl_info(F, #v1{sock = Sock}) ->
-    case rabbit_net:ssl_info(Sock) of
+ssl_info(F, #v1{sock = Sock, proxy_socket = ProxySock}) ->
+    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
         nossl       -> '';
         {error, _}  -> '';
         {ok, Items} ->
