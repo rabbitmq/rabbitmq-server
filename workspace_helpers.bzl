@@ -9,6 +9,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_bazel_erlang_lib(
         name = "accept",
         version = "0.3.5",
+        sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
     )
 
     github_bazel_erlang_lib(
@@ -101,6 +102,7 @@ erlang_lib(
     hex_pm_bazel_erlang_lib(
         name = "gen_batch_server",
         version = "0.8.4",
+        sha256 = "ff6b0ed0f7be945f38b94ddd4784d128f35ff029c34dad6ca0c6cb17ab7bc9c4",
     )
 
     hex_pm_bazel_erlang_lib(
