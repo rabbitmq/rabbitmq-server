@@ -82,7 +82,8 @@
          resource_alarm :: boolean(),
          send_file_oct ::
              atomics:atomics_ref(), % number of bytes sent with send_file (for metrics)
-         transport :: tcp | ssl}).
+         transport :: tcp | ssl,
+         proxy_socket :: undefined | ranch_proxy:proxy_socket()}).
 -record(configuration,
         {initial_credits :: integer(),
          credits_required_for_unblocking :: integer(),
@@ -224,7 +225,8 @@ init([KeepaliveSup,
                                frame_max = FrameMax,
                                resource_alarm = false,
                                send_file_oct = SendFileOct,
-                               transport = ConnTransport},
+                               transport = ConnTransport,
+                               proxy_socket = rabbit_net:maybe_get_proxy_socket(Sock)},
             State =
             #stream_connection_state{consumers = #{},
                                      blocked = false,
@@ -2776,8 +2778,8 @@ i(host, #stream_connection{host = Host}, _) ->
     Host;
 i(peer_host, #stream_connection{peer_host = PeerHost}, _) ->
     PeerHost;
-i(ssl, #stream_connection{socket = Socket}, _) ->
-    rabbit_net:is_ssl(Socket);
+i(ssl, #stream_connection{socket = Socket, proxy_socket = ProxySock}, _) ->
+    rabbit_net:proxy_ssl_info(Socket, ProxySock) /= nossl;
 i(peer_cert_subject, S, _) ->
     cert_info(fun rabbit_ssl:peer_cert_subject/1, S);
 i(peer_cert_issuer, S, _) ->
@@ -2843,8 +2845,8 @@ cert_info(F, #stream_connection{socket = Sock}) ->
             list_to_binary(F(Cert))
     end.
 
-ssl_info(F, #stream_connection{socket = Sock}) ->
-    case rabbit_net:ssl_info(Sock) of
+ssl_info(F, #stream_connection{socket = Sock, proxy_socket = ProxySock}) ->
+    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
         nossl ->
             '';
         {error, _} ->

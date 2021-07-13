@@ -15,7 +15,7 @@
     setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
     peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
     tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1,
-    hostname/0, getifaddrs/0]).
+    hostname/0, getifaddrs/0, proxy_ssl_info/2]).
 
 %%---------------------------------------------------------------------------
 
@@ -34,6 +34,7 @@
 % -type host_or_ip() :: binary() | inet:ip_address().
 -spec is_ssl(socket()) -> boolean().
 -spec ssl_info(socket()) -> 'nossl' | ok_val_or_error([{atom(), any()}]).
+-spec proxy_ssl_info(socket(), ranch_proxy:proxy_socket()) -> 'nossl' | ok_val_or_error([{atom(), any()}]).
 -spec controlling_process(socket(), pid()) -> ok_or_any_error().
 -spec getstat(socket(), [stat_option()]) ->
           ok_val_or_error([{stat_option(), integer()}]).
@@ -97,6 +98,33 @@ ssl_info(Sock) when ?IS_SSL(Sock) ->
     ssl:connection_information(Sock);
 ssl_info(_Sock) ->
     nossl.
+
+proxy_ssl_info(Sock, {rabbit_proxy_socket, _, ProxyInfo}) ->
+    case ProxyInfo of
+        #{ssl := #{version := Version, cipher := Cipher}} ->
+            Proto = case Version of
+                        <<"SSL3">> -> 'ssl3';
+                        <<"TLSv1">> -> 'tlsv1';
+                        <<"TLSv1.1">> -> 'tlsv1.1';
+                        <<"TLSv1.2">> -> 'tlsv1.2';
+                        <<"TLSv1.3">> -> 'tlsv1.3';
+                        _ -> nossl
+                    end,
+            CipherSuite = case ssl:str_to_suite(binary_to_list(Cipher)) of
+                              #{} = CS -> CS;
+                              _ -> ssl_info(Sock)
+                          end,
+            case {Proto, CipherSuite} of
+                {nossl, _} -> ssl_info(Sock);
+                {_, nossl} -> ssl_info(Sock);
+                _ -> {ok, [{protocol, Proto}, {selected_cipher_suite, CipherSuite}]}
+            end;
+        _ ->
+            ssl_info(Sock)
+    end;
+proxy_ssl_info(Sock, _) ->
+    ssl_info(Sock).
+
 
 controlling_process(Sock, Pid) when ?IS_SSL(Sock) ->
     ssl:controlling_process(Sock, Pid);
