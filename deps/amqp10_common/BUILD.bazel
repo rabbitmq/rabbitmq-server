@@ -110,15 +110,9 @@ dialyze(
 suites = [
     rabbitmq_suite(
         name = "binary_generator_SUITE",
-        deps = [
-            "@lager//:bazel_erlang_lib",
-        ],
     ),
     rabbitmq_suite(
         name = "binary_parser_SUITE",
-        deps = [
-            "@lager//:bazel_erlang_lib",
-        ],
     ),
 ]
 

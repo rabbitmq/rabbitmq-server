@@ -308,6 +308,10 @@ erlc(
 PACKAGE = "deps/rabbit"
 
 suites = [
+    rabbitmq_suite(
+        name = "amqqueue_backward_compatibility_SUITE",
+        size = "small",
+    ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "backing_queue_SUITE",
@@ -735,6 +739,10 @@ suites = [
             ":quorum_queue_utils",
         ],
     ),
+    rabbitmq_suite(
+        name = "sup_delayed_restart_SUITE",
+        size = "small",
+    ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "sync_detection_SUITE",
@@ -927,6 +935,10 @@ suites = [
         PACKAGE,
         name = "upgrade_preparation_SUITE",
         size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "vhost_SUITE",
     ),
 ]
 
