@@ -500,7 +500,7 @@ messages_confirmed(Counters) ->
 messages_errored(Counters) ->
     atomics:get(Counters, 3).
 
-stream_committed_offset(Log) ->
+stream_stored_offset(Log) ->
     osiris_log:committed_offset(Log).
 
 augment_infos_with_user_provided_connection_name(Infos,
@@ -1802,7 +1802,7 @@ handle_frame_post_auth(_Transport,
                                           user = User} =
                            Connection,
                        State,
-                       {commit_offset, Reference, Stream, Offset}) ->
+                       {store_offset, Reference, Stream, Offset}) ->
     case rabbit_stream_utils:check_write_permitted(#resource{name =
                                                                  Stream,
                                                              kind = queue,
@@ -1813,17 +1813,17 @@ handle_frame_post_auth(_Transport,
         ok ->
             case lookup_leader(Stream, Connection) of
                 cluster_not_found ->
-                    rabbit_log:warning("Could not find leader to commit offset on ~p",
+                    rabbit_log:warning("Could not find leader to store offset on ~p",
                                        [Stream]),
-                    %% FIXME commit offset is fire-and-forget, so no response even if error, change this?
+                    %% FIXME store offset is fire-and-forget, so no response even if error, change this?
                     {Connection, State};
                 {ClusterLeader, Connection1} ->
                     osiris:write_tracking(ClusterLeader, Reference, Offset),
                     {Connection1, State}
             end;
         error ->
-            %% FIXME commit offset is fire-and-forget, so no response even if error, change this?
-            rabbit_log:info("Not authorized to commit offset on ~p", [Stream]),
+            %% FIXME store offset is fire-and-forget, so no response even if error, change this?
+            rabbit_log:info("Not authorized to store offset on ~p", [Stream]),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -2629,7 +2629,7 @@ consumer_i(offset, #consumer{counters = Counters}) ->
     consumer_offset(Counters);
 consumer_i(offset_lag,
            #consumer{counters = Counters, segment = Log}) ->
-    stream_committed_offset(Log) - consumer_offset(Counters);
+    stream_stored_offset(Log) - consumer_offset(Counters);
 consumer_i(connection_pid, _) ->
     self();
 consumer_i(properties, #consumer{properties = Properties}) ->

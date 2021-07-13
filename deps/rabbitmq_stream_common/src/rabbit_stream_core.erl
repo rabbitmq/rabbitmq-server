@@ -72,7 +72,7 @@
     {deliver, subscription_id(), Chunk :: binary()} |
     {credit, subscription_id(), Credit :: non_neg_integer()} |
     {metadata_update, stream_name(), response_code()} |
-    {commit_offset, offset_ref(), stream_name(), osiris:offset()} |
+    {store_offset, offset_ref(), stream_name(), osiris:offset()} |
     heartbeat |
     {tune, FrameMax :: non_neg_integer(),
      HeartBeat :: non_neg_integer()} |
@@ -236,11 +236,11 @@ frame({metadata_update, Stream, ResponseCode}) ->
                     ResponseCode:16,
                     StreamSize:16,
                     Stream/binary>>);
-frame({commit_offset, Reference, Stream, Offset}) ->
+frame({store_offset, Reference, Stream, Offset}) ->
     ReferenceSize = byte_size(Reference),
     StreamSize = byte_size(Stream),
     wrap_in_frame(<<?REQUEST:1,
-                    ?COMMAND_COMMIT_OFFSET:15,
+                    ?COMMAND_STORE_OFFSET:15,
                     ?VERSION_1:16,
                     ReferenceSize:16,
                     Reference/binary,
@@ -473,7 +473,7 @@ request_body({subscribe = Tag,
         end,
     {Tag,
      [<<SubscriptionId:8, ?STRING(Stream), Data/binary>> | PropertiesBin]};
-request_body({commit_offset = Tag, OffsetRef, Stream, Offset}) ->
+request_body({store_offset = Tag, OffsetRef, Stream, Offset}) ->
     {Tag, <<?STRING(OffsetRef), ?STRING(Stream), Offset:64>>};
 request_body({query_offset = Tag, OffsetRef, Stream}) ->
     {Tag, <<?STRING(OffsetRef), ?STRING(Stream)>>};
@@ -575,12 +575,12 @@ parse_request(<<?REQUEST:1,
                 Stream:StreamSize/binary>>) ->
     {metadata_update, Stream, ResponseCode};
 parse_request(<<?REQUEST:1,
-                ?COMMAND_COMMIT_OFFSET:15,
+                ?COMMAND_STORE_OFFSET:15,
                 ?VERSION_1:16,
                 ?STRING(RefSize, OffsetRef),
                 ?STRING(SSize, Stream),
                 Offset:64>>) ->
-    {commit_offset, OffsetRef, Stream, Offset};
+    {store_offset, OffsetRef, Stream, Offset};
 parse_request(<<?REQUEST:1, ?COMMAND_HEARTBEAT:15, ?VERSION_1:16>>) ->
     heartbeat;
 parse_request(<<?REQUEST:1,
@@ -909,8 +909,8 @@ command_id(deliver) ->
     ?COMMAND_DELIVER;
 command_id(credit) ->
     ?COMMAND_CREDIT;
-command_id(commit_offset) ->
-    ?COMMAND_COMMIT_OFFSET;
+command_id(store_offset) ->
+    ?COMMAND_STORE_OFFSET;
 command_id(query_offset) ->
     ?COMMAND_QUERY_OFFSET;
 command_id(unsubscribe) ->
@@ -960,8 +960,8 @@ parse_command_id(?COMMAND_DELIVER) ->
     deliver;
 parse_command_id(?COMMAND_CREDIT) ->
     credit;
-parse_command_id(?COMMAND_COMMIT_OFFSET) ->
-    commit_offset;
+parse_command_id(?COMMAND_STORE_OFFSET) ->
+    store_offset;
 parse_command_id(?COMMAND_QUERY_OFFSET) ->
     query_offset;
 parse_command_id(?COMMAND_UNSUBSCRIBE) ->
