@@ -195,14 +195,14 @@ socket_adapter_info(Sock, Protocol) ->
 
 maybe_ssl_info(Sock) ->
     RealSocket = rabbit_net:unwrap_socket(Sock),
-    case rabbit_net:is_ssl(RealSocket) of
-        true  -> [{ssl, true}] ++ ssl_info(RealSocket) ++ ssl_cert_info(RealSocket);
-        false -> [{ssl, false}]
+    case rabbit_net:proxy_ssl_info(RealSocket, rabbit_net:maybe_get_proxy_socket(Sock)) of
+        nossl -> [{ssl, false}];
+        Info -> [{ssl, true}] ++ ssl_info(Info) ++ ssl_cert_info(RealSocket)
     end.
 
-ssl_info(Sock) ->
+ssl_info(Info) ->
     {Protocol, KeyExchange, Cipher, Hash} =
-        case rabbit_net:ssl_info(Sock) of
+        case Info of
             {ok, Infos} ->
                 {_, P} = lists:keyfind(protocol, 1, Infos),
                 #{cipher := C,
