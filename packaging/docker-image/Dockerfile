@@ -250,6 +250,8 @@ VOLUME $RABBITMQ_DATA_DIR
 # https://docs.docker.com/samples/library/ubuntu/#locales
 ENV LANG=C.UTF-8 LANGUAGE=C.UTF-8 LC_ALL=C.UTF-8
 
+COPY rabbitmq.conf /etc/rabbitmq/
+
 COPY docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]
 
