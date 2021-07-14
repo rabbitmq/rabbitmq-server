@@ -2675,7 +2675,7 @@ publisher_i(messages_errored,
 info(Pid, InfoItems) ->
     case InfoItems -- ?INFO_ITEMS of
         [] ->
-            gen_server2:call(Pid, {info, InfoItems});
+            gen_server2:call(Pid, {info, InfoItems}, infinity);
         UnknownItems ->
             throw({bad_argument, UnknownItems})
     end.
