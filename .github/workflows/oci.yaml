@@ -31,6 +31,7 @@ jobs:
   build-publish-dev:
     runs-on: ubuntu-latest
     strategy:
+        fail-fast: false
         matrix:
             # Build image for every supported Erlang major version.
             # Source of truth for OTP versions (min & max): https://www.rabbitmq.com/which-erlang.html
