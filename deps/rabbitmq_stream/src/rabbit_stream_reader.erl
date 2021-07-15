@@ -147,9 +147,9 @@
          peer_cert_validity]).
 
 -ifdef(TEST).
--define(STATE_TIMEOUT, 500).
+-define(CONNECTION_NEGOTIATION_STEP_TIMEOUT, 500).
 -else.
--define(STATE_TIMEOUT, 10_000).
+-define(CONNECTION_NEGOTIATION_STEP_TIMEOUT, 10_000).
 -endif.
 
 %% client API
@@ -259,7 +259,7 @@ init([KeepaliveSup,
     end.
 
 tcp_connected(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?STATE_TIMEOUT, close}};
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
 tcp_connected(state_timeout, close, #statem_data{
                                        transport = Transport,
                                        connection = #stream_connection{socket = Socket}
@@ -285,7 +285,7 @@ tcp_connected(info, Msg, StateData) ->
                 end).
 
 peer_properties_exchanged(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?STATE_TIMEOUT, close}};
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
 peer_properties_exchanged(state_timeout, close, #statem_data{
                                                    transport = Transport,
                                                    connection = #stream_connection{socket = Socket}
@@ -311,7 +311,7 @@ peer_properties_exchanged(info, Msg, StateData) ->
                 end).
 
 authenticating(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?STATE_TIMEOUT, close}};
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
 authenticating(state_timeout, close, #statem_data{
                                         transport = Transport,
                                         connection = #stream_connection{socket = Socket}
@@ -344,7 +344,7 @@ authenticating(info, Msg, StateData) ->
                 end).
 
 tuning(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?STATE_TIMEOUT, close}};
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
 tuning(state_timeout, close, #statem_data{
                                 transport = Transport,
                                 connection = #stream_connection{socket = Socket}
@@ -374,7 +374,7 @@ tuning(info, Msg, StateData) ->
                 end).
 
 tuned(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?STATE_TIMEOUT, close}};
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
 tuned(state_timeout, close, #statem_data{
                                transport = Transport,
                                connection = #stream_connection{socket = Socket}
@@ -1000,7 +1000,7 @@ open(cast, {force_event_refresh, Ref}, #statem_data{
     {keep_state, StatemData#statem_data{connection = Connection2}}.
 
 close_sent(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?STATE_TIMEOUT, close}};
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
 close_sent(state_timeout, close, #statem_data{
                                     transport = Transport,
                                     connection = #stream_connection{socket = Socket} = Connection,
