@@ -137,8 +137,13 @@ create_stream(Q0, Node) ->
     rabbit_types:ok(non_neg_integer()) |
     rabbit_types:error(in_use | not_empty).
 delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
-    {ok, Reply} = rabbit_stream_coordinator:delete_stream(Q, ActingUser),
-    Reply.
+    case rabbit_stream_coordinator:delete_stream(Q, ActingUser) of
+        {ok, Reply} ->
+            Reply;
+        Error ->
+            {protocol_error, internal_error, "Cannot delete queue '~s' on node '~s': ~255p ",
+             [rabbit_misc:rs(amqqueue:get_name(Q)), node(), Error]}
+    end.
 
 -spec purge(amqqueue:amqqueue()) ->
     {ok, non_neg_integer()} | {error, term()}.

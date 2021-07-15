@@ -30,6 +30,7 @@ all_tests() ->
      delete_stream,
      delete_replica_leader,
      delete_replica,
+     delete_two_replicas,
      delete_replica_2,
      leader_start_failed
     ].
@@ -905,6 +906,79 @@ delete_replica(_) ->
     ?assertMatch([{aux, {start_writer, StreamId, _Args, #{nodes := [N1, N2]}}}
                   ], lists:sort(Actions5)),
     {S4, []} = evaluate_stream(meta(?LINE), S4, []),
+    ok.
+
+delete_two_replicas(_) ->
+    %% There was a race condition on the rabbit_stream_queue_SUITE testcases delete_replica
+    %% and delete_last_replica. A replica can sometimes restart after deletion as it transitions
+    %% again to running state. This test reproduces it. See `rabbit_stream_coordinator.erl`
+    %% line 1039, the processing of `member_stopped` command. The new function `update_target`
+    %% ensures this transition never happens.
+    %% This test reproduces the trace that leads to that error.
+    E = 1,
+    StreamId = atom_to_list(?FUNCTION_NAME),
+    LeaderPid = fake_pid(n1),
+    [Replica1, Replica2] = [fake_pid(n2), fake_pid(n3)],
+    N1 = node(LeaderPid),
+    N2 = node(Replica1),
+    %% this is to be added
+    N3 = node(Replica2),
+
+    S0 = started_stream(StreamId, LeaderPid, [Replica1, Replica2]),
+    From = {self(), make_ref()},
+    Idx1 = ?LINE,
+    Meta1 = (meta(Idx1))#{from => From},
+    S1 = update_stream(Meta1, {delete_replica, StreamId, #{node => N3}}, S0),
+    ?assertMatch(#stream{target = running,
+                         nodes = [N1, N2],
+                         members = #{N1 := #member{target = stopped,
+                                                   current = undefined,
+                                                   state = {running, _, _}},
+                                     N2 := #member{target = stopped,
+                                                   current = undefined,
+                                                   state = {running, _, _}},
+                                     N3 := #member{target = deleted,
+                                                   current = undefined,
+                                                   state = {running, _, _}}
+                                    }},
+                 S1),
+    {S2, Actions1} = evaluate_stream(Meta1, S1, []),
+    ?assertMatch([{aux, {delete_member, StreamId, #{node := N3}, _}},
+                  {aux, {stop, StreamId, #{node := N1, epoch := E}, _}},
+                  {aux, {stop, StreamId, #{node := N2, epoch := E}, _}}],
+                 lists:sort(Actions1)),
+
+    Idx2 = ?LINE,
+    Meta2 = (meta(Idx2))#{from => From},
+    S3 = update_stream(Meta2, {delete_replica, StreamId, #{node => N2}}, S2),
+    ?assertMatch(#stream{target = running,
+                         nodes = [N1],
+                         members = #{N1 := #member{target = stopped,
+                                                   current = {stopping, _},
+                                                   state = {running, _, _}},
+                                     N2 := #member{target = deleted,
+                                                   current = {stopping, _},
+                                                   state = {running, _, _}},
+                                     N3 := #member{target = deleted,
+                                                   current = {deleting, _},
+                                                   state = {running, _, _}}
+                                    }},
+                 S3),
+    {S4, []} = evaluate_stream(Meta2, S3, []),
+
+
+    Idx3 = ?LINE,
+    S5 = update_stream(meta(Idx3),
+                       {member_stopped, StreamId, #{node => N2,
+                                                    index => Idx1,
+                                                    epoch => E,
+                                                    tail => {E, 101}}},
+                       S4),
+    %% A deleted member can never transition to another target.
+    ?assertMatch(#stream{members = #{N2 := #member{target = deleted,
+                                                   current = undefined,
+                                                   state = {stopped, _, _}}}},
+                 S5),
     ok.
 
 delete_replica_2(_) ->
