@@ -42,6 +42,7 @@ endif
 include rabbitmq-components.mk
 include erlang.mk
 include mk/github-actions.mk
+include mk/bazel.mk
 include mk/topic-branches.mk
 
 # --------------------------------------------------------------------
