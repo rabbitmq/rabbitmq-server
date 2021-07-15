@@ -396,7 +396,9 @@ tuned(info, Msg, StateData) ->
                 end).
 
 state_timeout(State, Transport, Socket) ->
-    rabbit_log_connection:warning("Closing connection because of timeout in state '~s'.", [State]),
+    rabbit_log_connection:warning(
+      "Closing connection because of timeout in state '~s' likely due to lack of client action.",
+      [State]),
     close_immediately(Transport, Socket),
     stop.
 
@@ -1004,7 +1006,9 @@ close_sent(state_timeout, close, #statem_data{
                                     connection = #stream_connection{socket = Socket} = Connection,
                                     connection_state = State
                                    }) ->
-    rabbit_log_connection:warning("Closing connection because of timeout in state '~s'.", [?FUNCTION_NAME]),
+    rabbit_log_connection:warning(
+      "Closing connection because of timeout in state '~s' likely due to lack of client action.",
+      [?FUNCTION_NAME]),
     close(Transport, Socket, State),
     rabbit_networking:unregister_non_amqp_connection(self()),
     notify_connection_closed(Connection, State),
