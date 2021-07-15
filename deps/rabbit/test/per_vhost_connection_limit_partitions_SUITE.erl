@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -94,7 +95,9 @@ cluster_full_partition_with_autoheal(Config) ->
     Conn4 = open_unmanaged_connection(Config, B),
     Conn5 = open_unmanaged_connection(Config, C),
     Conn6 = open_unmanaged_connection(Config, C),
-    wait_for_count_connections_in(Config, VHost, 6, 60000),
+    ?awaitMatch(Connections when length(Connections) == 6,
+                                 connections_in(Config, VHost),
+                                 60000, 3000),
 
     %% B drops off the network, non-reachable by either A or C
     rabbit_ct_broker_helpers:block_traffic_between(A, B),
@@ -102,14 +105,18 @@ cluster_full_partition_with_autoheal(Config) ->
     timer:sleep(?DELAY),
 
     %% A and C are still connected, so 4 connections are tracked
-    wait_for_count_connections_in(Config, VHost, 4, 60000),
+    ?awaitMatch(Connections when length(Connections) == 4,
+                                 connections_in(Config, VHost),
+                                 60000, 3000),
 
     rabbit_ct_broker_helpers:allow_traffic_between(A, B),
     rabbit_ct_broker_helpers:allow_traffic_between(B, C),
     timer:sleep(?DELAY),
 
     %% during autoheal B's connections were dropped
-    wait_for_count_connections_in(Config, VHost, 4, 60000),
+    ?awaitMatch(Connections when length(Connections) == 4,
+                                 connections_in(Config, VHost),
+                                 60000, 3000),
 
     lists:foreach(fun (Conn) ->
                           (catch rabbit_ct_client_helpers:close_connection(Conn))
@@ -121,19 +128,6 @@ cluster_full_partition_with_autoheal(Config) ->
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
-
-wait_for_count_connections_in(Config, VHost, Expected, Time) when Time =< 0 ->
-    ?assertMatch(Connections when length(Connections) == Expected,
-                                  connections_in(Config, VHost));
-wait_for_count_connections_in(Config, VHost, Expected, Time) ->
-    case connections_in(Config, VHost) of
-        Connections when length(Connections) == Expected ->
-            ok;
-        _ ->
-            Sleep = 3000,
-            timer:sleep(Sleep),
-            wait_for_count_connections_in(Config, VHost, Expected, Time - Sleep)
-    end.
 
 count_connections_in(Config, VHost) ->
     count_connections_in(Config, VHost, 0).
