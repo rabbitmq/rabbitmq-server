@@ -139,18 +139,6 @@ amqp_uri_parsing(_Config) ->
     ],
     ?assertEqual(lists:usort(Exp1), lists:usort(TLSOpts1)),
 
-    {ok, #amqp_params_network{host = "host2", ssl_options = TLSOpts2}} =
-        amqp_uri:parse("amqps://host2/%2F?verify=verify_peer"
-                       "&server_name_indication=host2"
-                       "&cacertfile=/path/to/cacertfile.pem"
-                       "&certfile=/path/to/certfile.pem"),
-    Opts2 = [{certfile,  "/path/to/certfile.pem"},
-             {cacertfile,"/path/to/cacertfile.pem"},
-             {server_name_indication, "host2"},
-             {verify, verify_peer}],
-    Exp2 = amqp_ssl:add_verify_fun_to_opts("host2", Opts2),
-    ?assertEqual(lists:usort(Exp2), lists:usort(TLSOpts2)),
-
     {ok, #amqp_params_network{host = "host3", ssl_options = TLSOpts3}} =
         amqp_uri:parse("amqps://host3/%2f?verify=verify_peer"
                        "&fail_if_no_peer_cert=true"),
@@ -170,22 +158,6 @@ amqp_uri_parsing(_Config) ->
             {depth,     5},
             {server_name_indication,"host4"}],
     ?assertEqual(lists:usort(Exp4), lists:usort(TLSOpts4)),
-
-    {ok, #amqp_params_network{host = "host5", ssl_options = TLSOpts5}} =
-        amqp_uri:parse("amqps://host5/%2f?server_name_indication=foobar"
-                       "&verify=verify_peer"),
-    Opts5 = [{server_name_indication, "foobar"},
-             {verify, verify_peer}],
-    Exp5 = amqp_ssl:add_verify_fun_to_opts("foobar", Opts5),
-    ?assertEqual(lists:usort(Exp5), lists:usort(TLSOpts5)),
-
-    {ok, #amqp_params_network{host = "127.0.0.1", ssl_options = TLSOpts6}} =
-        amqp_uri:parse("amqps://127.0.0.1/%2f?server_name_indication=barbaz"
-                       "&verify=verify_peer"),
-    Opts6 = [{server_name_indication, "barbaz"},
-             {verify, verify_peer}],
-    Exp6 = amqp_ssl:add_verify_fun_to_opts("barbaz", Opts6),
-    ?assertEqual(lists:usort(Exp6), lists:usort(TLSOpts6)),
 
     {ok, #amqp_params_network{host = "host7", ssl_options = TLSOpts7}} =
         amqp_uri:parse("amqps://host7/%2f?server_name_indication=disable"),
