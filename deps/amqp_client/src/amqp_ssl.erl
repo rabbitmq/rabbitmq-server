@@ -5,7 +5,6 @@
 -include_lib("public_key/include/public_key.hrl").
 
 -export([maybe_enhance_ssl_options/1,
-         add_verify_fun_to_opts/2,
          verify_fun/3]).
 
 maybe_enhance_ssl_options(Params = #amqp_params_network{ssl_options = none}) ->
@@ -26,27 +25,16 @@ maybe_add_sni_0(false, Host, Options) ->
     % server_name_indication at all. If Host is a DNS host name,
     % we will specify server_name_indication via code
     maybe_add_sni_1(inet_parse:domain(Host), Host, Options);
-maybe_add_sni_0({server_name_indication, disable}, _Host, Options) ->
+maybe_add_sni_0({server_name_indication, _DisableOrSniHost}, _Host, Options) ->
     % NB: this is the case where the user explicitly disabled
-    % server_name_indication
-    Options;
-maybe_add_sni_0({server_name_indication, SniHost}, _Host, Options) ->
-    % NB: this is the case where the user explicitly specified
-    % an SNI host name. We may need to add verify_fun for OTP 19
-    maybe_add_verify_fun(lists:keymember(verify_fun, 1, Options), SniHost, Options).
+    % server_name_indication or explicitly specified an SNI host name.
+    Options.
 
 maybe_add_sni_1(false, _Host, Options) ->
     % NB: host is not a DNS host name, so nothing to add
     Options;
 maybe_add_sni_1(true, Host, Options) ->
-    Opts1 = [{server_name_indication, Host} | Options],
-    maybe_add_verify_fun(lists:keymember(verify_fun, 1, Opts1), Host, Opts1).
-
-maybe_add_verify_fun(true, _Host, Options) ->
-    % NB: verify_fun already present, don't add twice
-    Options;
-maybe_add_verify_fun(false, Host, Options) ->
-    add_verify_fun_to_opts(lists:keyfind(verify, 1, Options), Host, Options).
+    [{server_name_indication, Host} | Options].
 
 maybe_add_verify(Options) ->
     case lists:keymember(verify, 1, Options) of
@@ -58,19 +46,6 @@ maybe_add_verify(Options) ->
                     "Please see https://rabbitmq.com/ssl.html for more information.", [self()]),
             Options
     end.
-
-add_verify_fun_to_opts(Host, Options) ->
-    add_verify_fun_to_opts(false, Host, Options).
-
-add_verify_fun_to_opts({verify, verify_none}, _Host, Options) ->
-    % NB: this is the case where the user explicitly disabled
-    % certificate chain verification so there's not much sense
-    % in adding verify_fun
-    Options;
-add_verify_fun_to_opts(_, _Host, Options) ->
-    % NB: this is the case where the user either did not
-    % set the verify option or set it to verify_peer
-    Options.
 
 -type hostname() :: nonempty_string() | binary().
 
