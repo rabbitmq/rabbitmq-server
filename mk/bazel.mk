@@ -3,6 +3,7 @@ ifeq (darwin,$(PLATFORM))
 $(BAZELISK):
 	brew install bazelisk
 else
+$(BAZELISK):
 	$(error Install bazelisk for your platform: https://github.com/bazelbuild/bazelisk)
 endif
 
