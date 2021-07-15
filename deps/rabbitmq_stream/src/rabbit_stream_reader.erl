@@ -1893,7 +1893,7 @@ handle_frame_post_auth(_Transport,
                     %% FIXME store offset is fire-and-forget, so no response even if error, change this?
                     {Connection, State};
                 {ClusterLeader, Connection1} ->
-                    osiris:write_tracking(ClusterLeader, Reference, Offset),
+                    osiris:write_tracking(ClusterLeader, Reference, {offset, Offset}),
                     {Connection1, State}
             end;
         error ->
@@ -1923,7 +1923,7 @@ handle_frame_post_auth(Transport,
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0, Connection0};
                     {LeaderPid, C} ->
                         {?RESPONSE_CODE_OK,
-                         case osiris:read_tracking(LeaderPid, Reference) of
+                         case osiris:read_tracking(LeaderPid, offset, Reference) of
                              undefined ->
                                  0;
                              {offset, Offt} ->
