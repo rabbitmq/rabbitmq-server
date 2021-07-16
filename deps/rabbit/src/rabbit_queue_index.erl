@@ -12,7 +12,7 @@
 -export([erase/1, init/3, reset_state/1, recover/6,
          terminate/3, delete_and_terminate/1,
          pre_publish/7, flush_pre_publish_cache/2,
-         publish/6, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
+         publish/7, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/2, stop/1]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
@@ -26,6 +26,13 @@
 
 %% Used by rabbit_vhost to set the segment_entry_count.
 -export([all_queue_directory_names/1]).
+
+%% Used by rabbit_classic_queue_index_v2 when upgrading
+%% after a non-clean shutdown.
+-export([queue_index_walker_reader/2]).
+
+%% Used to upgrade to the modern index.
+-export([delete_segment_file_for_seq_id/2]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -387,10 +394,10 @@ flush_delivered_cache(State = #qistate{delivered_cache = DC}) ->
     State1#qistate{delivered_cache = []}.
 
 -spec publish(rabbit_types:msg_id(), seq_id(),
-                    rabbit_types:message_properties(), boolean(),
+                    rabbit_types:message_properties(), boolean(), boolean(),
                     non_neg_integer(), qistate()) -> qistate().
 
-publish(MsgOrId, SeqId, MsgProps, IsPersistent, JournalSizeHint, State) ->
+publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint, State) ->
     {JournalHdl, State1} =
         get_journal_handle(
           maybe_needs_confirming(MsgProps, MsgOrId, State)),
@@ -403,9 +410,13 @@ publish(MsgOrId, SeqId, MsgProps, IsPersistent, JournalSizeHint, State) ->
                            end):?JPREFIX_BITS,
                           SeqId:?SEQ_BITS, Bin/binary,
                           (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin]),
-    maybe_flush_journal(
+    State2 = maybe_flush_journal(
       JournalSizeHint,
-      add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1)).
+      add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1)),
+    case IsDelivered of
+        true -> deliver([SeqId], State2);
+        false -> State2
+    end.
 
 maybe_needs_confirming(MsgProps, MsgOrId,
         State = #qistate{unconfirmed     = UC,
@@ -1535,3 +1546,22 @@ cleanup_global_recovery_terms() ->
 update_recovery_term(#resource{virtual_host = VHost} = QueueName, Term) ->
     Key = queue_name_to_dir_name(QueueName),
     rabbit_recovery_terms:store(VHost, Key, Term).
+
+
+%%----------------------------------------------------------------------------
+%% Upgrade to the modern index
+%%----------------------------------------------------------------------------
+
+%% This function is only used when upgrading to the new index.
+%% We delete the segment file without updating the state.
+%% We will drop the state later on so we don't care much
+%% about how accurate it is as long as we can read from
+%% subsequent segment files.
+delete_segment_file_for_seq_id(SeqId, #qistate { segments = Segments }) ->
+    {Seg, _} = seq_id_to_seg_and_rel_seq_id(SeqId),
+    case segment_find(Seg, Segments) of
+        {ok, #segment { path = Path }} ->
+            ok = rabbit_file:delete(Path);
+        error ->
+            ok
+    end.
