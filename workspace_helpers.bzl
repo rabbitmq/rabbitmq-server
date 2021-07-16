@@ -174,6 +174,7 @@ erlang_lib(
         ref = "v1.0.0",
         version = "1.0.0",
         build_file = rabbitmq_workspace + "//:BUILD.osiris",
+        sha256 = "7b30a02eeca7a89ba34dadf8d54eaa4e3f0c5dd19fab4bb84f8150f9f42b03a0",
     )
 
     hex_pm_bazel_erlang_lib(
@@ -206,6 +207,7 @@ erlang_lib(
         erlc_opts = [
             "+debug_info",
         ],
+        sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
     )
 
     hex_pm_bazel_erlang_lib(
