@@ -142,6 +142,10 @@ key(policy_set) ->
     <<"policy.set">>;
 key(policy_cleared) ->
     <<"policy.cleared">>;
+key(queue_policy_updated) ->
+    <<"queue.policy.updated">>;
+key(queue_policy_cleared) ->
+    <<"queue.policy.cleared">>;
 key(parameter_set) ->
     <<"parameter.set">>;
 key(parameter_cleared) ->
