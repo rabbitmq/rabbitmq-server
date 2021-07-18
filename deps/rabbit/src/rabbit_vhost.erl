@@ -13,7 +13,7 @@
 -export([recover/0, recover/1, read_config/1]).
 -export([add/2, add/4, delete/2, exists/1, with/2, with_user_and_vhost/3, assert/1, update/2,
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
-        list/0, count/0, list_names/0, all/0]).
+        list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
 -export([parse_tags/1, update_metadata/2, tag_with/2, untag_from/2, update_tags/2, update_tags/3]).
 -export([lookup/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
@@ -379,6 +379,18 @@ list() -> list_names().
 
 -spec all() -> [vhost:vhost()].
 all() -> mnesia:dirty_match_object(rabbit_vhost, vhost:pattern_match_all()).
+
+-spec all_tagged_with(atom()) -> [vhost:vhost()].
+all_tagged_with(TagName) ->
+    lists:filter(
+        fun(VHost) ->
+            Meta = vhost:get_metadata(VHost),
+            case Meta of
+                #{tags := Tags} ->
+                    lists:member(rabbit_data_coercion:to_atom(TagName), Tags);
+                _ -> false
+            end
+        end, all()).
 
 -spec count() -> non_neg_integer().
 count() ->
