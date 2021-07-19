@@ -99,11 +99,13 @@ def broker_for_integration_suites():
             "//deps/rabbit:bazel_erlang_lib",
             ":bazel_erlang_lib",
         ],
+        testonly = True,
     )
 
     rabbitmq_run(
         name = "rabbitmq-for-tests-run",
         home = ":broker-for-tests-home",
+        testonly = True,
     )
 
 def rabbitmq_integration_suite(
