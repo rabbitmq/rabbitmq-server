@@ -436,20 +436,22 @@ start_queue_concurrent(Config) ->
     Self = self(),
     [begin
          _ = spawn_link(fun () ->
-                                {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
+                                {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
                                 %% Test declare an existing queue
                                 ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                                              declare(Ch, LQ,
                                                      [{<<"x-queue-type">>,
                                                        longstr,
                                                        <<"quorum">>}])),
+                                timer:sleep(500),
+                                rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
                                 Self ! {done, Server}
                         end)
      end || Server <- Servers],
 
     [begin
          receive {done, Server} -> ok
-         after 5000 -> exit({await_done_timeout, Server})
+         after 10000 -> exit({await_done_timeout, Server})
          end
      end || Server <- Servers],
 
