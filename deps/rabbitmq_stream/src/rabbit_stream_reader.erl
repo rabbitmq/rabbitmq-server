@@ -431,7 +431,7 @@ handle_info(Msg, #statem_data{
             rabbit_log_connection:debug("Transitioned from ~s to ~s", [PreviousConnectionStep, NewConnectionStep]),
             Transition(NewConnectionStep, StatemData, Connection1, State1);
         {Closed, S} ->
-            rabbit_log_connection:info("Socket ~w closed", [S]),
+            rabbit_log_connection:warning("Stream protocol connection socket ~w closed", [S]),
             stop;
         {Error, S, Reason} ->
             rabbit_log_connection:warning("Socket error ~p [~w]", [Reason, S]),
@@ -1041,7 +1041,7 @@ close_sent(info, {tcp, S, Data}, #statem_data{
                                                            State,
                                                            Data),
     #stream_connection{connection_step = Step} = Connection1,
-    rabbit_log_connection:debug("Transitioned from ~s to ~s", [?FUNCTION_NAME, Step]),
+    rabbit_log_connection:debug("Stream reader has transitioned from ~s to ~s", [?FUNCTION_NAME, Step]),
     case Step of
         closing_done ->
             close(Transport, S, State1),
@@ -1061,21 +1061,21 @@ close_sent(info, {tcp_closed, S}, #statem_data{
                                     }) ->
     rabbit_networking:unregister_non_amqp_connection(self()),
     notify_connection_closed(Connection, State),
-    rabbit_log_connection:info("Socket ~w closed [~w]", [S, self()]),
+    rabbit_log_connection:debug("Stream protocol connection socket ~w closed [~w]", [S, self()]),
     stop;
 close_sent(info, {tcp_error, S, Reason}, #statem_data{
                                             transport = Transport,
                                             connection = Connection,
                                             connection_state = State
                                            }) ->
-    rabbit_log_connection:info("Socket error ~p [~w] [~w]", [Reason, S, self()]),
+    rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] [~w]", [Reason, S, self()]),
     close(Transport, S, State),
     rabbit_networking:unregister_non_amqp_connection(self()),
     notify_connection_closed(Connection, State),
     stop;
 close_sent(info,{resource_alarm, IsThereAlarm},
            StatemData = #statem_data{connection = Connection}) ->
-    rabbit_log:info("Ignored resource_alarm ~p in state ~s", [IsThereAlarm, ?FUNCTION_NAME]),
+    rabbit_log:warning("Stream protocol connection ignored a resource alarm ~p in state ~s", [IsThereAlarm, ?FUNCTION_NAME]),
     {keep_state, StatemData#statem_data{
                    connection = Connection#stream_connection{resource_alarm = IsThereAlarm}
                   }};
