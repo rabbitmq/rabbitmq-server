@@ -17,6 +17,19 @@ load("@io_buildbuddy_buildbuddy_toolchain//:rules.bzl", "buildbuddy")
 buildbuddy(name = "buildbuddy_toolchain")
 
 http_archive(
+    name = "rules_pkg",
+    sha256 = "038f1caa773a7e35b3663865ffb003169c6a71dc995e39bf4815792f385d837d",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_pkg/releases/download/0.4.0/rules_pkg-0.4.0.tar.gz",
+        "https://github.com/bazelbuild/rules_pkg/releases/download/0.4.0/rules_pkg-0.4.0.tar.gz",
+    ],
+)
+
+load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
+
+rules_pkg_dependencies()
+
+http_archive(
     name = "bazel-erlang",
     strip_prefix = "bazel-erlang-main",
     urls = ["https://github.com/rabbitmq/bazel-erlang/archive/main.zip"],
@@ -51,3 +64,34 @@ git_repository(
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
 
 activemq_archive()
+
+ADD_PLUGINS_DIR_BUILD_FILE = """set -euo pipefail
+
+cat << EOF > plugins/BUILD.bazel
+load("@rules_pkg//:pkg.bzl", "pkg_zip")
+
+pkg_zip(
+    name = "inet_tcp_proxy_ez",
+    package_dir = "inet_tcp_proxy/ebin",
+    srcs = [
+        "@inet_tcp_proxy//:bazel_erlang_lib",
+    ],
+    package_file_name = "inet_tcp_proxy.ez",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "standard_plugins",
+    srcs = glob(["*.ez"]),
+    visibility = ["//visibility:public"],
+)
+EOF
+"""
+
+http_archive(
+    name = "rabbitmq-server-generic-unix-3.8.18",
+    build_file = "@//:BUILD.package_generic_unix",
+    patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
+    strip_prefix = "rabbitmq_server-3.8.18",
+    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.18/rabbitmq-server-generic-unix-3.8.18.tar.xz"],
+)

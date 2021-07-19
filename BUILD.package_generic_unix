@@ -1,0 +1,18 @@
+load("@//:rabbitmq_package_generic_unix.bzl", "rabbitmq_package_generic_unix")
+load("@//:rabbitmq_run.bzl", "rabbitmq_run")
+
+rabbitmq_package_generic_unix(
+    name = "broker-home",
+    sbin = glob(["sbin/*"]),
+    escript = glob(["escript/*"]),
+    plugins = [
+        "//plugins:standard_plugins",
+        "//plugins:inet_tcp_proxy_ez",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-run",
+    home = ":broker-home",
+    visibility = ["//visibility:public"],
+)
