@@ -87,7 +87,8 @@
         {initial_credits :: integer(),
          credits_required_for_unblocking :: integer(),
          frame_max :: integer(),
-         heartbeat :: integer()}).
+         heartbeat :: integer(),
+         connection_negotiation_step_timeout :: integer()}).
 
 -record(statem_data,
         {transport :: module(),
@@ -169,7 +170,7 @@
          close_sent/3]).
 
 callback_mode() ->
-    state_functions.
+    [state_functions, state_enter].
 
 terminate(Reason, State, _StatemData) ->
     rabbit_log:debug("~p terminating in state '~s' with reason '~p'", [?MODULE, State, Reason]).
@@ -229,6 +230,10 @@ init([KeepaliveSup,
                                      rabbit_stream_core:init(undefined)},
             Transport:setopts(RealSocket, [{active, once}]),
             rabbit_alarm:register(self(), {?MODULE, resource_alarm, []}),
+            ConnectionNegotiationStepTimeout = application:get_env(
+                                                 rabbitmq_stream,
+                                                 connection_negotiation_step_timeout,
+                                                 10_000),
             % gen_statem process has its start_link call not return until the init function returns.
             % This is problematic, because we won't be able to call ranch:handshake/2
             % from the init callback as this would cause a deadlock to happen.
@@ -243,13 +248,24 @@ init([KeepaliveSup,
                                                  initial_credits = InitialCredits,
                                                  credits_required_for_unblocking = CreditsRequiredBeforeUnblocking,
                                                  frame_max = FrameMax,
-                                                 heartbeat = Heartbeat}});
+                                                 heartbeat = Heartbeat,
+                                                 connection_negotiation_step_timeout = ConnectionNegotiationStepTimeout}});
         {Error, Reason} ->
             rabbit_net:fast_close(RealSocket),
             rabbit_log_connection:warning("Closing connection because of ~p ~p",
                                           [Error, Reason])
     end.
 
+tcp_connected(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+tcp_connected(state_timeout, close, #statem_data{
+                                       transport = Transport,
+                                       connection = #stream_connection{socket = Socket}
+                                      }) ->
+    state_timeout(?FUNCTION_NAME, Transport, Socket);
 tcp_connected(info, Msg, StateData) ->
     handle_info(Msg, StateData,
                 fun (NextConnectionStep,
@@ -269,6 +285,16 @@ tcp_connected(info, Msg, StateData) ->
                         end
                 end).
 
+peer_properties_exchanged(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+peer_properties_exchanged(state_timeout, close, #statem_data{
+                                                   transport = Transport,
+                                                   connection = #stream_connection{socket = Socket}
+                                                  }) ->
+    state_timeout(?FUNCTION_NAME, Transport, Socket);
 peer_properties_exchanged(info, Msg, StateData) ->
     handle_info(Msg, StateData,
                 fun (NextConnectionStep,
@@ -288,6 +314,16 @@ peer_properties_exchanged(info, Msg, StateData) ->
                         end
                 end).
 
+authenticating(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+authenticating(state_timeout, close, #statem_data{
+                                        transport = Transport,
+                                        connection = #stream_connection{socket = Socket}
+                                       }) ->
+    state_timeout(?FUNCTION_NAME, Transport, Socket);
 authenticating(info, Msg, StateData) ->
     handle_info(Msg, StateData,
                 fun(NextConnectionStep,
@@ -314,6 +350,16 @@ authenticating(info, Msg, StateData) ->
                         end
                 end).
 
+tuning(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+tuning(state_timeout, close, #statem_data{
+                                transport = Transport,
+                                connection = #stream_connection{socket = Socket}
+                               }) ->
+    state_timeout(?FUNCTION_NAME, Transport, Socket);
 tuning(info, Msg, StateData) ->
     handle_info(Msg, StateData,
                 fun (NextConnectionStep,
@@ -337,6 +383,16 @@ tuning(info, Msg, StateData) ->
                         end
                 end).
 
+tuned(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+tuned(state_timeout, close, #statem_data{
+                               transport = Transport,
+                               connection = #stream_connection{socket = Socket}
+                              }) ->
+    state_timeout(?FUNCTION_NAME, Transport, Socket);
 tuned(info, Msg, StateData) ->
     handle_info(Msg, StateData,
                 fun (NextConnectionStep,
@@ -351,6 +407,13 @@ tuned(info, Msg, StateData) ->
                                invalid_transition(Transport, S, ?FUNCTION_NAME, NextConnectionStep)
                         end
                 end).
+
+state_timeout(State, Transport, Socket) ->
+    rabbit_log_connection:warning(
+      "Closing connection because of timeout in state '~s' likely due to lack of client action.",
+      [State]),
+    close_immediately(Transport, Socket),
+    stop.
 
 handle_info(Msg, #statem_data{
                     transport = Transport,
@@ -527,6 +590,8 @@ close_immediately(Transport, S) ->
     Transport:shutdown(S, read),
     Transport:close(S).
 
+open(enter, _OldState, StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData};
 open(info,
      {resource_alarm, IsThereAlarm},
      #statem_data{
@@ -947,6 +1012,23 @@ open(cast, {force_event_refresh, Ref}, #statem_data{
     Connection2 = ensure_stats_timer(Connection1),
     {keep_state, StatemData#statem_data{connection = Connection2}}.
 
+close_sent(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+close_sent(state_timeout, close, #statem_data{
+                                    transport = Transport,
+                                    connection = #stream_connection{socket = Socket} = Connection,
+                                    connection_state = State
+                                   }) ->
+    rabbit_log_connection:warning(
+      "Closing connection because of timeout in state '~s' likely due to lack of client action.",
+      [?FUNCTION_NAME]),
+    close(Transport, Socket, State),
+    rabbit_networking:unregister_non_amqp_connection(self()),
+    notify_connection_closed(Connection, State),
+    stop;
 close_sent(info, {tcp, S, Data}, #statem_data{
                                     transport = Transport,
                                     connection = Connection,
