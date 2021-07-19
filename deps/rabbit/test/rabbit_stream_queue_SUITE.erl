@@ -118,7 +118,17 @@ init_per_suite(Config0) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(cluster_size_3_parallel = Group, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            init_per_group1(Group, Config)
+    end;
 init_per_group(Group, Config) ->
+    init_per_group1(Group, Config).
+
+init_per_group1(Group, Config) ->
     ClusterSize = case Group of
                       single_node -> 1;
                       single_node_parallel -> 1;
