@@ -59,15 +59,15 @@ app_file(
 
 erlc(
     name = "beam_files",
-    srcs = ["src/amqp10_framing0.erl"] + glob(["src/*.erl"]),
-    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    srcs = glob(["src/*.erl"]),
+    hdrs = glob(["include/*.hrl"]),
     dest = "ebin",
     erlc_opts = RABBITMQ_ERLC_OPTS,
 )
 
 bazel_erlang_lib(
     name = "bazel_erlang_lib",
-    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    hdrs = glob(["include/*.hrl"]),
     app = ":app_file",
     app_name = "amqp10_common",
     beam = [":beam_files"],
@@ -76,8 +76,8 @@ bazel_erlang_lib(
 
 erlc(
     name = "test_beam_files",
-    srcs = ["src/amqp10_framing0.erl"] + glob(["src/*.erl"]),
-    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    srcs = glob(["src/*.erl"]),
+    hdrs = glob(["include/*.hrl"]),
     dest = "test",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
@@ -85,7 +85,7 @@ erlc(
 bazel_erlang_lib(
     name = "test_bazel_erlang_lib",
     testonly = True,
-    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    hdrs = glob(["include/*.hrl"]),
     app = ":app_file",
     app_name = "amqp10_common",
     beam = [":test_beam_files"],

@@ -80,7 +80,7 @@ EXTRA_APPS = [
     "xmerl",
 ]
 
-HDRS = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"]
+HDRS = glob(["include/*.hrl"])
 
 app_file(
     name = "app_file",
@@ -113,10 +113,7 @@ erlc(
     srcs = glob(
         ["src/*.erl"],
         exclude = FIRST_SRCS,
-    ) + [
-        "src/rabbit_framing_amqp_0_8.erl",
-        "src/rabbit_framing_amqp_0_9_1.erl",
-    ],
+    ),
     hdrs = HDRS,
     beam = [":first_beam_files"],
     dest = "ebin",
@@ -153,10 +150,7 @@ erlc(
     srcs = glob(
         ["src/*.erl"],
         exclude = FIRST_SRCS,
-    ) + [
-        "src/rabbit_framing_amqp_0_8.erl",
-        "src/rabbit_framing_amqp_0_9_1.erl",
-    ],
+    ),
     hdrs = HDRS,
     beam = [":first_test_beam_files"],
     dest = "src",
