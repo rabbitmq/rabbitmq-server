@@ -166,6 +166,27 @@ shovels(Config) ->
                            'dest-queue' => <<"test2">>}}, ?CREATED)
      || V <- ["%2f", "v"]],
 
+     [http_put(Config, "/parameters/shovel/" ++ V ++ "/my-dynamic",
+              #{value => #{'src-protocol' => <<"amqp091">>,
+                           'src-uri'    => <<"amqp://">>,
+                           'src-queue'  => <<"test">>,
+                           'dest-protocol' => <<"amqp091">>,
+                           'dest-uri'   => <<"amqp://">>,
+                           'dest-queue' => list_to_binary(
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq")}},
+               ?BAD_REQUEST)
+     || V <- ["%2f", "v"]],
+
     ?assertMatch([?StaticPattern, ?Dynamic1Pattern, ?Dynamic2Pattern],
 		 http_get(Config, "/shovels",     "guest", "guest", ?OK)),
     ?assertMatch([?Dynamic1Pattern],

@@ -151,7 +151,7 @@ amqp091_dest_validation(_Def, User) ->
     [{<<"dest-uri">>,        validate_uri_fun(User), mandatory},
      {<<"dest-exchange">>,   fun rabbit_parameter_validation:binary/2,optional},
      {<<"dest-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
-     {<<"dest-queue">>,      fun rabbit_parameter_validation:binary/2,optional},
+     {<<"dest-queue">>,      fun rabbit_parameter_validation:amqp091_queue_name/2,optional},
      {<<"dest-queue-args">>, fun validate_queue_args/2, optional},
      {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
