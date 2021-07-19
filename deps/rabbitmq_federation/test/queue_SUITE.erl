@@ -88,23 +88,33 @@ init_per_group(classic_queue, Config) ->
        {target_queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]}
       ]);
 init_per_group(quorum_queue, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [
-       {source_queue_type, quorum},
-       {source_queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
-       {target_queue_type, quorum},
-       {target_queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
-      ]);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "mixed versions not supported"};
+        _ ->
+            rabbit_ct_helpers:set_config(
+              Config,
+              [
+               {source_queue_type, quorum},
+               {source_queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+               {target_queue_type, quorum},
+               {target_queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
+              ])
+    end;
 init_per_group(mixed, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [
-       {source_queue_type, classic},
-       {source_queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
-       {target_queue_type, quorum},
-       {target_queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
-      ]);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "mixed versions not supported"};
+        _ ->
+            rabbit_ct_helpers:set_config(
+              Config,
+              [
+               {source_queue_type, classic},
+               {source_queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
+               {target_queue_type, quorum},
+               {target_queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
+              ])
+    end;
 init_per_group(without_disambiguate, Config) ->
     rabbit_ct_helpers:set_config(Config,
       {disambiguate_step, []});
@@ -117,10 +127,15 @@ init_per_group(cluster_size_1 = Group, Config) ->
       ]),
     init_per_group1(Group, Config1);
 init_per_group(cluster_size_2 = Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 2}
-      ]),
-    init_per_group1(Group, Config1).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            Config1 = rabbit_ct_helpers:set_config(Config, [
+                {rmq_nodes_count, 2}
+            ]),
+            init_per_group1(Group, Config1)
+    end.
 
 init_per_group1(Group, Config) ->
     SetupFederation = case Group of
@@ -142,8 +157,10 @@ init_per_group1(Group, Config) ->
             case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
                 ok ->
                     Config2;
-                Skip ->
-                    Skip
+                {skip, _} = Skip ->
+                    Skip;
+                Other ->
+                    {skip, Other}
             end;
         _ ->
             Config2

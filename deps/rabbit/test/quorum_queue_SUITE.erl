@@ -184,6 +184,10 @@ init_per_group(Group, Config) ->
     case ClusterSize of
         2 when IsMixed ->
             {skip, "cluster size 2 isn't mixed versions compatible"};
+        3 when IsMixed ->
+            {skip, "cluster size 3 isn't mixed versions compatible"};
+        5 when IsMixed ->
+            {skip, "cluster size 5 isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:set_config(Config,
                                                    [{rmq_nodes_count, ClusterSize},
@@ -209,9 +213,12 @@ init_per_group(Group, Config) ->
                             %% tests.
                             timer:sleep(ClusterSize * 1000),
                             Config2;
-                        Skip ->
+                        {skip, _} = Skip ->
                             end_per_group(Group, Config2),
-                            Skip
+                            Skip;
+                        Other ->
+                            end_per_group(Group, Config2),
+                            {skip, Other}
                     end
             end
     end.
@@ -251,9 +258,12 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
             case EnableFF of
                 ok ->
                     Config3;
-                Skip ->
+                {skip, _} = Skip ->
                     end_per_testcase(Testcase, Config3),
-                    Skip
+                    Skip;
+                Other ->
+                    end_per_testcase(Testcase, Config3),
+                    {skip, Other}
             end
     end;
 init_per_testcase(Testcase, Config) ->

@@ -1,8 +1,8 @@
-name: Test
+name: Test Mixed Version Clusters
 on: push
 jobs:
-  test:
-    name: Test
+  test-mixed-versions:
+    name: Test (Mixed Version Cluster)
     runs-on: ubuntu-18.04
     strategy:
       fail-fast: false
@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2
+      uses: actions/checkout@v2.3.4
     - name: CONFIGURE BAZEL
       run: |
         echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
@@ -32,10 +32,10 @@ jobs:
       run: |
         bazelisk test //... \
           --config=rbe-${{ matrix.erlang_version }} \
-          --test_tag_filters=-exclusive,-aws,-mixed-version-cluster \
+          --test_tag_filters=mixed-version-cluster,-exclusive,-aws \
           --verbose_failures
-  test-exclusive:
-    name: Test (Exclusive Tests)
+  test-exclusive-mixed-versions:
+    name: Test (Exclusive Tests with Mixed Version Cluster)
     runs-on: ubuntu-18.04
     strategy:
       matrix:
@@ -45,9 +45,9 @@ jobs:
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2
+      uses: actions/checkout@v2.3.4
     - name: CONFIGURE OTP & ELIXIR
-      uses: erlef/setup-beam@v1.7
+      uses: erlef/setup-beam@v1.8
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: 1.11.4
@@ -73,9 +73,10 @@ jobs:
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN EXCLUSIVE TESTS
       run: |
-        bazelisk test //... \
+        MIXED_EXCLUSIVE_TESTS=$(bazel query 'attr(tags, "mixed-version-cluster", attr(tags, "exclusive", tests(//...)))')
+        bazelisk test $MIXED_EXCLUSIVE_TESTS \
           --config=buildbuddy \
-          --test_tag_filters=exclusive,-aws,-mixed-version-cluster \
+          --test_tag_filters=-aws \
           --build_tests_only \
           --test_env RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES=true \
           --verbose_failures

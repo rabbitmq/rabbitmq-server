@@ -60,9 +60,11 @@ end_per_suite(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(quorum_queue_tests, Config) ->
-    case os:getenv("SECONDARY_UMBRELLA") of
-        false -> Config;
-        _     -> {skip, "quorum queue tests are skipped in mixed mode"}
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "quorum queue tests are skipped in mixed mode"};
+        _ ->
+            Config
     end;
 init_per_group(_, Config) ->
     Config.

@@ -3,38 +3,34 @@ load("@bazel-erlang//:bazel_erlang_lib.bzl", "path_join")
 load("@bazel-erlang//:ct.bzl", "sanitize_sname")
 load(":rabbitmq_home.bzl", "RabbitmqHomeInfo")
 
-# Note: Theses rules take advantage of the fact that when the files from
-#       the rabbitmq_home rule are used as runfiles, they are linked in
-#       at their declared relative paths. In other words, since
-#       rabbitmq_home declares "sbin/rabbitmq-server", is still at
-#       "sbin/rabbitmq-server" when our script runs.
+def _dirname(p):
+    return p.rpartition("/")[0]
+
+def _rabbitmq_home_info_root_short_path(rabbitmq_home):
+    return _dirname(_dirname(rabbitmq_home.sbin[0].short_path))
 
 def _impl(ctx):
-    erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
     rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
 
-    if rabbitmq_home.erlang_version != erlang_version:
-        fail("Mismatched erlang versions", erlang_version, rabbitmq_home.erlang_version)
+    root = _rabbitmq_home_info_root_short_path(rabbitmq_home)
 
-    erl_libs = ":".join(
-        [p.short_path for p in rabbitmq_home.plugins],
-    )
+    erl_libs = [path_join(root, "plugins")]
 
     ctx.actions.expand_template(
         template = ctx.file._template,
         output = ctx.outputs.executable,
         substitutions = {
-            "{RABBITMQ_HOME}": ctx.attr.home.label.name,
-            "{ERL_LIBS}": erl_libs,
+            "{RABBITMQ_HOME}": root,
+            "{ERL_LIBS}": ":".join(erl_libs),
             "{ERLANG_HOME}": ctx.attr._erlang_home[ErlangHomeProvider].path,
             "{SNAME}": sanitize_sname("sbb-" + ctx.attr.name),
         },
         is_executable = True,
     )
 
-    return [DefaultInfo(
-        runfiles = ctx.runfiles(ctx.attr.home[DefaultInfo].files.to_list()),
-    )]
+    runfiles = ctx.runfiles(ctx.attr.home[DefaultInfo].files.to_list())
+
+    return [DefaultInfo(runfiles = runfiles)]
 
 rabbitmq_run = rule(
     implementation = _impl,
@@ -44,7 +40,6 @@ rabbitmq_run = rule(
             allow_single_file = True,
         ),
         "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
-        "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
         "home": attr.label(providers = [RabbitmqHomeInfo]),
     },
     executable = True,

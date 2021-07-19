@@ -6,7 +6,6 @@ RabbitmqHomeInfo = provider(
         "sbin": "Files making up the sbin dir",
         "escript": "Files making up the escript dir",
         "plugins": "Files making up the plugins dir",
-        "erlang_version": "Version of the Erlang compiler used",
     },
 )
 
@@ -118,7 +117,6 @@ def _impl(ctx):
             sbin = scripts,
             escript = escripts,
             plugins = plugins,
-            erlang_version = erlang_versions[0],
         ),
         DefaultInfo(
             files = depset(scripts + escripts + plugins),
@@ -140,7 +138,6 @@ rabbitmq_home = rule(
             allow_files = True,
         ),
         "_rabbitmqctl_escript": attr.label(default = "//deps/rabbitmq_cli:rabbitmqctl"),
-        "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
         "plugins": attr.label_list(),
     },
 )
