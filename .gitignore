@@ -57,6 +57,7 @@
 /plugins.lock
 /sbin/
 /sbin.lock
+erl_crash.dump
 .envrc
 *.plt
 *.lock

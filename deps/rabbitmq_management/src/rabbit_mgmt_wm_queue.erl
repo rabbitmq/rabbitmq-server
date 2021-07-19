@@ -60,10 +60,16 @@ to_json(ReqData, Context) ->
 
 accept_content(ReqData, Context) ->
     Name = rabbit_mgmt_util:id(queue, ReqData),
-    rabbit_mgmt_util:direct_request(
-      'queue.declare',
-      fun rabbit_mgmt_format:format_accept_content/1,
-      [{queue, Name}], "Declare queue error: ~s", ReqData, Context).
+    %% NOTE: ?FRAMING currently defined as 0.9.1 hence validating length
+    case rabbit_parameter_validation:amqp091_queue_name(queue, Name) of
+        ok ->
+            rabbit_mgmt_util:direct_request(
+            'queue.declare',
+            fun rabbit_mgmt_format:format_accept_content/1,
+            [{queue, Name}], "Declare queue error: ~s", ReqData, Context);
+        {error, F, A} ->
+            rabbit_mgmt_util:bad_request(iolist_to_binary(io_lib:format(F ++ "~n", A)), ReqData, Context)
+    end.
 
 delete_resource(ReqData, Context) ->
     %% We need to retrieve manually if-unused and if-empty, as the HTTP API uses '-'

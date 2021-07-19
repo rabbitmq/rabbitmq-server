@@ -7,7 +7,8 @@
 
 -module(rabbit_parameter_validation).
 
--export([number/2, integer/2, binary/2, boolean/2, list/2, regex/2, proplist/3, enum/1]).
+-export([number/2, integer/2, binary/2, amqp091_queue_name/2,
+        boolean/2, list/2, regex/2, proplist/3, enum/1]).
 
 number(_Name, Term) when is_number(Term) ->
     ok;
@@ -26,6 +27,16 @@ binary(_Name, Term) when is_binary(Term) ->
 
 binary(Name, Term) ->
     {error, "~s should be binary, actually was ~p", [Name, Term]}.
+
+amqp091_queue_name(Name, S) when is_binary(S) ->
+    case size(S) of
+        Len when Len =< 255 -> ok;
+        _                   -> {error, "~s should be less than 255 bytes, actually was ~p", [Name, size(S)]}
+    end;
+
+amqp091_queue_name(Name, Term) ->
+    {error, "~s should be binary, actually was ~p", [Name, Term]}.
+
 
 boolean(_Name, Term) when is_boolean(Term) ->
     ok;
