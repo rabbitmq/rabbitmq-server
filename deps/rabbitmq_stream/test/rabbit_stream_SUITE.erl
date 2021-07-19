@@ -227,7 +227,7 @@ timeout_authenticating(Config) ->
     {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
     C0 = rabbit_stream_core:init(0),
     test_peer_properties(gen_tcp, S, C0),
-    SaslHandshakeFrame = rabbit_stream_core:frame({request, 1, sasl_handshake}),
+    _Frame = rabbit_stream_core:frame({request, 1, sasl_handshake}),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 timeout_close_sent(Config) ->
