@@ -88,7 +88,8 @@
         {initial_credits :: integer(),
          credits_required_for_unblocking :: integer(),
          frame_max :: integer(),
-         heartbeat :: integer()}).
+         heartbeat :: integer(),
+         connection_negotiation_step_timeout :: integer()}).
 
 -record(statem_data,
         {transport :: module(),
@@ -145,12 +146,6 @@
          peer_cert_issuer,
          peer_cert_subject,
          peer_cert_validity]).
-
--ifdef(TEST).
--define(CONNECTION_NEGOTIATION_STEP_TIMEOUT, 500).
--else.
--define(CONNECTION_NEGOTIATION_STEP_TIMEOUT, 10_000).
--endif.
 
 %% client API
 -export([start_link/4,
@@ -237,6 +232,10 @@ init([KeepaliveSup,
                                      rabbit_stream_core:init(undefined)},
             Transport:setopts(RealSocket, [{active, once}]),
             rabbit_alarm:register(self(), {?MODULE, resource_alarm, []}),
+            ConnectionNegotiationStepTimeout = application:get_env(
+                                                 rabbitmq_stream,
+                                                 connection_negotiation_step_timeout,
+                                                 10_000),
             % gen_statem process has its start_link call not return until the init function returns.
             % This is problematic, because we won't be able to call ranch:handshake/2
             % from the init callback as this would cause a deadlock to happen.
@@ -251,15 +250,19 @@ init([KeepaliveSup,
                                                  initial_credits = InitialCredits,
                                                  credits_required_for_unblocking = CreditsRequiredBeforeUnblocking,
                                                  frame_max = FrameMax,
-                                                 heartbeat = Heartbeat}});
+                                                 heartbeat = Heartbeat,
+                                                 connection_negotiation_step_timeout = ConnectionNegotiationStepTimeout}});
         {Error, Reason} ->
             rabbit_net:fast_close(RealSocket),
             rabbit_log_connection:warning("Closing connection because of ~p ~p",
                                           [Error, Reason])
     end.
 
-tcp_connected(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
+tcp_connected(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
 tcp_connected(state_timeout, close, #statem_data{
                                        transport = Transport,
                                        connection = #stream_connection{socket = Socket}
@@ -284,8 +287,11 @@ tcp_connected(info, Msg, StateData) ->
                         end
                 end).
 
-peer_properties_exchanged(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
+peer_properties_exchanged(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
 peer_properties_exchanged(state_timeout, close, #statem_data{
                                                    transport = Transport,
                                                    connection = #stream_connection{socket = Socket}
@@ -310,8 +316,11 @@ peer_properties_exchanged(info, Msg, StateData) ->
                         end
                 end).
 
-authenticating(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
+authenticating(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
 authenticating(state_timeout, close, #statem_data{
                                         transport = Transport,
                                         connection = #stream_connection{socket = Socket}
@@ -343,8 +352,11 @@ authenticating(info, Msg, StateData) ->
                         end
                 end).
 
-tuning(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
+tuning(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
 tuning(state_timeout, close, #statem_data{
                                 transport = Transport,
                                 connection = #stream_connection{socket = Socket}
@@ -373,8 +385,11 @@ tuning(info, Msg, StateData) ->
                         end
                 end).
 
-tuned(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
+tuned(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
 tuned(state_timeout, close, #statem_data{
                                transport = Transport,
                                connection = #stream_connection{socket = Socket}
@@ -999,8 +1014,11 @@ open(cast, {force_event_refresh, Ref}, #statem_data{
     Connection2 = ensure_stats_timer(Connection1),
     {keep_state, StatemData#statem_data{connection = Connection2}}.
 
-close_sent(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, ?CONNECTION_NEGOTIATION_STEP_TIMEOUT, close}};
+close_sent(enter, _OldState, #statem_data{
+                                   config = #configuration{
+                                               connection_negotiation_step_timeout = StateTimeout
+                                              }} = StateData) ->
+    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
 close_sent(state_timeout, close, #statem_data{
                                     transport = Transport,
                                     connection = #stream_connection{socket = Socket} = Connection,

@@ -68,13 +68,23 @@ init_per_group(single_node, Config) ->
     Config2 =
         rabbit_ct_helpers:set_config(Config1,
                                      {rabbitmq_ct_tls_verify, verify_none}),
-    rabbit_ct_helpers:run_setup_steps(Config2,
+    Config3 =
+        rabbit_ct_helpers:set_config(Config2,
+                                     {rabbitmq_stream, verify_none}),
+    rabbit_ct_helpers:run_setup_steps(Config3,
                                       [fun(StepConfig) ->
                                           rabbit_ct_helpers:merge_app_env(StepConfig,
                                                                           {rabbit,
                                                                            [{core_metrics_gc_interval,
                                                                              1000}]})
-                                       end]
+                                       end,
+                                       fun(StepConfig) ->
+                                          rabbit_ct_helpers:merge_app_env(StepConfig,
+                                                                          {rabbitmq_stream,
+                                                                           [{connection_negotiation_step_timeout,
+                                                                             500}]})
+                                       end
+                                      ]
                                       ++ rabbit_ct_broker_helpers:setup_steps());
 init_per_group(cluster = Group, Config) ->
     Config1 =
