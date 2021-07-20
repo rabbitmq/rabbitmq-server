@@ -96,7 +96,7 @@ end_per_group(_Group, Config) ->
                                                  % A short delay so that all tasks
                                                  % associated with the service can
                                                  % be deregistered
-                                                 timer:sleep(10000),
+                                                 timer:sleep(15000),
                                                  C
                                          end,
                                          fun aws_ecs_util:deregister_tasks/1]).
