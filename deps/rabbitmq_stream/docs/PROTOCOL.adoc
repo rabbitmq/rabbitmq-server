@@ -655,3 +655,8 @@ The client answers with a `Tune` frame with the settings he agrees on, possibly 
 from the server's suggestions.
 * Open: the client sends an `Open` frame to pick a virtual host to connect to. The server
 answers whether it accepts the access or not.
+
+== Resources
+
+- [RabbitMQ stream client](https://docs.google.com/presentation/d/1Hlv4qaWm2PRU04dVPmShP9wU7TEQEttXdsbV8P54Uvw/edit#slide=id.gdbeadf9676_0_37): a general guide line to write a stream client
+- [RabbitMQ Streams Internals](https://docs.google.com/presentation/d/1BFwf01LcicZ-SyxE1CycZv2gUQMPFGdtFkVuXhgkoTE/edit#slide=id.p1): how the streams work internally 
