@@ -25,7 +25,7 @@
 -rabbit_feature_flag(
    {stream_queue,
     #{desc          => "Support queues of type `stream`",
-      doc_url       => "https://www.rabbitmq.com/stream-queues.html",
+      doc_url       => "https://www.rabbitmq.com/stream.html",
       stability     => stable,
       depends_on    => [quorum_queue],
       migration_fun => {?MODULE, stream_queue_migration}
