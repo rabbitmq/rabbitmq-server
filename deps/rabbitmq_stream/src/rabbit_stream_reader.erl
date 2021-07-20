@@ -927,8 +927,8 @@ open(cast,
     {keep_state, StatemData#statem_data{connection_state = State1}};
 open(cast, {queue_event, #resource{name = StreamName},
             {osiris_offset, _QueueResource, -1}}, _StatemData) ->
-    rabbit_log:info("received osiris offset event for ~p with offset ~p",
-                    [StreamName, -1]),
+    rabbit_log:debug("Stream protocol connection received osiris offset event for ~p with offset ~p",
+                     [StreamName, -1]),
     keep_state_and_data;
 open(cast,
      {queue_event, #resource{name = StreamName},
@@ -945,14 +945,12 @@ open(cast,
     {Connection1, State1} =
     case maps:get(StreamName, StreamSubscriptions, undefined) of
         undefined ->
-            rabbit_log:info("osiris offset event for ~p, but no subscription "
-                            "(leftover messages after unsubscribe?)",
-                            [StreamName]),
+            rabbit_log:debug("Stream protocol connection: osiris offset event for ~p, but no subscription (leftover messages after unsubscribe?)",
+                             [StreamName]),
             {Connection, State};
         [] ->
-            rabbit_log:info("osiris offset event for ~p, but no registered "
-                            "consumers!",
-                            [StreamName]),
+            rabbit_log:debug("Stream protocol connection: osiris offset event for ~p, but no registered consumers!",
+                             [StreamName]),
             {Connection#stream_connection{stream_subscriptions =
                                           maps:remove(StreamName,
                                                       StreamSubscriptions)},
@@ -1346,7 +1344,7 @@ handle_frame_pre_auth(Transport,
                       State,
                       {request, CorrelationId, {open, VirtualHost}}) ->
     %% FIXME enforce connection limit (see rabbit_reader:is_over_connection_limit/2)
-    rabbit_log:info("Open received for ~s", [VirtualHost]),
+    rabbit_log:debug("Open frame received for ~s", [VirtualHost]),
     Connection1 =
         try
             rabbit_access_control:check_vhost_access(User,
@@ -1368,7 +1366,7 @@ handle_frame_pre_auth(Transport,
                 #{<<"advertised_host">> => AdvertisedHost,
                   <<"advertised_port">> => AdvertisedPort},
 
-            rabbit_log:info("sending open response ok ~s", [VirtualHost]),
+            rabbit_log:debug("sending open response ok ~s", [VirtualHost]),
             Frame =
                 rabbit_stream_core:frame({response, CorrelationId,
                                           {open, ?RESPONSE_CODE_OK,
@@ -1390,7 +1388,7 @@ handle_frame_pre_auth(Transport,
 
     {Connection1, State};
 handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
-    rabbit_log:info("Received heartbeat frame pre auth"),
+    rabbit_log:debug("Received heartbeat frame pre auth"),
     {Connection, State};
 handle_frame_pre_auth(_Transport, Connection, State, Command) ->
     rabbit_log_connection:warning("unknown command ~w, closing connection.",
@@ -1726,8 +1724,8 @@ handle_frame_post_auth(Transport,
                             rabbit_global_counters:increase_protocol_counter(stream, ?SUBSCRIPTION_ID_ALREADY_EXISTS, 1),
                             {Connection, State};
                         false ->
-                            rabbit_log:info("Creating subscription ~p to ~p, with offset specificat"
-                                            "ion ~p, properties ~0p",
+                            rabbit_log:debug("Creating subscription ~p to ~p, with offset specificat"
+                                             "ion ~p, properties ~0p",
                                             [SubscriptionId,
                                              Stream,
                                              OffsetSpec,
@@ -1747,9 +1745,8 @@ handle_frame_post_auth(Transport,
                                                    OffsetSpec,
                                                    CounterSpec,
                                                    Options),
-                            rabbit_log:info("Next offset for subscription ~p is ~p",
-                                            [SubscriptionId,
-                                             osiris_log:next_offset(Segment)]),
+                            rabbit_log:debug("Next offset for subscription ~p is ~p",
+                                             [SubscriptionId, osiris_log:next_offset(Segment)]),
                             ConsumerCounters =
                                 atomics:new(2, [{signed, false}]),
                             ConsumerState =
@@ -1772,8 +1769,8 @@ handle_frame_post_auth(Transport,
                                         subscribe,
                                         CorrelationId),
 
-                            rabbit_log:info("Distributing existing messages to subscription ~p",
-                                            [SubscriptionId]),
+                            rabbit_log:debug("Distributing existing messages to subscription ~p",
+                                             [SubscriptionId]),
                             {{segment, Segment1}, {credit, Credit1}} =
                                 send_chunks(Transport, ConsumerState,
                                             SendFileOct),
@@ -1801,10 +1798,10 @@ handle_frame_post_auth(Transport,
                             ConsumerOffsetLag =
                                 consumer_i(offset_lag, ConsumerState1),
 
-                            rabbit_log:info("Subscription ~p is now at offset ~p with ~p message(s) "
-                                            "distributed after subscription",
-                                            [SubscriptionId, ConsumerOffset,
-                                             messages_consumed(ConsumerCounters1)]),
+                            rabbit_log:debug("Subscription ~p is now at offset ~p with ~p message(s) "
+                                             "distributed after subscription",
+                                             [SubscriptionId, ConsumerOffset,
+                                              messages_consumed(ConsumerCounters1)]),
 
                             rabbit_stream_metrics:consumer_created(self(),
                                                                    stream_r(Stream,
@@ -1846,7 +1843,7 @@ handle_frame_post_auth(Transport,
                              SendFileOct)
             of
                 {error, closed} ->
-                    rabbit_log:warning("Reader for subscription ~p has been closed, removing "
+                    rabbit_log:warning("Stream protocol connection for subscription ~p has been closed, removing "
                                        "subscription",
                                        [SubscriptionId]),
                     {Connection1, State1} =
@@ -1907,7 +1904,7 @@ handle_frame_post_auth(_Transport,
             end;
         error ->
             %% FIXME store offset is fire-and-forget, so no response even if error, change this?
-            rabbit_log:info("Not authorized to store offset on ~p", [Stream]),
+            rabbit_log:warning("Not authorized to store offset on stream ~p", [Stream]),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -2000,9 +1997,8 @@ handle_frame_post_auth(Transport,
                         {ok,
                          #{leader_node := LeaderPid,
                            replica_nodes := ReturnedReplicas}} ->
-                            rabbit_log:info("Created cluster with leader on ~p and replicas "
-                                            "on ~p",
-                                            [LeaderPid, ReturnedReplicas]),
+                            rabbit_log:debug("Created stream cluster with leader on ~p and replicas on ~p",
+                                             [LeaderPid, ReturnedReplicas]),
                             response_ok(Transport,
                                         Connection,
                                         create_stream,
@@ -2274,8 +2270,8 @@ handle_frame_post_auth(Transport,
                        State,
                        {request, CorrelationId,
                         {close, ClosingCode, ClosingReason}}) ->
-    rabbit_log:info("Received close command ~p ~p",
-                    [ClosingCode, ClosingReason]),
+    rabbit_log:debug("Stream protocol reader received close command ~p ~p",
+                     [ClosingCode, ClosingReason]),
     Frame =
         rabbit_stream_core:frame({response, CorrelationId,
                                   {close, ?RESPONSE_CODE_OK}}),
