@@ -46,6 +46,20 @@ platform(
     },
 )
 
+platform(
+    name = "erlang_git_platform",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+        "@bazel_tools//tools/cpp:clang",
+    ],
+    exec_properties = {
+        "OSFamily": "Linux",
+        # linux-erlang-git-master
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:5d4fa38f723186668a497a8ee57e22010187e9347add5d4a7cc199dc13f1493f",
+    },
+)
+
 plt(
     name = "base_plt",
     visibility = ["//visibility:public"],
