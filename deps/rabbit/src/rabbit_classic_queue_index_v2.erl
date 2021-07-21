@@ -1006,19 +1006,14 @@ parse_entries(<< Status:8,
 %% ----
 %%
 %% Syncing and flushing to disk requested by the queue.
+%% @todo We no longer sync. Rename the function?
 
 -spec sync(State) -> State when State::mqistate().
 
 sync(State0 = #mqistate{ confirms = Confirms,
-                         fds = OpenFds,
                          on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State0]),
     State = flush_buffer(State0, full),
-    %% Call file:sync/1 on all open FDs. Some of them might not have
-    %% writes but for the time being we don't discriminate.
-    _ = maps:fold(fun(_, Fd, _) ->
-        ok = file:sync(Fd)
-    end, undefined, OpenFds),
     %% Notify syncs.
     %% @todo Why is this using a map? Isn't that unnecessary?
     Set = gb_sets:from_list(maps:values(Confirms)),

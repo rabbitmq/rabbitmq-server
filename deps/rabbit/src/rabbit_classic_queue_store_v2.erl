@@ -110,20 +110,11 @@
     read_fd = undefined :: undefined | file:fd(),
 
     %% Messages waiting for publisher confirms. The
-    %% publisher confirms will be sent when the message
-    %% has been synced to disk.
-    %%
-    %% The store does not call file:sync/1 by default.
-    %% It only does when publisher confirms are used
-    %% and there are outstanding unconfirmed messages.
-    %%
-    %% The sync mechanism is triggered by the index.
+    %% publisher confirms will be sent at regular
+    %% intervals after the index has been flushed
+    %% to disk.
     confirms = gb_sets:new() :: gb_sets:set(),
-
-    %% This fun must be called when messages that expect
-    %% confirms have been written to disk and file:sync/1
-    %% has been called.
-    on_sync :: on_sync_fun()
+    on_sync :: on_sync_fun() %% @todo Rename to reflect the lack of file:sync.
 }).
 
 %% Types copied from rabbit_queue_index.
@@ -211,11 +202,9 @@ maybe_cache(SeqId, MsgSize, Msg, State = #qs{ cache_table = CacheTable,
             State#qs{ cache_size = CacheSize + MsgSize }
     end.
 
-sync(State = #qs{ write_fd = Fd,
-                  confirms = Confirms,
+sync(State = #qs{ confirms = Confirms,
                   on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State]),
-    ok = file:sync(Fd),
     OnSyncFun(Confirms, written),
     State#qs{ confirms = gb_sets:new() }.
 
