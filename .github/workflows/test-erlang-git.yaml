@@ -19,8 +19,8 @@ jobs:
         IMAGE=pivotalrabbitmq/rabbitmq-server-buildenv:linux-erlang-git-master
         docker pull ${IMAGE}
         PINNED_IMAGE="$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE)"
-        go get github.com/bazelbuild/buildtools/buildozer
-        ${GOPATH}/bin/buildozer \
+        npm install @bazel/buildozer
+        npx buildozer \
           "dict_set exec_properties container-image:docker://${PINNED_IMAGE}" \
           //:erlang_git_platform
     - name: CONFIGURE BAZEL
