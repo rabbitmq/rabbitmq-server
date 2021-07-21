@@ -1280,10 +1280,10 @@ force_vhost_failure(Config, Node, VHost, Attempts) ->
                 force_vhost_failure(Config, Node, VHost, Attempts - 1)
             catch
                 %% The vhost terminated while we were checking again.
-                exit:{shutdown, _} ->
+                exception:{shutdown, _} ->
                     timer:sleep(300),
                     force_vhost_failure(Config, Node, VHost, Attempts - 1);
-                exit:{badmatch,
+                exception:{badmatch,
                       {error,
                        {vhost_supervisor_not_running, VHost}}} ->
                     %% This badmatch may occur in get_message_store_pid/3 as a
