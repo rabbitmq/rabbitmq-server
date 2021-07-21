@@ -73,6 +73,19 @@
     %% is enough to get the buffer to a comfortable size.
     write_buffer_updates = 0 :: non_neg_integer(),
 
+    %% When using publisher confirms we flush index entries
+    %% to disk regularly. This means we can no longer rely
+    %% on entries being present in the write_buffer and
+    %% have to read from disk. This cache is meant to avoid
+    %% that by keeping the write_buffer entries in memory
+    %% longer.
+    %%
+    %% When the write_buffer is flushed to disk fully, it
+    %% replaces the cache entirely. When only acks are flushed,
+    %% then the cache gets updated: old acks are removed and
+    %% new acks are added to the cache.
+    cache = #{} :: #{seq_id() => entry() | ack},
+
     %% Messages waiting for publisher confirms. The
     %% publisher confirms will be sent when the message
     %% has been synced to disk (as an entry or an ack).
@@ -591,25 +604,34 @@ maybe_flush_buffer(State = #mqistate { write_buffer = WriteBuffer,
             State
     end.
 
-flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0 },
+flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0,
+                                  cache = Cache0 },
              FlushType) ->
     SegmentEntryCount = segment_entry_count(),
     %% First we prepare the writes sorted by segment.
-    {Writes, WriteBuffer} = maps:fold(fun
-        (SeqId, ack, {WritesAcc, BufferAcc}) ->
+    {Writes, WriteBuffer, AcksToCache} = maps:fold(fun
+        (SeqId, ack, {WritesAcc, BufferAcc, AcksAcc}) when FlushType =:= updates ->
             {write_ack(SeqId, SegmentEntryCount, WritesAcc),
-             BufferAcc};
-        (SeqId, deliver, {WritesAcc, BufferAcc}) ->
+             BufferAcc,
+             AcksAcc#{SeqId => ack}};
+        (SeqId, ack, {WritesAcc, BufferAcc, AcksAcc}) ->
+            {write_ack(SeqId, SegmentEntryCount, WritesAcc),
+             BufferAcc,
+             AcksAcc};
+        (SeqId, deliver, {WritesAcc, BufferAcc, AcksAcc}) ->
             {write_deliver(SeqId, SegmentEntryCount, WritesAcc),
-             BufferAcc};
-        (SeqId, Entry, {WritesAcc, BufferAcc}) when FlushType =:= updates ->
+             BufferAcc,
+             AcksAcc};
+        (SeqId, Entry, {WritesAcc, BufferAcc, AcksAcc}) when FlushType =:= updates ->
             {WritesAcc,
-             BufferAcc#{SeqId => Entry}};
+             BufferAcc#{SeqId => Entry},
+             AcksAcc};
         %% Otherwise we write the entire buffer.
-        (SeqId, Entry, {WritesAcc, BufferAcc}) ->
+        (SeqId, Entry, {WritesAcc, BufferAcc, AcksAcc}) ->
             {write_entry(SeqId, SegmentEntryCount, Entry, WritesAcc),
-             BufferAcc}
-    end, {#{}, #{}}, WriteBuffer0),
+             BufferAcc,
+             AcksAcc}
+    end, {#{}, #{}, #{}}, WriteBuffer0),
     %% Then we do the writes for each segment.
     State = maps:fold(fun(Segment, LocBytes, FoldState0) ->
         FoldState1 = reduce_fd_usage(Segment, FoldState0),
@@ -618,9 +640,23 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0 },
         file_handle_cache_stats:update(queue_index_write),
         FoldState
     end, State0, Writes),
+    %% Update the cache. If we are flushing the entire write buffer,
+    %% then that buffer becomes the new cache. Otherwise remove the
+    %% old acks from the cache and add the new acks.
+    Cache = case FlushType of
+        full ->
+            WriteBuffer0;
+        updates ->
+            Cache1 = maps:foldl(fun
+                (_, ack, CacheAcc) -> CacheAcc;
+                (SeqId, Entry, CacheAcc) -> CacheAcc#{SeqId => Entry}
+            end, #{}, Cache0),
+            maps:merge(Cache1, AcksToCache)
+    end,
     %% Finally we update the state.
     State#mqistate{ write_buffer = WriteBuffer,
-                    write_buffer_updates = 0 }.
+                    write_buffer_updates = 0,
+                    cache = Cache }.
 
 write_ack(SeqId, SegmentEntryCount, WritesAcc) ->
     Segment = SeqId div SegmentEntryCount,
@@ -732,7 +768,8 @@ ack([], State) ->
     ?DEBUG("[] ~0p", [State]),
     {[], State};
 ack(SeqIds, State0 = #mqistate{ write_buffer = WriteBuffer0,
-                                write_buffer_updates = NumUpdates0 }) ->
+                                write_buffer_updates = NumUpdates0,
+                                cache = Cache0 }) ->
     ?DEBUG("~0p ~0p", [SeqIds, State0]),
     %% We start by updating the ack state information. We then
     %% use this information to delete segment files on disk that
@@ -743,9 +780,9 @@ ack(SeqIds, State0 = #mqistate{ write_buffer = WriteBuffer0,
     %% acks for segments that have been deleted. We do this using second
     %% step when there have been deletes to avoid having extra overhead
     %% in the normal case.
-    {WriteBuffer1, NumUpdates1} = lists:foldl(fun ack_fold_fun/2,
-                                              {WriteBuffer0, NumUpdates0},
-                                              SeqIds),
+    {WriteBuffer1, NumUpdates1, Cache} = lists:foldl(fun ack_fold_fun/2,
+                                                     {WriteBuffer0, NumUpdates0, Cache0},
+                                                     SeqIds),
     {WriteBuffer, NumUpdates} = case Deletes of
         [] ->
             {WriteBuffer1, NumUpdates1};
@@ -757,7 +794,8 @@ ack(SeqIds, State0 = #mqistate{ write_buffer = WriteBuffer0,
             {WriteBuffer2, NumUpdates2}
     end,
     {Deletes, maybe_flush_buffer(State#mqistate{ write_buffer = WriteBuffer,
-                                                 write_buffer_updates = NumUpdates })}.
+                                                 write_buffer_updates = NumUpdates,
+                                                 cache = Cache })}.
 
 update_ack_state(SeqIds, State = #mqistate{ segments = Segments0 }) ->
     SegmentEntryCount = segment_entry_count(),
@@ -796,18 +834,20 @@ delete_segment(Segment, State0 = #mqistate{ fds = OpenFds0 }) ->
     ok = file:delete(segment_file(Segment, State)),
     State.
 
-ack_fold_fun(SeqId, {Buffer, Updates}) ->
+ack_fold_fun(SeqId, {Buffer, Updates, Cache}) ->
     case Buffer of
         %% Remove the write if there is one scheduled. In that case
         %% we will never write this entry to disk.
         #{SeqId := Write} when is_tuple(Write) ->
-            {maps:remove(SeqId, Buffer), Updates};
+            {maps:remove(SeqId, Buffer), Updates, Cache};
         %% Ack if an on-disk entry was marked for delivery.
+        %% Remove the entry from the cache if any since it is now covered by the buffer.
         #{SeqId := deliver} ->
-            {Buffer#{SeqId => ack}, Updates};
+            {Buffer#{SeqId => ack}, Updates, maps:remove(SeqId, Cache)};
         %% Otherwise ack an entry that is already on disk.
+        %% Remove the entry from the cache if any since it is now covered by the buffer.
         _ when not is_map_key(SeqId, Buffer) ->
-            {Buffer#{SeqId => ack}, Updates + 1}
+            {Buffer#{SeqId => ack}, Updates + 1, maps:remove(SeqId, Cache)}
     end.
 
 %% Remove writes for all segments that have been deleted.
@@ -841,32 +881,41 @@ read(FromSeqId, ToSeqId, State)
     ?DEBUG("~0p ~0p ~0p", [FromSeqId, ToSeqId, State]),
     {[], State};
 %% Read the messages requested.
-read(FromSeqId, ToSeqId, State0 = #mqistate{ write_buffer = WriteBuffer }) ->
+read(FromSeqId, ToSeqId, State0 = #mqistate{ write_buffer = WriteBuffer,
+                                             cache = Cache }) ->
     ?DEBUG("~0p ~0p ~0p", [FromSeqId, ToSeqId, State0]),
     %% We first try to read from the write buffer what we can,
-    %% then we read the rest from disk.
-    {Reads0, SeqIdsOnDisk} = read_from_buffer(FromSeqId, ToSeqId,
-                                              WriteBuffer,
-                                              [], []),
+    %% then from the cache, then we read the rest from disk.
+    {Reads0, SeqIdsOnDisk} = read_from_buffers(FromSeqId, ToSeqId,
+                                               WriteBuffer, Cache,
+                                               [], []),
     {Reads1, State} = read_from_disk(SeqIdsOnDisk,
-                                      State0,
-                                      Reads0),
+                                     State0,
+                                     Reads0),
     %% The messages may not be in the correct order. Fix that.
     Reads = lists:keysort(2, Reads1),
     {Reads, State}.
 
-read_from_buffer(ToSeqId, ToSeqId, _, SeqIdsOnDisk, Reads) ->
+read_from_buffers(ToSeqId, ToSeqId, _, _, SeqIdsOnDisk, Reads) ->
     %% We must do a lists:reverse here so that we are able
     %% to read multiple continuous messages from disk in one call.
     {Reads, lists:reverse(SeqIdsOnDisk)};
-read_from_buffer(SeqId, ToSeqId, WriteBuffer, SeqIdsOnDisk, Reads) ->
+read_from_buffers(SeqId, ToSeqId, WriteBuffer, Cache, SeqIdsOnDisk, Reads) ->
     case WriteBuffer of
         #{SeqId := ack} ->
-            read_from_buffer(SeqId + 1, ToSeqId, WriteBuffer, SeqIdsOnDisk, Reads);
+            read_from_buffers(SeqId + 1, ToSeqId, WriteBuffer, Cache, SeqIdsOnDisk, Reads);
         #{SeqId := Entry} when is_tuple(Entry) ->
-            read_from_buffer(SeqId + 1, ToSeqId, WriteBuffer, SeqIdsOnDisk, [Entry|Reads]);
+            read_from_buffers(SeqId + 1, ToSeqId, WriteBuffer, Cache, SeqIdsOnDisk, [Entry|Reads]);
         _ ->
-            read_from_buffer(SeqId + 1, ToSeqId, WriteBuffer, [SeqId|SeqIdsOnDisk], Reads)
+            %% Nothing was found in the write buffer, but we may have an entry in the cache.
+            case Cache of
+                #{SeqId := ack} ->
+                    read_from_buffers(SeqId + 1, ToSeqId, WriteBuffer, Cache, SeqIdsOnDisk, Reads);
+                #{SeqId := Entry} when is_tuple(Entry) ->
+                    read_from_buffers(SeqId + 1, ToSeqId, WriteBuffer, Cache, SeqIdsOnDisk, [Entry|Reads]);
+                _ ->
+                    read_from_buffers(SeqId + 1, ToSeqId, WriteBuffer, Cache, [SeqId|SeqIdsOnDisk], Reads)
+            end
     end.
 
 %% We try to minimize the number of file:read calls when reading from
