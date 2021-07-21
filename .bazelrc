@@ -37,6 +37,13 @@ build:rbe-24 --platforms=//:erlang_24_platform
 build:rbe-24 --extra_execution_platforms=//:erlang_24_platform
 build:rbe-24 --@bazel-erlang//:erlang_version=24
 
+build:rbe-git --config=rbe
+build:rbe-git --host_platform=//:erlang_git_platform
+build:rbe-git --platforms=//:erlang_git_platform
+build:rbe-git --extra_execution_platforms=//:erlang_git_platform
+build:rbe-git --@bazel-erlang//:erlang_home=/usr/local/lib/erlang
+build:rbe-git --@bazel-erlang//:erlang_version=25
+
 # Try importing a user specific .bazelrc
 # You can create your own by copying and editing the template-user.bazelrc template:
 # cp template-user.bazelrc user.bazelrc
