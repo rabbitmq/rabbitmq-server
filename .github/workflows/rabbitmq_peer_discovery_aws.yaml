@@ -1,0 +1,51 @@
+name: Peer Discovery AWS Integration Test
+on:
+  push:
+    paths:
+      - 'deps/rabbitmq_peer_discovery_aws/**'
+      - .github/workflows/rabbitmq_peer_discovery_aws.yaml
+jobs:
+  peer-discovery-aws-integration-test:
+    name: Integration Test
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        erlang_version:
+        - "24" # This number is mostly irrelevant - the OCI image effectively determines the Erlang version tested
+    timeout-minutes: 45
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.3.4
+    - name: WAIT FOR OCI IMAGE WORKFLOW
+      uses: lewagon/wait-on-check-action@v0.2
+      with:
+        ref: ${{ github.ref }}
+        check-name: build-publish-dev (24.0.3)
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        wait-interval: 30 # seconds
+    - name: CONFIGURE BAZEL
+      run: |
+        echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
+        echo "${{ secrets.BUILDBUDDY_KEY }}" > buildbuddy-key.pem
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --tls_client_certificate=buildbuddy-cert.pem
+          build:buildbuddy --tls_client_key=buildbuddy-key.pem
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-aws-${{ matrix.erlang_version }}
+        EOF
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: RUN INTEGRATION TESTS
+      run: |
+        branch_or_tag="${GITHUB_REF##*/}"
+        bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
+          --config=rbe-${{ matrix.erlang_version }} \
+          --test_tag_filters=aws \
+          --build_tests_only \
+          --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
+          --test_env AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }} \
+          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:${{ github.sha }}-otp-max" \
+          --test_env AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//./-}" \
+          --verbose_failures

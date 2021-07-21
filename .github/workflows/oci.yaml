@@ -1,0 +1,127 @@
+# https://github.com/marketplace/actions/build-and-push-docker-images
+name: OCI
+on:
+  push:
+    paths:
+      - 'deps/**'
+      - 'escript/**'
+      - 'packaging/**'
+      - 'scripts/**'
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
+      - .github/workflows/oci.yaml
+env:
+  GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/PACKAGES/rabbitmq-server-generic-unix-${{ github.sha }}.tar.xz
+  RABBITMQ_VERSION: ${{ github.sha }}
+  VERSION: ${{ github.sha }}
+jobs:
+
+  # This job will build one docker image per supported Erlang major version.
+  # Each image will have two tags (one containing the Git commit SHA, one containing the branch name).
+  #
+  # For example, for Git commit SHA '111aaa' and branch name 'main' and maximum supported Erlang major version '24',
+  # the following tags will be pushed to Dockerhub:
+  #
+  # * 111aaa-otp-min (image OTP 23)
+  # * main-otp-min (image OTP 23)
+  # * 111aaa-otp-max (image OTP 24)
+  # * main-otp-max (image OTP 24)
+
+  build-publish-dev:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+          # Build image for every supported Erlang major version.
+          # Source of truth for OTP versions (min & max): https://www.rabbitmq.com/which-erlang.html
+          otp:
+            - '23.2'
+            # Which is the latest OTP release for this major? 1/2
+            # https://github.com/erlang/otp/tags
+            - '24.0.3'
+          include:
+          - otp: '23.2'
+            # make -C packaging/docker-image find-otp-sha256 OTP_VERSION_MATCH=23.2
+            otp_sha256: 79f2233a960cc427607d52a7b7e9e5b08afba96a4d87ced4efb64e902b44160c
+            # Which is the min supported Elixir?
+            # https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
+            elixir: '1.10.4'
+            image_tag_suffix: '-otp-min'
+            # Which is the latest OTP release for this major? 2/2
+            # https://github.com/erlang/otp/tags
+          - otp: '24.0.3'
+            # make -C packaging/docker-image find-otp-sha256
+            otp_sha256: f46bdc3146ac0b54e0d20faa09129a78f4d880d85890acda557c1094662a1a42
+            # Which is the max supported Elixir?
+            # https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
+            # Which is the latest Elixir release?
+            # https://github.com/elixir-lang/elixir/tags
+            elixir: '1.12.2'
+            image_tag_suffix: '-otp-max'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+
+      - name: Set up Erlang & Elixir
+        uses: erlef/setup-beam@v1.8
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+
+      - name: Build generic unix package
+        run: |
+          make package-generic-unix PROJECT_VERSION=${{ github.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Expand generic-unix-package
+        working-directory: packaging/docker-image
+        run: |
+          xzcat ${GENERIC_UNIX_ARCHIVE} | tar xvf -
+
+      - name: Compute image tags
+        id: compute-tags
+        run: |
+          echo "::set-output name=TAG_1::${{ github.sha }}${{ matrix.image_tag_suffix }}"
+          echo "::set-output name=TAG_2::${GITHUB_REF##*/}${{ matrix.image_tag_suffix }}"
+
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: packaging/docker-image
+          push: true
+          tags: |
+            pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_1 }}
+            pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_2 }}
+          build-args: |
+            SKIP_PGP_VERIFY=true
+            PGP_KEYSERVER=pgpkeys.eu
+            OTP_VERSION=${{ matrix.otp }}
+            OTP_SHA256=${{ matrix.otp_sha256 }}
+            RABBITMQ_BUILD=rabbitmq_server-${{ github.sha }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+
+      # Temp fix
+      # https://github.com/docker/build-push-action/issues/252
+      # https://github.com/moby/buildkit/issues/1896
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
