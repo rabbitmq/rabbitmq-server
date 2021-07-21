@@ -17,9 +17,10 @@ jobs:
         # buildbuddy caches the container image, so we must use a specific sha to ensure
         # the latest is used
         IMAGE=pivotalrabbitmq/rabbitmq-server-buildenv:linux-erlang-git-master
-        docker pull $IMAGE
+        docker pull ${IMAGE}
         PINNED_IMAGE="$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE)"
-        buildozer \
+        go get github.com/bazelbuild/buildtools/buildozer
+        ${GOPATH}/bin/buildozer \
           "dict_set exec_properties container-image:docker://${PINNED_IMAGE}" \
           //:erlang_git_platform
     - name: CONFIGURE BAZEL
