@@ -237,7 +237,7 @@ DeclarePublisherResponse => Key Version CorrelationId ResponseCode PublisherId
 === Publish
 
 ```
-Publish => Key Version Stream PublishedMessages
+Publish => Key Version PublisherId PublishedMessages
   Key => uint16 // 2
   Version => uint16
   PublisherId => uint8
