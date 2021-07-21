@@ -19,18 +19,18 @@ jobs:
         docker pull $IMAGE
         PINNED_IMAGE="$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE)"
         cat << EOF >> BUILD.bazel
-          platform(
-              name = "erlang_git_platform",
-              constraint_values = [
-                  "@platforms//os:linux",
-                  "@platforms//cpu:x86_64",
-                  "@bazel_tools//tools/cpp:clang",
-              ],
-              exec_properties = {
-                  "OSFamily": "Linux",
-                  "container-image": "docker://${PINNED_IMAGE}",
-              },
-          )
+        platform(
+            name = "erlang_git_platform",
+            constraint_values = [
+                "@platforms//os:linux",
+                "@platforms//cpu:x86_64",
+                "@bazel_tools//tools/cpp:clang",
+            ],
+            exec_properties = {
+                "OSFamily": "Linux",
+                "container-image": "docker://${PINNED_IMAGE}",
+            },
+        )
         EOF
     - name: CONFIGURE BAZEL
       run: |
