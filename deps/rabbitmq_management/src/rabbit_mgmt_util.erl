@@ -290,7 +290,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
             rabbit_log:warning("HTTP access denied: ~s",
                                [rabbit_misc:format(Msg, Args)]),
-            not_authorised(<<"Login failed">>, ReqData, Context)
+            not_authenticated(<<"Login failed">>, ReqData, Context)
     end.
 
 vhost_from_headers(ReqData) ->
@@ -736,7 +736,12 @@ a2b(B)                 -> B.
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
 
+not_authenticated(Reason, ReqData, Context) ->
+    ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
+    halt_response(401, not_authorized, Reason, ReqData1, Context).
+
 not_authorised(Reason, ReqData, Context) ->
+    %% TODO: consider changing to 403 in 4.0
     halt_response(401, not_authorised, Reason, ReqData, Context).
 
 not_found(Reason, ReqData, Context) ->
