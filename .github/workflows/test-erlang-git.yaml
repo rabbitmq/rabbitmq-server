@@ -12,11 +12,6 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2.3.4
-    - name: SETUP BUILDOZER
-      uses: ArtemSBulgakov/buildozer-action@v1
-      id: buildozer
-      with:
-        buildozer_version: stable
     - name: PATCH BUILD.bazel
       run: |
         # buildbuddy caches the container image, so we must use a specific sha to ensure
@@ -24,7 +19,8 @@ jobs:
         IMAGE=pivotalrabbitmq/rabbitmq-server-buildenv:linux-erlang-git-master
         docker pull ${IMAGE}
         PINNED_IMAGE="$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE)"
-        ${{ steps.buildozer.outputs.filename }} \
+        go get github.com/bazelbuild/buildtools/buildozer
+        ${GOPATH}/bin/buildozer \
           "dict_set exec_properties container-image:docker://${PINNED_IMAGE}" \
           //:erlang_git_platform
     - name: CONFIGURE BAZEL
