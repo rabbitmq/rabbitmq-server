@@ -95,7 +95,7 @@
     %% and there are outstanding unconfirmed messages.
     %% In that case the buffer is flushed to disk when
     %% the queue requests a sync (after a timeout).
-    confirms = #{} :: #{seq_id() => rabbit_types:msg_id()},
+    confirms = gb_sets:new() :: gb_sets:set(),
 
     %% Segments we currently know of along with the
     %% number of unacked messages remaining in the
@@ -490,7 +490,7 @@ publish(MsgId, SeqId, Location, Props, IsPersistent, IsDelivered, TargetRamCount
     end,
     %% When publisher confirms have been requested for this
     %% message we mark the message as unconfirmed.
-    State = maybe_mark_unconfirmed(MsgId, SeqId, Props, State2),
+    State = maybe_mark_unconfirmed(MsgId, Props, State2),
     maybe_flush_buffer(State).
 
 new_segment_file(Segment, State = #mqistate{ segments = Segments }) ->
@@ -580,10 +580,10 @@ reduce_fd_usage(SegmentToOpen, State = #mqistate{ fds = OpenFds0 }) ->
             State#mqistate{ fds = OpenFds }
     end.
 
-maybe_mark_unconfirmed(MsgId, SeqId, #message_properties{ needs_confirming = true },
+maybe_mark_unconfirmed(MsgId, #message_properties{ needs_confirming = true },
         State = #mqistate { confirms = Confirms }) ->
-    State#mqistate{ confirms = Confirms#{SeqId => MsgId} };
-maybe_mark_unconfirmed(_, _, _, State) ->
+    State#mqistate{ confirms = gb_sets:add_element(MsgId, Confirms) };
+maybe_mark_unconfirmed(_, _, State) ->
     State.
 
 %% @todo Perhaps make the two limits configurable. Also refine the default.
@@ -1014,18 +1014,14 @@ sync(State0 = #mqistate{ confirms = Confirms,
                          on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State0]),
     State = flush_buffer(State0, full),
-    %% Notify syncs.
-    %% @todo Why is this using a map? Isn't that unnecessary?
-    Set = gb_sets:from_list(maps:values(Confirms)),
-    OnSyncFun(Set),
-    %% Reset confirms.
-    State#mqistate{ confirms = #{} }.
+    OnSyncFun(Confirms),
+    State#mqistate{ confirms = gb_sets:new() }.
 
 -spec needs_sync(mqistate()) -> 'false'.
 
 needs_sync(State = #mqistate{ confirms = Confirms }) ->
     ?DEBUG("~0p", [State]),
-    case Confirms =:= #{} of
+    case gb_sets:is_empty(Confirms) of
         true -> false;
         false -> confirms
     end.
