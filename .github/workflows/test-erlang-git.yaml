@@ -1,0 +1,60 @@
+name: Test Erlang Git Master
+on:
+  schedule:
+  - cron:  '0 2 * * *'
+  workflow_dispatch:
+jobs:
+  test-erlang-git:
+    name: Test (Erlang Git Master)
+    runs-on: ubuntu-18.04
+    timeout-minutes: 120
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.3.4
+    - name: PATCH BUILD.bazel
+      run: |
+        # buildbuddy caches the container image, so we must use a specific sha to ensure
+        # the latest is used
+        IMAGE=pivotalrabbitmq/rabbitmq-server-buildenv:linux-erlang-git-master
+        docker pull $IMAGE
+        PINNED_IMAGE="$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE)"
+        cat << EOF >> BUILD.bazel
+          platform(
+              name = "erlang_git_platform",
+              constraint_values = [
+                  "@platforms//os:linux",
+                  "@platforms//cpu:x86_64",
+                  "@bazel_tools//tools/cpp:clang",
+              ],
+              exec_properties = {
+                  "OSFamily": "Linux",
+                  "container-image": "docker://${PINNED_IMAGE}",
+              },
+          )
+        EOF
+    - name: CONFIGURE BAZEL
+      run: |
+        echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
+        echo "${{ secrets.BUILDBUDDY_KEY }}" > buildbuddy-key.pem
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --tls_client_certificate=buildbuddy-cert.pem
+          build:buildbuddy --tls_client_key=buildbuddy-key.pem
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-erlang-git
+
+          build:rbe-git --config=rbe
+          build:rbe-git --host_platform=//:erlang_git_platform
+          build:rbe-git --platforms=//:erlang_git_platform
+          build:rbe-git --extra_execution_platforms=//:erlang_git_platform
+          build:rbe-git --@bazel-erlang//:erlang_version=master
+        EOF
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: RUN TESTS
+      run: |
+        bazelisk test //... \
+          --config=rbe-git \
+          --test_tag_filters=-mixed-version-cluster,-exclusive,-aws \
+          --verbose_failures
