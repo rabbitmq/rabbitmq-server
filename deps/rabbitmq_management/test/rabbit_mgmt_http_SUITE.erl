@@ -415,9 +415,13 @@ assert_percentage(Breakdown0, ExtraMargin) ->
 auth_test(Config) ->
     http_put(Config, "/users/user", [{password, <<"user">>},
                                      {tags, <<"">>}], {group, '2xx'}),
-    test_auth(Config, ?NOT_AUTHORISED, []),
+    EmptyAuthResponseHeaders = test_auth(Config, ?NOT_AUTHORISED, []),
+    ?assertEqual(true, lists:keymember("www-authenticate", 1,  EmptyAuthResponseHeaders)),
+    %% NOTE: this one won't have www-authenticate in the response,
+    %% because user/password are ok, tags are not
     test_auth(Config, ?NOT_AUTHORISED, [auth_header("user", "user")]),
-    test_auth(Config, ?NOT_AUTHORISED, [auth_header("guest", "gust")]),
+    WrongAuthResponseHeaders = test_auth(Config, ?NOT_AUTHORISED, [auth_header("guest", "gust")]),
+    ?assertEqual(true, lists:keymember("www-authenticate", 1,  WrongAuthResponseHeaders)),
     test_auth(Config, ?OK, [auth_header("guest", "guest")]),
     http_delete(Config, "/users/user", {group, '2xx'}),
     passed.
@@ -935,8 +939,8 @@ multiple_invalid_connections_test(Config) ->
     passed.
 
 test_auth(Config, Code, Headers) ->
-    {ok, {{_, Code, _}, _, _}} = req(Config, get, "/overview", Headers),
-    passed.
+    {ok, {{_, Code, _}, RespHeaders, _}} = req(Config, get, "/overview", Headers),
+    RespHeaders.
 
 exchanges_test(Config) ->
     %% Can list exchanges
