@@ -19,10 +19,10 @@ endef
 
 PROJECT := rabbitmq_prometheus
 PROJECT_MOD := rabbit_prometheus_app
-DEPS = rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch
+DEPS = accept rabbit rabbitmq_management_agent prometheus rabbitmq_web_dispatch
 # Deps that are not applications
 # rabbitmq_management is added so that we build a custom version, for the Docker image
-BUILD_DEPS = accept amqp_client rabbit_common rabbitmq_management
+BUILD_DEPS = amqp_client rabbit_common rabbitmq_management
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers eunit_formatters
 
 EUNIT_OPTS = no_tty, {report, {eunit_progress, [colored, profile]}}
