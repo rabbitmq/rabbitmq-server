@@ -99,7 +99,7 @@
     %% it does not include the metadata. The real
     %% cache size will therefore potentially be larger
     %% than the configured maximum size.
-    cache_table = undefined :: ets:tid(),
+    cache = #{}, %% @todo #{ seq_id() => {non_neg_integer(), msg()}}
     cache_size = 0 :: non_neg_integer(),
 
     %% Similarly, we keep track of a single read fd.
@@ -126,11 +126,9 @@ init(#resource{ virtual_host = VHost } = Name, OnSyncFun) ->
     ?DEBUG("~0p ~0p", [Name, OnSyncFun]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = rabbit_classic_queue_index_v2:queue_dir(VHostDir, Name),
-    CacheTable = ets:new(rabbit_classic_queue_store_v2_cache, [set, public]),
     #qs{
         dir = Dir,
-        on_sync = OnSyncFun,
-        cache_table = CacheTable
+        on_sync = OnSyncFun
     }.
 
 %% @todo Recover: do nothing? Just normal init?
@@ -191,15 +189,15 @@ get_write_fd(Segment, State = #qs{ write_fd = OldFd }) ->
                            %% until after the write has been completed.
                            write_offset = Offset }}.
 
-maybe_cache(SeqId, MsgSize, Msg, State = #qs{ cache_table = CacheTable,
+maybe_cache(SeqId, MsgSize, Msg, State = #qs{ cache = Cache,
                                               cache_size = CacheSize }) ->
-    MaxCacheSize = 32000000, %% @todo Configurable.
+    MaxCacheSize = 512000, %% @todo Configurable.
     if
         CacheSize + MsgSize > MaxCacheSize ->
             State;
         true ->
-            true = ets:insert_new(CacheTable, {SeqId, MsgSize, Msg}),
-            State#qs{ cache_size = CacheSize + MsgSize }
+            State#qs{ cache = Cache#{ SeqId => {MsgSize, Msg} },
+                      cache_size = CacheSize + MsgSize }
     end.
 
 sync(State = #qs{ confirms = Confirms,
@@ -208,12 +206,12 @@ sync(State = #qs{ confirms = Confirms,
     OnSyncFun(Confirms, written),
     State#qs{ confirms = gb_sets:new() }.
 
-read(SeqId, DiskLocation, State = #qs{ cache_table = CacheTable }) ->
+read(SeqId, DiskLocation, State = #qs{ cache = Cache }) ->
     ?DEBUG("~0p ~0p ~0p", [SeqId, DiskLocation, State]),
-    case ets:lookup(CacheTable, SeqId) of
-        [{SeqId, _MsgSize, Msg}] ->
+    case Cache of
+        #{ SeqId := {_, Msg} } ->
             {Msg, State};
-        [] ->
+        _ ->
             read_from_disk(SeqId, DiskLocation, State)
     end.
 
@@ -251,12 +249,15 @@ get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
 %% We only remove the message from the cache. We will remove
 %% the message from the disk when we delete the segment file.
 %% @todo Maybe rename remove_from_cache? Since we don't really remove.
-remove(SeqId, State = #qs{ cache_table = CacheTable,
+remove(SeqId, State = #qs{ cache = Cache0,
                            cache_size = CacheSize }) ->
     ?DEBUG("~0p ~0p", [SeqId, State]),
-    case ets:take(CacheTable, SeqId) of
-        [] -> State;
-        [{_, MsgSize, _}] -> State#qs{ cache_size = CacheSize - MsgSize }
+    case maps:take(SeqId, Cache0) of
+        error ->
+            State;
+        {{MsgSize, _}, Cache} ->
+            State#qs{ cache = Cache,
+                      cache_size = CacheSize - MsgSize }
     end.
 
 %% First we check if the write fd points to a segment
