@@ -605,7 +605,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "queue_master_location_SUITE",
-        size = "medium",
+        size = "large",
         shard_count = 2,
     ),
     rabbitmq_integration_suite(
