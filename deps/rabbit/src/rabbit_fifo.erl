@@ -800,19 +800,6 @@ handle_aux(_RaState, cast, tick, #aux{name = Name,
 handle_aux(_RaState, cast, eol, #aux{name = Name} = Aux, Log, _) ->
     ets:delete(rabbit_fifo_usage, Name),
     {no_reply, Aux, Log};
-handle_aux(_RaState, {call, _From}, oldest_entry_timestamp, Aux,
-           Log, #?MODULE{ra_indexes = Indexes}) ->
-    Ts = case rabbit_fifo_index:smallest(Indexes) of
-        %% if there are no entries, we return current timestamp
-        %% so that any previously obtained entries are considered older than this
-        undefined ->
-            erlang:system_time(millisecond);
-        Idx when is_integer(Idx) ->
-            {{_, _, {_, Meta, _, _}}, _Log1} = ra_log:fetch(Idx, Log),
-            #{ts := Timestamp} = Meta,
-           Timestamp
-    end,
-    {reply, {ok, Ts}, Aux, Log};
 handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            Log0, MacState) ->
     case rabbit_fifo:query_peek(Pos, MacState) of
