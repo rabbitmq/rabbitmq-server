@@ -84,7 +84,7 @@ usage_additional() ->
     Prefix = <<" must be one of ">>,
     InfoItems =
         'Elixir.Enum':join(
-            lists:usort(?CONSUMER_INFO_ITEMS), <<", ">>),
+            lists:usort(?PUBLISHER_INFO_ITEMS), <<", ">>),
     [{<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}].
 
 usage_doc_guides() ->
