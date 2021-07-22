@@ -57,11 +57,12 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "config_schema_SUITE",
+        size = "small",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "rabbit_prometheus_http_SUITE",
-        size = "small",
+        size = "medium",
         flaky = True,
     ),
 ]
