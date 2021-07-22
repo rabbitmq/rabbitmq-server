@@ -1,5 +1,10 @@
 name: Test Mixed Version Clusters
-on: push
+on:
+  push:
+    branches:
+      - master
+      - v3.9.x
+      - v3.8.x
 jobs:
   test-mixed-versions:
     name: Test (Mixed Version Cluster)
