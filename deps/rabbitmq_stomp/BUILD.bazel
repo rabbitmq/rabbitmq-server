@@ -124,7 +124,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "proxy_protocol_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
