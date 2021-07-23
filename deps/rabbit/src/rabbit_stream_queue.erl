@@ -605,10 +605,14 @@ tracking_status(Vhost, QueueName) ->
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             Leader = amqqueue:get_pid(Q),
             Map = osiris:read_tracking(Leader),
-            maps:fold(fun(K, {Type, Value}, Acc) ->
-                              [[{reference, K},
-                                {type, Type},
-                                {value, Value}] | Acc]
+            maps:fold(fun(Type, Trackings, Acc) ->
+                              %% Convert for example 'offsets' to 'offset' or 'sequences' to 'sequence'
+                              T = list_to_atom(lists:droplast(atom_to_list(Type))),
+                              maps:fold(fun(TrkId, TrkData, Acc0) ->
+                                                [[{type, T},
+                                                  {reference, TrkId},
+                                                  {value, TrkData}] | Acc0]
+                                        end, [], Trackings) ++ Acc
                       end, [], Map);
         {error, not_found} = E->
             E

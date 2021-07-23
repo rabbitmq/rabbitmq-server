@@ -101,7 +101,8 @@ all_tests() ->
      max_segment_size_bytes_policy,
      purge,
      update_retention_policy,
-     queue_info
+     queue_info,
+     tracking_status
     ].
 
 %% -------------------------------------------------------------------
@@ -1043,6 +1044,25 @@ consume_and_ack(Config) ->
             exit(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+tracking_status(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    Vhost = ?config(rmq_vhost, Config),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue, ?FUNCTION_NAME, [Vhost, Q])),
+    publish_confirm(Ch, Q, [<<"msg">>]),
+    ?assertMatch([[
+                   {type, sequence},
+                   {reference, _WriterID},
+                   {value, {_Offset = 0, _Seq = 1}}
+                  ]],
+                 rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue, ?FUNCTION_NAME, [Vhost, Q])),
+    rabbit_ct_broker_helpers:rpc(Config, Server, ?MODULE, delete_testcase_queue, [Q]).
 
 consume_from_last(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
