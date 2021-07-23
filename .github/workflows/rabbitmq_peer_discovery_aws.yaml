@@ -20,7 +20,7 @@ jobs:
       uses: lewagon/wait-on-check-action@v0.2
       with:
         ref: ${{ github.ref }}
-        check-name: build-publish-dev (24.0.3)
+        check-name: build-publish-dev (24.0.4)
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
     - name: CONFIGURE BAZEL
