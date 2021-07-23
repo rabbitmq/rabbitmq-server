@@ -88,7 +88,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "system_SUITE",
-        size = "small",
+        size = "medium",
         additional_srcs = [
             "test/rabbit_ldap_seed.erl",
         ],
