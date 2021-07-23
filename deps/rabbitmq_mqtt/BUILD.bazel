@@ -110,6 +110,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "cluster_SUITE",
+        size = "large",
         runtime_deps = [
             "@emqttc//:bazel_erlang_lib",
         ],
