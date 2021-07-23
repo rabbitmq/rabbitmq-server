@@ -889,7 +889,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_file_handle_cache_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
