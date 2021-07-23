@@ -334,14 +334,14 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "cluster_rename_SUITE",
-        size = "medium",
+        size = "large",
         flaky = True,
         shard_count = 2,
     ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "cluster_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
@@ -379,11 +379,12 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "dead_lettering_SUITE",
-        size = "medium",
+        size = "large",
         additional_beam = [
             ":quorum_queue_utils",
         ],
         flaky = True,
+        shard_count = 3,
     ),
     rabbitmq_integration_suite(
         PACKAGE,
@@ -409,7 +410,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "dynamic_qq_SUITE",
-        size = "medium",
+        size = "large",
         additional_beam = [
             ":quorum_queue_utils",
         ],
@@ -841,7 +842,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_app_management_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_suite(
         name = "unit_cluster_formation_locking_mocks_SUITE",
@@ -874,7 +875,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_credit_flow_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
