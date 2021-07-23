@@ -836,7 +836,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_amqp091_server_properties_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
@@ -907,7 +907,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_log_management_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_suite(
         name = "unit_operator_policy_SUITE",
