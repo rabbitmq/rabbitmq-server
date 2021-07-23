@@ -39,7 +39,7 @@ jobs:
             - '23.2'
             # Which is the latest OTP release for this major? 1/2
             # https://github.com/erlang/otp/tags
-            - '24.0.3'
+            - '24.0.4'
           include:
           - otp: '23.2'
             # make -C packaging/docker-image find-otp-sha256 OTP_VERSION_MATCH=23.2
@@ -50,9 +50,9 @@ jobs:
             image_tag_suffix: '-otp-min'
             # Which is the latest OTP release for this major? 2/2
             # https://github.com/erlang/otp/tags
-          - otp: '24.0.3'
+          - otp: '24.0.4'
             # make -C packaging/docker-image find-otp-sha256
-            otp_sha256: f46bdc3146ac0b54e0d20faa09129a78f4d880d85890acda557c1094662a1a42
+            otp_sha256: 5af12fb9c8fd7f29b2b4136ed9a451a7218132430641ca4ebf1495f85a732b9b
             # Which is the max supported Elixir?
             # https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
             # Which is the latest Elixir release?
