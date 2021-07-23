@@ -647,7 +647,7 @@ suites = [
     ),
     rabbitmq_suite(
         name = "rabbit_fifo_int_SUITE",
-        size = "small",
+        size = "medium",
         runtime_deps = [
             "@aten//:bazel_erlang_lib",
             "@gen_batch_server//:bazel_erlang_lib",

@@ -55,7 +55,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "system_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_suite(
         name = "unit_SUITE",
