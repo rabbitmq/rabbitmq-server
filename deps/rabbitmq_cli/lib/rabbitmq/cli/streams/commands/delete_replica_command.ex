@@ -49,7 +49,7 @@ defmodule RabbitMQ.CLI.Streams.Commands.DeleteReplicaCommand do
 
   def usage_doc_guides() do
     [
-      DocGuide.stream_queues()
+      DocGuide.streams()
     ]
   end
 
