@@ -1,6 +1,12 @@
 load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
-load("//:rabbitmq.bzl", "APP_VERSION", "rabbitmq_lib", "rabbitmq_suite")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "assert_suites",
+    "rabbitmq_lib",
+    "rabbitmq_suite",
+)
 
 APP_NAME = "rabbitmq_prelaunch"
 
@@ -14,7 +20,7 @@ RUNTIME_DEPS = [
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -38,6 +44,13 @@ dialyze(
     tags = ["dialyze"],
 )
 
-rabbitmq_suite(
-    name = "rabbit_logger_std_h_SUITE",
+suites = [
+    rabbitmq_suite(
+        name = "rabbit_logger_std_h_SUITE",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
 )

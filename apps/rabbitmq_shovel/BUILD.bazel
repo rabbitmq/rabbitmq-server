@@ -34,17 +34,17 @@ EXTRA_APPS = [
 ]
 
 BUILD_DEPS = [
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//apps/rabbitmq_cli:rabbitmqctl",
 ]
 
 DEPS = [
-    "//deps/amqp_client:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/amqp_client:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/amqp10_client:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/amqp10_client:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -72,8 +72,8 @@ dialyze(
 rabbitmq_home(
     name = "broker-for-tests-home",
     plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
-        "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
+        "//apps/rabbit:bazel_erlang_lib",
+        "//apps/rabbitmq_amqp1_0:bazel_erlang_lib",
         ":bazel_erlang_lib",
     ],
 )
@@ -93,7 +93,7 @@ erlc(
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
-PACKAGE = "deps/rabbitmq_shovel"
+PACKAGE = "apps/rabbitmq_shovel"
 
 suites = [
     rabbitmq_integration_suite(
@@ -111,7 +111,7 @@ suites = [
             "@meck//:bazel_erlang_lib",
         ],
         deps = [
-            "//deps/amqp10_common:bazel_erlang_lib",
+            "//apps/amqp10_common:bazel_erlang_lib",
         ],
     ),
     rabbitmq_integration_suite(
@@ -145,7 +145,7 @@ suites = [
         name = "parameters_SUITE",
         size = "medium",
         deps = [
-            "//deps/rabbit_common:bazel_erlang_lib",
+            "//apps/rabbit_common:bazel_erlang_lib",
         ],
     ),
     rabbitmq_integration_suite(

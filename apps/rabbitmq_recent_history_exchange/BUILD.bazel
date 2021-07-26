@@ -14,11 +14,11 @@ APP_NAME = "rabbitmq_recent_history_exchange"
 APP_DESCRIPTION = "RabbitMQ Recent History Exchange"
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -38,7 +38,7 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_recent_history_exchange"
+PACKAGE = "apps/rabbitmq_recent_history_exchange"
 
 suites = [
     rabbitmq_integration_suite(

@@ -3,7 +3,7 @@ name: OCI
 on:
   push:
     paths:
-      - 'deps/**'
+      - 'apps/**'
       - 'escript/**'
       - 'packaging/**'
       - 'scripts/**'

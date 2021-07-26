@@ -128,17 +128,17 @@ rabbitmq_home = rule(
     attrs = {
         "_scripts": attr.label_list(
             default = [
-                "//deps/rabbit:scripts/rabbitmq-defaults",
-                "//deps/rabbit:scripts/rabbitmq-diagnostics",
-                "//deps/rabbit:scripts/rabbitmq-env",
-                "//deps/rabbit:scripts/rabbitmq-plugins",
-                "//deps/rabbit:scripts/rabbitmq-queues",
-                "//deps/rabbit:scripts/rabbitmq-server",
-                "//deps/rabbit:scripts/rabbitmqctl",
+                "//apps/rabbit:scripts/rabbitmq-defaults",
+                "//apps/rabbit:scripts/rabbitmq-diagnostics",
+                "//apps/rabbit:scripts/rabbitmq-env",
+                "//apps/rabbit:scripts/rabbitmq-plugins",
+                "//apps/rabbit:scripts/rabbitmq-queues",
+                "//apps/rabbit:scripts/rabbitmq-server",
+                "//apps/rabbit:scripts/rabbitmqctl",
             ],
             allow_files = True,
         ),
-        "_rabbitmqctl_escript": attr.label(default = "//deps/rabbitmq_cli:rabbitmqctl"),
+        "_rabbitmqctl_escript": attr.label(default = "//apps/rabbitmq_cli:rabbitmqctl"),
         "plugins": attr.label_list(),
     },
 )

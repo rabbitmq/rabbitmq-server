@@ -46,18 +46,18 @@ FIRST_SRCS = [
 ]
 
 BUILD_DEPS = [
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//apps/rabbitmq_cli:rabbitmqctl",
 ]
 
 DEPS = [
-    "//deps/amqp_client:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/amqp_client:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
     "@ra//:bazel_erlang_lib",
     "@ranch//:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -90,11 +90,11 @@ erlc(
     dest = "test",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
+        "//apps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
-PACKAGE = "deps/rabbitmq_mqtt"
+PACKAGE = "apps/rabbitmq_mqtt"
 
 suites = [
     rabbitmq_integration_suite(
@@ -139,8 +139,8 @@ suites = [
         name = "processor_SUITE",
         size = "small",
         deps = [
-            "//deps/amqp_client:bazel_erlang_lib",
-            "//deps/rabbit_common:bazel_erlang_lib",
+            "//apps/amqp_client:bazel_erlang_lib",
+            "//apps/rabbit_common:bazel_erlang_lib",
         ],
     ),
     rabbitmq_integration_suite(

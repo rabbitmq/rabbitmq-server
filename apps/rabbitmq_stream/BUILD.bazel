@@ -32,14 +32,14 @@ APP_ENV = """[
 ]"""
 
 BUILD_DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//apps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbitmq_cli:rabbitmqctl",
     "@ranch//:bazel_erlang_lib",
 ]
 
 DEPS = [
-    "//deps/rabbitmq_stream_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbitmq_stream_common:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -61,7 +61,7 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_stream"
+PACKAGE = "apps/rabbitmq_stream"
 
 suites = [
     rabbitmq_integration_suite(
@@ -73,7 +73,7 @@ suites = [
         data = glob(["test/rabbit_stream_SUITE_data/**/*"]),
         flaky = True,
         deps = [
-            "//deps/rabbitmq_stream_common:bazel_erlang_lib",
+            "//apps/rabbitmq_stream_common:bazel_erlang_lib",
         ],
     ),
     rabbitmq_integration_suite(
@@ -84,8 +84,8 @@ suites = [
         PACKAGE,
         name = "rabbit_stream_SUITE",
         deps = [
-            "//deps/rabbit:bazel_erlang_lib",
-            "//deps/rabbitmq_stream_common:bazel_erlang_lib",
+            "//apps/rabbit:bazel_erlang_lib",
+            "//apps/rabbitmq_stream_common:bazel_erlang_lib",
         ],
     ),
 ]

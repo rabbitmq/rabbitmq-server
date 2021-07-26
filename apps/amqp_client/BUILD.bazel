@@ -21,7 +21,7 @@ EXTRA_APPS = [
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -56,7 +56,7 @@ dialyze(
 rabbitmq_home(
     name = "broker-for-tests-home",
     plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
+        "//apps/rabbit:bazel_erlang_lib",
     ],
 )
 
@@ -65,9 +65,11 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
+PACKAGE = "apps/amqp_client"
+
 suites = [
     rabbitmq_integration_suite(
-        "deps/amqp_client",
+        PACKAGE,
         name = "system_SUITE",
         size = "large",
         runtime_deps = [
@@ -78,10 +80,10 @@ suites = [
         name = "unit_SUITE",
         size = "small",
         runtime_deps = [
-            "//deps/rabbit:bazel_erlang_lib",
+            "//apps/rabbit:bazel_erlang_lib",
         ],
         deps = [
-            "//deps/rabbit_common:bazel_erlang_lib",
+            "//apps/rabbit_common:bazel_erlang_lib",
         ],
     ),
 ]

@@ -18,7 +18,7 @@ rabbitmqctl(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
+        "//apps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
@@ -35,8 +35,8 @@ rabbitmqctl_test(
     flaky = True,
     rabbitmq_run = "//:rabbitmq-for-cli-tests-run",
     deps = [
-        "//deps/amqp_client:bazel_erlang_lib",
-        "//deps/rabbit:bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
+        "//apps/amqp_client:bazel_erlang_lib",
+        "//apps/rabbit:bazel_erlang_lib",
+        "//apps/rabbit_common:bazel_erlang_lib",
     ],
 )

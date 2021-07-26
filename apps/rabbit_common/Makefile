@@ -15,6 +15,11 @@ define PROJECT_APP_EXTRA_KEYS
 	  ]}
 endef
 
+# Make sure we know where the applications are located.
+ROOT_DIR ?= $(realpath ../..)
+APPS_DIR ?= $(realpath ..)
+DEPS_DIR ?= $(realpath ../../deps)
+
 LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl
 DEPS = jsx recon credentials_obfuscation
 
@@ -47,7 +52,7 @@ WITHOUT = plugins/proper
 
 PLT_APPS += mnesia crypto ssl
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
 
 -include development.post.mk

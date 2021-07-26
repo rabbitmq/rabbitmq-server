@@ -17,8 +17,8 @@ APP_NAME = "rabbitmq_auth_backend_oauth2"
 APP_DESCRIPTION = "OAuth 2 and JWT-based AuthN and AuthZ backend"
 
 BUILD_DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//apps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbitmq_cli:rabbitmqctl",
 ]
 
 DEPS = [
@@ -26,7 +26,7 @@ DEPS = [
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
     "@base64url//:bazel_erlang_lib",
     "@cowlib//:bazel_erlang_lib",
 ]
@@ -59,7 +59,7 @@ erlc(
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
-PACKAGE = "deps/rabbitmq_auth_backend_oauth2"
+PACKAGE = "apps/rabbitmq_auth_backend_oauth2"
 
 suites = [
     rabbitmq_integration_suite(
@@ -90,7 +90,7 @@ suites = [
         name = "scope_SUITE",
         size = "medium",
         deps = [
-            "//deps/rabbit_common:bazel_erlang_lib",
+            "//apps/rabbit_common:bazel_erlang_lib",
         ],
     ),
     rabbitmq_integration_suite(

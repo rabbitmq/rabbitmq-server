@@ -4,7 +4,7 @@
 
 PYTHON       ?= python
 CODEGEN       = $(CURDIR)/codegen.py
-CODEGEN_DIR  ?= $(DEPS_DIR)/rabbitmq_codegen
+CODEGEN_DIR  ?= $(APPS_DIR)/rabbitmq_codegen
 CODEGEN_AMQP  = $(CODEGEN_DIR)/amqp_codegen.py
 
 AMQP_SPEC_1_0 = $(CODEGEN_DIR)/amqp-1.0/messaging.xml			\

@@ -17,10 +17,10 @@ APP_ENV = """[
 	  ]"""
 
 RUNTIME_DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
-    "//deps/rabbitmq_web_stomp:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
+    "//apps/rabbitmq_web_dispatch:bazel_erlang_lib",
+    "//apps/rabbitmq_web_stomp:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(

@@ -13,17 +13,17 @@ APP_DESCRIPTION = "RabbitMQ Top"
 APP_MODULE = "rabbit_top_app"
 
 BUILD_DEPS = [
-    "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+    "//apps/rabbitmq_management_agent:bazel_erlang_lib",
 ]
 
 DEPS = [
-    "//deps/amqp_client:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbitmq_management:bazel_erlang_lib",
+    "//apps/amqp_client:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbitmq_management:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(

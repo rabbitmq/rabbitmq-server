@@ -126,18 +126,16 @@ define PROJECT_ENV
 	  ]
 endef
 
-# With Erlang.mk default behavior, the value of `$(APPS_DIR)` is always
-# relative to the top-level executed Makefile. In our case, it could be
-# a plugin for instance. However, the rabbitmq_prelaunch application is
-# in this repository, not the plugin's. That's why we need to override
-# this value here.
-APPS_DIR := $(CURDIR)/apps
+# Make sure we know where the applications are located.
+ROOT_DIR ?= $(realpath ../..)
+APPS_DIR ?= $(realpath ..)
+DEPS_DIR ?= $(realpath ../../deps)
 
-LOCAL_DEPS = sasl rabbitmq_prelaunch os_mon inets compiler public_key crypto ssl syntax_tools xmerl
+LOCAL_DEPS = rabbitmq_prelaunch rabbit_common amqp10_common \
+	sasl os_mon inets compiler public_key crypto ssl syntax_tools xmerl
 
-BUILD_DEPS = rabbitmq_cli
-DEPS = ranch rabbit_common ra sysmon_handler stdout_formatter recon observer_cli osiris amqp10_common syslog systemd seshat
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck proper
+DEPS = ranch ra sysmon_handler stdout_formatter recon observer_cli osiris syslog systemd seshat
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers meck proper
 
 PLT_APPS += mnesia
 
@@ -154,12 +152,12 @@ DOCS_DIR     = docs
 MANPAGES     = $(wildcard $(DOCS_DIR)/*.[0-9])
 WEB_MANPAGES = $(patsubst %,%.html,$(MANPAGES))
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-test.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+DEP_EARLY_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-early-test.mk
+DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-build.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-dist.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-run.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-test.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-tools.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
@@ -167,11 +165,12 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
 
-# See above why we mess with `$(APPS_DIR)`.
-unexport APPS_DIR
+# rabbitmq_cli is a 'local' BUILD_DEP
+$(PROJECT).d::
+	$(MAKE) -C $(APPS_DIR)/rabbitmq_cli app IS_APP=1
 
 ifeq ($(strip $(BATS)),)
 BATS := $(ERLANG_MK_TMP)/bats/bin/bats

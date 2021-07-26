@@ -15,18 +15,18 @@ APP_NAME = "rabbitmq_shovel_management"
 APP_DESCRIPTION = "Management extension for the Shovel plugin"
 
 BUILD_DEPS = [
-    "//deps/amqp_client:bazel_erlang_lib",
-    "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+    "//apps/amqp_client:bazel_erlang_lib",
+    "//apps/rabbitmq_management_agent:bazel_erlang_lib",
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbitmq_management:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbitmq_management:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbitmq_shovel:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
+    "//apps/rabbitmq_shovel:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -48,8 +48,8 @@ dialyze(
 rabbitmq_home(
     name = "broker-for-tests-home",
     plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
-        "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
+        "//apps/rabbit:bazel_erlang_lib",
+        "//apps/rabbitmq_amqp1_0:bazel_erlang_lib",
         ":bazel_erlang_lib",
     ],
 )
@@ -59,7 +59,7 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-PACKAGE = "deps/rabbitmq_shovel_management"
+PACKAGE = "apps/rabbitmq_shovel_management"
 
 suites = [
     rabbitmq_integration_suite(

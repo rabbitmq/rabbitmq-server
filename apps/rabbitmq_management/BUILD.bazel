@@ -42,14 +42,14 @@ FIRST_SRCS = [
 ]
 
 DEPS = [
-    "//deps/amqp_client:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+    "//apps/amqp_client:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
+    "//apps/rabbitmq_management_agent:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
+    "//apps/rabbitmq_web_dispatch:bazel_erlang_lib",
     "@cowboy//:bazel_erlang_lib",
     "@cowlib//:bazel_erlang_lib",
 ]
@@ -83,11 +83,11 @@ erlc(
     ],
     dest = "test",
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
+        "//apps/rabbit_common:bazel_erlang_lib",
     ],
 )
 
-PACKAGE = "deps/rabbitmq_management"
+PACKAGE = "apps/rabbitmq_management"
 
 suites = [
     rabbitmq_suite(
@@ -105,7 +105,7 @@ suites = [
         name = "clustering_prop_SUITE",
         size = "large",
         deps = [
-            "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+            "//apps/rabbitmq_management_agent:bazel_erlang_lib",
             "@proper//:bazel_erlang_lib",
         ],
     ),
@@ -114,7 +114,7 @@ suites = [
         name = "clustering_SUITE",
         flaky = True,
         deps = [
-            "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+            "//apps/rabbitmq_management_agent:bazel_erlang_lib",
         ],
     ),
     rabbitmq_integration_suite(
@@ -160,7 +160,7 @@ suites = [
             "@rabbitmq_ct_helpers//:bazel_erlang_lib",
         ],
         deps = [
-            "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+            "//apps/rabbitmq_management_agent:bazel_erlang_lib",
             "@proper//:bazel_erlang_lib",
         ],
     ),
@@ -168,7 +168,7 @@ suites = [
         PACKAGE,
         name = "rabbit_mgmt_test_db_SUITE",
         deps = [
-            "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+            "//apps/rabbitmq_management_agent:bazel_erlang_lib",
         ],
     ),
     rabbitmq_suite(
@@ -179,7 +179,7 @@ suites = [
         name = "stats_SUITE",
         size = "small",
         deps = [
-            "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+            "//apps/rabbitmq_management_agent:bazel_erlang_lib",
             "@proper//:bazel_erlang_lib",
         ],
     ),

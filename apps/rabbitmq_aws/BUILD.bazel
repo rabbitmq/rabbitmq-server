@@ -21,7 +21,7 @@ EXTRA_APPS = [
 ]
 
 BUILD_DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -35,7 +35,7 @@ rabbitmq_lib(
 
 xref(
     additional_libs = [
-        "//deps/rabbit_common:bazel_erlang_lib",
+        "//apps/rabbit_common:bazel_erlang_lib",
         "@credentials_obfuscation//:bazel_erlang_lib",
         "@jsx//:bazel_erlang_lib",
         "@recon//:bazel_erlang_lib",
@@ -56,11 +56,11 @@ dialyze(
 
 eunit(
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
-        "-I deps/rabbitmq_aws",
+        "-I apps/rabbitmq_aws",
         "+nowarn_export_all",
     ],
     runtime_deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
+        "//apps/rabbit_common:bazel_erlang_lib",
         "@meck//:bazel_erlang_lib",
     ],
 )

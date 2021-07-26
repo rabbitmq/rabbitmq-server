@@ -23,8 +23,8 @@ EXTRA_APPS = [
 ]
 
 DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
     "@cowboy//:bazel_erlang_lib",
 ]
 
@@ -67,7 +67,7 @@ rabbitmq_home(
     name = "broker-for-tests-home",
     testonly = True,
     plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
+        "//apps/rabbit:bazel_erlang_lib",
         ":test_bazel_erlang_lib",
     ],
 )
@@ -78,7 +78,7 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-PACKAGE = "deps/rabbitmq_web_dispatch"
+PACKAGE = "apps/rabbitmq_web_dispatch"
 
 suites = [
     rabbitmq_integration_suite(

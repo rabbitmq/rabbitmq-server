@@ -14,15 +14,15 @@ APP_NAME = "rabbitmq_consistent_hash_exchange"
 APP_DESCRIPTION = "Consistent Hash Exchange Type"
 
 BUILD_DEPS = [
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//apps/rabbitmq_cli:rabbitmqctl",
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -43,7 +43,7 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_consistent_hash_exchange"
+PACKAGE = "apps/rabbitmq_consistent_hash_exchange"
 
 suites = [
     rabbitmq_integration_suite(

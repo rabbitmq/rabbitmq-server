@@ -21,11 +21,13 @@ include plugins.mk
 # For example build looking_glass on Linux when targeting Docker.
 ADDITIONAL_PLUGINS ?=
 
-DEPS = rabbit_common rabbit $(PLUGINS) $(ADDITIONAL_PLUGINS)
+DEPS = $(ADDITIONAL_PLUGINS)
 
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+LOCAL_DEPS = rabbit_common rabbit $(PLUGINS)
+
+DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-dist.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-run.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-tools.mk
 
 DISABLE_DISTCLEAN = 1
 
@@ -131,6 +133,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '__pycache__/'			\
 	       --exclude 'ci/'				\
 	       --exclude 'cover/'			\
+	       --exclude 'apps/'			\
 	       --exclude 'deps/'			\
 	       --exclude 'doc/'				\
 	       --exclude 'docker/'			\

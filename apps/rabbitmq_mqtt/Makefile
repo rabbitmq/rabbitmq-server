@@ -31,14 +31,19 @@ define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
-DEPS = ranch rabbit_common rabbit amqp_client ra
+# Make sure we know where the applications are located.
+ROOT_DIR ?= $(realpath ../..)
+APPS_DIR ?= $(realpath ..)
+DEPS_DIR ?= $(realpath ../../deps)
+
+LOCAL_DEPS = rabbit_common rabbit amqp_client
+DEPS = ranch ra
 TEST_DEPS = emqttc ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
-dep_ct_helper = git https://github.com/extend/ct_helper.git master
 dep_emqttc = git https://github.com/rabbitmq/emqttc.git remove-logging
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_EARLY_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-early-plugin.mk
+DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-plugin.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
@@ -46,8 +51,8 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
 
 
 clean::

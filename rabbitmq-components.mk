@@ -123,6 +123,8 @@ dep_observer_cli = hex 1.6.2
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
 
+dep_ct_helper = git https://github.com/extend/ct_helper.git master
+
 RABBITMQ_COMPONENTS = amqp_client \
 		      amqp10_common \
 		      amqp10_client \
@@ -326,7 +328,7 @@ define dep_fetch_git_rmq-subfolder
 	  1>&2 && false) ) && \
 	(test "$$$$fetch_url" = "$$$$push_url" || \
 	 git remote set-url --push origin "$$$$push_url")
-	ln -s $(ERLANG_MK_TMP)/rabbitmq-server/deps/$(call dep_name,$(1)) \
+	ln -s $(ERLANG_MK_TMP)/rabbitmq-server/apps/$(call dep_name,$(1)) \
 		$(DEPS_DIR)/$(call dep_name,$(1));
 endef
 

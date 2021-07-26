@@ -25,20 +25,24 @@ define PROJECT_APP_EXTRA_KEYS
 	  ]}
 endef
 
+# Make sure we know where the applications are located.
+ROOT_DIR ?= $(realpath ../..)
+APPS_DIR ?= $(realpath ..)
+DEPS_DIR ?= $(realpath ../../deps)
+
 # Release artifacts are put in $(PACKAGES_DIR).
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
-LOCAL_DEPS = xmerl
-DEPS = rabbit_common
-TEST_DEPS = rabbitmq_ct_helpers rabbit meck
+LOCAL_DEPS = xmerl rabbit_common
+TEST_DEPS = rabbitmq_ct_helpers meck
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
-	      rabbit_common/mk/rabbitmq-hexpm.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-test.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+DEP_EARLY_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-early-test.mk
+DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-build.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-hexpm.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-dist.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-run.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-test.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-tools.mk
 
 PLT_APPS = ssl public_key
 
@@ -50,8 +54,8 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 WITHOUT = plugins/proper
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
 
 # --------------------------------------------------------------------
 # Distribution.
@@ -99,6 +103,7 @@ RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.*.plt'			\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude 'cover/'			\
+	       --exclude 'apps/'			\
 	       --exclude 'deps/'			\
 	       --exclude 'ebin/'			\
 	       --exclude 'erl_crash.dump'		\

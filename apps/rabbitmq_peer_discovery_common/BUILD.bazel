@@ -22,19 +22,19 @@ EXTRA_APPS = [
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 ERLC_OPTS = RABBITMQ_ERLC_OPTS + [
-    "-I deps/rabbitmq_peer_discovery_common",
+    "-I apps/rabbitmq_peer_discovery_common",
 ]
 
 TEST_ERLC_OPTS = RABBITMQ_TEST_ERLC_OPTS + [
-    "-I deps/rabbitmq_peer_discovery_common",
+    "-I apps/rabbitmq_peer_discovery_common",
 ]
 
 rabbitmq_lib(
@@ -64,7 +64,7 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_peer_discovery_common"
+PACKAGE = "apps/rabbitmq_peer_discovery_common"
 
 suites = [
     rabbitmq_integration_suite(

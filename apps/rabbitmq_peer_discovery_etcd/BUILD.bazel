@@ -17,12 +17,12 @@ APP_DESCRIPTION = "etcd-based RabbitMQ peer discovery backend"
 APP_MODULE = "rabbitmq_peer_discovery_etcd_app"
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbitmq_peer_discovery_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbitmq_peer_discovery_common:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
     "@eetcd//:bazel_erlang_lib",
     "@gun//:bazel_erlang_lib",
 ]
@@ -45,7 +45,7 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_peer_discovery_etcd"
+PACKAGE = "apps/rabbitmq_peer_discovery_etcd"
 
 suites = [
     rabbitmq_integration_suite(

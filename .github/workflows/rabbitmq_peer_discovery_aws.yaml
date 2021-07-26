@@ -2,7 +2,7 @@ name: Peer Discovery AWS Integration Test
 on:
   push:
     paths:
-      - 'deps/rabbitmq_peer_discovery_aws/**'
+      - 'apps/rabbitmq_peer_discovery_aws/**'
       - .github/workflows/rabbitmq_peer_discovery_aws.yaml
 jobs:
   peer-discovery-aws-integration-test:

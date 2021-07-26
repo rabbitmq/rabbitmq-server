@@ -9,15 +9,18 @@ define PROJECT_ENV
 	  ]
 endef
 
-DEPS = rabbit_common rabbit
-LOCAL_DEPS += ssl crypto public_key
-## We need the Cowboy's test utilities
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client ct_helper trust_store_http
-dep_ct_helper = git https://github.com/extend/ct_helper.git master
+# Make sure we know where the applications are located.
+ROOT_DIR ?= $(realpath ../..)
+APPS_DIR ?= $(realpath ..)
+DEPS_DIR ?= $(realpath ../../deps)
+
+LOCAL_DEPS += ssl crypto public_key rabbit_common rabbit
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers ct_helper trust_store_http
+
 dep_trust_store_http = git https://github.com/rabbitmq/trust_store_http.git
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_EARLY_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-early-plugin.mk
+DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-plugin.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
@@ -25,5 +28,5 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk

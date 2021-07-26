@@ -27,18 +27,18 @@ APP_ENV = """[
 	  ]"""
 
 BUILD_DEPS = [
-    "//deps/amqp_client:bazel_erlang_lib",
+    "//apps/amqp_client:bazel_erlang_lib",
     "@ranch//:bazel_erlang_lib",
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
     "@cowboy//:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbitmq_mqtt:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
+    "//apps/rabbitmq_mqtt:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -61,7 +61,7 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_web_mqtt"
+PACKAGE = "apps/rabbitmq_web_mqtt"
 
 erlc(
     name = "test_utils",
@@ -81,7 +81,7 @@ suites = [
         additional_beam = [":test_utils"],
         additional_hdrs = glob(["test/src/*.hrl"]),
         erlc_opts = [
-            "-I deps/rabbitmq_web_mqtt/test",
+            "-I apps/rabbitmq_web_mqtt/test",
         ],
     ),
     rabbitmq_integration_suite(

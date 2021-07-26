@@ -1,12 +1,17 @@
 PROJECT = rabbitmq_auth_backend_oauth2
 PROJECT_DESCRIPTION = OAuth 2 and JWT-based AuthN and AuthZ backend
 
-BUILD_DEPS = rabbit_common
-DEPS = rabbit cowlib jose base64url
-TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
+# Make sure we know where the applications are located.
+ROOT_DIR ?= $(realpath ../..)
+APPS_DIR ?= $(realpath ..)
+DEPS_DIR ?= $(realpath ../../deps)
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+LOCAL_DEPS = rabbit
+DEPS = cowlib jose base64url
+TEST_DEPS = cowboy rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+
+DEP_EARLY_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-early-plugin.mk
+DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-plugin.mk
 
 dep_jose = git https://github.com/potatosalad/erlang-jose 2b1d66b
 dep_base64url = hex 1.0.1
@@ -17,5 +22,5 @@ dep_base64url = hex 1.0.1
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk

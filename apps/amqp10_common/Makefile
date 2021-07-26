@@ -3,14 +3,17 @@ PROJECT_DESCRIPTION = Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-cl
 
 DIALYZER_OPTS += --src -r test
 
-BUILD_DEPS = rabbit_common
+# Make sure we know where the applications are located.
+ROOT_DIR ?= $(realpath ../..)
+APPS_DIR ?= $(realpath ..)
+DEPS_DIR ?= $(realpath ../../deps)
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-macros.mk \
-	      rabbit_common/mk/rabbitmq-hexpm.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-test.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+DEP_EARLY_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-early-test.mk
+DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-macros.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-hexpm.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-dist.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-test.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-tools.mk
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
@@ -28,7 +31,7 @@ ERLANG_MK_COMMIT = rabbitmq-tmp
 
 -include development.pre.mk
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
 
 -include development.post.mk

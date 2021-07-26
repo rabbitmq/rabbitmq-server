@@ -29,12 +29,12 @@ EXTRA_APPS = [
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/amqp_client:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
+    "//apps/amqp_client:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -63,7 +63,7 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_auth_backend_http"
+PACKAGE = "apps/rabbitmq_auth_backend_http"
 
 suites = [
     rabbitmq_suite(
@@ -76,7 +76,7 @@ suites = [
             "@cowboy//:bazel_erlang_lib",
         ],
         deps = [
-            "//deps/rabbit_common:bazel_erlang_lib",
+            "//apps/rabbit_common:bazel_erlang_lib",
         ],
     ),
     rabbitmq_integration_suite(

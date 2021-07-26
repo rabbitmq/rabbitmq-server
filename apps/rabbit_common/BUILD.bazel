@@ -20,18 +20,18 @@ py_binary(
     srcs = [
         "codegen.py",
     ],
-    imports = ["../../deps/rabbitmq_codegen"],
+    imports = ["../../apps/rabbitmq_codegen"],
     deps = [
-        "//deps/rabbitmq_codegen:amqp_codegen",
+        "//apps/rabbitmq_codegen:amqp_codegen",
     ],
 )
 
 genrule(
     name = "generated_headers",
     srcs = [
-        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
-        "//deps/rabbitmq_codegen:credit_extension.json",
-        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
+        "//apps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
+        "//apps/rabbitmq_codegen:credit_extension.json",
+        "//apps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
     ],
     outs = ["include/rabbit_framing.hrl"],
     cmd = "$(location :codegen) --ignore-conflicts header $(SRCS) $@",
@@ -41,8 +41,8 @@ genrule(
 genrule(
     name = "rabbit_framing_amqp_0_9_1.erl",
     srcs = [
-        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
-        "//deps/rabbitmq_codegen:credit_extension.json",
+        "//apps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
+        "//apps/rabbitmq_codegen:credit_extension.json",
     ],
     outs = ["src/rabbit_framing_amqp_0_9_1.erl"],
     cmd = "$(location :codegen) body $(SRCS) $@",
@@ -52,7 +52,7 @@ genrule(
 genrule(
     name = "rabbit_framing_amqp_0_8.erl",
     srcs = [
-        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
+        "//apps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
     ],
     outs = ["src/rabbit_framing_amqp_0_8.erl"],
     cmd = "$(location :codegen) body $(SRCS) $@",

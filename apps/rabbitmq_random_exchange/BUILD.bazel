@@ -11,11 +11,11 @@ APP_NAME = "rabbitmq_random_exchange"
 APP_DESCRIPTION = "RabbitMQ Random Exchange"
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(

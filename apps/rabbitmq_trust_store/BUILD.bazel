@@ -28,11 +28,11 @@ EXTRA_APPS = [
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -65,9 +65,9 @@ dialyze(
 rabbitmq_home(
     name = "broker-for-tests-home",
     plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
+        "//apps/rabbit:bazel_erlang_lib",
         ":bazel_erlang_lib",
-        "//deps/amqp_client:bazel_erlang_lib",
+        "//apps/amqp_client:bazel_erlang_lib",
         "@ct_helper//:bazel_erlang_lib",
     ],
 )
@@ -77,7 +77,7 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-PACKAGE = "deps/rabbitmq_trust_store"
+PACKAGE = "apps/rabbitmq_trust_store"
 
 suites = [
     rabbitmq_integration_suite(

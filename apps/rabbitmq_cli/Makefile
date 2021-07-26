@@ -1,13 +1,14 @@
 PROJECT = rabbitmq_cli
 
-dep_observer_cli = git https://github.com/zhongwencool/observer_cli 1.4.4
+# Make sure we know where the applications are located.
+ROOT_DIR ?= $(realpath ../..)
+APPS_DIR ?= $(realpath ..)
+DEPS_DIR ?= $(realpath ../../deps)
 
-BUILD_DEPS = rabbit_common
 DEPS = observer_cli
-TEST_DEPS = amqp_client rabbit
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_EARLY_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-early-plugin.mk
+DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-plugin.mk
 
 VERBOSE_TEST ?= true
 MAX_CASES ?= 1
@@ -36,8 +37,8 @@ WITHOUT = plugins/cover \
 	  plugins/proper \
 	  plugins/triq
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
 
 # rabbitmq-mix.mk is generated during the creation of the RabbitMQ
 # source archive. It sets some environment variables to allow

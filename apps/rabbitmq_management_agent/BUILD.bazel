@@ -35,12 +35,12 @@ EXTRA_APPS = [
 ]
 
 BUILD_DEPS = [
-    "//deps/rabbitmq_cli:rabbitmqctl",
+    "//apps/rabbitmq_cli:rabbitmqctl",
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -73,7 +73,7 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_management_agent"
+PACKAGE = "apps/rabbitmq_management_agent"
 
 suites = [
     rabbitmq_suite(

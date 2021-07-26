@@ -2,18 +2,22 @@ PROJECT = amqp10_client
 PROJECT_DESCRIPTION = AMQP 1.0 client from the RabbitMQ Project
 PROJECT_MOD = amqp10_client_app
 
-BUILD_DEPS = rabbit_common elvis_mk
-DEPS = amqp10_common
-TEST_DEPS = rabbit rabbitmq_amqp1_0 rabbitmq_ct_helpers
-LOCAL_DEPS = ssl inets crypto
+# Make sure we know where the applications are located.
+ROOT_DIR ?= $(realpath ../..)
+APPS_DIR ?= $(realpath ..)
+DEPS_DIR ?= $(realpath ../../deps)
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-macros.mk \
-	      rabbit_common/mk/rabbitmq-hexpm.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-test.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+BUILD_DEPS = elvis_mk
+TEST_DEPS = rabbitmq_ct_helpers
+LOCAL_DEPS = ssl inets crypto amqp10_common
+
+DEP_EARLY_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-early-test.mk
+DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-macros.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-hexpm.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-dist.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-run.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-test.mk \
+	      $(PROJECT)/../rabbit_common/mk/rabbitmq-tools.mk
 
 DEP_PLUGINS += elvis_mk
 dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
@@ -24,8 +28,8 @@ dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-include ../../rabbitmq-components.mk
-include ../../erlang.mk
+include $(ROOT_DIR)/rabbitmq-components.mk
+include $(ROOT_DIR)/erlang.mk
 
 # --------------------------------------------------------------------
 # Compiler flags.

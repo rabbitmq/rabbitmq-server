@@ -8,8 +8,8 @@ endef
 
 DEPS = rabbit_common rabbit
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_EARLY_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-early-plugin.mk
+DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-plugin.mk
 
 include ../../../../../rabbitmq-components.mk
 include ../../../../../erlang.mk

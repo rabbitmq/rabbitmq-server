@@ -20,17 +20,17 @@ py_binary(
     srcs = [
         "codegen.py",
     ],
-    imports = ["../../deps/rabbitmq_codegen"],
+    imports = ["../../apps/rabbitmq_codegen"],
     deps = [
-        "//deps/rabbitmq_codegen:amqp_codegen",
+        "//apps/rabbitmq_codegen:amqp_codegen",
     ],
 )
 
 AMQP_SPEC_1_0 = [
-    "//deps/rabbitmq_codegen:amqp-1.0/messaging.xml",
-    "//deps/rabbitmq_codegen:amqp-1.0/security.xml",
-    "//deps/rabbitmq_codegen:amqp-1.0/transport.xml",
-    "//deps/rabbitmq_codegen:amqp-1.0/transactions.xml",
+    "//apps/rabbitmq_codegen:amqp-1.0/messaging.xml",
+    "//apps/rabbitmq_codegen:amqp-1.0/security.xml",
+    "//apps/rabbitmq_codegen:amqp-1.0/transport.xml",
+    "//apps/rabbitmq_codegen:amqp-1.0/transactions.xml",
 ]
 
 genrule(

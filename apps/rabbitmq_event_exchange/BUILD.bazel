@@ -15,8 +15,8 @@ APP_NAME = "rabbitmq_event_exchange"
 APP_DESCRIPTION = "Event Exchange Type"
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
+    "//apps/rabbit_common:bazel_erlang_lib",
+    "//apps/rabbit:bazel_erlang_lib",
 ]
 
 rabbitmq_lib(
@@ -35,7 +35,7 @@ dialyze(
 
 broker_for_integration_suites()
 
-PACKAGE = "deps/rabbitmq_event_exchange"
+PACKAGE = "apps/rabbitmq_event_exchange"
 
 suites = [
     rabbitmq_integration_suite(
