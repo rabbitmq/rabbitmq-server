@@ -405,7 +405,7 @@ ensure_safe_call_timeout(#amqp_params_direct{}, CallTimeout) ->
         {ongoing_change_to, NetTicktime} ->
             maybe_update_call_timeout(tick_or_direct_timeout(NetTicktime * 1000),
                 CallTimeout);
-        ignore ->
+        ignored ->
             maybe_update_call_timeout(?DIRECT_OPERATION_TIMEOUT, CallTimeout)
     end.
 
