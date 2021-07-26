@@ -38,11 +38,12 @@
 -export([validate/5, notify/5, notify_clear/4]).
 -export([parse_set/7, set/7, delete/3, lookup/2, list/0, list/1,
          list_formatted/1, list_formatted/3, info_keys/0]).
--export([parse_set_op/7, set_op/7, delete_op/3, lookup_op/2, list_op/0, list_op/1,
+-export([parse_set_op/7, set_op/7, delete_op/3, lookup_op/2, list_op/0, list_op/1, list_op/2,
          list_formatted_op/1, list_formatted_op/3,
          match_all/2, match_as_map/1, match_op_as_map/1, definition_keys/1,
          list_in/1, list_in/2, list_as_maps/0, list_as_maps/1, list_op_as_maps/1
         ]).
+-export([sort_by_priority/1]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "policy parameters"},
@@ -135,6 +136,9 @@ list_op() ->
 
 list_op(VHost) ->
     list0_op(VHost, fun ident/1).
+
+list_op(VHost, DefinitionKeys) ->
+    [P || P <- list_op(VHost), keys_overlap(definition_keys(P), DefinitionKeys)].
 
 list_formatted_op(VHost) ->
     sort_by_priority(list0_op(VHost, fun rabbit_json:encode/1)).
