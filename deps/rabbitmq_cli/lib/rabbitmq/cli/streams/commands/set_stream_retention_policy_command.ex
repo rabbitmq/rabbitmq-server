@@ -40,7 +40,7 @@ defmodule RabbitMQ.CLI.Streams.Commands.SetStreamRetentionPolicyCommand do
 
   def usage_doc_guides() do
     [
-      DocGuide.stream_queues()
+      DocGuide.streams()
     ]
   end
 
