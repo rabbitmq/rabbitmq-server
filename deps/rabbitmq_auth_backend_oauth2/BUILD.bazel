@@ -88,7 +88,7 @@ suites = [
     ),
     rabbitmq_suite(
         name = "scope_SUITE",
-        size = "small",
+        size = "medium",
         deps = [
             "//deps/rabbit_common:bazel_erlang_lib",
         ],

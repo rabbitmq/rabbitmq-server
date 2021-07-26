@@ -52,7 +52,7 @@ suites = [
     ),
     rabbitmq_suite(
         name = "rabbitmq_peer_discovery_consul_SUITE",
-        size = "small",
+        size = "medium",
         runtime_deps = [
             "@meck//:bazel_erlang_lib",
         ],
