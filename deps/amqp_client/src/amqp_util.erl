@@ -9,7 +9,7 @@ call_timeout() ->
         undefined ->
             Timeout = rabbit_misc:get_env(amqp_client,
                                           gen_server_call_timeout,
-                                          60000),
+                                          safe_call_timeout(60000)),
             put(gen_server_call_timeout, Timeout),
             Timeout;
         Timeout ->
