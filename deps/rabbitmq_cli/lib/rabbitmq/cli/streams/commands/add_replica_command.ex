@@ -48,7 +48,7 @@ defmodule RabbitMQ.CLI.Streams.Commands.AddReplicaCommand do
 
   def usage_doc_guides() do
     [
-      DocGuide.stream_queues()
+      DocGuide.streams()
     ]
   end
 
