@@ -2121,13 +2121,13 @@ notify_limiter(Limiter, Acked) ->
     %% common case.
      case rabbit_limiter:is_active(Limiter) of
         false -> ok;
-        true  -> case lists:foldl(fun ({_, CTag, _, _}, Acc) when is_integer(CTag) ->
+        true  -> case lists:foldl(fun (#pending_ack{tag = CTag}, Acc) when is_integer(CTag) ->
                                           %% Quorum queues use integer CTags
                                           %% classic queues use binaries
                                           %% Quorum queues do not interact
                                           %% with limiters
                                           Acc;
-                                      ({_,    _, _, _}, Acc) -> Acc + 1
+                                      (_, Acc) -> Acc + 1
                                   end, 0, Acked) of
                      0     -> ok;
                      Count -> rabbit_limiter:ack(Limiter, Count)
