@@ -120,7 +120,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "config_schema_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_suite(
         name = "listener_config_SUITE",
