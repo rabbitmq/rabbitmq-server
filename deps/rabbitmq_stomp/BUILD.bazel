@@ -150,7 +150,7 @@ suites = [
     ),
     rabbitmq_suite(
         name = "util_SUITE",
-        size = "small",
+        size = "medium",
         deps = [
             "//deps/amqp_client:bazel_erlang_lib",
             "//deps/rabbit_common:bazel_erlang_lib",
