@@ -258,9 +258,8 @@ init([KeepaliveSup,
 
 tcp_connected(enter, _OldState, #statem_data{
                                    config = #configuration{
-                                               connection_negotiation_step_timeout = StateTimeout
-                                              }} = StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+                                               connection_negotiation_step_timeout = StateTimeout}}) ->
+    {keep_state_and_data, {state_timeout, StateTimeout, close}};
 tcp_connected(state_timeout, close, #statem_data{
                                        transport = Transport,
                                        connection = #stream_connection{socket = Socket}
@@ -286,10 +285,9 @@ tcp_connected(info, Msg, StateData) ->
                 end).
 
 peer_properties_exchanged(enter, _OldState, #statem_data{
-                                   config = #configuration{
-                                               connection_negotiation_step_timeout = StateTimeout
-                                              }} = StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+                                               config = #configuration{
+                                                           connection_negotiation_step_timeout = StateTimeout}}) ->
+    {keep_state_and_data, {state_timeout, StateTimeout, close}};
 peer_properties_exchanged(state_timeout, close, #statem_data{
                                                    transport = Transport,
                                                    connection = #stream_connection{socket = Socket}
@@ -315,10 +313,9 @@ peer_properties_exchanged(info, Msg, StateData) ->
                 end).
 
 authenticating(enter, _OldState, #statem_data{
-                                   config = #configuration{
-                                               connection_negotiation_step_timeout = StateTimeout
-                                              }} = StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+                                    config = #configuration{
+                                                connection_negotiation_step_timeout = StateTimeout}}) ->
+    {keep_state_and_data, {state_timeout, StateTimeout, close}};
 authenticating(state_timeout, close, #statem_data{
                                         transport = Transport,
                                         connection = #stream_connection{socket = Socket}
@@ -351,10 +348,9 @@ authenticating(info, Msg, StateData) ->
                 end).
 
 tuning(enter, _OldState, #statem_data{
-                                   config = #configuration{
-                                               connection_negotiation_step_timeout = StateTimeout
-                                              }} = StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+                            config = #configuration{
+                                        connection_negotiation_step_timeout = StateTimeout}}) ->
+    {keep_state_and_data, {state_timeout, StateTimeout, close}};
 tuning(state_timeout, close, #statem_data{
                                 transport = Transport,
                                 connection = #stream_connection{socket = Socket}
@@ -384,10 +380,9 @@ tuning(info, Msg, StateData) ->
                 end).
 
 tuned(enter, _OldState, #statem_data{
-                                   config = #configuration{
-                                               connection_negotiation_step_timeout = StateTimeout
-                                              }} = StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+                           config = #configuration{
+                                       connection_negotiation_step_timeout = StateTimeout}}) ->
+    {keep_state_and_data, {state_timeout, StateTimeout, close}};
 tuned(state_timeout, close, #statem_data{
                                transport = Transport,
                                connection = #stream_connection{socket = Socket}
@@ -590,8 +585,8 @@ close_immediately(Transport, S) ->
     Transport:shutdown(S, read),
     Transport:close(S).
 
-open(enter, _OldState, StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData};
+open(enter, _OldState, _StateData) ->
+    keep_state_and_data;
 open(info,
      {resource_alarm, IsThereAlarm},
      #statem_data{
@@ -1011,10 +1006,9 @@ open(cast, {force_event_refresh, Ref}, #statem_data{
     {keep_state, StatemData#statem_data{connection = Connection2}}.
 
 close_sent(enter, _OldState, #statem_data{
-                                   config = #configuration{
-                                               connection_negotiation_step_timeout = StateTimeout
-                                              }} = StateData) ->
-    {next_state, ?FUNCTION_NAME, StateData, {state_timeout, StateTimeout, close}};
+                                config = #configuration{
+                                            connection_negotiation_step_timeout = StateTimeout}}) ->
+    {keep_state_and_data, {state_timeout, StateTimeout, close}};
 close_sent(state_timeout, close, #statem_data{
                                     transport = Transport,
                                     connection = #stream_connection{socket = Socket} = Connection,
