@@ -860,7 +860,7 @@ filter_command(_Meta, {delete_replica, _, #{node := Node}}, #stream{id = StreamI
     case maps:size(Members) =< 1 of
         true ->
             rabbit_log:warning(
-              "~s failed to delete ~p replica for stream queue ~s, last cluster member",
+              "~s failed to delete replica on node ~p for stream ~s: refusing to delete the only replica",
               [?MODULE, Node, StreamId]),
             {error, last_stream_member};
         false ->
