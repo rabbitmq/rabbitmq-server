@@ -63,7 +63,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "amqp10_client_SUITE",
-        size = "small",
+        size = "medium",
         runtime_deps = [
             "//deps/amqp10_client:bazel_erlang_lib",
         ],
