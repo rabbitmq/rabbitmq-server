@@ -128,14 +128,14 @@ defmodule RabbitMQCtl.MixfileBase do
       {:x509, "~> 0.7", only: :test}
     ]
 
-    rabbitmq_deps = case System.get_env("DEPS_DIR") do
+    rabbitmq_deps = case System.get_env("APPS_DIR") do
       nil ->
         # rabbitmq_cli is built as a standalone Elixir application.
         [
           {:rabbit_common, "~> 3.8.0"},
           {:amqp_client, "~> 3.8.0", only: :test}
         ]
-      deps_dir ->
+      apps_dir ->
         # rabbitmq_cli is built as part of RabbitMQ.
 
         # Mix is confused by any `rebar.{config,lock}` we might have left in
@@ -143,7 +143,7 @@ defmodule RabbitMQCtl.MixfileBase do
         # safe, as they are generated when we publish to Hex.pm only.
         for dir <- ["rabbit_common", "amqp_client"] do
           for file <- ["rebar.config", "rebar.lock"] do
-            File.rm(Path.join([deps_dir, dir, file]))
+            File.rm(Path.join([apps_dir, dir, file]))
           end
         end
 
@@ -152,13 +152,13 @@ defmodule RabbitMQCtl.MixfileBase do
         [
           {
             :rabbit_common,
-            path: Path.join(deps_dir, "rabbit_common"),
+            path: Path.join(apps_dir, "rabbit_common"),
             compile: false,
             override: true
           },
           {
             :amqp_client,
-            path: Path.join(deps_dir, "amqp_client"),
+            path: Path.join(apps_dir, "amqp_client"),
             compile: false,
             override: true,
             only: :test

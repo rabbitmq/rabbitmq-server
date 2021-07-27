@@ -38,7 +38,7 @@ export MAKE
 
 # We need to pass the location of codegen to the Java client ant
 # process.
-CODEGEN_DIR = $(DEPS_DIR)/rabbitmq_codegen
+CODEGEN_DIR = $(APPS_DIR)/rabbitmq_codegen
 PYTHONPATH = $(CODEGEN_DIR)
 export PYTHONPATH
 
@@ -50,7 +50,7 @@ ANT_FLAGS += -Dmake.bin=$(MAKE) \
 ifeq ($(PROJECT),rabbitmq_test)
 ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(CURDIR)
 else
-ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(DEPS_DIR)/rabbitmq_test
+ANT_FLAGS += -Dsibling.rabbitmq_test.dir=$(APPS_DIR)/rabbitmq_test
 endif
 export ANT ANT_FLAGS
 
@@ -103,9 +103,13 @@ export RABBITMQ_LOG
 DIST_ERL_LIBS = $(patsubst :%,%,$(patsubst %:,%,$(subst :$(APPS_DIR):,:,$(subst :$(DEPS_DIR):,:,:$(ERL_LIBS):))))
 
 ifdef PLUGINS_FROM_DEPS_DIR
-RMQ_PLUGINS_DIR=$(DEPS_DIR)
+RMQ_PLUGINS_DIR=$(APPS_DIR)
+else
+ifdef PLUGINS_FROM_APPS_DIR
+RMQ_PLUGINS_DIR=$(APPS_DIR)
 else
 RMQ_PLUGINS_DIR=$(CURDIR)/$(DIST_DIR)
+endif
 endif
 
 node_plugins_dir = $(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(if $(EXTRA_PLUGINS_DIR),$(EXTRA_PLUGINS_DIR):$(RMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR)))

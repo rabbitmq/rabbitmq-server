@@ -302,10 +302,10 @@ else
 install-cli-scripts:
 	$(gen_verbose) \
 	set -e; \
-	if test -d "$(DEPS_DIR)/rabbit/scripts"; then \
+	if test -d "$(APPS_DIR)/rabbit/scripts"; then \
+		rabbit_scripts_dir='$(APPS_DIR)/rabbit/scripts'; \
+	elif test -d "$(DEPS_DIR)/rabbit/scripts"; then \
 		rabbit_scripts_dir='$(DEPS_DIR)/rabbit/scripts'; \
-	elif test -d "$(DEPS_DIR)/../scripts"; then \
-		rabbit_scripts_dir='$(DEPS_DIR)/../scripts'; \
 	else \
 		echo 'rabbit/scripts directory not found' 1>&2; \
 		exit 1; \
@@ -342,18 +342,18 @@ install-cli-escripts:
 	if command -v flock >/dev/null; then \
 		flock $(CLI_ESCRIPTS_LOCK) \
 		sh -c 'mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
-		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
+		$(MAKE) -C "$(APPS_DIR)/rabbitmq_cli" install \
 			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
 			DESTDIR='; \
 	elif command -v lockf >/dev/null; then \
 		lockf $(CLI_ESCRIPTS_LOCK) \
 		sh -c 'mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
-		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
+		$(MAKE) -C "$(APPS_DIR)/rabbitmq_cli" install \
 			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
 			DESTDIR='; \
 	else \
 		mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
-		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
+		$(MAKE) -C "$(APPS_DIR)/rabbitmq_cli" install \
 			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
 			DESTDIR= ; \
 	fi

@@ -25,9 +25,9 @@ DEPS = $(ADDITIONAL_PLUGINS)
 
 LOCAL_DEPS = rabbit_common rabbit $(PLUGINS)
 
-DEP_PLUGINS = $(PROJECT)/../rabbit_common/mk/rabbitmq-dist.mk \
-	      $(PROJECT)/../rabbit_common/mk/rabbitmq-run.mk \
-	      $(PROJECT)/../rabbit_common/mk/rabbitmq-tools.mk
+DEP_PLUGINS = $(PROJECT)/apps/rabbit_common/mk/rabbitmq-dist.mk \
+	      $(PROJECT)/apps/rabbit_common/mk/rabbitmq-run.mk \
+	      $(PROJECT)/apps/rabbit_common/mk/rabbitmq-tools.mk
 
 DISABLE_DISTCLEAN = 1
 

@@ -45,12 +45,12 @@ clean:: clean-extra-sources
 clean-extra-sources:
 	$(gen_verbose) rm -f $(EXTRA_SOURCES)
 
-distclean:: distclean-dotnet-tests distclean-java-tests
+distclean:: distclean-fsharp-tests distclean-java-tests
 
-distclean-dotnet-tests:
-	$(gen_verbose) cd test/system_SUITE_data/dotnet-tests && \
+distclean-fsharp-tests:
+	$(gen_verbose) cd test/system_SUITE_data/fsharp-tests && \
 		rm -rf bin obj && \
 		rm -f project.lock.json TestResult.xml
 
 distclean-java-tests:
-	$(gen_verbose) cd test/system_SUITE_data/java-tests && mvn clean
+	$(gen_verbose) cd test/system_SUITE_data/java-tests && ./mvnw clean

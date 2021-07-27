@@ -3,7 +3,6 @@
 # Generated files are published to Hex.pm however so people using this
 # source won't have to depend on Python and rabbitmq-codegen.
 
-BUILD_DEPS = rabbitmq_codegen
 TEST_DEPS = proper
 
 EXTRA_SOURCES += include/rabbit_framing.hrl				\
