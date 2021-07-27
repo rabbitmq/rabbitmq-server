@@ -880,12 +880,12 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_disk_monitor_mocks_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_disk_monitor_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
@@ -940,11 +940,11 @@ suites = [
     ),
     rabbitmq_suite(
         name = "unit_priority_queue_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_suite(
         name = "unit_queue_consumers_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
