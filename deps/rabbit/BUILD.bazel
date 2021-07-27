@@ -880,7 +880,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_disk_monitor_mocks_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
