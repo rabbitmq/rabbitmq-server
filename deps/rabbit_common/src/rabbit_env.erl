@@ -1718,14 +1718,17 @@ parse_conf_env_file_output2([Line | Lines], Vars) ->
     end.
 
 is_sh_set_x_output(Line) ->
-    re:run(Line, "^\\++ ", [{capture, none}]) =:= match.
+    UnicodeLine = unicode:characters_to_binary(Line),
+    re:run(UnicodeLine, "^\\++ ", [{capture, none}]) =:= match.
 
 is_sh_function(_, []) ->
     false;
 is_sh_function(Line, Lines) ->
-    re:run(Line, "\\s\\(\\)\\s*$", [{capture, none}]) =:= match
+    UnicodeLine1 = unicode:characters_to_binary(Line),
+    UnicodeLine2 = unicode:characters_to_binary(hd(Lines)),
+    re:run(UnicodeLine1, "\\s\\(\\)\\s*$", [{capture, none}]) =:= match
     andalso
-    re:run(hd(Lines), "^\\s*\\{\\s*$", [{capture, none}]) =:= match.
+    re:run(UnicodeLine2, "^\\s*\\{\\s*$", [{capture, none}]) =:= match.
 
 parse_sh_literal([$' | SingleQuoted], Lines, Literal) ->
     parse_single_quoted_literal(SingleQuoted, Lines, Literal);
