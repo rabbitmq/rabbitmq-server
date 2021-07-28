@@ -1076,11 +1076,14 @@ check_parse_conf_env_file_output(_) ->
         )),
     ?assertEqual(
        #{"UNQUOTED" => "a",
+         "UNICODE" => [43, 43, 32, 1550, 32],
          "SINGLE_QUOTED" => "b",
          "DOUBLE_QUOTED" => "c",
          "SINGLE_DOLLAR" => "d"},
        rabbit_env:parse_conf_env_file_output2(
-         ["UNQUOTED=a",
+         ["++ ؎ ", %% note unicode char
+          "UNQUOTED=a",
+          "UNICODE='++ ؎ '",
           "SINGLE_QUOTED='b'",
           "DOUBLE_QUOTED=\"c\"",
           "SINGLE_DOLLAR=$'d'"],
