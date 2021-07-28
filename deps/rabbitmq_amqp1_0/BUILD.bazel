@@ -71,7 +71,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "command_SUITE",
-        size = "small",
+        size = "medium",
         deps = [
             "//deps/amqp10_common:bazel_erlang_lib",
         ],
@@ -79,7 +79,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "proxy_protocol_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
