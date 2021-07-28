@@ -1081,7 +1081,8 @@ check_parse_conf_env_file_output(_) ->
          "DOUBLE_QUOTED" => "c",
          "SINGLE_DOLLAR" => "d"},
        rabbit_env:parse_conf_env_file_output2(
-         ["++ ؎ ", %% note unicode char
+         %% a relatively rarely used Unicode character
+         ["++ ؎ ",
           "UNQUOTED=a",
           "UNICODE='++ ؎ '",
           "SINGLE_QUOTED='b'",
