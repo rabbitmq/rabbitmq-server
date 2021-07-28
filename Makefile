@@ -196,23 +196,28 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> "$@/git-revisions.txt"
 	$(verbose) echo "$$(TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')" > "$@.git-times.txt"
 	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
-	$(verbose) mkdir -p $@/deps/licensing
+	$(verbose) mkdir -p $@/apps $@/deps/licensing
 	$(verbose) set -e; for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
+		if test $$(basename $$(dirname $$dep)) = apps; then \
+			dep_parent_dir=apps; \
+		else \
+			dep_parent_dir=deps; \
+		fi; \
 		$(RSYNC) $(RSYNC_FLAGS) \
 		 $$dep \
-		 $@/deps; \
+		 $@/$$dep_parent_dir; \
 		rm -f \
-		 $@/deps/rabbit_common/rebar.config \
-		 $@/deps/rabbit_common/rebar.lock; \
-		if test -f $@/deps/$$(basename $$dep)/erlang.mk && \
-		   test "$$(wc -l $@/deps/$$(basename $$dep)/erlang.mk | awk '{print $$1;}')" = "1" && \
-		   grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" $@/deps/$$(basename $$dep)/erlang.mk; then \
-			echo "include ../../erlang.mk" > $@/deps/$$(basename $$dep)/erlang.mk; \
+		 $@/apps/rabbit_common/rebar.config \
+		 $@/apps/rabbit_common/rebar.lock; \
+		if test -f $@/$$dep_parent_dir/$$(basename $$dep)/erlang.mk && \
+		   test "$$(wc -l $@/$$dep_parent_dir/$$(basename $$dep)/erlang.mk | awk '{print $$1;}')" = "1" && \
+		   grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" $@/$$dep_parent_dir/$$(basename $$dep)/erlang.mk; then \
+			echo "include ../../erlang.mk" > $@/$$dep_parent_dir/$$(basename $$dep)/erlang.mk; \
 		fi; \
 		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$|include ../../erlang.mk|" \
-		 $@/deps/$$(basename $$dep)/Makefile && \
-		rm $@/deps/$$(basename $$dep)/Makefile.bak; \
-		mix_exs=$@/deps/$$(basename $$dep)/mix.exs; \
+		 $@/$$dep_parent_dir/$$(basename $$dep)/Makefile && \
+		rm $@/$$dep_parent_dir/$$(basename $$dep)/Makefile.bak; \
+		mix_exs=$@/$$dep_parent_dir/$$(basename $$dep)/mix.exs; \
 		if test -f $$mix_exs; then \
 			(cd $$(dirname "$$mix_exs") && \
 			 (test -d $@/deps/.hex || env DEPS_DIR=$@/deps MIX_HOME=$@/deps/.mix HEX_HOME=$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force) && \
@@ -395,7 +400,7 @@ packages: package-deb package-rpm package-windows package-generic-unix
 .PHONY: manpages web-manpages distclean-manpages
 
 manpages web-manpages distclean-manpages:
-	$(MAKE) -C $(DEPS_DIR)/rabbit $@ DEPS_DIR=$(DEPS_DIR)
+	$(MAKE) -C $(APPS_DIR)/rabbit $@
 
 .PHONY: install install-erlapp install-scripts install-bin install-man \
 	install-windows install-windows-erlapp install-windows-scripts \
@@ -448,7 +453,7 @@ install-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(inst_verbose) cp -r \
 		LICENSE* \
-		$(DEPS_DIR)/rabbit/INSTALL \
+		$(APPS_DIR)/rabbit/INSTALL \
 		$(DIST_DIR) \
 		$(DESTDIR)$(RMQ_ERLAPP_DIR)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins to enable them." \
@@ -457,13 +462,13 @@ install-erlapp: dist
 CLI_ESCRIPTS_DIR = escript
 
 install-escripts:
-	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \
+	$(verbose) $(MAKE) -C $(APPS_DIR)/rabbitmq_cli install \
 		PREFIX="$(RMQ_ERLAPP_DIR)/$(CLI_ESCRIPTS_DIR)"
 
 install-scripts: install-escripts
 	$(verbose) mkdir -p $(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin
 	$(inst_verbose) for script in $(SCRIPTS); do \
-		cp "$(DEPS_DIR)/rabbit/scripts/$$script" \
+		cp "$(APPS_DIR)/rabbit/scripts/$$script" \
 			"$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin"; \
 		chmod 0755 "$(DESTDIR)$(RMQ_ERLAPP_DIR)/sbin/$$script"; \
 	done
