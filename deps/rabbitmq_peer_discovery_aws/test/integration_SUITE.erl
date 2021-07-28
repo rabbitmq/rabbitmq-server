@@ -124,7 +124,11 @@ cluster_was_formed(Config) ->
     ?assertEqual(lists:sort(N2Nodes), lists:sort(N3Nodes)).
 
 register_tagged_task(Config) ->
+    RabbitmqDefaultUser = ?config(rabbitmq_default_user, Config),
+    RabbitmqDefaultPass = ?config(rabbitmq_default_pass, Config),
     RabbitmqConf = string:join([
+                                "default_user = " ++ RabbitmqDefaultUser,
+                                "default_pass = " ++ RabbitmqDefaultPass,
                                 "cluster_formation.peer_discovery_backend = aws",
                                 "cluster_formation.aws.instance_tags.service = rabbitmq",
                                 ""
@@ -133,7 +137,11 @@ register_tagged_task(Config) ->
     aws_ecs_util:register_task(Config, TaskJson).
 
 register_autoscaled_task(Config) ->
+    RabbitmqDefaultUser = ?config(rabbitmq_default_user, Config),
+    RabbitmqDefaultPass = ?config(rabbitmq_default_pass, Config),
     RabbitmqConf = string:join([
+                                "default_user = " ++ RabbitmqDefaultUser,
+                                "default_pass = " ++ RabbitmqDefaultPass,
                                 "cluster_formation.peer_discovery_backend = aws",
                                 "cluster_formation.aws.use_autoscaling_group = true",
                                 ""
@@ -156,11 +164,7 @@ task_json(Config, RabbitmqConf) ->
     RabbitContainerDef1 =
         RabbitContainerDef#{
                             <<"image">> := list_to_binary(RabbitmqImage),
-                            <<"environment">> := [#{<<"name">> => <<"RABBITMQ_DEFAULT_USER">>,
-                                                    <<"value">> => list_to_binary(RabbitmqDefaultUser)},
-                                                  #{<<"name">> => <<"RABBITMQ_DEFAULT_PASS">>,
-                                                    <<"value">> => list_to_binary(RabbitmqDefaultPass)},
-                                                  #{<<"name">> => <<"RABBITMQ_ERLANG_COOKIE">>,
+                            <<"environment">> := [#{<<"name">> => <<"RABBITMQ_ERLANG_COOKIE">>,
                                                     <<"value">> => list_to_binary(RabbitmqErlangCookie)}]
                            },
     SidecarContainerDef1 =
