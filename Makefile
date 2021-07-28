@@ -29,8 +29,6 @@ DEP_PLUGINS = $(PROJECT)/apps/rabbit_common/mk/rabbitmq-dist.mk \
 	      $(PROJECT)/apps/rabbit_common/mk/rabbitmq-run.mk \
 	      $(PROJECT)/apps/rabbit_common/mk/rabbitmq-tools.mk
 
-DISABLE_DISTCLEAN = 1
-
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
 
