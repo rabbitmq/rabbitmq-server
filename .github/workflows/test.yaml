@@ -35,13 +35,7 @@ jobs:
         bazelisk test //... \
           --config=rbe-${{ matrix.erlang_version }} \
           --test_tag_filters=-exclusive,-aws,-mixed-version-cluster \
-          --execution_log_binary_file=/tmp/exec.log \
           --verbose_failures
-    - name: SAVE EXECUTION LOG BINARY
-      uses: actions/upload-artifact@v2-preview
-      with:
-        name: execution-log-binary-${{matrix.erlang_version}}.log
-        path: /tmp/exec.log
   test-exclusive:
     name: Test (Exclusive Tests)
     runs-on: ubuntu-18.04
