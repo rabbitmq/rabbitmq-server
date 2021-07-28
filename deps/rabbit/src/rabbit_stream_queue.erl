@@ -129,7 +129,9 @@ create_stream(Q0, Node) ->
                      [rabbit_misc:rs(QName), node(), Error]}
             end;
         {existing, Q} ->
-            {existing, Q}
+            {existing, Q};
+        {absent, Q, Reason} ->
+            {absent, Q, Reason}
     end.
 
 -spec delete(amqqueue:amqqueue(), boolean(),
