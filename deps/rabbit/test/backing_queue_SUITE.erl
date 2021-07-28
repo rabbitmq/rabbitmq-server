@@ -634,7 +634,7 @@ bq_queue_index_props1(_Config) ->
               MsgId = rabbit_guid:gen(),
               Props = #message_properties{expiry=12345, size = 10},
               Qi1 = ?INDEX:publish(
-                      MsgId, 0, Props, true, false, infinity, Qi0),
+                      MsgId, 0, memory, Props, true, false, infinity, Qi0),
               {[{MsgId, 0, Props, _, _}], Qi2} =
                   ?INDEX:read(0, 1, Qi1),
               Qi2
@@ -1393,7 +1393,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
           fun (SeqId, {QiN, SeqIdsMsgIdsAcc}) ->
                   MsgId = rabbit_guid:gen(),
                   QiM = ?INDEX:publish(
-                          MsgId, SeqId, #message_properties{size = 10},
+                          MsgId, SeqId, memory, #message_properties{size = 10},
                           Persistent, false, infinity, QiN),
                   ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
@@ -1403,10 +1403,11 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
     ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     {A, B}.
 
+%% @todo Check for Delivered intentionally removed since it's now per-queue not per-message.
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
 verify_read_with_published(Delivered, Persistent,
-                           [{MsgId, SeqId, _Props, Persistent, Delivered}|Read],
+                           [{MsgId, SeqId, _Location, _Props, Persistent, _IgnoreDelivered}|Read],
                            [{SeqId, MsgId}|Published]) ->
     verify_read_with_published(Delivered, Persistent, Read, Published);
 verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
