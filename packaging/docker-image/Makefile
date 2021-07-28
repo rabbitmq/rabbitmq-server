@@ -19,7 +19,7 @@ else \
 fi)
 endif
 
-ifeq ($(filter-out all dist push,$(MAKECMDGOALS)),)
+ifeq ($(filter-out all dist push clean,$(MAKECMDGOALS)),)
 GENERIC_UNIX_ARCHIVE ?= $(wildcard $(PACKAGES_DIR)/rabbitmq-server-generic-unix-$(PROJECT_VERSION).tar.xz)
 
 ifeq ($(GENERIC_UNIX_ARCHIVE),)
