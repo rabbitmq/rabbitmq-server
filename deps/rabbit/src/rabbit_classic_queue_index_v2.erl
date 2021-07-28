@@ -618,10 +618,10 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0,
             {write_ack(SeqId, SegmentEntryCount, WritesAcc),
              BufferAcc,
              AcksAcc};
-        (SeqId, deliver, {WritesAcc, BufferAcc, AcksAcc}) ->
-            {write_deliver(SeqId, SegmentEntryCount, WritesAcc),
-             BufferAcc,
-             AcksAcc};
+%        (SeqId, deliver, {WritesAcc, BufferAcc, AcksAcc}) ->
+%            {write_deliver(SeqId, SegmentEntryCount, WritesAcc),
+%             BufferAcc,
+%             AcksAcc};
         (SeqId, Entry, {WritesAcc, BufferAcc, AcksAcc}) when FlushType =:= updates ->
             {WritesAcc,
              BufferAcc#{SeqId => Entry},
@@ -647,7 +647,7 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0,
         full ->
             WriteBuffer0;
         updates ->
-            Cache1 = maps:foldl(fun
+            Cache1 = maps:fold(fun
                 (_, ack, CacheAcc) -> CacheAcc;
                 (SeqId, Entry, CacheAcc) -> CacheAcc#{SeqId => Entry}
             end, #{}, Cache0),
@@ -664,11 +664,12 @@ write_ack(SeqId, SegmentEntryCount, WritesAcc) ->
     LocBytesAcc = maps:get(Segment, WritesAcc, []),
     WritesAcc#{Segment => [{Offset, <<0>>}|LocBytesAcc]}.
 
-write_deliver(SeqId, SegmentEntryCount, WritesAcc) ->
-    Segment = SeqId div SegmentEntryCount,
-    Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
-    LocBytesAcc = maps:get(Segment, WritesAcc, []),
-    WritesAcc#{Segment => [{Offset + 1, <<1>>}|LocBytesAcc]}.
+%% @todo No longer write delivers. Keep them in the queue terms.
+%write_deliver(SeqId, SegmentEntryCount, WritesAcc) ->
+%    Segment = SeqId div SegmentEntryCount,
+%    Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
+%    LocBytesAcc = maps:get(Segment, WritesAcc, []),
+%    WritesAcc#{Segment => [{Offset + 1, <<1>>}|LocBytesAcc]}.
 
 write_entry(SeqId, SegmentEntryCount, Entry, WritesAcc) ->
     Segment = SeqId div SegmentEntryCount,
@@ -676,11 +677,11 @@ write_entry(SeqId, SegmentEntryCount, Entry, WritesAcc) ->
     LocBytesAcc = maps:get(Segment, WritesAcc, []),
     WritesAcc#{Segment => [{Offset, build_entry(Entry)}|LocBytesAcc]}.
 
-build_entry({Id, _SeqId, Location, Props, IsPersistent, IsDelivered}) ->
-    IsDeliveredFlag = case IsDelivered of
-        true -> 1;
-        false -> 0
-    end,
+build_entry({Id, _SeqId, Location, Props, IsPersistent, _IsDelivered}) ->
+    IsDeliveredFlag = 0, %case IsDelivered of
+%        true -> 1;
+%        false -> 0
+%    end,
     Flags = case IsPersistent of
         true -> 1;
         false -> 0
@@ -729,6 +730,7 @@ get_fd_for_segment(Segment, State = #mqistate{ fds = OpenFds }) ->
 
 %% The rabbit_variable_queue module may call this function
 %% with an empty list. Do nothing.
+%% @todo This function is no longer used.
 deliver([], State) ->
     ?DEBUG("[] ~0p", [State]),
     State;
@@ -956,7 +958,7 @@ get_fd(SeqId, State0) ->
 parse_entries(<<>>, _, _, Acc) ->
     Acc;
 parse_entries(<< Status:8,
-                 IsDelivered0:8,
+                 _IsDelivered0:8,
                  _:7, IsPersistent:1,
                  LocationBin:232/bits,
                  Size:32/unsigned,
@@ -984,15 +986,16 @@ parse_entries(<< Status:8,
             end,
             Props = #message_properties{expiry = Expiry, size = Size},
             %% We may have a deliver in the write buffer.
-            IsDelivered = case IsDelivered0 of
-                1 ->
-                    true;
-                0 ->
-                    case WriteBuffer of
-                        #{SeqId := deliver} -> true;
-                        _ -> false
-                    end
-            end,
+            IsDelivered = undefined,
+%            IsDelivered = case IsDelivered0 of
+%                1 ->
+%                    true;
+%                0 ->
+%                    case WriteBuffer of
+%                        #{SeqId := deliver} -> true;
+%                        _ -> false
+%                    end
+%            end,
             parse_entries(Rest, SeqId + 1, WriteBuffer,
                           [{Id, SeqId, Location, Props, IsPersistent =:= 1, IsDelivered}|Acc]);
         0 -> %% No entry or acked entry.
