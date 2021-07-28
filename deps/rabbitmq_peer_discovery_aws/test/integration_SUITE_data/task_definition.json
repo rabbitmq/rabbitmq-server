@@ -22,14 +22,6 @@
             "essential": true,
             "environment": [
                 {
-                    "name": "RABBITMQ_DEFAULT_USER",
-                    "value": "PLACEHOLDER"
-                },
-                {
-                    "name": "RABBITMQ_DEFAULT_PASS",
-                    "value": "PLACEHOLDER"
-                },
-                {
                     "name": "RABBITMQ_ERLANG_COOKIE",
                     "value": "PLACEHOLDER"
                 }
