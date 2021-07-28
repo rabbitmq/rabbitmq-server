@@ -26,6 +26,8 @@ jobs:
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
           build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${{ matrix.erlang_version }}
         EOF
+
+        bazelisk info release
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
