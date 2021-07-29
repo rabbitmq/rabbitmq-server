@@ -65,7 +65,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "add_uaa_key_command_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
@@ -96,7 +96,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "system_SUITE",
-        size = "small",
+        size = "medium",
         additional_beam = [
             ":rabbit_auth_backend_oauth2_test_util",
         ],
