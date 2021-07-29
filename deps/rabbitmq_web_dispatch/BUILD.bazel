@@ -87,7 +87,7 @@ suites = [
     ),
     rabbitmq_suite(
         name = "rabbit_web_dispatch_unit_SUITE",
-        size = "small",
+        size = "medium",
     ),
 ]
 
