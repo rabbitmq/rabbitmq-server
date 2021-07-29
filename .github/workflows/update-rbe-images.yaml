@@ -1,0 +1,43 @@
+name: Update Bazel RBE Images
+on:
+  schedule:
+  - cron: '0 3 * * *'
+  workflow_dispatch:
+jobs:
+  update-rbe-images:
+    name: Update Bazel RBE Images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - "23.3"
+        - "24.0"
+        include:
+        - erlang_version: "23.3"
+          short_version: "23"
+        - erlang_version: "24.0"
+          short_version: "24"
+    timeout-minutes: 10
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.3.4
+    - name: UPDATE RBE IMAGE SHA
+      env:
+        IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
+        TAG: linux-erlang-${{ matrix.erlang_version }}
+      run: |
+        # buildbuddy caches the container image, so we must use a specific sha to ensure
+        # the latest is used
+        DIGEST="$(skopeo inspect --format '{{.Digest}}' docker://${IMAGE}:${TAG})"
+        echo "Will use ${IMAGE}@${DIGEST}"
+        npm install --silent @bazel/buildozer
+        npx buildozer \
+          "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
+          //:erlang_${{ matrix.short_version }}_platform
+    - name: CREATE PULL REQUEST
+      uses: peter-evans/create-pull-request@v3
+      with:
+        title: Adopt rabbitmq-server-buildenv:linux-erlang-${{ matrix.erlang_version }} for RBE
+        branch: bump-rbe-image
+        delete-branch: true
