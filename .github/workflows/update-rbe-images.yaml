@@ -8,7 +8,7 @@ jobs:
     name: Update Bazel RBE Images
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      max-parallel: 1
       matrix:
         erlang_version:
         - "23.3"
@@ -29,12 +29,13 @@ jobs:
       run: |
         # buildbuddy caches the container image, so we must use a specific sha to ensure
         # the latest is used
+        echo "Retrieving current digenst for ${IMAGE}:${TAG}..."
         DIGEST="$(skopeo inspect --format '{{.Digest}}' docker://${IMAGE}:${TAG})"
         echo "Will use ${IMAGE}@${DIGEST}"
         npm install --silent @bazel/buildozer
         npx buildozer \
           "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
-          //:erlang_${{ matrix.short_version }}_platform
+          //:erlang_${{ matrix.short_version }}_platform || test $? -eq 3
     - name: CREATE PULL REQUEST
       uses: peter-evans/create-pull-request@v3
       with:
