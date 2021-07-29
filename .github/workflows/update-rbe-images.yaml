@@ -32,7 +32,7 @@ jobs:
         echo "Retrieving current digenst for ${IMAGE}:${TAG}..."
         DIGEST="$(skopeo inspect --format '{{.Digest}}' docker://${IMAGE}:${TAG})"
         echo "Will use ${IMAGE}@${DIGEST}"
-        npm install --silent @bazel/buildozer
+        sudo npm install --global --silent @bazel/buildozer
         npx buildozer \
           "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
           //:erlang_${{ matrix.short_version }}_platform || test $? -eq 3
