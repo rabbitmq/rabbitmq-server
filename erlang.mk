@@ -5634,6 +5634,7 @@ $(call comma_list,$(foreach d,$(DEPS),\
 		{$(call dep_name,$d)$(comma)"$(call dep_repo,$d)"},\
 		{$(call dep_name,$d)$(comma)".*"$(comma){git,"$(call dep_repo,$d)"$(comma)"$(call dep_commit,$d)"}})))
 ]}.
+{plugins, [rebar3_hex]}.
 {erl_opts, $(call compat_erlc_opts_to_list,$(ERLC_OPTS))}.
 endef
 
