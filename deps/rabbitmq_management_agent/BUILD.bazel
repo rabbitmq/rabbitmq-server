@@ -87,12 +87,12 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "metrics_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "rabbit_mgmt_gc_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_suite(
         name = "rabbit_mgmt_slide_SUITE",

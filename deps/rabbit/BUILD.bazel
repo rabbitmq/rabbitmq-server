@@ -600,7 +600,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "queue_master_location_SUITE",
-        size = "medium",
+        size = "large",
         shard_count = 2,
     ),
     rabbitmq_integration_suite(
@@ -800,7 +800,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_app_management_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_suite(
         name = "unit_cluster_formation_locking_mocks_SUITE",
@@ -848,7 +848,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_file_handle_cache_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
