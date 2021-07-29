@@ -40,7 +40,7 @@ jobs:
     - name: RUN INTEGRATION TESTS
       run: |
         branch_or_tag="${GITHUB_REF##*/}"
-        bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
+        bazelisk test //apps/rabbitmq_peer_discovery_aws:integration_SUITE \
           --config=rbe-${{ matrix.erlang_version }} \
           --test_tag_filters=aws \
           --build_tests_only \
