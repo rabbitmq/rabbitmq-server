@@ -10,15 +10,20 @@ DEPS = [
     "@gen_batch_server//:bazel_erlang_lib",
 ]
 
+RUNTIME_DEPS = [
+    "@seshat//:bazel_erlang_lib",
+]
+
 erlang_lib(
+    app_description = "New project",
+    app_env = APP_ENV,
+    app_module = "osiris_app",
     app_name = "osiris",
     app_version = "master",
-    app_description = "New project",
-    app_module = "osiris_app",
-    app_env = APP_ENV,
     extra_apps = [
         "sasl",
         "crypto",
     ],
+    runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
