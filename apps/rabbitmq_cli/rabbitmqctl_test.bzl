@@ -77,7 +77,7 @@ def _impl(ctx):
             exit 1
         fi
 
-        export DEPS_DIR={mix_deps_dir}
+        export APPS_DIR={mix_deps_dir}
         mix local.hex --force
         mix local.rebar --force
         mix make_deps
