@@ -175,6 +175,7 @@ services:
     networks:
       - "rabbitmq-prometheus"
     command: "--uris rabbitmq-stream://guest:guest@rmq2:5552/%2f --max-length-bytes 100mb --rate 1000"
+    restart: on-failure
   # many-queues:
   #   image: *perf-test-image
   #   networks:
