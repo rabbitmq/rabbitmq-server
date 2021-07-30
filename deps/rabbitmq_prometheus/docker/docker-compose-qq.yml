@@ -12,12 +12,11 @@ volumes:
 
 services:
   rmq0-qq: &rabbitmq
-    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.9.0-alpha.465-2021.01.18
+    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq/tags
+    image: pivotalrabbitmq/rabbitmq:master-otp-max
     networks:
       - "rabbitmq-prometheus"
     ports:
-      - "5679:5672"
       - "15679:15672"
       - "15699:15692"
     # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
@@ -41,18 +40,16 @@ services:
     << : *rabbitmq
     hostname: rmq1-qq
     ports:
-      - "5680:5672"
       - "15680:15672"
       - "15700:15692"
   rmq2-qq:
     << : *rabbitmq
     hostname: rmq2-qq
     ports:
-      - "5681:5672"
       - "15681:15672"
       - "15701:15692"
   qq-moderate-load:
-    image: &perf-test-image pivotalrabbitmq/perf-test:2.11.0-ubuntu
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.15.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
     environment:

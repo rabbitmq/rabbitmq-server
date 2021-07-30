@@ -15,11 +15,10 @@ services:
     # https://network.pivotal.io/products/rabbitmq/
     # This is a commercial edition of RabbitMQ that requires a valid Tanzu Network account
     # Learn more: https://rabbitmq.com/tanzu
-    image: dev.registry.pivotal.io/rabbitmq/vmware-tanzu-rabbitmq:2021.06
+    image: dev.registry.pivotal.io/rabbitmq/vmware-tanzu-rabbitmq:1.0.0
     networks:
       - "rabbitmq-prometheus"
     ports:
-      - "5680:5672"
       - "15680:15672"
       - "15700:15692"
     # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
@@ -42,25 +41,23 @@ services:
     # we want to simulate hitting thresholds
     ulimits:
       nofile:
-        soft: "2000"
-        hard: "2000"
+        soft: 2000
+        hard: 2000
   rmq1-dist-metrics:
     << : *rabbitmq
     hostname: rmq1-dist-metrics
     ports:
-      - "5681:5672"
       - "15681:15672"
       - "15701:15692"
   rmq2-dist-metrics:
     << : *rabbitmq
     hostname: rmq2-dist-metrics
     ports:
-      - "5682:5672"
       - "15682:15672"
       - "15702:15692"
 
   qq:
-    image: &perf-test-image pivotalrabbitmq/perf-test:2.11.0-ubuntu
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.15.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
     environment:

@@ -12,12 +12,11 @@ volumes:
 
 services:
   rmq0: &rabbitmq
-    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.9.0-alpha.465-2021.01.18
+    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq/tags
+    image: pivotalrabbitmq/rabbitmq:master-otp-max
     networks:
       - "rabbitmq-prometheus"
     ports:
-      - "5673:5672"
       - "15673:15672"
       - "15693:15692"
     # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
@@ -39,26 +38,24 @@ services:
     # we want to simulate hitting thresholds
     ulimits:
       nofile:
-        soft: "2000"
-        hard: "2000"
+        soft: 2000
+        hard: 2000
   rmq1:
     << : *rabbitmq
     hostname: rmq1
     ports:
-      - "5674:5672"
       - "15674:15672"
       - "15694:15692"
   rmq2:
     << : *rabbitmq
     hostname: rmq2
     ports:
-      - "5675:5672"
       - "15675:15672"
       - "15695:15692"
 
   basic-get:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
-    image: &perf-test-image pivotalrabbitmq/perf-test:2.11.0-ubuntu
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.15.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
     environment:
@@ -173,6 +170,12 @@ services:
       CONSUMERS: 0
       SERVERS_STARTUP_TIMEOUT: *startup_timeout
       METRICS_PROMETHEUS: "true"
+  stream:
+    image: pivotalrabbitmq/stream-perf-test
+    networks:
+      - "rabbitmq-prometheus"
+    command: "--uris rabbitmq-stream://guest:guest@rmq2:5552/%2f --max-length-bytes 100mb --rate 1000"
+    restart: on-failure
   # many-queues:
   #   image: *perf-test-image
   #   networks:
