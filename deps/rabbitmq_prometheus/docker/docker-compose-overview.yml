@@ -38,8 +38,8 @@ services:
     # we want to simulate hitting thresholds
     ulimits:
       nofile:
-        soft: "2000"
-        hard: "2000"
+        soft: 2000
+        hard: 2000
   rmq1:
     << : *rabbitmq
     hostname: rmq1
