@@ -39,6 +39,6 @@ jobs:
     - name: CREATE PULL REQUEST
       uses: peter-evans/create-pull-request@v3
       with:
-        title: Adopt rabbitmq-server-buildenv:linux-erlang-${{ matrix.erlang_version }} for RBE
+        title: Adopt latest rabbitmq-server-buildenv:linux-erlang-${{ matrix.erlang_version }} for RBE
         branch: bump-rbe-image
         delete-branch: true
