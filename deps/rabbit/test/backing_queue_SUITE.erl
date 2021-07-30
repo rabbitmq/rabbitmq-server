@@ -1433,10 +1433,11 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
     ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     {A, B}.
 
+%% @todo Check for Delivered intentionally removed since it's now per-queue not per-message.
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
 verify_read_with_published(Delivered, Persistent,
-                           [{MsgId, SeqId, _Props, Persistent, Delivered}|Read],
+                           [{MsgId, SeqId, _Props, Persistent, _IgnoreDelivered}|Read],
                            [{SeqId, MsgId}|Published]) ->
     verify_read_with_published(Delivered, Persistent, Read, Published);
 verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->

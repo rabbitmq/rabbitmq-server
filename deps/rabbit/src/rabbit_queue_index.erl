@@ -1079,6 +1079,8 @@ entry_to_segment(RelSeq, {Pub, Del, Ack}, Initial) ->
                {no_del, no_ack} ->
                    Initial;
                _ ->
+                   %% @todo This might create issues when we don't deliver (and don't ack)!!
+                   %% @todo We need to always write 2 binaries when we ack and it wasn't acked before.
                    Binary = <<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
                               RelSeq:?REL_SEQ_BITS>>,
                    case {Del, Ack} of
@@ -1215,11 +1217,11 @@ segment_plus_journal1(undefined, {?PUB, del, no_ack} = Obj) ->
 segment_plus_journal1(undefined, {?PUB, del, ack}) ->
     {undefined, 0};
 
-segment_plus_journal1({?PUB = Pub, no_del, no_ack}, {no_pub, del, no_ack}) ->
+segment_plus_journal1({?PUB = Pub, no_del, no_ack}, {no_pub, _del, no_ack}) ->
     {{Pub, del, no_ack}, 0};
-segment_plus_journal1({?PUB, no_del, no_ack},       {no_pub, del, ack}) ->
+segment_plus_journal1({?PUB, no_del, no_ack},       {no_pub, _del, ack}) ->
     {undefined, -1};
-segment_plus_journal1({?PUB, del, no_ack},          {no_pub, no_del, ack}) ->
+segment_plus_journal1({?PUB, del, no_ack},          {no_pub, _no_del, ack}) ->
     {undefined, -1}.
 
 %% Remove from the journal entries for a segment, items that are
