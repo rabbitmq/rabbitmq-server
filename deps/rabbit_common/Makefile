@@ -18,7 +18,7 @@ endef
 LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl
 DEPS = jsx recon credentials_obfuscation
 
-dep_credentials_obfuscation = git https://github.com/rabbitmq/credentials-obfuscation.git  master
+dep_credentials_obfuscation = hex 2.4.0
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
