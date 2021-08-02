@@ -1,0 +1,102 @@
+name: Gather Bazel Execution Logs
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'A bazel label representing the test target'
+        required: true
+        default: '//deps/rabbit:rabbit_stream_queue_SUITE'
+env:
+  ERLANG_MAJOR: "24"
+  CACHE_NAME: ci-bazel-cache-analysis
+jobs:
+  run-a:
+    name: Run A
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.3.4
+    - name: CONFIGURE BAZEL
+      run: |
+        echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
+        echo "${{ secrets.BUILDBUDDY_KEY }}" > buildbuddy-key.pem
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --tls_client_certificate=buildbuddy-cert.pem
+          build:buildbuddy --tls_client_key=buildbuddy-key.pem
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${CACHE_NAME}
+        EOF
+    - name: RUN TESTS
+      run: |
+        bazelisk test ${{ github.event.inputs.target }} \
+          --config=rbe-${ERLANG_MAJOR} \
+          --execution_log_binary_file=/tmp/exec.log
+    - name: SAVE EXECUTION LOG BINARY
+      uses: actions/upload-artifact@v2-preview
+      with:
+        name: execution-log-binary-A
+        path: /tmp/exec.log
+  run-b:
+    name: Run B
+    needs: run-a
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.3.4
+    - name: CONFIGURE BAZEL
+      run: |
+        echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
+        echo "${{ secrets.BUILDBUDDY_KEY }}" > buildbuddy-key.pem
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --tls_client_certificate=buildbuddy-cert.pem
+          build:buildbuddy --tls_client_key=buildbuddy-key.pem
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${CACHE_NAME}
+        EOF
+    - name: RUN TESTS
+      run: |
+        bazelisk test ${{ github.event.inputs.target }} \
+          --config=rbe-${ERLANG_MAJOR} \
+          --execution_log_binary_file=/tmp/exec.log
+    - name: SAVE EXECUTION LOG BINARY
+      uses: actions/upload-artifact@v2-preview
+      with:
+        name: execution-log-binary-B
+        path: /tmp/exec.log
+  parse-logs:
+    name: Parse Logs
+    needs: [run-a, run-b]
+    runs-on: ubuntu-latest
+    steps:
+    - name: CHECKOUT BAZEL
+      uses: actions/checkout@v2.3.4
+      with:
+        repository: bazelbuild/bazel
+        path: bazel
+    - name: MOUNT BAZEL CACHE
+      uses: actions/cache@v2
+      with:
+        path: "/home/runner/.cache/bazel"
+        key: bazel
+    - name: BUILD EXECLOG PARSER
+      working-directory: bazel
+      run: |
+        bazelisk build src/tools/execlog:parser
+    - name: FETCH LOGS
+      uses: actions/download-artifact@v2
+    - name: PARSE LOGS
+      run: |
+        bazel/bazel-bin/src/tools/execlog/parser \
+          --log_path=./execution-log-binary-A/exec.log \
+          --log_path=./execution-log-binary-B/exec.log \
+          --output_path=/tmp/execution-log-binary-A.log.txt \
+          --output_path=/tmp/execution-log-binary-B.log.txt
+    - name: SAVE PARSED LOGS
+      uses: actions/upload-artifact@v2-preview
+      with:
+        name: parsed-logs
+        path: /tmp/execution-log-binary-*.log.txt
