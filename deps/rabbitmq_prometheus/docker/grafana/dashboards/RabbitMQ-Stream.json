@@ -2913,6 +2913,25 @@
   "templating": {
     "list": [
       {
+        "current": {
+          "selected": false,
+          "text": "default",
+          "value": "default"
+        },
+        "hide": 2,
+        "includeAll": false,
+        "label": "datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource",
+        "datasource": "${DS_PROMETHEUS}"
+      },
+      {
         "allValue": null,
         "current": {},
         "datasource": "${DS_PROMETHEUS}",
@@ -2982,5 +3001,5 @@
   "timezone": "",
   "title": "RabbitMQ-Stream",
   "uid": "j7MCpqZ7k",
-  "version": 20210730
+  "version": 20210802
 }
