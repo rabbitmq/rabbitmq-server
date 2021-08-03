@@ -964,7 +964,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_vm_memory_monitor_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
