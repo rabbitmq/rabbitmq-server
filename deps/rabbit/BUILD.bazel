@@ -870,7 +870,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_connection_tracking_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,

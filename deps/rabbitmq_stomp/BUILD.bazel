@@ -96,7 +96,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "command_SUITE",
-        size = "small",
+        size = "medium",
         additional_beam = [
             ":rabbit_stomp_client",
         ],
