@@ -394,7 +394,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "disconnect_detected_during_alarm_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
