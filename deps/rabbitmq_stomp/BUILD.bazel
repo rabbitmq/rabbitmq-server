@@ -109,6 +109,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "connections_SUITE",
+        size = "medium",
         additional_beam = [
             ":rabbit_stomp_client",
         ],
@@ -129,13 +130,14 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "python_SUITE",
+        size = "medium",
         flaky = True,
         shard_count = 3,
     ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "system_SUITE",
-        size = "small",
+        size = "medium",
         additional_beam = [
             ":rabbit_stomp_client",
         ],
@@ -143,7 +145,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "topic_SUITE",
-        size = "small",
+        size = "medium",
         additional_beam = [
             ":rabbit_stomp_client",
         ],
