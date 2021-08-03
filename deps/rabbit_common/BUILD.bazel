@@ -143,7 +143,7 @@ erlc(
     srcs = glob(FIRST_SRCS),
     hdrs = HDRS,
     dest = "src",
-    erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = DEPS,
 )
 
@@ -160,7 +160,7 @@ erlc(
     hdrs = HDRS,
     beam = [":first_test_beam_files"],
     dest = "src",
-    erlc_opts = RABBITMQ_ERLC_OPTS + RABBITMQ_TEST_ERLC_OPTS,
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = DEPS,
 )
 
