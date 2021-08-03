@@ -1,0 +1,15 @@
+pull_request_rules:
+  - name: Add bazel label if a Bazel file is modified
+    conditions:
+      - files~=\.(bazel|bzl)$
+    actions:
+      label:
+        add:
+          - bazel
+  - name: Add make label if a Make file is modified
+    conditions:
+      - files~=(Makefile|\.mk)$
+    actions:
+      label:
+        add:
+          - make
