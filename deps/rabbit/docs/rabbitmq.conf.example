@@ -1,9 +1,24 @@
+## This example configuration file demonstrates various settings
+## available via rabbitmq.conf. It primarily focuses core broker settings
+## but some tier 1 plugin settings are also covered.
+##
+## This file is AN EXAMPLE. It is NOT MEANT TO BE USED IN PRODUCTION. Instead of
+## copying the entire (large!) file, create or generate a new rabbitmq.conf for the target system
+## and populate it with the necessary settings.
+##
+## See https://rabbitmq.com/configure.html to learn about how to configure RabbitMQ,
+## the ini-style format used by rabbitmq.conf, how it is different from `advanced.config`,
+## how to verify effective configuration, and so on.
+##
+## See https://rabbitmq.com/documentation.html for the rest of RabbitMQ documentation.
+##
+## In case you have questions, please use RabbitMQ community Slack and the rabbitmq-users Google group
+## instead of GitHub issues.
+
 # ======================================
-# RabbitMQ broker section
+# Core broker section
 # ======================================
 
-## Related doc guide: https://rabbitmq.com/configure.html. See
-## https://rabbitmq.com/documentation.html for documentation ToC.
 
 ## Networking
 ## ====================
