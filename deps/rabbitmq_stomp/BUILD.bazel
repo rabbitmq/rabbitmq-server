@@ -104,11 +104,12 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "config_schema_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "connections_SUITE",
+        size = "medium",
         additional_beam = [
             ":rabbit_stomp_client",
         ],
@@ -143,7 +144,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "topic_SUITE",
-        size = "small",
+        size = "medium",
         additional_beam = [
             ":rabbit_stomp_client",
         ],
