@@ -58,7 +58,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "config_schema_SUITE",
-        size = "small",
+        size = "medium",
     ),
     # NOTE: integration_SUITE requires aws credentials and a docker image.
     # They can be supplied with:
