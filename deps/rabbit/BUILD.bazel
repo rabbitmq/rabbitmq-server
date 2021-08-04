@@ -895,7 +895,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_gen_server2_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_suite(
         name = "unit_gm_SUITE",
