@@ -304,10 +304,20 @@ handle_call({start_child, ChildSpec}, _From,
                            delegate = Delegate,
                            group    = Group,
                            tx_fun   = TxFun}) ->
+    rabbit_log:debug("Mirrored supervisor: asked to consider starting a child, group: ~p", [Group]),
     {reply, case maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) of
-                already_in_mnesia        -> {error, already_present};
-                {already_in_mnesia, Pid} -> {error, {already_started, Pid}};
-                Else                     -> Else
+                already_in_mnesia        ->
+                    rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
+                                     " overall ~p returned 'record already present'", [Group, Overall]),
+                    {error, already_present};
+                {already_in_mnesia, Pid} ->
+                    rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
+                                     " overall ~p returned 'already running: ~p'", [Group, Overall, Pid]),
+                    {error, {already_started, Pid}};
+                Else                     ->
+                    rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
+                                     " overall ~p returned ~p", [Group, Overall, Else]),
+                    Else
             end, State};
 
 handle_call({delete_child, Id}, _From, State = #state{delegate = Delegate,
@@ -384,17 +394,31 @@ tell_all_peers_to_die(Group, Reason) ->
     [cast(P, {die, Reason}) || P <- pg:get_members(Group) -- [self()]].
 
 maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) ->
+    rabbit_log:debug("Mirrored supervisor: asked to consider starting, group: ~p", [Group]),
     try TxFun(fun() -> check_start(Group, Overall, Delegate, ChildSpec) end) of
-        start      -> start(Delegate, ChildSpec);
-        undefined  -> already_in_mnesia;
-        Pid        -> {already_in_mnesia, Pid}
+        start      ->
+            rabbit_log:debug("Mirrored supervisor: check_start for group ~p,"
+                             " overall ~p returned 'do start'", [Group, Overall]),
+            start(Delegate, ChildSpec);
+        undefined  ->
+            rabbit_log:debug("Mirrored supervisor: check_start for group ~p,"
+                             " overall ~p returned 'undefined'", [Group, Overall]),
+            already_in_mnesia;
+        Pid        ->
+            rabbit_log:debug("Mirrored supervisor: check_start for group ~p,"
+                             " overall ~p returned 'already running (~p)'", [Group, Overall, Pid]),
+            {already_in_mnesia, Pid}
     catch
         %% If we are torn down while in the transaction...
         {error, E} -> {error, E}
     end.
 
 check_start(Group, Overall, Delegate, ChildSpec) ->
-    case mnesia:wread({?TABLE, {Group, id(ChildSpec)}}) of
+    rabbit_log:debug("Mirrored supervisor: check_start for group ~p, id: ~p", [Group, id(ChildSpec)]),
+    ReadResult = mnesia:wread({?TABLE, {Group, id(ChildSpec)}}),
+    rabbit_log:debug("Mirrored supervisor: check_start table ~s read for key ~p returned ~p",
+                     [?TABLE, {Group, id(ChildSpec)}, ReadResult]),
+    case ReadResult of
         []  -> _ = write(Group, Overall, ChildSpec),
                start;
         [S] -> #mirrored_sup_childspec{key           = {Group, Id},
@@ -427,6 +451,7 @@ start(Delegate, ChildSpec) ->
     apply(?SUPERVISOR, start_child, [Delegate, ChildSpec]).
 
 stop(Group, TxFun, Delegate, Id) ->
+    rabbit_log:debug("Mirrored supervisor: asked to stop, group: ~p, child ID: ~p", [Group, Id]),
     try TxFun(fun() -> check_stop(Group, Delegate, Id) end) of
         deleted    -> apply(?SUPERVISOR, delete_child, [Delegate, Id]);
         running    -> {error, running}
