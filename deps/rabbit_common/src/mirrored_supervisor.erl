@@ -278,9 +278,15 @@ handle_call({init, Overall}, _From,
                            initial_childspecs = ChildSpecs}) ->
     process_flag(trap_exit, true),
     ok = pg:join(Group, Overall),
+<<<<<<< HEAD
+=======
+    rabbit_log:debug("Mirrored supervisor: initializing, overall supervisor ~p joined group ~p", [Overall, Group]),
+>>>>>>> 9a0f4b17cd (More mirrored supervisor logging)
     Rest = pg:get_members(Group) -- [Overall],
     case Rest of
-        [] -> TxFun(fun() -> delete_all(Group) end);
+        [] ->
+            rabbit_log:debug("Mirrored supervisor: no known peer members in group ~p, will delete all child records for it", [Group]),
+            TxFun(fun() -> delete_all(Group) end);
         _  -> ok
     end,
     [begin
@@ -411,7 +417,8 @@ maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) ->
     end.
 
 check_start(Group, Overall, Delegate, ChildSpec) ->
-    rabbit_log:debug("Mirrored supervisor: check_start for group ~p, id: ~p", [Group, id(ChildSpec)]),
+    rabbit_log:debug("Mirrored supervisor: check_start for group ~p, id: ~p, overall: ~p",
+                     [Group, id(ChildSpec), Overall]),
     ReadResult = mnesia:wread({?TABLE, {Group, id(ChildSpec)}}),
     rabbit_log:debug("Mirrored supervisor: check_start table ~s read for key ~p returned ~p",
                      [?TABLE, {Group, id(ChildSpec)}, ReadResult]),
@@ -421,12 +428,19 @@ check_start(Group, Overall, Delegate, ChildSpec) ->
         [S] -> #mirrored_sup_childspec{key           = {Group, Id},
                                        mirroring_pid = Pid} = S,
                case Overall of
-                   Pid -> child(Delegate, Id);
-                   _   -> case supervisor(Pid) of
-                              dead      -> _ = write(Group, Overall, ChildSpec),
-                                           start;
-                              Delegate0 -> child(Delegate0, Id)
-                          end
+                   Pid ->
+                       rabbit_log:debug("Mirrored supervisor: overall matched mirrored pid ~p", [Pid]),
+                       child(Delegate, Id);
+                   _   ->
+                       rabbit_log:debug("Mirrored supervisor: overall ~p did not match mirrored pid ~p", [Overall, Pid]),
+                       rabbit_log:debug("Mirrored supervisor: supervisor(~p) returned ~p", [Pid, supervisor(Pid)]),
+                       case supervisor(Pid) of
+                          dead      ->
+                              _ = write(Group, Overall, ChildSpec),
+                              start;
+                          Delegate0 ->
+                              child(Delegate0, Id)
+                       end
                end
     end.
 
@@ -456,6 +470,8 @@ stop(Group, TxFun, Delegate, Id) ->
     end.
 
 check_stop(Group, Delegate, Id) ->
+    rabbit_log:debug("Mirrored supervisor: checking if child ~p in group ~p should be stopped: ~p",
+                     [Id, Group, child(Delegate, Id)]),
     case child(Delegate, Id) of
         undefined -> delete(Group, Id),
                      deleted;
