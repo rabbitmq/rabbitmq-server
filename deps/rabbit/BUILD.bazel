@@ -486,7 +486,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "message_size_limit_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
@@ -870,7 +870,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_connection_tracking_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
@@ -895,7 +895,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_gen_server2_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_suite(
         name = "unit_gm_SUITE",
@@ -931,12 +931,12 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_plugin_versioning_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "unit_policy_validators_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_suite(
         name = "unit_priority_queue_SUITE",
