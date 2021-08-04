@@ -277,6 +277,7 @@ handle_call({init, Overall}, _From,
                            tx_fun             = TxFun,
                            initial_childspecs = ChildSpecs}) ->
     process_flag(trap_exit, true),
+    LockId = mirrored_supervisor_locks:lock(Group),
     ok = pg:join(Group, Overall),
 <<<<<<< HEAD
 =======
@@ -296,8 +297,9 @@ handle_call({init, Overall}, _From,
     Delegate = delegate(Overall),
     erlang:monitor(process, Delegate),
     State1 = State#state{overall = Overall, delegate = Delegate},
-    case errors([maybe_start(Group, TxFun, Overall, Delegate, S)
-                 || S <- ChildSpecs]) of
+    Results = [maybe_start(Group, TxFun, Overall, Delegate, S) || S <- ChildSpecs],
+    mirrored_supervisor_locks:unlock(LockId),
+    case errors(Results) of
         []     -> {reply, ok, State1};
         Errors -> {stop, {shutdown, Errors}, State1}
     end;
@@ -307,21 +309,24 @@ handle_call({start_child, ChildSpec}, _From,
                            delegate = Delegate,
                            group    = Group,
                            tx_fun   = TxFun}) ->
+    LockId = mirrored_supervisor_locks:lock(Group),
     rabbit_log:debug("Mirrored supervisor: asked to consider starting a child, group: ~p", [Group]),
-    {reply, case maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) of
-                already_in_mnesia        ->
-                    rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
-                                     " overall ~p returned 'record already present'", [Group, Overall]),
-                    {error, already_present};
-                {already_in_mnesia, Pid} ->
-                    rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
-                                     " overall ~p returned 'already running: ~p'", [Group, Overall, Pid]),
-                    {error, {already_started, Pid}};
-                Else                     ->
-                    rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
-                                     " overall ~p returned ~p", [Group, Overall, Else]),
-                    Else
-            end, State};
+    Result = case maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) of
+                 already_in_mnesia ->
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
+                                      " overall ~p returned 'record already present'", [Group, Overall]),
+                     {error, already_present};
+                 {already_in_mnesia, Pid} ->
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
+                                      " overall ~p returned 'already running: ~p'", [Group, Overall, Pid]),
+                     {error, {already_started, Pid}};
+                 Else ->
+                     rabbit_log:debug("Mirrored supervisor: maybe_start for group ~p,"
+                                      " overall ~p returned ~p", [Group, Overall, Else]),
+                     Else
+             end,
+    mirrored_supervisor_locks:unlock(LockId),
+    {reply, Result, State};
 
 handle_call({delete_child, Id}, _From, State = #state{delegate = Delegate,
                                                       group    = Group,
@@ -461,7 +466,6 @@ start(Delegate, ChildSpec) ->
     apply(?SUPERVISOR, start_child, [Delegate, ChildSpec]).
 
 stop(Group, TxFun, Delegate, Id) ->
-    rabbit_log:debug("Mirrored supervisor: asked to stop, group: ~p, child ID: ~p", [Group, Id]),
     try TxFun(fun() -> check_stop(Group, Delegate, Id) end) of
         deleted    -> apply(?SUPERVISOR, delete_child, [Delegate, Id]);
         running    -> {error, running}
@@ -470,8 +474,6 @@ stop(Group, TxFun, Delegate, Id) ->
     end.
 
 check_stop(Group, Delegate, Id) ->
-    rabbit_log:debug("Mirrored supervisor: checking if child ~p in group ~p should be stopped: ~p",
-                     [Id, Group, child(Delegate, Id)]),
     case child(Delegate, Id) of
         undefined -> delete(Group, Id),
                      deleted;
