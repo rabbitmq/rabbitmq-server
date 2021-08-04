@@ -78,7 +78,7 @@ PACKAGE = "deps/rabbitmq_management_agent"
 suites = [
     rabbitmq_suite(
         name = "exometer_slide_SUITE",
-        size = "small",
+        size = "medium",
         deps = [
             "@proper//:bazel_erlang_lib",
         ],
