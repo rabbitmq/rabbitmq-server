@@ -278,6 +278,7 @@ handle_call({init, Overall}, _From,
                            initial_childspecs = ChildSpecs}) ->
     process_flag(trap_exit, true),
     LockId = mirrored_supervisor_locks:lock(Group),
+    maybe_log_lock_acquisition_failure(LockId, Group),
     ok = pg:join(Group, Overall),
     rabbit_log:debug("Mirrored supervisor: initializing, overall supervisor ~p joined group ~p", [Overall, Group]),
     Rest = pg:get_members(Group) -- [Overall],
@@ -309,6 +310,7 @@ handle_call({start_child, ChildSpec}, _From,
                            group    = Group,
                            tx_fun   = TxFun}) ->
     LockId = mirrored_supervisor_locks:lock(Group),
+    maybe_log_lock_acquisition_failure(LockId, Group),
     rabbit_log:debug("Mirrored supervisor: asked to consider starting a child, group: ~p", [Group]),
     Result = case maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) of
                  already_in_mnesia ->
@@ -549,3 +551,8 @@ restore_child_order(ChildSpecs, ChildOrder) ->
                        proplists:get_value(id(A), ChildOrder)
                            < proplists:get_value(id(B), ChildOrder)
                end, ChildSpecs).
+
+maybe_log_lock_acquisition_failure(undefined = _LockId, Group) ->
+    rabbit_log:warning("Mirrored supervisor: could not acquire lock for group ~s", [Group]);
+maybe_log_lock_acquisition_failure(_, _) ->
+    ok.
