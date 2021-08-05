@@ -74,17 +74,17 @@ drain() ->
 
 -spec do_drain() -> ok.
 do_drain() ->
-    _ = rabbit_log:alert("This node is being put into maintenance (drain) mode"),
+    _ = rabbit_log:warning("This node is being put into maintenance (drain) mode"),
     mark_as_being_drained(),
     _ = rabbit_log:info("Marked this node as undergoing maintenance"),
     suspend_all_client_listeners(),
-    _ = rabbit_log:alert("Suspended all listeners and will no longer accept client connections"),
+    _ = rabbit_log:warning("Suspended all listeners and will no longer accept client connections"),
     {ok, NConnections} = close_all_client_connections(),
     %% allow plugins to react e.g. by closing their protocol connections
     rabbit_event:notify(maintenance_connections_closed, #{
         reason => <<"node is being put into maintenance">>
     }),
-    _ = rabbit_log:alert("Closed ~b local client connections", [NConnections]),
+    _ = rabbit_log:warning("Closed ~b local client connections", [NConnections]),
 
     TransferCandidates = primary_replica_transfer_candidate_nodes(),
     %% Note: only QQ leadership is transferred because it is a reasonably quick thing to do a lot of queues
@@ -96,7 +96,7 @@ do_drain() ->
     rabbit_event:notify(maintenance_draining, #{
         reason => <<"node is being put into maintenance">>
     }),
-    _ = rabbit_log:alert("Node is ready to be shut down for maintenance or upgrade"),
+    _ = rabbit_log:info("Node is ready to be shut down for maintenance or upgrade"),
 
     ok.
 
@@ -111,11 +111,11 @@ revive() ->
 
 -spec do_revive() -> ok.
 do_revive() ->
-    _ = rabbit_log:alert("This node is being revived from maintenance (drain) mode"),
+    _ = rabbit_log:info("This node is being revived from maintenance (drain) mode"),
     revive_local_quorum_queue_replicas(),
-    _ = rabbit_log:alert("Resumed all listeners and will accept client connections again"),
+    _ = rabbit_log:info("Resumed all listeners and will accept client connections again"),
     resume_all_client_listeners(),
-    _ = rabbit_log:alert("Resumed all listeners and will accept client connections again"),
+    _ = rabbit_log:info("Resumed all listeners and will accept client connections again"),
     unmark_as_being_drained(),
     _ = rabbit_log:info("Marked this node as back from maintenance and ready to serve clients"),
 
