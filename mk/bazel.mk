@@ -28,7 +28,7 @@ build --flaky_test_attempts=1
 build:buildbuddy --remote_header=x-buildbuddy-api-key=YOUR_API_KEY
 endef
 
-export USER_BAZELRC
+user.bazelrc: export USER_BAZELRC
 user.bazelrc:
 	echo "$$USER_BAZELRC" > $@
 
