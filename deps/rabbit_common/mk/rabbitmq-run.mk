@@ -66,12 +66,12 @@ node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
 
 # Broker startup variables for the test environment.
 ifeq ($(PLATFORM),msys2)
-HOSTNAME := $(COMPUTERNAME)
+HOSTNAME = $(COMPUTERNAME)
 else
 ifeq ($(PLATFORM),solaris)
-HOSTNAME := $(shell hostname | sed 's@\..*@@')
+HOSTNAME = $(shell hostname | sed 's@\..*@@')
 else
-HOSTNAME := $(shell hostname -s)
+HOSTNAME = $(shell hostname -s)
 endif
 endif
 
@@ -283,8 +283,8 @@ endif
 endif
 
 run-broker run-tls-broker: RABBITMQ_CONFIG_FILE := $(basename $(TEST_CONFIG_FILE))
-run-broker:     config := $(test_rabbitmq_config)
-run-tls-broker: config := $(test_rabbitmq_config_with_tls)
+run-broker:     config = $(test_rabbitmq_config)
+run-tls-broker: config = $(test_rabbitmq_config_with_tls)
 run-tls-broker: $(TEST_TLS_CERTS_DIR)
 
 run-broker run-tls-broker: node-tmpdir $(DIST_TARGET) $(TEST_CONFIG_FILE)
