@@ -1,10 +1,10 @@
 ifeq ($(PLATFORM),msys2)
-HOSTNAME := $(COMPUTERNAME)
+HOSTNAME = $(COMPUTERNAME)
 else
 ifeq ($(PLATFORM),solaris)
-HOSTNAME := $(shell hostname | sed 's@\..*@@')
+HOSTNAME = $(shell hostname | sed 's@\..*@@')
 else
-HOSTNAME := $(shell hostname -s)
+HOSTNAME = $(shell hostname -s)
 endif
 endif
 
