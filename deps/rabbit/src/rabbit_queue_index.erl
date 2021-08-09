@@ -843,9 +843,9 @@ action_to_entry(RelSeq, Action, JEntries) ->
              end};
         ({Pub,    no_del, no_ack}) when Action == del ->
             {set, {Pub,    del, no_ack}};
-        ({no_pub,    _del, no_ack}) when Action == ack ->
+        ({no_pub,    del, no_ack}) when Action == ack ->
             {set, {no_pub, del,    ack}};
-        ({?PUB,      _del, no_ack}) when Action == ack ->
+        ({?PUB,      del, no_ack}) when Action == ack ->
             {reset, none}
     end.
 
