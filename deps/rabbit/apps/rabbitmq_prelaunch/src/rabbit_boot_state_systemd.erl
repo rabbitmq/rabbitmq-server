@@ -45,8 +45,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Private
 
-notify_boot_state(BootState)
-  when BootState =:= ready orelse BootState =:= stopping ->
+notify_boot_state(ready = BootState) ->
     Status = boot_state_to_desc(BootState),
     ?LOG_DEBUG(
        ?LOG_PREFIX "notifying of state `~s`",
@@ -62,7 +61,7 @@ notify_boot_state(BootState) ->
     systemd:notify({status, Status}).
 
 boot_state_to_desc(stopped) ->
-    "";
+    "Standing by";
 boot_state_to_desc(booting) ->
     "Startup in progress";
 boot_state_to_desc(core_started) ->
