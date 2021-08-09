@@ -22,7 +22,7 @@ format_time1(Timestamp, {rfc3339, Sep, Offset}) ->
                {time_designator, Sep}],
     calendar:system_time_to_rfc3339(Timestamp, Options);
 format_time1(Timestamp, {epoch, secs, int}) ->
-    Timestamp / 1000000;
+    Timestamp div 1000000;
 format_time1(Timestamp, {epoch, usecs, int}) ->
     Timestamp;
 format_time1(Timestamp, {epoch, secs, binary}) ->
