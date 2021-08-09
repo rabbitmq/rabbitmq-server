@@ -44,10 +44,14 @@ format_meta(Meta, Config) ->
     maps:fold(
       fun
           (time, Timestamp, Acc) ->
-              FormattedTime = unicode:characters_to_binary(
-                                rabbit_logger_fmt_helpers:format_time(
-                                  Timestamp, Config)),
-              Acc#{time => FormattedTime};
+              FormattedTime0 = rabbit_logger_fmt_helpers:format_time(
+                                 Timestamp, Config),
+              FormattedTime1 = case is_number(FormattedTime0) of
+                                   true  -> FormattedTime0;
+                                   false -> unicode:characters_to_binary(
+                                              FormattedTime0)
+                               end,
+              Acc#{time => FormattedTime1};
           (domain = Key, Components, Acc) ->
               Term = unicode:characters_to_binary(
                        string:join(
