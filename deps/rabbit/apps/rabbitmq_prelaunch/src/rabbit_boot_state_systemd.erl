@@ -55,7 +55,8 @@ notify_boot_state(ready = BootState) ->
 notify_boot_state(BootState) ->
     Status = boot_state_to_desc(BootState),
     ?LOG_DEBUG(
-       ?LOG_PREFIX "sending non-systemd state (~s) as status description: ~s",
+       ?LOG_PREFIX "sending non-systemd state (~s) as status description: "
+       "\"~s\"",
        [BootState, Status],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     systemd:notify({status, Status}).
