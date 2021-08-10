@@ -35,6 +35,7 @@
          logging_as_multi_line_works/1,
          formatting_as_json_configured_in_env_works/1,
          formatting_as_json_configured_in_config_works/1,
+         formatting_as_json_using_epoch_secs_timestamps_works/1,
          renaming_json_fields_works/1,
          removing_specific_json_fields_works/1,
          removing_non_mentionned_json_fields_works/1,
@@ -76,6 +77,7 @@ groups() ->
        logging_as_multi_line_works,
        formatting_as_json_configured_in_env_works,
        formatting_as_json_configured_in_config_works,
+       formatting_as_json_using_epoch_secs_timestamps_works,
        renaming_json_fields_works,
        removing_specific_json_fields_works,
        removing_non_mentionned_json_fields_works,
@@ -597,6 +599,15 @@ formatting_as_json_configured_in_config_works(Config) ->
     ok = application:set_env(
            rabbit, log,
            [{file, [{formatter, {rabbit_logger_json_fmt, #{}}}]}],
+           [{persistent, true}]),
+    formatting_as_json_works(Config, Context).
+
+formatting_as_json_using_epoch_secs_timestamps_works(Config) ->
+    Context = default_context(Config),
+    ok = application:set_env(
+           rabbit, log,
+           [{file, [{formatter, {rabbit_logger_json_fmt,
+                                 #{time_format => {epoch, secs, int}}}}]}],
            [{persistent, true}]),
     formatting_as_json_works(Config, Context).
 
