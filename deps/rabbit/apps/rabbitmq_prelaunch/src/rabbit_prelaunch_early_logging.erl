@@ -472,11 +472,11 @@ parse_json_field_mapping([], Mapping) ->
 %% @doc
 %% Parses the verbosity_map pattern.
 %%
-%% The pattern is of the form: `debug=2 info=1 *=0'.
+%% The pattern is of the form: `debug:2 info:1 *:0'.
 %%
-%% `debug=2' means that the verbosity of the debug level is 2.
+%% `debug:2' means that the verbosity of the debug level is 2.
 %%
-%% `*=0' means that the verbosity of all non-mentionned levels is 0.
+%% `*:0' means that the verbosity of all non-mentionned levels is 0.
 
 parse_json_verbosity_mapping("") ->
     #{};
@@ -484,7 +484,7 @@ parse_json_verbosity_mapping(RawMapping) ->
     parse_json_verbosity_mapping(string:split(RawMapping, " ", all), #{}).
 
 parse_json_verbosity_mapping([Entry | Rest], Mapping) ->
-    Mapping1 = case string:split(Entry, "=", leading) of
+    Mapping1 = case string:split(Entry, ":", leading) of
                    ["*", VerbS] ->
                        Verb = list_to_integer(VerbS),
                        Mapping#{'$REST' => Verb};
