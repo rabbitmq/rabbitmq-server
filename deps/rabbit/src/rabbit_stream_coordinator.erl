@@ -470,7 +470,7 @@ tick(_Ts, _State) ->
     [{aux, maybe_resize_coordinator_cluster}].
 
 maybe_resize_coordinator_cluster() ->
-    spawn_link(fun() ->
+    spawn(fun() ->
                   case ra:members({?MODULE, node()}) of
                       {_, Members, _} ->
                           MemberNodes = [Node || {_, Node} <- Members],
@@ -630,7 +630,11 @@ handle_aux(_, _, _, AuxState, LogState, _) ->
 run_action(Action, StreamId, #{node := _Node,
                                epoch := _Epoch} = Args,
            ActionFun, #aux{actions = Actions0} = Aux, Log) ->
-    Pid = spawn_link(ActionFun),
+    Coordinator = self(),
+    Pid = spawn_link(fun() ->
+                             ActionFun(),
+                             unlink(Coordinator)
+                     end),
     Effects = [],
     Actions = Actions0#{Pid => {StreamId, Action, Args}},
     {no_reply, Aux#aux{actions = Actions}, Log, Effects}.
