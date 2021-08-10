@@ -21,7 +21,11 @@
 
 -define(PT_KEY_BOOT_STATE,    {?MODULE, boot_state}).
 
--type boot_state() :: 'stopped' | 'booting' | 'core_started' | 'ready' | 'stopping'.
+-type boot_state() :: stopped |
+                      booting |
+                      core_started |
+                      ready |
+                      stopping.
 
 -export_type([boot_state/0]).
 
