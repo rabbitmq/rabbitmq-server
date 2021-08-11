@@ -56,8 +56,8 @@ do_setup(#{nodename := Node,
     %% Override the Erlang cookie if one was set in the environment.
     case maps:get(erlang_cookie, Origins, default) of
         environment ->
-            ?LOG_DEBUG(
-               "Override Erlang cookie using the one set in the environment",
+            ?LOG_WARNING(
+               "Overriding Erlang cookie using the value set in the environment",
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             Cookie = maps:get(erlang_cookie, Config),
             ?assert(is_atom(Cookie)),
