@@ -55,7 +55,7 @@
   "gnetId": 14798,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1627648233032,
+  "iteration": 1628683079578,
   "links": [],
   "panels": [
     {
@@ -833,7 +833,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort_desc(sum by(rabbitmq_cluster) (irate(rabbitmq_global_messages_received_total{protocol=\"stream\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
+          "expr": "sort_desc(sum by(rabbitmq_node) (irate(rabbitmq_global_messages_received_total{protocol=\"stream\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -1046,7 +1046,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort_desc(sum by(rabbitmq_cluster) (irate(rabbitmq_global_messages_confirmed_total{protocol=\"stream\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
+          "expr": "sort_desc(sum by(rabbitmq_node) (irate(rabbitmq_global_messages_confirmed_total{protocol=\"stream\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -1470,7 +1470,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sort_desc(sum by(rabbitmq_cluster) (irate(rabbitmq_global_messages_delivered_total{protocol=\"stream\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
+          "expr": "sort_desc(sum by(rabbitmq_node) (irate(rabbitmq_global_messages_delivered_total{protocol=\"stream\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -3001,5 +3001,5 @@
   "timezone": "",
   "title": "RabbitMQ-Stream",
   "uid": "j7MCpqZ7k",
-  "version": 20210802
+  "version": 20210811
 }
