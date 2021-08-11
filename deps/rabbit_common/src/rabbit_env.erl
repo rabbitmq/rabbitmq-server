@@ -51,9 +51,13 @@
          "RABBITMQ_CONFIG_FILE",
          "RABBITMQ_CONFIG_FILES",
          "RABBITMQ_DBG",
+         "RABBITMQ_DEFAULT_PASS",
+         "RABBITMQ_DEFAULT_USER",
+         "RABBITMQ_DEFAULT_VHOST",
          "RABBITMQ_DIST_PORT",
          "RABBITMQ_ENABLED_PLUGINS",
          "RABBITMQ_ENABLED_PLUGINS_FILE",
+         "RABBITMQ_ERLANG_COOKIE",
          "RABBITMQ_FEATURE_FLAGS",
          "RABBITMQ_FEATURE_FLAGS_FILE",
          "RABBITMQ_HOME",
@@ -152,6 +156,10 @@ get_context_after_reloading_env(Context) ->
              fun plugins_expand_dir/1,
              fun enabled_plugins_file/1,
              fun enabled_plugins/1,
+             fun default_vhost/1,
+             fun default_user/1,
+             fun default_pass/1,
+             fun erlang_cookie/1,
              fun maybe_stop_dist_for_remote_query/1,
              fun amqp_ipaddr/1,
              fun amqp_tcp_port/1,
@@ -1437,6 +1445,62 @@ motd_file_from_node(#{from_remote_node := Remote} = Context) ->
             update_context(Context, motd_file, undefined, default);
         File ->
             update_context(Context, motd_file, File, remote_node)
+    end.
+
+%% -------------------------------------------------------------------
+%%
+%% RABBITMQ_DEFAULT_VHOST
+%%   Override the default virtual host.
+%%   Default: unset (i.e. <<"/">>)
+%%
+%% RABBITMQ_DEFAULT_USER
+%%   Override the default username.
+%%   Default: unset (i.e. <<"guest">>).
+%%
+%% RABBITMQ_MOTD_FILE
+%%   Override the default user's password.
+%%   Default: unset (i.e. <<"guest">>).
+
+default_vhost(Context) ->
+    case get_prefixed_env_var("RABBITMQ_DEFAULT_VHOST") of
+        false ->
+            update_context(Context, default_vhost, undefined, default);
+        Value ->
+            VHost = list_to_binary(Value),
+            update_context(Context, default_vhost, VHost, environment)
+    end.
+
+default_user(Context) ->
+    case get_prefixed_env_var("RABBITMQ_DEFAULT_USER") of
+        false ->
+            update_context(Context, default_user, undefined, default);
+        Value ->
+            Username = list_to_binary(Value),
+            update_context(Context, default_user, Username, environment)
+    end.
+
+default_pass(Context) ->
+    case get_prefixed_env_var("RABBITMQ_DEFAULT_PASS") of
+        false ->
+            update_context(Context, default_pass, undefined, default);
+        Value ->
+            Password = list_to_binary(Value),
+            update_context(Context, default_pass, Password, environment)
+    end.
+
+%% -------------------------------------------------------------------
+%%
+%% RABBITMQ_ERLANG_COOKIE
+%%   Override the on-disk Erlang cookie.
+%%   Default: unset (i.e. defaults to the content of ~/.erlang.cookie)
+
+erlang_cookie(Context) ->
+    case get_prefixed_env_var("RABBITMQ_ERLANG_COOKIE") of
+        false ->
+            update_context(Context, erlang_cookie, undefined, default);
+        Value ->
+            Cookie = list_to_atom(Value),
+            update_context(Context, erlang_cookie, Cookie, environment)
     end.
 
 %% -------------------------------------------------------------------

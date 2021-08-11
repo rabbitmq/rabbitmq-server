@@ -1,5 +1,6 @@
 -module(rabbit_prelaunch_dist).
 
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
@@ -33,7 +34,9 @@ setup(#{nodename := Node, nodename_type := NameType} = Context) ->
     end,
     ok.
 
-do_setup(#{nodename := Node, nodename_type := NameType}) ->
+do_setup(#{nodename := Node,
+           nodename_type := NameType,
+           var_origins := Origins} = Config) ->
     ?LOG_DEBUG(
        "Starting Erlang distribution",
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
@@ -47,6 +50,19 @@ do_setup(#{nodename := Node, nodename_type := NameType}) ->
             ok;
         _ ->
             {ok, _} = net_kernel:start([Node, NameType]),
+            ok
+    end,
+
+    %% Override the Erlang cookie if one was set in the environment.
+    case maps:get(erlang_cookie, Origins, default) of
+        environment ->
+            ?LOG_WARNING(
+               "Overriding Erlang cookie using the value set in the environment",
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+            Cookie = maps:get(erlang_cookie, Config),
+            ?assert(is_atom(Cookie)),
+            true = erlang:set_cookie(node(), Cookie);
+        _ ->
             ok
     end,
     ok.

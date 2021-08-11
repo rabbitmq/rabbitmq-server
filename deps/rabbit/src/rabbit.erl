@@ -7,6 +7,7 @@
 
 -module(rabbit).
 
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 
@@ -1047,10 +1048,10 @@ maybe_insert_default_data() ->
     end.
 
 insert_default_data() ->
-    {ok, DefaultUser} = application:get_env(default_user),
-    {ok, DefaultPass} = application:get_env(default_pass),
+    DefaultUser = get_default_data_param(default_user),
+    DefaultPass = get_default_data_param(default_pass),
     {ok, DefaultTags} = application:get_env(default_user_tags),
-    {ok, DefaultVHost} = application:get_env(default_vhost),
+    DefaultVHost = get_default_data_param(default_vhost),
     {ok, [DefaultConfigurePerm, DefaultWritePerm, DefaultReadPerm]} =
         application:get_env(default_permissions),
 
@@ -1076,6 +1077,18 @@ insert_default_data() ->
                                                       DefaultReadPermBin,
                                                       ?INTERNAL_USER),
     ok.
+
+get_default_data_param(Param) ->
+    #{var_origins := Origins} = Context = rabbit_prelaunch:get_context(),
+    case maps:get(Param, Origins, default) of
+        environment ->
+            Value = maps:get(Param, Context),
+            ?assert(is_binary(Value)),
+            Value;
+        default ->
+            {ok, Value} = application:get_env(Param),
+            Value
+    end.
 
 %%---------------------------------------------------------------------------
 %% logging
