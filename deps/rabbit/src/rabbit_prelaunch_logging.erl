@@ -268,7 +268,7 @@ set_log_level(Level) ->
     %% of them to the new level.
     lists:foreach(
       fun
-          (#{id := Id, filters := Filters}) ->
+          (#{id := Id, filters := Filters, config := Config}) ->
               ?LOG_DEBUG(
                  "Logging: changing '~s' handler log level to ~s",
                  [Id, Level],
@@ -302,14 +302,18 @@ set_log_level(Level) ->
                                (Filter) ->
                                    Filter
                            end, Filters),
+              Config1 = adjust_burst_limit(Config, Level),
               logger:set_handler_config(Id, filters, Filters1),
+              logger:set_handler_config(Id, config, Config1),
               logger:set_handler_config(Id, level, Level),
               ok;
-          (#{id := Id}) ->
+          (#{id := Id, config := Config}) ->
               ?LOG_DEBUG(
                  "Logging: changing '~s' handler log level to ~s",
                  [Id, Level],
                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+              Config1 = adjust_burst_limit(Config, Level),
+              logger:set_handler_config(Id, config, Config1),
               logger:set_handler_config(Id, level, Level),
               ok
       end, logger:get_handler_config()),
@@ -1424,8 +1428,20 @@ adjust_log_levels(Handlers) ->
                         fun(_, LvlA, LvlB) ->
                                 get_less_severe_level(LvlA, LvlB)
                         end, GeneralLevel, FilterConfig),
-              Handler#{level => Level}
+              Handler1 = Handler#{level => Level},
+              adjust_burst_limit(Handler1)
       end, Handlers).
+
+adjust_burst_limit(#{config := #{burst_limit_enable := _}} = Handler) ->
+    Handler;
+adjust_burst_limit(#{level := debug, config := Config} = Handler) ->
+    Config1 = Config#{burst_limit_enable => false},
+    Handler#{config => Config1};
+adjust_burst_limit(Handler) when is_map(Handler) ->
+    Handler.
+
+adjust_burst_limit(Config, Level) ->
+    Config#{burst_limit_enable => Level =/= debug}.
 
 -spec assign_handler_ids(#{handler_key() => logger:handler_config()}) ->
     [logger:handler_config()].
