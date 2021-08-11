@@ -28,9 +28,13 @@
          check_RABBITMQ_ADVANCED_CONFIG_FILE/1,
          check_RABBITMQ_CONFIG_FILE/1,
          check_RABBITMQ_CONFIG_FILES/1,
+         check_RABBITMQ_DEFAULT_PASS/1,
+         check_RABBITMQ_DEFAULT_USER/1,
+         check_RABBITMQ_DEFAULT_VHOST/1,
          check_RABBITMQ_DIST_PORT/1,
          check_RABBITMQ_ENABLED_PLUGINS/1,
          check_RABBITMQ_ENABLED_PLUGINS_FILE/1,
+         check_RABBITMQ_ERLANG_COOKIE/1,
          check_RABBITMQ_FEATURE_FLAGS_FILE/1,
          check_RABBITMQ_KEEP_PID_FILE_ON_EXIT/1,
          check_RABBITMQ_LOG/1,
@@ -69,9 +73,13 @@ all() ->
      check_RABBITMQ_ADVANCED_CONFIG_FILE,
      check_RABBITMQ_CONFIG_FILE,
      check_RABBITMQ_CONFIG_FILES,
+     check_RABBITMQ_DEFAULT_PASS,
+     check_RABBITMQ_DEFAULT_USER,
+     check_RABBITMQ_DEFAULT_VHOST,
      check_RABBITMQ_DIST_PORT,
      check_RABBITMQ_ENABLED_PLUGINS,
      check_RABBITMQ_ENABLED_PLUGINS_FILE,
+     check_RABBITMQ_ERLANG_COOKIE,
      check_RABBITMQ_FEATURE_FLAGS_FILE,
      check_RABBITMQ_KEEP_PID_FILE_ON_EXIT,
      check_RABBITMQ_LOG,
@@ -167,8 +175,12 @@ check_default_values(_) ->
       amqp_ipaddr => default,
       amqp_tcp_port => default,
       conf_env_file => default,
+      default_user => default,
+      default_pass => default,
+      default_vhost => default,
       enabled_plugins => default,
       enabled_plugins_file => default,
+      erlang_cookie => default,
       erlang_dist_tcp_port => default,
       feature_flags_file => default,
       forced_feature_flags_on_init => RFFOrigin,
@@ -207,8 +219,12 @@ check_default_values(_) ->
          data_dir => "/var/lib/rabbitmq",
          dbg_mods => [],
          dbg_output => stdout,
+         default_user => undefined,
+         default_pass => undefined,
+         default_vhost => undefined,
          enabled_plugins => undefined,
          enabled_plugins_file => "/etc/rabbitmq/enabled_plugins",
+         erlang_cookie => undefined,
          erlang_dist_tcp_port => 25672,
          feature_flags_file =>
            "/var/lib/rabbitmq/mnesia/" ++ NodeS ++ "-feature_flags",
@@ -256,8 +272,12 @@ check_default_values(_) ->
          data_dir => "%APPDATA%/RabbitMQ",
          dbg_mods => [],
          dbg_output => stdout,
+         default_user => undefined,
+         default_pass => undefined,
+         default_vhost => undefined,
          enabled_plugins => undefined,
          enabled_plugins_file => "%APPDATA%/RabbitMQ/enabled_plugins",
+         erlang_cookie => undefined,
          erlang_dist_tcp_port => 25672,
          feature_flags_file =>
            "%APPDATA%/RabbitMQ/db/" ++ NodeS ++ "-feature_flags",
@@ -380,8 +400,12 @@ check_values_from_reachable_remote_node(Config) ->
           amqp_ipaddr => default,
           amqp_tcp_port => default,
           conf_env_file => default,
+          default_user => default,
+          default_pass => default,
+          default_vhost => default,
           enabled_plugins => default,
           enabled_plugins_file => remote_node,
+          erlang_cookie => default,
           erlang_dist_tcp_port => default,
           feature_flags_file => remote_node,
           forced_feature_flags_on_init => RFFOrigin,
@@ -420,8 +444,12 @@ check_values_from_reachable_remote_node(Config) ->
              data_dir => "/var/lib/rabbitmq",
              dbg_mods => [],
              dbg_output => stdout,
+             default_user => undefined,
+             default_pass => undefined,
+             default_vhost => undefined,
              enabled_plugins => undefined,
              enabled_plugins_file => EnabledPluginsFile,
+             erlang_cookie => undefined,
              erlang_dist_tcp_port => 25672,
              feature_flags_file => FeatureFlagsFile,
              forced_feature_flags_on_init => RFFValue,
@@ -497,8 +525,12 @@ check_values_from_offline_remote_node(_) ->
       amqp_ipaddr => default,
       amqp_tcp_port => default,
       conf_env_file => default,
+      default_user => default,
+      default_pass => default,
+      default_vhost => default,
       enabled_plugins => default,
       enabled_plugins_file => default,
+      erlang_cookie => default,
       erlang_dist_tcp_port => default,
       feature_flags_file => default,
       forced_feature_flags_on_init => RFFOrigin,
@@ -537,8 +569,12 @@ check_values_from_offline_remote_node(_) ->
          data_dir => "/var/lib/rabbitmq",
          dbg_mods => [],
          dbg_output => stdout,
+         default_user => undefined,
+         default_pass => undefined,
+         default_vhost => undefined,
          enabled_plugins => undefined,
          enabled_plugins_file => undefined,
+         erlang_cookie => undefined,
          erlang_dist_tcp_port => 25672,
          feature_flags_file => undefined,
          forced_feature_flags_on_init => RFFValue,
@@ -735,6 +771,24 @@ check_RABBITMQ_CONFIG_FILES(_) ->
                             Value1, Value1,
                             Value2, Value2).
 
+check_RABBITMQ_DEFAULT_PASS(_) ->
+    Value1 = random_string(),
+    check_variable("RABBITMQ_DEFAULT_PASS",
+                   default_pass,
+                   Value1, list_to_binary(Value1)).
+
+check_RABBITMQ_DEFAULT_USER(_) ->
+    Value1 = random_string(),
+    check_variable("RABBITMQ_DEFAULT_USER",
+                   default_user,
+                   Value1, list_to_binary(Value1)).
+
+check_RABBITMQ_DEFAULT_VHOST(_) ->
+    Value1 = random_string(),
+    check_variable("RABBITMQ_DEFAULT_VHOST",
+                   default_vhost,
+                   Value1, list_to_binary(Value1)).
+
 check_RABBITMQ_DIST_PORT(_) ->
     Value1 = random_int(),
     Value2 = random_int(),
@@ -766,6 +820,12 @@ check_RABBITMQ_ENABLED_PLUGINS_FILE(_) ->
                             '_',
                             Value1, Value1,
                             Value2, Value2).
+
+check_RABBITMQ_ERLANG_COOKIE(_) ->
+    Value1 = random_atom(),
+    check_variable("RABBITMQ_ERLANG_COOKIE",
+                   erlang_cookie,
+                   atom_to_list(Value1), Value1).
 
 check_RABBITMQ_FEATURE_FLAGS_FILE(_) ->
     Value1 = random_string(),
