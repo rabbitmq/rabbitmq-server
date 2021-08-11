@@ -302,6 +302,8 @@ set_log_level(Level) ->
                                (Filter) ->
                                    Filter
                            end, Filters),
+              %% If the log level is set to `debug', we turn off burst limit to
+              %% make sure all debug messages make it.
               Config1 = adjust_burst_limit(Config, Level),
               logger:set_handler_config(Id, filters, Filters1),
               logger:set_handler_config(Id, config, Config1),
@@ -312,6 +314,8 @@ set_log_level(Level) ->
                  "Logging: changing '~s' handler log level to ~s",
                  [Id, Level],
                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+              %% If the log level is set to `debug', we turn off burst limit to
+              %% make sure all debug messages make it.
               Config1 = adjust_burst_limit(Config, Level),
               logger:set_handler_config(Id, config, Config1),
               logger:set_handler_config(Id, level, Level),
@@ -1419,6 +1423,9 @@ filter_log_event(LogEvent, FilterConfig) ->
 %%
 %% If a filter is more permissive, we need to adapt the handler log level so
 %% the message makes it to the filter.
+%%
+%% Also, if the log level is set to `debug', we turn off burst limit to make
+%% sure all debug messages make it.
 
 adjust_log_levels(Handlers) ->
     maps:map(
