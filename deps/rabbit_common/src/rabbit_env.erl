@@ -657,6 +657,12 @@ parse_log_levels([CategoryValue | Rest], Result) ->
         ["-json"] ->
             Result1 = Result#{json => false},
             parse_log_levels(Rest, Result1);
+        ["+single_line"] ->
+            Result1 = Result#{single_line => true},
+            parse_log_levels(Rest, Result1);
+        ["-single_line"] ->
+            Result1 = Result#{single_line => false},
+            parse_log_levels(Rest, Result1);
         [CategoryOrLevel] ->
             case parse_level(CategoryOrLevel) of
                 undefined ->

@@ -111,11 +111,14 @@ main_handler_config(Context) ->
     #{filter_default => log,
       formatter => default_formatter(Context)}.
 
-default_formatter(#{log_levels := #{json := true}}) ->
-    {rabbit_logger_json_fmt, #{}};
+default_formatter(#{log_levels := #{json := true}} = Context) ->
+    SingleLine = format_msgs_as_single_lines(Context),
+    {rabbit_logger_json_fmt, #{single_line => SingleLine}};
 default_formatter(Context) ->
     Color = use_colored_logging(Context),
-    {rabbit_logger_text_fmt, #{use_colors => Color}}.
+    SingleLine = format_msgs_as_single_lines(Context),
+    {rabbit_logger_text_fmt, #{use_colors => Color,
+                               single_line => SingleLine}}.
 
 default_console_formatter(Context) ->
     default_formatter(Context).
@@ -141,6 +144,11 @@ use_colored_logging(#{log_levels := #{color := true},
                       output_supports_colors := true}) ->
     true;
 use_colored_logging(_) ->
+    false.
+
+format_msgs_as_single_lines(#{log_levels := #{single_line := true}}) ->
+    true;
+format_msgs_as_single_lines(_) ->
     false.
 
 enable_quick_dbg(#{dbg_mods := []}) ->
