@@ -124,6 +124,22 @@
          delete_child/2, terminate_child/2,
          which_children/1, count_children/1, check_childspecs/1]).
 
+-ifdef(OTP_RELEASE).
+-if(?OTP_RELEASE >= 23).
+-define(PG_START_LINK(), pg:start_link()).
+-define(PG_JOIN(Group, PID), pg:join(Group, PID)).
+-define(PG_GET_MEMBERS(Group), pg:get_members(Group)).
+-else.
+-define(PG_START_LINK(), ok).
+-define(PG_JOIN(Group, PID), pg2:create(Group), pg2:join(Group, PID)).
+-define(PG_GET_MEMBERS(Group), pg2:get_members(Group)).
+-endif.
+-else.
+-define(PG_START_LINK(), ok).
+-define(PG_JOIN(Group, PID), pg2:create(Group), pg2:join(Group, PID)).
+-define(PG_GET_MEMBERS(Group), pg2:get_members(Group)).
+-endif.
+
 -behaviour(?GEN_SERVER).
 
 -export([init/1, handle_call/3, handle_info/2, terminate/2, code_change/3,
@@ -208,7 +224,7 @@ start_link0(Prefix, Group, TxFun, Init) ->
     end.
 
 init(Mod, Args) ->
-    _ = pg:start_link(),
+    _ = ?PG_START_LINK(),
     case Mod:init(Args) of
         {ok, {{Bad, _, _}, _ChildSpecs}} when
               Bad =:= simple_one_for_one -> erlang:error(badarg);
@@ -245,7 +261,7 @@ fold(FunAtom, Sup, AggFun) ->
     Group = call(Sup, group),
     lists:foldl(AggFun, [],
                 [apply(?SUPERVISOR, FunAtom, [D]) ||
-                    M <- pg:get_members(Group),
+                    M <- ?PG_GET_MEMBERS(Group),
                     D <- [delegate(M)]]).
 
 child(Sup, Id) ->
@@ -279,9 +295,9 @@ handle_call({init, Overall}, _From,
     process_flag(trap_exit, true),
     LockId = mirrored_supervisor_locks:lock(Group),
     maybe_log_lock_acquisition_failure(LockId, Group),
-    ok = pg:join(Group, Overall),
+    ok = ?PG_JOIN(Group, Overall),
     rabbit_log:debug("Mirrored supervisor: initializing, overall supervisor ~p joined group ~p", [Overall, Group]),
-    Rest = pg:get_members(Group) -- [Overall],
+    Rest = ?PG_GET_MEMBERS(Group) -- [Overall],
     Nodes = [node(M) || M <- Rest],
     rabbit_log:debug("Mirrored supervisor: known group ~p members: ~p on nodes ~p", [Group, Rest, Nodes]),
     case Rest of
@@ -375,7 +391,7 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
                            overall  = O,
                            child_order = ChildOrder}) ->
     %% No guarantee pg will have received the DOWN before us.
-    R = case lists:sort(pg:get_members(Group)) -- [Pid] of
+    R = case lists:sort(?PG_GET_MEMBERS(Group)) -- [Pid] of
             [O | _] -> ChildSpecs =
                            TxFun(fun() -> update_all(O, Pid) end),
                        [start(Delegate, ChildSpec)
@@ -400,7 +416,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------------------------
 
 tell_all_peers_to_die(Group, Reason) ->
-    [cast(P, {die, Reason}) || P <- pg:get_members(Group) -- [self()]].
+    [cast(P, {die, Reason}) || P <- ?PG_GET_MEMBERS(Group) -- [self()]].
 
 maybe_start(Group, TxFun, Overall, Delegate, ChildSpec) ->
     rabbit_log:debug("Mirrored supervisor: asked to consider starting, group: ~p", [Group]),
