@@ -543,10 +543,22 @@ ensure_credentials_valid() ->
 %% @end
 api_get_request(Service, Path) ->
   rabbit_log:debug("Invoking AWS request {Service: ~p; Path: ~p}...", [Service, Path]),
+  api_get_request_with_retries(Service, Path, ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
+
+
+  -spec api_get_request_with_retries(string(), path(), integer(), integer()) -> result().
+  %% @doc Invoke an API call to an AWS service with retries.
+  %% @end
+api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
   ensure_credentials_valid(),
   case get(Service, Path) of
     {ok, {_Headers, Payload}} -> rabbit_log:debug("AWS request: ~s~nResponse: ~p", [Path, Payload]),
                                  {ok, Payload};
     {error, {credentials, _}} -> {error, credentials};
-    {error, Message, _}       -> {error, Message}
+    {error, Message, _}       -> case Retries of
+                                   0 -> {error, Message};
+                                   _ -> rabbit_log:warning("Error occurred ~s~nWill retry AWS request, remaining retries: ~b", [Message, Retries]),
+                                        timer:sleep(WaitTimeBetweenRetries),
+                                        api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
+                                 end
   end.
