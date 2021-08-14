@@ -666,9 +666,21 @@ credential_validator.regexp = ^abc\\d+",
   %% Definitions
   %%
 
+ %% classic configuration key, implies a local filesystem path
  {definition_files, "load_definitions = test/definition_import_SUITE_data/case1.json",
   [{rabbit,
        [{load_definitions, "test/definition_import_SUITE_data/case1.json"}]}],
+  []},
+
+ %% modern configuration key, local filesystem source
+ {definition_files, "definitions.import_backend = local_filesystem
+                     definitions.local.path = test/definition_import_SUITE_data/case1.json",
+  [{rabbit, [
+    {definitions, [
+      {import_backend, rabbit_definitions_import_local_filesystem},
+      {local_path, "test/definition_import_SUITE_data/case1.json"}
+    ]}
+  ]}],
   []},
 
   %%

@@ -121,14 +121,43 @@ end}.
 %% Definition import
 %%
 
-%% Load definitions from a JSON file or directory of files. See
+%% Original key for definition loading from a JSON file or directory of files. See
 %% https://www.rabbitmq.com/management.html#load-definitions
-%%
-%% {load_definitions, "/path/to/schema.json"},
-%% {load_definitions, "/path/to/schemas"},
 {mapping, "load_definitions", "rabbit.load_definitions",
     [{datatype, string},
      {validators, ["file_accessible"]}]}.
+
+%% Newer syntax for definition loading from a JSON file or directory of files. See
+%% https://www.rabbitmq.com/management.html#load-definitions
+{mapping, "definitions.local.path", "rabbit.definitions.local_path",
+    [{datatype, string},
+     {validators, ["file_accessible"]}]}.
+
+%% Extensive mechanism for loading definitions from a remote source
+{mapping, "definitions.import_backend", "rabbit.definitions.import_backend", [
+    {datatype, atom}
+]}.
+
+{translation, "rabbit.definitions.import_backend",
+fun(Conf) ->
+    case cuttlefish:conf_get("definitions.import_backend", Conf, rabbit_definitions_import_local_filesystem) of
+        %% short aliases for known backends
+        local_filesystem -> rabbit_definitions_import_local_filesystem;
+        local            -> rabbit_definitions_import_local_filesystem;
+        https            -> rabbit_definitions_import_https;
+        http             -> rabbit_definitions_import_https;
+        %% accept both rabbitmq_ and rabbit_ (typical core module prefix)
+        rabbitmq_definitions_import_local_filesystem -> rabbit_definitions_import_local_filesystem;
+        rabbitmq_definitions_import_local_filesystem -> rabbit_definitions_import_https;
+        %% any other value is used as is
+        Module           -> Module
+    end
+end}.
+
+%% Load definitions from a remote URL over HTTPS. See
+%% https://www.rabbitmq.com/management.html#load-definitions
+{mapping, "definitions.https.url", "rabbit.definitions.url",
+    [{datatype, string}]}.
 
 %%
 %% Security / AAA
