@@ -15,7 +15,10 @@
 
 all() ->
     [
-     {group, boot_time_import},
+     %% uses rabbit.load_definitions
+     {group, boot_time_import_using_classic_source},
+     %% uses rabbit.definitions with import_backend set to local_filesystem
+     {group, boot_time_import_using_modern_local_filesystem_source},
      {group, roundtrip},
      {group, import_on_a_running_node}
     ].
@@ -43,8 +46,13 @@ groups() ->
                                import_case14,
                                import_case15
                               ]},
-        {boot_time_import, [], [
-            import_on_a_booting_node
+        
+        {boot_time_import_using_classic_source, [], [
+            import_on_a_booting_node_using_classic_local_source
+        ]},
+
+        {boot_time_import_using_modern_local_filesystem_source, [], [
+            import_on_a_booting_node_using_modern_local_filesystem_source
         ]},
 
         {roundtrip, [], [
@@ -64,7 +72,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(boot_time_import = Group, Config) ->
+init_per_group(boot_time_import_using_classic_source = Group, Config) ->
     CasePath = filename:join(?config(data_dir, Config), "case5.json"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Group},
@@ -73,6 +81,21 @@ init_per_group(boot_time_import = Group, Config) ->
     Config2 = rabbit_ct_helpers:merge_app_env(Config1,
       {rabbit, [
           {load_definitions, CasePath}
+      ]}),
+    rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
+%% same as the classic source semantically but uses a different configuration structure
+init_per_group(boot_time_import_using_modern_local_filesystem_source = Group, Config) ->
+    CasePath = filename:join(?config(data_dir, Config), "case5.json"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Group},
+        {rmq_nodes_count, 1}
+      ]),
+    Config2 = rabbit_ct_helpers:merge_app_env(Config1,
+      {rabbit, [
+          {definitions, [
+              {import_backend, rabbit_definitions_import_local_filesystem},
+              {local_path,     CasePath}
+          ]}
       ]}),
     rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
 init_per_group(Group, Config) ->
@@ -158,7 +181,16 @@ export_import_round_trip_case2(Config) ->
     Defs = export(Config),
     import_parsed(Config, Defs).
 
-import_on_a_booting_node(Config) ->
+import_on_a_booting_node_using_classic_local_source(Config) ->
+    %% see case5.json
+    VHost = <<"vhost2">>,
+    %% verify that vhost2 eventually starts
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
+        ok -> ok;
+        {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
+    end.
+
+import_on_a_booting_node_using_modern_local_filesystem_source(Config) ->
     %% see case5.json
     VHost = <<"vhost2">>,
     %% verify that vhost2 eventually starts
