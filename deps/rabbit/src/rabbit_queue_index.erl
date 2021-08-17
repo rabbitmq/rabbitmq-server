@@ -10,7 +10,7 @@
 -compile({inline, [segment_entry_count/0]}).
 
 -export([erase/1, init/3, reset_state/1, recover/7,
-         terminate/3, delete_and_terminate/1,
+         terminate/3, delete_and_terminate/1, info/1,
          pre_publish/7, flush_pre_publish_cache/2,
          publish/7, publish/8, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/2, stop/1]).
@@ -357,6 +357,11 @@ delete_and_terminate(State) ->
     {_SegmentCounts, State1 = #qistate { dir = Dir }} = terminate(State),
     ok = rabbit_file:recursive_delete([Dir]),
     State1.
+
+-spec info(qistate()) -> [].
+
+%% No info is implemented for v1 at this time.
+info(_) -> [].
 
 pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint,
             State = #qistate{pre_publish_cache = PPC,
