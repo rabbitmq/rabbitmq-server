@@ -159,9 +159,101 @@ end}.
 {mapping, "definitions.https.url", "rabbit.definitions.url",
     [{datatype, string}]}.
 
+%% Client-side TLS settings used by e.g. HTTPS definition loading mechanism.
+%% These can be reused by other clients.
+
+{mapping, "definitions.tls.verify", "rabbit.definitions.ssl_options.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "definitions.tls.fail_if_no_peer_cert", "rabbit.definitions.ssl_options.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.tls.cacertfile", "rabbit.definitions.ssl_options.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "definitions.tls.certfile", "rabbit.definitions.ssl_options.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "definitions.tls.cacerts.$name", "rabbit.definitions.ssl_options.cacerts",
+    [{datatype, string}]}.
+
+{translation, "rabbit.definitions.ssl_options.cacerts",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("definitions.tls.cacerts", Conf),
+    [ list_to_binary(V) || {_, V} <- Settings ]
+end}.
+
+{mapping, "definitions.tls.cert", "rabbit.definitions.ssl_options.cert",
+    [{datatype, string}]}.
+
+{translation, "rabbit.definitions.ssl_options.cert",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("definitions.tls.cert", Conf))
+end}.
+
+{mapping, "definitions.tls.reuse_session", "rabbit.definitions.ssl_options.reuse_session",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.tls.crl_check", "rabbit.definitions.ssl_options.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "definitions.tls.depth", "rabbit.definitions.ssl_options.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "definitions.tls.dh", "rabbit.definitions.ssl_options.dh",
+    [{datatype, string}]}.
+
+{translation, "rabbit.definitions.ssl_options.dh",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("definitions.tls.dh", Conf))
+end}.
+
+{translation, "rabbit.definitions.ssl_options.key",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("definitions.tls.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> cuttlefish:unset()
+    end
+end}.
+
+{mapping, "definitions.tls.keyfile", "rabbit.definitions.ssl_options.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "definitions.tls.log_alert", "rabbit.definitions.ssl_options.log_alert",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.tls.password", "rabbit.definitions.ssl_options.password",
+    [{datatype, string}]}.
+
+{mapping, "definitions.tls.secure_renegotiate", "rabbit.definitions.ssl_options.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.tls.reuse_sessions", "rabbit.definitions.ssl_options.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.tls.versions.$version", "rabbit.definitions.ssl_options.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbit.definitions.ssl_options.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("definitions.tls.versions", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
+{mapping, "definitions.tls.ciphers.$cipher", "rabbit.definitions.ssl_options.ciphers",
+    [{datatype, string}]}.
+
+{translation, "rabbit.definitions.ssl_options.ciphers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("definitions.tls.ciphers", Conf),
+    lists:reverse([V || {_, V} <- Settings])
+end}.
+
+{mapping, "definitions.tls.log_level", "rabbit.definitions.ssl_options.log_level",
+    [{datatype, {enum, [emergency, alert, critical, error, warning, notice, info, debug]}}]}.
+
 %%
-%% Security / AAA
-%% ==============
+%% Seed User, Authentication, Access Control
 %%
 
 %% The default "guest" user is only permitted to access the server
@@ -283,12 +375,15 @@ end}.
 fun(Conf) ->
     case cuttlefish_variable:filter_by_prefix("ssl_options.key", Conf) of
         [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
-        _ -> undefined
+        _ -> cuttlefish:unset()
     end
 end}.
 
 {mapping, "ssl_options.keyfile", "rabbit.ssl_options.keyfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "ssl_options.log_level", "rabbit.ssl_options.log_level",
+    [{datatype, {enum, [emergency, alert, critical, error, warning, notice, info, debug]}}]}.
 
 {mapping, "ssl_options.log_alert", "rabbit.ssl_options.log_alert",
     [{datatype, {enum, [true, false]}}]}.

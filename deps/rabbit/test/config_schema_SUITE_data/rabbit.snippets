@@ -683,6 +683,52 @@ credential_validator.regexp = ^abc\\d+",
   ]}],
   []},
 
+  %% modern configuration key, HTTPS source
+ {definition_files, "definitions.import_backend = https
+                     definitions.https.url = https://rabbitmq.eng.megacorp.local/env-1/case1.json
+                     definitions.tls.versions.1 = tlsv1.2
+                     definitions.tls.log_level   = error
+
+                     definitions.tls.secure_renegotiate = true
+
+                     definitions.tls.ciphers.1  = ECDHE-ECDSA-AES256-GCM-SHA384
+                     definitions.tls.ciphers.2  = ECDHE-RSA-AES256-GCM-SHA384
+                     definitions.tls.ciphers.3  = ECDH-ECDSA-AES256-GCM-SHA384
+                     definitions.tls.ciphers.4  = ECDH-RSA-AES256-GCM-SHA384
+                     definitions.tls.ciphers.5  = DHE-RSA-AES256-GCM-SHA384
+                     definitions.tls.ciphers.6  = DHE-DSS-AES256-GCM-SHA384
+                     definitions.tls.ciphers.7  = ECDHE-ECDSA-AES128-GCM-SHA256
+                     definitions.tls.ciphers.8  = ECDHE-RSA-AES128-GCM-SHA256
+                     definitions.tls.ciphers.9  = ECDH-ECDSA-AES128-GCM-SHA256
+                     definitions.tls.ciphers.10 = ECDH-RSA-AES128-GCM-SHA256
+                     definitions.tls.ciphers.11 = DHE-RSA-AES128-GCM-SHA256
+                     definitions.tls.ciphers.12 = DHE-DSS-AES128-GCM-SHA256",
+  [{rabbit, [
+    {definitions, [
+      {import_backend, rabbit_definitions_import_https},
+      {url, "https://rabbitmq.eng.megacorp.local/env-1/case1.json"},
+      {ssl_options,  [
+           {log_level, error},
+           {secure_renegotiate, true},
+           {versions, ['tlsv1.2']},
+           {ciphers, [
+            "ECDHE-ECDSA-AES256-GCM-SHA384",
+            "ECDHE-RSA-AES256-GCM-SHA384",
+            "ECDH-ECDSA-AES256-GCM-SHA384",
+            "ECDH-RSA-AES256-GCM-SHA384",
+            "DHE-RSA-AES256-GCM-SHA384",
+            "DHE-DSS-AES256-GCM-SHA384",
+            "ECDHE-ECDSA-AES128-GCM-SHA256",
+            "ECDHE-RSA-AES128-GCM-SHA256",
+            "ECDH-ECDSA-AES128-GCM-SHA256",
+            "ECDH-RSA-AES128-GCM-SHA256",
+            "DHE-RSA-AES128-GCM-SHA256",
+            "DHE-DSS-AES128-GCM-SHA256"
+            ]}
+        ]}
+    ]}]}],
+  []},
+
   %%
   %% Raft
   %%
