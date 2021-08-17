@@ -19,6 +19,7 @@ all() ->
      {group, boot_time_import_using_classic_source},
      %% uses rabbit.definitions with import_backend set to local_filesystem
      {group, boot_time_import_using_modern_local_filesystem_source},
+     {group, boot_time_import_using_public_https_source},
      {group, roundtrip},
      {group, import_on_a_running_node}
     ].
@@ -53,6 +54,10 @@ groups() ->
 
         {boot_time_import_using_modern_local_filesystem_source, [], [
             import_on_a_booting_node_using_modern_local_filesystem_source
+        ]},
+
+        {boot_time_import_using_public_https_source, [], [
+            import_on_a_booting_node_using_public_https_source
         ]},
 
         {roundtrip, [], [
@@ -95,6 +100,38 @@ init_per_group(boot_time_import_using_modern_local_filesystem_source = Group, Co
           {definitions, [
               {import_backend, rabbit_definitions_import_local_filesystem},
               {local_path,     CasePath}
+          ]}
+      ]}),
+    rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
+init_per_group(boot_time_import_using_public_https_source = Group, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Group},
+        {rmq_nodes_count, 1}
+      ]),
+    Config2 = rabbit_ct_helpers:merge_app_env(Config1,
+      {rabbit, [
+          {definitions, [
+              {import_backend, rabbit_definitions_import_https},
+              {url,             "https://gist.githubusercontent.com/michaelklishin/e73b0114728d9391425d0644304f264a/raw/f15642771f099c60b6fa93f75d46a4246bb47c45/upstream.definitions.json"},
+              {ssl_options,  [
+                   {log_level, error},
+                   {secure_renegotiate, true},
+                   {versions, ['tlsv1.2']},
+                   {ciphers, [
+                    "ECDHE-ECDSA-AES256-GCM-SHA384",
+                    "ECDHE-RSA-AES256-GCM-SHA384",
+                    "ECDH-ECDSA-AES256-GCM-SHA384",
+                    "ECDH-RSA-AES256-GCM-SHA384",
+                    "DHE-RSA-AES256-GCM-SHA384",
+                    "DHE-DSS-AES256-GCM-SHA384",
+                    "ECDHE-ECDSA-AES128-GCM-SHA256",
+                    "ECDHE-RSA-AES128-GCM-SHA256",
+                    "ECDH-ECDSA-AES128-GCM-SHA256",
+                    "ECDH-RSA-AES128-GCM-SHA256",
+                    "DHE-RSA-AES128-GCM-SHA256",
+                    "DHE-DSS-AES128-GCM-SHA256"
+                    ]}
+            ]}
           ]}
       ]}),
     rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
@@ -194,6 +231,14 @@ import_on_a_booting_node_using_modern_local_filesystem_source(Config) ->
     %% see case5.json
     VHost = <<"vhost2">>,
     %% verify that vhost2 eventually starts
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
+        ok -> ok;
+        {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
+    end.
+
+import_on_a_booting_node_using_public_https_source(Config) ->
+    VHost = <<"bunny_testbed">>,
+    %% verify that virtual host eventually starts
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
         ok -> ok;
         {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])

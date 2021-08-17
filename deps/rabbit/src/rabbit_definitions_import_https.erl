@@ -15,7 +15,7 @@
 
 
 
--import(rabbit_misc, [pget/2]).
+-import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_data_coercion, [to_binary/1]).
 -import(rabbit_definitions, [import_raw/1]).
 
@@ -38,9 +38,20 @@ is_enabled() ->
     end.
 
 load(Proplist) ->
+    rabbit_log:debug("Definitions proprties: ~p", [Proplist]),
     URL = pget(url, Proplist),
-    %% TODO
-    HTTPOptions = [],
+    TLSOptions0 = [
+        %% avoids a peer verification warning emitted by default if no certificate chain and peer verification
+        %% settings are provided: these are not essential in this particular case (client-side downloads that likely
+        %% will happen from a local trusted source)
+        {log_level, error},
+        %% use TLSv1.2 by default
+        {versions, ['tlsv1.2']}
+    ],
+    TLSOptions = pget(ssl_options, Proplist, TLSOptions0),
+    HTTPOptions = [
+        {ssl, TLSOptions}
+    ],
     load_from_url(URL, HTTPOptions).
 
 
@@ -54,6 +65,7 @@ load_from_url(URL, HTTPOptions0) ->
         {body_format, binary}
     ],
     HTTPOptions = HTTPOptions0 ++ [
+        {connect_timeout, 120000},
         {autoredirect, true}
     ],
     rabbit_log:info("Applying definitions from remote URL"),
