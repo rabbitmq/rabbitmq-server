@@ -239,6 +239,12 @@
                     {requires,    [core_initialized, recovery]},
                     {enables,     routing_ready}]}).
 
+-rabbit_boot_step({rabbit_observer_cli,
+                   [{description, "Observer CLI configuration"},
+                    {mfa,         {rabbit_observer_cli, init, []}},
+                    {requires,    [core_initialized, recovery]},
+                    {enables,     routing_ready}]}).
+
 -rabbit_boot_step({pre_flight,
                    [{description, "ready to communicate with peers and clients"},
                     {requires,    [core_initialized, recovery, routing_ready]}]}).

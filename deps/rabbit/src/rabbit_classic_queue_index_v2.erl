@@ -9,7 +9,7 @@
 
 -export([erase/1, init/3, reset_state/1, recover/7,
          terminate/3, delete_and_terminate/1,
-         publish/7, ack/2, read/3]).
+         info/1, publish/7, ack/2, read/3]).
 
 %% Recovery. Unlike other functions in this module, these
 %% apply to all queues all at once.
@@ -558,6 +558,14 @@ delete_and_terminate(State = #qi { dir = Dir,
     ok = erase_index_dir(Dir),
     State#qi{ segments = #{},
               fds = #{} }.
+
+-spec info(state()) -> [{atom(), integer()}].
+
+info(#qi{ write_buffer = WriteBuffer, write_buffer_updates = NumUpdates }) ->
+    [
+        {qi_buffer_size,   map_size(WriteBuffer)},
+        {qi_buffer_num_up, NumUpdates}
+    ].
 
 -spec publish(rabbit_types:msg_id(), rabbit_variable_queue:seq_id(),
               rabbit_variable_queue:msg_location(),
