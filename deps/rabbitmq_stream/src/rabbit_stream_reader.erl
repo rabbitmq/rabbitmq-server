@@ -1421,6 +1421,30 @@ notify_auth_result(Username,
     rabbit_event:notify(AuthResult,
                         [P || {_, V} = P <- EventProps, V =/= '']).
 
+infer_extra_bcc(QName) ->
+  %% test extra_bcc
+  case rabbit_amqqueue:lookup(QName) of
+    {ok, Q0} ->
+      case amqqueue:get_options(Q0) of
+        #{extra_bcc := BCC} -> [rabbit_misc:r(QName#resource.virtual_host, queue, BCC)];
+        _ -> []
+      end;
+    _ -> []
+  end.
+
+write_messages_extra_bcc(_PublisherId, _Messages, []) ->
+  ok;
+write_messages_extra_bcc(PublisherId, Messages, [H | T]) ->
+  %% is the leader only local?
+  %% can I use a remote one?
+  Leader = lookup_leader_from_manager(H#resource.virtual_host, H#resource.name),
+  rabbit_stream_utils:write_messages(Leader,
+    undefined,
+    PublisherId,
+    Messages),
+
+  write_messages_extra_bcc(PublisherId, Messages, T).
+
 handle_frame_post_auth(Transport,
                        #stream_connection{resource_alarm = true} = Connection0,
                        State,
@@ -1555,6 +1579,14 @@ handle_frame_post_auth(Transport,
                                                        PublisherId,
                                                        Messages),
                     sub_credits(Credits, MessageCount),
+
+                    %% test for extra_bcc
+                    BCCs = infer_extra_bcc(#resource{name =
+                    Stream,
+                      kind = queue,
+                      virtual_host =  VirtualHost}),
+
+                    write_messages_extra_bcc(PublisherId, Messages, BCCs),
                     {Connection, State};
                 error ->
                     PublishingIds = publishing_ids_from_messages(Messages),
