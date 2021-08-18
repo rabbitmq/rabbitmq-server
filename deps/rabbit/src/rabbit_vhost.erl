@@ -203,6 +203,26 @@ do_add(Name, Description, Tags, ActingUser) ->
             {error, Msg}
     end.
 
+-spec update(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+update(Name, Description, Tags, ActingUser) ->
+    rabbit_misc:execute_mnesia_transaction(
+          fun () ->
+                  case mnesia:wread({rabbit_vhost, Name}) of
+                      [] ->
+                          {error, {no_such_vhost, Name}};
+                      [VHost0] ->
+                          VHost = vhost:merge_metadata(VHost0, #{description => Description, tags => Tags}),
+                          rabbit_log:debug("Updating a virtual host record ~p", [VHost]),
+                          ok = mnesia:write(rabbit_vhost, VHost, write),
+                          rabbit_event:notify(vhost_updated, info(VHost)
+                                ++ [{user_who_performed_action, ActingUser},
+                                    {description, Description},
+                                    {tags, Tags}]),
+                          ok
+                  end
+          end).
+
+
 -spec delete(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
 
 delete(VHost, ActingUser) ->
@@ -240,11 +260,12 @@ put_vhost(Name, Description, Tags0, Trace, Username) ->
       "null"      -> <<"">>;
       Other       -> Other
     end,
+    ParsedTags = parse_tags(Tags),
+    rabbit_log:debug("Parsed tags ~p to ~p", [Tags, ParsedTags]),
     Result = case exists(Name) of
-        true  -> ok;
+        true  ->
+            update(Name, Description, ParsedTags, Username);
         false ->
-            ParsedTags = parse_tags(Tags),
-            rabbit_log:debug("Parsed tags ~p to ~p", [Tags, ParsedTags]),
             add(Name, Description, ParsedTags, Username),
              %% wait for up to 45 seconds for the vhost to initialise
              %% on all nodes
