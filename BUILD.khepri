@@ -1,0 +1,18 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl",
+     "erlang_lib",
+     "DEFAULT_ERLC_OPTS")
+
+DEPS = [
+    "@ra//:bazel_erlang_lib",
+]
+
+erlang_lib(
+    app_description = "ZooKeeper-inspired database library",
+    app_name = "khepri",
+    app_version = "master",
+    erlc_opts = ["-I", "external/khepri"] + DEFAULT_ERLC_OPTS,
+    extra_apps = [
+        "sasl",
+    ],
+    deps = DEPS,
+)
