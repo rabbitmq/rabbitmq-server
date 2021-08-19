@@ -351,7 +351,18 @@ list() ->
     lists:foldl(
       fun (Node, Acc) ->
               Tab = tracked_connection_table_name_for(Node),
-              Acc ++ mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
+              try
+                  Acc ++
+                  mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
+              catch
+                  exit:{aborted, {no_exists, [Tab, _]}} ->
+                      %% The table might not exist yet (or is already gone)
+                      %% between the time rabbit_nodes:all_running() runs and
+                      %% returns a specific node, and
+                      %% mnesia:dirty_match_object() is called for that node's
+                      %% table.
+                      Acc
+              end
       end, [], rabbit_nodes:all_running()).
 
 -spec count() -> non_neg_integer().
@@ -360,6 +371,9 @@ count() ->
     lists:foldl(
       fun (Node, Acc) ->
               Tab = tracked_connection_table_name_for(Node),
+              %% mnesia:table_info() returns 0 if the table doesn't exist. We
+              %% don't need the same kind of protection as the list() function
+              %% above.
               Acc + mnesia:table_info(Tab, size)
       end, 0, rabbit_nodes:all_running()).
 
