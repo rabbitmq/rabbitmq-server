@@ -19,7 +19,7 @@
          has_reached/1,
          has_reached_and_is_active/1]).
 
--define(PT_KEY_BOOT_STATE,    {?MODULE, boot_state}).
+-define(PT_KEY_BOOT_STATE, {?MODULE, boot_state}).
 
 -type boot_state() :: stopped |
                       booting |
