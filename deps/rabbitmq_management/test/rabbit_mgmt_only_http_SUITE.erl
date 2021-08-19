@@ -261,26 +261,32 @@ vhosts_test(Config) ->
     ?assert(not maps:is_key(recv_oct, GetFirst)),
     ?assert(maps:is_key(cluster_state, GetFirst)),
 
-    %% PUT can update metadata (description, tags)
-    Desc0 = "desc 0",
-    Meta0 = [
-        {description, Desc0},
-        {tags,        "tag1,tag2"}
-    ],
-    http_put(Config, "/vhosts/myvhost", Meta0, {group, '2xx'}),
-    #{description := Desc1, tags := Tags1} = http_get(Config, "/vhosts/myvhost", ?OK),
-    ?assertEqual(Desc0, Desc1),
-    ?assertEqual([<<"tag1">>, <<"tag2">>], Tags1),
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% these won't pass for older 3.8 nodes
+            ok;
+        false ->
+            %% PUT can update metadata (description, tags)
+            Desc0 = "desc 0",
+            Meta0 = [
+                {description, Desc0},
+                {tags,        "tag1,tag2"}
+            ],
+            http_put(Config, "/vhosts/myvhost", Meta0, {group, '2xx'}),
+            #{description := Desc1, tags := Tags1} = http_get(Config, "/vhosts/myvhost", ?OK),
+            ?assertEqual(Desc0, Desc1),
+            ?assertEqual([<<"tag1">>, <<"tag2">>], Tags1),
 
-    Desc2 = "desc 2",
-    Meta2 = [
-        {description, Desc2},
-        {tags,        "tag3"}
-    ],
-    http_put(Config, "/vhosts/myvhost", Meta2, {group, '2xx'}),
-    #{description := Desc3, tags := Tags3} = http_get(Config, "/vhosts/myvhost", ?OK),
-    ?assertEqual(Desc2, Desc3),
-    ?assertEqual([<<"tag3">>], Tags3),
+            Desc2 = "desc 2",
+            Meta2 = [
+                {description, Desc2},
+                {tags,        "tag3"}
+            ],
+            http_put(Config, "/vhosts/myvhost", Meta2, {group, '2xx'}),
+            #{description := Desc3, tags := Tags3} = http_get(Config, "/vhosts/myvhost", ?OK),
+            ?assertEqual(Desc2, Desc3),
+            ?assertEqual([<<"tag3">>], Tags3)
+    end,
 
     %% Check individually
     Get = http_get(Config, "/vhosts/%2F", ?OK),
