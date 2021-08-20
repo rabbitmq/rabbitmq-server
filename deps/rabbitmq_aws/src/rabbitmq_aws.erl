@@ -555,10 +555,10 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
     {ok, {_Headers, Payload}} -> rabbit_log:debug("AWS request: ~s~nResponse: ~p", [Path, Payload]),
                                  {ok, Payload};
     {error, {credentials, _}} -> {error, credentials};
-    {error, Message, _}       -> case Retries of
-                                   0 -> {error, Message};
-                                   _ -> rabbit_log:warning("Error occurred ~s~nWill retry AWS request, remaining retries: ~b", [Message, Retries]),
-                                        timer:sleep(WaitTimeBetweenRetries),
-                                        api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
+    {error, Message, _}       -> case Retries > 0 of
+                                   true ->  rabbit_log:warning("Error occurred ~s~nWill retry AWS request, remaining retries: ~b", [Message, Retries]),
+                                            timer:sleep(WaitTimeBetweenRetries),
+                                            api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries);
+                                   false -> {error, Message}
                                  end
   end.
