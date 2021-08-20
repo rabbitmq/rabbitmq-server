@@ -491,7 +491,7 @@ api_get_request_test_() ->
           rabbitmq_aws:set_credentials(State),
           Result = rabbitmq_aws:api_get_request_with_retries("AWS", "API", 3, 1),
           ok = gen_server:stop(Pid),
-          ?assertEqual({error, "invalid input"}, Result),
+          ?assertEqual({error, "AWS service is unavailable"}, Result),
           meck:validate(httpc)
         end
       },
