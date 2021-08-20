@@ -549,16 +549,16 @@ api_get_request(Service, Path) ->
   -spec api_get_request_with_retries(string(), path(), integer(), integer()) -> result().
   %% @doc Invoke an API call to an AWS service with retries.
   %% @end
+api_get_request_with_retries(_, _, 0, _) ->
+  rabbit_log:warning("Request to AWS service has failed after ~b retries.", [?MAX_RETRIES]),
+  {error, "AWS service is unavailable."};
 api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
   ensure_credentials_valid(),
   case get(Service, Path) of
     {ok, {_Headers, Payload}} -> rabbit_log:debug("AWS request: ~s~nResponse: ~p", [Path, Payload]),
                                  {ok, Payload};
     {error, {credentials, _}} -> {error, credentials};
-    {error, Message, _}       -> case Retries > 0 of
-                                   true ->  rabbit_log:warning("Error occurred ~s~nWill retry AWS request, remaining retries: ~b", [Message, Retries]),
-                                            timer:sleep(WaitTimeBetweenRetries),
-                                            api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries);
-                                   false -> {error, Message}
-                                 end
+    {error, Message, _}       -> rabbit_log:warning("Error occurred ~s~nWill retry AWS request, remaining retries: ~b", [Message, Retries]),
+                                 timer:sleep(WaitTimeBetweenRetries),
+                                 api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
   end.
