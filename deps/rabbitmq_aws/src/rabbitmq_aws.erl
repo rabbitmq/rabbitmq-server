@@ -85,7 +85,7 @@ refresh_credentials() ->
 refresh_credentials(State) ->
   rabbit_log:debug("Refreshing AWS credentials..."),
   {_, NewState} = load_credentials(State),
-  rabbit_log:debug("AWS credentials have been refreshed."),
+  rabbit_log:debug("AWS credentials have been refreshed"),
   set_credentials(NewState).
 
 
@@ -334,7 +334,7 @@ load_credentials(#state{region = Region}) ->
                   security_token = SecurityToken,
                   imdsv2_token = undefined}};
     {error, Reason} ->
-      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~p. Will depend on config settings to be set.~n.", [Reason]),
+      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~p. Will depend on config settings to be set~n", [Reason]),
       {error, #state{region = Region,
                      error = Reason,
                      access_key = undefined,
@@ -497,10 +497,10 @@ sign_headers(#state{access_key = AccessKey,
 %% @doc Determine whether or not an Imdsv2Token has expired.
 %% @end
 expired_imdsv2_token(undefined) ->
-  rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained."),
+  rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained"),
   true;
 expired_imdsv2_token({_, _, undefined}) ->
-  rabbit_log:debug("EC2 IMDSv2 token is not available."),
+  rabbit_log:debug("EC2 IMDSv2 token is not available"),
   true;
 expired_imdsv2_token({_, _, Expiration}) ->
   Now = calendar:datetime_to_gregorian_seconds(local_time()),
@@ -527,7 +527,7 @@ ensure_imdsv2_token_valid() ->
 %%      If the credentials are not available or have expired, then refresh them before performing the request.
 %% @end
 ensure_credentials_valid() ->
-  rabbit_log:debug("Making sure AWS credentials are available and still valid."),
+  rabbit_log:debug("Making sure AWS credentials are available and still valid"),
   {ok, State} = gen_server:call(rabbitmq_aws, get_state),
   case has_credentials(State) of
     true -> case expired_credentials(State#state.expiration) of
