@@ -85,7 +85,7 @@ refresh_credentials() ->
 refresh_credentials(State) ->
   _ = rabbit_log:debug("Refreshing AWS credentials..."),
   {_, NewState} = load_credentials(State),
-  _ = rabbit_log:debug("AWS credentials have been refreshed."),
+  _ = rabbit_log:debug("AWS credentials have been refreshed"),
   set_credentials(NewState).
 
 
@@ -334,7 +334,7 @@ load_credentials(#state{region = Region}) ->
                   security_token = SecurityToken,
                   imdsv2_token = undefined}};
     {error, Reason} ->
-      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~p. Will depend on config settings to be set.~n.", [Reason]),
+      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~p. Will depend on config settings to be set~n", [Reason]),
       {error, #state{region = Region,
                      error = Reason,
                      access_key = undefined,
@@ -497,10 +497,10 @@ sign_headers(#state{access_key = AccessKey,
 %% @doc Determine whether or not an Imdsv2Token has expired.
 %% @end
 expired_imdsv2_token(undefined) ->
-  _ = rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained."),
+  _ = rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained"),
   true;
 expired_imdsv2_token({_, _, undefined}) ->
-  _ = rabbit_log:debug("EC2 IMDSv2 token is not available."),
+  _ = rabbit_log:debug("EC2 IMDSv2 token is not available"),
   true;
 expired_imdsv2_token({_, _, Expiration}) ->
   Now = calendar:datetime_to_gregorian_seconds(local_time()),
@@ -527,7 +527,7 @@ ensure_imdsv2_token_valid() ->
 %%      If the credentials are not available or have expired, then refresh them before performing the request.
 %% @end
 ensure_credentials_valid() ->
-  _ = rabbit_log:debug("Making sure AWS credentials are available and still valid."),
+  _ = rabbit_log:debug("Making sure AWS credentials are available and still valid"),
   {ok, State} = gen_server:call(rabbitmq_aws, get_state),
   case has_credentials(State) of
     true -> case expired_credentials(State#state.expiration) of
@@ -543,10 +543,22 @@ ensure_credentials_valid() ->
 %% @end
 api_get_request(Service, Path) ->
   _ = rabbit_log:debug("Invoking AWS request {Service: ~p; Path: ~p}...", [Service, Path]),
+  api_get_request_with_retries(Service, Path, ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
+
+
+  -spec api_get_request_with_retries(string(), path(), integer(), integer()) -> result().
+  %% @doc Invoke an API call to an AWS service with retries.
+  %% @end
+api_get_request_with_retries(_, _, 0, _) ->
+  _ = rabbit_log:warning("Request to AWS service has failed after ~b retries", [?MAX_RETRIES]),
+  {error, "AWS service is unavailable"};
+api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
   ensure_credentials_valid(),
   case get(Service, Path) of
     {ok, {_Headers, Payload}} -> _ = rabbit_log:debug("AWS request: ~s~nResponse: ~p", [Path, Payload]),
                                  {ok, Payload};
     {error, {credentials, _}} -> {error, credentials};
-    {error, Message, _}       -> {error, Message}
+    {error, Message, _}       -> _ = rabbit_log:warning("Error occurred ~s~nWill retry AWS request, remaining retries: ~b", [Message, Retries]),
+                                 timer:sleep(WaitTimeBetweenRetries),
+                                 api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
   end.

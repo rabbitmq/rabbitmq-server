@@ -43,6 +43,9 @@
 
 -define(METADATA_TOKEN, "X-aws-ec2-metadata-token").
 
+-define(LINEAR_BACK_OFF_MILLIS, 500).
+-define(MAX_RETRIES, 5).
+
 -type access_key() :: nonempty_string().
 -type secret_access_key() :: nonempty_string().
 -type expiration() :: calendar:datetime() | undefined.
