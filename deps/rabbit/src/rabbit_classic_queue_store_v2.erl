@@ -164,7 +164,8 @@ write(SeqId, MsgSize, Msg=#basic_message{ id = MsgId }, State0 = #qs{ confirms =
     %% combined with the SeqId is enough to find the
     %% message again.
     {Fd, Offset, State1} = get_write_fd(Segment, State0),
-    MsgIovec = term_to_iovec(Msg),
+    %% We remove MsgId because we are not going to use it after reading it back from disk.
+    MsgIovec = term_to_iovec(Msg#basic_message{ id = undefined }),
     Size = iolist_size(MsgIovec),
     %% Append to the buffer.
     ok = file:write(Fd, MsgIovec),
