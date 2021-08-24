@@ -1,0 +1,58 @@
+{
+  "bindings": [],
+  "exchanges": [],
+  "global_parameters": [
+    {
+      "name": "cluster_name",
+      "value": "rabbitmq@localhost"
+    }
+  ],
+  "parameters": [],
+  "permissions": [
+    {
+      "configure": ".*",
+      "read": ".*",
+      "user": "guest",
+      "vhost": "/",
+      "write": ".*"
+    }
+  ],
+  "policies": [],
+  "queues": [],
+  "rabbit_version": "3.9.1",
+  "rabbitmq_version": "3.9.1",
+  "topic_permissions": [],
+  "users": [
+    {
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "limits": {},
+      "name": "guest",
+      "password_hash": "wS4AT3B4Z5RpWlFn1FA30osf2C75D7WA3gem591ACDZ6saO6",
+      "tags": [
+        "administrator"
+      ]
+    }
+  ],
+  "vhosts": [
+    {
+      "limits": [],
+      "metadata": {
+        "description": "Default virtual host",
+        "tags": []
+      },
+      "name": "/"
+    },
+    {
+      "limits": [],
+      "metadata": {
+        "description": "A case16 description",
+        "tags": [
+          "multi_dc_replication",
+          "ab",
+          "cde"
+        ]
+      },
+      "name": "tagged"
+    }
+  ]
+}
