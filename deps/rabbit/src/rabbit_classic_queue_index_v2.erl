@@ -688,7 +688,7 @@ build_entry({Id, _SeqId, Location, Props, IsPersistent, _IsDelivered}) ->
     end,
     LocationBin = case Location of
         memory ->
-            << 0:104 >>;
+            << 0:136 >>;
         rabbit_msg_store ->
             << 1:8,
                Id:16/binary             %% Message store ID.
@@ -958,7 +958,7 @@ parse_entries(<<>>, _, _, Acc) ->
 parse_entries(<< Status:8,
                  _IsDelivered0:8,
                  _:7, IsPersistent:1,
-                 LocationBin:232/bits,
+                 LocationBin:136/bits,
                  Size:32/unsigned,
                  Expiry0:64/unsigned,
                  Rest/bits >>, SeqId, WriteBuffer, Acc) ->
@@ -969,15 +969,14 @@ parse_entries(<< Status:8,
             %% We get the Id binary in two steps because we do not want
             %% to create a sub-binary and keep the larger binary around
             %% in memory.
-            {Id1, Location} = case LocationBin of
-                << 0:104 >> ->
+            {Id, Location} = case LocationBin of
+                << 0:136 >> ->
                     {undefined, memory};
                 << 1:8, Id0:16/binary >> ->
-                    {Id0, rabbit_msg_store};
+                    {binary:copy(Id0), rabbit_msg_store};
                 << 2:8, StoreOffset:64/unsigned, StoreSize:32/unsigned, 0:32 >> ->
                     {undefined, {rabbit_classic_queue_store_v2, StoreOffset, StoreSize}}
             end,
-            Id = binary:copy(Id1),
             Expiry = case Expiry0 of
                 0 -> undefined;
                 _ -> Expiry0
