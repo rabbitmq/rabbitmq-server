@@ -461,11 +461,13 @@ add_policy(VHost, Param, Username) ->
 -spec add_vhost(map(), rabbit_types:username()) -> ok.
 
 add_vhost(VHost, ActingUser) ->
-    VHostName = maps:get(name, VHost, undefined),
-    VHostTrace = maps:get(tracing, VHost, undefined),
-    VHostDefinition = maps:get(definition, VHost, undefined),
-    VHostTags = maps:get(tags, VHost, undefined),
-    rabbit_vhost:put_vhost(VHostName, VHostDefinition, VHostTags, VHostTrace, ActingUser).
+    Name             = maps:get(name, VHost, undefined),
+    IsTracingEnabled = maps:get(tracing, VHost, undefined),
+    Metadata         = rabbit_data_coercion:atomize_keys(maps:get(metadata, VHost, #{})),
+    Description      = maps:get(description, VHost, maps:get(description, Metadata, <<"">>)),
+    Tags             = maps:get(tags, VHost, maps:get(tags, Metadata, [])),
+
+    rabbit_vhost:put_vhost(Name, Description, Tags, IsTracingEnabled, ActingUser).
 
 add_permission(Permission, ActingUser) ->
     rabbit_auth_backend_internal:set_permissions(maps:get(user,      Permission, undefined),
