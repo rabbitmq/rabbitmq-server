@@ -1404,11 +1404,12 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
     {A, B}.
 
 %% @todo Check for Delivered intentionally removed since it's now per-queue not per-message.
+%% @todo Check for MsgId intentionally removed since it's no longer stored if not necessary.
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
 verify_read_with_published(Delivered, Persistent,
-                           [{MsgId, SeqId, _Location, _Props, Persistent, _IgnoreDelivered}|Read],
-                           [{SeqId, MsgId}|Published]) ->
+                           [{_MsgId1, SeqId, _Location, _Props, Persistent, _IgnoreDelivered}|Read],
+                           [{SeqId, _MsgId2}|Published]) ->
     verify_read_with_published(Delivered, Persistent, Read, Published);
 verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
     ko.
