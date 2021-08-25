@@ -329,7 +329,10 @@ enable(FeatureNames) when is_list(FeatureNames) ->
 
 -spec enable_all() -> ok | {error, any()}.
 %% @doc
-%% Enables all supported feature flags.
+%% Enables all stable feature flags.
+%%
+%% Experimental feature flags are not enabled with this function. Use {@link
+%% enable/1} to enable them.
 %%
 %% @returns `ok' if the feature flags were successfully enabled,
 %%   or `{error, Reason}' if one feature flag could not be enabled
@@ -337,7 +340,7 @@ enable(FeatureNames) when is_list(FeatureNames) ->
 %%   unchanged).
 
 enable_all() ->
-    with_feature_flags(maps:keys(list(all)), fun enable/1).
+    enable_all(stable).
 
 -spec enable_all(stability()) -> ok | {error, any()}.
 %% @doc
