@@ -1,1 +1,447 @@
-{"rabbit_version":"3.7.13","users":[{"name":"langohr","password_hash":"7p9PXlsYs92NlHSdNgPoDXmN77NqeGpzCTHpElq/wPS1eAEd","hashing_algorithm":"rabbit_password_hashing_sha256","tags":""},{"name":"bunny_reader","password_hash":"ExmGdjBTmQEPxcW2z+dsOuPvjFbTBiYQgMByzfpE/IIXplYG","hashing_algorithm":"rabbit_password_hashing_sha256","tags":""},{"name":"bunny_gem","password_hash":"8HH7uxmZS3FDldlYmHpFEE5+gWaeQaim8qpWIHkmNxuQK8xO","hashing_algorithm":"rabbit_password_hashing_sha256","tags":""},{"name":"guest","password_hash":"CPCbkNAHXgQ7vmrqwP9e7RWQsE8U2DqN7JA4ggS50c4LwDda","hashing_algorithm":"rabbit_password_hashing_sha256","tags":"administrator"},{"name":"temp-user","password_hash":"CfUQkDeOYDrPkACDCjoF5zySbsXPIoMgNfv7FWfEpVFGegnL","hashing_algorithm":"rabbit_password_hashing_sha256","tags":"management"}],"vhosts":[{"name":"langohr_testbed"},{"name":"bunny_testbed"},{"name":"/"}],"permissions":[{"user":"bunny_reader","vhost":"bunny_testbed","configure":"^---$","write":"^---$","read":".*"},{"user":"bunny_gem","vhost":"bunny_testbed","configure":".*","write":".*","read":".*"},{"user":"guest","vhost":"/","configure":".*","write":".*","read":".*"},{"user":"langohr","vhost":"langohr_testbed","configure":".*","write":".*","read":".*"},{"user":"guest","vhost":"bunny_testbed","configure":".*","write":".*","read":".*"},{"user":"guest","vhost":"langohr_testbed","configure":".*","write":".*","read":".*"},{"user":"langohr","vhost":"/","configure":".*","write":".*","read":".*"},{"user":"temp-user","vhost":"/","configure":".*","write":".*","read":".*"}],"topic_permissions":[],"parameters":[],"global_parameters":[{"name":"cluster_name","value":"rabbit@localhost"}],"policies":[],"queues":[{"name":"bunny.basic_consume0.1364356981103202","vhost":"bunny_testbed","durable":false,"auto_delete":true,"arguments":{}},{"name":"return","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"q1","vhost":"/","durable":true,"auto_delete":false,"arguments":{}},{"name":"declareArgs-deliveries-dead-letter","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"test.rabbitmq-basic-nack","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"langohr.test.recovery.q1","vhost":"/","durable":true,"auto_delete":true,"arguments":{}},{"name":"langohr.tests2.queues.client-named.durable.non-exclusive.non-auto-deleted","vhost":"/","durable":true,"auto_delete":false,"arguments":{}},{"name":"test.tx.rollback","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"test-integration-declared-passive-queue","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"langohr.tests2.queues.client-named.non-durable.non-exclusive.auto-deleted","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"test.recover","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"amq.gen-7EZF7WjGIQFDoXexVF-e8w","vhost":"/","durable":false,"auto_delete":true,"arguments":{"x-message-ttl":1500}},{"name":"test.integration.channel.error","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"confirm","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"test.rabbitmq-message-ttl","vhost":"/","durable":false,"auto_delete":true,"arguments":{"x-message-ttl":100}},{"name":"declareWithTTL","vhost":"/","durable":false,"auto_delete":true,"arguments":{"x-message-ttl":9000000}},{"name":"test.tx.commit","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"test.get-ok","vhost":"/","durable":false,"auto_delete":true,"arguments":{}},{"name":"langohr.tests2.queues.non-auto-deleted1","vhost":"/","durable":false,"auto_delete":true,"arguments":{}}],"exchanges":[{"name":"declareArgs-dead-letter","vhost":"/","type":"fanout","durable":false,"auto_delete":true,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.topic5","vhost":"/","type":"topic","durable":false,"auto_delete":false,"internal":false,"arguments":{}},{"name":"langohr.extensions.altexchanges.direct1","vhost":"/","type":"direct","durable":false,"auto_delete":true,"internal":false,"arguments":{"alternate-exchange":"langohr.extensions.altexchanges.fanout1"}},{"name":"langohr.tests.exchanges.fanout1","vhost":"/","type":"fanout","durable":false,"auto_delete":false,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.direct3","vhost":"/","type":"direct","durable":false,"auto_delete":true,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.topic4","vhost":"/","type":"topic","durable":false,"auto_delete":true,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.fanout3","vhost":"/","type":"fanout","durable":false,"auto_delete":true,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.direct4","vhost":"/","type":"direct","durable":false,"auto_delete":false,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.topic2","vhost":"/","type":"topic","durable":true,"auto_delete":false,"internal":false,"arguments":{}},{"name":"test-integration-declared-passive-exchange","vhost":"/","type":"direct","durable":false,"auto_delete":true,"internal":false,"arguments":{}},{"name":"test-channel-still-exists","vhost":"/","type":"direct","durable":false,"auto_delete":true,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.topic1","vhost":"/","type":"topic","durable":false,"auto_delete":false,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.fanout2","vhost":"/","type":"fanout","durable":true,"auto_delete":false,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.direct1","vhost":"/","type":"direct","durable":false,"auto_delete":false,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.direct2","vhost":"/","type":"direct","durable":true,"auto_delete":false,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.headers2","vhost":"/","type":"headers","durable":false,"auto_delete":false,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.topic3","vhost":"/","type":"topic","durable":false,"auto_delete":true,"internal":false,"arguments":{}},{"name":"langohr.test.recovery.fanout1","vhost":"/","type":"fanout","durable":true,"auto_delete":false,"internal":false,"arguments":{}},{"name":"langohr.tests.exchanges.fanout4","vhost":"/","type":"fanout","durable":false,"auto_delete":false,"internal":false,"arguments":{}}],"bindings":[{"source":"amq.fanout","vhost":"/","destination":"langohr.tests2.queues.client-named.non-durable.non-exclusive.auto-deleted","destination_type":"queue","routing_key":"","arguments":{}},{"source":"declareArgs-dead-letter","vhost":"/","destination":"declareArgs-deliveries-dead-letter","destination_type":"queue","routing_key":"#","arguments":{}}]}
+{
+  "rabbit_version": "3.7.13",
+  "users": [
+    {
+      "name": "langohr",
+      "password_hash": "7p9PXlsYs92NlHSdNgPoDXmN77NqeGpzCTHpElq/wPS1eAEd",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": ""
+    },
+    {
+      "name": "bunny_reader",
+      "password_hash": "ExmGdjBTmQEPxcW2z+dsOuPvjFbTBiYQgMByzfpE/IIXplYG",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": ""
+    },
+    {
+      "name": "bunny_gem",
+      "password_hash": "8HH7uxmZS3FDldlYmHpFEE5+gWaeQaim8qpWIHkmNxuQK8xO",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": ""
+    },
+    {
+      "name": "guest",
+      "password_hash": "CPCbkNAHXgQ7vmrqwP9e7RWQsE8U2DqN7JA4ggS50c4LwDda",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": "administrator"
+    },
+    {
+      "name": "temp-user",
+      "password_hash": "CfUQkDeOYDrPkACDCjoF5zySbsXPIoMgNfv7FWfEpVFGegnL",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": "management"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "langohr_testbed"
+    },
+    {
+      "name": "bunny_testbed"
+    },
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "bunny_reader",
+      "vhost": "bunny_testbed",
+      "configure": "^---$",
+      "write": "^---$",
+      "read": ".*"
+    },
+    {
+      "user": "bunny_gem",
+      "vhost": "bunny_testbed",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "guest",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "langohr",
+      "vhost": "langohr_testbed",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "guest",
+      "vhost": "bunny_testbed",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "guest",
+      "vhost": "langohr_testbed",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "langohr",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "temp-user",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "topic_permissions": [],
+  "parameters": [],
+  "global_parameters": [
+    {
+      "name": "cluster_name",
+      "value": "rabbit@localhost"
+    }
+  ],
+  "policies": [],
+  "queues": [
+    {
+      "name": "bunny.basic_consume0.1364356981103202",
+      "vhost": "bunny_testbed",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "return",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "q1",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "declareArgs-deliveries-dead-letter",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "test.rabbitmq-basic-nack",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.test.recovery.q1",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests2.queues.client-named.durable.non-exclusive.non-auto-deleted",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "test.tx.rollback",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "test-integration-declared-passive-queue",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests2.queues.client-named.non-durable.non-exclusive.auto-deleted",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "test.recover",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "amq.gen-7EZF7WjGIQFDoXexVF-e8w",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {
+        "x-message-ttl": 1500
+      }
+    },
+    {
+      "name": "test.integration.channel.error",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "confirm",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "test.rabbitmq-message-ttl",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {
+        "x-message-ttl": 100
+      }
+    },
+    {
+      "name": "declareWithTTL",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {
+        "x-message-ttl": 9000000
+      }
+    },
+    {
+      "name": "test.tx.commit",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "test.get-ok",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests2.queues.non-auto-deleted1",
+      "vhost": "/",
+      "durable": false,
+      "auto_delete": true,
+      "arguments": {}
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "declareArgs-dead-letter",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": false,
+      "auto_delete": true,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.topic5",
+      "vhost": "/",
+      "type": "topic",
+      "durable": false,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.extensions.altexchanges.direct1",
+      "vhost": "/",
+      "type": "direct",
+      "durable": false,
+      "auto_delete": true,
+      "internal": false,
+      "arguments": {
+        "alternate-exchange": "langohr.extensions.altexchanges.fanout1"
+      }
+    },
+    {
+      "name": "langohr.tests.exchanges.fanout1",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": false,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.direct3",
+      "vhost": "/",
+      "type": "direct",
+      "durable": false,
+      "auto_delete": true,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.topic4",
+      "vhost": "/",
+      "type": "topic",
+      "durable": false,
+      "auto_delete": true,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.fanout3",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": false,
+      "auto_delete": true,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.direct4",
+      "vhost": "/",
+      "type": "direct",
+      "durable": false,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.topic2",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "test-integration-declared-passive-exchange",
+      "vhost": "/",
+      "type": "direct",
+      "durable": false,
+      "auto_delete": true,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "test-channel-still-exists",
+      "vhost": "/",
+      "type": "direct",
+      "durable": false,
+      "auto_delete": true,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.topic1",
+      "vhost": "/",
+      "type": "topic",
+      "durable": false,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.fanout2",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.direct1",
+      "vhost": "/",
+      "type": "direct",
+      "durable": false,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.direct2",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.headers2",
+      "vhost": "/",
+      "type": "headers",
+      "durable": false,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.topic3",
+      "vhost": "/",
+      "type": "topic",
+      "durable": false,
+      "auto_delete": true,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.test.recovery.fanout1",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "langohr.tests.exchanges.fanout4",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": false,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "amq.fanout",
+      "vhost": "/",
+      "destination": "langohr.tests2.queues.client-named.non-durable.non-exclusive.auto-deleted",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {}
+    },
+    {
+      "source": "declareArgs-dead-letter",
+      "vhost": "/",
+      "destination": "declareArgs-deliveries-dead-letter",
+      "destination_type": "queue",
+      "routing_key": "#",
+      "arguments": {}
+    }
+  ]
+}
