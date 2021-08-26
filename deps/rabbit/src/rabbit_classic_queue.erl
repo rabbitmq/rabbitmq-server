@@ -55,11 +55,13 @@ is_enabled() -> true.
 declare(Q, Node) when ?amqqueue_is_classic(Q) ->
     QName = amqqueue:get_name(Q),
     VHost = amqqueue:get_vhost(Q),
-    Node1 = case Node of
-                {ignore_location, Node0} ->
+    Node1 = case {Node, rabbit_amqqueue:is_exclusive(Q)} of
+                {{ignore_location, Node0}, _} ->
                     Node0;
+                {_, true} ->
+                    Node;
                 _ ->
-                    case rabbit_queue_master_location_misc:get_location(Q)  of
+                    case rabbit_queue_master_location_misc:get_location(Q) of
                         {ok, Node0}  -> Node0;
                         _   -> Node
                     end
