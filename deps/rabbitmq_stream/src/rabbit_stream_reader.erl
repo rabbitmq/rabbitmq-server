@@ -744,7 +744,7 @@ open(info,
 open(info, heartbeat_send, #statem_data{
                               transport = Transport,
                               connection = #stream_connection{socket = S} = Connection,
-                              connection_state = State }) ->
+                              connection_state = State}) ->
     Frame = rabbit_stream_core:frame(heartbeat),
     case catch send(Transport, S, Frame) of
         ok ->
@@ -752,17 +752,17 @@ open(info, heartbeat_send, #statem_data{
         Unexpected ->
             rabbit_log_connection:info("Heartbeat send error ~p, closing connection",
                                        [Unexpected]),
-            C1 = demonitor_all_streams(Connection),
-            close(Transport, C1, State),
+            _C1 = demonitor_all_streams(Connection),
+            close(Transport, S, State),
             stop
     end;
 open(info, heartbeat_timeout, #statem_data{
                                  transport = Transport,
-                                 connection = Connection,
+                                 connection = #stream_connection{socket = S} = Connection,
                                  connection_state = State }) ->
     rabbit_log_connection:debug("Heartbeat timeout, closing connection"),
-    C1 = demonitor_all_streams(Connection),
-    close(Transport, C1, State),
+    _C1 = demonitor_all_streams(Connection),
+    close(Transport, S, State),
     stop;
 open(info, {infos, From}, #statem_data{
                              connection = #stream_connection{
