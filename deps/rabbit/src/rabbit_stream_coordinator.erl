@@ -255,8 +255,8 @@ process_command([], _Cmd) ->
 process_command([Server | Servers], Cmd) ->
     case ra:process_command(Server, Cmd, ?CMD_TIMEOUT) of
         {timeout, _} ->
-            rabbit_log:warning("Coordinator timeout on server ~p when processing command ~p",
-                               [Server, element(1, Cmd)]),
+            rabbit_log:warning("Coordinator timeout on server ~s when processing command ~W",
+                               [Server, element(1, Cmd), 10]),
             process_command(Servers, Cmd);
         {error, noproc} ->
             process_command(Servers, Cmd);
@@ -511,8 +511,8 @@ add_members(Members, [Node | Nodes]) ->
                     add_members(Members, Nodes)
             end;
         Error ->
-            rabbit_log:warning("Stream coordinator failed to start on node ~p : ~p",
-                               [Node, Error]),
+            rabbit_log:warning("Stream coordinator failed to start on node ~s : ~W",
+                               [Node, Error, 10]),
             add_members(Members, Nodes)
     end.
 
@@ -529,12 +529,11 @@ remove_members(Members, [Node | Nodes]) ->
 -record(aux, {actions = #{} ::
               #{pid() := {stream_id(), #{node := node(),
                                          index := non_neg_integer(),
-                                          epoch := osiris:epoch()}}},
+                                         epoch := osiris:epoch()}}},
               resizer :: undefined | pid()}).
 
 init_aux(_Name) ->
     #aux{}.
-    % {#{}, undefined}.
 
 %% TODO ensure the dead writer is restarted as a replica at some point in time, increasing timeout?
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
@@ -667,10 +666,10 @@ phase_start_replica(StreamId, #{epoch := Epoch,
                     rabbit_log:warning("~s: Error while starting replica for ~s : ~W",
                                        [?MODULE, maps:get(name, Conf0), Reason, 10]),
                     send_action_failed(StreamId, starting, Args)
-            catch _:E ->
-                    rabbit_log:warning("~s: Error while starting replica for ~s : ~p",
-                                       [?MODULE, maps:get(name, Conf0), E]),
-                    maybe_sleep(E),
+            catch _:Error ->
+                    rabbit_log:warning("~s: Error while starting replica for ~s : ~W",
+                                       [?MODULE, maps:get(name, Conf0), Error, 10]),
+                    maybe_sleep(Error),
                     send_action_failed(StreamId, starting, Args)
             end
     end.
@@ -691,8 +690,8 @@ phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
                 _ ->
                     send_action_failed(StreamId, deleting, Arg)
             catch _:E ->
-                    rabbit_log:warning("~s: Error while deleting member for ~s : on node ~s ~p",
-                                       [?MODULE, StreamId, Node, E]),
+                    rabbit_log:warning("~s: Error while deleting member for ~s : on node ~s ~W",
+                                       [?MODULE, StreamId, Node, E, 10]),
                     maybe_sleep(E),
                     send_action_failed(StreamId, deleting, Arg)
             end
@@ -727,11 +726,11 @@ phase_stop_member(StreamId, #{node := Node,
                                        [StreamId, Node, Err]),
                     send_action_failed(StreamId, stopping, Arg0)
             catch _:Err ->
-                    rabbit_log:warning("Stream coordinator failed to stop
+                      rabbit_log:warning("Stream coordinator failed to stop
                                             member ~s ~w Error: ~w",
-                                       [StreamId, Node, Err]),
-                    maybe_sleep(Err),
-                    send_action_failed(StreamId, stopping, Arg0)
+                                         [StreamId, Node, Err]),
+                      maybe_sleep(Err),
+                      send_action_failed(StreamId, stopping, Arg0)
             end
     end.
 
@@ -871,7 +870,7 @@ filter_command(_Meta, {delete_replica, _, #{node := Node}}, #stream{id = StreamI
     case maps:size(Members) =< 1 of
         true ->
             rabbit_log:warning(
-              "~s failed to delete replica on node ~p for stream ~s: refusing to delete the only replica",
+              "~s failed to delete replica on node ~s for stream ~s: refusing to delete the only replica",
               [?MODULE, Node, StreamId]),
             {error, last_stream_member};
         false ->
@@ -886,8 +885,8 @@ update_stream(Meta, Cmd, Stream) ->
     catch
         _:E:Stacktrace ->
             rabbit_log:warning(
-              "~s failed to update stream:~n~p~n~p",
-              [?MODULE, E, Stacktrace]),
+              "~s failed to update stream:~n~W~n~W",
+              [?MODULE, E, 10, Stacktrace, 10]),
             Stream
     end.
 
