@@ -782,6 +782,8 @@ get_replica_tail(Node, Conf) ->
     case rpc:call(Node, ?MODULE, log_overview, [Conf]) of
         {badrpc, nodedown} ->
             {error, nodedown};
+        {error, _} = Err ->
+            Err;
         {_Range, Offsets} ->
             {ok, select_highest_offset(Offsets)}
     end.
@@ -792,8 +794,13 @@ select_highest_offset(Offsets) ->
     lists:last(Offsets).
 
 log_overview(Config) ->
-    Dir = osiris_log:directory(Config),
-    osiris_log:overview(Dir).
+    case whereis(osiris_sup) of
+        undefined ->
+            {error, app_not_running};
+        _ ->
+            Dir = osiris_log:directory(Config),
+            osiris_log:overview(Dir)
+    end.
 
 
 replay(L) when is_list(L) ->
