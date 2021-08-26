@@ -209,25 +209,31 @@ import_case14(Config) -> import_file_case(Config, "case14").
 import_case15(Config) -> import_file_case(Config, "case15").
 %% contains a virtual host with tags
 import_case16(Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, virtual_host_metadata) of
-        ok ->
-            import_file_case(Config, "case16"),
-            VHost = <<"tagged">>,
-            VHostIsImported =
-            fun () ->
-                    case vhost_lookup(Config, VHost) of
-                        {error, {no_such_vhosts, _}} -> false;
-                        _       -> true
-                    end
-            end,
-            rabbit_ct_helpers:await_condition(VHostIsImported, 20000),
-            VHostRec = vhost_lookup(Config, VHost),
-            ?assertEqual(<<"A case16 description">>, vhost:get_description(VHostRec)),
-            ?assertEqual([multi_dc_replication,ab,cde], vhost:get_tags(VHostRec)),
+    case rabbit_ct_helpers:is_mixed_versions() of
+      false ->
+        case rabbit_ct_broker_helpers:enable_feature_flag(Config, virtual_host_metadata) of
+            ok ->
+                import_file_case(Config, "case16"),
+                VHost = <<"tagged">>,
+                VHostIsImported =
+                fun () ->
+                        case vhost_lookup(Config, VHost) of
+                            {error, {no_such_vhosts, _}} -> false;
+                            _       -> true
+                        end
+                end,
+                rabbit_ct_helpers:await_condition(VHostIsImported, 20000),
+                VHostRec = vhost_lookup(Config, VHost),
+                ?assertEqual(<<"A case16 description">>, vhost:get_description(VHostRec)),
+                ?assertEqual([multi_dc_replication,ab,cde], vhost:get_tags(VHostRec)),
 
-            ok;
-        Skip ->
-            Skip
+                ok;
+            Skip ->
+                Skip
+        end;
+      _ ->
+        %% skip the test in mixed version mode
+        {skip, "Should not run in mixed version environments"}
     end.
 
 export_import_round_trip_case1(Config) ->
