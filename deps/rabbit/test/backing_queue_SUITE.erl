@@ -634,7 +634,7 @@ bq_queue_index_props1(_Config) ->
               MsgId = rabbit_guid:gen(),
               Props = #message_properties{expiry=12345, size = 10},
               Qi1 = ?INDEX:publish(
-                      MsgId, 0, memory, Props, true, false, infinity, Qi0),
+                      MsgId, 0, memory, Props, true, infinity, Qi0),
               {[{MsgId, 0, Props, _, _}], Qi2} =
                   ?INDEX:read(0, 1, Qi1),
               Qi2
@@ -1394,7 +1394,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                   MsgId = rabbit_guid:gen(),
                   QiM = ?INDEX:publish(
                           MsgId, SeqId, memory, #message_properties{size = 10},
-                          Persistent, false, infinity, QiN),
+                          Persistent, infinity, QiN),
                   ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
           end, {Qi, []}, SeqIds),

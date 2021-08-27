@@ -578,7 +578,10 @@ init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun)
 
     %% @todo We may need to delete store segment files here as well.
 
-    init(IsDurable, IndexState, todo, DeltaCount, DeltaBytes, RecoveryTerms,
+    %% @todo Nothing to recover as far as the store is concerned. (For now.)
+    StoreState = ?STORE:init(QueueName, MsgOnDiskFun),
+
+    init(IsDurable, IndexState, StoreState, DeltaCount, DeltaBytes, RecoveryTerms,
          PersistentClient, TransientClient, VHost).
 
 process_recovery_terms(Terms=non_clean_shutdown) ->
@@ -1239,25 +1242,24 @@ msg_status(IsPersistent, IsDelivered, SeqId,
                 msg_props     = MsgProps}.
 
 beta_msg_status({Msg = #basic_message{id = MsgId},
-                 SeqId, memory, MsgProps, IsPersistent, IsDelivered}) ->
-    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent, IsDelivered),
+                 SeqId, memory, MsgProps, IsPersistent}) ->
+    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
     MS0#msg_status{msg_id       = MsgId,
                    msg          = Msg,
                    persist_to   = queue_store, % msg_store, % queue_index,
                    msg_location = memory};
 
-beta_msg_status({MsgId, SeqId, MsgLocation, MsgProps, IsPersistent, IsDelivered}) ->
-    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent, IsDelivered),
+beta_msg_status({MsgId, SeqId, MsgLocation, MsgProps, IsPersistent}) ->
+    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
     MS0#msg_status{msg_id       = MsgId,
                    msg          = undefined,
                    persist_to   = queue_store, % msg_store,
                    msg_location = MsgLocation}.
 
-beta_msg_status0(SeqId, MsgProps, IsPersistent, IsDelivered) ->
+beta_msg_status0(SeqId, MsgProps, IsPersistent) ->
   #msg_status{seq_id        = SeqId,
               msg           = undefined,
               is_persistent = IsPersistent,
-              is_delivered  = IsDelivered,
               index_on_disk = true,
               msg_props     = MsgProps}.
 
@@ -1335,18 +1337,14 @@ msg_store_close_fds_fun(IsPersistent) ->
 betas_from_index_entries(List, TransientThreshold, DelsAndAcksFun, State = #vqstate{ next_deliver_seq_id = NextDeliverSeqId0 }) ->
     {Filtered, Delivers, Acks, RamReadyCount, RamBytes, TransientCount, TransientBytes} =
         lists:foldr(
-          fun ({_MsgOrId, SeqId, _MsgLocation, _MsgProps, IsPersistent, _IsDelivered} = M,
+          fun ({_MsgOrId, SeqId, _MsgLocation, _MsgProps, IsPersistent} = M,
                {Filtered1, Delivers1, Acks1, RRC, RB, TC, TB} = Acc) ->
                   case SeqId < TransientThreshold andalso not IsPersistent of
                       true  -> {Filtered1,
-                                %% @todo So this is not necessary anymore either because we won't process delivers anymore. We just need to know which is the most recent delivered.
-%                                cons_if(not IsDelivered, SeqId, Delivers1),
-
                                 case Delivers1 of
                                     SeqId -> Delivers1 + 1;
                                     _ -> Delivers1
                                 end,
-
                                 [SeqId | Acks1], RRC, RB, TC, TB};
                       false -> MsgStatus = m(beta_msg_status(M)),
                                HaveMsg = msg_in_ram(MsgStatus),
@@ -2098,7 +2096,6 @@ maybe_batch_write_index_to_disk(Force,
                                   msg_id        = MsgId,
                                   seq_id        = SeqId,
                                   is_persistent = IsPersistent,
-                                  is_delivered  = IsDelivered,
                                   msg_location  = MsgLocation,
                                   msg_props     = MsgProps},
                                 State = #vqstate {
@@ -2113,7 +2110,7 @@ maybe_batch_write_index_to_disk(Force,
             queue_index -> {prepare_to_store(Msg), DiskWriteCount + 1}
         end,
     IndexState1 = ?INDEX:pre_publish(
-                    MsgOrId, SeqId, MsgLocation, MsgProps, IsPersistent, IsDelivered,
+                    MsgOrId, SeqId, MsgLocation, MsgProps, IsPersistent,
                     TargetRamCount, IndexState),
     {MsgStatus#msg_status{index_on_disk = true},
      State#vqstate{index_state      = IndexState1,
@@ -2129,7 +2126,6 @@ maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
                                    msg_id        = MsgId,
                                    seq_id        = SeqId,
                                    is_persistent = IsPersistent,
-                                   is_delivered  = IsDelivered,
                                    msg_location  = MsgLocation,
                                    msg_props     = MsgProps},
                           State = #vqstate{target_ram_count = TargetRamCount,
@@ -2143,7 +2139,7 @@ maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
             queue_index -> {prepare_to_store(Msg), DiskWriteCount + 1}
         end,
     IndexState2 = ?INDEX:publish(
-                    MsgOrId, SeqId, MsgLocation, MsgProps, IsPersistent, IsDelivered, TargetRamCount,
+                    MsgOrId, SeqId, MsgLocation, MsgProps, IsPersistent, TargetRamCount,
                     IndexState),
     {MsgStatus#msg_status{index_on_disk = true},
      State#vqstate{index_state      = IndexState2,
