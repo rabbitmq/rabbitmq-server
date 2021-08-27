@@ -76,7 +76,7 @@ HOSTNAME = $(shell hostname -s)
 endif
 endif
 
-RABBITMQ_NODENAME ?= rabbit@$(HOSTNAME)
+RABBITMQ_NODENAME ?= rabbit@localhost
 RABBITMQ_NODENAME_FOR_PATHS ?= $(RABBITMQ_NODENAME)
 NODE_TMPDIR ?= $(call node_tmpdir,$(RABBITMQ_NODENAME_FOR_PATHS))
 
