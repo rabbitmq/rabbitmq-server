@@ -9,7 +9,7 @@
 
 -export([erase/1, init/3, reset_state/1, recover/6,
          terminate/3, delete_and_terminate/1,
-         publish/8, deliver/2, ack/2, read/3]).
+         publish/7, ack/2, read/3]).
 
 %% Recovery. Unlike other functions in this module, these
 %% apply to all queues all at once.
@@ -18,7 +18,7 @@
 %% rabbit_queue_index/rabbit_variable_queue-specific functions.
 %% Implementation details from the queue index leaking into the
 %% queue implementation itself.
--export([pre_publish/8, flush_pre_publish_cache/2,
+-export([pre_publish/7, flush_pre_publish_cache/2,
          sync/1, needs_sync/1, flush/1,
          bounds/1, next_segment_boundary/1]).
 
@@ -46,7 +46,8 @@
 -type seq_id() :: non_neg_integer().
 %% @todo Use a shared seq_id() type in all relevant modules.
 
--type entry() :: {rabbit_types:msg_id(), seq_id(), rabbit_types:message_properties(), boolean(), boolean()}.
+%% @todo Add location to the type.
+-type entry() :: {rabbit_types:msg_id(), seq_id(), rabbit_types:message_properties(), boolean()}.
 
 %% @todo Rename into #qi.
 -record(mqistate, {
@@ -59,17 +60,16 @@
     %% Buffer of all write operations to be performed.
     %% When the buffer reaches a certain size, we reduce
     %% the buffer size by first checking if writing the
-    %% delivers and acks gets us to a comfortable buffer
-    %% size. If we do, write only the delivers and acks.
+    %% acks gets us to a comfortable buffer
+    %% size. If we do, write only the acks.
     %% If not, write everything. This allows the reader
     %% to continue reading from memory if it is fast
     %% enough to keep up with the producer.
-    write_buffer = #{} :: #{seq_id() => entry() | deliver | ack},
+    write_buffer = #{} :: #{seq_id() => entry() | ack},
 
     %% The number of entries in the write buffer that
     %% refer to an update to the file, rather than a
-    %% full entry. Updates include deliver and ack.
-    %% Used to determine if flushing only delivers/acks
+    %% full entry. Used to determine if flushing only acks
     %% is enough to get the buffer to a comfortable size.
     write_buffer_updates = 0 :: non_neg_integer(),
 
@@ -272,7 +272,7 @@ recover_segment(State = #mqistate{ segments = Segments }, _, _, Fd,
             %% There are no more messages in this segment file.
             {delete, State};
         _ ->
-            %% We must update some messages on disk (ack or deliver).
+            %% We must ack some messages on disk.
             ok = file:pwrite(Fd, LocBytes),
             {keep, State#mqistate{ segments = Segments#{ Segment => Unacked }}}
     end;
@@ -283,38 +283,56 @@ recover_segment(State, ContainsCheckFun, CountersRef, Fd,
         %% We found a non-ack persistent entry. Check that the corresponding
         %% message exists in the message store. If not, mark this message as
         %% acked.
-        {ok, <<1,IsDelivered:8,1,_:8,Id:16/binary,Size:32/unsigned,_/bits>>} ->
-            case ContainsCheckFun(Id) of
-                %% Message is in the store. We mark all those
-                %% messages as delivered if they were not already
-                %% (like the old index).
-                true ->
-                    LocBytes = case IsDelivered of
-                        1 -> LocBytes0;
-                        0 -> [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE + 1, <<1>>}|LocBytes0]
-                    end,
+        {ok, << 1:8,
+                0:7, 1:1, %% Message is persistent.
+                0:8, LocationBin:136/bits,
+                Size:32/unsigned, _:64/unsigned >>} ->
+            case LocationBin of
+                %% Message is expected to be in the per-vhost store.
+                << 1:8, Id:16/binary >> ->
+                    case ContainsCheckFun(Id) of
+                        %% Message is in the store.
+                        true ->
+                            counters:add(CountersRef, ?RECOVER_COUNT, 1),
+                            counters:add(CountersRef, ?RECOVER_BYTES, Size),
+                            recover_segment(State, ContainsCheckFun, CountersRef,
+                                            Fd, Segment, ThisEntry + 1, SegmentEntryCount,
+                                            Unacked, LocBytes0);
+                        %% Message is not in the store. Mark it as acked.
+                        false ->
+                            LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
+                            recover_segment(State, ContainsCheckFun, CountersRef,
+                                            Fd, Segment, ThisEntry + 1, SegmentEntryCount,
+                                            Unacked - 1, LocBytes)
+                    end;
+                %% Message is in the per-queue store.
+                << 2:8,
+                   _StoreOffset:64/unsigned,
+                   _StoreSize:32/unsigned,
+                   0:32 >> ->
+                    %% @todo There's currently no check for the per-queue store.
                     counters:add(CountersRef, ?RECOVER_COUNT, 1),
                     counters:add(CountersRef, ?RECOVER_BYTES, Size),
                     recover_segment(State, ContainsCheckFun, CountersRef,
                                     Fd, Segment, ThisEntry + 1, SegmentEntryCount,
-                                    Unacked, LocBytes);
-                %% Message is not in the store. Mark it as acked.
-                false ->
+                                    Unacked, LocBytes0);
+                %% Message was in memory or malformed. Ack it.
+                _ ->
                     LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
                     recover_segment(State, ContainsCheckFun, CountersRef,
                                     Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                                     Unacked - 1, LocBytes)
             end;
-        %% We found a non-ack transient entry. We mark the message as acked
+        %% We found a non-acked transient entry. We mark the message as acked
         %% without checking with the message store, because it already dropped
         %% this message via the queue walker functions.
-        {ok, <<1,_,0,_/bits>>} ->
+        {ok, << 1:8, _:7, 0:1, _/bits >>} ->
             LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
             recover_segment(State, ContainsCheckFun, CountersRef,
                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                             Unacked - 1, LocBytes);
         %% We found a non-entry or an acked entry. Consider it acked.
-        {ok, _} ->
+        {ok, << 0:8, _/bits >>} ->
             recover_segment(State, ContainsCheckFun, CountersRef,
                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                             Unacked - 1, LocBytes0)
@@ -330,7 +348,7 @@ recover_index_v1_clean(State0 = #mqistate{ queue_name = Name }, Terms, IsMsgStor
     %% we do not need to calculate the values again. This lets us
     %% share code with dirty recovery.
     DummyCountersRef = counters:new(2, []),
-    State = recover_index_v1_common(State0, Terms, V1State, DummyCountersRef),
+    State = recover_index_v1_common(State0, V1State, DummyCountersRef),
     logger:info("Queue ~s on vhost ~s converted ~b total messages to the new index format",
                 [QName, VHost, counters:get(DummyCountersRef, ?RECOVER_COUNT)]),
     State.
@@ -345,31 +363,22 @@ recover_index_v1_dirty(State0 = #mqistate{ queue_name = Name }, Terms, IsMsgStor
     %% returned than it really has.
     {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
                                                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun),
-    State = recover_index_v1_common(State0, Terms, V1State, CountersRef),
+    State = recover_index_v1_common(State0, V1State, CountersRef),
     logger:info("Queue ~s on vhost ~s converted ~b total messages to the new index format",
                 [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 
-recover_index_v1_common(State0 = #mqistate{ queue_name = #resource{ virtual_host = VHost },
-                                            dir = Dir }, Terms, V1State, CountersRef) ->
-    %% Prepare the message store client that will be used to store
-    %% embedded messages back to the message store.
-    Ref = case Terms of
-        non_clean_shutdown ->
-            rabbit_guid:gen();
-        _ ->
-            case proplists:get_value(persistent_ref, Terms) of
-                undefined -> rabbit_guid:gen();
-                Ref0      -> Ref0
-            end
-    end,
-    MSClient = rabbit_vhost_msg_store:client_init(VHost, msg_store_persistent, Ref,
-                                                  fun(_, _) -> ok end, fun () -> ok end),
+%% At this point all messages are persistent because transient messages
+%% were dropped during the old index recovery.
+recover_index_v1_common(State0 = #mqistate{ queue_name = Name, dir = Dir },
+                        V1State, CountersRef) ->
+    %% Use a temporary per-queue store state to store embedded messages.
+    StoreState0 = rabbit_classic_queue_store_v2:init(Name, fun(_, _) -> ok end),
     %% Go through the old index and publish messages to the new one.
     {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1State),
-    State1 = recover_index_v1_loop(State0, MSClient, V1State, CountersRef, LoSeqId, HiSeqId),
+    {State1, StoreState} = recover_index_v1_loop(State0, StoreState0, V1State, CountersRef, LoSeqId, HiSeqId),
     %% Terminate the message store client.
-    rabbit_msg_store:client_terminate(MSClient),
+    _ = rabbit_classic_queue_store_v2:terminate(StoreState),
     %% Close the old index journal handle if any.
     JournalHdl = element(4, V1State),
     ok = case JournalHdl of
@@ -385,10 +394,10 @@ recover_index_v1_common(State0 = #mqistate{ queue_name = #resource{ virtual_host
     garbage_collect(),
     State.
 
-recover_index_v1_loop(State, _, _, _, HiSeqId, HiSeqId) ->
-    State;
+recover_index_v1_loop(State, StoreState, _, _, HiSeqId, HiSeqId) ->
+    {State, StoreState};
 recover_index_v1_loop(State0 = #mqistate{ queue_name = Name },
-                      MSClient, V1State0, CountersRef, LoSeqId, HiSeqId) ->
+                      StoreState0, V1State0, CountersRef, LoSeqId, HiSeqId) ->
     UpSeqId = lists:min([rabbit_queue_index:next_segment_boundary(LoSeqId),
                          HiSeqId]),
     {Messages, V1State} = rabbit_queue_index:read(LoSeqId, UpSeqId, V1State0),
@@ -397,24 +406,26 @@ recover_index_v1_loop(State0 = #mqistate{ queue_name = Name },
     garbage_collect(),
     MessagesCount = length(Messages),
     counters:add(CountersRef, ?RECOVER_COUNT, MessagesCount),
-    State2 = lists:foldl(fun({MsgOrId, SeqId, Props, IsPersistent, IsDelivered}, State1) ->
-        %% We must move embedded messages to the message store.
-        MsgId = case MsgOrId of
-            Msg = #basic_message{ id = MsgId0 } ->
-                %% We must do a synchronous write to avoid overloading the message store.
-                rabbit_msg_store:blocking_write(MsgId0, Msg, MSClient),
-                MsgId0;
-            MsgId0 ->
-                MsgId0
-        end,
-        %% At this point all messages are persistent because transient messages
-        %% were dropped during the old index recovery.
-        counters:add(CountersRef, ?RECOVER_BYTES, Props#message_properties.size),
-        %% @todo Messages should be moved to the per_queue index.
-        publish(MsgId, SeqId, todo, Props, IsPersistent, IsDelivered, infinity, State1)
-    end, State0, Messages),
-    State = flush(State2),
-    rabbit_msg_store:force_sync(MSClient),
+    {State3, StoreState3} = lists:foldl(fun
+        %% Move embedded messages to the per-queue store.
+        ({Msg = #basic_message{id = MsgId}, SeqId, Props, IsPersistent, _IsDelivered},
+         {State1, StoreState1}) ->
+            MsgSize = Props#message_properties.size,
+            {MsgLocation, StoreState2} = rabbit_classic_queue_store_v2:write(SeqId, MsgSize, Msg, StoreState1),
+            counters:add(CountersRef, ?RECOVER_BYTES, MsgSize),
+            State2 = publish(MsgId, SeqId, MsgLocation, Props, IsPersistent, infinity, State1),
+            {State2, StoreState2};
+        %% Keep messages in the per-vhost store where they are.
+        ({MsgId, SeqId, Props, IsPersistent, _IsDelivered},
+         {State1, StoreState1}) ->
+            MsgSize = Props#message_properties.size,
+            counters:add(CountersRef, ?RECOVER_BYTES, MsgSize),
+            State2 = publish(MsgId, SeqId, rabbit_msg_store, Props, IsPersistent, infinity, State1),
+            {State2, StoreState1}
+    end, {State0, StoreState0}, Messages),
+    %% Flush to disk to avoid keeping too much in memory between segments.
+    State = flush(State3),
+    StoreState = rabbit_classic_queue_store_v2:sync(StoreState3),
     %% We have written everything to disk. We can delete the old segment file
     %% to free up much needed space, to avoid doubling disk usage during the upgrade.
     rabbit_queue_index:delete_segment_file_for_seq_id(LoSeqId, V1State),
@@ -423,7 +434,7 @@ recover_index_v1_loop(State0 = #mqistate{ queue_name = Name },
     #resource{virtual_host = VHost, name = QName} = Name,
     logger:info("Queue ~s on vhost ~s converted ~b more messages to the new index format",
                 [QName, VHost, MessagesCount]),
-    recover_index_v1_loop(State, MSClient, V1State, CountersRef, UpSeqId, HiSeqId).
+    recover_index_v1_loop(State, StoreState, V1State, CountersRef, UpSeqId, HiSeqId).
 
 -spec terminate(rabbit_types:vhost(), [any()], State) -> State when State::mqistate().
 
@@ -461,7 +472,7 @@ delete_and_terminate(State = #mqistate { dir = Dir,
                     fds = #{} }.
 
 -spec publish(rabbit_types:msg_id(), seq_id(), todo,
-                    rabbit_types:message_properties(), boolean(), boolean(),
+                    rabbit_types:message_properties(), boolean(),
                     non_neg_integer(), State) -> State when State::mqistate().
 
 %% Because we always persist to the msg_store, the Msg(Or)Id argument
@@ -473,12 +484,12 @@ delete_and_terminate(State = #mqistate { dir = Dir,
 %%       but for the time being we are stuck with it.
 %%
 %%       Maybe switch confirms to seq_id()? Is that doable?
-publish(MsgId, SeqId, Location, Props, IsPersistent, IsDelivered, TargetRamCount,
+publish(MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount,
         State0 = #mqistate { write_buffer = WriteBuffer0,
                              segments = Segments }) ->
     ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount, State0]),
     %% Add the entry to the write buffer.
-    WriteBuffer = WriteBuffer0#{SeqId => {MsgId, SeqId, Location, Props, IsPersistent, IsDelivered}},
+    WriteBuffer = WriteBuffer0#{SeqId => {MsgId, SeqId, Location, Props, IsPersistent}},
     State1 = State0#mqistate{ write_buffer = WriteBuffer },
     %% When writing to a new segment we must prepare the file
     %% and update our segments state.
@@ -595,7 +606,7 @@ maybe_flush_buffer(State = #mqistate { write_buffer = WriteBuffer,
         %% data on crashes.
         (map_size(WriteBuffer) - NumUpdates) >= 100 ->
             flush_buffer(State, full);
-        %% We may want to flush updates (acks | delivers) when
+        %% We may want to flush updates (acks) when
         %% too many have accumulated.
         NumUpdates >= 2000 ->
             flush_buffer(State, updates);
@@ -618,10 +629,6 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0,
             {write_ack(SeqId, SegmentEntryCount, WritesAcc),
              BufferAcc,
              AcksAcc};
-%        (SeqId, deliver, {WritesAcc, BufferAcc, AcksAcc}) ->
-%            {write_deliver(SeqId, SegmentEntryCount, WritesAcc),
-%             BufferAcc,
-%             AcksAcc};
         (SeqId, Entry, {WritesAcc, BufferAcc, AcksAcc}) when FlushType =:= updates ->
             {WritesAcc,
              BufferAcc#{SeqId => Entry},
@@ -664,24 +671,13 @@ write_ack(SeqId, SegmentEntryCount, WritesAcc) ->
     LocBytesAcc = maps:get(Segment, WritesAcc, []),
     WritesAcc#{Segment => [{Offset, <<0>>}|LocBytesAcc]}.
 
-%% @todo No longer write delivers. Keep them in the queue terms.
-%write_deliver(SeqId, SegmentEntryCount, WritesAcc) ->
-%    Segment = SeqId div SegmentEntryCount,
-%    Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
-%    LocBytesAcc = maps:get(Segment, WritesAcc, []),
-%    WritesAcc#{Segment => [{Offset + 1, <<1>>}|LocBytesAcc]}.
-
 write_entry(SeqId, SegmentEntryCount, Entry, WritesAcc) ->
     Segment = SeqId div SegmentEntryCount,
     Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
     LocBytesAcc = maps:get(Segment, WritesAcc, []),
     WritesAcc#{Segment => [{Offset, build_entry(Entry)}|LocBytesAcc]}.
 
-build_entry({Id, _SeqId, Location, Props, IsPersistent, _IsDelivered}) ->
-    IsDeliveredFlag = 0, %case IsDelivered of
-%        true -> 1;
-%        false -> 0
-%    end,
+build_entry({Id, _SeqId, Location, Props, IsPersistent}) ->
     Flags = case IsPersistent of
         true -> 1;
         false -> 0
@@ -705,8 +701,8 @@ build_entry({Id, _SeqId, Location, Props, IsPersistent, _IsDelivered}) ->
         _ -> Expiry0
     end,
     << 1:8,                   %% Status. 0 = no entry or entry acked, 1 = entry exists.
-       IsDeliveredFlag:8,     %% Deliver.
        Flags:8,               %% IsPersistent flag (least significant bit).
+       0:8,                   %% Unused.
        LocationBin/binary,
        %% The shared message store uses 8 bytes for the size but that was never needed
        %% as the v1 index always used 4 bytes. So we are using 4 bytes here as well.
@@ -721,40 +717,6 @@ get_fd_for_segment(Segment, State = #mqistate{ fds = OpenFds }) ->
             {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
             {Fd, State#mqistate{ fds = OpenFds#{ Segment => Fd }}}
     end.
-
-%% When marking delivers we may need to update the file(s) on disk.
-
--spec deliver([seq_id()], State) -> State when State::mqistate().
-
-%% The rabbit_variable_queue module may call this function
-%% with an empty list. Do nothing.
-%% @todo This function is no longer used.
-deliver([], State) ->
-    ?DEBUG("[] ~0p", [State]),
-    State;
-deliver(SeqIds, State = #mqistate { write_buffer = WriteBuffer0,
-                                    write_buffer_updates = NumUpdates0 }) ->
-    ?DEBUG("~0p ~0p", [SeqIds, State]),
-    %% Add delivers to the write buffer if necessary.
-    {WriteBuffer, NumUpdates} = lists:foldl(fun
-        (SeqId, {FoldBuffer, FoldUpdates}) ->
-            case FoldBuffer of
-                %% Update the IsDelivered flag in the entry if any.
-                #{SeqId := {Id, SeqId, Props, IsPersistent, false}} ->
-                    {FoldBuffer#{SeqId => {Id, SeqId, Props, IsPersistent, true}},
-                     FoldUpdates};
-                %% If any other write exists, do nothing.
-                #{SeqId := _} ->
-                    {FoldBuffer,
-                     FoldUpdates};
-                %% Otherwise mark for delivery and increase the updates count.
-                _ ->
-                    {FoldBuffer#{SeqId => deliver},
-                     FoldUpdates + 1}
-            end
-    end, {WriteBuffer0, NumUpdates0}, SeqIds),
-    maybe_flush_buffer(State#mqistate{ write_buffer = WriteBuffer,
-                                       write_buffer_updates = NumUpdates }).
 
 %% When marking acks we need to update the file(s) on disk.
 %% When a file has been fully acked we may also close its
@@ -840,10 +802,6 @@ ack_fold_fun(SeqId, {Buffer, Updates, Cache}) ->
         %% we will never write this entry to disk.
         #{SeqId := Write} when is_tuple(Write) ->
             {maps:remove(SeqId, Buffer), Updates, Cache};
-        %% Ack if an on-disk entry was marked for delivery.
-        %% Remove the entry from the cache if any since it is now covered by the buffer.
-        #{SeqId := deliver} ->
-            {Buffer#{SeqId => ack}, Updates, maps:remove(SeqId, Cache)};
         %% Otherwise ack an entry that is already on disk.
         %% Remove the entry from the cache if any since it is now covered by the buffer.
         _ when not is_map_key(SeqId, Buffer) ->
@@ -956,8 +914,8 @@ get_fd(SeqId, State0) ->
 parse_entries(<<>>, _, _, Acc) ->
     Acc;
 parse_entries(<< Status:8,
-                 _IsDelivered0:8,
-                 _:7, IsPersistent:1,
+                 0:7, IsPersistent:1,
+                 0:8,
                  LocationBin:136/bits,
                  Size:32/unsigned,
                  Expiry0:64/unsigned,
@@ -982,19 +940,8 @@ parse_entries(<< Status:8,
                 _ -> Expiry0
             end,
             Props = #message_properties{expiry = Expiry, size = Size},
-            %% We may have a deliver in the write buffer.
-            IsDelivered = undefined,
-%            IsDelivered = case IsDelivered0 of
-%                1 ->
-%                    true;
-%                0 ->
-%                    case WriteBuffer of
-%                        #{SeqId := deliver} -> true;
-%                        _ -> false
-%                    end
-%            end,
             parse_entries(Rest, SeqId + 1, WriteBuffer,
-                          [{Id, SeqId, Location, Props, IsPersistent =:= 1, IsDelivered}|Acc]);
+                          [{Id, SeqId, Location, Props, IsPersistent =:= 1}|Acc]);
         0 -> %% No entry or acked entry.
             %% @todo It would be good to keep track of how many "misses"
             %%       we have. We can use it to confirm the correct behavior
@@ -1127,14 +1074,13 @@ stop(VHost) ->
 %% They relate to specific optimizations of rabbit_queue_index and
 %% rabbit_variable_queue.
 %%
-%% @todo The way pre_publish works is still fairly puzzling. It sounds
-%%       like the only thing we should care about is IsDelivered possibly
-%%       having changed compared to the previous publish call. When the
-%%       old index gets removed we can just drop these functions.
+%% @todo The way pre_publish works is still fairly puzzling.
+%%       When the old index gets removed we can just drop
+%%       these functions.
 
-pre_publish(MsgOrId, SeqId, Location, Props, IsPersistent, IsDelivered, TargetRamCount, State) ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgOrId, SeqId, Location, Props, IsPersistent, IsDelivered, TargetRamCount, State]),
-    publish(MsgOrId, SeqId, Location, Props, IsPersistent, IsDelivered, TargetRamCount, State).
+pre_publish(MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State) ->
+    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State]),
+    publish(MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State).
 
 %% @todo -spec flush_pre_publish_cache(???, State) -> State when State::mqistate().
 
