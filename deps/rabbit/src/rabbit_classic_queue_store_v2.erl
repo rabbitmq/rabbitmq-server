@@ -54,6 +54,9 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+%% We need this to directly access the delayed file io pid.
+-include_lib("kernel/include/file.hrl").
+
 %% Set to true to get an awful lot of debug logs.
 -if(false).
 -define(DEBUG(X,Y), logger:debug("~0p: " ++ X, [?FUNCTION_NAME|Y])).
@@ -118,7 +121,7 @@
 }).
 
 %% Types copied from rabbit_queue_index.
--type on_sync_fun() :: fun ((gb_sets:set()) -> ok).
+-type on_sync_fun() :: fun ((gb_sets:set()) -> ok). %% @todo Wrong spec, there's 2 arguments.
 
 %% @todo specs everywhere
 
@@ -240,12 +243,28 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
 
 get_read_fd(Segment, State = #qs{ read_segment = Segment,
                                   read_fd = Fd }) ->
+    maybe_flush_write_fd(Segment, State),
     {Fd, State};
 get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
     maybe_close_fd(OldFd),
+    maybe_flush_write_fd(Segment, State),
     {ok, Fd} = file:open(segment_file(Segment, State), [read, raw, binary]),
     {Fd, State#qs{ read_segment = Segment,
                    read_fd = Fd }}.
+
+maybe_flush_write_fd(Segment, #qs{ write_segment = Segment,
+                                   write_fd = Fd }) ->
+    %% We tell the pid handling delayed writes to flush to disk
+    %% without issuing a separate command to the fd. We need
+    %% to do this in order to read from a separate fd that
+    %% points to the same file.
+    #file_descriptor{
+        module = raw_file_io_delayed, %% assert
+        data = #{ pid := Pid }
+    } = Fd,
+    gen_statem:call(Pid, '$synchronous_flush');
+maybe_flush_write_fd(_, _) ->
+    ok.
 
 %% We only remove the message from the cache. We will remove
 %% the message from the disk when we delete the segment file.
