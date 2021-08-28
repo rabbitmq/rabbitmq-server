@@ -86,11 +86,8 @@ defmodule TestHelper do
   end
 
   def set_user_tags(name, tags) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_tags, [name, tags, "acting-user"])
-  end
-
-  def set_vhost_tags(name, tags) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_vhost, :update_tags, [name, tags, "acting-user"])
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_tags,
+      [name, tags, "acting-user"])
   end
 
   def authenticate_user(name, password) do

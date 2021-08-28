@@ -14,7 +14,7 @@
 -export([add/2, add/4, delete/2, exists/1, with/2, with_user_and_vhost/3, assert/1, update/2,
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0]).
--export([parse_tags/1, update_metadata/2, tag_with/2, untag_from/2, update_tags/2, update_tags/3]).
+-export([parse_tags/1, update_metadata/2, tag_with/2, untag_from/2]).
 -export([lookup/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1, ensure_config_file/1]).
@@ -25,9 +25,6 @@
 %%
 %% API
 %%
-
--type vhost_tag() :: atom() | string() | binary().
--export_type([vhost_tag/0]).
 
 recover() ->
     %% Clear out remnants of old incarnation, in case we restarted
@@ -427,39 +424,6 @@ update(VHostName, Fun) ->
 update_metadata(VHostName, Fun) ->
     update(VHostName, fun(Record) ->
         Meta = Fun(vhost:get_metadata(Record)),
-        vhost:set_metadata(Record, Meta)
-    end).
-
--spec update_tags(vhost:name(), [vhost_tag()], rabbit_types:username()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
-update_tags(VHostName, Tags, ActingUser) ->
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
-    try
-        R = rabbit_misc:execute_mnesia_transaction(fun() ->
-            update_tags(VHostName, ConvertedTags)
-        end),
-        rabbit_log:info("Successfully set tags for virtual host '~s' to ~p", [VHostName, ConvertedTags]),
-        rabbit_event:notify(vhost_tags_set, [{name, VHostName},
-                                             {tags, ConvertedTags},
-                                             {user_who_performed_action, ActingUser}]),
-        R
-    catch
-        throw:{error, {no_such_vhost, _}} = Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': the virtual host does not exist", [VHostName]),
-            throw(Error);
-        throw:Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': ~p", [VHostName, Error]),
-            throw(Error);
-        exit:Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': ~p", [VHostName, Error]),
-            exit(Error)
-    end.
-
--spec update_tags(vhost:name(), [vhost_tag()]) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
-update_tags(VHostName, Tags) ->
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
-    update(VHostName, fun(Record) ->
-        Meta0 = vhost:get_metadata(Record),
-        Meta  = maps:update(tags, ConvertedTags, Meta0),
         vhost:set_metadata(Record, Meta)
     end).
 
