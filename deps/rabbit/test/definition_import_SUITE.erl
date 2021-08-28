@@ -178,27 +178,15 @@ import_case16(Config) ->
     end.
 
 export_import_round_trip_case1(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-      false ->
-        %% case 6 has runtime parameters that do not depend on any plugins
-        import_file_case(Config, "case6"),
-        Defs = export(Config),
-        import_raw(Config, rabbit_json:encode(Defs));
-      _ ->
-        %% skip the test in mixed version mode
-        {skip, "Should not run in mixed version environments"}
-    end.
+    %% case 6 has runtime parameters that do not depend on any plugins
+    import_file_case(Config, "case6"),
+    Defs = export(Config),
+    import_raw(Config, rabbit_json:encode(Defs)).
 
 export_import_round_trip_case2(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-      false ->
-        import_file_case(Config, "case9", "case9a"),
-        Defs = export(Config),
-        import_parsed(Config, Defs);
-      _ ->
-        %% skip the test in mixed version mode
-        {skip, "Should not run in mixed version environments"}
-    end.
+    import_file_case(Config, "case9", "case9a"),
+    Defs = export(Config),
+    import_parsed(Config, Defs).
 
 import_on_a_booting_node(Config) ->
     %% see case5.json
