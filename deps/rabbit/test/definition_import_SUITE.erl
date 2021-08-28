@@ -44,8 +44,7 @@ groups() ->
                                import_case11,
                                import_case12,
                                import_case13,
-                               import_case14,
-                               import_case16
+                               import_case14
                               ]},
         {boot_time_import, [], [
             import_on_a_booting_node
@@ -148,28 +147,6 @@ import_case13(Config) ->
     end.
 
 import_case14(Config) -> import_file_case(Config, "case14").
-%% contains a virtual host with tags
-import_case16(Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, virtual_host_metadata) of
-        ok ->
-            import_file_case(Config, "case16"),
-            VHost = <<"tagged">>,
-            VHostIsImported =
-            fun () ->
-                    case vhost_lookup(Config, VHost) of
-                        {error, {no_such_vhosts, _}} -> false;
-                        _       -> true
-                    end
-            end,
-            rabbit_ct_helpers:await_condition(VHostIsImported, 20000),
-            VHostRec = vhost_lookup(Config, VHost),
-            ?assertEqual(<<"A case16 description">>, vhost:get_description(VHostRec)),
-            ?assertEqual([multi_dc_replication,ab,cde], vhost:get_tags(VHostRec)),
-
-            ok;
-        Skip ->
-            Skip
-    end.
 
 export_import_round_trip_case1(Config) ->
     %% case 6 has runtime parameters that do not depend on any plugins
@@ -285,6 +262,3 @@ run_invalid_import_case(Path) ->
 
 queue_lookup(Config, VHost, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [rabbit_misc:r(VHost, queue, Name)]).
-
-vhost_lookup(Config, VHost) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, lookup, [VHost]).
