@@ -13,9 +13,7 @@
 -export([recover/0, recover/1, read_config/1]).
 -export([add/2, add/4, delete/2, exists/1, with/2, with_user_and_vhost/3, assert/1, update/2,
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
-        list/0, count/0, list_names/0, all/0]).
--export([parse_tags/1, update_metadata/2, tag_with/2, untag_from/2]).
--export([lookup/1]).
+        list/0, count/0, list_names/0, all/0, parse_tags/1]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1, ensure_config_file/1]).
 -export([delete_storage/1]).
@@ -380,64 +378,44 @@ all() -> mnesia:dirty_match_object(rabbit_vhost, vhost:pattern_match_all()).
 count() ->
     length(list()).
 
--spec lookup(vhost:name()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
-lookup(VHostName) ->
-    case rabbit_misc:dirty_read({rabbit_vhost, VHostName}) of
-        {error, not_found} -> {error, {no_such_vhost, VHostName}};
-        {ok, Record}       -> Record
-    end.
-
 -spec with(vhost:name(), rabbit_misc:thunk(A)) -> A.
-with(VHostName, Thunk) ->
+
+with(VHost, Thunk) ->
     fun () ->
-        case mnesia:read({rabbit_vhost, VHostName}) of
-            []   -> mnesia:abort({no_such_vhost, VHostName});
-            [_V] -> Thunk()
-        end
+            case mnesia:read({rabbit_vhost, VHost}) of
+                [] ->
+                    mnesia:abort({no_such_vhost, VHost});
+                [_V] ->
+                    Thunk()
+            end
     end.
 
--spec with_user_and_vhost(rabbit_types:username(), vhost:name(), rabbit_misc:thunk(A)) -> A.
-with_user_and_vhost(Username, VHostName, Thunk) ->
-    rabbit_misc:with_user(Username, with(VHostName, Thunk)).
+-spec with_user_and_vhost
+        (rabbit_types:username(), vhost:name(), rabbit_misc:thunk(A)) -> A.
+
+with_user_and_vhost(Username, VHost, Thunk) ->
+    rabbit_misc:with_user(Username, with(VHost, Thunk)).
 
 %% Like with/2 but outside an Mnesia tx
 
 -spec assert(vhost:name()) -> 'ok'.
-assert(VHostName) ->
-    case exists(VHostName) of
-        true  -> ok;
-        false -> throw({error, {no_such_vhost, VHostName}})
-    end.
+
+assert(VHost) -> case exists(VHost) of
+                         true  -> ok;
+                         false -> throw({error, {no_such_vhost, VHost}})
+                     end.
 
 -spec update(vhost:name(), fun((vhost:vhost()) -> vhost:vhost())) -> vhost:vhost().
-update(VHostName, Fun) ->
-    case mnesia:read({rabbit_vhost, VHostName}) of
+
+update(VHost, Fun) ->
+    case mnesia:read({rabbit_vhost, VHost}) of
         [] ->
-            mnesia:abort({no_such_vhost, VHostName});
+            mnesia:abort({no_such_vhost, VHost});
         [V] ->
             V1 = Fun(V),
             ok = mnesia:write(rabbit_vhost, V1, write),
             V1
     end.
-
--spec update_metadata(vhost:name(), fun((map())-> map())) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
-update_metadata(VHostName, Fun) ->
-    update(VHostName, fun(Record) ->
-        Meta = Fun(vhost:get_metadata(Record)),
-        vhost:set_metadata(Record, Meta)
-    end).
-
--spec tag_with(vhost:name(), [atom()]) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
-tag_with(VHostName, Tags) when is_list(Tags) ->
-    update_metadata(VHostName, fun(#{tags := Tags0} = Meta) ->
-        maps:update(tags, lists:usort(Tags0 ++ Tags), Meta)
-    end).
-
--spec untag_from(vhost:name(), [atom()]) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
-untag_from(VHostName, Tags) when is_list(Tags) ->
-    update_metadata(VHostName, fun(#{tags := Tags0} = Meta) ->
-        maps:update(tags, lists:usort(Tags0 -- Tags), Meta)
-    end).
 
 set_limits(VHost, undefined) ->
     vhost:set_limits(VHost, []);
