@@ -1,5 +1,5 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 load("@bazel-erlang//:github.bzl", "github_bazel_erlang_lib")
 load("@bazel-erlang//:hex_archive.bzl", "hex_archive")
 load("@bazel-erlang//:hex_pm.bzl", "hex_pm_bazel_erlang_lib")
@@ -168,10 +168,10 @@ erlang_lib(
         sha256 = "3418e319764b9dff1f469e43cbdffd7fd54ea47cbf765027c557abd146a19fb3",
     )
 
-    github_bazel_erlang_lib(
+    git_repository(
         name = "osiris",
-        org = "rabbitmq",
-        build_file = rabbitmq_workspace + "//:BUILD.osiris",
+        branch = "master",
+        remote = "https://github.com/rabbitmq/osiris.git",
     )
 
     hex_pm_bazel_erlang_lib(
