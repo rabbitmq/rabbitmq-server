@@ -280,6 +280,10 @@ init_per_testcase(Testcase, Config) ->
             {skip, "delete_immediately_by_resource isn't mixed versions compatible"};
         queue_ttl when IsMixed andalso ClusterSize == 3 ->
             {skip, "queue_ttl isn't mixed versions compatible"};
+        start_queue when IsMixed andalso ClusterSize == 5 ->
+            {skip, "start_queue isn't mixed versions compatible"};
+        start_queue_concurrent when IsMixed andalso ClusterSize == 5 ->
+            {skip, "start_queue_concurrent isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
