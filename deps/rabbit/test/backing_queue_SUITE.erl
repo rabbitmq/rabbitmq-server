@@ -525,11 +525,11 @@ bq_queue_index1(_Config) ->
               BytesB = LenB * 10,
               {LenB, BytesB, Qi12} = restart_test_queue(Qi10, QName),
               {0, TwoSegs, Qi13} = ?INDEX:bounds(Qi12),
-              Qi14 = ?INDEX:deliver(SeqIdsB, Qi13),
-              {ReadC, Qi15} = ?INDEX:read(0, SegmentSize, Qi14),
-              ok = verify_read_with_published(true, true, ReadC,
-                                              lists:reverse(SeqIdsMsgIdsB)),
-              Qi16 = ?INDEX:ack(SeqIdsB, Qi15),
+%              Qi14 = ?INDEX:deliver(SeqIdsB, Qi13),
+%              {ReadC, Qi15} = ?INDEX:read(0, SegmentSize, Qi14),
+%              ok = verify_read_with_published(true, true, ReadC,
+%                                              lists:reverse(SeqIdsMsgIdsB)),
+              {_DeletedSegments, Qi16} = ?INDEX:ack(SeqIdsB, Qi13),
               Qi17 = ?INDEX:flush(Qi16),
               %% Everything will have gone now because #pubs == #acks
               {0, 0, Qi18} = ?INDEX:bounds(Qi17),
@@ -541,38 +541,35 @@ bq_queue_index1(_Config) ->
 
     %% These next bits are just to hit the auto deletion of segment files.
     %% First, partials:
-    %% a) partial pub+del+ack, then move to new segment
+    %% a) partial pub+ack, then move to new segment
     with_empty_test_queue(
       fun (Qi0, _QName) ->
               {Qi1, _SeqIdsMsgIdsC} = queue_index_publish(SeqIdsC,
                                                           false, Qi0),
-              Qi2 = ?INDEX:deliver(SeqIdsC, Qi1),
-              Qi3 = ?INDEX:ack(SeqIdsC, Qi2),
+              {_DeletedSegments, Qi3} = ?INDEX:ack(SeqIdsC, Qi1),
               Qi4 = ?INDEX:flush(Qi3),
               {Qi5, _SeqIdsMsgIdsC1} = queue_index_publish([SegmentSize],
                                                            false, Qi4),
               Qi5
       end),
 
-    %% b) partial pub+del, then move to new segment, then ack all in old segment
+    %% b) partial pub, then move to new segment, then ack all in old segment
     with_empty_test_queue(
       fun (Qi0, _QName) ->
               {Qi1, _SeqIdsMsgIdsC2} = queue_index_publish(SeqIdsC,
                                                            false, Qi0),
-              Qi2 = ?INDEX:deliver(SeqIdsC, Qi1),
               {Qi3, _SeqIdsMsgIdsC3} = queue_index_publish([SegmentSize],
-                                                           false, Qi2),
-              Qi4 = ?INDEX:ack(SeqIdsC, Qi3),
+                                                           false, Qi1),
+              {_DeletedSegments, Qi4} = ?INDEX:ack(SeqIdsC, Qi3),
               ?INDEX:flush(Qi4)
       end),
 
-    %% c) just fill up several segments of all pubs, then +dels, then +acks
+    %% c) just fill up several segments of all pubs, then +acks
     with_empty_test_queue(
       fun (Qi0, _QName) ->
               {Qi1, _SeqIdsMsgIdsD} = queue_index_publish(SeqIdsD,
                                                           false, Qi0),
-              Qi2 = ?INDEX:deliver(SeqIdsD, Qi1),
-              Qi3 = ?INDEX:ack(SeqIdsD, Qi2),
+              {_DeletedSegments, Qi3} = ?INDEX:ack(SeqIdsD, Qi1),
               ?INDEX:flush(Qi3)
       end),
 
@@ -635,7 +632,7 @@ bq_queue_index_props1(_Config) ->
               Props = #message_properties{expiry=12345, size = 10},
               Qi1 = ?INDEX:publish(
                       MsgId, 0, memory, Props, true, infinity, Qi0),
-              {[{MsgId, 0, Props, _, _}], Qi2} =
+              {[{MsgId, 0, _, Props, _}], Qi2} =
                   ?INDEX:read(0, 1, Qi1),
               Qi2
       end),
@@ -1393,7 +1390,8 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
           fun (SeqId, {QiN, SeqIdsMsgIdsAcc}) ->
                   MsgId = rabbit_guid:gen(),
                   QiM = ?INDEX:publish(
-                          MsgId, SeqId, memory, #message_properties{size = 10},
+                          MsgId, SeqId, rabbit_msg_store,
+                          #message_properties{size = 10},
                           Persistent, infinity, QiN),
                   ok = rabbit_msg_store:write(MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
@@ -1408,7 +1406,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
 verify_read_with_published(_Delivered, _Persistent, [], _) ->
     ok;
 verify_read_with_published(Delivered, Persistent,
-                           [{_MsgId1, SeqId, _Location, _Props, Persistent, _IgnoreDelivered}|Read],
+                           [{_MsgId1, SeqId, _Location, _Props, Persistent}|Read],
                            [{SeqId, _MsgId2}|Published]) ->
     verify_read_with_published(Delivered, Persistent, Read, Published);
 verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
