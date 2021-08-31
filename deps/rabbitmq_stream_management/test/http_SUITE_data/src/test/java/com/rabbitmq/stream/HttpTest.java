@@ -748,6 +748,7 @@ public class HttpTest {
 
   @ParameterizedTest
   @MethodSource("subscriptionProperties")
+  @SuppressWarnings("unchecked")
   void streamConsumersShouldShowUpAsRegularConsumers(Map<String, String> subscriptionProperties)
       throws Exception {
     Callable<List<Map<String, Object>>> consumersRequest = () -> toMaps(get("/consumers"));
