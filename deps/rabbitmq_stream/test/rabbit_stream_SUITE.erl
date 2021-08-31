@@ -121,8 +121,7 @@ end_per_testcase(_Test, _Config) ->
     ok.
 
 test_global_counters(Config) ->
-    Port = get_stream_port(Config),
-    test_server(gen_tcp, Port),
+    test_server(gen_tcp, Config),
     ?assertEqual(#{
                    publishers => 0,
                    consumers => 0,
@@ -153,14 +152,11 @@ test_global_counters(Config) ->
     ok.
 
 test_stream(Config) ->
-    Port = get_stream_port(Config),
-    test_server(gen_tcp, Port),
+    test_server(gen_tcp, Config),
     ok.
 
 test_stream_tls(Config) ->
-    Port = get_stream_port_tls(Config),
-    application:ensure_all_started(ssl),
-    test_server(ssl, Port),
+    test_server(ssl, Config),
     ok.
 
 test_gc_consumers(Config) ->
@@ -313,7 +309,12 @@ get_node_name(Config) ->
 get_node_name(Config, Node) ->
     rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename).
 
-test_server(Transport, Port) ->
+test_server(Transport, Config) ->
+    Port = case Transport of
+               gen_tcp -> get_stream_port(Config);
+               ssl -> application:ensure_all_started(ssl),
+                      get_stream_port_tls(Config)
+           end,
     {ok, S} =
         Transport:connect("localhost", Port,
                           [{active, false}, {mode, binary}]),
@@ -323,12 +324,16 @@ test_server(Transport, Port) ->
     Stream = <<"stream1">>,
     C3 = test_create_stream(Transport, S, Stream, C2),
     PublisherId = 42,
+    ?assertMatch(#{publishers := 0}, get_global_counters(Config)),
     C4 = test_declare_publisher(Transport, S, PublisherId, Stream, C3),
+    ?assertMatch(#{publishers := 1}, get_global_counters(Config)),
     Body = <<"hello">>,
     C5 = test_publish_confirm(Transport, S, PublisherId, Body, C4),
     C6 = test_publish_confirm(Transport, S, PublisherId, Body, C5),
     SubscriptionId = 42,
+    ?assertMatch(#{consumers := 0}, get_global_counters(Config)),
     C7 = test_subscribe(Transport, S, SubscriptionId, Stream, C6),
+    ?assertMatch(#{consumers := 1}, get_global_counters(Config)),
     C8 = test_deliver(Transport, S, SubscriptionId, 0, Body, C7),
     C9 = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
     C10 = test_delete_stream(Transport, S, Stream, C9),

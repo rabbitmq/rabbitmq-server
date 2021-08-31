@@ -173,7 +173,9 @@
 callback_mode() ->
     [state_functions, state_enter].
 
-terminate(Reason, State, _StatemData) ->
+terminate(Reason, State, StatemData) ->
+    rabbit_networking:unregister_non_amqp_connection(self()),
+    notify_connection_closed(StatemData),
     rabbit_log:debug("~p terminating in state '~s' with reason '~p'", [?MODULE, State, Reason]).
 
 start_link(KeepaliveSup, Transport, Ref, Opts) ->
@@ -656,8 +658,6 @@ open(info,
     case Step of
         closing ->
             close(Transport, S, State),
-            rabbit_networking:unregister_non_amqp_connection(self()),
-            notify_connection_closed(Connection1, State1),
             stop;
         close_sent ->
             rabbit_log_connection:debug("Transitioned to close_sent"),
@@ -697,24 +697,14 @@ open(info,
                            connection = Connection1,
                            connection_state = State2}}
     end;
-open(info, {Closed, Socket}, #statem_data{
-                                connection = Connection,
-                                connection_state = State
-                               })
+open(info, {Closed, Socket}, #statem_data{connection = Connection})
   when Closed =:= tcp_closed; Closed =:= ssl_closed ->
     demonitor_all_streams(Connection),
-    rabbit_networking:unregister_non_amqp_connection(self()),
-    notify_connection_closed(Connection, State),
     rabbit_log_connection:warning("Socket ~w closed [~w]", [Socket, self()]),
     stop;
-open(info, {Error, Socket, Reason}, #statem_data{
-                                       connection = Connection,
-                                       connection_state = State
-                                      })
+open(info, {Error, Socket, Reason}, #statem_data{connection = Connection})
   when Error =:= tcp_error; Error =:= ssl_error ->
     demonitor_all_streams(Connection),
-    rabbit_networking:unregister_non_amqp_connection(self()),
-    notify_connection_closed(Connection, State),
     rabbit_log_connection:error("Socket error ~p [~w] [~w]", [Reason, Socket, self()]),
     stop;
 open(info,
@@ -756,7 +746,7 @@ open(info,
 open(info, heartbeat_send, #statem_data{
                               transport = Transport,
                               connection = #stream_connection{socket = S} = Connection,
-                              connection_state = State }) ->
+                              connection_state = State}) ->
     Frame = rabbit_stream_core:frame(heartbeat),
     case catch send(Transport, S, Frame) of
         ok ->
@@ -764,17 +754,17 @@ open(info, heartbeat_send, #statem_data{
         Unexpected ->
             rabbit_log_connection:info("Heartbeat send error ~p, closing connection",
                                        [Unexpected]),
-            C1 = demonitor_all_streams(Connection),
-            close(Transport, C1, State),
+            _C1 = demonitor_all_streams(Connection),
+            close(Transport, S, State),
             stop
     end;
 open(info, heartbeat_timeout, #statem_data{
                                  transport = Transport,
-                                 connection = Connection,
+                                 connection = #stream_connection{socket = S} = Connection,
                                  connection_state = State }) ->
     rabbit_log_connection:debug("Heartbeat timeout, closing connection"),
-    C1 = demonitor_all_streams(Connection),
-    close(Transport, C1, State),
+    _C1 = demonitor_all_streams(Connection),
+    close(Transport, S, State),
     stop;
 open(info, {infos, From}, #statem_data{
                              connection = #stream_connection{
@@ -813,8 +803,6 @@ open({call, From}, {shutdown, Explanation}, #statem_data{
     rabbit_log_connection:info("Forcing stream connection ~p closing: ~p",
                                [self(), Explanation]),
     demonitor_all_streams(Connection),
-    rabbit_networking:unregister_non_amqp_connection(self()),
-    notify_connection_closed(Connection, State),
     close(Transport, S, State),
     {stop_and_reply, normal, {reply, From, ok}};
 open(cast,
@@ -1013,15 +1001,13 @@ close_sent(enter, _OldState, #statem_data{
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
 close_sent(state_timeout, close, #statem_data{
                                     transport = Transport,
-                                    connection = #stream_connection{socket = Socket} = Connection,
+                                    connection = #stream_connection{socket = Socket},
                                     connection_state = State
                                    }) ->
     rabbit_log_connection:warning(
       "Closing connection because of timeout in state '~s' likely due to lack of client action.",
       [?FUNCTION_NAME]),
     close(Transport, Socket, State),
-    rabbit_networking:unregister_non_amqp_connection(self()),
-    notify_connection_closed(Connection, State),
     stop;
 close_sent(info, {tcp, S, Data}, #statem_data{
                                     transport = Transport,
@@ -1037,8 +1023,6 @@ close_sent(info, {tcp, S, Data}, #statem_data{
     case Step of
         closing_done ->
             close(Transport, S, State1),
-            rabbit_networking:unregister_non_amqp_connection(self()),
-            notify_connection_closed(Connection1, State1),
             stop;
         _ ->
             Transport:setopts(S, [{active, once}]),
@@ -1047,23 +1031,15 @@ close_sent(info, {tcp, S, Data}, #statem_data{
                            connection_state = State1
                           }}
     end;
-close_sent(info, {tcp_closed, S}, #statem_data{
-                                     connection = Connection,
-                                     connection_state = State
-                                    }) ->
-    rabbit_networking:unregister_non_amqp_connection(self()),
-    notify_connection_closed(Connection, State),
+close_sent(info, {tcp_closed, S}, _StatemData) ->
     rabbit_log_connection:debug("Stream protocol connection socket ~w closed [~w]", [S, self()]),
     stop;
 close_sent(info, {tcp_error, S, Reason}, #statem_data{
                                             transport = Transport,
-                                            connection = Connection,
                                             connection_state = State
                                            }) ->
     rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] [~w]", [Reason, S, self()]),
     close(Transport, S, State),
-    rabbit_networking:unregister_non_amqp_connection(self()),
-    notify_connection_closed(Connection, State),
     stop;
 close_sent(info,{resource_alarm, IsThereAlarm},
            StatemData = #statem_data{connection = Connection}) ->
@@ -2290,11 +2266,12 @@ handle_frame_post_auth(Transport,
     rabbit_global_counters:increase_protocol_counter(stream, ?UNKNOWN_FRAME, 1),
     {Connection#stream_connection{connection_step = close_sent}, State}.
 
-notify_connection_closed(#stream_connection{name = Name,
-                                            publishers = Publishers} =
-                             Connection,
-                         #stream_connection_state{consumers = Consumers} =
-                             ConnectionState) ->
+notify_connection_closed(
+  #statem_data{connection = #stream_connection{
+                               name = Name,
+                               publishers = Publishers} = Connection,
+               connection_state = #stream_connection_state{
+                                     consumers = Consumers} = ConnectionState}) ->
     rabbit_core_metrics:connection_closed(self()),
     [rabbit_stream_metrics:consumer_cancelled(self(),
                                               stream_r(S, Connection), SubId)

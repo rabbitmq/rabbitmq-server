@@ -1,6 +1,6 @@
 
 -define(STREAM_COORDINATOR_STARTUP, {stream_coordinator_startup, self()}).
--define(TICK_TIMEOUT, 1000).
+-define(TICK_TIMEOUT, 30000).
 -define(RESTART_TIMEOUT, 1000).
 -define(PHASE_RETRY_TIMEOUT, 10000).
 -define(CMD_TIMEOUT, 30000).
