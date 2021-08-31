@@ -1443,29 +1443,36 @@ replica_recovery(Config) ->
     publish_confirm(Ch1, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
     amqp_channel:close(Ch1),
 
-    [begin
-         [DownNode | _] = PNodes,
-         rabbit_control_helper:command(stop_app, DownNode),
-         rabbit_control_helper:command(start_app, DownNode),
-         timer:sleep(6000),
-         Ch2 = rabbit_ct_client_helpers:open_channel(Config, DownNode),
-         qos(Ch2, 10, false),
-         subscribe(Ch2, Q, false, 0),
-         receive_batch(Ch2, 0, 99),
-         amqp_channel:close(Ch2)
-     end || PNodes <- permute(Nodes)],
+    CheckReplicaRecovered =
+        fun(DownNode) ->
+                rabbit_ct_helpers:await_condition(
+                  fun () ->
+                          timer:sleep(1000),
+                          ct:pal("Wait for replica to recover..."),
+                          try
+                              {Conn, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, DownNode),
+                              qos(Ch2, 10, false),
+                              subscribe(Ch2, Q, false, 0),
+                              receive_batch(Ch2, 0, 99),
+                              amqp_connection:close(Conn),
+                              true
+                          catch _:_ ->
+                              false
+                          end
+                  end, 30000)
+        end,
 
     [begin
-         [DownNode | _] = PNodes,
+         rabbit_control_helper:command(stop_app, DownNode),
+         rabbit_control_helper:command(start_app, DownNode),
+         CheckReplicaRecovered(DownNode)
+     end || [DownNode | _] <- permute(Nodes)],
+
+    [begin
          ok = rabbit_ct_broker_helpers:stop_node(Config, DownNode),
          ok = rabbit_ct_broker_helpers:start_node(Config, DownNode),
-         timer:sleep(6000),
-         Ch2 = rabbit_ct_client_helpers:open_channel(Config, DownNode),
-         qos(Ch2, 10, false),
-         subscribe(Ch2, Q, false, 0),
-         receive_batch(Ch2, 0, 99),
-         amqp_channel:close(Ch2)
-     end || PNodes <- permute(Nodes)],
+         CheckReplicaRecovered(DownNode)
+     end || [DownNode | _] <- permute(Nodes)],
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 leader_failover(Config) ->
