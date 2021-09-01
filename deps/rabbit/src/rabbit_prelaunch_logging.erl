@@ -1094,7 +1094,7 @@ apply_log_levels_from_env(LogConfig, #{log_levels := LogLevels})
     maps:fold(
       fun
           (_, Value, LC) when is_boolean(Value) ->
-              %% Ignore the '+color' and '+json' flags.
+              %% Ignore flags such as '+color' and '+json'.
               LC;
           (global, Level, #{global := GlobalConfig} = LC) ->
               GlobalConfig1 = GlobalConfig#{level => Level},
