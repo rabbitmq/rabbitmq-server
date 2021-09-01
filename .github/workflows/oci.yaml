@@ -58,7 +58,7 @@ jobs:
             # https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
             # Which is the latest Elixir release?
             # https://github.com/elixir-lang/elixir/tags
-            elixir: '1.12.2'
+            elixir: '1.13.0'
             image_tag_suffix: '-otp-max'
     steps:
       - name: Checkout
