@@ -1,5 +1,14 @@
 name: Test
-on: push
+on:
+  push:
+    paths:
+      - 'deps/**'
+      - 'packaging/**'
+      - 'scripts/**'
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
+      - .github/workflows/test.yaml
 jobs:
   test:
     name: Test

@@ -5,6 +5,14 @@ on:
       - master
       - v3.9.x
       - v3.8.x
+    paths:
+      - 'deps/**'
+      - 'packaging/**'
+      - 'scripts/**'
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
+      - .github/workflows/test-mixed-versions.yaml
 jobs:
   test-mixed-versions:
     name: Test (Mixed Version Cluster)
