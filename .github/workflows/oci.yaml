@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - 'deps/**'
-      - 'escript/**'
       - 'packaging/**'
       - 'scripts/**'
       - Makefile
