@@ -370,7 +370,7 @@ StoreOffset => Key Version Reference Stream Offset
   Key => uint16 // 10
   Version => uint16
   Reference => string // max 256 characters
-  SubscriptionId => uint8
+  Stream => string // the name of the stream
   Offset => uint64
 ```
 
