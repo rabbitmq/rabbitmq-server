@@ -12,6 +12,11 @@ on:
       - Makefile
       - plugins.mk
       - rabbitmq-components.mk
+      - .bazelrc
+      - .bazelversion
+      - BUILD.*
+      - '*.bzl'
+      - '*.bazel'
       - .github/workflows/test-mixed-versions.yaml
 jobs:
   test-mixed-versions:
