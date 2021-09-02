@@ -31,9 +31,9 @@ rules_pkg_dependencies()
 
 http_archive(
     name = "bazel-erlang",
-    sha256 = "422a9222522216f59a01703a13f578c601d6bddf5617bee8da3c43e3b299fc4e",
-    strip_prefix = "bazel-erlang-1.1.0",
-    urls = ["https://github.com/rabbitmq/bazel-erlang/archive/refs/tags/1.1.0.zip"],
+    sha256 = "03b75fae7e3d3e80644ba1b0f1bf43b9da3c7c36435ea7baba0d0f87b3c05482",
+    strip_prefix = "bazel-erlang-1.2.0",
+    urls = ["https://github.com/rabbitmq/bazel-erlang/archive/refs/tags/1.2.0.zip"],
 )
 
 load("@bazel-erlang//:bazel_erlang.bzl", "bazel_erlang_deps")
