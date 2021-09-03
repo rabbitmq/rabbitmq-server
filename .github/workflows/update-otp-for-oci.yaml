@@ -33,11 +33,11 @@ jobs:
     - name: MODIFY VERSION FILE
       run: |
         echo "Updating packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml with:"
-        echo "  otp -> ${VERSION}"
-        echo "  otp_sha256 -> ${SHA}"
+        echo "  otp -> ${{ steps.fetch-version.outputs.VERSION }}"
+        echo "  otp_sha256 -> ${{ steps.fetch-version.outputs.SHA }}"
 
-        sed -i "s/otp: .*/otp: '${VERSION}'/" packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml
-        sed -i "s/otp_sha256: .*/otp_sha256: ${SHA}/" packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml
+        sed -i "s/otp: .*/otp: '${{ steps.fetch-version.outputs.VERSION }}'/" packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml
+        sed -i "s/otp_sha256: .*/otp_sha256: ${{ steps.fetch-version.outputs.SHA }}/" packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml
         git diff
     #! - name: CREATE PULL REQUEST
     #!   uses: peter-evans/create-pull-request@v3
