@@ -19,7 +19,7 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2.3.4
-    - name: DETERMINE LATEST PATCH and SHA
+    - name: DETERMINE LATEST PATCH & SHA
       id: fetch-version
       run: |
         TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags \
@@ -36,8 +36,9 @@ jobs:
         echo "  otp -> ${{ steps.fetch-version.outputs.VERSION }}"
         echo "  otp_sha256 -> ${{ steps.fetch-version.outputs.SHA }}"
 
-        sed -i "s/otp: .*/otp: '${{ steps.fetch-version.outputs.VERSION }}'/" packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml
-        sed -i "s/otp_sha256: .*/otp_sha256: ${{ steps.fetch-version.outputs.SHA }}/" packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml
+        FILE=packaging/docker-image/otp-versions/${{ matrix.image_tag_suffix }}.yaml
+        sed -i "s/otp: .*/otp: '${{ steps.fetch-version.outputs.VERSION }}'/" $FILE
+        sed -i "s/otp_sha256: .*/otp_sha256: ${{ steps.fetch-version.outputs.SHA }}/" $FILE
         git diff
     #! - name: CREATE PULL REQUEST
     #!   uses: peter-evans/create-pull-request@v3
