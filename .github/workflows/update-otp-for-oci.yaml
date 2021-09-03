@@ -11,10 +11,8 @@ jobs:
       max-parallel: 1
       matrix:
         erlang_version:
-        #! - "23.3"
         - "24.0"
         include:
-        #! - erlang_version: "23.3"
         - erlang_version: "24.0"
           image_tag_suffix: 'otp-max'
     timeout-minutes: 10
@@ -24,11 +22,13 @@ jobs:
     - name: DETERMINE LATEST PATCH and SHA
       id: fetch-version
       run: |
-        FULL_VERSION=$(curl -s GET https://api.github.com/repos/erlang/otp/tags \
+        TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags \
           | jq -r 'map(select(.name | contains("OTP-${{ matrix.erlang_version }}"))) | first | .name')
-        VERSION=${FULL_VERSION#OTP-}
-        SHA=$(make -C packaging/docker-image find-otp-sha256 OTP_VERSION_MATCH=${VERSION})
-        echo "::set-output name=VERSION::${VERSION}"
+
+        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "https://github.com/erlang/otp/archive/${TAG_NAME}.tar.gz" && \
+        SHA=$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')
+
+        echo "::set-output name=VERSION::${TAG_NAME#OTP-}"
         echo "::set-output name=SHA::${SHA}"
     - name: MODIFY VERSION FILE
       run: |
