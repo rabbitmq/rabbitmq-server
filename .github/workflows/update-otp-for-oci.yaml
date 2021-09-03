@@ -1,0 +1,43 @@
+name: Update OTP Versions for OCI Workflow
+on:
+  schedule:
+  - cron: '0 3 * * *'
+  workflow_dispatch:
+jobs:
+  update-rbe-images:
+    name: Update OTP Versions
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        erlang_version:
+        #! - "23.3"
+        - "24.0"
+        include:
+        #! - erlang_version: "23.3"
+        - erlang_version: "24.0"
+          image_tag_suffix: 'otp-max'
+    timeout-minutes: 10
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.3.4
+    - name: DETERMINE LATEST PATCH and SHA
+      id: fetch-version
+      run: |
+        FULL_VERSION=$(curl -s GET https://api.github.com/repos/erlang/otp/tags \
+          | jq -r 'map(select(.name | contains("OTP-${{ matrix.erlang_version }}"))) | first | .name')
+        VERSION=${FULL_VERSION#OTP-}
+        SHA=$(make -C packaging/docker-image find-otp-sha256 OTP_VERSION_MATCH=${VERSION})
+        echo "::set-output name=VERSION::${VERSION}"
+        echo "::set-output name=SHA::${SHA}"
+    - name: MODIFY VERSION FILE
+      run: |
+        sed -i "/otp: .*/otp: '${VERSION}'/" packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml
+        sed -i "/otp_sha256: .*/otp_sha256: ${SHA}/" packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml
+        git diff
+    #! - name: CREATE PULL REQUEST
+    #!   uses: peter-evans/create-pull-request@v3
+    #!   with:
+    #!     title: Adopt latest patch of otp ${{ matrix.erlang_version }} for OCI workflow
+    #!     branch: bump-otp-for-oci
+    #!     delete-branch: true
