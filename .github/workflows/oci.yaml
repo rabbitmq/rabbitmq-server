@@ -34,69 +34,80 @@ jobs:
       matrix:
           # Build image for every supported Erlang major version.
           # Source of truth for OTP versions (min & max): https://www.rabbitmq.com/which-erlang.html
-          otp:
-            - '23.2'
-            # 1/3: Which is the latest OTP release for this major?
-            # https://github.com/erlang/otp/tags
-            - '24.0.5'
-          include:
-          - otp: '23.2'
-            # make -C packaging/docker-image find-otp-sha256 OTP_VERSION_MATCH=23.2
-            otp_sha256: 79f2233a960cc427607d52a7b7e9e5b08afba96a4d87ced4efb64e902b44160c
-            # Which is the min supported Elixir?
-            # https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
-            elixir: '1.10.4'
-            image_tag_suffix: '-otp-min'
-            # 2/3: Which is the latest OTP release for this major?
-            # https://github.com/erlang/otp/tags
-          - otp: '24.0.5'
-            # make -C packaging/docker-image find-otp-sha256
-            otp_sha256: dd189cf94bf86c610a66f5d9f1a49b8d95a7ce1a7534d216e97e8fade271e624
-            # 3/3: REMEMBER to update OTP version in rabbitmq_peer_discovery_aws workflow
-            #
-            # Which is the max supported Elixir?
-            # https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
-            # Which is the latest Elixir release?
-            # https://github.com/elixir-lang/elixir/tags
-            elixir: '1.12.2'
-            image_tag_suffix: '-otp-max'
-    env:
-      IMAGE_TAG_1: ${{ github.sha }}${{ matrix.image_tag_suffix }}
+          image_tag_suffix:
+            - otp-min
+            - otp-max
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v2.3.4
+
+      - name: Load version info
+        id: load-info
+        run: |
+          FILE=packaging/docker-image/otp-versions/${{ matrix.image_tag_suffix }}.yaml
+          echo "::set-output name=otp::$(yq eval '.otp' $FILE)"
+          echo "::set-output name=otp_sha256::$(yq eval '.otp_sha256' $FILE)"
+          echo "::set-output name=elixir::$(yq eval '.elixir' $FILE)"
 
       - name: Set up Erlang & Elixir
-        uses: erlef/setup-beam@v1.7
+        uses: erlef/setup-beam@v1.9
         with:
-          otp-version: ${{ matrix.otp }}
-          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ steps.load-info.outputs.otp }}
+          elixir-version: ${{ steps.load-info.outputs.elixir }}
 
       - name: Build generic unix package
         run: |
-          make package-generic-unix PROJECT_VERSION=${GITHUB_SHA}
+          make package-generic-unix PROJECT_VERSION=${{ github.sha }}
 
-      - name: Build container image
-        working-directory: packaging/docker-image
-        env:
-          OTP_VERSION: ${{ matrix.otp }}
-          OTP_SHA256: ${{ matrix.otp_sha256 }}
-        run: |
-          make dist SKIP_PGP_VERIFY=true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-
 
       - name: Login to DockerHub
-        working-directory: packaging/docker-image
-        run: |
-          docker login \
-            --username '${{ secrets.DOCKERHUB_USERNAME }}' \
-            --password '${{ secrets.DOCKERHUB_PASSWORD }}'
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      # Push the same image with two different tags:
-      # 1. <git_commit_sha>-otp-min[-max]
-      # 2. <branch_name>-otp-min[-max]
-      - name: Push container image to DockerHub
+      - name: Expand generic-unix-package
         working-directory: packaging/docker-image
-        env:
-          IMAGE_TAG_SUFFIX: ${{ matrix.image_tag_suffix }}
         run: |
-          make push IMAGE_TAG_2=${GITHUB_REF##*/}${IMAGE_TAG_SUFFIX}
+          xzcat ${GENERIC_UNIX_ARCHIVE} | tar xvf -
+
+      - name: Compute image tags
+        id: compute-tags
+        run: |
+          echo "::set-output name=TAG_1::${{ github.sha }}-${{ matrix.image_tag_suffix }}"
+          echo "::set-output name=TAG_2::${GITHUB_REF##*/}-${{ matrix.image_tag_suffix }}"
+
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: packaging/docker-image
+          push: true
+          tags: |
+            pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_1 }}
+            pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_2 }}
+          build-args: |
+            SKIP_PGP_VERIFY=true
+            PGP_KEYSERVER=pgpkeys.eu
+            OTP_VERSION=${{ steps.load-info.outputs.otp }}
+            OTP_SHA256=${{ steps.load-info.outputs.otp_sha256 }}
+            RABBITMQ_BUILD=rabbitmq_server-${{ github.sha }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+
+      # Temp fix
+      # https://github.com/docker/build-push-action/issues/252
+      # https://github.com/moby/buildkit/issues/1896
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache

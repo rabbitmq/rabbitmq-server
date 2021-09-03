@@ -7,20 +7,28 @@ on:
 jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        erlang_version:
-        - "24"
+        image_tag_suffix:
+        - otp-max
+        include:
+        - image_tag_suffix: otp-max
+          erlang_version: "24"
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2
+      uses: actions/checkout@v2.3.4
+    - name: LOAD INFO ABOUT OTP VERSIONS USED IN THE OCI PIPELINE
+      id: load-info
+      run: |
+        FILE=packaging/docker-image/otp-versions/${{ matrix.image_tag_suffix }}.yaml
+        echo "::set-output name=otp::$(yq eval '.otp' $FILE)"
     - name: WAIT FOR OCI IMAGE WORKFLOW
       uses: lewagon/wait-on-check-action@v0.2
       with:
         ref: ${{ github.ref }}
-        check-name: build-publish-dev (24.0.5)
+        check-name: build-publish-dev (${{ steps.load-info.outputs.otp }})
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
     - name: CONFIGURE BAZEL
