@@ -39,10 +39,9 @@ jobs:
         FILE=packaging/docker-image/otp-versions/${{ matrix.image_tag_suffix }}.yaml
         sed -i "s/otp: .*/otp: '${{ steps.fetch-version.outputs.VERSION }}'/" $FILE
         sed -i "s/otp_sha256: .*/otp_sha256: ${{ steps.fetch-version.outputs.SHA }}/" $FILE
-        git diff
-    #! - name: CREATE PULL REQUEST
-    #!   uses: peter-evans/create-pull-request@v3
-    #!   with:
-    #!     title: Adopt latest patch of otp ${{ matrix.erlang_version }} for OCI workflow
-    #!     branch: bump-otp-for-oci
-    #!     delete-branch: true
+    - name: CREATE PULL REQUEST
+      uses: peter-evans/create-pull-request@v3
+      with:
+        title: Adopt latest patch of otp ${{ matrix.erlang_version }} for OCI workflow
+        branch: bump-otp-for-oci
+        delete-branch: true

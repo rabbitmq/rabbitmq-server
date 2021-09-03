@@ -1,8 +1,6 @@
 otp: '24.0.5'
-# make -C packaging/docker-image find-otp-sha256
+# make -C packaging/docker-image find-otp-sha256 OTP_VERSION_MATCH=24.0
 otp_sha256: dd189cf94bf86c610a66f5d9f1a49b8d95a7ce1a7534d216e97e8fade271e624
-# 3/3: REMEMBER to update OTP version in rabbitmq_peer_discovery_aws workflow
-#
 # Which is the max supported Elixir?
 # https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
 # Which is the latest Elixir release?
