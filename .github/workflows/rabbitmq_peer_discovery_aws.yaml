@@ -4,6 +4,7 @@ on:
     paths:
       - 'deps/rabbitmq_peer_discovery_aws/**'
       - .github/workflows/rabbitmq_peer_discovery_aws.yaml
+  workflow_dispatch:
 jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
