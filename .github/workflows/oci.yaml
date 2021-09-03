@@ -45,9 +45,9 @@ jobs:
         id: load-info
         run: |
           FILE=packaging/docker-image/otp-versions/${{ matrix.image_tag_suffix }}.yaml
-          echo "::set-output name=otp::$(cat $FILE | yq -r .otp)"
-          echo "::set-output name=otp_sha256::$(cat $FILE | yq -r .otp_sha256)"
-          echo "::set-output name=elixir::$(cat $FILE | yq -r .elixir)"
+          echo "::set-output name=otp::$(yq eval '.otp' $FILE)"
+          echo "::set-output name=otp_sha256::$(yq eval '.otp_sha256' $FILE)"
+          echo "::set-output name=elixir::$(yq eval '.elixir' $FILE)"
 
       - name: Set up Erlang & Elixir
         uses: erlef/setup-beam@v1.9
