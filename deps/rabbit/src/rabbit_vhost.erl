@@ -440,20 +440,20 @@ update_tags(VHostName, Tags, ActingUser) ->
         R = rabbit_misc:execute_mnesia_transaction(fun() ->
             update_tags(VHostName, ConvertedTags)
         end),
-        rabbit_log:info("Successfully set tags for virtual host '~s' to ~p", [VHostName, ConvertedTags]),
+        _ = rabbit_log:info("Successfully set tags for virtual host '~s' to ~p", [VHostName, ConvertedTags]),
         rabbit_event:notify(vhost_tags_set, [{name, VHostName},
                                              {tags, ConvertedTags},
                                              {user_who_performed_action, ActingUser}]),
         R
     catch
         throw:{error, {no_such_vhost, _}} = Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': the virtual host does not exist", [VHostName]),
+            _ = rabbit_log:warning("Failed to set tags for virtual host '~s': the virtual host does not exist", [VHostName]),
             throw(Error);
         throw:Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': ~p", [VHostName, Error]),
+            _ = rabbit_log:warning("Failed to set tags for virtual host '~s': ~p", [VHostName, Error]),
             throw(Error);
         exit:Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~s': ~p", [VHostName, Error]),
+            _ = rabbit_log:warning("Failed to set tags for virtual host '~s': ~p", [VHostName, Error]),
             exit(Error)
     end.
 
