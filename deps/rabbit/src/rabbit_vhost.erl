@@ -129,6 +129,9 @@ parse_tags(Val) when is_list(Val) ->
       Bin when is_binary(Bin) ->
         %% this is a list of binaries
         [trim_tag(Tag) || Tag <- Val];
+      Atom when is_atom(Atom) ->
+        %% this is a list of atoms
+        [trim_tag(Tag) || Tag <- Val];
       Int when is_integer(Int) ->
         %% this is a string/charlist
         [trim_tag(Tag) || Tag <- re:split(Val, ",", [{return, list}])]
