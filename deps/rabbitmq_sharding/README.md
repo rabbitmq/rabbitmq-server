@@ -36,6 +36,15 @@ Message distribution between shards (partitioning) is achieved
 with a custom exchange type that distributes messages by applying
 a hashing function to the routing key.
 
+## Sharding and Queue Replication
+
+Sharding performed by this plugin makes sense for **non-replicated classic queues** only.
+
+Combining sharding with a replicated queue type, e.g. [quorum queues]() or
+(**deprecated**) mirrored classic queues will lose most or all of the benefits offered
+by this plugin.
+
+Do not use this plugin with quorum queues. Avoid classic mirrored queues in general.
 
 ## Messages Distribution Between Shards (Partitioning)
 
