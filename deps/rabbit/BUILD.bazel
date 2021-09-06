@@ -412,7 +412,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "dynamic_qq_SUITE",
-        size = "medium",
+        size = "large",
         additional_beam = [
             ":quorum_queue_utils",
         ],
