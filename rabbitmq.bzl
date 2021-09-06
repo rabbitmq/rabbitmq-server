@@ -24,7 +24,7 @@ _LAGER_EXTRA_SINKS = [
     "rabbit_log_upgrade",
 ]
 
-RABBITMQ_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
+RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
     "+{parse_transform,lager_transform}",
     "+{lager_extra_sinks,[" + ",".join(_LAGER_EXTRA_SINKS) + "]}",
 ]
