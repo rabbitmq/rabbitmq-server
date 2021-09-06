@@ -28,12 +28,14 @@ RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
     "+{parse_transform,lager_transform}",
     "+{lager_extra_sinks,[" + ",".join(_LAGER_EXTRA_SINKS) + "]}",
 ]
+RABBITMQ_ERLC_OPTS.remove("+deterministic")
 
 RABBITMQ_TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
     "+{parse_transform,lager_transform}",
     "+{lager_extra_sinks,[" + ",".join(_LAGER_EXTRA_SINKS) + "]}",
     "+nowarn_export_all",
 ]
+RABBITMQ_TEST_ERLC_OPTS.remove("+deterministic")
 
 RABBITMQ_DIALYZER_OPTS = [
     "-Werror_handling",
