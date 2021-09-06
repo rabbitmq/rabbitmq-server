@@ -279,13 +279,13 @@ error_frame(Condition, Fmt, Args) ->
 
 handle_exception(State = #v1{connection_state = closed}, Channel,
                  #'v1_0.error'{description = {utf8, Desc}}) ->
-    rabbit_log_connection:error("AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
+    _ = rabbit_log_connection:error("AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
         [self(), closed, Channel, Desc]),
     State;
 handle_exception(State = #v1{connection_state = CS}, Channel,
                  ErrorFrame = #'v1_0.error'{description = {utf8, Desc}})
   when ?IS_RUNNING(State) orelse CS =:= closing ->
-    rabbit_log_connection:error("AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
+    _ = rabbit_log_connection:error("AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
         [self(), CS, Channel, Desc]),
     %% TODO: session errors shouldn't force the connection to close
     State1 = close_connection(State),
@@ -421,8 +421,8 @@ handle_1_0_connection_frame(#'v1_0.open'{ max_frame_size = ClientFrameMax,
                     undefined -> undefined;
                     {utf8, Val} -> Val
                   end,
-    rabbit_log:debug("AMQP 1.0 connection.open frame: hostname = ~s, extracted vhost = ~s, idle_timeout = ~p" ,
-                    [HostnameVal, vhost(Hostname), HeartbeatSec * 1000]),
+    _ = rabbit_log:debug("AMQP 1.0 connection.open frame: hostname = ~s, extracted vhost = ~s, idle_timeout = ~p" ,
+                         [HostnameVal, vhost(Hostname), HeartbeatSec * 1000]),
     %% TODO enforce channel_max
     ok = send_on_channel0(
            Sock,
@@ -715,7 +715,7 @@ send_to_new_1_0_session(Channel, Frame, State) ->
             put({ch_fr_pid, ChFrPid}, {channel, Channel}),
             ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame);
         {error, {not_allowed, _}} ->
-            rabbit_log:error("AMQP 1.0: user '~s' is not allowed to access virtual host '~s'",
+            _ = rabbit_log:error("AMQP 1.0: user '~s' is not allowed to access virtual host '~s'",
                 [User#user.username, vhost(Hostname)]),
             %% Let's skip the supervisor trace, this is an expected error
             throw({error, {not_allowed, User#user.username}});

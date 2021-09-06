@@ -57,13 +57,13 @@ init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
                                 session            = rabbit_amqp1_0_session:init(Channel)
                                }};
                 {error, Reason} ->
-                    rabbit_log:warning("Closing session for connection ~p:~n~p~n",
-                                       [ReaderPid, Reason]),
+                    _ = rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+                                           [ReaderPid, Reason]),
                     {stop, Reason}
             end;
         {error, Reason} ->
-            rabbit_log:warning("Closing session for connection ~p:~n~p~n",
-                               [ReaderPid, Reason]),
+            _ = rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+                                   [ReaderPid, Reason]),
             {stop, Reason}
     end.
 
@@ -94,8 +94,8 @@ handle_info({#'basic.deliver'{ consumer_tag = ConsumerTag,
     case get({out, Handle}) of
         undefined ->
             %% TODO handle missing link -- why does the queue think it's there?
-            rabbit_log:warning("Delivery to non-existent consumer ~p",
-                               [ConsumerTag]),
+            _ = rabbit_log:warning("Delivery to non-existent consumer ~p",
+                                   [ConsumerTag]),
             {noreply, State};
         Link ->
             {ok, Frames, Session1} =
@@ -158,8 +158,8 @@ handle_info({'DOWN', _MRef, process, Ch, Reason},
                                              io_lib:format("~w", [Reason])))}}
     end,
     End = #'v1_0.end'{ error = Error },
-    rabbit_log:warning("Closing session for connection ~p:~n~p~n",
-                       [ReaderPid, Reason]),
+    _ = rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+                           [ReaderPid, Reason]),
     ok = rabbit_amqp1_0_writer:send_command_sync(Sock, End),
     {stop, normal, State};
 handle_info({'DOWN', _MRef, process, _QPid, _Reason}, State) ->
@@ -186,8 +186,8 @@ handle_cast({frame, Frame, FlowPid},
     catch exit:Reason = #'v1_0.error'{} ->
             %% TODO shut down nicely like rabbit_channel
             End = #'v1_0.end'{ error = Reason },
-            rabbit_log:warning("Closing session for connection ~p:~n~p~n",
-                               [ReaderPid, Reason]),
+            _ = rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+                                   [ReaderPid, Reason]),
             ok = rabbit_amqp1_0_writer:send_command_sync(Sock, End),
             {stop, normal, State};
           exit:normal ->
@@ -320,7 +320,7 @@ handle_control(Flow = #'v1_0.flow'{},
                 undefined ->
                     case get({out, Handle}) of
                         undefined ->
-                            rabbit_log:warning("Flow for unknown link handle ~p", [Flow]),
+                            _ = rabbit_log:warning("Flow for unknown link handle ~p", [Flow]),
                             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
                                            "Unattached handle: ~p", [Handle]);
                         Out ->
