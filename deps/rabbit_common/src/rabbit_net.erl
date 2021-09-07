@@ -112,7 +112,7 @@ proxy_ssl_info(Sock, {rabbit_proxy_socket, _, ProxyInfo}) ->
                     end,
             CipherSuite = case ssl:str_to_suite(binary_to_list(Cipher)) of
                               #{} = CS -> CS;
-                              _ -> ssl_info(Sock)
+                              _ -> nossl
                           end,
             case {Proto, CipherSuite} of
                 {nossl, _} -> ssl_info(Sock);
