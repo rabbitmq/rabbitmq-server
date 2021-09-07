@@ -7,7 +7,6 @@ on:
       - v3.8.x
     paths:
       - 'deps/**'
-      - 'packaging/**'
       - 'scripts/**'
       - Makefile
       - plugins.mk
