@@ -1,12 +1,24 @@
+load("@rules_pkg//:pkg.bzl", "pkg_zip")
 load("@//:rabbitmq_package_generic_unix.bzl", "rabbitmq_package_generic_unix")
 load("@//:rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load("@//:rabbitmqctl.bzl", "rabbitmqctl")
+
+# The 3.7 package has a slightly different layout, and rabbit.ez
+# need be created for compatibility
+pkg_zip(
+    name = "rabbit",
+    package_dir = "rabbit/ebin",
+    srcs = glob(["ebin/*"]),
+    package_file_name = "plugins/rabbit.ez",
+    visibility = ["//visibility:public"],
+)
 
 rabbitmq_package_generic_unix(
     name = "broker-home",
     sbin = glob(["sbin/*"]),
     escript = glob(["escript/*"]),
     plugins = [
+        "//:rabbit",
         "//plugins:standard_plugins",
         "//plugins:inet_tcp_proxy_ez",
     ],
