@@ -42,7 +42,14 @@ snippet_id(L) when is_list(L) ->
 
 test_snippet(Config, Snippet, Expected, _Plugins) ->
     {ConfFile, AdvancedFile} = write_snippet(Config, Snippet),
-    Generated = generate_config(ConfFile, AdvancedFile),
+    %% We ignore the rabbit -> log portion of the config on v3.9+, where the lager
+    %% dependency has been dropped
+    Generated = case code:which(lager) of
+                    non_existing ->
+                        without_rabbit_log(generate_config(ConfFile, AdvancedFile));
+                    _ ->
+                        generate_config(ConfFile, AdvancedFile)
+                end,
     Gen = deepsort(Generated),
     Exp = deepsort(Expected),
     case Exp of
@@ -65,9 +72,10 @@ write_snippet(Config, {Name, Conf, Advanced}) ->
 
 generate_config(ConfFile, AdvancedFile) ->
     Context = rabbit_env:get_context(),
-    ErlangConfig =
     rabbit_prelaunch_conf:generate_config_from_cuttlefish_files(
-      Context, [ConfFile], AdvancedFile),
+      Context, [ConfFile], AdvancedFile).
+
+without_rabbit_log(ErlangConfig) ->
     case proplists:get_value(rabbit, ErlangConfig) of
         undefined ->
             ErlangConfig;
