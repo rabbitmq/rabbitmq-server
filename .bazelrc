@@ -1,4 +1,5 @@
 build --incompatible_strict_action_env
+build --local_test_jobs=1
 
 build:buildbuddy --bes_results_url=https://app.buildbuddy.io/invocation/
 build:buildbuddy --bes_backend=grpcs://cloud.buildbuddy.io
