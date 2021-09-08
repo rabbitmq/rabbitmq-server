@@ -1,5 +1,6 @@
 load("@//:rabbitmq_package_generic_unix.bzl", "rabbitmq_package_generic_unix")
-load("@//:rabbitmq_run.bzl", "rabbitmq_run")
+load("@//:rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
+load("@//:rabbitmqctl.bzl", "rabbitmqctl")
 
 rabbitmq_package_generic_unix(
     name = "broker-home",
@@ -15,4 +16,26 @@ rabbitmq_run(
     name = "rabbitmq-run",
     home = ":broker-home",
     visibility = ["//visibility:public"],
+)
+
+rabbitmq_run_command(
+    name = "broker",
+    rabbitmq_run = ":rabbitmq-run",
+    subcommand = "run-broker",
+)
+
+rabbitmqctl(
+    name = "rabbitmqctl",
+    home = ":broker-home",
+    # visibility = ["//visibility:public"],
+)
+
+rabbitmqctl(
+    name = "rabbitmq-diagnostics",
+    home = ":broker-home",
+)
+
+rabbitmqctl(
+    name = "rabbitmq-plugins",
+    home = ":broker-home",
 )
