@@ -147,5 +147,7 @@ def _dirname(p):
     return p.rpartition("/")[0]
 
 def rabbitmq_home_short_path(rabbitmq_home):
-    info = rabbitmq_home[RabbitmqHomeInfo]
-    return _dirname(_dirname(info.sbin[0].short_path))
+    short_path = rabbitmq_home[RabbitmqHomeInfo].sbin[0].short_path
+    if rabbitmq_home.label.workspace_root != "":
+        short_path = path_join(rabbitmq_home.label.workspace_root, short_path)
+    return _dirname(_dirname(short_path))
