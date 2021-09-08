@@ -111,6 +111,7 @@ suites = [
         PACKAGE,
         name = "cluster_SUITE",
         size = "large",
+        flaky = True,
         runtime_deps = [
             "@emqttc//:bazel_erlang_lib",
         ],
