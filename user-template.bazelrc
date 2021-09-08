@@ -7,9 +7,6 @@ build --//:elixir_home=/Users/rabbitmq/.kiex/elixirs/elixir-1.12.0/lib/elixir
 # adding "--spawn_strategy=local" to the invocation is a workaround
 build --spawn_strategy=local
 
-# run one test at a time on the local machine
-build --local_test_jobs=1
-
 # don't re-run flakes automatically on the local machine
 build --flaky_test_attempts=1
 
