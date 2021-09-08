@@ -1,26 +1,18 @@
 load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
 load("@bazel-erlang//:bazel_erlang_lib.bzl", "path_join")
 load("@bazel-erlang//:ct.bzl", "sanitize_sname")
-load(":rabbitmq_home.bzl", "RabbitmqHomeInfo")
-
-def _dirname(p):
-    return p.rpartition("/")[0]
-
-def _rabbitmq_home_info_root_short_path(rabbitmq_home):
-    return _dirname(_dirname(rabbitmq_home.sbin[0].short_path))
+load(":rabbitmq_home.bzl", "RabbitmqHomeInfo", "rabbitmq_home_short_path")
 
 def _impl(ctx):
-    rabbitmq_home = ctx.attr.home[RabbitmqHomeInfo]
+    rabbitmq_home_path = rabbitmq_home_short_path(ctx.attr.home)
 
-    root = _rabbitmq_home_info_root_short_path(rabbitmq_home)
-
-    erl_libs = [path_join(root, "plugins")]
+    erl_libs = [path_join(rabbitmq_home_path, "plugins")]
 
     ctx.actions.expand_template(
         template = ctx.file._template,
         output = ctx.outputs.executable,
         substitutions = {
-            "{RABBITMQ_HOME}": root,
+            "{RABBITMQ_HOME}": rabbitmq_home_path,
             "{ERL_LIBS}": ":".join(erl_libs),
             "{ERLANG_HOME}": ctx.attr._erlang_home[ErlangHomeProvider].path,
             "{SNAME}": sanitize_sname("sbb-" + ctx.attr.name),
