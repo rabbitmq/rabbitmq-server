@@ -142,3 +142,10 @@ rabbitmq_home = rule(
         "plugins": attr.label_list(),
     },
 )
+
+def _dirname(p):
+    return p.rpartition("/")[0]
+
+def rabbitmq_home_short_path(rabbitmq_home):
+    info = rabbitmq_home[RabbitmqHomeInfo]
+    return _dirname(_dirname(info.sbin[0].short_path))
