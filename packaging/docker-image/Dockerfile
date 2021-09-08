@@ -286,7 +286,7 @@ RUN set -eux; \
 	fi; \
 	[ -s /usr/local/bin/rabbitmqadmin ]; \
 	chmod +x /usr/local/bin/rabbitmqadmin; \
-	apt-get update; apt-get install -y --no-install-recommends python3; rm -rf /var/lib/apt/lists/*; \
+	apt-get update; apt-get install -y --no-install-recommends python3 dstat sysstat htop nmon tmux neovim; rm -rf /var/lib/apt/lists/*; \
 	rabbitmqadmin --version
 # MANAGEMENT-TLS MANAGEMENT
 EXPOSE 15671 15672
