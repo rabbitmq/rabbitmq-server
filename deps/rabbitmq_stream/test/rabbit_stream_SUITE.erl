@@ -20,8 +20,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
-
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
+
 -include("rabbit_stream_metrics.hrl").
 
 -compile(nowarn_export_all).
@@ -69,8 +69,7 @@ init_per_group(single_node, Config) ->
         rabbit_ct_helpers:set_config(Config1,
                                      {rabbitmq_ct_tls_verify, verify_none}),
     Config3 =
-        rabbit_ct_helpers:set_config(Config2,
-                                     {rabbitmq_stream, verify_none}),
+        rabbit_ct_helpers:set_config(Config2, {rabbitmq_stream, verify_none}),
     rabbit_ct_helpers:run_setup_steps(Config3,
                                       [fun(StepConfig) ->
                                           rabbit_ct_helpers:merge_app_env(StepConfig,
@@ -83,8 +82,7 @@ init_per_group(single_node, Config) ->
                                                                           {rabbitmq_stream,
                                                                            [{connection_negotiation_step_timeout,
                                                                              500}]})
-                                       end
-                                      ]
+                                       end]
                                       ++ rabbit_ct_broker_helpers:setup_steps());
 init_per_group(cluster = Group, Config) ->
     Config1 =
@@ -122,8 +120,7 @@ end_per_testcase(_Test, _Config) ->
 
 test_global_counters(Config) ->
     test_server(gen_tcp, Config),
-    ?assertEqual(#{
-                   publishers => 0,
+    ?assertEqual(#{publishers => 0,
                    consumers => 0,
                    messages_confirmed_total => 2,
                    messages_received_confirm_total => 2,
@@ -147,8 +144,8 @@ test_global_counters(Config) ->
                    stream_error_subscription_id_already_exists_total => 0,
                    stream_error_subscription_id_does_not_exist_total => 0,
                    stream_error_unknown_frame_total => 0,
-                   stream_error_vhost_access_failure_total => 0
-                  }, get_global_counters(Config)),
+                   stream_error_vhost_access_failure_total => 0},
+                 get_global_counters(Config)),
     ok.
 
 test_stream(Config) ->
@@ -195,18 +192,21 @@ test_gc_publishers(Config) ->
 
 unauthenticated_client_rejected_tcp_connected(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    {ok, S} =
+        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
     ?assertEqual(ok, gen_tcp:send(S, <<"invalid data">>)),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 timeout_tcp_connected(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    {ok, S} =
+        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 unauthenticated_client_rejected_peer_properties_exchanged(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    {ok, S} =
+        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
     C0 = rabbit_stream_core:init(0),
     test_peer_properties(gen_tcp, S, C0),
     ?assertEqual(ok, gen_tcp:send(S, <<"invalid data">>)),
@@ -214,23 +214,28 @@ unauthenticated_client_rejected_peer_properties_exchanged(Config) ->
 
 timeout_peer_properties_exchanged(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    {ok, S} =
+        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
     C0 = rabbit_stream_core:init(0),
     test_peer_properties(gen_tcp, S, C0),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 unauthenticated_client_rejected_authenticating(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    {ok, S} =
+        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
     C0 = rabbit_stream_core:init(0),
     test_peer_properties(gen_tcp, S, C0),
-    SaslHandshakeFrame = rabbit_stream_core:frame({request, 1, sasl_handshake}),
+    SaslHandshakeFrame =
+        rabbit_stream_core:frame({request, 1, sasl_handshake}),
     ?assertEqual(ok, gen_tcp:send(S, SaslHandshakeFrame)),
-    ?awaitMatch({error, closed}, gen_tcp:send(S, <<"invalid data">>), ?WAIT).
+    ?awaitMatch({error, closed}, gen_tcp:send(S, <<"invalid data">>),
+                ?WAIT).
 
 timeout_authenticating(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    {ok, S} =
+        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
     C0 = rabbit_stream_core:init(0),
     test_peer_properties(gen_tcp, S, C0),
     _Frame = rabbit_stream_core:frame({request, 1, sasl_handshake}),
@@ -238,7 +243,8 @@ timeout_authenticating(Config) ->
 
 timeout_close_sent(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} = gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    {ok, S} =
+        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
     C0 = rabbit_stream_core:init(0),
     C1 = test_peer_properties(gen_tcp, S, C0),
     C2 = test_authenticate(gen_tcp, S, C1),
@@ -248,8 +254,10 @@ timeout_close_sent(Config) ->
     Size = iolist_size(IOData),
     Frame = [<<Size:32>> | IOData],
     ok = gen_tcp:send(S, Frame),
-    {{request, _CorrelationID, {close, ?RESPONSE_CODE_UNKNOWN_FRAME, <<"unknown frame">>}}, _Config}
-    = receive_commands(gen_tcp, S, C2),
+    {{request, _CorrelationID,
+      {close, ?RESPONSE_CODE_UNKNOWN_FRAME, <<"unknown frame">>}},
+     _Config} =
+        receive_commands(gen_tcp, S, C2),
     % Now, rabbit_stream_reader is in state close_sent.
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
@@ -310,11 +318,14 @@ get_node_name(Config, Node) ->
     rabbit_ct_broker_helpers:get_node_config(Config, Node, nodename).
 
 test_server(Transport, Config) ->
-    Port = case Transport of
-               gen_tcp -> get_stream_port(Config);
-               ssl -> application:ensure_all_started(ssl),
-                      get_stream_port_tls(Config)
-           end,
+    Port =
+        case Transport of
+            gen_tcp ->
+                get_stream_port(Config);
+            ssl ->
+                application:ensure_all_started(ssl),
+                get_stream_port_tls(Config)
+        end,
     {ok, S} =
         Transport:connect("localhost", Port,
                           [{active, false}, {mode, binary}]),
@@ -516,4 +527,8 @@ receive_commands(Transport, S, C0) ->
 
 get_global_counters(Config) ->
     maps:get([{protocol, stream}],
-             rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, [])).
+             rabbit_ct_broker_helpers:rpc(Config,
+                                          0,
+                                          rabbit_global_counters,
+                                          overview,
+                                          [])).

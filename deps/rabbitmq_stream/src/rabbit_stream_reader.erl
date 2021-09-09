@@ -20,6 +20,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
+
 -include("rabbit_stream_metrics.hrl").
 
 -type stream() :: binary().
@@ -90,7 +91,6 @@
          frame_max :: integer(),
          heartbeat :: integer(),
          connection_negotiation_step_timeout :: integer()}).
-
 -record(statem_data,
         {transport :: module(),
          connection :: #stream_connection{},
@@ -153,15 +153,11 @@
          consumers_info/2,
          publishers_info/2,
          in_vhost/2]).
-
 -export([resource_alarm/3]).
-
 %% gen_statem callbacks
 -export([callback_mode/0,
          terminate/3,
-         %% not called by gen_statem since gen_statem:enter_loop/4 is used
          init/1,
-         %% states
          tcp_connected/3,
          peer_properties_exchanged/3,
          authenticating/3,
@@ -170,16 +166,23 @@
          open/3,
          close_sent/3]).
 
+         %% not called by gen_statem since gen_statem:enter_loop/4 is used
+
+         %% states
+
 callback_mode() ->
     [state_functions, state_enter].
 
 terminate(Reason, State, StatemData) ->
     rabbit_networking:unregister_non_amqp_connection(self()),
     notify_connection_closed(StatemData),
-    rabbit_log:debug("~p terminating in state '~s' with reason '~p'", [?MODULE, State, Reason]).
+    rabbit_log:debug("~p terminating in state '~s' with reason '~p'",
+                     [?MODULE, State, Reason]).
 
 start_link(KeepaliveSup, Transport, Ref, Opts) ->
-    {ok, proc_lib:spawn_link(?MODULE, init, [[KeepaliveSup, Transport, Ref, Opts]])}.
+    {ok,
+     proc_lib:spawn_link(?MODULE, init,
+                         [[KeepaliveSup, Transport, Ref, Opts]])}.
 
 init([KeepaliveSup,
       Transport,
@@ -191,9 +194,9 @@ init([KeepaliveSup,
         transport := ConnTransport}]) ->
     process_flag(trap_exit, true),
     {ok, Sock} =
-    rabbit_networking:handshake(Ref,
-                                application:get_env(rabbitmq_stream,
-                                                    proxy_protocol, false)),
+        rabbit_networking:handshake(Ref,
+                                    application:get_env(rabbitmq_stream,
+                                                        proxy_protocol, false)),
     RealSocket = rabbit_net:unwrap_socket(Sock),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->
@@ -202,272 +205,323 @@ init([KeepaliveSup,
             atomics:put(SendFileOct, 1, 0),
             init_credit(Credits, InitialCredits),
             {PeerHost, PeerPort, Host, Port} =
-            socket_op(Sock,
-                      fun(S) -> rabbit_net:socket_ends(S, inbound) end),
+                socket_op(Sock,
+                          fun(S) -> rabbit_net:socket_ends(S, inbound) end),
             Connection =
-            #stream_connection{name =
-                               rabbit_data_coercion:to_binary(ConnStr),
-                               host = Host,
-                               peer_host = PeerHost,
-                               port = Port,
-                               peer_port = PeerPort,
-                               connected_at = os:system_time(milli_seconds),
-                               auth_mechanism = none,
-                               helper_sup = KeepaliveSup,
-                               socket = RealSocket,
-                               publishers = #{},
-                               publisher_to_ids = #{},
-                               stream_leaders = #{},
-                               stream_subscriptions = #{},
-                               credits = Credits,
-                               authentication_state = none,
-                               connection_step = tcp_connected,
-                               frame_max = FrameMax,
-                               resource_alarm = false,
-                               send_file_oct = SendFileOct,
-                               transport = ConnTransport,
-                               proxy_socket = rabbit_net:maybe_get_proxy_socket(Sock)},
+                #stream_connection{name =
+                                       rabbit_data_coercion:to_binary(ConnStr),
+                                   host = Host,
+                                   peer_host = PeerHost,
+                                   port = Port,
+                                   peer_port = PeerPort,
+                                   connected_at = os:system_time(milli_seconds),
+                                   auth_mechanism = none,
+                                   helper_sup = KeepaliveSup,
+                                   socket = RealSocket,
+                                   publishers = #{},
+                                   publisher_to_ids = #{},
+                                   stream_leaders = #{},
+                                   stream_subscriptions = #{},
+                                   credits = Credits,
+                                   authentication_state = none,
+                                   connection_step = tcp_connected,
+                                   frame_max = FrameMax,
+                                   resource_alarm = false,
+                                   send_file_oct = SendFileOct,
+                                   transport = ConnTransport,
+                                   proxy_socket =
+                                       rabbit_net:maybe_get_proxy_socket(Sock)},
             State =
-            #stream_connection_state{consumers = #{},
-                                     blocked = false,
-                                     data =
-                                     rabbit_stream_core:init(undefined)},
+                #stream_connection_state{consumers = #{},
+                                         blocked = false,
+                                         data =
+                                             rabbit_stream_core:init(undefined)},
             Transport:setopts(RealSocket, [{active, once}]),
             rabbit_alarm:register(self(), {?MODULE, resource_alarm, []}),
-            ConnectionNegotiationStepTimeout = application:get_env(
-                                                 rabbitmq_stream,
-                                                 connection_negotiation_step_timeout,
-                                                 10_000),
+            ConnectionNegotiationStepTimeout =
+                application:get_env(rabbitmq_stream,
+                                    connection_negotiation_step_timeout,
+                                    10_000),
             % gen_statem process has its start_link call not return until the init function returns.
             % This is problematic, because we won't be able to call ranch:handshake/2
             % from the init callback as this would cause a deadlock to happen.
             % Therefore, we use the gen_statem:enter_loop/4 function.
             % See https://ninenines.eu/docs/en/ranch/2.0/guide/protocols/
-            gen_statem:enter_loop(?MODULE, [], tcp_connected,
-                                  #statem_data{
-                                     transport = Transport,
-                                     connection = Connection,
-                                     connection_state = State,
-                                     config = #configuration{
-                                                 initial_credits = InitialCredits,
-                                                 credits_required_for_unblocking = CreditsRequiredBeforeUnblocking,
-                                                 frame_max = FrameMax,
-                                                 heartbeat = Heartbeat,
-                                                 connection_negotiation_step_timeout = ConnectionNegotiationStepTimeout}});
+            gen_statem:enter_loop(?MODULE,
+                                  [],
+                                  tcp_connected,
+                                  #statem_data{transport = Transport,
+                                               connection = Connection,
+                                               connection_state = State,
+                                               config =
+                                                   #configuration{initial_credits
+                                                                      =
+                                                                      InitialCredits,
+                                                                  credits_required_for_unblocking
+                                                                      =
+                                                                      CreditsRequiredBeforeUnblocking,
+                                                                  frame_max =
+                                                                      FrameMax,
+                                                                  heartbeat =
+                                                                      Heartbeat,
+                                                                  connection_negotiation_step_timeout
+                                                                      =
+                                                                      ConnectionNegotiationStepTimeout}});
         {Error, Reason} ->
             rabbit_net:fast_close(RealSocket),
             rabbit_log_connection:warning("Closing connection because of ~p ~p",
                                           [Error, Reason])
     end.
 
-tcp_connected(enter, _OldState, #statem_data{
-                                   config = #configuration{
-                                               connection_negotiation_step_timeout = StateTimeout}}) ->
+tcp_connected(enter, _OldState,
+              #statem_data{config =
+                               #configuration{connection_negotiation_step_timeout
+                                                  = StateTimeout}}) ->
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
-tcp_connected(state_timeout, close, #statem_data{
-                                       transport = Transport,
-                                       connection = #stream_connection{socket = Socket}
-                                      }) ->
+tcp_connected(state_timeout, close,
+              #statem_data{transport = Transport,
+                           connection = #stream_connection{socket = Socket}}) ->
     state_timeout(?FUNCTION_NAME, Transport, Socket);
 tcp_connected(info, Msg, StateData) ->
     handle_info(Msg, StateData,
-                fun (NextConnectionStep,
-                     #statem_data{
-                        transport = Transport,
-                        connection = #stream_connection{socket = S}
-                       } = StatemData,
-                     NewConnection,
-                     NewConnectionState) ->
-                        if NextConnectionStep =:= peer_properties_exchanged ->
-                               {next_state, peer_properties_exchanged, StatemData#statem_data{
-                                                                         connection = NewConnection,
-                                                                         connection_state = NewConnectionState
-                                                                        }};
-                           true ->
-                               invalid_transition(Transport, S, ?FUNCTION_NAME, NextConnectionStep)
-                        end
+                fun(NextConnectionStep,
+                    #statem_data{transport = Transport,
+                                 connection = #stream_connection{socket = S}} =
+                        StatemData,
+                    NewConnection,
+                    NewConnectionState) ->
+                   if NextConnectionStep =:= peer_properties_exchanged ->
+                          {next_state, peer_properties_exchanged,
+                           StatemData#statem_data{connection = NewConnection,
+                                                  connection_state =
+                                                      NewConnectionState}};
+                      true ->
+                          invalid_transition(Transport,
+                                             S,
+                                             ?FUNCTION_NAME,
+                                             NextConnectionStep)
+                   end
                 end).
 
-peer_properties_exchanged(enter, _OldState, #statem_data{
-                                               config = #configuration{
-                                                           connection_negotiation_step_timeout = StateTimeout}}) ->
+peer_properties_exchanged(enter, _OldState,
+                          #statem_data{config =
+                                           #configuration{connection_negotiation_step_timeout
+                                                              =
+                                                              StateTimeout}}) ->
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
-peer_properties_exchanged(state_timeout, close, #statem_data{
-                                                   transport = Transport,
-                                                   connection = #stream_connection{socket = Socket}
-                                                  }) ->
+peer_properties_exchanged(state_timeout, close,
+                          #statem_data{transport = Transport,
+                                       connection =
+                                           #stream_connection{socket =
+                                                                  Socket}}) ->
     state_timeout(?FUNCTION_NAME, Transport, Socket);
 peer_properties_exchanged(info, Msg, StateData) ->
     handle_info(Msg, StateData,
-                fun (NextConnectionStep,
-                     #statem_data{
-                        transport = Transport,
-                        connection = #stream_connection{socket = S}
-                       } = StatemData,
-                     NewConnection,
-                     NewConnectionState) ->
-                        if NextConnectionStep =:= authenticating ->
-                               {next_state, authenticating, StatemData#statem_data{
-                                                              connection = NewConnection,
-                                                              connection_state = NewConnectionState
-                                                             }};
-                           true ->
-                               invalid_transition(Transport, S, ?FUNCTION_NAME, NextConnectionStep)
-                        end
+                fun(NextConnectionStep,
+                    #statem_data{transport = Transport,
+                                 connection = #stream_connection{socket = S}} =
+                        StatemData,
+                    NewConnection,
+                    NewConnectionState) ->
+                   if NextConnectionStep =:= authenticating ->
+                          {next_state, authenticating,
+                           StatemData#statem_data{connection = NewConnection,
+                                                  connection_state =
+                                                      NewConnectionState}};
+                      true ->
+                          invalid_transition(Transport,
+                                             S,
+                                             ?FUNCTION_NAME,
+                                             NextConnectionStep)
+                   end
                 end).
 
-authenticating(enter, _OldState, #statem_data{
-                                    config = #configuration{
-                                                connection_negotiation_step_timeout = StateTimeout}}) ->
+authenticating(enter, _OldState,
+               #statem_data{config =
+                                #configuration{connection_negotiation_step_timeout
+                                                   = StateTimeout}}) ->
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
-authenticating(state_timeout, close, #statem_data{
-                                        transport = Transport,
-                                        connection = #stream_connection{socket = Socket}
-                                       }) ->
+authenticating(state_timeout, close,
+               #statem_data{transport = Transport,
+                            connection =
+                                #stream_connection{socket = Socket}}) ->
     state_timeout(?FUNCTION_NAME, Transport, Socket);
 authenticating(info, Msg, StateData) ->
     handle_info(Msg, StateData,
                 fun(NextConnectionStep,
-                    #statem_data{
-                       transport = Transport,
-                       connection = #stream_connection{socket = S},
-                       config = #configuration{
-                                   frame_max = FrameMax,
-                                   heartbeat = Heartbeat}
-                      } = StatemData,
+                    #statem_data{transport = Transport,
+                                 connection = #stream_connection{socket = S},
+                                 config =
+                                     #configuration{frame_max = FrameMax,
+                                                    heartbeat = Heartbeat}} =
+                        StatemData,
                     NewConnection,
                     NewConnectionState) ->
-                        if NextConnectionStep =:= authenticated ->
-                               Frame = rabbit_stream_core:frame({tune, FrameMax, Heartbeat}),
-                               send(Transport, S, Frame),
-                               {next_state, tuning, StatemData#statem_data{
-                                                      connection = NewConnection#stream_connection{connection_step
-                                                                                                   =
-                                                                                                   tuning},
-                                                      connection_state = NewConnectionState
-                                                     }};
-                           true ->
-                               invalid_transition(Transport, S, ?FUNCTION_NAME, NextConnectionStep)
-                        end
+                   if NextConnectionStep =:= authenticated ->
+                          Frame =
+                              rabbit_stream_core:frame({tune, FrameMax,
+                                                        Heartbeat}),
+                          send(Transport, S, Frame),
+                          {next_state, tuning,
+                           StatemData#statem_data{connection =
+                                                      NewConnection#stream_connection{connection_step
+                                                                                          =
+                                                                                          tuning},
+                                                  connection_state =
+                                                      NewConnectionState}};
+                      true ->
+                          invalid_transition(Transport,
+                                             S,
+                                             ?FUNCTION_NAME,
+                                             NextConnectionStep)
+                   end
                 end).
 
-tuning(enter, _OldState, #statem_data{
-                            config = #configuration{
-                                        connection_negotiation_step_timeout = StateTimeout}}) ->
+tuning(enter, _OldState,
+       #statem_data{config =
+                        #configuration{connection_negotiation_step_timeout =
+                                           StateTimeout}}) ->
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
-tuning(state_timeout, close, #statem_data{
-                                transport = Transport,
-                                connection = #stream_connection{socket = Socket}
-                               }) ->
+tuning(state_timeout, close,
+       #statem_data{transport = Transport,
+                    connection = #stream_connection{socket = Socket}}) ->
     state_timeout(?FUNCTION_NAME, Transport, Socket);
 tuning(info, Msg, StateData) ->
     handle_info(Msg, StateData,
-                fun (NextConnectionStep,
-                     #statem_data{
-                        transport = Transport,
-                        connection = #stream_connection{socket = S},
-                        config = Configuration
-                       } = StatemData,
-                     NewConnection,
-                     NewConnectionState) ->
-                        case NextConnectionStep of
-                            tuned ->
-                                {next_state, tuned, StatemData#statem_data{
-                                                      connection = NewConnection,
-                                                      connection_state = NewConnectionState
-                                                     }};
-                            opened ->
-                                transition_to_opened(Transport, Configuration, NewConnection, NewConnectionState);
-                            _ ->
-                                invalid_transition(Transport, S, ?FUNCTION_NAME, NextConnectionStep)
-                        end
+                fun(NextConnectionStep,
+                    #statem_data{transport = Transport,
+                                 connection = #stream_connection{socket = S},
+                                 config = Configuration} =
+                        StatemData,
+                    NewConnection,
+                    NewConnectionState) ->
+                   case NextConnectionStep of
+                       tuned ->
+                           {next_state, tuned,
+                            StatemData#statem_data{connection = NewConnection,
+                                                   connection_state =
+                                                       NewConnectionState}};
+                       opened ->
+                           transition_to_opened(Transport,
+                                                Configuration,
+                                                NewConnection,
+                                                NewConnectionState);
+                       _ ->
+                           invalid_transition(Transport,
+                                              S,
+                                              ?FUNCTION_NAME,
+                                              NextConnectionStep)
+                   end
                 end).
 
-tuned(enter, _OldState, #statem_data{
-                           config = #configuration{
-                                       connection_negotiation_step_timeout = StateTimeout}}) ->
+tuned(enter, _OldState,
+      #statem_data{config =
+                       #configuration{connection_negotiation_step_timeout =
+                                          StateTimeout}}) ->
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
-tuned(state_timeout, close, #statem_data{
-                               transport = Transport,
-                               connection = #stream_connection{socket = Socket}
-                              }) ->
+tuned(state_timeout, close,
+      #statem_data{transport = Transport,
+                   connection = #stream_connection{socket = Socket}}) ->
     state_timeout(?FUNCTION_NAME, Transport, Socket);
 tuned(info, Msg, StateData) ->
     handle_info(Msg, StateData,
-                fun (NextConnectionStep,
-                     #statem_data{
-                        transport = Transport,
-                        connection = #stream_connection{socket = S},
-                        config = Configuration},
-                     NewConnection, NewConnectionState) ->
-                        if NextConnectionStep =:= opened ->
-                               transition_to_opened(Transport, Configuration, NewConnection, NewConnectionState);
-                           true ->
-                               invalid_transition(Transport, S, ?FUNCTION_NAME, NextConnectionStep)
-                        end
+                fun(NextConnectionStep,
+                    #statem_data{transport = Transport,
+                                 connection = #stream_connection{socket = S},
+                                 config = Configuration},
+                    NewConnection,
+                    NewConnectionState) ->
+                   if NextConnectionStep =:= opened ->
+                          transition_to_opened(Transport,
+                                               Configuration,
+                                               NewConnection,
+                                               NewConnectionState);
+                      true ->
+                          invalid_transition(Transport,
+                                             S,
+                                             ?FUNCTION_NAME,
+                                             NextConnectionStep)
+                   end
                 end).
 
 state_timeout(State, Transport, Socket) ->
-    rabbit_log_connection:warning(
-      "Closing connection because of timeout in state '~s' likely due to lack of client action.",
-      [State]),
+    rabbit_log_connection:warning("Closing connection because of timeout in state '~s' likely due to lack of client action.",
+                                  [State]),
     close_immediately(Transport, Socket),
     stop.
 
-handle_info(Msg, #statem_data{
-                    transport = Transport,
-                    connection = #stream_connection{socket = S, connection_step = PreviousConnectionStep} = Connection,
-                    connection_state = State
-                   } = StatemData, Transition) ->
+handle_info(Msg,
+            #statem_data{transport = Transport,
+                         connection =
+                             #stream_connection{socket = S,
+                                                connection_step =
+                                                    PreviousConnectionStep} =
+                                 Connection,
+                         connection_state = State} =
+                StatemData,
+            Transition) ->
     {OK, Closed, Error, _Passive} = Transport:messages(),
     case Msg of
         {OK, S, Data} ->
-            {Connection1, State1} = handle_inbound_data_pre_auth(Transport, Connection, State, Data),
+            {Connection1, State1} =
+                handle_inbound_data_pre_auth(Transport,
+                                             Connection,
+                                             State,
+                                             Data),
             Transport:setopts(S, [{active, once}]),
-            #stream_connection{connection_step = NewConnectionStep} = Connection1,
-            rabbit_log_connection:debug("Transitioned from ~s to ~s", [PreviousConnectionStep, NewConnectionStep]),
+            #stream_connection{connection_step = NewConnectionStep} =
+                Connection1,
+            rabbit_log_connection:debug("Transitioned from ~s to ~s",
+                                        [PreviousConnectionStep,
+                                         NewConnectionStep]),
             Transition(NewConnectionStep, StatemData, Connection1, State1);
         {Closed, S} ->
-            rabbit_log_connection:warning("Stream protocol connection socket ~w closed", [S]),
+            rabbit_log_connection:warning("Stream protocol connection socket ~w closed",
+                                          [S]),
             stop;
         {Error, S, Reason} ->
             rabbit_log_connection:warning("Socket error ~p [~w]", [Reason, S]),
             stop;
         {resource_alarm, IsThereAlarm} ->
-            {keep_state, StatemData#statem_data{
-                           connection = Connection#stream_connection{
-                                          resource_alarm = IsThereAlarm},
-                           connection_state = State#stream_connection_state{
-                                                blocked = true}}};
+            {keep_state,
+             StatemData#statem_data{connection =
+                                        Connection#stream_connection{resource_alarm
+                                                                         =
+                                                                         IsThereAlarm},
+                                    connection_state =
+                                        State#stream_connection_state{blocked =
+                                                                          true}}};
         Unknown ->
             rabbit_log:warning("Received unknown message ~p", [Unknown]),
             close_immediately(Transport, S),
             stop
     end.
 
-transition_to_opened(Transport, Configuration, NewConnection, NewConnectionState) ->
+transition_to_opened(Transport,
+                     Configuration,
+                     NewConnection,
+                     NewConnectionState) ->
     % TODO remove registration to rabbit_stream_connections
     % just meant to be able to close the connection remotely
     % should be possible once the connections are available in ctl list_connections
     pg_local:join(rabbit_stream_connections, self()),
     Connection1 =
-    rabbit_event:init_stats_timer(NewConnection,
-                                  #stream_connection.stats_timer),
+        rabbit_event:init_stats_timer(NewConnection,
+                                      #stream_connection.stats_timer),
     Connection2 = ensure_stats_timer(Connection1),
     Infos =
-    augment_infos_with_user_provided_connection_name(infos(?CREATION_EVENT_KEYS,
-                                                           Connection2,
-                                                           NewConnectionState),
-                                                     Connection2),
+        augment_infos_with_user_provided_connection_name(infos(?CREATION_EVENT_KEYS,
+                                                               Connection2,
+                                                               NewConnectionState),
+                                                         Connection2),
     rabbit_core_metrics:connection_created(self(), Infos),
     rabbit_event:notify(connection_created, Infos),
     rabbit_networking:register_non_amqp_connection(self()),
-    {next_state, open, #statem_data{
-                          transport = Transport,
-                          connection = Connection2,
-                          connection_state = NewConnectionState,
-                          config = Configuration
-                         }}.
+    {next_state, open,
+     #statem_data{transport = Transport,
+                  connection = Connection2,
+                  connection_state = NewConnectionState,
+                  config = Configuration}}.
 
 invalid_transition(Transport, Socket, From, To) ->
     rabbit_log_connection:warning("Closing socket ~w. Invalid transition from ~s to ~s.",
@@ -490,7 +544,8 @@ socket_op(Sock, Fun) ->
         {ok, Res} ->
             Res;
         {error, Reason} ->
-            rabbit_log_connection:warning("Error during socket operation ~p", [Reason]),
+            rabbit_log_connection:warning("Error during socket operation ~p",
+                                          [Reason]),
             rabbit_net:fast_close(RealSocket),
             exit(normal)
     end.
@@ -529,7 +584,8 @@ has_enough_credits_to_unblock(CreditReference,
     atomics:get(CreditReference, 1) > CreditsRequiredForUnblocking.
 
 increase_messages_consumed(Counters, Count) ->
-    rabbit_global_counters:messages_delivered(stream, ?STREAM_QUEUE_TYPE, Count),
+    rabbit_global_counters:messages_delivered(stream, ?STREAM_QUEUE_TYPE,
+                                              Count),
     atomics:add(Counters, 1, Count).
 
 set_consumer_offset(Counters, Offset) ->
@@ -591,32 +647,32 @@ close_immediately(Transport, S) ->
 
 open(enter, _OldState, _StateData) ->
     keep_state_and_data;
-open(info,
-     {resource_alarm, IsThereAlarm},
-     #statem_data{
-        transport = Transport,
-        connection = #stream_connection{
-                        socket = S,
-                        name = ConnectionName,
-                        credits = Credits,
-                        heartbeater = Heartbeater
-                       } = Connection,
-        connection_state = #stream_connection_state{blocked = Blocked} = State,
-        config = #configuration{credits_required_for_unblocking = CreditsRequiredForUnblocking}
-       } = StatemData) ->
+open(info, {resource_alarm, IsThereAlarm},
+     #statem_data{transport = Transport,
+                  connection =
+                      #stream_connection{socket = S,
+                                         name = ConnectionName,
+                                         credits = Credits,
+                                         heartbeater = Heartbeater} =
+                          Connection,
+                  connection_state =
+                      #stream_connection_state{blocked = Blocked} = State,
+                  config =
+                      #configuration{credits_required_for_unblocking =
+                                         CreditsRequiredForUnblocking}} =
+         StatemData) ->
     rabbit_log_connection:debug("Connection ~p received resource alarm. Alarm "
                                 "on? ~p",
                                 [ConnectionName, IsThereAlarm]),
     EnoughCreditsToUnblock =
-    has_enough_credits_to_unblock(Credits,
-                                  CreditsRequiredForUnblocking),
+        has_enough_credits_to_unblock(Credits, CreditsRequiredForUnblocking),
     NewBlockedState =
-    case {IsThereAlarm, EnoughCreditsToUnblock} of
-        {true, _} ->
-            true;
-        {false, EnoughCredits} ->
-            not EnoughCredits
-    end,
+        case {IsThereAlarm, EnoughCreditsToUnblock} of
+            {true, _} ->
+                true;
+            {false, EnoughCredits} ->
+                not EnoughCredits
+        end,
     rabbit_log_connection:debug("Connection ~p had blocked status set to ~p, new "
                                 "blocked status is now ~p",
                                 [ConnectionName, Blocked, NewBlockedState]),
@@ -634,26 +690,26 @@ open(info,
             ok
     end,
     {keep_state,
-     StatemData#statem_data{
-       connection = Connection#stream_connection{resource_alarm = IsThereAlarm},
-       connection_state = State#stream_connection_state{blocked = NewBlockedState}
-      }};
-open(info,
-     {OK, S, Data},
-     #statem_data{
-        transport = Transport,
-        connection = #stream_connection{socket = S,
-                                        credits = Credits,
-                                        heartbeater = Heartbeater
-                                       } = Connection,
-        connection_state = #stream_connection_state{blocked = Blocked} = State,
-        config = Configuration
-       } = StatemData)
-  when OK =:= tcp; OK =:= ssl ->
-    {Connection1, State1} = handle_inbound_data_post_auth(Transport,
-                                                          Connection,
-                                                          State,
-                                                          Data),
+     StatemData#statem_data{connection =
+                                Connection#stream_connection{resource_alarm =
+                                                                 IsThereAlarm},
+                            connection_state =
+                                State#stream_connection_state{blocked =
+                                                                  NewBlockedState}}};
+open(info, {OK, S, Data},
+     #statem_data{transport = Transport,
+                  connection =
+                      #stream_connection{socket = S,
+                                         credits = Credits,
+                                         heartbeater = Heartbeater} =
+                          Connection,
+                  connection_state =
+                      #stream_connection_state{blocked = Blocked} = State,
+                  config = Configuration} =
+         StatemData)
+    when OK =:= tcp; OK =:= ssl ->
+    {Connection1, State1} =
+        handle_inbound_data_post_auth(Transport, Connection, State, Data),
     #stream_connection{connection_step = Step} = Connection1,
     case Step of
         closing ->
@@ -662,91 +718,88 @@ open(info,
         close_sent ->
             rabbit_log_connection:debug("Transitioned to close_sent"),
             Transport:setopts(S, [{active, once}]),
-            {next_state, close_sent, StatemData#statem_data{
-                                       connection = Connection1,
-                                       connection_state = State1
-                                      }};
+            {next_state, close_sent,
+             StatemData#statem_data{connection = Connection1,
+                                    connection_state = State1}};
         _ ->
             State2 =
-            case Blocked of
-                true ->
-                    case should_unblock(Connection, Configuration)
-                    of
-                        true ->
-                            Transport:setopts(S, [{active, once}]),
-                            ok =
-                            rabbit_heartbeat:resume_monitor(Heartbeater),
-                            State1#stream_connection_state{blocked =
-                                                           false};
-                        false ->
-                            State1
-                    end;
-                false ->
-                    case has_credits(Credits) of
-                        true ->
-                            Transport:setopts(S, [{active, once}]),
-                            State1;
-                        false ->
-                            ok =
-                            rabbit_heartbeat:pause_monitor(Heartbeater),
-                            State1#stream_connection_state{blocked =
-                                                           true}
-                    end
-            end,
-            {keep_state, StatemData#statem_data{
-                           connection = Connection1,
-                           connection_state = State2}}
+                case Blocked of
+                    true ->
+                        case should_unblock(Connection, Configuration) of
+                            true ->
+                                Transport:setopts(S, [{active, once}]),
+                                ok =
+                                    rabbit_heartbeat:resume_monitor(Heartbeater),
+                                State1#stream_connection_state{blocked = false};
+                            false ->
+                                State1
+                        end;
+                    false ->
+                        case has_credits(Credits) of
+                            true ->
+                                Transport:setopts(S, [{active, once}]),
+                                State1;
+                            false ->
+                                ok =
+                                    rabbit_heartbeat:pause_monitor(Heartbeater),
+                                State1#stream_connection_state{blocked = true}
+                        end
+                end,
+            {keep_state,
+             StatemData#statem_data{connection = Connection1,
+                                    connection_state = State2}}
     end;
 open(info, {Closed, Socket}, #statem_data{connection = Connection})
-  when Closed =:= tcp_closed; Closed =:= ssl_closed ->
+    when Closed =:= tcp_closed; Closed =:= ssl_closed ->
     demonitor_all_streams(Connection),
-    rabbit_log_connection:warning("Socket ~w closed [~w]", [Socket, self()]),
+    rabbit_log_connection:warning("Socket ~w closed [~w]",
+                                  [Socket, self()]),
     stop;
-open(info, {Error, Socket, Reason}, #statem_data{connection = Connection})
-  when Error =:= tcp_error; Error =:= ssl_error ->
+open(info, {Error, Socket, Reason},
+     #statem_data{connection = Connection})
+    when Error =:= tcp_error; Error =:= ssl_error ->
     demonitor_all_streams(Connection),
-    rabbit_log_connection:error("Socket error ~p [~w] [~w]", [Reason, Socket, self()]),
+    rabbit_log_connection:error("Socket error ~p [~w] [~w]",
+                                [Reason, Socket, self()]),
     stop;
-open(info,
-     {'DOWN', MonitorRef, process, _OsirisPid, _Reason},
-     #statem_data{
-        transport = Transport,
-        connection = #stream_connection{socket = S,
-                                        monitors = Monitors
-                                       } = Connection,
-        connection_state = State
-       } = StatemData) ->
+open(info, {'DOWN', MonitorRef, process, _OsirisPid, _Reason},
+     #statem_data{transport = Transport,
+                  connection =
+                      #stream_connection{socket = S, monitors = Monitors} =
+                          Connection,
+                  connection_state = State} =
+         StatemData) ->
     {Connection1, State1} =
-    case Monitors of
-        #{MonitorRef := Stream} ->
-            Monitors1 = maps:remove(MonitorRef, Monitors),
-            C = Connection#stream_connection{monitors = Monitors1},
-            case
-                clean_state_after_stream_deletion_or_failure(Stream,
-                                                             C,
-                                                             State)
-            of
-                {cleaned, NewConnection, NewState} ->
-                    Command =
-                    {metadata_update, Stream,
-                     ?RESPONSE_CODE_STREAM_NOT_AVAILABLE},
-                    Frame = rabbit_stream_core:frame(Command),
-                    send(Transport, S, Frame),
-                    rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_NOT_AVAILABLE, 1),
-                    {NewConnection, NewState};
-                {not_cleaned, SameConnection, SameState} ->
-                    {SameConnection, SameState}
-            end;
-        _ ->
-            {Connection, State}
-    end,
-    {keep_state, StatemData#statem_data{
-                   connection = Connection1,
-                   connection_state = State1}};
-open(info, heartbeat_send, #statem_data{
-                              transport = Transport,
-                              connection = #stream_connection{socket = S} = Connection,
-                              connection_state = State}) ->
+        case Monitors of
+            #{MonitorRef := Stream} ->
+                Monitors1 = maps:remove(MonitorRef, Monitors),
+                C = Connection#stream_connection{monitors = Monitors1},
+                case clean_state_after_stream_deletion_or_failure(Stream, C,
+                                                                  State)
+                of
+                    {cleaned, NewConnection, NewState} ->
+                        Command =
+                            {metadata_update, Stream,
+                             ?RESPONSE_CODE_STREAM_NOT_AVAILABLE},
+                        Frame = rabbit_stream_core:frame(Command),
+                        send(Transport, S, Frame),
+                        rabbit_global_counters:increase_protocol_counter(stream,
+                                                                         ?STREAM_NOT_AVAILABLE,
+                                                                         1),
+                        {NewConnection, NewState};
+                    {not_cleaned, SameConnection, SameState} ->
+                        {SameConnection, SameState}
+                end;
+            _ ->
+                {Connection, State}
+        end,
+    {keep_state,
+     StatemData#statem_data{connection = Connection1,
+                            connection_state = State1}};
+open(info, heartbeat_send,
+     #statem_data{transport = Transport,
+                  connection = #stream_connection{socket = S} = Connection,
+                  connection_state = State}) ->
     Frame = rabbit_stream_core:frame(heartbeat),
     case catch send(Transport, S, Frame) of
         ok ->
@@ -758,23 +811,23 @@ open(info, heartbeat_send, #statem_data{
             close(Transport, S, State),
             stop
     end;
-open(info, heartbeat_timeout, #statem_data{
-                                 transport = Transport,
-                                 connection = #stream_connection{socket = S} = Connection,
-                                 connection_state = State }) ->
+open(info, heartbeat_timeout,
+     #statem_data{transport = Transport,
+                  connection = #stream_connection{socket = S} = Connection,
+                  connection_state = State}) ->
     rabbit_log_connection:debug("Heartbeat timeout, closing connection"),
     _C1 = demonitor_all_streams(Connection),
     close(Transport, S, State),
     stop;
-open(info, {infos, From}, #statem_data{
-                             connection = #stream_connection{
-                                             client_properties = ClientProperties
-                                            }}) ->
+open(info, {infos, From},
+     #statem_data{connection =
+                      #stream_connection{client_properties =
+                                             ClientProperties}}) ->
     From ! {self(), ClientProperties},
     keep_state_and_data;
-open(info, emit_stats, #statem_data{
-                          connection = Connection,
-                          connection_state = State} = StatemData) ->
+open(info, emit_stats,
+     #statem_data{connection = Connection, connection_state = State} =
+         StatemData) ->
     Connection1 = emit_stats(Connection, State),
     {keep_state, StatemData#statem_data{connection = Connection1}};
 open(info, Unknown, _StatemData) ->
@@ -782,23 +835,24 @@ open(info, Unknown, _StatemData) ->
                                   [Unknown, ?FUNCTION_NAME]),
     %% FIXME send close
     keep_state_and_data;
-open({call, From}, info, #statem_data{
-                            connection = Connection,
-                            connection_state = State}) ->
-    {keep_state_and_data, {reply, From, infos(?INFO_ITEMS, Connection, State)}};
-open({call, From}, {info, Items}, #statem_data{
-                                     connection = Connection,
-                                     connection_state = State}) ->
+open({call, From}, info,
+     #statem_data{connection = Connection, connection_state = State}) ->
+    {keep_state_and_data,
+     {reply, From, infos(?INFO_ITEMS, Connection, State)}};
+open({call, From}, {info, Items},
+     #statem_data{connection = Connection, connection_state = State}) ->
     {keep_state_and_data, {reply, From, infos(Items, Connection, State)}};
-open({call, From}, {consumers_info, Items}, #statem_data{connection_state = State}) ->
+open({call, From}, {consumers_info, Items},
+     #statem_data{connection_state = State}) ->
     {keep_state_and_data, {reply, From, consumers_infos(Items, State)}};
-open({call, From}, {publishers_info, Items}, #statem_data{connection = Connection}) ->
-    {keep_state_and_data, {reply, From, publishers_infos(Items, Connection)}};
-open({call, From}, {shutdown, Explanation}, #statem_data{
-                                               transport = Transport,
-                                               connection = #stream_connection{socket = S}
-                                               = Connection,
-                                               connection_state = State}) ->
+open({call, From}, {publishers_info, Items},
+     #statem_data{connection = Connection}) ->
+    {keep_state_and_data,
+     {reply, From, publishers_infos(Items, Connection)}};
+open({call, From}, {shutdown, Explanation},
+     #statem_data{transport = Transport,
+                  connection = #stream_connection{socket = S} = Connection,
+                  connection_state = State}) ->
     % likely closing call from the management plugin
     rabbit_log_connection:info("Forcing stream connection ~p closing: ~p",
                                [self(), Explanation]),
@@ -807,248 +861,245 @@ open({call, From}, {shutdown, Explanation}, #statem_data{
     {stop_and_reply, normal, {reply, From, ok}};
 open(cast,
      {queue_event, _, {osiris_written, _, undefined, CorrelationList}},
-     #statem_data{
-        transport = Transport,
-        connection = #stream_connection{socket = S,
-                                        credits = Credits,
-                                        heartbeater = Heartbeater,
-                                        publishers = Publishers
-                                       } = Connection,
-        connection_state = #stream_connection_state{
-                              blocked = Blocked
-                             } = State,
-        config = Configuration
-       } = StatemData) ->
+     #statem_data{transport = Transport,
+                  connection =
+                      #stream_connection{socket = S,
+                                         credits = Credits,
+                                         heartbeater = Heartbeater,
+                                         publishers = Publishers} =
+                          Connection,
+                  connection_state =
+                      #stream_connection_state{blocked = Blocked} = State,
+                  config = Configuration} =
+         StatemData) ->
     ByPublisher =
-    lists:foldr(fun({PublisherId, PublishingId}, Acc) ->
-                        case maps:is_key(PublisherId, Publishers) of
-                          true ->
-                            case maps:get(PublisherId, Acc, undefined) of
-                              undefined ->
-                                Acc#{PublisherId => [PublishingId]};
-                              Ids ->
-                                Acc#{PublisherId => [PublishingId | Ids]}
-                            end;
-                          false ->
-                            Acc
-                        end
-                end,
-                #{}, CorrelationList),
+        lists:foldr(fun({PublisherId, PublishingId}, Acc) ->
+                       case maps:is_key(PublisherId, Publishers) of
+                           true ->
+                               case maps:get(PublisherId, Acc, undefined) of
+                                   undefined ->
+                                       Acc#{PublisherId => [PublishingId]};
+                                   Ids ->
+                                       Acc#{PublisherId => [PublishingId | Ids]}
+                               end;
+                           false ->
+                               Acc
+                       end
+                    end,
+                    #{}, CorrelationList),
     _ = maps:map(fun(PublisherId, PublishingIds) ->
-                         Command =
-                         {publish_confirm, PublisherId, PublishingIds},
-                         send(Transport, S,
-                              rabbit_stream_core:frame(Command)),
-                         #{PublisherId :=
-                           #publisher{message_counters = Cnt}} =
-                         Publishers,
-                         increase_messages_confirmed(Cnt,
-                                                     length(PublishingIds))
+                    Command = {publish_confirm, PublisherId, PublishingIds},
+                    send(Transport, S, rabbit_stream_core:frame(Command)),
+                    #{PublisherId := #publisher{message_counters = Cnt}} =
+                        Publishers,
+                    increase_messages_confirmed(Cnt, length(PublishingIds))
                  end,
                  ByPublisher),
     CorrelationIdCount = length(CorrelationList),
     add_credits(Credits, CorrelationIdCount),
-    State1 = case Blocked of
-                 true ->
-                     case should_unblock(Connection, Configuration) of
-                         true ->
-                             Transport:setopts(S, [{active, once}]),
-                             ok =
-                             rabbit_heartbeat:resume_monitor(Heartbeater),
-                             State#stream_connection_state{blocked = false};
-                         false ->
-                             State
-                     end;
-                 false ->
-                     State
-             end,
+    State1 =
+        case Blocked of
+            true ->
+                case should_unblock(Connection, Configuration) of
+                    true ->
+                        Transport:setopts(S, [{active, once}]),
+                        ok = rabbit_heartbeat:resume_monitor(Heartbeater),
+                        State#stream_connection_state{blocked = false};
+                    false ->
+                        State
+                end;
+            false ->
+                State
+        end,
     {keep_state, StatemData#statem_data{connection_state = State1}};
 open(cast,
      {queue_event, _QueueResource,
-      {osiris_written, #resource{name = Stream}, PublisherReference, CorrelationList}},
-     #statem_data{
-        transport = Transport,
-        connection = #stream_connection{socket = S,
-                                        credits = Credits,
-                                        heartbeater = Heartbeater,
-                                        publishers = Publishers,
-                                        publisher_to_ids = PublisherRefToIds
-                                       } = Connection,
-        connection_state = #stream_connection_state{
-                              blocked = Blocked
-                             } = State,
-        config = Configuration
-       } = StatemData) ->
+      {osiris_written,
+       #resource{name = Stream},
+       PublisherReference,
+       CorrelationList}},
+     #statem_data{transport = Transport,
+                  connection =
+                      #stream_connection{socket = S,
+                                         credits = Credits,
+                                         heartbeater = Heartbeater,
+                                         publishers = Publishers,
+                                         publisher_to_ids = PublisherRefToIds} =
+                          Connection,
+                  connection_state =
+                      #stream_connection_state{blocked = Blocked} = State,
+                  config = Configuration} =
+         StatemData) ->
     PublishingIdCount = length(CorrelationList),
     case maps:get({Stream, PublisherReference}, PublisherRefToIds,
-             undefined) of
-      undefined ->
-        ok;
-      PublisherId ->
-        Command = {publish_confirm, PublisherId, CorrelationList},
-        send(Transport, S, rabbit_stream_core:frame(Command)),
-        #{PublisherId := #publisher{message_counters = Counters}} =
-          Publishers,
-        increase_messages_confirmed(Counters, PublishingIdCount)
+                  undefined)
+    of
+        undefined ->
+            ok;
+        PublisherId ->
+            Command = {publish_confirm, PublisherId, CorrelationList},
+            send(Transport, S, rabbit_stream_core:frame(Command)),
+            #{PublisherId := #publisher{message_counters = Counters}} =
+                Publishers,
+            increase_messages_confirmed(Counters, PublishingIdCount)
     end,
     add_credits(Credits, PublishingIdCount),
     State1 =
-    case Blocked of
-        true ->
-            case should_unblock(Connection, Configuration) of
-                true ->
-                    Transport:setopts(S, [{active, once}]),
-                    ok =
-                    rabbit_heartbeat:resume_monitor(Heartbeater),
-                    State#stream_connection_state{blocked = false};
-                false ->
-                    State
-            end;
-        false ->
-            State
-    end,
+        case Blocked of
+            true ->
+                case should_unblock(Connection, Configuration) of
+                    true ->
+                        Transport:setopts(S, [{active, once}]),
+                        ok = rabbit_heartbeat:resume_monitor(Heartbeater),
+                        State#stream_connection_state{blocked = false};
+                    false ->
+                        State
+                end;
+            false ->
+                State
+        end,
     {keep_state, StatemData#statem_data{connection_state = State1}};
-open(cast, {queue_event, #resource{name = StreamName},
-            {osiris_offset, _QueueResource, -1}}, _StatemData) ->
+open(cast,
+     {queue_event, #resource{name = StreamName},
+      {osiris_offset, _QueueResource, -1}},
+     _StatemData) ->
     rabbit_log:debug("Stream protocol connection received osiris offset event for ~p with offset ~p",
                      [StreamName, -1]),
     keep_state_and_data;
 open(cast,
      {queue_event, #resource{name = StreamName},
       {osiris_offset, _QueueResource, Offset}},
-     #statem_data{
-        transport = Transport,
-        connection = #stream_connection{
-                        stream_subscriptions = StreamSubscriptions,
-                        send_file_oct = SendFileOct
-                       } = Connection,
-        connection_state = #stream_connection_state{consumers = Consumers} = State
-       } = StatemData)
-  when Offset > -1 ->
+     #statem_data{transport = Transport,
+                  connection =
+                      #stream_connection{stream_subscriptions =
+                                             StreamSubscriptions,
+                                         send_file_oct = SendFileOct} =
+                          Connection,
+                  connection_state =
+                      #stream_connection_state{consumers = Consumers} = State} =
+         StatemData)
+    when Offset > -1 ->
     {Connection1, State1} =
-    case maps:get(StreamName, StreamSubscriptions, undefined) of
-        undefined ->
-            rabbit_log:debug("Stream protocol connection: osiris offset event for ~p, but no subscription (leftover messages after unsubscribe?)",
-                             [StreamName]),
-            {Connection, State};
-        [] ->
-            rabbit_log:debug("Stream protocol connection: osiris offset event for ~p, but no registered consumers!",
-                             [StreamName]),
-            {Connection#stream_connection{stream_subscriptions =
-                                          maps:remove(StreamName,
-                                                      StreamSubscriptions)},
-             State};
-        CorrelationIds when is_list(CorrelationIds) ->
-            Consumers1 =
-            lists:foldl(fun(CorrelationId, ConsumersAcc) ->
-                                #{CorrelationId := Consumer} =
-                                ConsumersAcc,
-                                #consumer{credit = Credit} =
-                                Consumer,
-                                Consumer1 =
-                                case Credit of
-                                    0 -> Consumer;
-                                    _ ->
-                                        case
-                                            send_chunks(Transport,
-                                                        Consumer,
-                                                        SendFileOct)
-                                        of
-                                            {error, Reason} ->
-                                                rabbit_log_connection:info("Error while sending chunks: ~p",
-                                                                           [Reason]),
-                                                %% likely a connection problem
-                                                Consumer;
-                                            {{segment, Segment1},
-                                             {credit,
-                                              Credit1}} ->
-                                                Consumer#consumer{segment
-                                                                  =
-                                                                  Segment1,
-                                                                  credit
-                                                                  =
-                                                                  Credit1}
-                                        end
+        case maps:get(StreamName, StreamSubscriptions, undefined) of
+            undefined ->
+                rabbit_log:debug("Stream protocol connection: osiris offset event for ~p, but no subscription (leftover messages after unsubscribe?)",
+                                 [StreamName]),
+                {Connection, State};
+            [] ->
+                rabbit_log:debug("Stream protocol connection: osiris offset event for ~p, but no registered consumers!",
+                                 [StreamName]),
+                {Connection#stream_connection{stream_subscriptions =
+                                                  maps:remove(StreamName,
+                                                              StreamSubscriptions)},
+                 State};
+            CorrelationIds when is_list(CorrelationIds) ->
+                Consumers1 =
+                    lists:foldl(fun(CorrelationId, ConsumersAcc) ->
+                                   #{CorrelationId := Consumer} = ConsumersAcc,
+                                   #consumer{credit = Credit} = Consumer,
+                                   Consumer1 =
+                                       case Credit of
+                                           0 ->
+                                               Consumer;
+                                           _ ->
+                                               case send_chunks(Transport,
+                                                                Consumer,
+                                                                SendFileOct)
+                                               of
+                                                   {error, Reason} ->
+                                                       rabbit_log_connection:info("Error while sending chunks: ~p",
+                                                                                  [Reason]),
+                                                       %% likely a connection problem
+                                                       Consumer;
+                                                   {{segment, Segment1},
+                                                    {credit, Credit1}} ->
+                                                       Consumer#consumer{segment
+                                                                             =
+                                                                             Segment1,
+                                                                         credit
+                                                                             =
+                                                                             Credit1}
+                                               end
+                                       end,
+                                   ConsumersAcc#{CorrelationId => Consumer1}
                                 end,
-                                ConsumersAcc#{CorrelationId =>
-                                              Consumer1}
-                        end,
-                        Consumers, CorrelationIds),
-            {Connection,
-             State#stream_connection_state{consumers = Consumers1}}
-    end,
-    {keep_state, StatemData#statem_data{
-                   connection = Connection1,
-                   connection_state = State1}};
-open(cast, {force_event_refresh, Ref}, #statem_data{
-                                          connection = Connection,
-                                          connection_state = State} = StatemData) ->
+                                Consumers, CorrelationIds),
+                {Connection,
+                 State#stream_connection_state{consumers = Consumers1}}
+        end,
+    {keep_state,
+     StatemData#statem_data{connection = Connection1,
+                            connection_state = State1}};
+open(cast, {force_event_refresh, Ref},
+     #statem_data{connection = Connection, connection_state = State} =
+         StatemData) ->
     Infos =
-    augment_infos_with_user_provided_connection_name(infos(?CREATION_EVENT_KEYS,
-                                                           Connection,
-                                                           State),
-                                                     Connection),
+        augment_infos_with_user_provided_connection_name(infos(?CREATION_EVENT_KEYS,
+                                                               Connection,
+                                                               State),
+                                                         Connection),
     rabbit_event:notify(connection_created, Infos, Ref),
     Connection1 =
-    rabbit_event:init_stats_timer(Connection,
-                                  #stream_connection.stats_timer),
+        rabbit_event:init_stats_timer(Connection,
+                                      #stream_connection.stats_timer),
     Connection2 = ensure_stats_timer(Connection1),
     {keep_state, StatemData#statem_data{connection = Connection2}}.
 
-close_sent(enter, _OldState, #statem_data{
-                                config = #configuration{
-                                            connection_negotiation_step_timeout = StateTimeout}}) ->
+close_sent(enter, _OldState,
+           #statem_data{config =
+                            #configuration{connection_negotiation_step_timeout =
+                                               StateTimeout}}) ->
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
-close_sent(state_timeout, close, #statem_data{
-                                    transport = Transport,
-                                    connection = #stream_connection{socket = Socket},
-                                    connection_state = State
-                                   }) ->
-    rabbit_log_connection:warning(
-      "Closing connection because of timeout in state '~s' likely due to lack of client action.",
-      [?FUNCTION_NAME]),
+close_sent(state_timeout, close,
+           #statem_data{transport = Transport,
+                        connection = #stream_connection{socket = Socket},
+                        connection_state = State}) ->
+    rabbit_log_connection:warning("Closing connection because of timeout in state '~s' likely due to lack of client action.",
+                                  [?FUNCTION_NAME]),
     close(Transport, Socket, State),
     stop;
-close_sent(info, {tcp, S, Data}, #statem_data{
-                                    transport = Transport,
-                                    connection = Connection,
-                                    connection_state = State
-                                   } = StatemData) when byte_size(Data) > 1 ->
-    {Connection1, State1} = handle_inbound_data_post_close(Transport,
-                                                           Connection,
-                                                           State,
-                                                           Data),
+close_sent(info, {tcp, S, Data},
+           #statem_data{transport = Transport,
+                        connection = Connection,
+                        connection_state = State} =
+               StatemData)
+    when byte_size(Data) > 1 ->
+    {Connection1, State1} =
+        handle_inbound_data_post_close(Transport, Connection, State, Data),
     #stream_connection{connection_step = Step} = Connection1,
-    rabbit_log_connection:debug("Stream reader has transitioned from ~s to ~s", [?FUNCTION_NAME, Step]),
+    rabbit_log_connection:debug("Stream reader has transitioned from ~s to ~s",
+                                [?FUNCTION_NAME, Step]),
     case Step of
         closing_done ->
             close(Transport, S, State1),
             stop;
         _ ->
             Transport:setopts(S, [{active, once}]),
-            {keep_state, StatemData#statem_data{
-                           connection = Connection1,
-                           connection_state = State1
-                          }}
+            {keep_state,
+             StatemData#statem_data{connection = Connection1,
+                                    connection_state = State1}}
     end;
 close_sent(info, {tcp_closed, S}, _StatemData) ->
-    rabbit_log_connection:debug("Stream protocol connection socket ~w closed [~w]", [S, self()]),
+    rabbit_log_connection:debug("Stream protocol connection socket ~w closed [~w]",
+                                [S, self()]),
     stop;
-close_sent(info, {tcp_error, S, Reason}, #statem_data{
-                                            transport = Transport,
-                                            connection_state = State
-                                           }) ->
-    rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] [~w]", [Reason, S, self()]),
+close_sent(info, {tcp_error, S, Reason},
+           #statem_data{transport = Transport, connection_state = State}) ->
+    rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] [~w]",
+                                [Reason, S, self()]),
     close(Transport, S, State),
     stop;
-close_sent(info,{resource_alarm, IsThereAlarm},
+close_sent(info, {resource_alarm, IsThereAlarm},
            StatemData = #statem_data{connection = Connection}) ->
-    rabbit_log:warning("Stream protocol connection ignored a resource alarm ~p in state ~s", [IsThereAlarm, ?FUNCTION_NAME]),
-    {keep_state, StatemData#statem_data{
-                   connection = Connection#stream_connection{resource_alarm = IsThereAlarm}
-                  }};
+    rabbit_log:warning("Stream protocol connection ignored a resource alarm ~p in state ~s",
+                       [IsThereAlarm, ?FUNCTION_NAME]),
+    {keep_state,
+     StatemData#statem_data{connection =
+                                Connection#stream_connection{resource_alarm =
+                                                                 IsThereAlarm}}};
 close_sent(info, Msg, _StatemData) ->
-    rabbit_log_connection:warning("Ignored unknown message ~p in state ~s", [Msg, ?FUNCTION_NAME]),
+    rabbit_log_connection:warning("Ignored unknown message ~p in state ~s",
+                                  [Msg, ?FUNCTION_NAME]),
     keep_state_and_data.
 
 handle_inbound_data_pre_auth(Transport, Connection, State, Data) ->
@@ -1141,9 +1192,10 @@ handle_frame_pre_auth(Transport,
                                    ServerProperties}}),
     send(Transport, S, Frame),
     {Connection#stream_connection{client_properties = ClientProperties,
-                                  authentication_state = peer_properties_exchanged,
-                                  connection_step = peer_properties_exchanged
-                                 }, State};
+                                  authentication_state =
+                                      peer_properties_exchanged,
+                                  connection_step = peer_properties_exchanged},
+     State};
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S} = Connection,
                       State,
@@ -1154,7 +1206,8 @@ handle_frame_pre_auth(Transport,
                                   {sasl_handshake, ?RESPONSE_CODE_OK,
                                    Mechanisms}}),
     send(Transport, S, Frame),
-    {Connection#stream_connection{connection_step = authenticating}, State};
+    {Connection#stream_connection{connection_step = authenticating},
+     State};
 handle_frame_pre_auth(Transport,
                       #stream_connection{socket = S,
                                          authentication_state = AuthState0,
@@ -1238,7 +1291,7 @@ handle_frame_pre_auth(Transport,
                                                                             Username,
                                                                             stream),
                                     rabbit_log_connection:warning("User '~s' can only connect via localhost",
-                                                       [Username]),
+                                                                  [Username]),
                                     {C1#stream_connection{connection_step =
                                                               failure},
                                      {sasl_authenticate,
@@ -1275,7 +1328,8 @@ handle_frame_pre_auth(_Transport,
                           Connection,
                       #stream_connection_state{blocked = Blocked} = State,
                       {tune, FrameMax, Heartbeat}) ->
-    rabbit_log_connection:debug("Tuning response ~p ~p ", [FrameMax, Heartbeat]),
+    rabbit_log_connection:debug("Tuning response ~p ~p ",
+                                [FrameMax, Heartbeat]),
     Parent = self(),
     %% sending a message to the main process so the heartbeat frame is sent from this main process
     %% otherwise heartbeat frames can interleave with chunk delivery
@@ -1362,7 +1416,7 @@ handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
     {Connection, State};
 handle_frame_pre_auth(_Transport, Connection, State, Command) ->
     rabbit_log_connection:warning("unknown command ~w, closing connection.",
-                       [Command]),
+                                  [Command]),
     {Connection#stream_connection{connection_step = failure}, State}.
 
 auth_fail(Username, Msg, Args, Connection, ConnectionState) ->
@@ -1406,14 +1460,15 @@ handle_frame_post_auth(Transport,
                          _WriterRef,
                          Stream}}) ->
     rabbit_log_connection:info("Cannot create publisher ~p on stream ~p, connection "
-                    "is blocked because of resource alarm",
-                    [PublisherId, Stream]),
+                               "is blocked because of resource alarm",
+                               [PublisherId, Stream]),
     response(Transport,
              Connection0,
              declare_publisher,
              CorrelationId,
              ?RESPONSE_CODE_PRECONDITION_FAILED),
-    rabbit_global_counters:increase_protocol_counter(stream, ?PRECONDITION_FAILED, 1),
+    rabbit_global_counters:increase_protocol_counter(stream,
+                                                     ?PRECONDITION_FAILED, 1),
     {Connection0, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{user = User,
@@ -1440,7 +1495,9 @@ handle_frame_post_auth(Transport,
                                      declare_publisher,
                                      CorrelationId,
                                      ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
-                            rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
+                            rabbit_global_counters:increase_protocol_counter(stream,
+                                                                             ?STREAM_DOES_NOT_EXIST,
+                                                                             1),
                             {Connection0, State};
                         {ClusterLeader,
                          #stream_connection{publishers = Publishers0,
@@ -1487,7 +1544,9 @@ handle_frame_post_auth(Transport,
                              declare_publisher,
                              CorrelationId,
                              ?RESPONSE_CODE_PRECONDITION_FAILED),
-                    rabbit_global_counters:increase_protocol_counter(stream, ?PRECONDITION_FAILED, 1),
+                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                     ?PRECONDITION_FAILED,
+                                                                     1),
                     {Connection0, State}
             end;
         error ->
@@ -1496,7 +1555,9 @@ handle_frame_post_auth(Transport,
                      declare_publisher,
                      CorrelationId,
                      ?RESPONSE_CODE_ACCESS_REFUSED),
-            rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?ACCESS_REFUSED,
+                                                             1),
             {Connection0, State}
     end;
 handle_frame_post_auth(Transport,
@@ -1541,7 +1602,9 @@ handle_frame_post_auth(Transport,
                          PublishingIds},
                     Frame = rabbit_stream_core:frame(Command),
                     send(Transport, S, Frame),
-                    rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
+                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                     ?ACCESS_REFUSED,
+                                                                     1),
                     increase_messages_errored(Counters, MessageCount),
                     {Connection, State}
             end;
@@ -1554,7 +1617,9 @@ handle_frame_post_auth(Transport,
                  PublishingIds},
             Frame = rabbit_stream_core:frame(Command),
             send(Transport, S, Frame),
-            rabbit_global_counters:increase_protocol_counter(stream, ?PUBLISHER_DOES_NOT_EXIST, 1),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?PUBLISHER_DOES_NOT_EXIST,
+                                                             1),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -1578,7 +1643,9 @@ handle_frame_post_auth(Transport,
                                                                Stream)
                 of
                     {error, not_found} ->
-                        rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
+                        rabbit_global_counters:increase_protocol_counter(stream,
+                                                                         ?STREAM_DOES_NOT_EXIST,
+                                                                         1),
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0};
                     {ok, LocalMemberPid} ->
                         {?RESPONSE_CODE_OK,
@@ -1591,7 +1658,9 @@ handle_frame_post_auth(Transport,
                          end}
                 end;
             error ->
-                rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
+                rabbit_global_counters:increase_protocol_counter(stream,
+                                                                 ?ACCESS_REFUSED,
+                                                                 1),
                 {?RESPONSE_CODE_ACCESS_REFUSED, 0}
         end,
     Frame =
@@ -1634,7 +1703,9 @@ handle_frame_post_auth(Transport,
                      delete_publisher,
                      CorrelationId,
                      ?RESPONSE_CODE_PUBLISHER_DOES_NOT_EXIST),
-            rabbit_global_counters:increase_protocol_counter(stream, ?PUBLISHER_DOES_NOT_EXIST, 1),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?PUBLISHER_DOES_NOT_EXIST,
+                                                             1),
             {Connection0, State}
     end;
 handle_frame_post_auth(Transport,
@@ -1671,7 +1742,9 @@ handle_frame_post_auth(Transport,
                              subscribe,
                              CorrelationId,
                              ?RESPONSE_CODE_STREAM_NOT_AVAILABLE),
-                    rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_NOT_AVAILABLE, 1),
+                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                     ?STREAM_NOT_AVAILABLE,
+                                                                     1),
                     {Connection, State};
                 {error, not_found} ->
                     response(Transport,
@@ -1679,7 +1752,9 @@ handle_frame_post_auth(Transport,
                              subscribe,
                              CorrelationId,
                              ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
-                    rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
+                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                     ?STREAM_DOES_NOT_EXIST,
+                                                                     1),
                     {Connection, State};
                 {ok, LocalMemberPid} ->
                     case subscription_exists(StreamSubscriptions,
@@ -1691,15 +1766,17 @@ handle_frame_post_auth(Transport,
                                      subscribe,
                                      CorrelationId,
                                      ?RESPONSE_CODE_SUBSCRIPTION_ID_ALREADY_EXISTS),
-                            rabbit_global_counters:increase_protocol_counter(stream, ?SUBSCRIPTION_ID_ALREADY_EXISTS, 1),
+                            rabbit_global_counters:increase_protocol_counter(stream,
+                                                                             ?SUBSCRIPTION_ID_ALREADY_EXISTS,
+                                                                             1),
                             {Connection, State};
                         false ->
                             rabbit_log:debug("Creating subscription ~p to ~p, with offset specificat"
                                              "ion ~p, properties ~0p",
-                                            [SubscriptionId,
-                                             Stream,
-                                             OffsetSpec,
-                                             Properties]),
+                                             [SubscriptionId,
+                                              Stream,
+                                              OffsetSpec,
+                                              Properties]),
                             CounterSpec =
                                 {{?MODULE,
                                   QueueResource,
@@ -1716,7 +1793,8 @@ handle_frame_post_auth(Transport,
                                                    CounterSpec,
                                                    Options),
                             rabbit_log:debug("Next offset for subscription ~p is ~p",
-                                             [SubscriptionId, osiris_log:next_offset(Segment)]),
+                                             [SubscriptionId,
+                                              osiris_log:next_offset(Segment)]),
                             ConsumerCounters =
                                 atomics:new(2, [{signed, false}]),
                             ConsumerState =
@@ -1795,7 +1873,9 @@ handle_frame_post_auth(Transport,
                      subscribe,
                      CorrelationId,
                      ?RESPONSE_CODE_ACCESS_REFUSED),
-            rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?ACCESS_REFUSED,
+                                                             1),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -1825,7 +1905,9 @@ handle_frame_post_auth(Transport,
                                                   {credit, Code,
                                                    SubscriptionId}}),
                     send(Transport, S, Frame),
-                    rabbit_global_counters:increase_protocol_counter(stream, ?SUBSCRIPTION_ID_DOES_NOT_EXIST, 1),
+                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                     ?SUBSCRIPTION_ID_DOES_NOT_EXIST,
+                                                                     1),
                     {Connection1, State1};
                 {{segment, Segment1}, {credit, Credit1}} ->
                     Consumer1 =
@@ -1845,7 +1927,9 @@ handle_frame_post_auth(Transport,
                 rabbit_stream_core:frame({response, 1,
                                           {credit, Code, SubscriptionId}}),
             send(Transport, S, Frame),
-            rabbit_global_counters:increase_protocol_counter(stream, ?SUBSCRIPTION_ID_DOES_NOT_EXIST, 1),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?SUBSCRIPTION_ID_DOES_NOT_EXIST,
+                                                             1),
             {Connection, State}
     end;
 handle_frame_post_auth(_Transport,
@@ -1874,7 +1958,8 @@ handle_frame_post_auth(_Transport,
             end;
         error ->
             %% FIXME store offset is fire-and-forget, so no response even if error, change this?
-            rabbit_log:warning("Not authorized to store offset on stream ~p", [Stream]),
+            rabbit_log:warning("Not authorized to store offset on stream ~p",
+                               [Stream]),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -1895,7 +1980,9 @@ handle_frame_post_auth(Transport,
             ok ->
                 case lookup_leader(Stream, Connection0) of
                     cluster_not_found ->
-                        rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
+                        rabbit_global_counters:increase_protocol_counter(stream,
+                                                                         ?STREAM_DOES_NOT_EXIST,
+                                                                         1),
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0, Connection0};
                     {LeaderPid, C} ->
                         {?RESPONSE_CODE_OK,
@@ -1908,7 +1995,9 @@ handle_frame_post_auth(Transport,
                          C}
                 end;
             error ->
-                rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
+                rabbit_global_counters:increase_protocol_counter(stream,
+                                                                 ?ACCESS_REFUSED,
+                                                                 1),
                 {?RESPONSE_CODE_ACCESS_REFUSED, 0, Connection0}
         end,
     Frame =
@@ -1930,7 +2019,9 @@ handle_frame_post_auth(Transport,
                      unsubscribe,
                      CorrelationId,
                      ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST),
-            rabbit_global_counters:increase_protocol_counter(stream, ?SUBSCRIPTION_ID_DOES_NOT_EXIST, 1),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?SUBSCRIPTION_ID_DOES_NOT_EXIST,
+                                                             1),
             {Connection, State};
         true ->
             {Connection1, State1} =
@@ -1980,7 +2071,9 @@ handle_frame_post_auth(Transport,
                                      create_stream,
                                      CorrelationId,
                                      ?RESPONSE_CODE_PRECONDITION_FAILED),
-                            rabbit_global_counters:increase_protocol_counter(stream, ?PRECONDITION_FAILED, 1),
+                            rabbit_global_counters:increase_protocol_counter(stream,
+                                                                             ?PRECONDITION_FAILED,
+                                                                             1),
                             {Connection, State};
                         {error, reference_already_exists} ->
                             response(Transport,
@@ -1988,7 +2081,9 @@ handle_frame_post_auth(Transport,
                                      create_stream,
                                      CorrelationId,
                                      ?RESPONSE_CODE_STREAM_ALREADY_EXISTS),
-                            rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_ALREADY_EXISTS, 1),
+                            rabbit_global_counters:increase_protocol_counter(stream,
+                                                                             ?STREAM_ALREADY_EXISTS,
+                                                                             1),
                             {Connection, State};
                         {error, _} ->
                             response(Transport,
@@ -1996,7 +2091,9 @@ handle_frame_post_auth(Transport,
                                      create_stream,
                                      CorrelationId,
                                      ?RESPONSE_CODE_INTERNAL_ERROR),
-                            rabbit_global_counters:increase_protocol_counter(stream, ?INTERNAL_ERROR, 1),
+                            rabbit_global_counters:increase_protocol_counter(stream,
+                                                                             ?INTERNAL_ERROR,
+                                                                             1),
                             {Connection, State}
                     end;
                 error ->
@@ -2005,7 +2102,9 @@ handle_frame_post_auth(Transport,
                              create_stream,
                              CorrelationId,
                              ?RESPONSE_CODE_ACCESS_REFUSED),
-                    rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
+                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                     ?ACCESS_REFUSED,
+                                                                     1),
                     {Connection, State}
             end;
         _ ->
@@ -2014,7 +2113,9 @@ handle_frame_post_auth(Transport,
                      create_stream,
                      CorrelationId,
                      ?RESPONSE_CODE_PRECONDITION_FAILED),
-            rabbit_global_counters:increase_protocol_counter(stream, ?PRECONDITION_FAILED, 1),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?PRECONDITION_FAILED,
+                                                             1),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -2052,7 +2153,9 @@ handle_frame_post_auth(Transport,
                                      ?RESPONSE_CODE_STREAM_NOT_AVAILABLE},
                                 Frame = rabbit_stream_core:frame(Command),
                                 send(Transport, S, Frame),
-                                rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_NOT_AVAILABLE, 1),
+                                rabbit_global_counters:increase_protocol_counter(stream,
+                                                                                 ?STREAM_NOT_AVAILABLE,
+                                                                                 1),
                                 {NewConnection, NewState};
                             {not_cleaned, SameConnection, SameState} ->
                                 {SameConnection, SameState}
@@ -2064,7 +2167,9 @@ handle_frame_post_auth(Transport,
                              delete_stream,
                              CorrelationId,
                              ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
-                    rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
+                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                     ?STREAM_DOES_NOT_EXIST,
+                                                                     1),
                     {Connection, State}
             end;
         error ->
@@ -2073,7 +2178,9 @@ handle_frame_post_auth(Transport,
                      delete_stream,
                      CorrelationId,
                      ?RESPONSE_CODE_ACCESS_REFUSED),
-            rabbit_global_counters:increase_protocol_counter(stream, ?ACCESS_REFUSED, 1),
+            rabbit_global_counters:increase_protocol_counter(stream,
+                                                             ?ACCESS_REFUSED,
+                                                             1),
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
@@ -2112,7 +2219,8 @@ handle_frame_post_auth(Transport,
                                                        NodesAcc)
                                            end,
                                            Acc1, ReplicaNodes);
-                           {error, _} -> Acc
+                           {error, _} ->
+                               Acc
                        end
                     end,
                     #{}, Streams),
@@ -2124,13 +2232,16 @@ handle_frame_post_auth(Transport,
         lists:foldr(fun(Node, Acc) ->
                        PortFunction =
                            case TransportLayer of
-                               tcp -> port;
-                               ssl -> tls_port
+                               tcp ->
+                                   port;
+                               ssl ->
+                                   tls_port
                            end,
                        Host = rpc:call(Node, rabbit_stream, host, []),
                        Port = rpc:call(Node, rabbit_stream, PortFunction, []),
                        case {is_binary(Host), is_integer(Port)} of
-                           {true, true} -> Acc#{Node => {Host, Port}};
+                           {true, true} ->
+                               Acc#{Node => {Host, Port}};
                            _ ->
                                rabbit_log:warning("Error when retrieving broker metadata: ~p ~p",
                                                   [Host, Port]),
@@ -2142,21 +2253,25 @@ handle_frame_post_auth(Transport,
     Metadata =
         lists:foldl(fun(Stream, Acc) ->
                        case maps:get(Stream, Topology) of
-                           {error, Err} -> Acc#{Stream => Err};
+                           {error, Err} ->
+                               Acc#{Stream => Err};
                            {ok,
                             #{leader_node := LeaderNode,
                               replica_nodes := Replicas}} ->
                                LeaderInfo =
                                    case NodeEndpoints of
-                                       #{LeaderNode := Info} -> Info;
-                                       _ -> undefined
+                                       #{LeaderNode := Info} ->
+                                           Info;
+                                       _ ->
+                                           undefined
                                    end,
                                ReplicaInfos =
                                    lists:foldr(fun(Replica, A) ->
                                                   case NodeEndpoints of
                                                       #{Replica := I} ->
                                                           [I | A];
-                                                      _ -> A
+                                                      _ ->
+                                                          A
                                                   end
                                                end,
                                                [], Replicas),
@@ -2189,7 +2304,9 @@ handle_frame_post_auth(Transport,
                 {?RESPONSE_CODE_OK,
                  <<StreamSize:16, Stream:StreamSize/binary>>};
             {error, _} ->
-                rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
+                rabbit_global_counters:increase_protocol_counter(stream,
+                                                                 ?STREAM_DOES_NOT_EXIST,
+                                                                 1),
                 {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, <<(-1):16>>}
         end,
 
@@ -2222,7 +2339,9 @@ handle_frame_post_auth(Transport,
                                   <<StreamCount:32>>, Streams),
                 {?RESPONSE_CODE_OK, Bin};
             {error, _} ->
-                rabbit_global_counters:increase_protocol_counter(stream, ?STREAM_DOES_NOT_EXIST, 1),
+                rabbit_global_counters:increase_protocol_counter(stream,
+                                                                 ?STREAM_DOES_NOT_EXIST,
+                                                                 1),
                 {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, <<0:32>>}
         end,
 
@@ -2263,15 +2382,19 @@ handle_frame_post_auth(Transport,
                                   {close, ?RESPONSE_CODE_UNKNOWN_FRAME,
                                    CloseReason}}),
     send(Transport, S, Frame),
-    rabbit_global_counters:increase_protocol_counter(stream, ?UNKNOWN_FRAME, 1),
+    rabbit_global_counters:increase_protocol_counter(stream,
+                                                     ?UNKNOWN_FRAME, 1),
     {Connection#stream_connection{connection_step = close_sent}, State}.
 
-notify_connection_closed(
-  #statem_data{connection = #stream_connection{
-                               name = Name,
-                               publishers = Publishers} = Connection,
-               connection_state = #stream_connection_state{
-                                     consumers = Consumers} = ConnectionState}) ->
+notify_connection_closed(#statem_data{connection =
+                                          #stream_connection{name = Name,
+                                                             publishers =
+                                                                 Publishers} =
+                                              Connection,
+                                      connection_state =
+                                          #stream_connection_state{consumers =
+                                                                       Consumers} =
+                                              ConnectionState}) ->
     rabbit_core_metrics:connection_closed(self()),
     [rabbit_stream_metrics:consumer_cancelled(self(),
                                               stream_r(S, Connection), SubId)
@@ -2301,7 +2424,8 @@ handle_frame_post_close(_Transport, Connection, State, heartbeat) ->
     rabbit_log_connection:debug("Received heartbeat command post close"),
     {Connection, State};
 handle_frame_post_close(_Transport, Connection, State, Command) ->
-    rabbit_log_connection:warning("ignored command on close ~p .", [Command]),
+    rabbit_log_connection:warning("ignored command on close ~p .",
+                                  [Command]),
     {Connection, State}.
 
 stream_r(Stream, #stream_connection{virtual_host = VHost}) ->
@@ -2358,7 +2482,8 @@ clean_state_after_stream_deletion_or_failure(Stream,
                                                                                  PubId),
                                          {maps:remove(PubId, Pubs),
                                           maps:remove({Stream, Ref}, PubToIds)};
-                                     _ -> {Pubs, PubToIds}
+                                     _ ->
+                                         {Pubs, PubToIds}
                                  end
                               end,
                               {Publishers, PublisherToIds}, Publishers),
@@ -2475,7 +2600,8 @@ demonitor_stream(Stream,
                          Stream ->
                              demonitor(MonitorRef, [flush]),
                              Acc;
-                         _ -> maps:put(MonitorRef, Strm, Acc)
+                         _ ->
+                             maps:put(MonitorRef, Strm, Acc)
                      end
                   end,
                   #{}, Monitors0),
@@ -2496,8 +2622,10 @@ stream_has_publishers(Stream,
                       #stream_connection{publishers = Publishers}) ->
     lists:any(fun(#publisher{stream = S}) ->
                  case S of
-                     Stream -> true;
-                     _ -> false
+                     Stream ->
+                         true;
+                     _ ->
+                         false
                  end
               end,
               maps:values(Publishers)).
@@ -2778,7 +2906,8 @@ i(host, #stream_connection{host = Host}, _) ->
     Host;
 i(peer_host, #stream_connection{peer_host = PeerHost}, _) ->
     PeerHost;
-i(ssl, #stream_connection{socket = Socket, proxy_socket = ProxySock}, _) ->
+i(ssl, #stream_connection{socket = Socket, proxy_socket = ProxySock},
+  _) ->
     rabbit_net:proxy_ssl_info(Socket, ProxySock) /= nossl;
 i(peer_cert_subject, S, _) ->
     cert_info(fun rabbit_ssl:peer_cert_subject/1, S);
@@ -2845,7 +2974,8 @@ cert_info(F, #stream_connection{socket = Sock}) ->
             list_to_binary(F(Cert))
     end.
 
-ssl_info(F, #stream_connection{socket = Sock, proxy_socket = ProxySock}) ->
+ssl_info(F,
+         #stream_connection{socket = Sock, proxy_socket = ProxySock}) ->
     case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
         nossl ->
             '';

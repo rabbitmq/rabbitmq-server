@@ -25,8 +25,7 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand').
 
 all() ->
-    [{group, list_connections},
-     {group, list_consumers},
+    [{group, list_connections}, {group, list_consumers},
      {group, list_publishers}].
 
 groups() ->
@@ -48,7 +47,8 @@ init_per_suite(Config) ->
                                              [{rmq_nodename_suffix, ?MODULE}]),
             Config2 =
                 rabbit_ct_helpers:set_config(Config1,
-                                             {rabbitmq_ct_tls_verify, verify_none}),
+                                             {rabbitmq_ct_tls_verify,
+                                              verify_none}),
             rabbit_ct_helpers:log_environment(),
             rabbit_ct_helpers:run_setup_steps(Config2,
                                               rabbit_ct_broker_helpers:setup_steps())
