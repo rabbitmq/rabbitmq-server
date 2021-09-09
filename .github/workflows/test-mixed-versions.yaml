@@ -18,7 +18,6 @@ on:
       - '*.bzl'
       - '*.bazel'
       - .github/workflows/test-mixed-versions.yaml
-  workflow_dispatch:
 jobs:
   test-mixed-versions:
     name: Test (Mixed Version Cluster)
