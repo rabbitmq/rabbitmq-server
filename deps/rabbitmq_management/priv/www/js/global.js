@@ -168,6 +168,9 @@ var COLUMNS;
 
 var RENDER_CALLBACKS = {};
 
+const QUEUE_EXTRA_CONTENT = [];
+const QUEUE_EXTRA_CONTENT_REQUESTS = [];
+
 // All help ? popups
 var HELP = {
     'delivery-limit':
