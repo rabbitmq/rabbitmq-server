@@ -81,7 +81,11 @@ write_messages(ClusterLeader,
         osiris:write(ClusterLeader,
                      undefined,
                      {PublisherId, PublishingId},
-                     {batch, MessageCount, CompressionType, UncompressedSize, Batch}),
+                     {batch,
+                      MessageCount,
+                      CompressionType,
+                      UncompressedSize,
+                      Batch}),
     write_messages(ClusterLeader, undefined, PublisherId, Rest);
 write_messages(_ClusterLeader, _PublisherRef, _PublisherId, <<>>) ->
     ok;
@@ -113,7 +117,11 @@ write_messages(ClusterLeader,
         osiris:write(ClusterLeader,
                      PublisherRef,
                      PublishingId,
-                     {batch, MessageCount, CompressionType, UncompressedSize, Batch}),
+                     {batch,
+                      MessageCount,
+                      CompressionType,
+                      UncompressedSize,
+                      Batch}),
     write_messages(ClusterLeader, PublisherRef, PublisherId, Rest).
 
 parse_map(<<>>, _Count) ->
