@@ -76,15 +76,21 @@ merge_app_env(Config) ->
                                            {detailed, [{10, 5}]}] }]}).
 
 init_per_suite(Config) ->
-    rabbit_ct_helpers:log_environment(),
-    inets:start(),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-                                                    {rmq_nodename_suffix, ?MODULE},
-                                                    {rmq_nodes_count, 2}
-                                                   ]),
-    Config2 = merge_app_env(Config1),
-    rabbit_ct_helpers:run_setup_steps(Config2,
-                                      rabbit_ct_broker_helpers:setup_steps()).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% skip due to the pg/pg2 cross cluster incompatibility
+            {skip, "not mixed versions compatible"};
+        _ ->
+            rabbit_ct_helpers:log_environment(),
+            inets:start(),
+            Config1 = rabbit_ct_helpers:set_config(Config, [
+                                                            {rmq_nodename_suffix, ?MODULE},
+                                                            {rmq_nodes_count, 2}
+                                                           ]),
+            Config2 = merge_app_env(Config1),
+            rabbit_ct_helpers:run_setup_steps(Config2,
+                                              rabbit_ct_broker_helpers:setup_steps())
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,

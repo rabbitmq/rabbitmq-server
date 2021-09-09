@@ -41,7 +41,11 @@ init_per_suite(Config) ->
         {rmq_nodename_suffix, ?MODULE},
         {rmq_nodes_count,     2}
       ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
+    Config2 = rabbit_ct_helpers:merge_app_env(Config1,
+      {rabbit, [
+          {log, [{file, [{level, debug}]},
+                 {console, [{level, debug}]}]}]}),
+    rabbit_ct_helpers:run_setup_steps(Config2,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 

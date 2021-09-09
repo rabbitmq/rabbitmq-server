@@ -49,9 +49,12 @@ init_per_group(tests, Config0) ->
     case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
         ok ->
             Config2;
-        Skip ->
+        {skip, _} = Skip ->
             end_per_group(tests, Config2),
-            Skip
+            Skip;
+        Other ->
+            end_per_group(tests, Config2),
+            {skip, Other}
     end.
 
 end_per_group(tests, Config) ->

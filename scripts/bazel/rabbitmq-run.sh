@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+rmq_realpath() {
+    local path=$1
+
+    if [ -d "$path" ]; then
+        cd "$path" && pwd
+    elif [ -f "$path" ]; then
+        cd "$(dirname "$path")" && echo $(pwd)/$(basename "$path")
+    else
+        echo "$path"
+    fi
+}
+
 if [ -z ${TEST_SRCDIR+x} ]; then
 BASE_DIR=$PWD
 else
@@ -41,7 +53,7 @@ if [ ! -z ${EXTRA_PLUGINS_DIR+x} ]; then
 fi
 
 TEST_TMPDIR=${TEST_TMPDIR:=${TMPDIR}/rabbitmq-test-instances}
-RABBITMQ_SCRIPTS_DIR=${BASE_DIR}/{RABBITMQ_HOME}/sbin
+RABBITMQ_SCRIPTS_DIR="$(rmq_realpath ${BASE_DIR}/{RABBITMQ_HOME}/sbin)"
 RABBITMQ_PLUGINS=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-plugins
 RABBITMQ_SERVER=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server
 RABBITMQCTL=${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl
@@ -139,6 +151,12 @@ cat << EOF > ${RABBITMQ_CONFIG_FILE}
 EOF
 }
 
+write_enabled_plugins_file() {
+cat << EOF > ${RABBITMQ_ENABLED_PLUGINS_FILE}
+[$(echo "${RABBITMQ_ENABLED_PLUGINS}" | sed 's/[ ]+*/,/g')].
+EOF
+}
+
 case $CMD in
     run-broker)
         export RABBITMQ_ALLOW_INPUT=true
@@ -148,6 +166,10 @@ case $CMD in
         ;;
     start-background-broker)
         RMQCTL_WAIT_TIMEOUT=${RMQCTL_WAIT_TIMEOUT:=60}
+
+        # 3.7 in mixed version testing seems to need this file,
+        # instead of the RABBITMQ_ENABLED_PLUGINS env var
+        write_enabled_plugins_file
 
         ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server \
             > ${RABBITMQ_LOG_BASE}/startup_log \

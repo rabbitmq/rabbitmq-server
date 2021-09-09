@@ -93,17 +93,25 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),
-    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Testcase},
-        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
-        {keep_pid_file_on_exit, true}
-      ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    case {Testcase, ClusterSize} of
+        {forget_cluster_node, 3} ->
+            {skip, "not mixed versions compatible"};
+        {persistent_cluster_id, _} ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase),
+            TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+            Config1 = rabbit_ct_helpers:set_config(Config,
+                                                   [
+                                                    {rmq_nodename_suffix, Testcase},
+                                                    {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
+                                                    {keep_pid_file_on_exit, true}
+                                                   ]),
+            rabbit_ct_helpers:run_steps(Config1,
+                                        rabbit_ct_broker_helpers:setup_steps() ++
+                                            rabbit_ct_client_helpers:setup_steps())
+    end.
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,

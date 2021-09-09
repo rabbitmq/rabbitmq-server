@@ -46,7 +46,7 @@ rabbitmq_external_deps(rabbitmq_workspace = "@")
 
 git_repository(
     name = "rabbitmq_ct_helpers",
-    branch = "v3.8.x",
+    branch = "master",
     remote = "https://github.com/rabbitmq/rabbitmq-ct-helpers.git",
     repo_mapping = {
         "@rabbitmq-server": "@",
@@ -55,7 +55,7 @@ git_repository(
 
 git_repository(
     name = "rabbitmq_ct_client_helpers",
-    branch = "v3.8.x",
+    branch = "master",
     remote = "https://github.com/rabbitmq/rabbitmq-ct-client-helpers.git",
     repo_mapping = {
         "@rabbitmq-server": "@",
@@ -65,13 +65,6 @@ git_repository(
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
 
 activemq_archive()
-
-# The 3.7 package has a slightly different layout, and rabbit.ez
-# needs to be created for compatibility
-CREATE_RABBIT_EZ = """set -euo pipefail
-
-zip -r plugins/rabbit.ez ebin/* priv/*
-"""
 
 ADD_PLUGINS_DIR_BUILD_FILE = """set -euo pipefail
 
@@ -100,7 +93,6 @@ http_archive(
     name = "rabbitmq-server-generic-unix-3.7.28",
     build_file = "@//:BUILD.package_generic_unix",
     patch_cmds = [
-        CREATE_RABBIT_EZ, # <- for 3.7 only
         ADD_PLUGINS_DIR_BUILD_FILE,
     ],
     sha256 = "8cc45ef421323b407eda3fa82975fffd81d9a46235f6314e16855caedacd02cc",
