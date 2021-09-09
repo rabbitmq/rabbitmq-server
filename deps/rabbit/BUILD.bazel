@@ -939,6 +939,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "vhost_SUITE",
+        flaky = True,
     ),
 ]
 
