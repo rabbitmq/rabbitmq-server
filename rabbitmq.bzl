@@ -42,7 +42,7 @@ RABBITMQ_DIALYZER_OPTS = [
     "-Wunmatched_returns",
 ]
 
-APP_VERSION = "3.9.0"
+APP_VERSION = "3.8"
 
 LABELS_WITH_TEST_VERSIONS = [
     "//deps/amqp10_common:bazel_erlang_lib",
