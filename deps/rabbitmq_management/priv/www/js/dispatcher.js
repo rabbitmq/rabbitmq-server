@@ -98,10 +98,22 @@ dispatcher_add(function(sammy) {
         });
 
     sammy.get('#/queues/:vhost/:name', function() {
-            var path = '/queues/' + esc(this.params['vhost']) + '/' + esc(this.params['name']);
-            render({'queue': {path:    path,
-                              options: {ranges:['lengths-q', 'msg-rates-q', 'data-rates-q']}},
-                    'bindings': path + '/bindings'}, 'queue', '#/queues');
+            var vhost = this.params['vhost'];
+            var queue = this.params['name'];
+            var path = '/queues/' + esc(vhost) + '/' + esc(queue);
+            var requests = {'queue': {path:    path,
+                                      options: {ranges:['lengths-q', 'msg-rates-q', 'data-rates-q']}},
+                            'bindings': path + '/bindings'};
+            // we add extra requests that can be added by code plugged on the extension point
+            for (var i = 0; i < QUEUE_EXTRA_CONTENT_REQUESTS.length; i++) {
+                var extra = QUEUE_EXTRA_CONTENT_REQUESTS[i](vhost, queue);
+                for (key in extra) {
+                    if(extra.hasOwnProperty(key)){
+                        requests[key] = "/stream/publishers";
+                    }
+                }
+            }
+            render(requests, 'queue', '#/queues');
         });
     sammy.put('#/queues', function() {
             if (sync_put(this, '/queues/:vhost/:name'))
