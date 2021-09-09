@@ -6,6 +6,7 @@ load(":rabbitmq_home.bzl", "RabbitmqHomeInfo", "rabbitmq_home_short_path")
 def _impl(ctx):
     rabbitmq_home_path = rabbitmq_home_short_path(ctx.attr.home)
 
+    # the rabbitmq-run.sh template only allows a single erl_libs currently
     erl_libs = [path_join(rabbitmq_home_path, "plugins")]
 
     ctx.actions.expand_template(
