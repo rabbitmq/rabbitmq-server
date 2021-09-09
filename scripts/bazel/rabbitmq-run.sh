@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+rmq_realpath() {
+    local path=$1
+
+    if [ -d "$path" ]; then
+        cd "$path" && pwd
+    elif [ -f "$path" ]; then
+        cd "$(dirname "$path")" && echo $(pwd)/$(basename "$path")
+    else
+        echo "$path"
+    fi
+}
+
 if [ -z ${TEST_SRCDIR+x} ]; then
 BASE_DIR=$PWD
 else
@@ -41,7 +53,7 @@ if [ ! -z ${EXTRA_PLUGINS_DIR+x} ]; then
 fi
 
 TEST_TMPDIR=${TEST_TMPDIR:=${TMPDIR}/rabbitmq-test-instances}
-RABBITMQ_SCRIPTS_DIR=${BASE_DIR}/{RABBITMQ_HOME}/sbin
+RABBITMQ_SCRIPTS_DIR="$(rmq_realpath ${BASE_DIR}/{RABBITMQ_HOME}/sbin)"
 RABBITMQ_PLUGINS=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-plugins
 RABBITMQ_SERVER=${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server
 RABBITMQCTL=${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl

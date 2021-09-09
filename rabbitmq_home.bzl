@@ -3,9 +3,7 @@ load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "flat_deps", "path
 RabbitmqHomeInfo = provider(
     doc = "An assembled RABBITMQ_HOME dir",
     fields = {
-        "sbin": "Files making up the sbin dir",
-        "escript": "Files making up the escript dir",
-        "plugins": "Files making up the plugins dir",
+        "rabbitmqctl": "rabbitmqctl script from the sbin directory",
     },
 )
 
@@ -112,11 +110,16 @@ def _impl(ctx):
 
     plugins = _flatten([_plugins_dir_links(ctx, plugin) for plugin in plugins])
 
+    rabbitmqctl = None
+    for script in scripts:
+        if script.basename == "rabbitmqctl":
+            rabbitmqctl = script
+    if rabbitmqctl == None:
+        fail("could not find rabbitmqct among", scripts)
+
     return [
         RabbitmqHomeInfo(
-            sbin = scripts,
-            escript = escripts,
-            plugins = plugins,
+            rabbitmqctl = rabbitmqctl,
         ),
         DefaultInfo(
             files = depset(scripts + escripts + plugins),
@@ -147,7 +150,7 @@ def _dirname(p):
     return p.rpartition("/")[0]
 
 def rabbitmq_home_short_path(rabbitmq_home):
-    short_path = rabbitmq_home[RabbitmqHomeInfo].sbin[0].short_path
+    short_path = rabbitmq_home[RabbitmqHomeInfo].rabbitmqctl.short_path
     if rabbitmq_home.label.workspace_root != "":
         short_path = path_join(rabbitmq_home.label.workspace_root, short_path)
     return _dirname(_dirname(short_path))
