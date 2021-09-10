@@ -151,9 +151,11 @@ cat << EOF > ${RABBITMQ_CONFIG_FILE}
 EOF
 }
 
+# 3.7 in mixed version testing seems to need this file,
+# instead of the RABBITMQ_ENABLED_PLUGINS env var
 write_enabled_plugins_file() {
 cat << EOF > ${RABBITMQ_ENABLED_PLUGINS_FILE}
-[$(echo "${RABBITMQ_ENABLED_PLUGINS}" | sed 's/[ ]+*/,/g')].
+[${RABBITMQ_ENABLED_PLUGINS}].
 EOF
 }
 
@@ -162,13 +164,12 @@ case $CMD in
         export RABBITMQ_ALLOW_INPUT=true
         export RABBITMQ_CONFIG_FILE=${TEST_TMPDIR}/test.config
         write_config_file
+        write_enabled_plugins_file
         ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server
         ;;
     start-background-broker)
         RMQCTL_WAIT_TIMEOUT=${RMQCTL_WAIT_TIMEOUT:=60}
 
-        # 3.7 in mixed version testing seems to need this file,
-        # instead of the RABBITMQ_ENABLED_PLUGINS env var
         write_enabled_plugins_file
 
         ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server \
