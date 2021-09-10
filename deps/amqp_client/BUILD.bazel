@@ -40,7 +40,12 @@ rabbitmq_lib(
     deps = DEPS,
 )
 
-xref(tags = ["xref"])
+xref(
+    additional_libs = [
+        "@ranch//:bazel_erlang_lib",
+    ],
+    tags = ["xref"],
+)
 
 plt(
     name = "base_plt",

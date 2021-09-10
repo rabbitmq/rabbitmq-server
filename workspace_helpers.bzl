@@ -228,8 +228,8 @@ erlang_lib(
 
     hex_archive(
         name = "ranch",
-        version = "2.0.0",
-        sha256 = "c20a4840c7d6623c19812d3a7c828b2f1bd153ef0f124cb69c54fe51d8a42ae0",
+        version = "2.1.0",
+        sha256 = "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916",
         build_file = rabbitmq_workspace + "//:BUILD.ranch",
     )
 
