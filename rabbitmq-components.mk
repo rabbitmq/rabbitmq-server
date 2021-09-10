@@ -116,13 +116,8 @@ dep_cowlib = hex 2.9.1
 dep_jsx = hex 3.1.0
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
 dep_prometheus = hex 4.8.1
-<<<<<<< HEAD
 dep_ra = hex 2.0.0
-dep_ranch = hex 2.0.0
-=======
-dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 2.1.0
->>>>>>> d327e8a7cb (Update Ranch to 2.1.0)
 dep_recon = hex 2.5.1
 dep_observer_cli = hex 1.6.2
 dep_stdout_formatter = hex 0.2.4
