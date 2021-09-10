@@ -67,9 +67,17 @@ groups() ->
 %% Test suite setup/teardown
 %% -------------------------------------------------------------------
 
+merge_app_env(Config) ->
+    rabbit_ct_helpers:merge_app_env(Config,
+                                    {rabbit, [
+                                              {collect_statistics, fine},
+                                              {collect_statistics_interval, 500}
+                                             ]}).
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    rabbit_ct_helpers:run_setup_steps(Config,
+      [ fun merge_app_env/1 ] ++
+      rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
