@@ -1,0 +1,46 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc",
+"DEFAULT_ERLC_OPTS")
+
+FIRST_SRCS = [
+    "src/ranch_transport.erl",
+]
+
+erlc(
+    name = "first_beam_files",
+    hdrs = glob(["include/**/*.hrl", "src/**/*.hrl"]),
+    srcs = glob(FIRST_SRCS),
+    erlc_opts = DEFAULT_ERLC_OPTS,
+    dest = "ebin",
+)
+
+erlc(
+    name = "beam_files",
+    hdrs = glob(["include/**/*.hrl", "src/**/*.hrl"]),
+    srcs = glob(["src/**/*.erl"], exclude = FIRST_SRCS),
+    beam = [":first_beam_files"],
+    erlc_opts = DEFAULT_ERLC_OPTS,
+    dest = "ebin",
+)
+
+genrule(
+    name = "appup",
+    srcs = ["src/ranch.appup"],
+    outs = ["ebin/ranch.appup"],
+    cmd = "cp $< $@",
+)
+
+app_file(
+    name = "app_file",
+    app_name = "ranch",
+    app_version = "2.1.0",
+    modules = [":first_beam_files", ":beam_files"],
+)
+
+bazel_erlang_lib(
+    name = "bazel_erlang_lib",
+    app_name = "ranch",
+    app = ":app_file",
+    hdrs = glob(["include/**/*.hrl"]),
+    beam = [":first_beam_files", ":beam_files", ":appup"],
+    visibility = ["//visibility:public"],
+)
