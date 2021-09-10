@@ -100,26 +100,12 @@ ssl_info(_Sock) ->
     nossl.
 
 proxy_ssl_info(Sock, {rabbit_proxy_socket, _, ProxyInfo}) ->
-    case ProxyInfo of
-        #{ssl := #{version := Version, cipher := Cipher}} ->
-            Proto = case Version of
-                        <<"SSL3">> -> 'ssl3';
-                        <<"TLSv1">> -> 'tlsv1';
-                        <<"TLSv1.1">> -> 'tlsv1.1';
-                        <<"TLSv1.2">> -> 'tlsv1.2';
-                        <<"TLSv1.3">> -> 'tlsv1.3';
-                        _ -> nossl
-                    end,
-            CipherSuite = case ssl:str_to_suite(binary_to_list(Cipher)) of
-                              #{} = CS -> CS;
-                              _ -> nossl
-                          end,
-            case {Proto, CipherSuite} of
-                {nossl, _} -> ssl_info(Sock);
-                {_, nossl} -> ssl_info(Sock);
-                _ -> {ok, [{protocol, Proto}, {selected_cipher_suite, CipherSuite}]}
-            end;
-        _ ->
+    ConnInfo = ranch_proxy_header:to_connection_info(ProxyInfo),
+    case lists:keymember(protocol, 1, ConnInfo) andalso
+         lists:keymember(selected_cipher_suite, 1, ConnInfo) of
+        true ->
+            {ok, ConnInfo};
+        false ->
             ssl_info(Sock)
     end;
 proxy_ssl_info(Sock, _) ->
