@@ -32,7 +32,7 @@ genrule(
 app_file(
     name = "app_file",
     app_name = "ranch",
-    app_src = ["src/ranch.app.src"],
+    app_version = "2.1.0",
     modules = [":first_beam_files", ":beam_files"],
 )
 

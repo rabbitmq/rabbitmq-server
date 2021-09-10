@@ -28,6 +28,7 @@ rabbitmq_lib(
 
 xref(
     additional_libs = [
+        "@ranch//:bazel_erlang_lib",
         "@systemd//:bazel_erlang_lib",
     ],
     tags = ["xref"],
