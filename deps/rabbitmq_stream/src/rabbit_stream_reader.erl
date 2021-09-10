@@ -1006,6 +1006,9 @@ open(cast,
                                                                 Consumer,
                                                                 SendFileOct)
                                                of
+                                                   {error, closed} ->
+                                                       rabbit_log:info("Stream protocol connection has been closed by peer", []),
+                                                       throw({stop, connection_closed});
                                                    {error, Reason} ->
                                                        rabbit_log_connection:info("Error while sending chunks: ~p",
                                                                                   [Reason]),
@@ -1819,52 +1822,56 @@ handle_frame_post_auth(Transport,
 
                             rabbit_log:debug("Distributing existing messages to subscription ~p",
                                              [SubscriptionId]),
-                            {{segment, Segment1}, {credit, Credit1}} =
-                                send_chunks(Transport, ConsumerState,
-                                            SendFileOct),
-                            ConsumerState1 =
-                                ConsumerState#consumer{segment = Segment1,
-                                                       credit = Credit1},
-                            Consumers1 =
-                                Consumers#{SubscriptionId => ConsumerState1},
 
-                            StreamSubscriptions1 =
-                                case StreamSubscriptions of
-                                    #{Stream := SubscriptionIds} ->
-                                        StreamSubscriptions#{Stream =>
+                            case send_chunks(Transport, ConsumerState, SendFileOct) of
+                                {error, closed} ->
+                                    rabbit_log:info("Stream protocol connection has been closed by peer", []),
+                                    throw({stop, connection_closed});
+                                {{segment, Segment1}, {credit, Credit1}} ->
+                                    ConsumerState1 =
+                                    ConsumerState#consumer{segment = Segment1,
+                                                           credit = Credit1},
+                                    Consumers1 =
+                                    Consumers#{SubscriptionId => ConsumerState1},
+
+                                    StreamSubscriptions1 =
+                                    case StreamSubscriptions of
+                                        #{Stream := SubscriptionIds} ->
+                                            StreamSubscriptions#{Stream =>
                                                                  [SubscriptionId]
                                                                  ++ SubscriptionIds};
-                                    _ ->
-                                        StreamSubscriptions#{Stream =>
+                                        _ ->
+                                            StreamSubscriptions#{Stream =>
                                                                  [SubscriptionId]}
-                                end,
+                                    end,
 
-                            #consumer{counters = ConsumerCounters1} =
-                                ConsumerState1,
+                                    #consumer{counters = ConsumerCounters1} =
+                                    ConsumerState1,
 
-                            ConsumerOffset = osiris_log:next_offset(Segment1),
-                            ConsumerOffsetLag =
-                                consumer_i(offset_lag, ConsumerState1),
+                                    ConsumerOffset = osiris_log:next_offset(Segment1),
+                                    ConsumerOffsetLag =
+                                    consumer_i(offset_lag, ConsumerState1),
 
-                            rabbit_log:debug("Subscription ~p is now at offset ~p with ~p message(s) "
-                                             "distributed after subscription",
-                                             [SubscriptionId, ConsumerOffset,
-                                              messages_consumed(ConsumerCounters1)]),
+                                    rabbit_log:debug("Subscription ~p is now at offset ~p with ~p message(s) "
+                                                     "distributed after subscription",
+                                                     [SubscriptionId, ConsumerOffset,
+                                                      messages_consumed(ConsumerCounters1)]),
 
-                            rabbit_stream_metrics:consumer_created(self(),
-                                                                   stream_r(Stream,
-                                                                            Connection1),
-                                                                   SubscriptionId,
-                                                                   Credit1,
-                                                                   messages_consumed(ConsumerCounters1),
-                                                                   ConsumerOffset,
-                                                                   ConsumerOffsetLag,
-                                                                   Properties),
-                            {Connection1#stream_connection{stream_subscriptions
-                                                               =
-                                                               StreamSubscriptions1},
-                             State#stream_connection_state{consumers =
-                                                               Consumers1}}
+                                    rabbit_stream_metrics:consumer_created(self(),
+                                                                           stream_r(Stream,
+                                                                                    Connection1),
+                                                                           SubscriptionId,
+                                                                           Credit1,
+                                                                           messages_consumed(ConsumerCounters1),
+                                                                           ConsumerOffset,
+                                                                           ConsumerOffsetLag,
+                                                                           Properties),
+                                    {Connection1#stream_connection{stream_subscriptions
+                                                                   =
+                                                                   StreamSubscriptions1},
+                                     State#stream_connection_state{consumers =
+                                                                   Consumers1}}
+                            end
                     end
             end;
         error ->
@@ -1893,22 +1900,8 @@ handle_frame_post_auth(Transport,
                              SendFileOct)
             of
                 {error, closed} ->
-                    rabbit_log:warning("Stream protocol connection for subscription ~p has been closed, removing "
-                                       "subscription",
-                                       [SubscriptionId]),
-                    {Connection1, State1} =
-                        remove_subscription(SubscriptionId, Connection, State),
-
-                    Code = ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST,
-                    Frame =
-                        rabbit_stream_core:frame({response, 1,
-                                                  {credit, Code,
-                                                   SubscriptionId}}),
-                    send(Transport, S, Frame),
-                    rabbit_global_counters:increase_protocol_counter(stream,
-                                                                     ?SUBSCRIPTION_ID_DOES_NOT_EXIST,
-                                                                     1),
-                    {Connection1, State1};
+                    rabbit_log:warning("Stream protocol connection has been closed by peer", []),
+                    throw({stop, connection_closed});
                 {{segment, Segment1}, {credit, Credit1}} ->
                     Consumer1 =
                         Consumer#consumer{segment = Segment1, credit = Credit1},
