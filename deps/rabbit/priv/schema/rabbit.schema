@@ -743,7 +743,7 @@ end}.
 
 
 {mapping, "max_message_size", "rabbit.max_message_size",
-    [{datatype, integer}, {validators, ["less_then_512MB"]}]}.
+    [{datatype, integer}, {validators, ["max_message_size"]}]}.
 
 %% Customising Socket Options.
 %%
@@ -1019,7 +1019,7 @@ end}.
 %% {mirroring_sync_batch_size, 4096},
 
 {mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size",
-    [{datatype, bytesize}, {validators, ["size_less_than_2G"]}]}.
+    [{datatype, bytesize}, {validators, ["mirroring_sync_batch_size"]}]}.
 
 %% Peer discovery backend used by cluster formation.
 %%
@@ -2050,14 +2050,14 @@ end}.
 % Validators
 % ===============================
 
-{validator, "size_less_than_2G", "Byte size should be less than 2G and greater than 0",
+{validator, "mirroring_sync_batch_size", "Batch size should be greater than 0 and less than 1M",
 fun(Size) when is_integer(Size) ->
-    Size > 0 andalso Size < 2147483648
+    Size > 0 andalso Size =< 1000000
 end}.
 
-{validator, "less_then_512MB", "Max message size should be less than 512MB and gre than 0",
+{validator, "max_message_size", "Max message size should be between 0 and 512MB",
 fun(Size) when is_integer(Size) ->
-    Size > 0 andalso Size < 536870912
+    Size > 0 andalso Size =< 536870912
 end}.
 
 {validator, "less_than_1", "Float is not between 0 and 1",
