@@ -1007,8 +1007,8 @@ open(cast,
                                                                 SendFileOct)
                                                of
                                                    {error, closed} ->
-                                                       rabbit_log:info("Stream protocol connection has been closed by peer", []),
-                                                       throw({stop, connection_closed});
+                                                       rabbit_log_connection:info("Stream protocol connection has been closed by peer", []),
+                                                       throw({stop, normal});
                                                    {error, Reason} ->
                                                        rabbit_log_connection:info("Error while sending chunks: ~p",
                                                                                   [Reason]),
@@ -1825,8 +1825,8 @@ handle_frame_post_auth(Transport,
 
                             case send_chunks(Transport, ConsumerState, SendFileOct) of
                                 {error, closed} ->
-                                    rabbit_log:info("Stream protocol connection has been closed by peer", []),
-                                    throw({stop, connection_closed});
+                                    rabbit_log_connection:info("Stream protocol connection has been closed by peer", []),
+                                    throw({stop, normal});
                                 {{segment, Segment1}, {credit, Credit1}} ->
                                     ConsumerState1 =
                                     ConsumerState#consumer{segment = Segment1,
@@ -1900,8 +1900,8 @@ handle_frame_post_auth(Transport,
                              SendFileOct)
             of
                 {error, closed} ->
-                    rabbit_log:warning("Stream protocol connection has been closed by peer", []),
-                    throw({stop, connection_closed});
+                    rabbit_log_connection:info("Stream protocol connection has been closed by peer", []),
+                    throw({stop, normal});
                 {{segment, Segment1}, {credit, Credit1}} ->
                     Consumer1 =
                         Consumer#consumer{segment = Segment1, credit = Credit1},
