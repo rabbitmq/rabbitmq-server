@@ -296,8 +296,6 @@ RUN rabbitmq-plugins enable --offline rabbitmq_prometheus && \
 EXPOSE 15691 15692
 
 RUN rabbitmq-plugins enable --all
-# STREAM-TLS STREAM
-EXPOSE 5551 5552
 # MQTT-TLS MQTT
 EXPOSE 8883 1883
 # WEB-MQTT-TLS WEB-MQTT
