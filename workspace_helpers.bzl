@@ -188,8 +188,8 @@ erlang_lib(
 
     hex_pm_bazel_erlang_lib(
         name = "prometheus",
-        version = "4.6.0",
-        sha256 = "4905fd2992f8038eccd7aa0cd22f40637ed618c0bed1f75c05aacec15b7545de",
+        version = "4.8.1",
+        sha256 = "6edfbe928d271c7f657a6f2c46258738086584bd6cae4a000b8b9a6009ba23a5",
         first_srcs = [
             "src/prometheus_collector.erl",
             "src/prometheus_format.erl",
