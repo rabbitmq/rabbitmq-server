@@ -180,7 +180,12 @@ bazel_erlang_lib(
     deps = DEPS + RUNTIME_DEPS,
 )
 
-xref(tags = ["xref"])
+xref(
+    additional_libs = [
+        "@ranch//:bazel_erlang_lib",
+    ],
+    tags = ["xref"],
+)
 
 plt(
     name = "base_plt",
