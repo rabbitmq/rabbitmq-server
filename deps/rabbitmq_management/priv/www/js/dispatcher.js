@@ -109,7 +109,7 @@ dispatcher_add(function(sammy) {
                 var extra = QUEUE_EXTRA_CONTENT_REQUESTS[i](vhost, queue);
                 for (key in extra) {
                     if(extra.hasOwnProperty(key)){
-                        requests[key] = "/stream/publishers";
+                        requests[key] = extra[key];
                     }
                 }
             }

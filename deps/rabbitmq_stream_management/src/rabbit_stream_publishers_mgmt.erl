@@ -22,7 +22,8 @@
 
 dispatcher() ->
     [{"/stream/publishers", ?MODULE, []},
-     {"/stream/publishers/:vhost", ?MODULE, []}].
+     {"/stream/publishers/:vhost", ?MODULE, []},
+     {"/stream/publishers/:vhost/:queue", ?MODULE, []}].
 
 web_ui() ->
     [].
@@ -42,22 +43,44 @@ resource_exists(ReqData, Context) ->
          none ->
              true; % none means `all`
          _ ->
-             true
+             case rabbit_mgmt_util:id(queue, ReqData) of
+                 none ->
+                     true;
+                 _ ->
+                     case rabbit_mgmt_wm_queue:queue(ReqData) of
+                         not_found ->
+                             false;
+                         _ ->
+                             true
+                     end
+             end
      end,
      ReqData, Context}.
 
 to_json(ReqData, Context = #context{user = User}) ->
     case rabbit_mgmt_util:disable_stats(ReqData) of
         false ->
-            Arg = case rabbit_mgmt_util:vhost(ReqData) of
-                      none ->
-                          all;
-                      VHost ->
-                          VHost
-                  end,
+            VHost =
+                case rabbit_mgmt_util:vhost(ReqData) of
+                    none ->
+                        all;
+                    V ->
+                        V
+                end,
+            Queue = rabbit_mgmt_util:id(queue, ReqData),
             Publishers =
-                rabbit_mgmt_format:strip_pids(
-                    rabbit_stream_mgmt_db:get_all_publishers(Arg)),
+                case {VHost, Queue} of
+                    {VHost, none} ->
+                        rabbit_mgmt_format:strip_pids(
+                            rabbit_stream_mgmt_db:get_all_publishers(VHost));
+                    {VHost, Q} ->
+                        QueueResource =
+                            #resource{virtual_host = VHost,
+                                      name = Q,
+                                      kind = queue},
+                        rabbit_mgmt_format:strip_pids(
+                            rabbit_stream_mgmt_db:get_stream_publishers(QueueResource))
+                end,
             rabbit_mgmt_util:reply_list(filter_user(Publishers, User),
                                         [],
                                         ReqData,

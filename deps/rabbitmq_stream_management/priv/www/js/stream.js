@@ -64,14 +64,20 @@ CONSUMER_OWNER_FORMATTERS.push({
 CONSUMER_OWNER_FORMATTERS.sort(CONSUMER_OWNER_FORMATTERS_COMPARATOR);
 
 QUEUE_EXTRA_CONTENT_REQUESTS.push(function(vhost, queue) {
-    return {'extra_stream_publishers' : '/stream/publishers'};
+    return {'extra_stream_publishers' : '/stream/publishers/' + esc(vhost) + '/' + esc(queue)};
 });
 
 QUEUE_EXTRA_CONTENT.push(function(queue, extraContent) {
     if (is_stream(queue)) {
-        return '<div class="section"><h2>Stream publishers</h2><div class="hider updatable">' +
-            format('streamPublishersList', {'publishers': extraContent['extra_stream_publishers']}) +
-            '</div></div>';
+        var publishers = extraContent['extra_stream_publishers'];
+        if (publishers !== undefined) {
+            return '<div class="section"><h2>Stream publishers</h2><div class="hider updatable">' +
+                format('streamPublishersList', {'publishers': publishers}) +
+                '</div></div>';
+
+        } else {
+            return '';
+        }
     } else {
         return '';
     }
