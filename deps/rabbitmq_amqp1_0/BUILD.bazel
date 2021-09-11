@@ -50,7 +50,7 @@ xref(
 )
 
 dialyze(
-    size = "small",
+    size = "medium",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = "//:base_plt",
     tags = ["dialyze"],

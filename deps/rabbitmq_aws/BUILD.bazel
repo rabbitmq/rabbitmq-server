@@ -40,6 +40,7 @@ xref(
         "@credentials_obfuscation//:bazel_erlang_lib",
         "@jsx//:bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
+        "@ranch//:bazel_erlang_lib",
         "@recon//:bazel_erlang_lib",
     ],
     tags = ["xref"],
