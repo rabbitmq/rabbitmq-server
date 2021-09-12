@@ -46,7 +46,7 @@ queue_master_location(Q) when ?is_amqqueue(Q) ->
         [] ->
             {ok, node()};
         _ ->
-            MastersPerNode0 = erpc:multicall(Nodes, ets, info, [queue_metrics, size], 10),
+            MastersPerNode0 = erpc:multicall(Nodes, ets, info, [queue_metrics, size], 15),
             %% use {node(), infinity} whenever we don't get an answer;
             %% this way if everything goes wrong, we select node()
             MastersPerNode =
