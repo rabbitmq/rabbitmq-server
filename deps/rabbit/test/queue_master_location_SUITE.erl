@@ -189,6 +189,11 @@ declare_policy_nodes(Config) ->
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?POLICY,
                                              <<".*">>, <<"queues">>, Policy),
     QueueName = rabbit_misc:r(<<"/">>, queue, Q = <<"qm.test">>),
+
+    rabbit_ct_helpers:await_condition(fun() ->
+                                        0 < ets:info(queue_metrics, size)
+                                      end, 60000),
+
     declare(Config, QueueName, false, false, _Args=[], none),
     verify_min_master(Config, Q, Node1).
 

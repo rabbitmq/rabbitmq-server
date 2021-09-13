@@ -40,7 +40,7 @@ description() ->
     ].
 
 queue_master_location(Q) when ?is_amqqueue(Q) ->
-    Nodes0 = rabbit_nodes:all_running(),
+    Nodes0 = rabbit_queue_master_location_misc:all_nodes(Q),
     Nodes = rabbit_maintenance:filter_out_drained_nodes_local_read(Nodes0),
     case Nodes of
         [] ->
