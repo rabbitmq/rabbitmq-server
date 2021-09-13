@@ -25,25 +25,9 @@ Otherwise:
 
 https://docs.bazel.build/versions/master/install-bazelisk.html
 
-### Create `.bazelrc`
+### Create `user.bazelrc`
 
-Create a `.bazelrc` file with at least:
-
-```
-build --@bazel-erlang//:erlang_home=/path/to/erlang/installation
-build --@bazel-erlang//:erlang_version=23.1
-build --@bazel-erlang//:elixir_home=/path/to/elixir/installation
-build --test_strategy=exclusive
-build --incompatible_strict_action_env
-```
-
-Additionally, on **macOS**, you will likely need to add
-
-```
-build --spawn_strategy=local
-```
-
-for certain `rabbitmq_cli` tests to pass. This is because `rabbitmqctl wait` shells out to 'ps', which is broken in the bazel macOS (https://github.com/bazelbuild/bazel/issues/7448).
+Create a `user.bazelrc` by making a copy of `user-template.bazelrc` and updating the paths in the first few lines.
 
 ### Run the broker
 
@@ -51,7 +35,7 @@ for certain `rabbitmq_cli` tests to pass. This is because `rabbitmqctl wait` she
 
 ### Running tests
 
-Many rabbit tests spawn single or clustered rabbit nodes, and therefore it's best to run test suites sequentially on a single machine. Hence the `--test_strategy=exclusive` flag used in `.bazelrc` above. Naturally that restriction does not hold if utilizing remote execution (as is the case for RabbitMQ's CI pipelines).
+Many rabbit tests spawn single or clustered rabbit nodes, and therefore it's best to run test suites sequentially on a single machine. Hence the `build --local_test_jobs=1` flag used in `.bazelrc`. Naturally that restriction does not hold if utilizing remote execution (as is the case for RabbitMQ's CI pipelines).
 
 Erlang Common Test logs will not be placed in the logs directory when run with bazel. They can be found under `bazel-testlogs`. For instance, those of the rabbit application's backing_queue suite will be under `bazel-testlogs/deps/rabbit/backing_queue_SUITE/test.outputs/`.
 

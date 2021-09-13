@@ -587,7 +587,7 @@ RouteQuery => Key Version CorrelationId RoutingKey SuperStream
   RoutingKey => string
   SuperStream => string
 
-RouteResponse => Key Version CorrelationId Stream
+RouteResponse => Key Version CorrelationId [Stream]
   Key => uint16 // 24
   Version => uint16
   CorrelationId => uint32

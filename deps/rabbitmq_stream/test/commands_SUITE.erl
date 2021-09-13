@@ -40,7 +40,9 @@ groups() ->
 init_per_suite(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
-            {skip, "mixed version clusters are not supported for this suite"};
+            {skip,
+             "mixed version clusters are not supported for "
+             "this suite"};
         _ ->
             Config1 =
                 rabbit_ct_helpers:set_config(Config,
