@@ -75,7 +75,7 @@ topology(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {topology, VirtualHost, Stream}).
 
 -spec route(binary(), binary(), binary()) ->
-               {ok, binary() | no_route} | {error, stream_not_found}.
+               {ok, [binary()] | no_route} | {error, stream_not_found}.
 route(RoutingKey, VirtualHost, SuperStream) ->
     gen_server:call(?MODULE,
                     {route, RoutingKey, VirtualHost, SuperStream}).
@@ -368,10 +368,9 @@ handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
               case rabbit_exchange:route(Exchange, Delivery) of
                   [] ->
                       {ok, no_route};
-                  [#resource{name = Stream}] ->
-                      {ok, Stream};
-                  [#resource{name = Stream} | _] ->
-                      {ok, Stream}
+                  Routes ->
+                      %% FIXME filter non-stream resources
+                      {ok, [Stream || #resource{name = Stream} <- Routes]}
               end
           catch
               exit:Error ->

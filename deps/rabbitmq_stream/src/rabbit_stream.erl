@@ -118,10 +118,8 @@ kill_connection(ConnectionName) ->
                          {ConnectionPid,
                           #{<<"connection_name">> := ConnectionNameBin}} ->
                              exit(ConnectionPid, kill);
-                         {ConnectionPid, _ClientProperties} ->
-                             ok
-                     after 1000 ->
-                         ok
+                         {ConnectionPid, _ClientProperties} -> ok
+                     after 1000 -> ok
                      end
                   end,
                   pg_local:get_members(rabbit_stream_connections)).
