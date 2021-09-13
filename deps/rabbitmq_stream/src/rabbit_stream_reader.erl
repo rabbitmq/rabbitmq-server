@@ -1080,15 +1080,8 @@ close_sent(info, {tcp_closed, S}, _StatemData) ->
     rabbit_log_connection:debug("Stream protocol connection socket ~w closed [~w]",
                                 [S, self()]),
     stop;
-<<<<<<< HEAD
 close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
     rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] [~w]",
-=======
-close_sent(info, {tcp_error, S, Reason},
-           #statem_data{transport = Transport, connection_state = State}) ->
-    rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] "
-                                "[~w]",
->>>>>>> master
                                 [Reason, S, self()]),
     stop;
 close_sent(info, {resource_alarm, IsThereAlarm},
