@@ -1090,6 +1090,7 @@ close_sent(info, {tcp_closed, S}, _StatemData) ->
                                 [S, self()]),
     stop;
 <<<<<<< HEAD
+<<<<<<< HEAD
 close_sent(info, {tcp_error, S, Reason},
            #statem_data{transport = Transport, connection_state = State}) ->
     rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] "
@@ -1098,6 +1099,10 @@ close_sent(info, {tcp_error, S, Reason},
 close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
     rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] [~w]",
 >>>>>>> 9e4506041d (fix build warnings)
+=======
+close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
+    rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] [~w]",
+>>>>>>> c8d483809e (Resolve a missed conflict)
                                 [Reason, S, self()]),
     stop;
 close_sent(info, {resource_alarm, IsThereAlarm},
