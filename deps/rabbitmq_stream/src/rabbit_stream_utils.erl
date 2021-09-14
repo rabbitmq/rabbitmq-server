@@ -25,9 +25,12 @@
          check_configure_permitted/3,
          check_write_permitted/3,
          check_read_permitted/3,
-         extract_stream_list/2]).
+         extract_stream_list/2,
+         sort_partitions/1]).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
+
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 enforce_correct_stream_name(Name) ->
     % from rabbit_channel
@@ -213,3 +216,23 @@ extract_stream_list(<<>>, Streams) ->
 extract_stream_list(<<Length:16, Stream:Length/binary, Rest/binary>>,
                     Streams) ->
     extract_stream_list(Rest, [Stream | Streams]).
+
+-spec sort_partitions([#binding{}]) -> [#binding{}].
+sort_partitions(Partitions) ->
+    lists:sort(fun(#binding{args = Args1}, #binding{args = Args2}) ->
+                  Arg1 =
+                      rabbit_misc:table_lookup(Args1,
+                                               <<"x-stream-partition-order">>),
+                  Arg2 =
+                      rabbit_misc:table_lookup(Args2,
+                                               <<"x-stream-partition-order">>),
+                  case {Arg1, Arg2} of
+                      {{_, Order1}, {_, Order2}} ->
+                          rabbit_data_coercion:to_integer(Order1)
+                          =< rabbit_data_coercion:to_integer(Order2);
+                      {undefined, {_, _Order2}} -> false;
+                      {{_, _Order1}, undefined} -> true;
+                      _ -> true
+                  end
+               end,
+               Partitions).

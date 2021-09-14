@@ -386,6 +386,9 @@ handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
               %% FIXME make sure queue is a stream
               %% TODO bindings could be sorted by partition number, by using a binding argument
               %% this would make the spreading of messages stable
+              UnorderedBindings = rabbit_binding:list_for_source(ExchangeName),
+              OrderedBindings =
+                  rabbit_stream_utils:sort_partitions(UnorderedBindings),
               {ok,
                lists:foldl(fun (#binding{destination =
                                              #resource{kind = queue, name = Q}},
@@ -394,7 +397,7 @@ handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
                                (_Binding, Acc) ->
                                    Acc
                            end,
-                           [], rabbit_binding:list_for_source(ExchangeName))}
+                           [], OrderedBindings)}
           catch
               exit:Error ->
                   rabbit_log:error("Error while looking up exchange ~p, ~p",
