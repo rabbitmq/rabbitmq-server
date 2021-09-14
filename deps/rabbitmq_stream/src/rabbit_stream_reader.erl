@@ -174,7 +174,8 @@ callback_mode() ->
 terminate(Reason, State,
           #statem_data{transport = Transport,
                        connection = #stream_connection{socket = Socket},
-                       connection_state = ConnectionState} = StatemData) ->
+                       connection_state = ConnectionState} =
+              StatemData) ->
     close(Transport, Socket, ConnectionState),
     rabbit_networking:unregister_non_amqp_connection(self()),
     notify_connection_closed(StatemData),
@@ -1053,7 +1054,8 @@ close_sent(enter, _OldState,
                                                StateTimeout}}) ->
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
 close_sent(state_timeout, close, #statem_data{}) ->
-    rabbit_log_connection:warning("Closing connection because of timeout in state '~s' likely due to lack of client action.",
+    rabbit_log_connection:warning("Closing connection because of timeout in state "
+                                  "'~s' likely due to lack of client action.",
                                   [?FUNCTION_NAME]),
     stop;
 close_sent(info, {tcp, S, Data},
@@ -1081,7 +1083,8 @@ close_sent(info, {tcp_closed, S}, _StatemData) ->
                                 [S, self()]),
     stop;
 close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
-    rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] [~w]",
+    rabbit_log_connection:error("Stream protocol connection socket error: ~p [~w] "
+                                "[~w]",
                                 [Reason, S, self()]),
     stop;
 close_sent(info, {resource_alarm, IsThereAlarm},
