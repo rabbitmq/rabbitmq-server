@@ -34,13 +34,15 @@ init_per_suite(Config) ->
                                              [{rmq_nodename_suffix, ?MODULE}]),
             Config2 =
                 rabbit_ct_helpers:set_config(Config1,
-                                             {rabbitmq_ct_tls_verify, verify_none}),
-            SetupStep = fun(StepConfig) ->
-                                rabbit_ct_helpers:merge_app_env(StepConfig,
-                                                                {rabbit,
-                                                                 [{collect_statistics_interval,
-                                                                   500}]})
-                        end,
+                                             {rabbitmq_ct_tls_verify,
+                                              verify_none}),
+            SetupStep =
+                fun(StepConfig) ->
+                   rabbit_ct_helpers:merge_app_env(StepConfig,
+                                                   {rabbit,
+                                                    [{collect_statistics_interval,
+                                                      500}]})
+                end,
             rabbit_ct_helpers:run_setup_steps(Config2,
                                               [SetupStep]
                                               ++ rabbit_ct_broker_helpers:setup_steps()

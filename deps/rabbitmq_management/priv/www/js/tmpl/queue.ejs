@@ -267,6 +267,9 @@
 
 <% } %>
 
+<% if(!disable_stats) { %>
+<%= maybe_format_extra_queue_content(queue, extra_content) %>
+<% } %>
 
 <% if(!disable_stats) { %>
 <div class="section-hidden">

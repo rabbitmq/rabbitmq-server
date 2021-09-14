@@ -393,6 +393,8 @@ public class HttpTest {
 
     client.declarePublisher((byte) 0, null, stream);
     waitUntil(() -> request.call().size() == initialCount + 1);
+    assertThat(toMaps(get("/stream/publishers/%2F"))).hasSize(1);
+    assertThat(toMaps(get("/stream/publishers/vh1"))).isEmpty();
     waitUntil(() -> entities(request.call(), client).size() == 1);
 
     Map<String, Object> publisher = entities(request.call(), client).get(0);
@@ -425,6 +427,51 @@ public class HttpTest {
     waitUntil(() -> entities(request.call(), client).size() == 1);
     client.deletePublisher((byte) 1);
     waitUntil(() -> entities(request.call(), client).isEmpty());
+  }
+
+  @Test
+  void publishersByStream() throws Exception {
+    Callable<List<Map<String, Object>>> request =
+        () -> toMaps(get("/stream/publishers/%2F/" + stream));
+    int initialCount = request.call().size();
+    String connectionProvidedName = UUID.randomUUID().toString();
+    AtomicBoolean closed = new AtomicBoolean(false);
+    Client client =
+        cf.get(
+            new ClientParameters()
+                .clientProperty("connection_name", connectionProvidedName)
+                .shutdownListener(shutdownContext -> closed.set(true)));
+
+    String otherStream = UUID.randomUUID().toString();
+    assertThat(client.create(otherStream).isOk()).isTrue();
+
+    client.declarePublisher((byte) 0, null, stream);
+    client.declarePublisher((byte) 1, null, otherStream);
+
+    waitUntil(() -> toMaps(get("/stream/publishers/%2F")).size() == initialCount + 2);
+    waitUntil(() -> request.call().size() == initialCount + 1);
+    waitUntil(() -> entities(request.call(), client).size() == 1);
+
+    Map<String, Object> publisher = entities(request.call(), client).get(0);
+    assertThat(connectionDetails(publisher))
+        .containsEntry("name", connectionName(client))
+        .containsEntry("user", "guest")
+        .containsKey("node");
+    assertThat(queue(publisher)).containsEntry("name", stream).containsEntry("vhost", "/");
+
+    Callable<List<Map<String, Object>>> requestOtherStream =
+        () -> toMaps(get("/stream/publishers/%2F/" + otherStream));
+    waitUntil(() -> entities(requestOtherStream.call(), client).size() == 1);
+
+    publisher = entities(requestOtherStream.call(), client).get(0);
+    assertThat(connectionDetails(publisher))
+        .containsEntry("name", connectionName(client))
+        .containsEntry("user", "guest")
+        .containsKey("node");
+    assertThat(queue(publisher)).containsEntry("name", otherStream).containsEntry("vhost", "/");
+
+    client.deletePublisher((byte) 0);
+    client.deletePublisher((byte) 1);
   }
 
   @ParameterizedTest
@@ -740,7 +787,9 @@ public class HttpTest {
         "/stream/connections/%2F/foo-connection-name/consumers",
         "/stream/connections/%2F/foo-connection-name/publishers",
         "/stream/consumers/foo-virtual-host",
-        "/stream/publishers/foo-virtual-host"
+        "/stream/publishers/foo-virtual-host",
+        "/stream/publishers/foo-virtual-host",
+        "/stream/publishers/%2F/foo-stream"
       })
   void shouldReturnNotFound(String endpoint) {
     assertThatThrownBy(() -> get(endpoint)).hasMessageContaining("404");

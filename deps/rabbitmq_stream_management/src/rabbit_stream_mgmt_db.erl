@@ -17,7 +17,8 @@
          get_all_publishers/1]).
 -export([entity_data/4]).
 -export([get_connection_consumers/1,
-         get_connection_publishers/1]).
+         get_connection_publishers/1,
+         get_stream_publishers/1]).
 
 get_all_consumers(VHosts) ->
     rabbit_mgmt_db:submit(fun(_Interval) -> consumers_stats(VHosts) end).
@@ -33,6 +34,11 @@ get_connection_consumers(ConnectionPid) when is_pid(ConnectionPid) ->
 get_connection_publishers(ConnectionPid) when is_pid(ConnectionPid) ->
     rabbit_mgmt_db:submit(fun(_Interval) ->
                              connection_publishers_stats(ConnectionPid)
+                          end).
+
+get_stream_publishers(QueueResource) ->
+    rabbit_mgmt_db:submit(fun(_Interval) ->
+                             stream_publishers_stats(QueueResource)
                           end).
 
 consumers_stats(VHost) ->
@@ -65,6 +71,14 @@ connection_publishers_stats(ConnectionPid) ->
                                             entity_data,
                                             [ConnectionPid, ?ENTITY_PUBLISHER,
                                              fun publishers_by_connection/1]}),
+    [V || {_, V} <- maps:to_list(Data)].
+
+stream_publishers_stats(Queue) ->
+    Data =
+        rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db,
+                                            entity_data,
+                                            [Queue, ?ENTITY_PUBLISHER,
+                                             fun publishers_by_stream/1]}),
     [V || {_, V} <- maps:to_list(Data)].
 
 entity_data(_Pid, Param, EntityType, QueryFun) ->
@@ -103,11 +117,26 @@ consumers_by_connection(ConnectionPid) ->
 publishers_by_connection(ConnectionPid) ->
     get_entity_stats(?TABLE_PUBLISHER, ConnectionPid).
 
+publishers_by_stream(QueueResource) ->
+    get_entity_stats_by_resource(?TABLE_PUBLISHER, QueueResource).
+
 get_entity_stats(Table, Id) ->
     ets:select(Table, match_entity_spec(Id)).
 
 match_entity_spec(ConnectionId) ->
     [{{{'_', '$1', '_'}, '_'}, [{'==', ConnectionId, '$1'}], ['$_']}].
+
+get_entity_stats_by_resource(Table, Resource) ->
+    ets:select(Table, match_entity_spec_by_resource(Resource)).
+
+match_entity_spec_by_resource(#resource{virtual_host = VHost,
+                                        name = Name}) ->
+    [{{{#resource{virtual_host = '$1',
+                  name = '$2',
+                  _ = '_'},
+        '_', '_'},
+       '_'},
+      [{'andalso', {'==', '$1', VHost}, {'==', Name, '$2'}}], ['$_']}].
 
 augment_connection_pid(Consumer) ->
     Pid = rabbit_misc:pget(connection, Consumer),
