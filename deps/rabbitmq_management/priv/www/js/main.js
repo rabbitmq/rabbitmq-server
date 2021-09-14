@@ -480,7 +480,9 @@ function with_update(fun) {
     if(outstanding_reqs.length > 0){
         return false;
     }
-    with_reqs(apply_state(current_reqs), [], function(json) {
+    var model = [];
+    model['extra_content'] = []; // magic key for extension point
+    with_reqs(apply_state(current_reqs), model, function(json) {
             var html = format(current_template, json);
             fun(html);
             update_status('ok');
@@ -1116,7 +1118,13 @@ function with_reqs(reqs, acc, fun) {
     if (keys(reqs).length > 0) {
         var key = keys(reqs)[0];
         with_req('GET', reqs[key], null, function(resp) {
-                acc[key] = JSON.parse(resp.responseText);
+                if (key.startsWith("extra_")) {
+                    var extraContent = acc["extra_content"];
+                    extraContent[key] = JSON.parse(resp.responseText);
+                    acc["extra_content"] = extraContent;
+                } else {
+                    acc[key] = JSON.parse(resp.responseText);
+                }
                 var remainder = {};
                 for (var k in reqs) {
                     if (k != key) remainder[k] = reqs[k];
@@ -1150,6 +1158,14 @@ function format(template, json) {
         console.log("Stack: " + err['stack']);
         debug(err['name'] + ": " + err['message'] + "\n" + err['stack'] + "\n");
     }
+}
+
+function maybe_format_extra_queue_content(queue, extraContent) {
+    var content = '';
+    for (var i = 0; i < QUEUE_EXTRA_CONTENT.length; i++) {
+        content += QUEUE_EXTRA_CONTENT[i](queue, extraContent);
+    }
+    return content;
 }
 
 function update_status(status) {

@@ -2,9 +2,15 @@
     <table class="list">
       <thead>
         <tr>
+<% if (mode == 'queue') { %>
+          <th>Connection</th>
+          <th>ID</th>
+          <th>Reference</th>
+<% } else { %>
           <th>ID</th>
           <th>Reference</th>
           <th>Queue</th>
+<% } %>
           <th>Messages Published</th>
           <th>Messages Confirmed</th>
           <th>Messages Errored</th>
@@ -15,9 +21,15 @@
     var publisher = publishers[i];
 %>
       <tr<%= alt_rows(i) %>>
+<% if (mode == 'queue') { %>
+        <td><%= link_stream_conn(publisher.queue.vhost, publisher.connection_details.name) %></td>
+        <td><%= publisher.publisher_id %></td>
+        <td class="c"><%= fmt_string(publisher.reference) %></td>
+<% } else { %>
         <td><%= publisher.publisher_id %></td>
         <td class="c"><%= fmt_string(publisher.reference) %></td>
         <td><%= link_queue(publisher.queue.vhost, publisher.queue.name) %></td>
+<% } %>
         <td class="c"><%= publisher.published %></td>
         <td class="c"><%= publisher.confirmed %></td>
         <td class="c"><%= publisher.errored %></td>
