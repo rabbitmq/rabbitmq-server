@@ -74,7 +74,7 @@
 </div>
 
 <div class="section">
-  <h2>Consumers</h2>
+  <h2 class="updatable" >Consumers (<%=(channel.consumer_details.length)%>) </h2>
   <div class="hider updatable">
 <%= format('consumers', {'mode': 'channel', 'consumers': channel.consumer_details}) %>
   </div>
