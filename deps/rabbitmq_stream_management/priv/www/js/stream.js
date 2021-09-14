@@ -20,7 +20,7 @@ dispatcher_add(function(sammy) {
         if (is_stream(queue)) {
             var publishers = extraContent['extra_stream_publishers'];
             if (publishers !== undefined) {
-                return '<div class="section-hidden"><h2>Stream publishers</h2><div class="hider updatable">' +
+                return '<div class="section-hidden"><h2 class="updatable">Stream publishers (' + Object.keys(publishers).length +')</h2><div class="hider updatable">' +
                     format('streamPublishersList', {'publishers': publishers, 'mode': 'queue'}) +
                     '</div></div>';
             } else {

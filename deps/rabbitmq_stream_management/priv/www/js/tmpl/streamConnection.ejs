@@ -116,14 +116,14 @@
 <% } %>
 
 <div class="section">
-  <h2>Publishers</h2>
+  <h2 class="updatable">Publishers (<%=(publishers.length)%>) </h2>
   <div class="hider updatable">
     <%= format('streamPublishersList', {'publishers': publishers, 'mode' : 'connection'}) %>
   </div>
 </div>
 
 <div class="section">
-  <h2>Consumers</h2>
+  <h2 class="updatable" >Consumers (<%=(consumers.length)%>)</h2>
   <div class="hider updatable">
     <%= format('streamConsumersList', {'consumers': consumers}) %>
   </div>
