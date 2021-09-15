@@ -573,48 +573,42 @@ bq_queue_index1(_Config) ->
               ?INDEX:flush(Qi3)
       end),
 
-%% @todo This is commented out because the modern index expects
-%%       publishes to be ordered by seq_id(). It also does not
-%%       have a journal so the tests are not doing much anyway.
-%%
-%    %% d) get messages in all states to a segment, then flush, then do
-%    %% the same again, don't flush and read. This will hit all
-%    %% possibilities in combining the segment with the journal.
-%    with_empty_test_queue(
-%      fun (Qi0, _QName) ->
-%              {Qi1, [Seven,Five,Four|_]} = queue_index_publish([0,1,2,4,5,7],
-%                                                               false, Qi0),
+    %% d) get messages in all states to a segment, then flush, then do
+    %% the same again, don't flush and read.
+    with_empty_test_queue(
+      fun (Qi0, _QName) ->
+              {Qi1, [Seven,Five,Four|_]} = queue_index_publish([0,1,2,4,5,7],
+                                                               false, Qi0),
 %              Qi2 = ?INDEX:deliver([0,1,4], Qi1),
-%              Qi3 = ?INDEX:ack([0], Qi2),
-%              Qi4 = ?INDEX:flush(Qi3),
-%              {Qi5, [Eight,Six|_]} = queue_index_publish([3,6,8], false, Qi4),
+              {_DeletedSegments3, Qi3} = ?INDEX:ack([0], Qi1),
+              Qi4 = ?INDEX:flush(Qi3),
+              {Qi5, [Eight,Six|_]} = queue_index_publish([3,6,8], false, Qi4),
 %              Qi6 = ?INDEX:deliver([2,3,5,6], Qi5),
-%              Qi7 = ?INDEX:ack([1,2,3], Qi6),
-%              {[], Qi8} = ?INDEX:read(0, 4, Qi7),
-%              {ReadD, Qi9} = ?INDEX:read(4, 7, Qi8),
-%              ok = verify_read_with_published(true, false, ReadD,
-%                                              [Four, Five, Six]),
-%              {ReadE, Qi10} = ?INDEX:read(7, 9, Qi9),
-%              ok = verify_read_with_published(false, false, ReadE,
-%                                              [Seven, Eight]),
-%              Qi10
-%      end),
-%
-%    %% e) as for (d), but use terminate instead of read, which will
-%    %% exercise journal_minus_segment, not segment_plus_journal.
-%    with_empty_test_queue(
-%      fun (Qi0, QName) ->
-%              {Qi1, _SeqIdsMsgIdsE} = queue_index_publish([0,1,2,4,5,7],
-%                                                          true, Qi0),
+              {_DeletedSegments7, Qi7} = ?INDEX:ack([1,2,3], Qi5),
+              {[], Qi8} = ?INDEX:read(0, 4, Qi7),
+              {ReadD, Qi9} = ?INDEX:read(4, 7, Qi8),
+              ok = verify_read_with_published(true, false, ReadD,
+                                              [Four, Five, Six]),
+              {ReadE, Qi10} = ?INDEX:read(7, 9, Qi9),
+              ok = verify_read_with_published(false, false, ReadE,
+                                              [Seven, Eight]),
+              Qi10
+      end),
+
+    %% e) as for (d), but use terminate instead of read.
+    with_empty_test_queue(
+      fun (Qi0, QName) ->
+              {Qi1, _SeqIdsMsgIdsE} = queue_index_publish([0,1,2,4,5,7],
+                                                          true, Qi0),
 %              Qi2 = ?INDEX:deliver([0,1,4], Qi1),
-%              Qi3 = ?INDEX:ack([0], Qi2),
-%              {5, 50, Qi4} = restart_test_queue(Qi3, QName),
-%              {Qi5, _SeqIdsMsgIdsF} = queue_index_publish([3,6,8], true, Qi4),
+              {_DeletedSegments3, Qi3} = ?INDEX:ack([0], Qi1),
+              {5, 50, Qi4} = restart_test_queue(Qi3, QName),
+              {Qi5, _SeqIdsMsgIdsF} = queue_index_publish([3,6,8], true, Qi4),
 %              Qi6 = ?INDEX:deliver([2,3,5,6], Qi5),
-%              Qi7 = ?INDEX:ack([1,2,3], Qi6),
-%              {5, 50, Qi8} = restart_test_queue(Qi7, QName),
-%              Qi8
-%      end),
+              {_DeletedSegments7, Qi7} = ?INDEX:ack([1,2,3], Qi5),
+              {5, 50, Qi8} = restart_test_queue(Qi7, QName),
+              Qi8
+      end),
 
     ok = rabbit_variable_queue:stop(?VHOST),
     {ok, _} = rabbit_variable_queue:start(?VHOST, []),
