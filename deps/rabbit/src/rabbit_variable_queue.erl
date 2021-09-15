@@ -599,6 +599,7 @@ terminate(_Reason, State) ->
                         persistent_count    = PCount,
                         persistent_bytes    = PBytes,
                         index_state         = IndexState,
+                        store_state         = StoreState,
                         msg_store_clients   = {MSCStateP, MSCStateT} } =
         purge_pending_ack(true, State),
     PRef = case MSCStateP of
@@ -614,6 +615,7 @@ terminate(_Reason, State) ->
              {persistent_bytes,    PBytes}],
     a(State1#vqstate {
         index_state = ?INDEX:terminate(VHost, Terms, IndexState),
+        store_state = ?STORE:terminate(StoreState),
         msg_store_clients = undefined }).
 
 %% the only difference between purge and delete is that delete also
