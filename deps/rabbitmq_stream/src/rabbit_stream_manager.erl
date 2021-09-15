@@ -369,8 +369,10 @@ handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
                   [] ->
                       {ok, no_route};
                   Routes ->
-                      %% FIXME filter non-stream resources
-                      {ok, [Stream || #resource{name = Stream} <- Routes]}
+                      {ok,
+                       [Stream
+                        || #resource{name = Stream} = R <- Routes,
+                           is_resource_stream_queue(R)]}
               end
           catch
               exit:Error ->
@@ -383,10 +385,11 @@ handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
     Res = try
               rabbit_exchange:lookup_or_die(ExchangeName),
-              %% FIXME make sure queue is a stream
-              %% TODO bindings could be sorted by partition number, by using a binding argument
-              %% this would make the spreading of messages stable
-              UnorderedBindings = rabbit_binding:list_for_source(ExchangeName),
+              UnorderedBindings =
+                  [Binding
+                   || Binding = #binding{destination = D}
+                          <- rabbit_binding:list_for_source(ExchangeName),
+                      is_resource_stream_queue(D)],
               OrderedBindings =
                   rabbit_stream_utils:sort_partitions(UnorderedBindings),
               {ok,
@@ -448,3 +451,13 @@ is_stream_queue(Q) ->
         _ ->
             false
     end.
+
+is_resource_stream_queue(#resource{kind = queue} = Resource) ->
+    case rabbit_amqqueue:lookup(Resource) of
+        {ok, Q} ->
+            is_stream_queue(Q);
+        _ ->
+            false
+    end;
+is_resource_stream_queue(_) ->
+    false.
