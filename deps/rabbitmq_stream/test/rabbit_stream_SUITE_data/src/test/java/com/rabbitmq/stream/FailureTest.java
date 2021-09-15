@@ -60,7 +60,6 @@ public class FailureTest {
 
   @Test
   void leaderFailureWhenPublisherConnectedToReplica() throws Exception {
-    System.out.println("stream " + stream);
     Set<String> messages = new HashSet<>();
     Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
     Map<String, Client.StreamMetadata> metadata = client.metadata(stream);
