@@ -46,8 +46,6 @@ end_per_testcase(_TestCase, _Config) ->
 
 sort_partitions(_Config) ->
     [] = rabbit_stream_utils:sort_partitions([]),
-    %[binding(<<"a">>, 1), binding(<<"b">>, 1),
-    %              binding(<<"c">>, 2)]
     ?assertEqual([<<"a">>, <<"b">>, <<"c">>],
                  [S
                   || #binding{destination = #resource{name = S}}
@@ -57,12 +55,12 @@ sort_partitions(_Config) ->
                                                                          1),
                                                                  binding(<<"a">>,
                                                                          0)])]),
-    ?assertEqual([<<"a">>, <<"c">>, <<"not-order-field">>],
+    ?assertEqual([<<"a">>, <<"c">>, <<"no-order-field">>],
                  [S
                   || #binding{destination = #resource{name = S}}
                          <- rabbit_stream_utils:sort_partitions([binding(<<"c">>,
                                                                          10),
-                                                                 binding(<<"not-order-field">>),
+                                                                 binding(<<"no-order-field">>),
                                                                  binding(<<"a">>,
                                                                          0)])]),
     ok.
