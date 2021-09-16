@@ -2163,40 +2163,40 @@ maybe_prepare_write_to_disk(ForceMsg, ForceIndex, MsgStatus, State) ->
 %%       to persist to the message store, because reference
 %%       counting is useful for large fan-outs. If not, then
 %%       we just use the per queue store.
-determine_persist_to(_, _, _) -> queue_store. % msg_store.
-%determine_persist_to(#basic_message{
-%                        content = #content{properties     = Props,
-%                                           properties_bin = PropsBin}},
-%                     #message_properties{size = BodySize},
-%                     IndexMaxSize) ->
-%    %% The >= is so that you can set the env to 0 and never persist
-%    %% to the index.
-%    %%
-%    %% We want this to be fast, so we avoid size(term_to_binary())
-%    %% here, or using the term size estimation from truncate.erl, both
-%    %% of which are too slow. So instead, if the message body size
-%    %% goes over the limit then we avoid any other checks.
-%    %%
-%    %% If it doesn't we need to decide if the properties will push
-%    %% it past the limit. If we have the encoded properties (usual
-%    %% case) we can just check their size. If we don't (message came
-%    %% via the direct client), we make a guess based on the number of
-%    %% headers.
-%    case BodySize >= IndexMaxSize of
-%        true  -> msg_store;
-%        false -> Est = case is_binary(PropsBin) of
-%                           true  -> BodySize + size(PropsBin);
-%                           false -> #'P_basic'{headers = Hs} = Props,
-%                                    case Hs of
-%                                        undefined -> 0;
-%                                        _         -> length(Hs)
-%                                    end * ?HEADER_GUESS_SIZE + BodySize
-%                       end,
-%                 case Est >= IndexMaxSize of
-%                     true  -> msg_store;
-%                     false -> queue_index
-%                 end
-%    end.
+%determine_persist_to(_, _, _) -> queue_store. % msg_store.
+determine_persist_to(#basic_message{
+                        content = #content{properties     = Props,
+                                           properties_bin = PropsBin}},
+                     #message_properties{size = BodySize},
+                     IndexMaxSize) ->
+    %% The >= is so that you can set the env to 0 and never persist
+    %% to the index.
+    %%
+    %% We want this to be fast, so we avoid size(term_to_binary())
+    %% here, or using the term size estimation from truncate.erl, both
+    %% of which are too slow. So instead, if the message body size
+    %% goes over the limit then we avoid any other checks.
+    %%
+    %% If it doesn't we need to decide if the properties will push
+    %% it past the limit. If we have the encoded properties (usual
+    %% case) we can just check their size. If we don't (message came
+    %% via the direct client), we make a guess based on the number of
+    %% headers.
+    case BodySize >= IndexMaxSize of
+        true  -> msg_store;
+        false -> Est = case is_binary(PropsBin) of
+                           true  -> BodySize + size(PropsBin);
+                           false -> #'P_basic'{headers = Hs} = Props,
+                                    case Hs of
+                                        undefined -> 0;
+                                        _         -> length(Hs)
+                                    end * ?HEADER_GUESS_SIZE + BodySize
+                       end,
+                 case Est >= IndexMaxSize of
+                     true  -> msg_store;
+                     false -> queue_store
+                 end
+    end.
 
 persist_to(#msg_status{persist_to = To}) -> To.
 
