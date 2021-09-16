@@ -37,10 +37,14 @@
           q3,
           q4,
           next_seq_id,
+          %% seq_id() of first undelivered message
+          %% everything before this seq_id() was delivered at least once
+          next_deliver_seq_id,
           ram_pending_ack,    %% msgs using store, still in RAM
           disk_pending_ack,   %% msgs in store, paged out
           qi_pending_ack,     %% msgs using qi, *can't* be paged out
           index_state,
+          store_state,
           msg_store_clients,
           durable,
           transient_threshold,
@@ -94,7 +98,7 @@
           msg,
           is_persistent,
           is_delivered,
-          msg_in_store,
+          msg_location, %% ?IN_SHARED_STORE | ?IN_QUEUE_STORE | ?IN_MEMORY -- we no longer embed in the index
           index_on_disk,
           persist_to,
           msg_props
