@@ -889,7 +889,7 @@ handle_ch_down(DownPid, State = #q{consumers                 = Consumers,
     %% A rabbit_channel process died. Here credit_flow will take care
     %% of cleaning up the rabbit_amqqueue_process process dictionary
     %% with regards to the credit we were tracking for the channel
-    %% process. See handle_cast({deliver, Deliver}, State) in this
+    %% process. See handle_cast({deliver, Deliver, ...}, State) in this
     %% module. In that cast function we process deliveries from the
     %% channel, which means we credit_flow:ack/1 said
     %% messages. credit_flow:ack'ing messages means we are increasing
