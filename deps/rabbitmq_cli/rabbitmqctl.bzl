@@ -85,6 +85,7 @@ def _impl(ctx):
         fi
 
         export DEPS_DIR={mix_deps_dir}
+        export ERL_COMPILER_OPTIONS=deterministic
         mix local.hex --force
         mix local.rebar --force
         mix make_all
