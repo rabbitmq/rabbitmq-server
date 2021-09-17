@@ -1750,25 +1750,26 @@ checkout_one(Meta, #?MODULE{service_queue = SQ0,
                             messages = Messages0,
                             consumers = Cons0} = InitState) ->
     case priority_queue:out(SQ0) of
-        {{value, ConsumerId}, SQ1} ->
+        {{value, ConsumerId}, SQ1}
+          when is_map_key(ConsumerId, Cons0) ->
             case take_next_msg(InitState) of
                 {ConsumerMsg, State0} ->
                     %% there are consumers waiting to be serviced
                     %% process consumer checkout
-                    case maps:find(ConsumerId, Cons0) of
-                        {ok, #consumer{credit = 0}} ->
+                    case maps:get(ConsumerId, Cons0) of
+                        #consumer{credit = 0} ->
                             %% no credit but was still on queue
                             %% can happen when draining
                             %% recurse without consumer on queue
                             checkout_one(Meta, InitState#?MODULE{service_queue = SQ1});
-                        {ok, #consumer{status = cancelled}} ->
+                        #consumer{status = cancelled} ->
                             checkout_one(Meta, InitState#?MODULE{service_queue = SQ1});
-                        {ok, #consumer{status = suspected_down}} ->
+                        #consumer{status = suspected_down} ->
                             checkout_one(Meta, InitState#?MODULE{service_queue = SQ1});
-                        {ok, #consumer{checked_out = Checked0,
-                                       next_msg_id = Next,
-                                       credit = Credit,
-                                       delivery_count = DelCnt} = Con0} ->
+                        #consumer{checked_out = Checked0,
+                                  next_msg_id = Next,
+                                  credit = Credit,
+                                  delivery_count = DelCnt} = Con0 ->
                             Checked = maps:put(Next, ConsumerMsg, Checked0),
                             Con = Con0#consumer{checked_out = Checked,
                                                 next_msg_id = Next + 1,
@@ -1795,14 +1796,14 @@ checkout_one(Meta, #?MODULE{service_queue = SQ0,
                                            add_bytes_checkout(Header, State1)),
                                          M}
                                 end,
-                            {success, ConsumerId, Next, Msg, State};
-                        error ->
-                            %% consumer did not exist but was queued, recurse
-                            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1})
+                            {success, ConsumerId, Next, Msg, State}
                     end;
                 empty ->
                     {nochange, InitState}
             end;
+        {{value, _ConsumerId}, SQ1} ->
+            %% consumer did not exist but was queued, recurse
+            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1});
         {empty, _} ->
             case lqueue:len(Messages0) of
                 0 -> {nochange, InitState};
