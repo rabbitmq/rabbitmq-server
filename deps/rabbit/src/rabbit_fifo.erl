@@ -340,10 +340,13 @@ apply(#{index := Index,
                     {State, Reply, Effects}
             end
     end;
-apply(Meta, #checkout{spec = cancel, consumer_id = ConsumerId}, State0) ->
-    {State, Effects} = cancel_consumer(Meta, ConsumerId, State0, [],
-                                       consumer_cancel),
-    checkout(Meta, State0, State, Effects);
+apply(#{index := Idx} = Meta,
+      #checkout{spec = cancel,
+                consumer_id = ConsumerId}, State0) ->
+    {State1, Effects1} = cancel_consumer(Meta, ConsumerId, State0, [],
+                                         consumer_cancel),
+    {State, Reply, Effects} = checkout(Meta, State0, State1, Effects1),
+    update_smallest_raft_index(Idx, Reply, State, Effects);
 apply(Meta, #checkout{spec = Spec, meta = ConsumerMeta,
                       consumer_id = {_, Pid} = ConsumerId},
       State0) ->
@@ -372,8 +375,8 @@ apply(#{index := Index}, #purge{},
     {State, _, Effects} = evaluate_limit(Index, false, State0,
                                          State1, Effects0),
     update_smallest_raft_index(Index, Reply, State, Effects);
-apply(_Meta, #garbage_collection{}, State) ->
-    {State, ok, [{aux, garbage_collection}]};
+apply(#{index := Idx}, #garbage_collection{}, State) ->
+    update_smallest_raft_index(Idx, ok, State, [{aux, garbage_collection}]);
 apply(#{system_time := Ts} = Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                cfg = #cfg{consumer_strategy = single_active},
