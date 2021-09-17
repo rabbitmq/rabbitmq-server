@@ -18,6 +18,7 @@ _Put an `x` in the boxes that apply_
 - [ ] Breaking change (fix or feature that would cause an observable behavior change in existing systems)
 - [ ] Documentation improvements (corrections, new content, etc)
 - [ ] Cosmetic change (whitespace, formatting, etc)
+- [ ] Build system and/or CI
 
 ## Checklist
 
