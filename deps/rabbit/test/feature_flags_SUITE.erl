@@ -61,14 +61,12 @@ groups() ->
      {enabling_on_single_node, [],
       [
        enable_feature_flag_in_a_healthy_situation,
-       enable_unsupported_feature_flag_in_a_healthy_situation,
-       enable_feature_flag_when_ff_file_is_unwritable
+       enable_unsupported_feature_flag_in_a_healthy_situation
       ]},
      {enabling_in_cluster, [],
       [
        enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
-       enable_feature_flag_when_ff_file_is_unwritable,
        enable_feature_flag_with_a_network_partition,
        mark_feature_flag_as_enabled_with_a_network_partition
       ]},

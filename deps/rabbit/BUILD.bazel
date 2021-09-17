@@ -437,6 +437,19 @@ suites = [
         size = "large",
         flaky = True,
         shard_count = 5,
+        runtime_deps = [
+            "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "feature_flags_with_unpriveleged_user_SUITE",
+        size = "large",
+        additional_beam = [
+            ":feature_flags_SUITE_beam_files",
+        ],
+        flaky = True,
+        shard_count = 2,
         # The enabling_* tests chmod files and then expect writes to be blocked.
         # This probably doesn't work because we are root in the remote docker image.
         tags = ["exclusive"],
