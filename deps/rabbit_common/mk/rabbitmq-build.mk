@@ -18,6 +18,8 @@ ifneq ($(filter-out rabbit_common amqp_client,$(PROJECT)),)
 RMQ_ERLC_OPTS += -pa $(DEPS_DIR)/rabbitmq_cli/_build/dev/lib/rabbitmqctl/ebin
 endif
 
+RMQ_ERLC_OPTS += +deterministic
+
 # Push our compilation options to both the normal and test ERLC_OPTS.
 ERLC_OPTS += $(RMQ_ERLC_OPTS)
 TEST_ERLC_OPTS += $(RMQ_ERLC_OPTS)

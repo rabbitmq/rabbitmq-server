@@ -13,7 +13,7 @@ VERBOSE_TEST ?= true
 MAX_CASES ?= 1
 
 MIX_TEST_OPTS ?= ""
-MIX_TEST = mix test --max-cases=$(MAX_CASES)
+MIX_TEST = ERL_COMPILER_OPTIONS=deterministic mix test --max-cases=$(MAX_CASES)
 
 ifneq ("",$(MIX_TEST_OPTS))
 MIX_TEST := $(MIX_TEST) $(MIX_TEST_OPTS)
@@ -106,9 +106,9 @@ rabbitmqctl_srcs := mix.exs \
 # ones).
 $(ACTUAL_ESCRIPTS): $(rabbitmqctl_srcs)
 	$(gen_verbose) if test -d ../.hex; then \
-		echo y | mix make_all_in_src_archive; \
+		echo y | ERL_COMPILER_OPTIONS=deterministic mix make_all_in_src_archive; \
 	else \
-		echo y | mix make_all; \
+		echo y | ERL_COMPILER_OPTIONS=deterministic mix make_all; \
 	fi
 
 $(LINKED_ESCRIPTS):
