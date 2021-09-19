@@ -166,9 +166,11 @@ notify_node_up() ->
 -spec notify_joined_cluster() -> 'ok'.
 
 notify_joined_cluster() ->
-    Nodes = rabbit_nodes:all_running() -- [node()],
+    NewMember = node(),
+    Nodes = rabbit_nodes:all_running() -- [NewMember],
     gen_server:abcast(Nodes, ?SERVER,
                       {joined_cluster, node(), rabbit_mnesia:node_type()}),
+
     ok.
 
 -spec notify_left_cluster(node()) -> 'ok'.
@@ -536,6 +538,8 @@ handle_cast({joined_cluster, Node, NodeType}, State) ->
                               ram  -> DiscNodes
                           end,
                           RunningNodes}),
+    rabbit_log:debug("Node '~p' has joined the cluster", [Node]),
+    rabbit_event:notify(node_added, [{node, Node}]),
     {noreply, State};
 
 handle_cast({left_cluster, Node}, State) ->
