@@ -42,7 +42,7 @@ start_child({VHost, ShovelName} = Name, Def) ->
     rabbit_log_shovel:debug("Starting a mirrored supervisor named '~s' in virtual host '~s'", [ShovelName, VHost]),
     Result = case mirrored_supervisor:start_child(
            ?SUPERVISOR,
-           {Name, {rabbit_shovel_dyn_worker_sup, start_link, [Name, Def]},
+           {Name, {rabbit_shovel_dyn_worker_sup, start_link, [Name, rabbit_shovel_parameters:obfuscate_uris_parameters(Def)]},
             transient, ?WORKER_WAIT, worker, [rabbit_shovel_dyn_worker_sup]}) of
         {ok,                      _Pid}  -> ok;
         {error, {already_started, _Pid}} -> ok
