@@ -158,8 +158,8 @@ maybe_close_fd(undefined) ->
 maybe_close_fd(Fd) ->
     ok = file:close(Fd).
 
-write(SeqId, MsgSize, Msg=#basic_message{ id = MsgId }, State0 = #qs{ confirms = Confirms }) ->
-    ?DEBUG("~0p ~0p ~0p ~0p", [SeqId, MsgSize, Msg, State0]),
+write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
+    ?DEBUG("~0p ~0p ~0p ~0p", [SeqId, Msg, Props, State0]),
     SegmentEntryCount = 65536, %% @todo segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
     %% We simply append to the related segment file.
@@ -173,11 +173,12 @@ write(SeqId, MsgSize, Msg=#basic_message{ id = MsgId }, State0 = #qs{ confirms =
     %% Append to the buffer.
     ok = file:write(Fd, MsgIovec),
     %% Maybe cache the message.
-    State = maybe_cache(SeqId, MsgSize, Msg, State1),
+    State2 = maybe_cache(SeqId, Size, Msg, State1),
+    %% When publisher confirms have been requested for this
+    %% message we mark the message as unconfirmed.
+    State = maybe_mark_unconfirmed(MsgId, Props, State2),
     %% Keep track of the offset we are at.
-    {{?MODULE, Offset, Size}, State#qs{ write_offset = Offset + Size,
-                                        %% @todo Only add messages that need to be confirmed.
-                                        confirms = gb_sets:add_element(MsgId, Confirms) }}.
+    {{?MODULE, Offset, Size}, State#qs{ write_offset = Offset + Size }}.
 
 get_write_fd(Segment, State = #qs{ write_fd = Fd,
                                    write_segment = Segment,
@@ -203,6 +204,12 @@ maybe_cache(SeqId, MsgSize, Msg, State = #qs{ cache = Cache,
             State#qs{ cache = Cache#{ SeqId => {MsgSize, Msg} },
                       cache_size = CacheSize + MsgSize }
     end.
+
+maybe_mark_unconfirmed(MsgId, #message_properties{ needs_confirming = true },
+        State = #qs { confirms = Confirms }) ->
+    State#qs{ confirms = gb_sets:add_element(MsgId, Confirms) };
+maybe_mark_unconfirmed(_, _, State) ->
+    State.
 
 sync(State = #qs{ confirms = Confirms,
                   on_sync = OnSyncFun }) ->
