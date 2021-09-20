@@ -876,7 +876,7 @@ majority() ->
     majority([]).
 
 majority(NodesDown) ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Nodes = rabbit_nodes:all(),
     AliveNodes = alive_nodes(Nodes) -- NodesDown,
     length(AliveNodes) / length(Nodes) > 0.5.
 
@@ -889,28 +889,28 @@ in_preferred_partition(PreferredNodes) ->
     in_preferred_partition(PreferredNodes, []).
 
 in_preferred_partition(PreferredNodes, NodesDown) ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Nodes = rabbit_nodes:all(),
     RealPreferredNodes = [N || N <- PreferredNodes, lists:member(N, Nodes)],
     AliveNodes = alive_nodes(RealPreferredNodes) -- NodesDown,
     RealPreferredNodes =:= [] orelse AliveNodes =/= [].
 
 all_nodes_up() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Nodes = rabbit_nodes:all(),
     length(alive_nodes(Nodes)) =:= length(Nodes).
 
 -spec all_rabbit_nodes_up() -> boolean().
 
 all_rabbit_nodes_up() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Nodes = rabbit_nodes:all(),
     length(alive_rabbit_nodes(Nodes)) =:= length(Nodes).
 
-alive_nodes() -> alive_nodes(rabbit_mnesia:cluster_nodes(all)).
+alive_nodes() -> alive_nodes(rabbit_nodes:all()).
 
 -spec alive_nodes([node()]) -> [node()].
 
 alive_nodes(Nodes) -> [N || N <- Nodes, lists:member(N, [node()|nodes()])].
 
-alive_rabbit_nodes() -> alive_rabbit_nodes(rabbit_mnesia:cluster_nodes(all)).
+alive_rabbit_nodes() -> alive_rabbit_nodes(rabbit_nodes:all()).
 
 -spec alive_rabbit_nodes([node()]) -> [node()].
 
@@ -922,7 +922,7 @@ alive_rabbit_nodes(Nodes) ->
 -spec ping_all() -> 'ok'.
 
 ping_all() ->
-    [net_adm:ping(N) || N <- rabbit_mnesia:cluster_nodes(all)],
+    [net_adm:ping(N) || N <- rabbit_nodes:all()],
     ok.
 
 possibly_partitioned_nodes() ->

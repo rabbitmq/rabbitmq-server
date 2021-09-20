@@ -176,7 +176,7 @@ start_cluster(Q) ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
     Id = {RaName, node()},
-    Nodes = select_quorum_nodes(QuorumSize, rabbit_mnesia:cluster_nodes(all)),
+    Nodes = select_quorum_nodes(QuorumSize, rabbit_nodes:all()),
     NewQ0 = amqqueue:set_pid(Q, Id),
     NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => Nodes}),
 
@@ -440,7 +440,7 @@ handle_tick(QName,
                                                     {messages_unacknowledged, MU},
                                                     {reductions, R}]),
                       ok = repair_leader_record(QName, Self),
-                      ExpectedNodes = rabbit_mnesia:cluster_nodes(all),
+                      ExpectedNodes = rabbit_nodes:all(),
                       case Nodes -- ExpectedNodes of
                           [] ->
                               ok;

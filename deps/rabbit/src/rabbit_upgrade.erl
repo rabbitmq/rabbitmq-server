@@ -111,7 +111,7 @@ remove_backup() ->
 -spec maybe_upgrade_mnesia() -> 'ok'.
 
 maybe_upgrade_mnesia() ->
-    AllNodes = rabbit_mnesia:cluster_nodes(all),
+    AllNodes = rabbit_nodes:all(),
     ok = rabbit_mnesia_rename:maybe_finish(AllNodes),
     %% Mnesia upgrade is the first upgrade scope,
     %% so we should create a backup here if there are any upgrades

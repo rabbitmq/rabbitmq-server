@@ -52,7 +52,7 @@ init([]) ->
                  end}
         end,
 
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Nodes = rabbit_nodes:all(),
     OsirisConf = #{nodes => Nodes},
 
     ServerConfiguration =

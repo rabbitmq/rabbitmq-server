@@ -750,7 +750,7 @@ make_stream_conf(Node, Q) ->
     InitialClusterSize = initial_cluster_size(
                            args_policy_lookup(<<"initial-cluster-size">>,
                                               fun policy_precedence/2, Q)),
-    Replicas0 = rabbit_mnesia:cluster_nodes(all) -- [Node],
+    Replicas0 = rabbit_nodes:all() -- [Node],
     %% TODO: try to avoid nodes that are not connected
     Replicas = select_stream_nodes(InitialClusterSize - 1, Replicas0),
     Formatter = {?MODULE, format_osiris_event, [QName]},
