@@ -475,7 +475,7 @@ maybe_resize_coordinator_cluster() ->
                       {_, Members, _} ->
                           MemberNodes = [Node || {_, Node} <- Members],
                           Running = rabbit_mnesia:cluster_nodes(running),
-                          All = rabbit_mnesia:cluster_nodes(all),
+                          All = rabbit_nodes:all(),
                           case Running -- MemberNodes of
                               [] ->
                                   ok;

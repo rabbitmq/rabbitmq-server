@@ -14,7 +14,7 @@
          await_running_count/2, is_single_node_cluster/0,
          boot/0]).
 -export([persistent_cluster_id/0, seed_internal_cluster_id/0, seed_user_provided_cluster_name/0]).
--export([all_running_with_hashes/0]).
+-export([all/0, all_running_with_hashes/0]).
 -export([lock_id/1, lock_retries/0]).
 
 -include_lib("kernel/include/inet.hrl").
@@ -137,6 +137,9 @@ set_cluster_name(Name, Username) ->
 ensure_epmd() ->
     rabbit_nodes_common:ensure_epmd().
 
+-spec all() -> [node()].
+all() -> rabbit_mnesia:cluster_nodes(all).
+
 -spec all_running() -> [node()].
 all_running() -> rabbit_mnesia:cluster_nodes(running).
 
@@ -144,7 +147,7 @@ all_running() -> rabbit_mnesia:cluster_nodes(running).
 running_count() -> length(all_running()).
 
 -spec total_count() -> integer().
-total_count() -> length(rabbit_mnesia:cluster_nodes(all)).
+total_count() -> length(rabbit_nodes:all()).
 
 -spec is_single_node_cluster() -> boolean().
 is_single_node_cluster() ->

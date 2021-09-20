@@ -1779,7 +1779,7 @@ forget_node_for_queue(DeadNode, [H|T], Q) when ?is_amqqueue(Q) ->
 node_permits_offline_promotion(Node) ->
     case node() of
         Node -> not rabbit:is_running(); %% [1]
-        _    -> All = rabbit_mnesia:cluster_nodes(all),
+        _    -> All = rabbit_nodes:all(),
                 Running = rabbit_nodes:all_running(),
                 lists:member(Node, All) andalso
                     not lists:member(Node, Running) %% [2]
