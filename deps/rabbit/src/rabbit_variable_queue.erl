@@ -2060,7 +2060,7 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
                                  msg = Msg, msg_id = MsgId,
                                  is_persistent = IsPersistent,
                                  msg_location = ?IN_MEMORY,
-                                 msg_props = #message_properties{ size = MsgSize } },
+                                 msg_props = Props },
                         State = #vqstate{ store_state = StoreState0,
                                           msg_store_clients = MSCState,
                                           disk_write_count  = Count})
@@ -2070,7 +2070,7 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
                                             prepare_to_store(Msg)),
                        {MsgStatus#msg_status{msg_location = ?IN_SHARED_STORE},
                         State#vqstate{disk_write_count = Count + 1}};
-        queue_store -> {MsgLocation, StoreState} = ?STORE:write(SeqId, MsgSize, prepare_to_store(Msg), StoreState0),
+        queue_store -> {MsgLocation, StoreState} = ?STORE:write(SeqId, prepare_to_store(Msg), Props, StoreState0),
                        {MsgStatus#msg_status{ msg_location = MsgLocation },
                         State#vqstate{ store_state = StoreState,
                                        disk_write_count = Count + 1}};
