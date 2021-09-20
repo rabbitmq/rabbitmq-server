@@ -386,6 +386,18 @@ return_auto_checked_out_test(_) ->
                 Effects),
     ok.
 
+cancelled_checkout_empty_queue_test(_) ->
+    Cid = {<<"cid">>, self()},
+    {State1, _} = check_auto(Cid, 2, test_init(test)),
+    % cancelled checkout should clear out service_queue also, else we'd get a
+    % build up of these
+    {State2, _, Effects} = apply(meta(3), rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
+    ?assertEqual(0, map_size(State2#rabbit_fifo.consumers)),
+    ?assertEqual(0, priority_queue:len(State2#rabbit_fifo.service_queue)),
+    ct:pal("Effs: ~p", [Effects]),
+    ?ASSERT_EFF({release_cursor, _, _}, Effects),
+    ok.
+
 cancelled_checkout_out_test(_) ->
     Cid = {<<"cid">>, self()},
     {State00, [_, _]} = enq(1, 1, first, test_init(test)),
@@ -395,6 +407,7 @@ cancelled_checkout_out_test(_) ->
     {State2, _, _} = apply(meta(3), rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
     ?assertEqual(1, lqueue:len(State2#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State2#rabbit_fifo.returns)),
+    ?assertEqual(0, priority_queue:len(State2#rabbit_fifo.service_queue)),
 
     {State3, {dequeue, empty}} =
         apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State2),
