@@ -534,7 +534,7 @@ handle_cast({joined_cluster, Node, NodeType}, State) ->
                               ram  -> DiscNodes
                           end,
                           RunningNodes}),
-    rabbit_log:debug("Node '~p' has joined the cluster", [Node]),
+    _ = rabbit_log:debug("Node '~p' has joined the cluster", [Node]),
     rabbit_event:notify(node_added, [{node, Node}]),
     {noreply, State};
 
