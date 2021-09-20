@@ -144,7 +144,7 @@ enabled() ->
     end.
 
 leader() ->
-    [Leader | _] = lists:usort(rabbit_mnesia:cluster_nodes(all)),
+    [Leader | _] = lists:usort(rabbit_nodes:all()),
     Leader.
 
 %% This is the winner receiving its last notification that a node has
@@ -410,7 +410,7 @@ partition_value(Partition) ->
 %% only know which nodes we have been partitioned from, not which
 %% nodes are partitioned from each other.
 check_other_nodes(LocalPartitions) ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Nodes = rabbit_nodes:all(),
     {Results, Bad} = rabbit_node_monitor:status(Nodes -- [node()]),
     RemotePartitions = [{Node, proplists:get_value(partitions, Res)}
                         || {Node, Res} <- Results],
