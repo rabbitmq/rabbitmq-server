@@ -102,7 +102,7 @@ gc_exchanges() ->
     gc_process_and_entity(channel_exchange_metrics, GbSet).
 
 gc_nodes() ->
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Nodes = rabbit_nodes:all(),
     GbSet = gb_sets:from_list(Nodes),
     gc_entity(node_node_metrics, GbSet).
 

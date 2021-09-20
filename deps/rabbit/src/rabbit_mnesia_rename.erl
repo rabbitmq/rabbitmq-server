@@ -100,7 +100,7 @@ prepare(Node, NodeMapList) ->
 
     %% Check that we are in the cluster, all old nodes are in the
     %% cluster, and no new nodes are.
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Nodes = rabbit_nodes:all(),
     case {FromNodes -- Nodes, ToNodes -- (ToNodes -- Nodes),
           lists:member(Node, Nodes ++ ToNodes)} of
         {[], [], true}  -> ok;
@@ -232,7 +232,7 @@ update_term(_NodeMap, Term) ->
     Term.
 
 rename_in_running_mnesia(FromNode, ToNode) ->
-    All = rabbit_mnesia:cluster_nodes(all),
+    All = rabbit_nodes:all(),
     Running = rabbit_nodes:all_running(),
     case {lists:member(FromNode, Running), lists:member(ToNode, All)} of
         {false, true}  -> ok;
