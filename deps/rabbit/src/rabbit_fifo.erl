@@ -509,13 +509,14 @@ apply(Meta, {nodeup, Node}, #?MODULE{consumers = Cons0,
     checkout(Meta, State0, State, Effects);
 apply(_, {nodedown, _Node}, State) ->
     {State, ok};
-apply(Meta, #purge_nodes{nodes = Nodes}, State0) ->
+apply(#{index := Idx} = Meta, #purge_nodes{nodes = Nodes}, State0) ->
     {State, Effects} = lists:foldl(fun(Node, {S, E}) ->
                                            purge_node(Meta, Node, S, E)
                                    end, {State0, []}, Nodes),
-    {State, ok, Effects};
-apply(Meta, #update_config{config = Conf}, State) ->
-    checkout(Meta, State, update_config(Conf, State), []);
+    update_smallest_raft_index(Idx, ok, State, Effects);
+apply(#{index := Idx} = Meta, #update_config{config = Conf}, State0) ->
+    {State, Reply, Effects} = checkout(Meta, State0, update_config(Conf, State0), []),
+    update_smallest_raft_index(Idx, Reply, State, Effects);
 apply(_Meta, {machine_version, 0, 1}, V0State) ->
     State = convert_v0_to_v1(V0State),
     {State, ok, []};
