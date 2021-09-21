@@ -15,7 +15,8 @@
 
 -import(rabbit_federation_test_util,
         [wait_for_federation/2, expect/3, expect/4,
-         set_upstream/4, set_upstream/5, clear_upstream/3, set_policy/5, clear_policy/3,
+         set_upstream/4, set_upstream/5, clear_upstream/3, clear_upstream_set/3,
+         set_policy/5, clear_policy/3,
          set_policy_pattern/5, set_policy_upstream/5, q/2, with_ch/3,
          maybe_declare_queue/3, delete_queue/2,
          federation_links_in_vhost/3]).
@@ -35,7 +36,7 @@ groups() ->
                     multiple_upstreams,
                     multiple_upstreams_pattern,
                     multiple_downstreams,
-                    bidirectional,
+                    message_flow,
                     dynamic_reconfiguration,
                     federate_unfederate,
                     dynamic_plugin_stop_start
@@ -249,7 +250,7 @@ multiple_downstreams(Config) ->
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>, ?EXPECT_FEDERATION_TIMEOUT)
       end, upstream_downstream(Config) ++ [q(<<"fed.downstream2">>, Args)]).
 
-bidirectional(Config) ->
+message_flow(Config) ->
     %% TODO: specifc source / target here
     Args = ?config(source_queue_args, Config),
     with_ch(Config,
@@ -267,7 +268,13 @@ bidirectional(Config) ->
               [publish(Ch, <<>>, <<"two">>, <<"bulk">>) || _ <- Seq],
               expect(Ch, <<"two">>, repeat(100, <<"bulk">>)),
               expect_empty(Ch, <<"one">>),
-              expect_empty(Ch, <<"two">>)
+              expect_empty(Ch, <<"two">>),
+              %% We clear the federation configuration to avoid a race condition
+              %% when deleting the queues in quorum mode. The federation link
+              %% would restart and lead to a state where nothing happened for
+              %% minutes.
+              clear_upstream_set(Config, 0, <<"one">>),
+              clear_upstream_set(Config, 0, <<"two">>)
       end, [q(<<"one">>, Args),
             q(<<"two">>, Args)]).
 
