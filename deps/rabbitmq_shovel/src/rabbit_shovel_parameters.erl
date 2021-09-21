@@ -442,7 +442,7 @@ get_uris(Key, Def) ->
     [binary_to_list(URI) || URI <- URIs].
 
 get_unencrypted_uris(Key, Def) ->
-    ObfuscatedURIs =  pget(Key, Def),
+    ObfuscatedURIs = pget(Key, Def),
     URIs = [credentials_obfuscation:decrypt(ObfuscatedURI) || ObfuscatedURI <- ObfuscatedURIs],
     [binary_to_list(URI) || URI <- URIs].
 

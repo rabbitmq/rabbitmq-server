@@ -11,6 +11,7 @@
 -export([start_link/0, init/1, adjust/2, stop_child/1, cleanup_specs/0]).
 
 -import(rabbit_misc, [pget/2]).
+-import(proplists, [to_map/1, from_map/1]).
 
 -include("rabbit_shovel.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -42,7 +43,7 @@ start_child({VHost, ShovelName} = Name, Def) ->
     rabbit_log_shovel:debug("Starting a mirrored supervisor named '~s' in virtual host '~s'", [ShovelName, VHost]),
     Result = case mirrored_supervisor:start_child(
            ?SUPERVISOR,
-           {Name, {rabbit_shovel_dyn_worker_sup, start_link, [Name, rabbit_shovel_parameters:obfuscate_uris_parameters(Def)]},
+           {Name, {rabbit_shovel_dyn_worker_sup, start_link, [Name, get_obfuscate_uris_parameters(Def)]},
             transient, ?WORKER_WAIT, worker, [rabbit_shovel_dyn_worker_sup]}) of
         {ok,                      _Pid}  -> ok;
         {error, {already_started, _Pid}} -> ok
@@ -50,6 +51,12 @@ start_child({VHost, ShovelName} = Name, Def) ->
     %% release the lock if we managed to acquire one
     rabbit_shovel_locks:unlock(LockId),
     Result.
+
+get_obfuscate_uris_parameters(Def) ->
+  case Def of
+    M when is_map(M) -> to_map(rabbit_shovel_parameters:obfuscate_uris_parameters(from_map(Def)));
+    _ -> rabbit_shovel_parameters:obfuscate_uris_parameters(Def)
+  end.
 
 child_exists(Name) ->
     lists:any(fun ({N, _, _, _}) -> N =:= Name end,

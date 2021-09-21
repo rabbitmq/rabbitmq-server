@@ -43,9 +43,18 @@ groups() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
+    {ok, _} = application:ensure_all_started(credentials_obfuscation),
+    Secret = crypto:strong_rand_bytes(128),
+    ok = credentials_obfuscation:set_secret(Secret),
     Config.
 
 end_per_suite(Config) ->
+    case application:stop(credentials_obfuscation) of
+      ok ->
+        ok;
+      {error, {not_started, credentials_obfuscation}} ->
+        ok
+    end,
     Config.
 
 init_per_group(_, Config) ->
@@ -55,18 +64,9 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(_Testcase, Config) ->
-  {ok, _} = application:ensure_all_started(credentials_obfuscation),
-  Secret = crypto:strong_rand_bytes(128),
-  ok = credentials_obfuscation:set_secret(Secret),
   Config.
 
 end_per_testcase(_Testcase, Config) ->
-  case application:stop(credentials_obfuscation) of
-    ok ->
-      ok;
-    {error, {not_started, credentials_obfuscation}} ->
-      ok
-  end,
   Config.
 
 
