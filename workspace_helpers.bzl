@@ -164,8 +164,8 @@ erlang_lib(
 
     hex_pm_bazel_erlang_lib(
         name = "observer_cli",
-        version = "1.6.1",
-        sha256 = "3418e319764b9dff1f469e43cbdffd7fd54ea47cbf765027c557abd146a19fb3",
+        version = "1.7.1",
+        sha256 = "4ccafaaa2ce01b85ddd14591f4d5f6731b4e13b610a70fb841f0701178478280",
     )
 
     git_repository(
