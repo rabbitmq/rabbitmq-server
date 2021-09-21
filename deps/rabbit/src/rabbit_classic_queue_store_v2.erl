@@ -170,15 +170,20 @@ write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
     %% We remove MsgId because we are not going to use it after reading it back from disk.
     MsgIovec = term_to_iovec(Msg#basic_message{ id = undefined }),
     Size = iolist_size(MsgIovec),
-    %% Append to the buffer.
-    ok = file:write(Fd, MsgIovec),
+    %% Calculate the CRC for the data if configured to do so.
+    %% We will truncate the CRC to 16 bits to save on space. (Idea taken from postgres.)
+    UseCRC32 = 1, %% @todo Configurable?
+    CRC32 = erlang:crc32(MsgIovec),
+    %% Append to the buffer. A short entry header is prepended:
+    %% Size:32, Flags:8, CRC32:16, Unused:8.
+    ok = file:write(Fd, [<<Size:32/unsigned, 0:7, UseCRC32:1, CRC32:16, 0:8>>, MsgIovec]),
     %% Maybe cache the message.
     State2 = maybe_cache(SeqId, Size, Msg, State1),
     %% When publisher confirms have been requested for this
     %% message we mark the message as unconfirmed.
     State = maybe_mark_unconfirmed(MsgId, Props, State2),
     %% Keep track of the offset we are at.
-    {{?MODULE, Offset, Size}, State#qs{ write_offset = Offset + Size }}.
+    {{?MODULE, Offset, Size}, State#qs{ write_offset = Offset + Size + 8 }}. %% @todo ENTRY_HEADER define?
 
 get_write_fd(Segment, State = #qs{ write_fd = Fd,
                                    write_segment = Segment,
@@ -244,7 +249,20 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
     %%       the write buffer can get bigger than the cache I believe
     %%       (or more accurately, messages are in the write but not the cache).
     %%       A solution could be to use {delayed_write, Size, Delay}.
-    {ok, MsgBin} = file:pread(Fd, Offset, Size),
+    {ok, MsgBin0} = file:pread(Fd, Offset, 8 + Size), %% @todo ENTRY_HEADER define?
+    %% Assert the size to make sure we read the correct data.
+    %% Check the CRC if configured to do so.
+    <<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits, _:8, MsgBin/bits>> = MsgBin0,
+    %% @todo Only check if configured to do so, not only based on UseCRC32.
+    case UseCRC32 of
+        0 ->
+            ok;
+        1 ->
+            CRC32 = erlang:crc32(MsgBin),
+            %% We currently crash if the CRC32 is incorrect. @todo Log first?
+            CRC32Expected = <<CRC32:16>>,
+            ok
+    end,
     Msg = binary_to_term(MsgBin),
     {Msg, State}.
 
@@ -323,7 +341,12 @@ delete_segments(Segments, State0 = #qs{ write_segment = WriteSegment,
     end,
     %% Then we delete the files.
     _ = [
-        ok = file:delete(segment_file(Segment, State))
+        case file:delete(segment_file(Segment, State)) of
+            ok -> ok;
+            %% The file might not have been created. This is the case
+            %% if all messages were sent to the per-vhost store for example.
+            {error, enoent} -> ok
+        end
     || Segment <- Segments],
     State.
 
