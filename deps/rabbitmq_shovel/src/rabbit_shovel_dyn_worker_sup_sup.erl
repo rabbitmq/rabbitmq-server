@@ -53,9 +53,9 @@ start_child({VHost, ShovelName} = Name, Def) ->
     Result.
 
 obfuscated_uris_parameters(Def) when is_map(Def) ->
-    to_map(rabbit_shovel_parameters:obfuscate_uris_parameters(to_list(Def)));
+    to_map(rabbit_shovel_parameters:obfuscate_uris_in_definition(to_list(Def)));
 obfuscated_uris_parameters(Def) when is_list(Def) ->
-    rabbit_shovel_parameters:obfuscate_uris_parameters(Def).
+    rabbit_shovel_parameters:obfuscate_uris_in_definition(Def).
 
 child_exists(Name) ->
     lists:any(fun ({N, _, _, _}) -> N =:= Name end,
