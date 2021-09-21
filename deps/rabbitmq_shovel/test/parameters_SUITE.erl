@@ -43,9 +43,18 @@ groups() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
+    {ok, _} = application:ensure_all_started(credentials_obfuscation),
+    Secret = crypto:strong_rand_bytes(128),
+    ok = credentials_obfuscation:set_secret(Secret),
     Config.
 
 end_per_suite(Config) ->
+    case application:stop(credentials_obfuscation) of
+      ok ->
+        ok;
+      {error, {not_started, credentials_obfuscation}} ->
+        ok
+    end,
     Config.
 
 init_per_group(_, Config) ->
@@ -54,9 +63,11 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(_Testcase, Config) -> Config.
+init_per_testcase(_Testcase, Config) ->
+  Config.
 
-end_per_testcase(_Testcase, Config) -> Config.
+end_per_testcase(_Testcase, Config) ->
+  Config.
 
 
 %% -------------------------------------------------------------------
@@ -140,8 +151,9 @@ parse_amqp091_empty_proplists(_Config) ->
 
 
 test_parse_amqp091(Params) ->
+    ObfuscatedParams = rabbit_shovel_parameters:obfuscate_uris_in_definition(Params),
     {ok, Result} = rabbit_shovel_parameters:parse({"vhost", "name"},
-                                                  "my-cluster", Params),
+                                                  "my-cluster", ObfuscatedParams),
     #{ack_mode := on_publish,
       name := "name",
       reconnect_delay := 1001,
@@ -165,8 +177,9 @@ test_parse_amqp091(Params) ->
     ok.
 
 test_parse_amqp091_with_blank_proprties(Params) ->
+    ObfuscatedParams = rabbit_shovel_parameters:obfuscate_uris_in_definition(Params),
     {ok, Result} = rabbit_shovel_parameters:parse({"vhost", "name"},
-                                                  "my-cluster", Params),
+                                                  "my-cluster", ObfuscatedParams),
     #{ack_mode := on_publish,
       name := "name",
       reconnect_delay := 1001,
@@ -229,7 +242,7 @@ parse_amqp10(_Config) ->
                                             <<"message-ann-value">>}]},
          {<<"dest-properties">>, [{<<"user_id">>, <<"some-user">>}]}
         ],
-
+    ObfuscatedParams = rabbit_shovel_parameters:obfuscate_uris_in_definition(Params),
     ?assertMatch(
        {ok, #{name := "my_shovel",
               ack_mode := on_publish,
@@ -252,7 +265,7 @@ parse_amqp10(_Config) ->
                        }
              }},
         rabbit_shovel_parameters:parse({"vhost", "my_shovel"}, "my-cluster",
-                                       Params)),
+                                       ObfuscatedParams)),
     ok.
 
 parse_amqp10_minimal(_Config) ->
@@ -266,6 +279,7 @@ parse_amqp10_minimal(_Config) ->
          {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
          {<<"dest-address">>, <<"a-dest-queue">>}
         ],
+    ObfuscatedParams = rabbit_shovel_parameters:obfuscate_uris_in_definition(Params),
     ?assertMatch(
        {ok, #{name := "my_shovel",
               ack_mode := on_confirm,
@@ -281,7 +295,7 @@ parse_amqp10_minimal(_Config) ->
                        }
              }},
         rabbit_shovel_parameters:parse({"vhost", "my_shovel"}, "my-cluster",
-                                       Params)),
+                                       ObfuscatedParams)),
     ok.
 
 validate_amqp10(_Config) ->

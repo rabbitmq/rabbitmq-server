@@ -13,8 +13,9 @@
 
 -export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0, parse/3]).
+-export([obfuscate_uris_in_definition/1]).
 
--import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_misc, [pget/2, pget/3, pset/3]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "shovel parameters"},
@@ -81,6 +82,16 @@ validate_amqp091_src(Def) ->
          _ ->
              ok
      end].
+
+obfuscate_uris_in_definition(Def) ->
+  SrcURIs  = get_uris(<<"src-uri">>, Def),
+  ObfuscatedSrcURIsDef = pset(<<"src-uri">>, obfuscate_uris(SrcURIs), Def),
+  DestURIs  = get_uris(<<"dest-uri">>, Def),
+  ObfuscatedDef = pset(<<"dest-uri">>, obfuscate_uris(DestURIs), ObfuscatedSrcURIsDef),
+  ObfuscatedDef.
+
+obfuscate_uris(URIs) ->
+  [credentials_obfuscation:encrypt(URI) || URI <- URIs].
 
 validate_amqp091_dest(Def) ->
     [case pget2(<<"dest-exchange">>, <<"dest-queue">>, Def) of
@@ -273,7 +284,7 @@ parse_dest(VHostName, ClusterName, Def, SourceHeaders) ->
     end.
 
 parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
-    Uris = get_uris(<<"dest-uri">>, Def),
+    Uris = deobfuscated_uris(<<"dest-uri">>, Def),
     Address = pget(<<"dest-address">>, Def),
     Properties =
         rabbit_data_coercion:to_proplist(
@@ -299,7 +310,7 @@ parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
      }.
 
 parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
-    DestURIs  = get_uris(<<"dest-uri">>,      Def),
+    DestURIs  = deobfuscated_uris(<<"dest-uri">>,      Def),
     DestX     = pget(<<"dest-exchange">>,     Def, none),
     DestXKey  = pget(<<"dest-exchange-key">>, Def, none),
     DestQ     = pget(<<"dest-queue">>,        Def, none),
@@ -367,7 +378,7 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
                 }, Details).
 
 parse_amqp10_source(Def) ->
-    Uris = get_uris(<<"src-uri">>, Def),
+    Uris = deobfuscated_uris(<<"src-uri">>, Def),
     Address = pget(<<"src-address">>, Def),
     DeleteAfter = pget(<<"src-delete-after">>, Def, <<"never">>),
     PrefetchCount = pget(<<"src-prefetch-count">>, Def, 1000),
@@ -379,7 +390,7 @@ parse_amqp10_source(Def) ->
        prefetch_count => PrefetchCount}, Headers}.
 
 parse_amqp091_source(Def) ->
-    SrcURIs  = get_uris(<<"src-uri">>, Def),
+    SrcURIs  = deobfuscated_uris(<<"src-uri">>, Def),
     SrcX     = pget(<<"src-exchange">>,Def, none),
     SrcXKey  = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
     SrcQ     = pget(<<"src-queue">>, Def, none),
@@ -419,6 +430,11 @@ get_uris(Key, Def) ->
                B when is_binary(B) -> [B];
                L when is_list(L)   -> L
            end,
+    [binary_to_list(URI) || URI <- URIs].
+
+deobfuscated_uris(Key, Def) ->
+    ObfuscatedURIs = pget(Key, Def),
+    URIs = [credentials_obfuscation:decrypt(ObfuscatedURI) || ObfuscatedURI <- ObfuscatedURIs],
     [binary_to_list(URI) || URI <- URIs].
 
 translate_ack_mode(<<"on-confirm">>) -> on_confirm;
