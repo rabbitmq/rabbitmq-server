@@ -24,7 +24,7 @@
         ]).
 
 suite() ->
-    [{timetrap, {minutes, 15}}].
+    [{timetrap, {minutes, 5}}].
 
 all() ->
     [
