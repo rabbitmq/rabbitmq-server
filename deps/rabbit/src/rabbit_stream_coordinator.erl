@@ -634,7 +634,7 @@ run_action(Action, StreamId, #{node := _Node,
                              ActionFun(),
                              unlink(Coordinator)
                      end),
-    Effects = [],
+    Effects = [{monitor, process, aux, Pid}],
     Actions = Actions0#{Pid => {StreamId, Action, Args}},
     {no_reply, Aux#aux{actions = Actions}, Log, Effects}.
 
