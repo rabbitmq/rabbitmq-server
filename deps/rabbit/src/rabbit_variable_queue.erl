@@ -740,7 +740,7 @@ ack([SeqId], State) ->
                               false -> {[], IndexState}
                           end,
             StoreState1 = case MsgLocation of
-                ?IN_SHARED_STORE  -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]);
+                ?IN_SHARED_STORE  -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]), StoreState0;
                 ?IN_QUEUE_STORE   -> ?STORE:remove(SeqId, StoreState0);
                 ?IN_MEMORY        -> StoreState0
             end,
@@ -1671,7 +1671,7 @@ remove(false, MsgStatus = #msg_status {
 
     %% Remove from msg_store and queue index, if necessary
     StoreState1 = case MsgLocation of
-        ?IN_SHARED_STORE -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]);
+        ?IN_SHARED_STORE -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]), StoreState0;
         ?IN_QUEUE_STORE  -> ?STORE:remove(SeqId, StoreState0);
         ?IN_MEMORY       -> StoreState0
     end,
