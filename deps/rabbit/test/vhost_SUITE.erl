@@ -67,8 +67,14 @@ init_per_group(cluster_size_1_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
     init_per_multinode_group(cluster_size_1_network, Config1, 1);
 init_per_group(cluster_size_2_network, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
-    init_per_multinode_group(cluster_size_2_network, Config1, 2);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            Config1 = rabbit_ct_helpers:set_config(Config,
+                                                   [{connection_type, network}]),
+            init_per_multinode_group(cluster_size_2_network, Config1, 2)
+    end;
 init_per_group(cluster_size_1_direct, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
     init_per_multinode_group(cluster_size_1_direct, Config1, 1);
