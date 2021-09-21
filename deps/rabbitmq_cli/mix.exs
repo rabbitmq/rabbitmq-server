@@ -117,12 +117,12 @@ defmodule RabbitMQCtl.MixfileBase do
   # don't have the equivalent for other methods.
   defp deps() do
     elixir_deps = [
-      {:json, "~> 1.2.0"},
-      {:csv, "~> 2.3.0"},
+      {:json, "~> 1.4.1"},
+      {:csv, "~> 2.4.0"},
       {:stdout_formatter, "~> 0.2.3"},
-      {:observer_cli, "~> 1.5.0"},
+      {:observer_cli, "~> 1.7.1"},
 
-      {:amqp, "~> 1.2.0", only: :test},
+      {:amqp, "~> 2.1.0", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},
       {:temp, "~> 0.4", only: :test},
       {:x509, "~> 0.7", only: :test}
