@@ -1,0 +1,52 @@
+name: Update rabbitmq-ct-[client-]helpers
+on:
+  schedule:
+  - cron: '0 3 * * *'
+  workflow_dispatch:
+jobs:
+  update-rbe-images:
+    name: Update rabbitmq-ct-[client-]helpers
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.3.4
+      with:
+        path: rabbitmq-server
+    - name: CHECKOUT rabbitmq-ct-helpers
+      uses: actions/checkout@v2.3.4
+      with:
+        repository: rabbitmq/rabbitmq-ct-helpers
+        path: rabbitmq-ct-helpers
+    - name: DETERMINE LATEST COMMIT
+      id: helpers-commit
+      path: rabbitmq-ct-helpers
+      run: |
+        echo "::set-output name=SHA::$(git rev-parse HEAD)"
+    - name: CHECKOUT rabbitmq-ct-client-helpers
+      uses: actions/checkout@v2.3.4
+      with:
+        repository: rabbitmq/rabbitmq-ct-client-helpers
+        path: rabbitmq-ct-client-helpers
+    - name: DETERMINE LATEST COMMIT
+      id: client-helpers-commit
+      path: rabbitmq-ct-client-helpers
+      run: |
+        echo "::set-output name=SHA::$(git rev-parse HEAD)"
+    - name: UPDATE rabbitmq-ct-[client-]helpers COMMIT
+      path: rabbitmq-server
+      run: |
+        sudo npm install --global --silent @bazel/buildozer
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set commit ${{ steps.helpers-commit.outputs.SHA }}' -:rabbitmq_ct_helpers)" > WORKSPACE.bazel
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set commit ${{ steps.client-helpers-commit.outputs.SHA }}' -:rabbitmq_ct_client_helpers)" > WORKSPACE.bazel
+        git diff
+    - name: CREATE PULL REQUEST
+      uses: peter-evans/create-pull-request@v3
+      with:
+        path: rabbitmq-server
+        title: Adopt latest rabbitmq-ct-[client-]helpers
+        labels: |
+          backport-v3.9.x
+          backport-v3.8.x
+        branch: bump-rabbitmq-ct-helpers
+        delete-branch: true
