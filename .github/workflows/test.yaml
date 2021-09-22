@@ -13,9 +13,6 @@ on:
       - '*.bzl'
       - '*.bazel'
       - .github/workflows/test.yaml
-  pull_request:
-    branches:
-      - bump-rabbitmq-ct-helpers
 jobs:
   test:
     name: Test

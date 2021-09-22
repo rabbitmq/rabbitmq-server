@@ -5,6 +5,9 @@ on:
       - master
       - v3.9.x
       - v3.8.x
+      - bump-rbe-image
+      - bump-otp-for-oci
+      - bump-rabbitmq-ct-helpers
     paths:
       - 'deps/**'
       - 'scripts/**'
@@ -17,9 +20,6 @@ on:
       - '*.bzl'
       - '*.bazel'
       - .github/workflows/test-mixed-versions.yaml
-  pull_request:
-    branches:
-      - bump-rabbitmq-ct-helpers
   workflow_dispatch:
 jobs:
   test-mixed-versions:
