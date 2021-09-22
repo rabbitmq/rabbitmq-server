@@ -43,6 +43,7 @@ jobs:
     - name: CREATE PULL REQUEST
       uses: peter-evans/create-pull-request@v3
       with:
+        token: ${{ secrets.REPO_SCOPED_TOKEN }}
         path: rabbitmq-server
         title: Adopt latest rabbitmq-ct-[client-]helpers
         labels: |

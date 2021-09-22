@@ -45,6 +45,7 @@ jobs:
     - name: CREATE PULL REQUEST
       uses: peter-evans/create-pull-request@v3
       with:
+        token: ${{ secrets.REPO_SCOPED_TOKEN }}
         title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }} for OCI workflow
         labels: |
           backport-v3.9.x

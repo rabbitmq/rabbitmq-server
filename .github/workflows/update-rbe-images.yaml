@@ -39,6 +39,10 @@ jobs:
     - name: CREATE PULL REQUEST
       uses: peter-evans/create-pull-request@v3
       with:
+        token: ${{ secrets.REPO_SCOPED_TOKEN }}
         title: Adopt latest rabbitmq-server-buildenv:linux-erlang-${{ matrix.erlang_version }} for RBE
+        labels: |
+          backport-v3.9.x
+          backport-v3.8.x
         branch: bump-rbe-image
         delete-branch: true
