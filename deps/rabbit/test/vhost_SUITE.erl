@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -249,10 +250,10 @@ node_starts_with_dead_vhosts(Config) ->
     %% The node should start without a vhost
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
 
-    timer:sleep(3000),
-
-    ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
-                        rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])).
+    ?awaitMatch(true,
+                rabbit_ct_broker_helpers:rpc(Config, 1,
+                                             rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
+                10000).
 
 node_starts_with_dead_vhosts_with_mirrors(Config) ->
     VHost1 = <<"vhost1">>,
@@ -304,10 +305,10 @@ node_starts_with_dead_vhosts_with_mirrors(Config) ->
     %% The node should start without a vhost
     ok = rabbit_ct_broker_helpers:start_node(Config, 1),
 
-    timer:sleep(3000),
-
-    ?assertEqual(true, rabbit_ct_broker_helpers:rpc(Config, 1,
-                        rabbit_vhost_sup_sup, is_vhost_alive, [VHost2])).
+    ?awaitMatch(true,
+                rabbit_ct_broker_helpers:rpc(Config, 1,
+                                             rabbit_vhost_sup_sup, is_vhost_alive, [VHost2]),
+                10000).
 
 vhost_creation_idempotency(Config) ->
     VHost = <<"idempotency-test">>,
