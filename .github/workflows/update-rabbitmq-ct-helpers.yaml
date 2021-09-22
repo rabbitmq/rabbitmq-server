@@ -20,7 +20,7 @@ jobs:
         path: rabbitmq-ct-helpers
     - name: DETERMINE LATEST COMMIT
       id: helpers-commit
-      path: rabbitmq-ct-helpers
+      working-directory: rabbitmq-ct-helpers
       run: |
         echo "::set-output name=SHA::$(git rev-parse HEAD)"
     - name: CHECKOUT rabbitmq-ct-client-helpers
@@ -30,11 +30,11 @@ jobs:
         path: rabbitmq-ct-client-helpers
     - name: DETERMINE LATEST COMMIT
       id: client-helpers-commit
-      path: rabbitmq-ct-client-helpers
+      working-directory: rabbitmq-ct-client-helpers
       run: |
         echo "::set-output name=SHA::$(git rev-parse HEAD)"
     - name: UPDATE rabbitmq-ct-[client-]helpers COMMIT
-      path: rabbitmq-server
+      working-directory: rabbitmq-server
       run: |
         sudo npm install --global --silent @bazel/buildozer
         echo "$(cat WORKSPACE.bazel | npx buildozer 'set commit ${{ steps.helpers-commit.outputs.SHA }}' -:rabbitmq_ct_helpers)" > WORKSPACE.bazel
