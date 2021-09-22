@@ -68,7 +68,8 @@ register() ->
 unregister() ->
     ok.
 
--spec lock(Node :: node()) -> {ok, {ResourceId :: string(), LockRequesterId :: node()}} | {error, Reason :: string()}.
+-spec lock(Node :: node()) -> {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
+                              {error, Reason :: string()}.
 
 lock(Node) ->
   %% call list_nodes/0 externally such that meck can mock the function
@@ -81,7 +82,7 @@ lock(Node) ->
           Retries = rabbit_nodes:lock_retries(),
           case global:set_lock(LockId, Nodes, Retries) of
             true ->
-              {ok, LockId};
+              {ok, {LockId, Nodes}};
             false ->
               {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
           end;
@@ -95,16 +96,12 @@ lock(Node) ->
       Error
   end.
 
--spec unlock({ResourceId :: string(), LockRequesterId :: node()}) -> ok | {error, Reason :: string()}.
+-spec unlock({{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}) ->
+    ok | {error, Reason :: string()}.
 
-unlock(LockId) ->
-  case ?MODULE:list_nodes() of
-    {ok, {Nodes, disc}} ->
-      global:del_lock(LockId, Nodes),
-      ok;
-    {error, _} = Error ->
-      Error
-  end.
+unlock({LockId, Nodes}) ->
+    global:del_lock(LockId, Nodes),
+    ok.
 
 %%
 %% Implementation
