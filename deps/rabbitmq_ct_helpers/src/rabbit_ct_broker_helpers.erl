@@ -192,7 +192,8 @@
     tcp_port_web_stomp,
     tcp_port_web_stomp_tls,
     tcp_port_stream,
-    tcp_port_stream_tls
+    tcp_port_stream_tls,
+    tcp_port_prometheus
   ]).
 
 %% -------------------------------------------------------------------
@@ -543,6 +544,10 @@ update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_erlang_dist | Rest]) ->
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_erlang_dist_proxy | Rest]) ->
     %% inet_proxy_dist port doesn't appear in the configuration file.
     update_tcp_ports_in_rmq_config(NodeConfig, Rest);
+update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_prometheus = Key | Rest]) ->
+    NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
+        {rabbitmq_prometheus, [{tcp_config, [{port, ?config(Key, NodeConfig)}]}]}),
+    update_tcp_ports_in_rmq_config(NodeConfig1, Rest);
 update_tcp_ports_in_rmq_config(NodeConfig, []) ->
     NodeConfig.
 
