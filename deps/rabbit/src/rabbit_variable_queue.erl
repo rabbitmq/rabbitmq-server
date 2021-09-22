@@ -751,9 +751,10 @@ ack([SeqId], State) ->
                                  ack_out_counter  = AckOutCount + 1 })}
     end;
 ack(AckTags, State) ->
-    {{IndexOnDiskSeqIds, SeqIdsInStore, AllMsgIds},
+    {{IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, AllMsgIds},
      State1 = #vqstate { index_state       = IndexState,
                          store_state       = StoreState0,
+                         msg_store_clients = MSCState,
                          ack_out_counter   = AckOutCount }} =
         lists:foldl(
           fun (SeqId, {Acc, State2}) ->
@@ -767,6 +768,7 @@ ack(AckTags, State) ->
     {DeletedSegments, IndexState1} = ?INDEX:ack(IndexOnDiskSeqIds, IndexState),
     StoreState1 = ?STORE:delete_segments(DeletedSegments, StoreState0),
     StoreState = lists:foldl(fun ?STORE:remove/2, StoreState1, SeqIdsInStore),
+    remove_msgs_by_id(MsgIdsByStore, MSCState),
     {lists:reverse(AllMsgIds),
      a(State1 #vqstate { index_state      = IndexState1,
                          store_state      = StoreState,
@@ -2271,17 +2273,18 @@ remove_pending_ack(false, SeqId, State = #vqstate{ram_pending_ack  = RPA,
 
 purge_pending_ack(KeepPersistent,
                   State = #vqstate { index_state       = IndexState,
-                                     store_state       = StoreState0 }) ->
-    {IndexOnDiskSeqIds, SeqIdsInStore, State1} = purge_pending_ack1(State),
+                                     store_state       = StoreState0,
+                                     msg_store_clients = MSCState }) ->
+    {IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, State1} = purge_pending_ack1(State),
     StoreState1 = lists:foldl(fun ?STORE:remove/2, StoreState0, SeqIdsInStore),
     %% @todo Sounds like we might want to remove only transients from the cache?
     case KeepPersistent of
-        true  -> State1 #vqstate { store_state = StoreState1 };
+        true  -> remove_transient_msgs_by_id(MsgIdsByStore, MSCState),
+                 State1 #vqstate { store_state = StoreState1 };
         false -> {DeletedSegments, IndexState1} =
                      ?INDEX:ack(IndexOnDiskSeqIds, IndexState),
-
                  StoreState = ?STORE:delete_segments(DeletedSegments, StoreState1),
-
+                 remove_msgs_by_id(MsgIdsByStore, MSCState),
                  State1 #vqstate { index_state = IndexState1,
                                    store_state = StoreState }
     end.
@@ -2289,7 +2292,7 @@ purge_pending_ack(KeepPersistent,
 purge_pending_ack_delete_and_terminate(
   State = #vqstate { index_state       = IndexState,
                      msg_store_clients = MSCState }) ->
-    {_, MsgIdsByStore, State1} = purge_pending_ack1(State),
+    {_, MsgIdsByStore, _SeqIdsInStore, State1} = purge_pending_ack1(State),
     IndexState1 = ?INDEX:delete_and_terminate(IndexState),
     %% @todo delete queue store.
     remove_msgs_by_id(MsgIdsByStore, MSCState),
@@ -2299,7 +2302,7 @@ purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
                                       disk_pending_ack  = DPA,
                                       qi_pending_ack    = QPA }) ->
     F = fun (_SeqId, MsgStatus, Acc) -> accumulate_ack(MsgStatus, Acc) end,
-    {IndexOnDiskSeqIds, MsgIdsByStore, _AllMsgIds} =
+    {IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, _AllMsgIds} =
         rabbit_misc:gb_trees_fold(
           F, rabbit_misc:gb_trees_fold(
                F,  rabbit_misc:gb_trees_fold(
@@ -2307,7 +2310,7 @@ purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
     State1 = State #vqstate { ram_pending_ack  = gb_trees:empty(),
                               disk_pending_ack = gb_trees:empty(),
                               qi_pending_ack   = gb_trees:empty()},
-    {IndexOnDiskSeqIds, MsgIdsByStore, State1}.
+    {IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, State1}.
 
 %% MsgIdsByStore is an map with two keys:
 %%
@@ -2319,23 +2322,34 @@ purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
 %% transient ones. The msg_store_remove/3 function takes this boolean
 %% flag to determine from which store the messages should be removed
 %% from.
-%% @todo Do nothing. We want to delete files when the index file is removed.
-remove_msgs_by_id(_, _) -> ok.
-%remove_msgs_by_id(MsgIdsByStore, MSCState) ->
-%    [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
-%     || {IsPersistent, MsgIds} <- maps:to_list(MsgIdsByStore)].
+%% @todo This is for the per-vhost store only. Rename function maybe.
+%remove_msgs_by_id(_, _) -> ok.
+remove_msgs_by_id(MsgIdsByStore, MSCState) ->
+    [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
+     || {IsPersistent, MsgIds} <- maps:to_list(MsgIdsByStore)].
 
-accumulate_ack_init() -> {[], [], []}.
+remove_transient_msgs_by_id(MsgIdsByStore, MSCState) ->
+    case maps:find(false, MsgIdsByStore) of
+        error        -> ok;
+        {ok, MsgIds} -> ok = msg_store_remove(MSCState, false, MsgIds)
+    end.
+
+accumulate_ack_init() -> {[], maps:new(), [], []}.
 
 accumulate_ack(#msg_status { seq_id        = SeqId,
                              msg_id        = MsgId,
+                             is_persistent = IsPersistent,
                              msg_location  = MsgLocation,
                              index_on_disk = IndexOnDisk },
-               {IndexOnDiskSeqIdsAcc, SeqIdsInStore, AllMsgIds}) ->
+               {IndexOnDiskSeqIdsAcc, MsgIdsByStore, SeqIdsInStore, AllMsgIds}) ->
     {cons_if(IndexOnDisk, SeqId, IndexOnDiskSeqIdsAcc),
      case MsgLocation of
-         ?IN_SHARED_STORE -> [SeqId|SeqIdsInStore];
-         _                -> SeqIdsInStore
+         ?IN_SHARED_STORE -> rabbit_misc:maps_cons(IsPersistent, MsgId, MsgIdsByStore);
+         _                -> MsgIdsByStore
+     end,
+     case MsgLocation of
+         ?IN_QUEUE_STORE -> [SeqId|SeqIdsInStore];
+         _               -> SeqIdsInStore
      end,
      [MsgId | AllMsgIds]}.
 
