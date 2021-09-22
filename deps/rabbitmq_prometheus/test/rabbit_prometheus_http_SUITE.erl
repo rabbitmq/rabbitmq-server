@@ -18,7 +18,6 @@ all() ->
     [
         {group, default_config},
         {group, config_path},
-        {group, config_port},
         {group, aggregated_metrics},
         {group, per_object_metrics},
         {group, per_object_endpoint_metrics},
@@ -30,7 +29,6 @@ groups() ->
     [
         {default_config, [], generic_tests()},
         {config_path, [], generic_tests()},
-        {config_port, [], generic_tests()},
         {aggregated_metrics, [], [
             aggregated_metrics_test,
             specific_erlang_metrics_present_test,
@@ -79,10 +77,6 @@ init_per_group(config_path, Config0) ->
     PathConfig = {rabbitmq_prometheus, [{path, "/bunnieshop"}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     init_per_group(config_path, Config1, [{prometheus_path, "/bunnieshop"}]);
-init_per_group(config_port, Config0) ->
-    PathConfig = {rabbitmq_prometheus, [{tcp_config, [{port, 15772}]}]},
-    Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
-    init_per_group(config_port, Config1, [{prometheus_port, 15772}]);
 init_per_group(per_object_metrics, Config0) ->
     PathConfig = {rabbitmq_prometheus, [{return_per_object_metrics, true}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
@@ -269,7 +263,7 @@ get_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
     %% Check that the body looks like a valid response
     ?assertEqual(match, re:run(Body, "TYPE", [{capture, none}])),
-    Port = proplists:get_value(prometheus_port, Config, 15692),
+    Port = rabbit_mgmt_test_util:config_port(Config, tcp_port_prometheus),
     URI = lists:flatten(io_lib:format("http://localhost:~p/metricsooops", [Port])),
     {ok, {{_, CodeAct, _}, _, _}} = httpc:request(get, {URI, []}, ?HTTPC_OPTS, []),
     ?assertMatch(404, CodeAct).
@@ -498,7 +492,7 @@ http_get(Config, ReqHeaders, CodeExp) ->
     http_get(Config, Path, ReqHeaders, CodeExp).
 
 http_get(Config, Path, ReqHeaders, CodeExp) ->
-    Port = proplists:get_value(prometheus_port, Config, 15692),
+    Port = rabbit_mgmt_test_util:config_port(Config, tcp_port_prometheus),
     URI = lists:flatten(io_lib:format("http://localhost:~p~s", [Port, Path])),
     {ok, {{_HTTP, CodeAct, _}, Headers, Body}} =
         httpc:request(get, {URI, ReqHeaders}, ?HTTPC_OPTS, []),
