@@ -5,6 +5,7 @@ on:
       - master
       - v3.9.x
       - v3.8.x
+      - bump-rabbitmq-ct-helpers
     paths:
       - 'deps/**'
       - 'scripts/**'
