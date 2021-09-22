@@ -37,8 +37,8 @@ jobs:
       working-directory: rabbitmq-server
       run: |
         sudo npm install --global --silent @bazel/buildozer
-        echo "$(cat WORKSPACE.bazel | npx buildozer 'set commit ${{ steps.helpers-commit.outputs.SHA }}' -:rabbitmq_ct_helpers)" > WORKSPACE.bazel
-        echo "$(cat WORKSPACE.bazel | npx buildozer 'set commit ${{ steps.client-helpers-commit.outputs.SHA }}' -:rabbitmq_ct_client_helpers)" > WORKSPACE.bazel
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set commit "${{ steps.helpers-commit.outputs.SHA }}"' -:rabbitmq_ct_helpers)" > WORKSPACE.bazel
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set commit "${{ steps.client-helpers-commit.outputs.SHA }}"' -:rabbitmq_ct_client_helpers)" > WORKSPACE.bazel
         git diff
     - name: CREATE PULL REQUEST
       uses: peter-evans/create-pull-request@v3
