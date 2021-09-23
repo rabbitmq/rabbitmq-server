@@ -41,7 +41,7 @@ jobs:
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
         committer: GitHub <noreply@github.com>
-        author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
+        author: GitHub <noreply@github.com>
         title: Adopt latest rabbitmq-server-buildenv:linux-erlang-${{ matrix.erlang_version }} for RBE
         commit-message: |
           Use latest rabbitmq-server-buildenv:linux-erlang-${{ matrix.erlang_version }}
