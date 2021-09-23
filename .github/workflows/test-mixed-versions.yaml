@@ -5,7 +5,7 @@ on:
       - master
       - v3.9.x
       - v3.8.x
-      - bump-rbe-image
+      - bump-rbe-image-*
       - bump-otp-for-oci
       - bump-rabbitmq-ct-helpers
     paths:
