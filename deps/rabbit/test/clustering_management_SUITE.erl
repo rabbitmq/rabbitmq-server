@@ -59,7 +59,9 @@ groups() ->
 suite() ->
     [
       %% If a test hangs, no need to wait for 30 minutes.
-      {timetrap, {minutes, 15}}
+      %% 14 minutes is one minute less than the current bazel timeout,
+      %% which should allow logs to be collected during a timeout
+      {timetrap, {minutes, 14}}
     ].
 
 %% -------------------------------------------------------------------
