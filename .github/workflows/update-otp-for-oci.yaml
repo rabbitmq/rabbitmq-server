@@ -1,5 +1,8 @@
 name: Update OTP Versions for OCI Workflow
 on:
+  push:
+    paths:
+      - .github/workflows/update-otp-for-oci.yaml
   schedule:
   - cron: '0 3 * * *'
   workflow_dispatch:
@@ -11,9 +14,9 @@ jobs:
       max-parallel: 1
       matrix:
         erlang_version:
-        - "24.0"
+        - "24.1"
         include:
-        - erlang_version: "24.0"
+        - erlang_version: "24.1"
           image_tag_suffix: 'otp-max'
     timeout-minutes: 10
     steps:
