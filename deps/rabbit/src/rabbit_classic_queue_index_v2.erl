@@ -520,6 +520,7 @@ new_segment_file(Segment, State = #mqistate{ segments = Segments }) ->
         %% In that case we fill the file with zeroes manually.
         {error, enotsup} ->
             ok = file:write(Fd, <<0:Size/unit:8>>),
+            {ok, 0} = file:position(Fd, bof),
             %% We do a full GC immediately after because we do not want
             %% to keep around the large binary we used to fill the file.
             _ = garbage_collect(),
