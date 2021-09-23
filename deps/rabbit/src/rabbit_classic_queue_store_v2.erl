@@ -52,6 +52,11 @@
 %% @todo Maybe name the files .qi and .qs? (queue index and queue store?)
 -define(SEGMENT_EXTENSION, ".mstr").
 
+-define(MAGIC, 16#524D5153). %% "RMQS"
+-define(VERSION, 2).
+-define(HEADER_SIZE,       64). %% bytes
+-define(ENTRY_HEADER_SIZE,  8). %% bytes
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %% We need this to directly access the delayed file io pid.
@@ -85,7 +90,7 @@
     %% a later read.
     write_segment = undefined :: undefined | non_neg_integer(),
     write_fd = undefined :: undefined | file:fd(),
-    write_offset = 0 :: non_neg_integer(), %% @todo Perhaps have a file header.
+    write_offset = ?HEADER_SIZE :: non_neg_integer(),
 
     %% We keep a cache of messages for faster reading
     %% for the cases where consumers can keep up with
@@ -183,7 +188,7 @@ write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
     %% message we mark the message as unconfirmed.
     State = maybe_mark_unconfirmed(MsgId, Props, State2),
     %% Keep track of the offset we are at.
-    {{?MODULE, Offset, Size}, State#qs{ write_offset = Offset + Size + 8 }}. %% @todo ENTRY_HEADER define?
+    {{?MODULE, Offset, Size}, State#qs{ write_offset = Offset + Size + ?ENTRY_HEADER_SIZE }}.
 
 get_write_fd(Segment, State = #qs{ write_fd = Fd,
                                    write_segment = Segment,
@@ -192,12 +197,24 @@ get_write_fd(Segment, State = #qs{ write_fd = Fd,
 get_write_fd(Segment, State = #qs{ write_fd = OldFd }) ->
     maybe_close_fd(OldFd),
     {ok, Fd} = file:open(segment_file(Segment, State), [read, append, raw, binary, {delayed_write, 512000, 10000}]),
-    {ok, Offset} = file:position(Fd, cur),
+    {ok, Offset0} = file:position(Fd, eof),
+    %% If we are at offset 0, write the file header.
+    Offset = case Offset0 of
+        0 ->
+            SegmentEntryCount = 65536, %% @todo segment_entry_count(),
+            FromSeqId = Segment * SegmentEntryCount,
+            ToSeqId = FromSeqId + SegmentEntryCount,
+            ok = file:write(Fd, << ?MAGIC:32,
+                                   ?VERSION:8,
+                                   FromSeqId:64/unsigned,
+                                   ToSeqId:64/unsigned,
+                                   0:344 >>),
+            ?HEADER_SIZE;
+        _ ->
+            Offset0
+    end,
     {Fd, Offset, State#qs{ write_segment = Segment,
-                           write_fd = Fd,
-                           %% We could as a tiny optimisation not write this offset
-                           %% until after the write has been completed.
-                           write_offset = Offset }}.
+                           write_fd = Fd }}.
 
 maybe_cache(SeqId, MsgSize, Msg, State = #qs{ cache = Cache,
                                               cache_size = CacheSize }) ->
@@ -235,21 +252,7 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
     SegmentEntryCount = 65536, %% @todo segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
     {Fd, State} = get_read_fd(Segment, State0),
-    %% @todo We can't use pread because the position is undefined after.
-    %%       What to do? Have one fd for writing (writes should be
-    %%       more or less sequential after all), and multiple for
-    %%       reading? How many for reading? One? Reads should be
-    %%       relatively sequential as well since we are fifo.
-    %%       So have one read fd and one write fd then. We will
-    %%       still use pread for reading.
-    %%
-    %% @todo Before trying to read we may need to flush the buffer to disk
-    %%       otherwise we risk getting eof. Alternatively we could read
-    %%       from the buffer directly? Though this can only happen if
-    %%       the write buffer can get bigger than the cache I believe
-    %%       (or more accurately, messages are in the write but not the cache).
-    %%       A solution could be to use {delayed_write, Size, Delay}.
-    {ok, MsgBin0} = file:pread(Fd, Offset, 8 + Size), %% @todo ENTRY_HEADER define?
+    {ok, MsgBin0} = file:pread(Fd, Offset, ?ENTRY_HEADER_SIZE + Size),
     %% Assert the size to make sure we read the correct data.
     %% Check the CRC if configured to do so.
     <<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits, _:8, MsgBin/bits>> = MsgBin0,
@@ -274,6 +277,9 @@ get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
     maybe_close_fd(OldFd),
     maybe_flush_write_fd(Segment, State),
     {ok, Fd} = file:open(segment_file(Segment, State), [read, raw, binary]),
+    {ok, <<?MAGIC:32,?VERSION:8,
+           _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,
+           _/bits>>} = file:read(Fd, ?HEADER_SIZE),
     {Fd, State#qs{ read_segment = Segment,
                    read_fd = Fd }}.
 
