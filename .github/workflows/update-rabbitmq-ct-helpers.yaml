@@ -44,8 +44,15 @@ jobs:
       uses: peter-evans/create-pull-request@v3
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
+        committer: GitHub <noreply@github.com>
+        author: GitHub <noreply@github.com>
         path: rabbitmq-server
         title: Adopt latest rabbitmq-ct-[client-]helpers
+        commit-message: |
+          Adopt latest rabbitmq-ct-[client-]helpers
+
+          - rabbitmq-ct-helpers@${{ steps.helpers-commit.outputs.SHA }}
+          - rabbitmq-ct-client-helpers@${{ steps.client-helpers-commit.outputs.SHA }}
         labels: |
           backport-v3.9.x
           backport-v3.8.x

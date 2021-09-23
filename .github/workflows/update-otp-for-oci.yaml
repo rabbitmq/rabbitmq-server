@@ -46,7 +46,11 @@ jobs:
       uses: peter-evans/create-pull-request@v3
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
+        committer: GitHub <noreply@github.com>
+        author: GitHub <noreply@github.com>
         title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }} for OCI workflow
+        commit-message: |
+          Adopt otp ${{ steps.fetch-version.outputs.VERSION }} for OCI workflow
         labels: |
           backport-v3.9.x
           backport-v3.8.x
