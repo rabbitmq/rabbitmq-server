@@ -7,35 +7,41 @@ jobs:
   update-rbe-images:
     name: Update Bazel RBE Images
     runs-on: ubuntu-latest
-    strategy:
-      max-parallel: 1
-      matrix:
-        erlang_version:
-        - "23.3"
-        - "24.0"
-        include:
-        - erlang_version: "23.3"
-          short_version: "23"
-        - erlang_version: "24.0"
-          short_version: "24"
     timeout-minutes: 10
+    env:
+      IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2.3.4
-    - name: UPDATE RBE IMAGE SHA
+    - name: SETUP BUILDOZER
+      run: |
+        sudo npm install --global --silent @bazel/buildozer
+    - name: UPDATE RBE IMAGE SHA (23)
       env:
-        IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
-        TAG: linux-erlang-${{ matrix.erlang_version }}
+        TAG: linux-erlang-23.3
+        LABEL: //:erlang_23_platform
       run: |
         # buildbuddy caches the container image, so we must use a specific sha to ensure
         # the latest is used
         echo "Retrieving current digest for ${IMAGE}:${TAG}"
         DIGEST="$(skopeo inspect --format '{{.Digest}}' docker://${IMAGE}:${TAG})"
         echo "Will use ${IMAGE}@${DIGEST}"
-        sudo npm install --global --silent @bazel/buildozer
         npx buildozer \
           "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
-          //:erlang_${{ matrix.short_version }}_platform || test $? -eq 3
+          ${LABEL} || test $? -eq 3
+    - name: UPDATE RBE IMAGE SHA (24)
+      env:
+        TAG: linux-erlang-24.0
+        LABEL: //:erlang_24_platform
+      run: |
+        # buildbuddy caches the container image, so we must use a specific sha to ensure
+        # the latest is used
+        echo "Retrieving current digest for ${IMAGE}:${TAG}"
+        DIGEST="$(skopeo inspect --format '{{.Digest}}' docker://${IMAGE}:${TAG})"
+        echo "Will use ${IMAGE}@${DIGEST}"
+        npx buildozer \
+          "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
+          ${LABEL} || test $? -eq 3
     - name: CREATE PULL REQUEST
       uses: peter-evans/create-pull-request@v3
       with:
