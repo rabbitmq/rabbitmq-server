@@ -17,7 +17,7 @@
 -module(rabbit_stream_utils).
 
 %% API
--export([enforce_correct_stream_name/1,
+-export([enforce_correct_name/1,
          write_messages/4,
          parse_map/2,
          auth_mechanisms/1,
@@ -26,13 +26,14 @@
          check_write_permitted/3,
          check_read_permitted/3,
          extract_stream_list/2,
-         sort_partitions/1]).
+         sort_partitions/1,
+         strip_cr_lf/1]).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
-enforce_correct_stream_name(Name) ->
+enforce_correct_name(Name) ->
     % from rabbit_channel
     StrippedName =
         binary:replace(Name, [<<"\n">>, <<"\r">>], <<"">>, [global]),
@@ -236,3 +237,6 @@ sort_partitions(Partitions) ->
                   end
                end,
                Partitions).
+
+strip_cr_lf(NameBin) ->
+    binary:replace(NameBin, [<<"\n">>, <<"\r">>], <<"">>, [global]).
