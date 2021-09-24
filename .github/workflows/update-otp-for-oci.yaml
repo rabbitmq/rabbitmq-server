@@ -1,8 +1,5 @@
 name: Update OTP Versions for OCI Workflow
 on:
-  push:
-    paths:
-      - .github/workflows/update-otp-for-oci.yaml
   schedule:
   - cron: '0 3 * * *'
   workflow_dispatch:
