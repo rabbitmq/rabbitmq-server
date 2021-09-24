@@ -32,7 +32,7 @@ all() ->
     [{group, list_connections},
      {group, list_consumers},
      {group, list_publishers},
-     {super_streams}].
+     {group, super_streams}].
 
 groups() ->
     [{list_connections, [],
