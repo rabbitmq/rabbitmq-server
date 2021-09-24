@@ -415,8 +415,12 @@ add_delete_super_stream_run(Config) ->
 
     ok.
 
-partitions(Config, SuperStream) ->
-    rabbit_stream_manager_SUITE:partitions(Config, SuperStream).
+partitions(Config, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 0,
+                                 rabbit_stream_manager,
+                                 partitions,
+                                 [<<"/">>, Name]).
 
 create_stream(S, Stream, C0) ->
     rabbit_stream_SUITE:test_create_stream(gen_tcp, S, Stream, C0).
