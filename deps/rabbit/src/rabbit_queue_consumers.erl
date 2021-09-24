@@ -221,7 +221,6 @@ deliver(FetchFun, QName, false, State = #state{consumers = Consumers}, true, Sin
                 {delivered, R} ->
                     {delivered, false, R, State};
                 undelivered ->
-                    {ChPid, Consumer} = SingleActiveConsumer,
                     Consumers1 = remove_consumer(ChPid, Consumer#consumer.tag, Consumers),
                     {undelivered, true,
                         State#state{consumers = Consumers1, use = update_use(State#state.use, inactive)}}
