@@ -25,6 +25,8 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand').
 -define(COMMAND_ADD_SUPER_STREAM,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand').
+-define(COMMAND_DELETE_SUPER_STREAM,
+        'Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteSuperStreamCommand').
 
 all() ->
     [{group, list_connections},
@@ -41,8 +43,11 @@ groups() ->
      {list_publishers, [],
       [list_publishers_merge_defaults, list_publishers_run]},
      {super_streams, [],
-      [add_super_stream_merge_defaults, add_super_stream_validate,
-       add_super_stream_run]}].
+      [add_super_stream_merge_defaults,
+       add_super_stream_validate,
+       delete_super_stream_merge_defaults,
+       delete_super_stream_validate,
+       add_delete_super_stream_run]}].
 
 init_per_suite(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -360,20 +365,58 @@ add_super_stream_validate(_Config) ->
                                                           <<"a,b,c">>})),
     ok.
 
-add_super_stream_run(Config) ->
+delete_super_stream_merge_defaults(_Config) ->
+    ?assertMatch({[<<"super-stream">>], #{vhost := <<"/">>}},
+                 ?COMMAND_DELETE_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                                                             #{})),
+    ok.
+
+delete_super_stream_validate(_Config) ->
+    ?assertMatch({validation_failure, not_enough_args},
+                 ?COMMAND_DELETE_SUPER_STREAM:validate([], #{})),
+    ?assertMatch({validation_failure, too_many_args},
+                 ?COMMAND_DELETE_SUPER_STREAM:validate([<<"a">>, <<"b">>],
+                                                       #{})),
+    ?assertEqual(ok, ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>], #{})),
+    ok.
+
+add_delete_super_stream_run(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Opts =
         #{node => Node,
           timeout => 10000,
-          vhost => <<"/">>,
-          partitions => 3},
+          vhost => <<"/">>},
 
     ?assertMatch({ok, _},
-                 ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>], Opts)),
+                 ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
+                                               maps:merge(#{partitions => 3},
+                                                          Opts))),
     ?assertEqual({ok,
                   [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
-                 rabbit_stream_manager_SUITE:partitions(Config,
-                                                        <<"invoices">>)).
+                 partitions(Config, <<"invoices">>)),
+    ?assertMatch({ok, _},
+                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+    ?assertEqual({error, stream_not_found},
+                 partitions(Config, <<"invoices">>)),
+
+    ?assertMatch({ok, _},
+                 ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
+                                               maps:merge(#{routing_keys =>
+                                                                <<" amer,emea , apac">>},
+                                                          Opts))),
+    ?assertEqual({ok,
+                  [<<"invoices-amer">>, <<"invoices-emea">>,
+                   <<"invoices-apac">>]},
+                 partitions(Config, <<"invoices">>)),
+    ?assertMatch({ok, _},
+                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+    ?assertEqual({error, stream_not_found},
+                 partitions(Config, <<"invoices">>)),
+
+    ok.
+
+partitions(Config, SuperStream) ->
+    rabbit_stream_manager_SUITE:partitions(Config, SuperStream).
 
 create_stream(S, Stream, C0) ->
     rabbit_stream_SUITE:test_create_stream(gen_tcp, S, Stream, C0).

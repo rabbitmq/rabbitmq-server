@@ -99,6 +99,28 @@ run([SuperStream],
                         VHost,
                         SuperStream,
                         Streams,
+                        RoutingKeys);
+run([SuperStream],
+    #{node := NodeName,
+      vhost := VHost,
+      timeout := Timeout,
+      routing_keys := RoutingKeysStr}) ->
+    RoutingKeys =
+        [rabbit_data_coercion:to_binary(
+             string:strip(K))
+         || K
+                <- string:tokens(
+                       rabbit_data_coercion:to_list(RoutingKeysStr), ",")],
+    Streams =
+        [list_to_binary(binary_to_list(SuperStream)
+                        ++ "-"
+                        ++ binary_to_list(K))
+         || K <- RoutingKeys],
+    create_super_stream(NodeName,
+                        Timeout,
+                        VHost,
+                        SuperStream,
+                        Streams,
                         RoutingKeys).
 
 create_super_stream(NodeName,
