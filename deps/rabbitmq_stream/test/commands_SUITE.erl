@@ -23,10 +23,14 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand').
 -define(COMMAND_LIST_PUBLISHERS,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand').
+-define(COMMAND_ADD_SUPER_STREAM,
+        'Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand').
 
 all() ->
-    [{group, list_connections}, {group, list_consumers},
-     {group, list_publishers}].
+    [{group, list_connections},
+     {group, list_consumers},
+     {group, list_publishers},
+     {super_streams}].
 
 groups() ->
     [{list_connections, [],
@@ -35,7 +39,10 @@ groups() ->
      {list_consumers, [],
       [list_consumers_merge_defaults, list_consumers_run]},
      {list_publishers, [],
-      [list_publishers_merge_defaults, list_publishers_run]}].
+      [list_publishers_merge_defaults, list_publishers_run]},
+     {super_streams, [],
+      [add_super_stream_merge_defaults, add_super_stream_validate,
+       add_super_stream_run]}].
 
 init_per_suite(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -308,6 +315,65 @@ list_publishers_run(Config) ->
     close(S2, C2_2),
     ?awaitMatch(0, publisher_count(Config), ?WAIT),
     ok.
+
+add_super_stream_merge_defaults(_Config) ->
+    ?assertMatch({[<<"super-stream">>],
+                  #{partitions := 3, vhost := <<"/">>}},
+                 ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                                                          #{})),
+
+    ?assertMatch({[<<"super-stream">>],
+                  #{partitions := 5, vhost := <<"/">>}},
+                 ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                                                          #{partitions => 5})),
+
+    DefaultWithRoutingKeys =
+        ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                                                 #{routing_keys =>
+                                                       <<"amer,emea,apac">>}),
+    ?assertMatch({[<<"super-stream">>],
+                  #{routing_keys := <<"amer,emea,apac">>, vhost := <<"/">>}},
+                 DefaultWithRoutingKeys),
+
+    {_, Opts} = DefaultWithRoutingKeys,
+    ?assertEqual(false, maps:is_key(partitions, Opts)).
+
+add_super_stream_validate(_Config) ->
+    ?assertMatch({validation_failure, not_enough_args},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([], #{})),
+    ?assertMatch({validation_failure, too_many_args},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>, <<"b">>], #{})),
+    ?assertMatch({validation_failure, _},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{partitions => 1,
+                                                      routing_keys =>
+                                                          <<"a,b,c">>})),
+    ?assertMatch({validation_failure, _},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{partitions => 0})),
+    ?assertEqual(ok,
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{partitions => 5})),
+    ?assertEqual(ok,
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{routing_keys =>
+                                                          <<"a,b,c">>})),
+    ok.
+
+add_super_stream_run(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Opts =
+        #{node => Node,
+          timeout => 10000,
+          vhost => <<"/">>,
+          partitions => 3},
+
+    ?assertMatch({ok, _},
+                 ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>], Opts)),
+    ?assertEqual({ok,
+                  [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
+                 rabbit_stream_manager_SUITE:partitions(Config,
+                                                        <<"invoices">>)).
 
 create_stream(S, Stream, C0) ->
     rabbit_stream_SUITE:test_create_stream(gen_tcp, S, Stream, C0).

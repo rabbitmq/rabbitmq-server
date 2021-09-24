@@ -559,12 +559,12 @@ validate_super_stream_creation(VirtualHost, Name, Partitions) ->
         {error, validation_failed} ->
             {error,
              {validation_failed,
-              rabbit_misc:format("~p is not a correct name for a super stream",
+              rabbit_misc:format("~s is not a correct name for a super stream",
                                  [Name])}};
         {ok, true} ->
             {error,
              {reference_already_exists,
-              rabbit_misc:format("there is already an exchange named ~p",
+              rabbit_misc:format("there is already an exchange named ~s",
                                  [Name])}};
         {ok, false} ->
             case check_already_existing_queue(VirtualHost, Partitions) of
@@ -615,11 +615,11 @@ check_already_existing_queue0(VirtualHost, [Q | T], _Error) ->
         {ok, true} ->
             {error,
              {reference_already_exists,
-              rabbit_misc:format("there is already a queue named ~p", [Q])}};
+              rabbit_misc:format("there is already a queue named ~s", [Q])}};
         {error, validation_failed} ->
             {error,
              {validation_failed,
-              rabbit_misc:format("~p is not a correct name for a queue", [Q])}}
+              rabbit_misc:format("~s is not a correct name for a queue", [Q])}}
     end.
 
 declare_super_stream_exchange(VirtualHost, Name, Username) ->
@@ -736,7 +736,7 @@ add_super_stream_binding(VirtualHost,
         {error, {resources_missing, [{absent, Q, _Reason} | _]}} ->
             {error,
              {stream_not_found,
-              rabbit_misc:format("stream ~p does not exists (absent", [Q])}};
+              rabbit_misc:format("stream ~s does not exists (absent)", [Q])}};
         {error, binding_not_found} ->
             {error,
              {not_found,
