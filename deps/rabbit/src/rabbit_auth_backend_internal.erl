@@ -232,12 +232,9 @@ add_user_sans_validation(Username, Password, ActingUser) ->
         throw:{error, {user_already_exists, _}} = Error ->
             _ = rabbit_log:warning("Failed to add user '~s': the user already exists", [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error ->
             _ = rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
-            throw(Error);
-        exit:Error ->
-            _ = rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
-            exit(Error)
+            erlang:Class(Error)
     end .
 
 -spec delete_user(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
@@ -273,12 +270,9 @@ delete_user(Username, ActingUser) ->
         throw:{error, {no_such_user, _}} = Error ->
             _ = rabbit_log:warning("Failed to delete user '~s': the user does not exist", [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error ->
             _ = rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
-            throw(Error);
-        exit:Error ->
-            _ = rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
-            exit(Error)
+            erlang:Class(Error)
     end .
 
 -spec lookup_user
@@ -321,12 +315,9 @@ change_password_sans_validation(Username, Password, ActingUser) ->
         throw:{error, {no_such_user, _}} = Error ->
             _ = rabbit_log:warning("Failed to change password for user '~s': the user does not exist", [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error ->
             _ = rabbit_log:warning("Failed to change password for user '~s': ~p", [Username, Error]),
-            throw(Error);
-        exit:Error ->
-            _ = rabbit_log:warning("Failed to change password for user '~s': ~p", [Username, Error]),
-            exit(Error)
+            erlang:Class(Error)
     end.
 
 -spec clear_password(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
@@ -375,12 +366,9 @@ set_tags(Username, Tags, ActingUser) ->
         throw:{error, {no_such_user, _}} = Error ->
             _ = rabbit_log:warning("Failed to set tags for user '~s': the user does not exist", [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error ->
             _ = rabbit_log:warning("Failed to set tags for user '~s': ~p", [Username, Error]),
-            throw(Error);
-        exit:Error ->
-            _ = rabbit_log:warning("Failed to set tags for user '~s': ~p", [Username, Error]),
-            exit(Error)
+            erlang:Class(Error)
     end .
 
 -spec set_permissions
@@ -438,14 +426,10 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
             _ = rabbit_log:warning("Failed to set permissions for '~s': the user does not exist",
                                [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error ->
             _ = rabbit_log:warning("Failed to set permissions for '~s' in virtual host '~s': ~p",
-                               [Username, VirtualHost, Error]),
-            throw(Error);
-        exit:Error ->
-            _ = rabbit_log:warning("Failed to set permissions for '~s' in virtual host '~s': ~p",
-                               [Username, VirtualHost, Error]),
-            exit(Error)
+                                   [Username, VirtualHost, Error]),
+            erlang:Class(Error)
     end.
 
 -spec clear_permissions
@@ -478,14 +462,10 @@ clear_permissions(Username, VirtualHost, ActingUser) ->
             _ = rabbit_log:warning("Failed to clear permissions for '~s': the user does not exist",
                                [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error ->
             _ = rabbit_log:warning("Failed to clear permissions for '~s' in virtual host '~s': ~p",
-                               [Username, VirtualHost, Error]),
-            throw(Error);
-        exit:Error ->
-            _ = rabbit_log:warning("Failed to clear permissions for '~s' in virtual host '~s': ~p",
-                               [Username, VirtualHost, Error]),
-            exit(Error)
+                                   [Username, VirtualHost, Error]),
+            erlang:Class(Error)
     end.
 
 
@@ -555,14 +535,10 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
             _ = rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s': the user does not exist.",
                                [Exchange, Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error ->
             _ = rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s' in virtual host '~s': ~p.",
-                               [Exchange, Username, VirtualHost, Error]),
-            throw(Error);
-        exit:Error ->
-            _ = rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s' in virtual host '~s': ~p.",
-                               [Exchange, Username, VirtualHost, Error]),
-            exit(Error)
+                                  [Exchange, Username, VirtualHost, Error]),
+            erlang:Class(Error)
     end .
 
 clear_topic_permissions(Username, VirtualHost, ActingUser) ->
@@ -594,14 +570,10 @@ clear_topic_permissions(Username, VirtualHost, ActingUser) ->
             _ = rabbit_log:warning("Failed to clear topic permissions for '~s': the user does not exist",
                                [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error ->
             _ = rabbit_log:warning("Failed to clear topic permissions for '~s' in virtual host '~s': ~p",
-                               [Username, VirtualHost, Error]),
-            throw(Error);
-        exit:Error ->
-            _ = rabbit_log:warning("Failed to clear topic permissions for '~s' in virtual host '~s': ~p",
-                               [Username, VirtualHost, Error]),
-            exit(Error)
+                                   [Username, VirtualHost, Error]),
+            erlang:Class(Error)
     end.
 
 clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
@@ -635,14 +607,10 @@ clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
             _ = rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s': the user does not exist",
                                [Exchange, Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error ->
             _ = rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s' in virtual host '~s': ~p",
-                               [Exchange, Username, VirtualHost, Error]),
-            throw(Error);
-        exit:Error ->
-            _ = rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s' in virtual host '~s': ~p",
-                               [Exchange, Username, VirtualHost, Error]),
-            exit(Error)
+                                   [Exchange, Username, VirtualHost, Error]),
+            erlang:Class(Error)
     end.
 
 put_user(User, ActingUser) -> put_user(User, undefined, ActingUser).
