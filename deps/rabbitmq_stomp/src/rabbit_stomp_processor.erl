@@ -827,7 +827,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
     NewState.
 
 notify_received(undefined) ->
-  %% no notification for quorum queues
+  %% no notification for quorum queues and streams
   ok;
 notify_received(DeliveryCtx) ->
   %% notification for flow control
