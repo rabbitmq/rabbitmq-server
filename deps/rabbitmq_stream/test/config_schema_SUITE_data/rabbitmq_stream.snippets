@@ -54,9 +54,11 @@
   [rabbitmq_stream]},
   {advertised_host_port,
       "stream.advertised_host = some-host
+       stream.advertised_tls_host = some-other-host
        stream.advertised_port = 5556
        stream.advertised_tls_port = 5553",
       [{rabbitmq_stream,[{advertised_host, <<"some-host">>},
+                          {advertised_tls_host, <<"some-other-host">>},
                          	{advertised_port, 5556},
                          	{advertised_tls_port, 5553}]}],
       [rabbitmq_stream]},
