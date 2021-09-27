@@ -193,6 +193,15 @@ fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("stream.advertised_host", Conf))
 end}.
 
+{mapping, "stream.advertised_tls_host", "rabbitmq_stream.advertised_tls_host", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_stream.advertised_tls_host",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("stream.advertised_tls_host", Conf))
+end}.
+
 {mapping, "stream.advertised_port", "rabbitmq_stream.advertised_port", [
     {datatype, integer}
 ]}.

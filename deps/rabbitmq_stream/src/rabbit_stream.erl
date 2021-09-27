@@ -20,6 +20,7 @@
 
 -export([start/2,
          host/0,
+         tls_host/0,
          port/0,
          tls_port/0,
          kill_connection/1]).
@@ -43,6 +44,15 @@ start(_Type, _Args) ->
     rabbit_global_counters:init([{protocol, stream},
                                  {queue_type, ?STREAM_QUEUE_TYPE}]),
     rabbit_stream_sup:start_link().
+
+tls_host() ->
+    case application:get_env(rabbitmq_stream, advertised_tls_host, undefined)
+    of
+        undefined ->
+            hostname_from_node();
+        Host ->
+            rabbit_data_coercion:to_binary(Host)
+    end.
 
 host() ->
     case application:get_env(rabbitmq_stream, advertised_host, undefined)
