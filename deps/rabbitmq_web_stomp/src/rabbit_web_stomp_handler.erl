@@ -183,6 +183,15 @@ websocket_info({Delivery = #'basic.deliver'{},
                                                      DeliveryCtx,
                                                      ProcState0),
     {ok, State#state{ proc_state = ProcState }};
+websocket_info({Delivery = #'basic.deliver'{},
+               #amqp_msg{props = Props, payload = Payload}},
+               State=#state{ proc_state = ProcState0 }) ->
+    ProcState = rabbit_stomp_processor:send_delivery(Delivery,
+                                                     Props,
+                                                     Payload,
+                                                     undefined,
+                                                     ProcState0),
+    {ok, State#state{ proc_state = ProcState }};
 websocket_info(#'basic.cancel'{consumer_tag = Ctag},
                State=#state{ proc_state = ProcState0 }) ->
     case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState0) of
