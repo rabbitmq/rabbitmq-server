@@ -94,7 +94,7 @@ suites = [
         name = "cache_SUITE",
         size = "small",
         runtime_deps = [
-            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
         ],
         deps = [
             "@proper//:bazel_erlang_lib",
@@ -157,7 +157,7 @@ suites = [
         name = "rabbit_mgmt_stats_SUITE",
         size = "small",
         runtime_deps = [
-            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
         ],
         deps = [
             "//deps/rabbitmq_management_agent:bazel_erlang_lib",

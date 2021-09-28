@@ -5,6 +5,6 @@ erlang_lib(
     app_version = "master",
     deps = [
         "@proper//:bazel_erlang_lib",
-        "@rabbitmq-server//deps/rabbit_common:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
     ],
 )
