@@ -46,10 +46,11 @@ start(_Type, _Args) ->
     rabbit_stream_sup:start_link().
 
 tls_host() ->
-    case application:get_env(rabbitmq_stream, advertised_tls_host, undefined)
+    case application:get_env(rabbitmq_stream, advertised_tls_host,
+                             undefined)
     of
         undefined ->
-            hostname_from_node();
+            host();
         Host ->
             rabbit_data_coercion:to_binary(Host)
     end.
