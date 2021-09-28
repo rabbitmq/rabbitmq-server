@@ -1374,7 +1374,13 @@ handle_frame_pre_auth(Transport,
                                                      VirtualHost,
                                                      {socket, S},
                                                      #{}),
-            AdvertisedHost = rabbit_stream:host(),
+            AdvertisedHost =
+                case TransportLayer of
+                    tcp ->
+                        rabbit_stream:host();
+                    ssl ->
+                        rabbit_stream:tls_host()
+                end,
             AdvertisedPort =
                 case TransportLayer of
                     tcp ->
