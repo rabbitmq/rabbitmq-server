@@ -515,14 +515,15 @@ parse_response(Body) ->
                 || L = [C|_] <- Lines, C /= $#
               ],
     lists:foldl(fun ({Metric, Label, Value}, MetricMap) ->
-                        case string:prefix(atom_to_list(Metric), "telemetry") of
-                            nomatch ->
+                        case re:run(atom_to_list(Metric), "^(telemetry|rabbitmq_identity_info|rabbitmq_build_info)", [{capture, none}]) of
+                            match ->
+                                MetricMap;
+                            _ ->
                                 OldLabelMap = maps:get(Metric, MetricMap, #{}),
                                 OldValues = maps:get(Label, OldLabelMap, []),
                                 NewValues = [Value|OldValues],
                                 NewLabelMap = maps:put(Label, NewValues, OldLabelMap),
-                                maps:put(Metric, NewLabelMap, MetricMap);
-                            _ -> MetricMap
+                                maps:put(Metric, NewLabelMap, MetricMap)
                         end
                 end, #{}, Metrics).
 

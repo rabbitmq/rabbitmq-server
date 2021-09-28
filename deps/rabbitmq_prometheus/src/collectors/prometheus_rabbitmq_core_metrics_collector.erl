@@ -233,15 +233,19 @@ deregister_cleanup(_) -> ok.
 
 collect_mf('detailed', Callback) ->
     collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), enabled_mfs_from_pdict(), Callback),
+    %% identity is here to enable filtering on a cluster name (as already happens in existing dashboards)
+    emit_identity_info(Callback),
     ok;
 collect_mf('per-object', Callback) ->
     collect(true, ?METRIC_NAME_PREFIX, false, ?METRICS_RAW, Callback),
     totals(Callback),
+    emit_identity_info(Callback),
     ok;
 collect_mf(_Registry, Callback) ->
     PerObjectMetrics = application:get_env(rabbitmq_prometheus, return_per_object_metrics, false),
     collect(PerObjectMetrics, ?METRIC_NAME_PREFIX, false, ?METRICS_RAW, Callback),
     totals(Callback),
+    emit_identity_info(Callback),
     ok.
 
 collect(PerObjectMetrics, Prefix, VHostsFilter, IncludedMFs, Callback) ->
@@ -255,8 +259,12 @@ totals(Callback) ->
          Size = ets:info(Table, size),
          mf_totals(Callback, Name, Type, Help, Size)
      end || {Table, Name, Type, Help} <- ?TOTALS],
+    ok.
+
+emit_identity_info(Callback) ->
     add_metric_family(build_info(), Callback),
-    add_metric_family(identity_info(), Callback).
+    add_metric_family(identity_info(), Callback),
+    ok.
 
 %% Aggregated `auth``_attempt_detailed_metrics` and
 %% `auth_attempt_metrics` are the same numbers. The former is just
