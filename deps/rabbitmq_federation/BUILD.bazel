@@ -77,6 +77,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "exchange_SUITE",
+        size = "large",
         additional_beam = [
             ":rabbit_federation_test_util",
         ],
