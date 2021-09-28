@@ -26,10 +26,10 @@
     </developers>
 
     <properties>
-        <stream-client.version>0.4.0-SNAPSHOT</stream-client.version>
-        <junit.jupiter.version>5.7.2</junit.jupiter.version>
-        <assertj.version>3.20.2</assertj.version>
-        <logback.version>1.2.5</logback.version>
+        <stream-client.version>0.5.0-SNAPSHOT</stream-client.version>
+        <junit.jupiter.version>5.8.1</junit.jupiter.version>
+        <assertj.version>3.21.0</assertj.version>
+        <logback.version>1.2.6</logback.version>
         <maven.compiler.plugin.version>3.8.1</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
         <spotless.version>2.2.0</spotless.version>

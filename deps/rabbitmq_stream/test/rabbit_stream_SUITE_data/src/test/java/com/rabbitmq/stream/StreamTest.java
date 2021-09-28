@@ -119,7 +119,7 @@ public class StreamTest {
                     (client1, subscriptionId, offset, messageCount1, dataSize) ->
                         client1.credit(subscriptionId, 10))
                 .messageListener(
-                    (subscriptionId, offset, message) -> {
+                    (subscriptionId, offset, chunkTimestamp, message) -> {
                       bodies.add(new String(message.getBodyAsBinary(), StandardCharsets.UTF_8));
                       consumingLatch.countDown();
                     }));

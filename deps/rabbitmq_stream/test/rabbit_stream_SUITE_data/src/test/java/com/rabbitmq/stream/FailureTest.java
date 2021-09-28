@@ -159,7 +159,7 @@ public class FailureTest {
             new Client.ClientParameters()
                 .port(TestUtils.streamPortNode1())
                 .messageListener(
-                    (subscriptionId, offset, msg) -> {
+                    (subscriptionId, offset, chunkTimestamp, msg) -> {
                       bodies.add(new String(msg.getBodyAsBinary(), StandardCharsets.UTF_8));
                       consumeLatch.countDown();
                     }));
@@ -340,7 +340,7 @@ public class FailureTest {
                     (client1, subscriptionId, offset, messageCount, dataSize) ->
                         client1.credit(subscriptionId, 1))
                 .messageListener(
-                    (subscriptionId, offset, message) -> {
+                    (subscriptionId, offset, chunkTimestamp, message) -> {
                       consumed.add(message);
                       generations.add((Long) message.getApplicationProperties().get("generation"));
                       if (consumed.size() == confirmed.size()) {
@@ -443,7 +443,7 @@ public class FailureTest {
     Set<Long> generations = ConcurrentHashMap.newKeySet();
     Set<Long> consumedIds = ConcurrentHashMap.newKeySet();
     Client.MessageListener messageListener =
-        (subscriptionId, offset, message) -> {
+        (subscriptionId, offset, chunkTimestamp, message) -> {
           consumed.add(message);
           generations.add((Long) message.getApplicationProperties().get("generation"));
           consumedIds.add(message.getProperties().getMessageIdAsLong());
