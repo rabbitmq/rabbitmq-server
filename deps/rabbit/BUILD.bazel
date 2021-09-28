@@ -237,7 +237,7 @@ rabbitmq_home(
     testonly = True,
     plugins = [
         ":test_bazel_erlang_lib",
-        "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
+        "//deps/rabbitmq_ct_client_helpers:bazel_erlang_lib",
         "@inet_tcp_proxy//:bazel_erlang_lib",
         "@meck//:bazel_erlang_lib",
     ],
@@ -874,7 +874,7 @@ suites = [
         size = "small",
         runtime_deps = [
             "@meck//:bazel_erlang_lib",
-            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
         ],
     ),
     rabbitmq_suite(

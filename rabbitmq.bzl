@@ -150,8 +150,8 @@ def rabbitmq_integration_suite(
         additional_hdrs = additional_hdrs,
         additional_srcs = additional_srcs,
         data = [
-            "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
-            "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
+            "//deps/rabbitmq_ct_helpers/tools/tls-certs:Makefile",
+            "//deps/rabbitmq_ct_helpers/tools/tls-certs:openssl.cnf.in",
         ] + data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
@@ -167,13 +167,13 @@ def rabbitmq_integration_suite(
         runtime_deps = [
             "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
             "//deps/rabbitmq_cli:rabbitmqctl",
-            "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_client_helpers:bazel_erlang_lib",
         ] + runtime_deps,
         deps = [
             "//deps/amqp_client:bazel_erlang_lib",
             "//deps/rabbit_common:bazel_erlang_lib",
             "@lager//:bazel_erlang_lib",
-            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
         ] + deps,
         **kwargs
     )
@@ -183,8 +183,8 @@ def rabbitmq_integration_suite(
         suite_name = name,
         tags = tags + ["mixed-version-cluster"],
         data = [
-            "@rabbitmq_ct_helpers//tools/tls-certs:Makefile",
-            "@rabbitmq_ct_helpers//tools/tls-certs:openssl.cnf.in",
+            "//deps/rabbitmq_ct_helpers/tools/tls-certs:Makefile",
+            "//deps/rabbitmq_ct_helpers/tools/tls-certs:openssl.cnf.in",
         ] + data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
@@ -202,12 +202,12 @@ def rabbitmq_integration_suite(
         runtime_deps = [
             "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
             "//deps/rabbitmq_cli:rabbitmqctl",
-            "@rabbitmq_ct_client_helpers//:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_client_helpers:bazel_erlang_lib",
         ] + runtime_deps,
         deps = [
             "//deps/amqp_client:bazel_erlang_lib",
             "//deps/rabbit_common:bazel_erlang_lib",
-            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
         ] + deps,
         **kwargs
     )

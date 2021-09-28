@@ -75,7 +75,7 @@ suites = [
     rabbitmq_suite(
         name = "rabbit_auth_cache_SUITE",
         runtime_deps = [
-            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
         ],
     ),
 ]
