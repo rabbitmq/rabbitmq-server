@@ -4,7 +4,7 @@ on:
   - cron: '0 3 * * *'
   workflow_dispatch:
 jobs:
-  update-rbe-images:
+  update-rabbitmq-ct-helpers:
     name: Update rabbitmq-ct-[client-]helpers
     runs-on: ubuntu-latest
     timeout-minutes: 10
