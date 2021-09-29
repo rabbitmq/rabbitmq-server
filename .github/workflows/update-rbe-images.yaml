@@ -12,11 +12,11 @@ jobs:
       matrix:
         erlang_version:
         - "23.3"
-        - "24.0"
+        - "24.1"
         include:
         - erlang_version: "23.3"
           short_version: "23"
-        - erlang_version: "24.0"
+        - erlang_version: "24.1"
           short_version: "24"
     timeout-minutes: 10
     steps:
