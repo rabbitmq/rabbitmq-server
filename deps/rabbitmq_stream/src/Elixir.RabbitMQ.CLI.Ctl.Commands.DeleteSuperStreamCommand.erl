@@ -86,7 +86,7 @@ delete_super_stream(NodeName, Timeout, VHost, SuperStream) ->
     end.
 
 banner(_, _) ->
-    <<"Deleting a super stream ...">>.
+    <<"Deleting a super stream (experimental feature)...">>.
 
 output({error, Msg}, _Opts) ->
     {error, 'Elixir.RabbitMQ.CLI.Core.ExitCodes':exit_software(), Msg};

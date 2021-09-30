@@ -363,6 +363,39 @@ add_super_stream_validate(_Config) ->
                  ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
                                                     #{routing_keys =>
                                                           <<"a,b,c">>})),
+
+    [case Expected of
+         ok ->
+             ?assertEqual(ok,
+                          ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>], Opts));
+         error ->
+             ?assertMatch({validation_failure, _},
+                          ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>], Opts))
+     end
+     || {Opts, Expected}
+            <- [{#{max_length_bytes => 1000}, ok},
+                {#{max_length_bytes => <<"1000">>}, ok},
+                {#{max_length_bytes => <<"100gb">>}, ok},
+                {#{max_length_bytes => <<"50mb">>}, ok},
+                {#{max_length_bytes => <<"50bm">>}, error},
+                {#{max_age => <<"PT10M">>}, ok},
+                {#{max_age => <<"P5DT8H">>}, ok},
+                {#{max_age => <<"foo">>}, error},
+                {#{stream_max_segment_size_bytes => 1000}, ok},
+                {#{stream_max_segment_size_bytes => <<"1000">>}, ok},
+                {#{stream_max_segment_size_bytes => <<"100gb">>}, ok},
+                {#{stream_max_segment_size_bytes => <<"50mb">>}, ok},
+                {#{stream_max_segment_size_bytes => <<"50bm">>}, error},
+                {#{leader_locator => <<"client-local">>}, ok},
+                {#{leader_locator => <<"least-leaders">>}, ok},
+                {#{leader_locator => <<"random">>}, ok},
+                {#{leader_locator => <<"foo">>}, error},
+                {#{initial_cluster_size => <<"1">>}, ok},
+                {#{initial_cluster_size => <<"2">>}, ok},
+                {#{initial_cluster_size => <<"3">>}, ok},
+                {#{initial_cluster_size => <<"0">>}, error},
+                {#{initial_cluster_size => <<"-1">>}, error},
+                {#{initial_cluster_size => <<"foo">>}, error}]],
     ok.
 
 delete_super_stream_merge_defaults(_Config) ->
@@ -387,6 +420,7 @@ add_delete_super_stream_run(Config) ->
           timeout => 10000,
           vhost => <<"/">>},
 
+    % with number of partitions
     ?assertMatch({ok, _},
                  ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
                                                maps:merge(#{partitions => 3},
@@ -399,6 +433,7 @@ add_delete_super_stream_run(Config) ->
     ?assertEqual({error, stream_not_found},
                  partitions(Config, <<"invoices">>)),
 
+    % with routing keys
     ?assertMatch({ok, _},
                  ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
                                                maps:merge(#{routing_keys =>
@@ -412,6 +447,38 @@ add_delete_super_stream_run(Config) ->
                  ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
     ?assertEqual({error, stream_not_found},
                  partitions(Config, <<"invoices">>)),
+
+    % with arguments
+    ExtraOptions =
+        #{partitions => 3,
+          max_length_bytes => <<"50mb">>,
+          max_age => <<"PT10M">>,
+          stream_max_segment_size_bytes => <<"1mb">>,
+          leader_locator => <<"random">>,
+          initial_cluster_size => <<"1">>},
+
+    ?assertMatch({ok, _},
+                 ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
+                                               maps:merge(ExtraOptions, Opts))),
+
+    {ok, Q} = queue_lookup(Config, <<"invoices-0">>),
+    Args = amqqueue:get_arguments(Q),
+    ?assertMatch({_, <<"random">>},
+                 rabbit_misc:table_lookup(Args, <<"x-queue-leader-locator">>)),
+    ?assertMatch({_, 1},
+                 rabbit_misc:table_lookup(Args, <<"x-initial-cluster-size">>)),
+    ?assertMatch({_, 1000000},
+                 rabbit_misc:table_lookup(Args,
+                                          <<"x-stream-max-segment-size-bytes">>)),
+    ?assertMatch({_, <<"600s">>},
+                 rabbit_misc:table_lookup(Args, <<"x-max-age">>)),
+    ?assertMatch({_, 50000000},
+                 rabbit_misc:table_lookup(Args, <<"x-max-length-bytes">>)),
+    ?assertMatch({_, <<"stream">>},
+                 rabbit_misc:table_lookup(Args, <<"x-queue-type">>)),
+
+    ?assertMatch({ok, _},
+                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
 
     ok.
 
@@ -497,3 +564,11 @@ amqp_params(network, _, Port) ->
     #amqp_params_network{port = Port};
 amqp_params(direct, Node, _) ->
     #amqp_params_direct{node = Node}.
+
+queue_lookup(Config, Q) ->
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q),
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 0,
+                                 rabbit_amqqueue,
+                                 lookup,
+                                 [QueueName]).

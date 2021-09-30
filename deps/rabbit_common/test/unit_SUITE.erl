@@ -44,7 +44,8 @@ groups() ->
             frame_encoding_does_not_fail_with_empty_binary_payload,
             amqp_table_conversion,
             name_type,
-            get_erl_path
+            get_erl_path,
+            date_time_parse_duration
         ]},
         {parse_mem_limit, [parallel], [
             parse_mem_limit_relative_exactly_max,
@@ -459,4 +460,24 @@ get_erl_path(_) ->
         _ ->
             ?assertNotMatch(nomatch, string:find(Exe, "erl"))
     end,
+    ok.
+
+date_time_parse_duration(_) ->
+    ?assertEqual(
+        {ok, [{sign, "+"}, {years, 6}, {months, 3}, {days, 1}, {hours, 1}, {minutes, 1}, {seconds, 1}]},
+        rabbit_date_time:parse_duration("+P6Y3M1DT1H1M1.1S")
+    ),
+    ?assertEqual(
+        {ok, [{sign, []}, {years, 0}, {months, 0}, {days, 0}, {hours, 0}, {minutes, 6}, {seconds, 0}]},
+        rabbit_date_time:parse_duration("PT6M")
+    ),
+    ?assertEqual(
+        {ok, [{sign, []}, {years, 0}, {months, 0}, {days, 0}, {hours, 0}, {minutes, 10}, {seconds, 30}]},
+        rabbit_date_time:parse_duration("PT10M30S")
+    ),
+    ?assertEqual(
+        {ok, [{sign, []}, {years, 0}, {months, 0}, {days, 5}, {hours, 8}, {minutes, 0}, {seconds, 0}]},
+        rabbit_date_time:parse_duration("P5DT8H")
+    ),
+    ?assertEqual(error, rabbit_date_time:parse_duration("foo")),
     ok.

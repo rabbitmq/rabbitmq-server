@@ -116,7 +116,7 @@ create_super_stream(Config, Name, Partitions, RKs) ->
                                  [<<"/">>,
                                   Name,
                                   Partitions,
-                                  [],
+                                  #{},
                                   RKs,
                                   <<"guest">>]).
 
