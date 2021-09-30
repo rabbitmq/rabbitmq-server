@@ -43,7 +43,6 @@
   ]).
 
 -define(BACKING_QUEUE_TESTCASES, [
-    msg_store,
     bq_queue_index,
     bq_queue_index_props,
     {variable_queue_default, [parallel], ?VARIABLE_QUEUE_TESTCASES},
@@ -60,7 +59,11 @@ all() ->
 
 groups() ->
     [
-     {backing_queue_tests, [], ?BACKING_QUEUE_TESTCASES}
+     {backing_queue_tests, [], [
+          msg_store,
+          {backing_queue_embed_limit_0, [], ?BACKING_QUEUE_TESTCASES},
+          {backing_queue_embed_limit_1024, [], ?BACKING_QUEUE_TESTCASES}
+        ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -106,6 +109,14 @@ init_per_group1(backing_queue_tests, Config) ->
                "Backing queue module not supported by this test group: ~p~n",
                [Module])}
     end;
+init_per_group1(backing_queue_embed_limit_0, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      application, set_env, [rabbit, queue_index_embed_msgs_below, 0]),
+    Config;
+init_per_group1(backing_queue_embed_limit_1024, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      application, set_env, [rabbit, queue_index_embed_msgs_below, 1024]),
+    Config;
 init_per_group1(variable_queue_default, Config) ->
     rabbit_ct_helpers:set_config(Config, {variable_queue_type, default});
 init_per_group1(variable_queue_lazy, Config) ->
@@ -142,6 +153,13 @@ end_per_group(Group, Config) ->
 end_per_group1(backing_queue_tests, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, teardown_backing_queue_test_group, [Config]);
+end_per_group1(Group, Config)
+when   Group =:= backing_queue_embed_limit_0
+orelse Group =:= backing_queue_embed_limit_1024 ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      application, set_env, [rabbit, queue_index_embed_msgs_below,
+        ?config(rmq_queue_index_embed_msgs_below, Config)]),
+    Config;
 end_per_group1(_, Config) ->
     Config.
 
@@ -480,10 +498,16 @@ setup_backing_queue_test_group(Config) ->
     application:set_env(rabbit, msg_store_file_size_limit, 512),
     application:set_env(rabbit, msg_store_file_size_limit,
                         FileSizeLimit),
-    Config.
+    {ok, Bytes} =
+        application:get_env(rabbit, queue_index_embed_msgs_below),
+    rabbit_ct_helpers:set_config(Config, [
+        {rmq_queue_index_embed_msgs_below, Bytes}
+      ]).
 
 teardown_backing_queue_test_group(Config) ->
     %% FIXME: Undo all the setup function did.
+    application:set_env(rabbit, queue_index_max_journal_entries,
+                        ?config(rmq_queue_index_max_journal_entries, Config)),
     %% We will have restarted the message store, and thus changed
     %% the order of the children of rabbit_sup. This will cause
     %% problems if there are subsequent failures - see bug 24262.
