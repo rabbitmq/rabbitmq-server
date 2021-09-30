@@ -26,7 +26,8 @@ list_nodes() ->
         Nodes when is_list(Nodes)  -> {ok, {Nodes, disc}}
     end.
 
--spec lock(Node :: node()) -> {ok, {ResourceId :: string(), LockRequesterId :: node()}} | {error, Reason :: string()}.
+-spec lock(Node :: node()) -> {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
+                              {error, Reason :: string()}.
 
 lock(Node) ->
   {ok, {Nodes, _NodeType}} = list_nodes(),
@@ -40,15 +41,15 @@ lock(Node) ->
   Retries = rabbit_nodes:lock_retries(),
   case global:set_lock(LockId, Nodes, Retries) of
     true ->
-      {ok, LockId};
+      {ok, {LockId, Nodes}};
     false ->
       {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
   end.
 
--spec unlock({ResourceId :: string(), LockRequesterId :: node()}) -> ok.
+-spec unlock({{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}) ->
+    ok | {error, Reason :: string()}.
 
-unlock(LockId) ->
-  {ok, {Nodes, _NodeType}} = list_nodes(),
+unlock({LockId, Nodes}) ->
   global:del_lock(LockId, Nodes),
   ok.
 
