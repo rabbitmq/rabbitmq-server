@@ -1057,7 +1057,7 @@ queue_index_walker_segment(_, _, N, N) ->
 queue_index_walker_segment(Fd, Gatherer, N, Total) ->
     case file:read(Fd, ?ENTRY_SIZE) of
         %% We found a non-ack persistent entry. Gather it.
-        {ok, <<1,_,1,_,Id:16/binary,_/bits>>} ->
+        {ok, <<1,_:7,1:1,_,1,Id:16/binary,_/bits>>} ->
             gatherer:sync_in(Gatherer, {Id, 1}),
             queue_index_walker_segment(Fd, Gatherer, N + 1, Total);
         %% We found an ack, a transient entry or a non-entry. Skip it.
