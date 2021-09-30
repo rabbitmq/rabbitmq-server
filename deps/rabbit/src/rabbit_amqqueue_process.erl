@@ -617,9 +617,6 @@ send_or_record_confirm(#delivery{confirm    = true,
                        State = #q{q                 = Q,
                                   msg_id_to_channel = MTC})
   when ?amqqueue_is_durable(Q) ->
-    %% @todo Once mirrored queues have been removed we can replace MsgId with a reference.
-    %%       We do not need to store the MsgId when used for confirms, only when used with
-    %%       the per-vhost message store.
     MTC1 = maps:put(MsgId, {SenderPid, MsgSeqNo}, MTC),
     {eventually, State#q{msg_id_to_channel = MTC1}};
 send_or_record_confirm(#delivery{confirm    = true,
