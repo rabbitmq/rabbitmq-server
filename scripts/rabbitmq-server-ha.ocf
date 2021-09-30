@@ -912,7 +912,7 @@ erl_eval() {
     local fmt="${1:?}"
     shift
 
-    $COMMAND_TIMEOUT ${OCF_RESKEY_ctl} eval "$(printf "$fmt" "$@")"
+    $COMMAND_TIMEOUT ${OCF_RESKEY_ctl} eval "$(printf "$fmt" "$@")" 2>/dev/null
 }
 
 # Returns 0 if we are clustered with provideded node
@@ -1291,7 +1291,7 @@ load_plugins() {
 
 list_active_plugins() {
   local list
-  list=`${OCF_RESKEY_ctl} eval 'rabbit_plugins:active().'`
+  list=`${OCF_RESKEY_ctl} eval 'rabbit_plugins:active().' 2>/dev/null`
   echo "${list}"
 }
 
@@ -1808,7 +1808,7 @@ node_health_check_legacy() {
     local alarms
     local rc_alarms
     local timeout_alarms
-    alarms=`su_rabbit_cmd "${OCF_RESKEY_ctl} -q eval 'rabbit_alarm:get_alarms().'"`
+    alarms=`su_rabbit_cmd "${OCF_RESKEY_ctl} -q eval 'rabbit_alarm:get_alarms().'" 2>/dev/null`
     rc_alarms=$?
     check_timeouts $rc_alarms "rabbit_get_alarms_timeouts" "get_alarms"
     timeout_alarms=$?
