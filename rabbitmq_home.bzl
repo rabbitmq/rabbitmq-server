@@ -29,13 +29,17 @@ def _link_escript(ctx, escript):
     return s
 
 def _priv_file_dest_relative_path(plugin_label, f):
-    rel_base = plugin_label.package
     if plugin_label.workspace_root != "":
-        rel_base = path_join(plugin_label.workspace_root, rel_base)
-    if rel_base == "":
-        return f.path
+        if plugin_label.package != "":
+            rel_base = path_join(plugin_label.workspace_root, plugin_label.package)
+        else:
+            rel_base = plugin_label.workspace_root
     else:
+        rel_base = plugin_label.package
+    if rel_base != "":
         return f.path.replace(rel_base + "/", "")
+    else:
+        return f.path
 
 def _plugins_dir_links(ctx, plugin):
     lib_info = plugin[ErlangLibInfo]
