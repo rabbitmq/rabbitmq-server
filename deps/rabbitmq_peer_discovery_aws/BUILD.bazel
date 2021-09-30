@@ -76,7 +76,7 @@ suites = [
             "external",
         ],
         deps = [
-            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
         ],
     ),
     rabbitmq_suite(

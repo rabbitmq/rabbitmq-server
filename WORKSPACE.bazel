@@ -43,24 +43,6 @@ load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
 
 rabbitmq_external_deps(rabbitmq_workspace = "@")
 
-git_repository(
-    name = "rabbitmq_ct_helpers",
-    commit = "f709a6f6a2345d3ab5076469cb8d8e42e89b2b59",
-    remote = "https://github.com/rabbitmq/rabbitmq-ct-helpers.git",
-    repo_mapping = {
-        "@rabbitmq-server": "@",
-    },
-)
-
-git_repository(
-    name = "rabbitmq_ct_client_helpers",
-    commit = "51ed1e59d725816cd82a3bd6211c043d385f180e",
-    remote = "https://github.com/rabbitmq/rabbitmq-ct-client-helpers.git",
-    repo_mapping = {
-        "@rabbitmq-server": "@",
-    },
-)
-
 load("//deps/amqp10_client:activemq.bzl", "activemq_archive")
 
 activemq_archive()
