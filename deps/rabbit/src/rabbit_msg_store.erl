@@ -20,7 +20,6 @@
 -export([scan_file_for_valid_messages/1]). %% salvage tool
 
 -export([transform_dir/3, force_recovery/2]). %% upgrade
--export([blocking_write/3, force_sync/1]). %% Used when upgrading to the modern index.
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, prioritise_call/4, prioritise_cast/3,
@@ -516,23 +515,6 @@ write_flow(MsgId, Msg,
 
 write(MsgId, Msg, CState) -> client_write(MsgId, Msg, noflow, CState).
 
--spec blocking_write(rabbit_types:msg_id(), msg(), client_msstate()) -> 'ok'.
-
-%% Used when upgrading to the modern index.
-blocking_write(MsgId, Msg,
-            CState = #client_msstate { cur_file_cache_ets = CurFileCacheEts,
-                                       client_ref         = CRef }) ->
-    file_handle_cache_stats:update(msg_store_write),
-    ok = client_update_flying(+1, MsgId, CState),
-    ok = update_msg_cache(CurFileCacheEts, MsgId, Msg),
-    ok = server_call(CState, {write, CRef, MsgId, noflow}).
-
--spec force_sync(client_msstate()) -> 'ok'.
-
-%% Used when upgrading to the modern index.
-force_sync(CState) ->
-    ok = server_call(CState, force_sync).
-
 -spec read(rabbit_types:msg_id(), client_msstate()) ->
                      {rabbit_types:ok(msg()) | 'not_found', client_msstate()}.
 
@@ -885,16 +867,7 @@ handle_call({read, MsgId}, From, State) ->
 
 handle_call({contains, MsgId}, From, State) ->
     State1 = contains_message(MsgId, From, State),
-    noreply(State1);
-
-%% Used when upgrading to the modern index.
-handle_call(Write = {write, _, _, _}, _From, State) ->
-    {noreply, State1, _} = handle_cast(Write, State),
-    reply(ok, State1);
-
-handle_call(force_sync, _From, State = #msstate { current_file_handle = CurHdl }) ->
-    ok = file_handle_cache:sync(CurHdl),
-    reply(ok, State).
+    noreply(State1).
 
 handle_cast({client_dying, CRef},
             State = #msstate { dying_clients       = DyingClients,
