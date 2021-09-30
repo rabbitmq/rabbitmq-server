@@ -348,7 +348,8 @@ suites = [
         name = "clustering_management_SUITE",
         size = "large",
         flaky = True,
-        shard_count = 4,
+        shard_count = 19,
+        sharding_method = "case",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
