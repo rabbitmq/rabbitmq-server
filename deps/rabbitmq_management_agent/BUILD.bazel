@@ -97,7 +97,7 @@ suites = [
         name = "rabbit_mgmt_slide_SUITE",
         size = "small",
         runtime_deps = [
-            "@rabbitmq_ct_helpers//:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
         ],
         deps = [
             "@proper//:bazel_erlang_lib",
