@@ -1,8 +1,12 @@
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@bazel-erlang//:dialyze.bzl", "plt")
+load("@bazel-erlang//:shell.bzl", "shell")
 load("elixir_home.bzl", "elixir_home")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
+load(":rabbitmq.bzl", "ALL_PLUGINS", "APP_VERSION")
+load(":dist.bzl", "collect_licenses", "versioned_rabbitmq_home")
 
 exports_files([
     "scripts/bazel/rabbitmq-run.sh",
@@ -123,4 +127,74 @@ rabbitmqctl(
 rabbitmqctl(
     name = "rabbitmq-plugins",
     home = ":broker-home",
+)
+
+shell(
+    name = "repl",
+    deps = ALL_PLUGINS,
+)
+
+collect_licenses(
+    name = "licenses",
+    srcs = glob(
+        ["LICENSE*"],
+        exclude = [
+            "LICENSE.md",
+            "LICENSE.txt",
+        ],
+    ),
+    deps = ALL_PLUGINS,
+)
+
+versioned_rabbitmq_home(
+    name = "dist-home",
+    plugins = ALL_PLUGINS,
+)
+
+pkg_tar(
+    name = "license-files",
+    srcs = [
+        ":licenses",
+        "//deps/rabbit:INSTALL",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "scripts",
+    srcs = [
+        "scripts/bash_autocomplete.sh",
+        "scripts/rabbitmq-script-wrapper",
+        "scripts/rabbitmqctl-autocomplete.sh",
+        "scripts/zsh_autocomplete.sh",
+    ],
+    package_dir = "scripts",
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "release-notes",
+    srcs = glob([
+        "release-notes/*.md",
+        "release-notes/*.txt",
+    ]),
+    package_dir = "release-notes",
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "package-generic-unix",
+    srcs = [
+        ":dist-home",
+    ],
+    extension = "tar.xz",
+    package_dir = "rabbitmq_server-{}".format(APP_VERSION),
+    strip_prefix = "dist-home",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":license-files",
+        ":release-notes",
+        ":scripts",
+        "//deps/rabbit:manpages-dir",
+    ],
 )
