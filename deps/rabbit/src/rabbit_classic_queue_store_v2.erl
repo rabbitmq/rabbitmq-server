@@ -69,9 +69,6 @@
 -define(DEBUG(X,Y), _ = X, _ = Y, ok).
 -endif.
 
-%-type seq_id() :: non_neg_integer().
-%% @todo Use a shared seq_id() type in all relevant modules.
-
 -record(qs, {
     %% Store directory - same as the queue index.
     dir :: file:filename(),
@@ -107,7 +104,7 @@
     %% it does not include the metadata. The real
     %% cache size will therefore potentially be larger
     %% than the configured maximum size.
-    cache = #{}, %% @todo #{ seq_id() => {non_neg_integer(), msg()}}
+    cache = #{} :: #{ rabbit_variable_queue:seq_id() => {non_neg_integer(), #basic_message{}}},
     cache_size = 0 :: non_neg_integer(),
 
     %% Similarly, we keep track of a single read fd.
@@ -122,7 +119,7 @@
     %% intervals after the index has been flushed
     %% to disk.
     confirms = gb_sets:new() :: gb_sets:set(),
-    on_sync :: on_sync_fun() %% @todo Rename to reflect the lack of file:sync.
+    on_sync :: on_sync_fun()
 }).
 
 %% Types copied from rabbit_queue_index.
@@ -139,7 +136,7 @@ init(#resource{ virtual_host = VHost } = Name, OnSyncFun) ->
         on_sync = OnSyncFun
     }.
 
-%% @todo Recover: do nothing? Just normal init?
+%% @todo Recover: tie into the index to check the messages are there and CRC matches.
 
 terminate(State = #qs{ write_fd = WriteFd,
                        read_fd = ReadFd }) ->
