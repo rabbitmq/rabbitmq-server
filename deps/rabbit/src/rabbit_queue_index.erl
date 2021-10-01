@@ -239,7 +239,6 @@
                                entries_to_segment :: array:array(),
                                unacked            :: non_neg_integer()
                              }).
--type seq_id() :: integer().
 -type seg_map() :: {map(), [segment()]}.
 -type on_sync_fun() :: fun ((gb_sets:set()) -> ok).
 -type qistate() :: #qistate { dir                 :: file:filename(),
@@ -393,9 +392,9 @@ flush_delivered_cache(State = #qistate{delivered_cache = DC}) ->
     State1 = deliver(lists:reverse(DC), State),
     State1#qistate{delivered_cache = []}.
 
--spec publish(rabbit_types:msg_id(), seq_id(),
-                    rabbit_types:message_properties(), boolean(), boolean(),
-                    non_neg_integer(), qistate()) -> qistate().
+-spec publish(rabbit_types:msg_id(), rabbit_variable_queue:seq_id(),
+              rabbit_types:message_properties(), boolean(), boolean(),
+              non_neg_integer(), qistate()) -> qistate().
 
 publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint, State) ->
     {JournalHdl, State1} =
@@ -434,12 +433,12 @@ maybe_needs_confirming(MsgProps, MsgOrId,
       {false, _}     -> State
     end.
 
--spec deliver([seq_id()], qistate()) -> qistate().
+-spec deliver([rabbit_variable_queue:seq_id()], qistate()) -> qistate().
 
 deliver(SeqIds, State) ->
     deliver_or_ack(del, SeqIds, State).
 
--spec ack([seq_id()], qistate()) -> qistate().
+-spec ack([rabbit_variable_queue:seq_id()], qistate()) -> qistate().
 
 ack(SeqIds, State) ->
     deliver_or_ack(ack, SeqIds, State).
@@ -475,8 +474,10 @@ needs_sync(#qistate{journal_handle  = JournalHdl,
 flush(State = #qistate { dirty_count = 0 }) -> State;
 flush(State)                                -> flush_journal(State).
 
--spec read(seq_id(), seq_id(), qistate()) ->
-                     {[{rabbit_types:msg_id(), seq_id(),
+-spec read(rabbit_variable_queue:seq_id(),
+           rabbit_variable_queue:seq_id(),
+           qistate()) ->
+                     {[{rabbit_types:msg_id(), rabbit_variable_queue:seq_id(),
                         rabbit_types:message_properties(),
                         boolean(), boolean()}], qistate()}.
 
@@ -493,7 +494,7 @@ read(Start, End, State = #qistate { segments = Segments,
                     end, {[], Segments}, lists:seq(StartSeg, EndSeg)),
     {Messages, State #qistate { segments = Segments1 }}.
 
--spec next_segment_boundary(seq_id()) -> seq_id().
+-spec next_segment_boundary(rabbit_variable_queue:seq_id()) -> rabbit_variable_queue:seq_id().
 
 next_segment_boundary(SeqId) ->
     {Seg, _RelSeq} = seq_id_to_seg_and_rel_seq_id(SeqId),
