@@ -326,13 +326,18 @@
 
 -record(rates, { in, out, ack_in, ack_out, timestamp }).
 
+-type msg_location() :: memory
+                      | rabbit_msg_store
+                      | {rabbit_classic_queue_store_v2, non_neg_integer(), non_neg_integer()}.
+-export_type([msg_location/0]).
+
 -record(msg_status,
         { seq_id,
           msg_id,
           msg,
           is_persistent,
           is_delivered,
-          msg_location, %% ?IN_SHARED_STORE | ?IN_QUEUE_STORE | ?IN_MEMORY -- we no longer embed in the index
+          msg_location, %% ?IN_SHARED_STORE | ?IN_QUEUE_STORE | ?IN_MEMORY -- we no longer embed in the index in v2
           index_on_disk,
           persist_to,
           msg_props
@@ -367,6 +372,7 @@
 -rabbit_upgrade({move_messages_to_vhost_store, message_store, []}).
 
 -type seq_id()  :: non_neg_integer().
+-export_type([seq_id/0]).
 
 -type rates() :: #rates { in        :: float(),
                           out       :: float(),

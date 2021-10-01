@@ -34,7 +34,6 @@
 -define(ENTRY_SIZE,  32). %% bytes
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("kernel/include/file.hrl"). %% @todo Is that still necessary?
 
 %% Set to true to get an awful lot of debug logs.
 -if(false).
@@ -43,11 +42,11 @@
 -define(DEBUG(X,Y), _ = X, _ = Y, ok).
 -endif.
 
--type seq_id() :: non_neg_integer().
-%% @todo Use a shared seq_id() type in all relevant modules.
-
-%% @todo Add location to the type.
--type entry() :: {rabbit_types:msg_id(), seq_id(), rabbit_types:message_properties(), boolean()}.
+-type entry() :: {rabbit_types:msg_id(),
+                  rabbit_variable_queue:seq_id(),
+                  rabbit_variable_queue:msg_location(),
+                  rabbit_types:message_properties(),
+                  boolean()}.
 
 %% @todo Rename into #qi.
 -record(mqistate, {
@@ -65,7 +64,7 @@
     %% If not, write everything. This allows the reader
     %% to continue reading from memory if it is fast
     %% enough to keep up with the producer.
-    write_buffer = #{} :: #{seq_id() => entry() | ack},
+    write_buffer = #{} :: #{rabbit_variable_queue:seq_id() => entry() | ack},
 
     %% The number of entries in the write buffer that
     %% refer to an update to the file, rather than a
@@ -84,7 +83,7 @@
     %% replaces the cache entirely. When only acks are flushed,
     %% then the cache gets updated: old acks are removed and
     %% new acks are added to the cache.
-    cache = #{} :: #{seq_id() => entry() | ack},
+    cache = #{} :: #{rabbit_variable_queue:seq_id() => entry() | ack},
 
     %% Messages waiting for publisher confirms. The
     %% publisher confirms will be sent when the message
@@ -471,19 +470,13 @@ delete_and_terminate(State = #mqistate { dir = Dir,
     State#mqistate{ segments = #{},
                     fds = #{} }.
 
--spec publish(rabbit_types:msg_id(), seq_id(), todo,
-                    rabbit_types:message_properties(), boolean(),
-                    non_neg_integer(), State) -> State when State::mqistate().
+-spec publish(rabbit_types:msg_id(), rabbit_variable_queue:seq_id(),
+              rabbit_variable_queue:msg_location(),
+              rabbit_types:message_properties(), boolean(),
+              non_neg_integer(), State) -> State when State::mqistate().
 
 %% Because we always persist to the msg_store, the Msg(Or)Id argument
 %% here is always a binary, never a record.
-%%
-%% @todo MsgId should be the real MsgId, and a separate argument for location.
-%%       Otherwise confirms won't work as intended (for now). Ultimately it
-%%       would be good to get rid of MsgId (at least where we don't need it)
-%%       but for the time being we are stuck with it.
-%%
-%%       Maybe switch confirms to seq_id()? Is that doable?
 publish(MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount,
         State0 = #mqistate { write_buffer = WriteBuffer0,
                              segments = Segments }) ->
@@ -539,6 +532,7 @@ new_segment_file(Segment, State = #mqistate{ segments = Segments }) ->
                            ToSeqId:64/unsigned,
                            0:344 >>),
     %% Keep the file open.
+    %% @todo Does segment file deleting work when not all entries get written? Probably not. Should keep an accurate count.
     State#mqistate{ segments = Segments#{Segment => SegmentEntryCount},
                     fds = OpenFds#{Segment => Fd} }.
 
@@ -723,7 +717,7 @@ get_fd_for_segment(Segment, State = #mqistate{ fds = OpenFds }) ->
 %% When a file has been fully acked we may also close its
 %% open FD if any and delete it.
 
--spec ack([seq_id()], State) -> State when State::mqistate().
+-spec ack([rabbit_variable_queue:seq_id()], State) -> State when State::mqistate().
 
 %% The rabbit_variable_queue module may call this function
 %% with an empty list. Do nothing.
@@ -828,7 +822,9 @@ ack_delete_fold_fun(SeqId, Write, {Buffer, Updates, Deletes, SegmentEntryCount})
 %% and then read from S1 to S2. This function could then return
 %% either N messages or less depending on the current state.
 
--spec read(seq_id(), seq_id(), State) ->
+-spec read(rabbit_variable_queue:seq_id(),
+           rabbit_variable_queue:seq_id(),
+           State) ->
                      {[entry()], State}
                      when State::mqistate().
 
@@ -954,7 +950,7 @@ parse_entries(<< Status:8,
 %% ----
 %%
 %% Syncing and flushing to disk requested by the queue.
-%% @todo We no longer sync. Rename the function?
+%% Note: the v2 no longer calls fsync, it only flushes.
 
 -spec sync(State) -> State when State::mqistate().
 
@@ -1118,7 +1114,7 @@ bounds(State = #mqistate{ segments = Segments }) ->
 %% The next_segment_boundary/1 function is used internally when
 %% reading. It should not be called from rabbit_variable_queue.
 
--spec next_segment_boundary(SeqId) -> SeqId when SeqId::seq_id().
+-spec next_segment_boundary(SeqId) -> SeqId when SeqId::rabbit_variable_queue:seq_id().
 
 next_segment_boundary(SeqId) ->
     ?DEBUG("~0p", [SeqId]),
@@ -1133,9 +1129,6 @@ segment_entry_count() ->
     %% @todo A value lower than the max write_buffer size results in nothing needing
     %%       to be written to disk as long as the consumer consumes as fast as the
     %%       producer produces. Accidental memory queue?
-    %%
-    %% @todo Probably put this in the state rather than read it all the time.
-    %%       But we must change next_segment_boundary to allow that.
     SegmentEntryCount =
         application:get_env(rabbit, classic_queue_index_v2_segment_entry_count, 65536),
     SegmentEntryCount.
@@ -1149,7 +1142,6 @@ erase_index_dir(Dir) ->
         false -> ok
     end.
 
-%% @todo This must be exported for rabbit_classic_queue_store_v2.
 queue_dir(VHostDir, QueueName) ->
     %% Queue directory is
     %% {node_database_dir}/msg_stores/vhosts/{vhost}/queues/{queue}
