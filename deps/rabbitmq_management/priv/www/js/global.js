@@ -169,7 +169,7 @@ var COLUMNS;
 // All help ? popups
 var HELP = {
     'delivery-limit':
-      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsucessfully this many times it will be dropped or dead-lettered, depending on the queue configuration.',
+      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsuccessfully this many times it will be dropped or dead-lettered, depending on the queue configuration.',
 
     'exchange-auto-delete':
       'If yes, the exchange will delete itself after at least one queue or exchange has been bound to this one, and then all queues or exchanges have been unbound.',
