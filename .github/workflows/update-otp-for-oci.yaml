@@ -19,7 +19,13 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2.3.4
+    - name: SKIP IF THE PR ALREADY EXISTS
+      id: check-for-branch
+      run: |
+        c=$(git ls-remote --exit-code --heads origin bump-otp-for-oci)
+        echo "::set-output name=c::$c"
     - name: DETERMINE LATEST PATCH & SHA
+      if: steps.check-for-branch.c != 0
       id: fetch-version
       run: |
         TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags \
@@ -31,6 +37,7 @@ jobs:
         echo "::set-output name=VERSION::${TAG_NAME#OTP-}"
         echo "::set-output name=SHA::${SHA}"
     - name: MODIFY VERSION FILE
+      if: steps.check-for-branch.c != 0
       run: |
         echo "Updating packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml with:"
         echo "  otp -> ${{ steps.fetch-version.outputs.VERSION }}"
@@ -43,6 +50,7 @@ jobs:
         set -x
         git diff
     - name: CREATE PULL REQUEST
+      if: steps.check-for-branch.c != 0
       uses: peter-evans/create-pull-request@v3
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
