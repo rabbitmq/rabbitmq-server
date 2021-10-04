@@ -48,8 +48,7 @@
                   rabbit_types:message_properties(),
                   boolean()}.
 
-%% @todo Rename into #qi.
--record(mqistate, {
+-record(qi, {
     %% Queue name (for the stub file).
     queue_name :: rabbit_amqqueue:name(),
 
@@ -112,8 +111,7 @@
     on_sync :: on_sync_fun()
 }).
 
--type mqistate() :: #mqistate{}.
--export_type([mqistate/0]).
+-type state() :: #qi{}.
 
 %% Types copied from rabbit_queue_index.
 
@@ -132,7 +130,7 @@ erase(#resource{ virtual_host = VHost } = Name) ->
     erase_index_dir(Dir).
 
 -spec init(rabbit_amqqueue:name(),
-                 on_sync_fun(), on_sync_fun()) -> mqistate().
+                 on_sync_fun(), on_sync_fun()) -> state().
 
 %% We do not embed messages and as a result never need the OnSyncMsgFun.
 
@@ -145,7 +143,7 @@ init(#resource{ virtual_host = VHost } = Name, OnSyncFun, _OnSyncMsgFun) ->
 
 init1(Name, Dir, OnSyncFun) ->
     ensure_queue_name_stub_file(Name, Dir),
-    #mqistate{
+    #qi{
         queue_name = Name,
         dir = Dir,
         on_sync = OnSyncFun
@@ -158,11 +156,11 @@ ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) 
                                           "QUEUE: ", QName/binary, "\n",
                                           "INDEX: v2\n">>).
 
--spec reset_state(State) -> State when State::mqistate().
+-spec reset_state(State) -> State when State::state().
 
-reset_state(State = #mqistate{ queue_name     = Name,
-                               dir            = Dir,
-                               on_sync        = OnSyncFun }) ->
+reset_state(State = #qi{ queue_name     = Name,
+                         dir            = Dir,
+                         on_sync        = OnSyncFun }) ->
     ?DEBUG("~0p", [State]),
     delete_and_terminate(State),
     init1(Name, Dir, OnSyncFun).
@@ -171,7 +169,7 @@ reset_state(State = #mqistate{ queue_name     = Name,
                     contains_predicate(),
                     on_sync_fun(), on_sync_fun()) ->
                         {'undefined' | non_neg_integer(),
-                         'undefined' | non_neg_integer(), mqistate()}.
+                         'undefined' | non_neg_integer(), state()}.
 
 -define(RECOVER_COUNT, 1).
 -define(RECOVER_BYTES, 2).
@@ -198,7 +196,7 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, IsMsgStoreClean,
                     recover_index_v1_clean(State0, Terms, IsMsgStoreClean,
                                            ContainsCheckFun, OnSyncFun, OnSyncMsgFun);
                 {?VERSION, Segments} ->
-                    State0#mqistate{ segments = Segments }
+                    State0#qi{ segments = Segments }
             end,
             %% The queue has stored the count/bytes values inside
             %% Terms so we don't need to provide them again.
@@ -215,7 +213,7 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, IsMsgStoreClean,
              State}
     end.
 
-recover_segments(State0 = #mqistate { queue_name = Name, dir = Dir }, Terms, IsMsgStoreClean,
+recover_segments(State0 = #qi { queue_name = Name, dir = Dir }, Terms, IsMsgStoreClean,
                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun, CountersRef) ->
     SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
     State = case SegmentFiles of
@@ -269,7 +267,7 @@ recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, [Segment|Ta
     end,
     recover_segments(State, ContainsCheckFun, StoreState, CountersRef, Tail).
 
-recover_segment(State = #mqistate{ segments = Segments }, _, StoreState, _, Fd,
+recover_segment(State = #qi{ segments = Segments }, _, StoreState, _, Fd,
                 Segment, ThisEntry, SegmentEntryCount,
                 Unacked, LocBytes)
                 when ThisEntry =:= SegmentEntryCount ->
@@ -280,7 +278,7 @@ recover_segment(State = #mqistate{ segments = Segments }, _, StoreState, _, Fd,
         _ ->
             %% We must ack some messages on disk.
             ok = file:pwrite(Fd, LocBytes),
-            {keep, State#mqistate{ segments = Segments#{ Segment => Unacked }}, StoreState}
+            {keep, State#qi{ segments = Segments#{ Segment => Unacked }}, StoreState}
     end;
 recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
                 Segment, ThisEntry, SegmentEntryCount,
@@ -355,7 +353,7 @@ recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
                             Unacked - 1, LocBytes0)
     end.
 
-recover_index_v1_clean(State0 = #mqistate{ queue_name = Name }, Terms, IsMsgStoreClean,
+recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
     #resource{virtual_host = VHost, name = QName} = Name,
     logger:info("Converting clean queue ~s on vhost ~s to the new index format", [QName, VHost]),
@@ -370,7 +368,7 @@ recover_index_v1_clean(State0 = #mqistate{ queue_name = Name }, Terms, IsMsgStor
                 [QName, VHost, counters:get(DummyCountersRef, ?RECOVER_COUNT)]),
     State.
 
-recover_index_v1_dirty(State0 = #mqistate{ queue_name = Name }, Terms, IsMsgStoreClean,
+recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                        CountersRef) ->
     #resource{virtual_host = VHost, name = QName} = Name,
@@ -387,7 +385,7 @@ recover_index_v1_dirty(State0 = #mqistate{ queue_name = Name }, Terms, IsMsgStor
 
 %% At this point all messages are persistent because transient messages
 %% were dropped during the old index recovery.
-recover_index_v1_common(State0 = #mqistate{ queue_name = Name, dir = Dir },
+recover_index_v1_common(State0 = #qi{ queue_name = Name, dir = Dir },
                         V1State, CountersRef) ->
     %% Use a temporary per-queue store state to store embedded messages.
     StoreState0 = rabbit_classic_queue_store_v2:init(Name, fun(_, _) -> ok end),
@@ -413,7 +411,7 @@ recover_index_v1_common(State0 = #mqistate{ queue_name = Name, dir = Dir },
 
 recover_index_v1_loop(State, StoreState, _, _, HiSeqId, HiSeqId) ->
     {State, StoreState};
-recover_index_v1_loop(State0 = #mqistate{ queue_name = Name },
+recover_index_v1_loop(State0 = #qi{ queue_name = Name },
                       StoreState0, V1State0, CountersRef, LoSeqId, HiSeqId) ->
     UpSeqId = lists:min([rabbit_queue_index:next_segment_boundary(LoSeqId),
                          HiSeqId]),
@@ -453,11 +451,11 @@ recover_index_v1_loop(State0 = #mqistate{ queue_name = Name },
                 [QName, VHost, MessagesCount]),
     recover_index_v1_loop(State, StoreState, V1State, CountersRef, UpSeqId, HiSeqId).
 
--spec terminate(rabbit_types:vhost(), [any()], State) -> State when State::mqistate().
+-spec terminate(rabbit_types:vhost(), [any()], State) -> State when State::state().
 
-terminate(VHost, Terms, State0 = #mqistate { dir = Dir,
-                                             segments = Segments,
-                                             fds = OpenFds }) ->
+terminate(VHost, Terms, State0 = #qi { dir = Dir,
+                                       segments = Segments,
+                                       fds = OpenFds }) ->
     ?DEBUG("~0p ~0p ~0p", [VHost, Terms, State0]),
     %% Flush the buffer.
     State = flush_buffer(State0, full),
@@ -470,13 +468,13 @@ terminate(VHost, Terms, State0 = #mqistate { dir = Dir,
     %% Write recovery terms for faster recovery.
     rabbit_recovery_terms:store(VHost, filename:basename(Dir),
                                 [{mqi_state, {?VERSION, Segments}} | Terms]),
-    State#mqistate{ segments = #{},
-                    fds = #{} }.
+    State#qi{ segments = #{},
+              fds = #{} }.
 
--spec delete_and_terminate(State) -> State when State::mqistate().
+-spec delete_and_terminate(State) -> State when State::state().
 
-delete_and_terminate(State = #mqistate { dir = Dir,
-                                         fds = OpenFds }) ->
+delete_and_terminate(State = #qi { dir = Dir,
+                                   fds = OpenFds }) ->
     ?DEBUG("~0p", [State]),
     %% Close all FDs.
     _ = maps:map(fun(_, Fd) ->
@@ -485,23 +483,23 @@ delete_and_terminate(State = #mqistate { dir = Dir,
     file_handle_cache:release_reservation(),
     %% Erase the data on disk.
     ok = erase_index_dir(Dir),
-    State#mqistate{ segments = #{},
-                    fds = #{} }.
+    State#qi{ segments = #{},
+              fds = #{} }.
 
 -spec publish(rabbit_types:msg_id(), rabbit_variable_queue:seq_id(),
               rabbit_variable_queue:msg_location(),
               rabbit_types:message_properties(), boolean(),
-              non_neg_integer(), State) -> State when State::mqistate().
+              non_neg_integer(), State) -> State when State::state().
 
 %% Because we always persist to the msg_store, the Msg(Or)Id argument
 %% here is always a binary, never a record.
 publish(MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount,
-        State0 = #mqistate { write_buffer = WriteBuffer0,
-                             segments = Segments }) ->
+        State0 = #qi { write_buffer = WriteBuffer0,
+                       segments = Segments }) ->
     ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount, State0]),
     %% Add the entry to the write buffer.
     WriteBuffer = WriteBuffer0#{SeqId => {MsgId, SeqId, Location, Props, IsPersistent}},
-    State1 = State0#mqistate{ write_buffer = WriteBuffer },
+    State1 = State0#qi{ write_buffer = WriteBuffer },
     %% When writing to a new segment we must prepare the file
     %% and update our segments state.
     SegmentEntryCount = segment_entry_count(),
@@ -515,8 +513,8 @@ publish(MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount,
     State = maybe_mark_unconfirmed(MsgId, Props, State2),
     maybe_flush_buffer(State).
 
-new_segment_file(Segment, State = #mqistate{ segments = Segments }) ->
-    #mqistate{ fds = OpenFds } = reduce_fd_usage(Segment, State),
+new_segment_file(Segment, State = #qi{ segments = Segments }) ->
+    #qi{ fds = OpenFds } = reduce_fd_usage(Segment, State),
     false = maps:is_key(Segment, OpenFds), %% assert
     {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
     %% We must preallocate space for the file. We want the space
@@ -551,8 +549,8 @@ new_segment_file(Segment, State = #mqistate{ segments = Segments }) ->
                            0:344 >>),
     %% Keep the file open.
     %% @todo Does segment file deleting work when not all entries get written? Probably not. Should keep an accurate count.
-    State#mqistate{ segments = Segments#{Segment => SegmentEntryCount},
-                    fds = OpenFds#{Segment => Fd} }.
+    State#qi{ segments = Segments#{Segment => SegmentEntryCount},
+              fds = OpenFds#{Segment => Fd} }.
 
 %% We try to keep the number of FDs open at 4 at a maximum.
 %% Under normal circumstances we will end up with 1 or 2
@@ -561,7 +559,7 @@ new_segment_file(Segment, State = #mqistate{ segments = Segments }) ->
 %% using too many FDs when the consumer lags a lot. We
 %% limit at 4 because we try to keep up to 2 for reading
 %% and 2 for writing.
-reduce_fd_usage(SegmentToOpen, State = #mqistate{ fds = OpenFds })
+reduce_fd_usage(SegmentToOpen, State = #qi{ fds = OpenFds })
         when map_size(OpenFds) < 4 ->
     %% The only case where we need to update reservations is
     %% when we are opening a segment that wasn't already open,
@@ -573,7 +571,7 @@ reduce_fd_usage(SegmentToOpen, State = #mqistate{ fds = OpenFds })
             file_handle_cache:set_reservation(map_size(OpenFds) + 1),
             State
     end;
-reduce_fd_usage(SegmentToOpen, State = #mqistate{ fds = OpenFds0 }) ->
+reduce_fd_usage(SegmentToOpen, State = #qi{ fds = OpenFds0 }) ->
     case OpenFds0 of
         #{SegmentToOpen := _} ->
             State;
@@ -601,18 +599,18 @@ reduce_fd_usage(SegmentToOpen, State = #mqistate{ fds = OpenFds0 }) ->
             ?DEBUG("~0p ~0p ~0p", [SegmentToOpen, OpenSegments, SegmentToClose]),
             {Fd, OpenFds} = maps:take(SegmentToClose, OpenFds0),
             ok = file:close(Fd),
-            State#mqistate{ fds = OpenFds }
+            State#qi{ fds = OpenFds }
     end.
 
 maybe_mark_unconfirmed(MsgId, #message_properties{ needs_confirming = true },
-        State = #mqistate { confirms = Confirms }) ->
-    State#mqistate{ confirms = gb_sets:add_element(MsgId, Confirms) };
+        State = #qi { confirms = Confirms }) ->
+    State#qi{ confirms = gb_sets:add_element(MsgId, Confirms) };
 maybe_mark_unconfirmed(_, _, State) ->
     State.
 
 %% @todo Perhaps make the two limits configurable. Also refine the default.
-maybe_flush_buffer(State = #mqistate { write_buffer = WriteBuffer,
-                                       write_buffer_updates = NumUpdates }) ->
+maybe_flush_buffer(State = #qi { write_buffer = WriteBuffer,
+                                 write_buffer_updates = NumUpdates }) ->
     if
         %% When we have at least 100 entries, we always want to flush,
         %% in order to limit the memory usage and avoid losing too much
@@ -628,8 +626,8 @@ maybe_flush_buffer(State = #mqistate { write_buffer = WriteBuffer,
             State
     end.
 
-flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0,
-                                  cache = Cache0 },
+flush_buffer(State0 = #qi { write_buffer = WriteBuffer0,
+                            cache = Cache0 },
              FlushType) ->
     SegmentEntryCount = segment_entry_count(),
     %% First we prepare the writes sorted by segment.
@@ -674,9 +672,9 @@ flush_buffer(State0 = #mqistate { write_buffer = WriteBuffer0,
             maps:merge(Cache1, AcksToCache)
     end,
     %% Finally we update the state.
-    State#mqistate{ write_buffer = WriteBuffer,
-                    write_buffer_updates = 0,
-                    cache = Cache }.
+    State#qi{ write_buffer = WriteBuffer,
+              write_buffer_updates = 0,
+              cache = Cache }.
 
 write_ack(SeqId, SegmentEntryCount, WritesAcc) ->
     Segment = SeqId div SegmentEntryCount,
@@ -722,29 +720,29 @@ build_entry({Id, _SeqId, Location, Props, IsPersistent}) ->
        Size:32/unsigned,      %% Message payload size.
        Expiry:64/unsigned >>. %% Expiration time.
 
-get_fd_for_segment(Segment, State = #mqistate{ fds = OpenFds }) ->
+get_fd_for_segment(Segment, State = #qi{ fds = OpenFds }) ->
     case OpenFds of
         #{ Segment := Fd } ->
             {Fd, State};
         _ ->
             {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
-            {Fd, State#mqistate{ fds = OpenFds#{ Segment => Fd }}}
+            {Fd, State#qi{ fds = OpenFds#{ Segment => Fd }}}
     end.
 
 %% When marking acks we need to update the file(s) on disk.
 %% When a file has been fully acked we may also close its
 %% open FD if any and delete it.
 
--spec ack([rabbit_variable_queue:seq_id()], State) -> State when State::mqistate().
+-spec ack([rabbit_variable_queue:seq_id()], State) -> State when State::state().
 
 %% The rabbit_variable_queue module may call this function
 %% with an empty list. Do nothing.
 ack([], State) ->
     ?DEBUG("[] ~0p", [State]),
     {[], State};
-ack(SeqIds, State0 = #mqistate{ write_buffer = WriteBuffer0,
-                                write_buffer_updates = NumUpdates0,
-                                cache = Cache0 }) ->
+ack(SeqIds, State0 = #qi{ write_buffer = WriteBuffer0,
+                          write_buffer_updates = NumUpdates0,
+                          cache = Cache0 }) ->
     ?DEBUG("~0p ~0p", [SeqIds, State0]),
     %% We start by updating the ack state information. We then
     %% use this information to delete segment files on disk that
@@ -768,11 +766,11 @@ ack(SeqIds, State0 = #mqistate{ write_buffer = WriteBuffer0,
                 WriteBuffer1),
             {WriteBuffer2, NumUpdates2}
     end,
-    {Deletes, maybe_flush_buffer(State#mqistate{ write_buffer = WriteBuffer,
-                                                 write_buffer_updates = NumUpdates,
-                                                 cache = Cache })}.
+    {Deletes, maybe_flush_buffer(State#qi{ write_buffer = WriteBuffer,
+                                           write_buffer_updates = NumUpdates,
+                                           cache = Cache })}.
 
-update_ack_state(SeqIds, State = #mqistate{ segments = Segments0 }) ->
+update_ack_state(SeqIds, State = #qi{ segments = Segments0 }) ->
     SegmentEntryCount = segment_entry_count(),
     {Delete, Segments} = lists:foldl(fun(SeqId, {DeleteAcc, Segments1}) ->
         Segment = SeqId div SegmentEntryCount,
@@ -785,14 +783,14 @@ update_ack_state(SeqIds, State = #mqistate{ segments = Segments0 }) ->
                 {DeleteAcc, Segments1#{Segment => Unacked - 1}}
         end
     end, {[], Segments0}, SeqIds),
-    {Delete, State#mqistate{ segments = Segments }}.
+    {Delete, State#qi{ segments = Segments }}.
 
 delete_segments([], State) ->
     State;
 delete_segments([Segment|Tail], State) ->
     delete_segments(Tail, delete_segment(Segment, State)).
 
-delete_segment(Segment, State0 = #mqistate{ fds = OpenFds0 }) ->
+delete_segment(Segment, State0 = #qi{ fds = OpenFds0 }) ->
     %% We close the open fd if any.
     State = case maps:take(Segment, OpenFds0) of
         {Fd, OpenFds} ->
@@ -801,7 +799,7 @@ delete_segment(Segment, State0 = #mqistate{ fds = OpenFds0 }) ->
                 0 -> file_handle_cache:release_reservation();
                 N -> file_handle_cache:set_reservation(N)
             end,
-            State0#mqistate{ fds = OpenFds };
+            State0#qi{ fds = OpenFds };
         error ->
             State0
     end,
@@ -844,7 +842,7 @@ ack_delete_fold_fun(SeqId, Write, {Buffer, Updates, Deletes, SegmentEntryCount})
            rabbit_variable_queue:seq_id(),
            State) ->
                      {[entry()], State}
-                     when State::mqistate().
+                     when State::state().
 
 %% From is inclusive, To is exclusive.
 
@@ -854,8 +852,8 @@ read(FromSeqId, ToSeqId, State)
     ?DEBUG("~0p ~0p ~0p", [FromSeqId, ToSeqId, State]),
     {[], State};
 %% Read the messages requested.
-read(FromSeqId, ToSeqId, State0 = #mqistate{ write_buffer = WriteBuffer,
-                                             cache = Cache }) ->
+read(FromSeqId, ToSeqId, State0 = #qi{ write_buffer = WriteBuffer,
+                                       cache = Cache }) ->
     ?DEBUG("~0p ~0p ~0p", [FromSeqId, ToSeqId, State0]),
     %% We first try to read from the write buffer what we can,
     %% then from the cache, then we read the rest from disk.
@@ -897,7 +895,7 @@ read_from_buffers(SeqId, ToSeqId, WriteBuffer, Cache, SeqIdsOnDisk, Reads) ->
 
 read_from_disk([], State, Acc) ->
     {Acc, State};
-read_from_disk(SeqIdsToRead0, State0 = #mqistate{ write_buffer = WriteBuffer }, Acc0) ->
+read_from_disk(SeqIdsToRead0, State0 = #qi{ write_buffer = WriteBuffer }, Acc0) ->
     FirstSeqId = hd(SeqIdsToRead0),
     %% We get the highest continuous seq_id() from the same segment file.
     %% If there are more continuous entries we will read them on the
@@ -970,25 +968,25 @@ parse_entries(<< Status:8,
 %% Syncing and flushing to disk requested by the queue.
 %% Note: the v2 no longer calls fsync, it only flushes.
 
--spec sync(State) -> State when State::mqistate().
+-spec sync(State) -> State when State::state().
 
-sync(State0 = #mqistate{ confirms = Confirms,
-                         on_sync = OnSyncFun }) ->
+sync(State0 = #qi{ confirms = Confirms,
+                   on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State0]),
     State = flush_buffer(State0, full),
     OnSyncFun(Confirms),
-    State#mqistate{ confirms = gb_sets:new() }.
+    State#qi{ confirms = gb_sets:new() }.
 
--spec needs_sync(mqistate()) -> 'false'.
+-spec needs_sync(state()) -> 'false'.
 
-needs_sync(State = #mqistate{ confirms = Confirms }) ->
+needs_sync(State = #qi{ confirms = Confirms }) ->
     ?DEBUG("~0p", [State]),
     case gb_sets:is_empty(Confirms) of
         true -> false;
         false -> confirms
     end.
 
--spec flush(State) -> State when State::mqistate().
+-spec flush(State) -> State when State::state().
 
 flush(State) ->
     ?DEBUG("~0p", [State]),
@@ -1097,7 +1095,7 @@ pre_publish(MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State
     ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State]),
     publish(MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State).
 
-%% @todo -spec flush_pre_publish_cache(???, State) -> State when State::mqistate().
+%% @todo -spec flush_pre_publish_cache(???, State) -> State when State::state().
 
 flush_pre_publish_cache(TargetRamCount, State) ->
     ?DEBUG("~0p ~0p", [TargetRamCount, State]),
@@ -1111,9 +1109,9 @@ flush_pre_publish_cache(TargetRamCount, State) ->
 
 -spec bounds(State) ->
                        {non_neg_integer(), non_neg_integer(), State}
-                       when State::mqistate().
+                       when State::state().
 
-bounds(State = #mqistate{ segments = Segments }) ->
+bounds(State = #qi{ segments = Segments }) ->
     ?DEBUG("~0p", [State]),
     %% We must special case when we are empty to make tests happy.
     if
@@ -1170,7 +1168,7 @@ queue_name_to_dir_name(#resource { kind = queue,
     <<Num:128>> = erlang:md5(<<"queue", VHost/binary, QName/binary>>),
     rabbit_misc:format("~.36B", [Num]).
 
-segment_file(Segment, #mqistate{ dir = Dir }) ->
+segment_file(Segment, #qi{ dir = Dir }) ->
     filename:join(Dir, integer_to_list(Segment) ++ ?SEGMENT_EXTENSION).
 
 highest_continuous_seq_id([SeqId|Tail], EndSeqId)
