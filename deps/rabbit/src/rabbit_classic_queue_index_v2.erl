@@ -1147,9 +1147,7 @@ segment_entry_count() ->
     %% @todo A value lower than the max write_buffer size results in nothing needing
     %%       to be written to disk as long as the consumer consumes as fast as the
     %%       producer produces. Accidental memory queue?
-    SegmentEntryCount =
-        application:get_env(rabbit, classic_queue_index_v2_segment_entry_count, 65536),
-    SegmentEntryCount.
+    application:get_env(rabbit, classic_queue_index_v2_segment_entry_count, 65536).
 
 %% @todo This is a problem if we share the same directory for index and store.
 %%       We should erase the index files only, and if there's nothing left,

@@ -136,8 +136,6 @@ init(#resource{ virtual_host = VHost } = Name, OnSyncFun) ->
         on_sync = OnSyncFun
     }.
 
-%% @todo Recover: tie into the index to check the messages are there and CRC matches.
-
 terminate(State = #qs{ write_fd = WriteFd,
                        read_fd = ReadFd }) ->
     ?DEBUG("~0p", [State]),
@@ -162,7 +160,7 @@ maybe_close_fd(Fd) ->
 
 write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
     ?DEBUG("~0p ~0p ~0p ~0p", [SeqId, Msg, Props, State0]),
-    SegmentEntryCount = 65536, %% @todo segment_entry_count(),
+    SegmentEntryCount = segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
     %% We simply append to the related segment file.
     %% We will then return the offset and size. That
@@ -174,8 +172,10 @@ write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
     Size = iolist_size(MsgIovec),
     %% Calculate the CRC for the data if configured to do so.
     %% We will truncate the CRC to 16 bits to save on space. (Idea taken from postgres.)
-    UseCRC32 = 1, %% @todo Configurable?
-    CRC32 = erlang:crc32(MsgIovec),
+    {UseCRC32, CRC32} = case check_crc32() of
+        true -> {1, erlang:crc32(MsgIovec)};
+        false -> {0, 0}
+    end,
     %% Append to the buffer. A short entry header is prepended:
     %% Size:32, Flags:8, CRC32:16, Unused:8.
     ok = file:write(Fd, [<<Size:32/unsigned, 0:7, UseCRC32:1, CRC32:16, 0:8>>, MsgIovec]),
@@ -198,7 +198,7 @@ get_write_fd(Segment, State = #qs{ write_fd = OldFd }) ->
     %% If we are at offset 0, write the file header.
     Offset = case Offset0 of
         0 ->
-            SegmentEntryCount = 65536, %% @todo segment_entry_count(),
+            SegmentEntryCount = segment_entry_count(),
             FromSeqId = Segment * SegmentEntryCount,
             ToSeqId = FromSeqId + SegmentEntryCount,
             ok = file:write(Fd, << ?MAGIC:32,
@@ -215,7 +215,7 @@ get_write_fd(Segment, State = #qs{ write_fd = OldFd }) ->
 
 maybe_cache(SeqId, MsgSize, Msg, State = #qs{ cache = Cache,
                                               cache_size = CacheSize }) ->
-    MaxCacheSize = 512000, %% @todo Configurable.
+    MaxCacheSize = max_cache_size(),
     if
         CacheSize + MsgSize > MaxCacheSize ->
             State;
@@ -246,22 +246,27 @@ read(SeqId, DiskLocation, State = #qs{ cache = Cache }) ->
     end.
 
 read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
-    SegmentEntryCount = 65536, %% @todo segment_entry_count(),
+    SegmentEntryCount = segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
     {Fd, State} = get_read_fd(Segment, State0),
     {ok, MsgBin0} = file:pread(Fd, Offset, ?ENTRY_HEADER_SIZE + Size),
     %% Assert the size to make sure we read the correct data.
     %% Check the CRC if configured to do so.
     <<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits, _:8, MsgBin:Size/binary>> = MsgBin0,
-    %% @todo Only check if configured to do so, not only based on UseCRC32.
     case UseCRC32 of
         0 ->
             ok;
         1 ->
-            CRC32 = erlang:crc32(MsgBin),
-            %% We currently crash if the CRC32 is incorrect. @todo Log first?
-            CRC32Expected = <<CRC32:16>>,
-            ok
+            %% We only want to check the CRC32 if configured to do so.
+            case check_crc32() of
+                false ->
+                    ok;
+                true ->
+                    CRC32 = erlang:crc32(MsgBin),
+                    %% We currently crash if the CRC32 is incorrect. @todo Log first?
+                    CRC32Expected = <<CRC32:16>>,
+                    ok
+            end
     end,
     Msg = binary_to_term(MsgBin),
     {Msg, State}.
@@ -281,7 +286,7 @@ get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
                    read_fd = Fd }}.
 
 check_msg_on_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
-    SegmentEntryCount = 65536, %% @todo segment_entry_count(),
+    SegmentEntryCount = segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
     {Fd, State} = get_read_fd(Segment, State0),
     case file:pread(Fd, Offset, ?ENTRY_HEADER_SIZE + Size) of
@@ -290,15 +295,20 @@ check_msg_on_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
             %% Check the CRC if configured to do so.
             case MsgBin0 of
                 <<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits, _:8, MsgBin:Size/binary>> ->
-                    %% @todo Only check if configured to do so, not only based on UseCRC32.
                     case UseCRC32 of
                         0 ->
                             {ok, State};
                         1 ->
-                            CRC32 = erlang:crc32(MsgBin),
-                            case <<CRC32:16>> of
-                                CRC32Expected -> {ok, State};
-                                _ -> {{error, bad_crc}, State}
+                            %% We only want to check the CRC32 if configured to do so.
+                            case check_crc32() of
+                                false ->
+                                    {ok, State};
+                                true ->
+                                    CRC32 = erlang:crc32(MsgBin),
+                                    case <<CRC32:16>> of
+                                        CRC32Expected -> {ok, State};
+                                        _ -> {{error, bad_crc}, State}
+                                    end
                             end
                     end;
                 _ ->
@@ -380,6 +390,20 @@ delete_segments(Segments, State0 = #qs{ write_segment = WriteSegment,
         end
     || Segment <- Segments],
     State.
+
+%% ----
+%%
+%% Internal.
+
+segment_entry_count() ->
+    %% We use the same value as the index.
+    application:get_env(rabbit, classic_queue_index_v2_segment_entry_count, 65536).
+
+max_cache_size() ->
+    application:get_env(rabbit, classic_queue_store_v2_max_cache_size, 512000).
+
+check_crc32() ->
+    application:get_env(rabbit, classic_queue_store_v2_check_crc32, true).
 
 %% Same implementation as rabbit_classic_queue_index_v2:segment_file/2,
 %% but with a different state record.
