@@ -126,8 +126,7 @@
 -type msg_location() :: {?MODULE, non_neg_integer(), non_neg_integer()}.
 -export_type([msg_location/0]).
 
-%% Types copied from rabbit_queue_index.
--type on_sync_fun() :: fun ((gb_sets:set()) -> ok). %% @todo Wrong spec, there's 2 arguments.
+-type on_sync_fun() :: fun ((gb_sets:set(), 'written' | 'ignored') -> any()).
 
 -spec init(rabbit_amqqueue:name(), on_sync_fun()) -> state().
 
@@ -278,9 +277,15 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
                     ok;
                 true ->
                     CRC32 = erlang:crc32(MsgBin),
-                    %% We currently crash if the CRC32 is incorrect. @todo Log first?
-                    CRC32Expected = <<CRC32:16>>,
-                    ok
+                    %% We currently crash if the CRC32 is incorrect as we cannot recover automatically.
+                    try
+                        CRC32Expected = <<CRC32:16>>,
+                        ok
+                    catch C:E:S ->
+                        logger:error("Per-queue store CRC32 check failed in ~s seq id ~b offset ~b size ~b",
+                            [segment_file(Segment, State), SeqId, Offset, Size]),
+                        erlang:raise(C, E, S)
+                    end
             end
     end,
     Msg = binary_to_term(MsgBin),
