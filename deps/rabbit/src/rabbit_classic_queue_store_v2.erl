@@ -46,7 +46,7 @@
 -module(rabbit_classic_queue_store_v2).
 
 -export([init/2, terminate/1,
-         write/4, sync/1, read/3,
+         write/4, sync/1, read/3, check_msg_on_disk/3,
          remove/2, delete_segments/2]).
 
 %% @todo Maybe name the files .qi and .qs? (queue index and queue store?)
@@ -252,7 +252,7 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
     {ok, MsgBin0} = file:pread(Fd, Offset, ?ENTRY_HEADER_SIZE + Size),
     %% Assert the size to make sure we read the correct data.
     %% Check the CRC if configured to do so.
-    <<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits, _:8, MsgBin/bits>> = MsgBin0,
+    <<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits, _:8, MsgBin:Size/binary>> = MsgBin0,
     %% @todo Only check if configured to do so, not only based on UseCRC32.
     case UseCRC32 of
         0 ->
@@ -279,6 +279,34 @@ get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
            _/bits>>} = file:read(Fd, ?HEADER_SIZE),
     {Fd, State#qs{ read_segment = Segment,
                    read_fd = Fd }}.
+
+check_msg_on_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
+    SegmentEntryCount = 65536, %% @todo segment_entry_count(),
+    Segment = SeqId div SegmentEntryCount,
+    {Fd, State} = get_read_fd(Segment, State0),
+    case file:pread(Fd, Offset, ?ENTRY_HEADER_SIZE + Size) of
+        {ok, MsgBin0} ->
+            %% Assert the size to make sure we read the correct data.
+            %% Check the CRC if configured to do so.
+            case MsgBin0 of
+                <<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits, _:8, MsgBin:Size/binary>> ->
+                    %% @todo Only check if configured to do so, not only based on UseCRC32.
+                    case UseCRC32 of
+                        0 ->
+                            {ok, State};
+                        1 ->
+                            CRC32 = erlang:crc32(MsgBin),
+                            case <<CRC32:16>> of
+                                CRC32Expected -> {ok, State};
+                                _ -> {{error, bad_crc}, State}
+                            end
+                    end;
+                _ ->
+                    {{error, bad_size}, State}
+            end;
+        Error ->
+            {Error, State}
+    end.
 
 maybe_flush_write_fd(Segment, #qs{ write_segment = Segment,
                                    write_fd = Fd }) ->
