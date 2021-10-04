@@ -121,10 +121,15 @@
     on_sync :: on_sync_fun()
 }).
 
+-type state() :: #qs{}.
+
+-type msg_location() :: {?MODULE, non_neg_integer(), non_neg_integer()}.
+-export_type([msg_location/0]).
+
 %% Types copied from rabbit_queue_index.
 -type on_sync_fun() :: fun ((gb_sets:set()) -> ok). %% @todo Wrong spec, there's 2 arguments.
 
-%% @todo specs everywhere
+-spec init(rabbit_amqqueue:name(), on_sync_fun()) -> state().
 
 init(#resource{ virtual_host = VHost } = Name, OnSyncFun) ->
     ?DEBUG("~0p ~0p", [Name, OnSyncFun]),
@@ -134,6 +139,8 @@ init(#resource{ virtual_host = VHost } = Name, OnSyncFun) ->
         dir = Dir,
         on_sync = OnSyncFun
     }.
+
+-spec terminate(State) -> State when State::state().
 
 terminate(State = #qs{ write_fd = WriteFd,
                        read_fd = ReadFd }) ->
@@ -156,6 +163,10 @@ maybe_close_fd(undefined) ->
     ok;
 maybe_close_fd(Fd) ->
     ok = file:close(Fd).
+
+-spec write(rabbit_variable_queue:seq_id(), rabbit_types:basic_message(),
+            rabbit_types:message_properties(), State)
+        -> {msg_location(), State} when State::state().
 
 write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
     ?DEBUG("~0p ~0p ~0p ~0p", [SeqId, Msg, Props, State0]),
@@ -229,11 +240,16 @@ maybe_mark_unconfirmed(MsgId, #message_properties{ needs_confirming = true },
 maybe_mark_unconfirmed(_, _, State) ->
     State.
 
+-spec sync(State) -> State when State::state().
+
 sync(State = #qs{ confirms = Confirms,
                   on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State]),
     OnSyncFun(Confirms, written),
     State#qs{ confirms = gb_sets:new() }.
+
+-spec read(rabbit_variable_queue:seq_id(), msg_location(), State)
+        -> {rabbit_types:basic_message(), State} when State::state().
 
 read(SeqId, DiskLocation, State = #qs{ cache = Cache }) ->
     ?DEBUG("~0p ~0p ~0p", [SeqId, DiskLocation, State]),
@@ -284,6 +300,9 @@ get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
     {Fd, State#qs{ read_segment = Segment,
                    read_fd = Fd }}.
 
+-spec check_msg_on_disk(rabbit_variable_queue:seq_id(), msg_location(), State)
+        -> {ok | {error, any()}, State} when State::state().
+
 check_msg_on_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
     SegmentEntryCount = segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
@@ -331,9 +350,10 @@ maybe_flush_write_fd(Segment, #qs{ write_segment = Segment,
 maybe_flush_write_fd(_, _) ->
     ok.
 
+-spec remove(rabbit_variable_queue:seq_id(), State) -> State when State::state().
+
 %% We only remove the message from the cache. We will remove
 %% the message from the disk when we delete the segment file.
-%% @todo Maybe rename remove_from_cache? Since we don't really remove.
 remove(SeqId, State = #qs{ cache = Cache0,
                            cache_size = CacheSize }) ->
     ?DEBUG("~0p ~0p", [SeqId, State]),
@@ -344,6 +364,8 @@ remove(SeqId, State = #qs{ cache = Cache0,
             State#qs{ cache = Cache,
                       cache_size = CacheSize - MsgSize }
     end.
+
+-spec delete_segments([non_neg_integer()], State) -> State when State::state().
 
 %% First we check if the write fd points to a segment
 %% that must be deleted, and we close it if that's the case.

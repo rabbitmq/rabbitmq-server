@@ -328,7 +328,7 @@
 
 -type msg_location() :: memory
                       | rabbit_msg_store
-                      | {rabbit_classic_queue_store_v2, non_neg_integer(), non_neg_integer()}.
+                      | rabbit_classic_queue_store_v2:msg_location().
 -export_type([msg_location/0]).
 
 -record(msg_status,
