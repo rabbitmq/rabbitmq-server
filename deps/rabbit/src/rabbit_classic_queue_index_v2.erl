@@ -26,9 +26,9 @@
 -export([queue_dir/2]).
 
 -define(QUEUE_NAME_STUB_FILE, ".queue_name").
--define(SEGMENT_EXTENSION, ".midx").
+-define(SEGMENT_EXTENSION, ".qi").
 
--define(MAGIC, 16#524D5149). %% "RMQI"
+-define(MAGIC, 16#52435149). %% "RCQI"
 -define(VERSION, 2).
 -define(HEADER_SIZE, 64). %% bytes
 -define(ENTRY_SIZE,  32). %% bytes

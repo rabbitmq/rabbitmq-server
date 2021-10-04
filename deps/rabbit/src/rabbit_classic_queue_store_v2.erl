@@ -49,10 +49,9 @@
          write/4, sync/1, read/3, check_msg_on_disk/3,
          remove/2, delete_segments/2]).
 
-%% @todo Maybe name the files .qi and .qs? (queue index and queue store?)
--define(SEGMENT_EXTENSION, ".mstr").
+-define(SEGMENT_EXTENSION, ".qs").
 
--define(MAGIC, 16#524D5153). %% "RMQS"
+-define(MAGIC, 16#52435153). %% "RCQS"
 -define(VERSION, 2).
 -define(HEADER_SIZE,       64). %% bytes
 -define(ENTRY_HEADER_SIZE,  8). %% bytes
