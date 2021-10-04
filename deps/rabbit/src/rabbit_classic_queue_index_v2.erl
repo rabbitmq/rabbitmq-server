@@ -215,7 +215,7 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, IsMsgStoreClean,
              State}
     end.
 
-recover_segments(State0 = #mqistate { dir = Dir }, Terms, IsMsgStoreClean,
+recover_segments(State0 = #mqistate { queue_name = Name, dir = Dir }, Terms, IsMsgStoreClean,
                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun, CountersRef) ->
     SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
     State = case SegmentFiles of
@@ -227,7 +227,11 @@ recover_segments(State0 = #mqistate { dir = Dir }, Terms, IsMsgStoreClean,
             Segments = lists:sort([
                 list_to_integer(filename:basename(F, ?SEGMENT_EXTENSION))
             || F <- SegmentFiles]),
-            recover_segments(State0, ContainsCheckFun, CountersRef, Segments)
+            %% We use a temporary store state to check that messages do exist.
+            StoreState0 = rabbit_classic_queue_store_v2:init(Name, OnSyncMsgFun),
+            {State1, StoreState} = recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, Segments),
+            _ = rabbit_classic_queue_store_v2:terminate(StoreState),
+            State1
     end,
     %% We always try to see if there are segment files from the old index as well.
     case rabbit_file:wildcard(".*\\.idx", Dir) of
@@ -241,9 +245,9 @@ recover_segments(State0 = #mqistate { dir = Dir }, Terms, IsMsgStoreClean,
             State
     end.
 
-recover_segments(State, _, _, []) ->
-    State;
-recover_segments(State0, ContainsCheckFun, CountersRef, [Segment|Tail]) ->
+recover_segments(State, _, StoreState, _, []) ->
+    {State, StoreState};
+recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, [Segment|Tail]) ->
     %% @todo We may want to check that the file sizes are correct before attempting
     %%       to parse them, and to correct the file sizes.
     SegmentEntryCount = segment_entry_count(),
@@ -252,30 +256,33 @@ recover_segments(State0, ContainsCheckFun, CountersRef, [Segment|Tail]) ->
     {ok, <<?MAGIC:32,?VERSION:8,
            _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,
            _/bits>>} = file:read(Fd, ?HEADER_SIZE),
-    {Action, State} = recover_segment(State0, ContainsCheckFun, CountersRef, Fd,
-                                      Segment, 0, SegmentEntryCount,
-                                      SegmentEntryCount, []),
+    {Action, State, StoreState1} = recover_segment(State0, ContainsCheckFun, StoreState0, CountersRef, Fd,
+                                                  Segment, 0, SegmentEntryCount,
+                                                  SegmentEntryCount, []),
     ok = file:close(Fd),
-    ok = case Action of
-        delete -> file:delete(SegmentFile);
-        keep -> ok
+    StoreState = case Action of
+        keep ->
+            StoreState1;
+        delete ->
+            file:delete(SegmentFile),
+            rabbit_classic_queue_store_v2:delete_segments([Segment], StoreState1)
     end,
-    recover_segments(State, ContainsCheckFun, CountersRef, Tail).
+    recover_segments(State, ContainsCheckFun, StoreState, CountersRef, Tail).
 
-recover_segment(State = #mqistate{ segments = Segments }, _, _, Fd,
+recover_segment(State = #mqistate{ segments = Segments }, _, StoreState, _, Fd,
                 Segment, ThisEntry, SegmentEntryCount,
                 Unacked, LocBytes)
                 when ThisEntry =:= SegmentEntryCount ->
     case Unacked of
         0 ->
             %% There are no more messages in this segment file.
-            {delete, State};
+            {delete, State, StoreState};
         _ ->
             %% We must ack some messages on disk.
             ok = file:pwrite(Fd, LocBytes),
-            {keep, State#mqistate{ segments = Segments#{ Segment => Unacked }}}
+            {keep, State#mqistate{ segments = Segments#{ Segment => Unacked }}, StoreState}
     end;
-recover_segment(State, ContainsCheckFun, CountersRef, Fd,
+recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
                 Segment, ThisEntry, SegmentEntryCount,
                 Unacked, LocBytes0) ->
     case file:read(Fd, ?ENTRY_SIZE) of
@@ -294,31 +301,42 @@ recover_segment(State, ContainsCheckFun, CountersRef, Fd,
                         true ->
                             counters:add(CountersRef, ?RECOVER_COUNT, 1),
                             counters:add(CountersRef, ?RECOVER_BYTES, Size),
-                            recover_segment(State, ContainsCheckFun, CountersRef,
+                            recover_segment(State, ContainsCheckFun, StoreState0, CountersRef,
                                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                                             Unacked, LocBytes0);
                         %% Message is not in the store. Mark it as acked.
                         false ->
                             LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
-                            recover_segment(State, ContainsCheckFun, CountersRef,
+                            recover_segment(State, ContainsCheckFun, StoreState0, CountersRef,
                                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                                             Unacked - 1, LocBytes)
                     end;
                 %% Message is in the per-queue store.
                 << 2:8,
-                   _StoreOffset:64/unsigned,
-                   _StoreSize:32/unsigned,
+                   StoreOffset:64/unsigned,
+                   StoreSize:32/unsigned,
                    0:32 >> ->
-                    %% @todo There's currently no check for the per-queue store.
-                    counters:add(CountersRef, ?RECOVER_COUNT, 1),
-                    counters:add(CountersRef, ?RECOVER_BYTES, Size),
-                    recover_segment(State, ContainsCheckFun, CountersRef,
-                                    Fd, Segment, ThisEntry + 1, SegmentEntryCount,
-                                    Unacked, LocBytes0);
+                    Location = {rabbit_classic_queue_store_v2, StoreOffset, StoreSize},
+                    case rabbit_classic_queue_store_v2:check_msg_on_disk(Segment * SegmentEntryCount + ThisEntry,
+                                                                         Location, StoreState0) of
+                        %% Message was found in store and is valid.
+                        {ok, StoreState} ->
+                            counters:add(CountersRef, ?RECOVER_COUNT, 1),
+                            counters:add(CountersRef, ?RECOVER_BYTES, Size),
+                            recover_segment(State, ContainsCheckFun, StoreState, CountersRef,
+                                            Fd, Segment, ThisEntry + 1, SegmentEntryCount,
+                                            Unacked, LocBytes0);
+                        %% Message was not found or checksum failed. Ack it.
+                        {{error, _}, StoreState} ->
+                            LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
+                            recover_segment(State, ContainsCheckFun, StoreState, CountersRef,
+                                            Fd, Segment, ThisEntry + 1, SegmentEntryCount,
+                                            Unacked - 1, LocBytes)
+                    end;
                 %% Message was in memory or malformed. Ack it.
                 _ ->
                     LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
-                    recover_segment(State, ContainsCheckFun, CountersRef,
+                    recover_segment(State, ContainsCheckFun, StoreState0, CountersRef,
                                     Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                                     Unacked - 1, LocBytes)
             end;
@@ -327,12 +345,12 @@ recover_segment(State, ContainsCheckFun, CountersRef, Fd,
         %% this message via the queue walker functions.
         {ok, << 1:8, _:7, 0:1, _/bits >>} ->
             LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
-            recover_segment(State, ContainsCheckFun, CountersRef,
+            recover_segment(State, ContainsCheckFun, StoreState0, CountersRef,
                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                             Unacked - 1, LocBytes);
         %% We found a non-entry or an acked entry. Consider it acked.
         {ok, << 0:8, _/bits >>} ->
-            recover_segment(State, ContainsCheckFun, CountersRef,
+            recover_segment(State, ContainsCheckFun, StoreState0, CountersRef,
                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
                             Unacked - 1, LocBytes0)
     end.
