@@ -22,7 +22,13 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2.3.4
+    - name: SKIP IF THE PR ALREADY EXISTS
+      id: check-for-branch
+      run: |
+        c=$(git ls-remote --exit-code --heads origin bump-rbe-image-${{ matrix.short_version }})
+        echo "::set-output name=c::$c"
     - name: UPDATE RBE IMAGE SHA
+      if: steps.check-for-branch.c != 0
       env:
         IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
         TAG: linux-erlang-${{ matrix.erlang_version }}
@@ -37,6 +43,7 @@ jobs:
           "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
           //:erlang_${{ matrix.short_version }}_platform || test $? -eq 3
     - name: CREATE PULL REQUEST
+      if: steps.check-for-branch.c != 0
       uses: peter-evans/create-pull-request@v3
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
