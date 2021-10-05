@@ -423,7 +423,7 @@ delete_segments(Segments, State0 = #qs{ write_segment = WriteSegment,
 
 segment_entry_count() ->
     %% We use the same value as the index.
-    application:get_env(rabbit, classic_queue_index_v2_segment_entry_count, 65536).
+    application:get_env(rabbit, classic_queue_index_v2_segment_entry_count, 4096).
 
 max_cache_size() ->
     application:get_env(rabbit, classic_queue_store_v2_max_cache_size, 512000).
