@@ -173,12 +173,14 @@ reset_state(State = #qi{ queue_name     = Name,
 
 -define(RECOVER_COUNT, 1).
 -define(RECOVER_BYTES, 2).
-%% @todo Also count the number of entries dropped because the message wasn't in the store,
-%%       and log something at the end. We could also count the number of bytes dropped.
-%% @todo We may also want to log holes inside files.
+-define(RECOVER_DROPPED_PERSISTENT_PER_VHOST, 3).
+-define(RECOVER_DROPPED_PERSISTENT_PER_QUEUE, 4).
+-define(RECOVER_DROPPED_PERSISTENT_OTHER, 5).
+-define(RECOVER_DROPPED_TRANSIENT, 6).
+-define(RECOVER_COUNTER_SIZE, 6).
 
-recover(#resource{ virtual_host = VHost } = Name, Terms, IsMsgStoreClean,
-        ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
+recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
+        IsMsgStoreClean, ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
     ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [Name, Terms, IsMsgStoreClean,
                                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
@@ -204,10 +206,17 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, IsMsgStoreClean,
              undefined,
              State};
         false ->
-            CountersRef = counters:new(2, []),
+            CountersRef = counters:new(?RECOVER_COUNTER_SIZE, []),
             State = recover_segments(State0, Terms, IsMsgStoreClean,
                                      ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                                      CountersRef),
+            rabbit_log:warning("Queue ~s in vhost ~s dropped ~b/~b/~b persistent messages "
+                               "and ~b transient messages during dirty recovery",
+                               [QueueName, VHost,
+                                counters:get(CountersRef, ?RECOVER_DROPPED_PERSISTENT_PER_VHOST),
+                                counters:get(CountersRef, ?RECOVER_DROPPED_PERSISTENT_PER_QUEUE),
+                                counters:get(CountersRef, ?RECOVER_DROPPED_PERSISTENT_OTHER),
+                                counters:get(CountersRef, ?RECOVER_DROPPED_TRANSIENT)]),
             {counters:get(CountersRef, ?RECOVER_COUNT),
              counters:get(CountersRef, ?RECOVER_BYTES),
              State}
@@ -304,6 +313,7 @@ recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
                                             Unacked, LocBytes0);
                         %% Message is not in the store. Mark it as acked.
                         false ->
+                            counters:add(CountersRef, ?RECOVER_DROPPED_PERSISTENT_PER_VHOST, 1),
                             LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
                             recover_segment(State, ContainsCheckFun, StoreState0, CountersRef,
                                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
@@ -326,6 +336,7 @@ recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
                                             Unacked, LocBytes0);
                         %% Message was not found or checksum failed. Ack it.
                         {{error, _}, StoreState} ->
+                            counters:add(CountersRef, ?RECOVER_DROPPED_PERSISTENT_PER_QUEUE, 1),
                             LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
                             recover_segment(State, ContainsCheckFun, StoreState, CountersRef,
                                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
@@ -333,6 +344,7 @@ recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
                     end;
                 %% Message was in memory or malformed. Ack it.
                 _ ->
+                    counters:add(CountersRef, ?RECOVER_DROPPED_PERSISTENT_OTHER, 1),
                     LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
                     recover_segment(State, ContainsCheckFun, StoreState0, CountersRef,
                                     Fd, Segment, ThisEntry + 1, SegmentEntryCount,
@@ -342,6 +354,7 @@ recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
         %% without checking with the message store, because it already dropped
         %% this message via the queue walker functions.
         {ok, << 1:8, _:7, 0:1, _/bits >>} ->
+            counters:add(CountersRef, ?RECOVER_DROPPED_TRANSIENT, 1),
             LocBytes = [{?HEADER_SIZE + ThisEntry * ?ENTRY_SIZE, <<0>>}|LocBytes0],
             recover_segment(State, ContainsCheckFun, StoreState0, CountersRef,
                             Fd, Segment, ThisEntry + 1, SegmentEntryCount,
@@ -356,7 +369,7 @@ recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
 recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
     #resource{virtual_host = VHost, name = QName} = Name,
-    logger:info("Converting clean queue ~s on vhost ~s to the new index format", [QName, VHost]),
+    rabbit_log:info("Converting clean queue ~s on vhost ~s to the new index format", [QName, VHost]),
     {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
                                                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun),
     %% We will ignore the counter results because on clean shutdown
@@ -364,7 +377,7 @@ recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
     %% share code with dirty recovery.
     DummyCountersRef = counters:new(2, []),
     State = recover_index_v1_common(State0, V1State, DummyCountersRef),
-    logger:info("Queue ~s on vhost ~s converted ~b total messages to the new index format",
+    rabbit_log:info("Queue ~s on vhost ~s converted ~b total messages to the new index format",
                 [QName, VHost, counters:get(DummyCountersRef, ?RECOVER_COUNT)]),
     State.
 
@@ -372,14 +385,14 @@ recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                        CountersRef) ->
     #resource{virtual_host = VHost, name = QName} = Name,
-    logger:info("Converting dirty queue ~s on vhost ~s to the new index format", [QName, VHost]),
+    rabbit_log:info("Converting dirty queue ~s on vhost ~s to the new index format", [QName, VHost]),
     %% We ignore the count and bytes returned here because we cannot trust
     %% rabbit_queue_index: it has a bug that may lead to more bytes being
     %% returned than it really has.
     {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
                                                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun),
     State = recover_index_v1_common(State0, V1State, CountersRef),
-    logger:info("Queue ~s on vhost ~s converted ~b total messages to the new index format",
+    rabbit_log:info("Queue ~s on vhost ~s converted ~b total messages to the new index format",
                 [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 
@@ -447,8 +460,8 @@ recover_index_v1_loop(State0 = #qi{ queue_name = Name },
     %% Log some progress to keep the user aware of what's going on, as moving
     %% embedded messages can take quite some time.
     #resource{virtual_host = VHost, name = QName} = Name,
-    logger:info("Queue ~s on vhost ~s converted ~b more messages to the new index format",
-                [QName, VHost, MessagesCount]),
+    rabbit_log:info("Queue ~s on vhost ~s converted ~b more messages to the new index format",
+                    [QName, VHost, MessagesCount]),
     recover_index_v1_loop(State, StoreState, V1State, CountersRef, UpSeqId, HiSeqId).
 
 -spec terminate(rabbit_types:vhost(), [any()], State) -> State when State::state().
