@@ -947,8 +947,9 @@ parse_entries(<< Status:8,
                  Size:32/unsigned,
                  Expiry0:64/unsigned,
                  Rest/bits >>, SeqId, WriteBuffer, Acc) ->
-    %% We skip entries that have already been acked. This may only
-    %% happen when we recover from a dirty shutdown.
+    %% We skip entries that have already been acked. This may
+    %% happen when we recover from a dirty shutdown or when
+    %% some messages were requeued.
     case Status of
         1 ->
             %% We get the Id binary in two steps because we do not want
@@ -970,10 +971,6 @@ parse_entries(<< Status:8,
             parse_entries(Rest, SeqId + 1, WriteBuffer,
                           [{Id, SeqId, Location, Props, IsPersistent =:= 1}|Acc]);
         0 -> %% No entry or acked entry.
-            %% @todo It would be good to keep track of how many "misses"
-            %%       we have. We can use it to confirm the correct behavior
-            %%       of the module in tests, as well as an occasionally
-            %%       useful internal metric. Maybe use counters.
             parse_entries(Rest, SeqId + 1, WriteBuffer, Acc)
     end.
 
