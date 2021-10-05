@@ -378,7 +378,7 @@ recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
     DummyCountersRef = counters:new(2, []),
     State = recover_index_v1_common(State0, V1State, DummyCountersRef),
     rabbit_log:info("Queue ~s on vhost ~s converted ~b total messages to the new index format",
-                [QName, VHost, counters:get(DummyCountersRef, ?RECOVER_COUNT)]),
+                    [QName, VHost, counters:get(DummyCountersRef, ?RECOVER_COUNT)]),
     State.
 
 recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
@@ -393,7 +393,7 @@ recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
                                                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun),
     State = recover_index_v1_common(State0, V1State, CountersRef),
     rabbit_log:info("Queue ~s on vhost ~s converted ~b total messages to the new index format",
-                [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
+                    [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 
 %% At this point all messages are persistent because transient messages
@@ -915,7 +915,6 @@ read_from_disk(SeqIdsToRead0, State0 = #qi{ write_buffer = WriteBuffer }, Acc0) 
     %% next loop.
     {LastSeqId, SeqIdsToRead} = highest_continuous_seq_id(SeqIdsToRead0,
                                                           next_segment_boundary(FirstSeqId)),
-    %% @todo We should limit the read size to avoid creating 2MB binaries all of a sudden...
     ReadSize = (LastSeqId - FirstSeqId + 1) * ?ENTRY_SIZE,
     {Fd, OffsetForSeqId, State} = get_fd(FirstSeqId, State0),
     file_handle_cache_stats:update(queue_index_read),
@@ -1155,14 +1154,14 @@ next_segment_boundary(SeqId) ->
 %% Internal.
 
 segment_entry_count() ->
-    %% @todo A value lower than the max write_buffer size results in nothing needing
-    %%       to be written to disk as long as the consumer consumes as fast as the
-    %%       producer produces. Accidental memory queue?
+    %% A value lower than the max write_buffer size results in nothing needing
+    %% to be written to disk as long as the consumer consumes as fast as the
+    %% producer produces.
     application:get_env(rabbit, classic_queue_index_v2_segment_entry_count, 65536).
 
-%% @todo This is a problem if we share the same directory for index and store.
-%%       We should erase the index files only, and if there's nothing left,
-%%       delete the index directory.
+%% Note that store files will also be removed if there are any in this directory.
+%% Currently the v2 per-queue store expects this function to remove its own files.
+
 erase_index_dir(Dir) ->
     case rabbit_file:is_dir(Dir) of
         true  -> rabbit_file:recursive_delete([Dir]);
