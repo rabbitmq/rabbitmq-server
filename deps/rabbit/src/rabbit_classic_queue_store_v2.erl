@@ -282,8 +282,8 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
                         CRC32Expected = <<CRC32:16>>,
                         ok
                     catch C:E:S ->
-                        logger:error("Per-queue store CRC32 check failed in ~s seq id ~b offset ~b size ~b",
-                            [segment_file(Segment, State), SeqId, Offset, Size]),
+                        rabbit_log:error("Per-queue store CRC32 check failed in ~s seq id ~b offset ~b size ~b",
+                                         [segment_file(Segment, State), SeqId, Offset, Size]),
                         erlang:raise(C, E, S)
                     end
             end
