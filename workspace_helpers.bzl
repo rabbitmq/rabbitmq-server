@@ -207,19 +207,10 @@ erlang_lib(
         sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
     )
 
-    github_bazel_erlang_lib(
+    git_repository(
         name = "ra",
-        first_srcs = [
-            "src/ra_machine.erl",
-            "src/ra_snapshot.erl",
-        ],
-        org = "rabbitmq",
-        deps = [
-            "@gen_batch_server//:bazel_erlang_lib",
-        ],
-        runtime_deps = [
-            "@aten//:bazel_erlang_lib",
-        ],
+        branch = "master",
+        remote = "https://github.com/rabbitmq/ra.git",
     )
 
     hex_archive(
