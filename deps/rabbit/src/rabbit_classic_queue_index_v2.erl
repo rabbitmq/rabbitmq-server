@@ -34,6 +34,7 @@
 -define(ENTRY_SIZE,  32). %% bytes
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/file.hrl").
 
 %% Set to true to get an awful lot of debug logs.
 -if(false).
@@ -255,14 +256,15 @@ recover_segments(State0 = #qi { queue_name = Name, dir = Dir }, Terms, IsMsgStor
 recover_segments(State, _, StoreState, _, []) ->
     {State, StoreState};
 recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, [Segment|Tail]) ->
-    %% @todo We may want to check that the file sizes are correct before attempting
-    %%       to parse them, and to correct the file sizes.
     SegmentEntryCount = segment_entry_count(),
     SegmentFile = segment_file(Segment, State0),
     {ok, Fd} = file:open(SegmentFile, [read, read_ahead, write, raw, binary]),
     {ok, <<?MAGIC:32,?VERSION:8,
            _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,
            _/bits>>} = file:read(Fd, ?HEADER_SIZE),
+    %% Double check the file size before attempting to parse it.
+    SegmentFileSize = ?HEADER_SIZE + SegmentEntryCount * ?ENTRY_SIZE,
+    {ok, #file_info{size = SegmentFileSize}} = file:read_file_info(Fd),
     {Action, State, StoreState1} = recover_segment(State0, ContainsCheckFun, StoreState0, CountersRef, Fd,
                                                   Segment, 0, SegmentEntryCount,
                                                   SegmentEntryCount, []),
