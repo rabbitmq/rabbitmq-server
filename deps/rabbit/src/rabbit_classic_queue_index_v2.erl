@@ -193,7 +193,7 @@ recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
     IsIndexClean = Terms =/= non_clean_shutdown,
     case IsIndexClean andalso IsMsgStoreClean of
         true ->
-            State = case proplists:get_value(mqi_state, Terms, undefined) of
+            State = case proplists:get_value(v2_index_state, Terms, undefined) of
                 %% We are recovering a queue that was using the old index.
                 undefined ->
                     recover_index_v1_clean(State0, Terms, IsMsgStoreClean,
@@ -482,7 +482,7 @@ terminate(VHost, Terms, State0 = #qi { dir = Dir,
     file_handle_cache:release_reservation(),
     %% Write recovery terms for faster recovery.
     rabbit_recovery_terms:store(VHost, filename:basename(Dir),
-                                [{mqi_state, {?VERSION, Segments}} | Terms]),
+                                [{v2_index_state, {?VERSION, Segments}} | Terms]),
     State#qi{ segments = #{},
               fds = #{} }.
 
