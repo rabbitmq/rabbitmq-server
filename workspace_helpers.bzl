@@ -209,7 +209,7 @@ erlang_lib(
 
     git_repository(
         name = "ra",
-        branch = "master",
+        branch = "main",
         remote = "https://github.com/rabbitmq/ra.git",
     )
 
