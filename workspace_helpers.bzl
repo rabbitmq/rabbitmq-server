@@ -170,7 +170,7 @@ erlang_lib(
 
     git_repository(
         name = "osiris",
-        branch = "master",
+        branch = "main",
         remote = "https://github.com/rabbitmq/osiris.git",
     )
 
