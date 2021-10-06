@@ -190,12 +190,15 @@ dispatcher_add(function(sammy) {
                      'permissions': '/permissions'}, 'users');
     sammy.get('#/users/:id', function() {
         var vhosts = JSON.parse(sync_get('/vhosts'));
-            render({'user': '/users/' + esc(this.params['id']),
+        const current_vhost = get_pref('vhost');
+        let index_vhost = vhosts.findIndex(v => v.name === current_vhost);
+        index_vhost = index_vhost === -1 ? 0 : index_vhost;
+        render({'user': '/users/' + esc(this.params['id']),
                     'permissions': '/users/' + esc(this.params['id']) + '/permissions',
                     'topic_permissions': '/users/' + esc(this.params['id']) + '/topic-permissions',
                     'vhosts': '/vhosts/',
-                    'exchanges': '/exchanges/' + esc(vhosts[0].name)}, 'user',
-                   '#/users');
+                    'exchanges': '/exchanges/' + esc(vhosts[index_vhost].name)},
+           'user','#/users');
         });
     sammy.put('#/users-add', function() {
             res = sync_put(this, '/users/:username');
