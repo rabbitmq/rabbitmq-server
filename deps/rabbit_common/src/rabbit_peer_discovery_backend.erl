@@ -54,6 +54,6 @@
 
 -callback lock(Node :: atom())   -> {ok, Data :: term()} | not_supported | {error, Reason :: string()}.
 
--callback unlock(Data :: term()) -> ok | {error, Reason :: string()}.
+-callback unlock(Data :: term()) -> ok.
 
 -optional_callbacks([init/0]).
