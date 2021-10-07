@@ -151,7 +151,7 @@ enqueue(Correlation, Msg,
         0 ->
             %% the leader is running the old version
             enqueue(Correlation, Msg, State0#state{queue_status = go});
-        1 ->
+        N when is_integer(N) ->
             %% were running the new version on the leader do sync initialisation
             %% of enqueuer session
             Reg = rabbit_fifo:make_register_enqueuer(self()),
