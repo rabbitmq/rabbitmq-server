@@ -49,6 +49,6 @@ post_registration() ->
 lock(Node) ->
     ?DELEGATE:lock(Node).
 
--spec unlock({ResourceId :: string(), LockRequesterId :: node()}) -> ok | {error, Reason :: string()}.
+-spec unlock({{ResourceId :: string(), LockRequestedId :: atom()}, Nodes :: [atom()]}) -> 'ok'.
 unlock(Data) ->
     ?DELEGATE:unlock(Data).
