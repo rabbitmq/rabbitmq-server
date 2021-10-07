@@ -9,7 +9,7 @@
 
 -module(rabbit_peer_discovery_httpc).
 
--include("include/rabbit_peer_discovery.hrl").
+-include("rabbit_peer_discovery.hrl").
 
 %%
 %% API
