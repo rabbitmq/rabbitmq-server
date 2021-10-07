@@ -359,8 +359,6 @@ apply(#{index := Index}, #purge{},
                messages = Messages,
                ra_indexes = Indexes0} = State0) ->
     Total = messages_ready(State0),
-    %% TODO: add an optimised version of oqueue:delete that takes a list
-    %% of items
     Indexes1 = lists:foldl(fun (?INDEX_MSG(I, _), Acc0) when is_integer(I) ->
                                    rabbit_fifo_index:delete(I, Acc0);
                                (_, Acc) ->
@@ -648,8 +646,6 @@ convert_v1_to_v2(V1State) ->
         consumers = ConsumersV2,
         service_queue = rabbit_fifo_v1:get_field(service_queue, V1State),
         prefix_msgs = rabbit_fifo_v1:get_field(prefix_msgs, V1State),
-        %% this is wrong
-        % returns = oqueue:from_list(lqueue:to_list(ReturnsV1))
         msg_bytes_enqueue = rabbit_fifo_v1:get_field(msg_bytes_enqueue, V1State),
         msg_bytes_checkout = rabbit_fifo_v1:get_field(msg_bytes_checkout, V1State),
         waiting_consumers = rabbit_fifo_v1:get_field(waiting_consumers, V1State),
@@ -967,8 +963,6 @@ query_processes(#?MODULE{enqueuers = Enqs, consumers = Cons0}) ->
 
 query_ra_indexes(#?MODULE{ra_indexes = RaIndexes}) ->
     RaIndexes.
-    % rabbit_fifo_index:append(Key, Arg2)
-    % oqueue:to_list(RaIndexes).
 
 query_consumer_count(#?MODULE{consumers = Consumers,
                               waiting_consumers = WaitingConsumers}) ->
@@ -2055,7 +2049,6 @@ normalize(#?MODULE{ra_indexes = _Indexes,
                    messages = Messages,
                    release_cursors = Cursors} = State) ->
     State#?MODULE{
-             % ra_indexes = oqueue:from_list(oqueue:to_list(Indexes)),
              returns = lqueue:from_list(lqueue:to_list(Returns)),
              messages = lqueue:from_list(lqueue:to_list(Messages)),
              release_cursors = lqueue:from_list(lqueue:to_list(Cursors))}.
