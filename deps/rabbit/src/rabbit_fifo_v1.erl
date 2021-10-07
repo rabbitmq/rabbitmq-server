@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(rabbit_fifo).
+-module(rabbit_fifo_v1).
 
 -behaviour(ra_machine).
 
@@ -13,7 +13,7 @@
 -compile(inline).
 -compile({no_auto_import, [apply/3]}).
 
--include("rabbit_fifo.hrl").
+-include("rabbit_fifo_v1.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
@@ -517,8 +517,8 @@ apply(#{index := Idx} = Meta, #purge_nodes{nodes = Nodes}, State0) ->
 apply(#{index := Idx} = Meta, #update_config{config = Conf}, State0) ->
     {State, Reply, Effects} = checkout(Meta, State0, update_config(Conf, State0), []),
     update_smallest_raft_index(Idx, Reply, State, Effects);
-apply(_Meta, {machine_version, FromVersion, ToVersion}, V0State) ->
-    State = convert(FromVersion, ToVersion, V0State),
+apply(_Meta, {machine_version, 0, 1}, V0State) ->
+    State = convert_v0_to_v1(V0State),
     {State, ok, []};
 apply(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
@@ -535,7 +535,7 @@ convert_v0_to_v1(V0State0) ->
                        #enqueuer{next_seqno = element(2, E),
                                  pending = element(3, E),
                                  status = element(4, E)}
-               end, V0Enqs), 
+               end, V0Enqs),
     V0Cons = rabbit_fifo_v0:get_field(consumers, V0State),
     V1Cons = maps:map(
                fun (_CId, C0) ->
@@ -763,11 +763,10 @@ get_checked_out(Cid, From, To, #?MODULE{consumers = Consumers}) ->
     end.
 
 -spec version() -> pos_integer().
-version() -> 2.
+version() -> 1.
 
 which_module(0) -> rabbit_fifo_v0;
-which_module(1) -> rabbit_fifo_v1;
-which_module(2) -> ?MODULE.
+which_module(1) -> ?MODULE.
 
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(aux, {name :: atom(),
@@ -2207,11 +2206,3 @@ notify_decorators_effect(#?MODULE{cfg = #cfg{resource = QName}} = State) ->
 notify_decorators_effect(QName, MaxActivePriority, IsEmpty) ->
     {mod_call, rabbit_quorum_queue, spawn_notify_decorators,
      [QName, consumer_state_changed, [MaxActivePriority, IsEmpty]]}.
-
-convert(To, To, State0) ->
-    State0;
-convert(0, To, State0) ->
-    convert(1, To, convert_v0_to_v1(State0));
-convert(1, To, State0) ->
-    %% no conversion yet
-    convert(2, To, State0).
