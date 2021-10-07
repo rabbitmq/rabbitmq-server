@@ -85,6 +85,11 @@ handle_info(#'basic.consume_ok'{}, State) ->
     %% Handled above
     {noreply, State};
 
+handle_info(#'basic.cancel_ok'{}, State) ->
+    %% just ignore this for now,
+    %% At some point we should send the detach here but then we'd need to track
+    %% consumer tags -> link handle somewhere
+    {noreply, State};
 handle_info({#'basic.deliver'{ consumer_tag = ConsumerTag,
                                delivery_tag = DeliveryTag } = Deliver, Msg},
             State = #state{frame_max       = FrameMax,
@@ -294,11 +299,19 @@ handle_control(#'v1_0.disposition'{state = Outcome,
         {Reply, Session1} -> {reply,   Reply, state(Session1, State)}
     end;
 
-handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
+handle_control(#'v1_0.detach'{handle = Handle} = Detach,
+               #state{backing_channel = BCh} = State) ->
     %% TODO keep the state around depending on the lifetime
     %% TODO outgoing links?
+    case get({out, Handle}) of
+        undefined ->
+            ok;
+        Link ->
+            erase({out, Handle}),
+            ok = rabbit_amqp1_0_outgoing_link:detach(Detach, BCh, Link)
+    end,
     erase({in, Handle}),
-    {reply, #'v1_0.detach'{ handle = Handle }, State};
+    {reply, #'v1_0.detach'{handle = Handle}, State};
 
 handle_control(#'v1_0.end'{}, _State = #state{ writer_pid = Sock }) ->
     ok = rabbit_amqp1_0_writer:send_command(Sock, #'v1_0.end'{}),
