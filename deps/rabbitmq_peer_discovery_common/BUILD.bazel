@@ -29,21 +29,11 @@ RUNTIME_DEPS = [
     "//deps/rabbit:bazel_erlang_lib",
 ]
 
-ERLC_OPTS = RABBITMQ_ERLC_OPTS + [
-    "-I deps/rabbitmq_peer_discovery_common",
-]
-
-TEST_ERLC_OPTS = RABBITMQ_TEST_ERLC_OPTS + [
-    "-I deps/rabbitmq_peer_discovery_common",
-]
-
 rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    erlc_opts = ERLC_OPTS,
     extra_apps = EXTRA_APPS,
-    test_erlc_opts = TEST_ERLC_OPTS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )

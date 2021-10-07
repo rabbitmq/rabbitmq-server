@@ -25,7 +25,7 @@
         ]).
 
 -include_lib("kernel/include/logger.hrl").
--include("include/rabbit_peer_discovery.hrl").
+-include("rabbit_peer_discovery.hrl").
 
 %% Export all for unit tests
 -ifdef(TEST).

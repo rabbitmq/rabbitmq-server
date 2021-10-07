@@ -10,7 +10,7 @@
 -module(rabbit_peer_discovery_config).
 
 -include_lib("kernel/include/logger.hrl").
--include("include/rabbit_peer_discovery.hrl").
+-include("rabbit_peer_discovery.hrl").
 
 -export([get/3, get_integer/3, config_map/1]).
 

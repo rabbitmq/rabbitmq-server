@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 -include_lib("kernel/include/logger.hrl").
--include("include/rabbit_peer_discovery.hrl").
+-include("rabbit_peer_discovery.hrl").
 
 -export([start_link/0,
          check_cluster/0]).

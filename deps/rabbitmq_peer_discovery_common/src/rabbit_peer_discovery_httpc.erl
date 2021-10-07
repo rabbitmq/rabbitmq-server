@@ -10,7 +10,7 @@
 -module(rabbit_peer_discovery_httpc).
 
 -include_lib("kernel/include/logger.hrl").
--include("include/rabbit_peer_discovery.hrl").
+-include("rabbit_peer_discovery.hrl").
 
 %%
 %% API
