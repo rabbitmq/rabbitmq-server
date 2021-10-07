@@ -143,9 +143,7 @@ lock(Node) ->
       Error
   end.
 
--spec unlock({{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}) ->
-    ok | {error, Reason :: string()}.
-
+-spec unlock({{ResourceId :: string(), LockRequestedId :: atom()}, Nodes :: [atom()]}) -> 'ok'.
 unlock({LockId, Nodes}) ->
   global:del_lock(LockId, Nodes),
   ok.
@@ -153,6 +151,7 @@ unlock({LockId, Nodes}) ->
 %%
 %% Implementation
 %%
+
 -spec get_config_key(Key :: atom(), Map :: #{atom() => peer_discovery_config_value()})
                     -> peer_discovery_config_value().
 
