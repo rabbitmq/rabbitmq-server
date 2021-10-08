@@ -37,6 +37,7 @@ register() ->
                           {policy_validator, <<"max-in-memory-length">>},
                           {policy_validator, <<"max-in-memory-bytes">>},
                           {policy_validator, <<"queue-mode">>},
+                          {policy_validator, <<"queue-version">>},
                           {policy_validator, <<"overflow">>},
                           {policy_validator, <<"delivery-limit">>},
                           {policy_validator, <<"max-age">>},
@@ -126,6 +127,14 @@ validate_policy0(<<"queue-mode">>, <<"lazy">>) ->
     ok;
 validate_policy0(<<"queue-mode">>, Value) ->
     {error, "~p is not a valid queue-mode value", [Value]};
+
+validate_policy0(<<"queue-version">>, 1) ->
+    ok;
+validate_policy0(<<"queue-version">>, 2) ->
+    ok;
+validate_policy0(<<"queue-version">>, Value) ->
+    {error, "~p is not a valid queue-version value", [Value]};
+
 validate_policy0(<<"overflow">>, <<"drop-head">>) ->
     ok;
 validate_policy0(<<"overflow">>, <<"reject-publish">>) ->

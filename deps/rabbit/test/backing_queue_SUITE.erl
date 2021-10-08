@@ -16,6 +16,7 @@
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
+%% @todo Test both indexes.
 -define(INDEX, rabbit_classic_queue_index_v2).
 
 -define(TIMEOUT, 30000).
@@ -58,11 +59,15 @@ all() ->
     ].
 
 groups() ->
+    Common = [
+        {backing_queue_embed_limit_0, [], ?BACKING_QUEUE_TESTCASES},
+        {backing_queue_embed_limit_1024, [], ?BACKING_QUEUE_TESTCASES}
+    ],
     [
      {backing_queue_tests, [], [
           msg_store,
-          {backing_queue_embed_limit_0, [], ?BACKING_QUEUE_TESTCASES},
-          {backing_queue_embed_limit_1024, [], ?BACKING_QUEUE_TESTCASES}
+          {backing_queue_v2, [], Common},
+          {backing_queue_v1, [], Common}
         ]}
     ].
 
@@ -109,6 +114,14 @@ init_per_group1(backing_queue_tests, Config) ->
                "Backing queue module not supported by this test group: ~p~n",
                [Module])}
     end;
+init_per_group1(backing_queue_v1, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      application, set_env, [rabbit, variable_queue_default_version, 1]),
+    Config;
+init_per_group1(backing_queue_v2, Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      application, set_env, [rabbit, variable_queue_default_version, 2]),
+    Config;
 init_per_group1(backing_queue_embed_limit_0, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
       application, set_env, [rabbit, queue_index_embed_msgs_below, 0]),
@@ -153,6 +166,12 @@ end_per_group(Group, Config) ->
 end_per_group1(backing_queue_tests, Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, teardown_backing_queue_test_group, [Config]);
+end_per_group1(Group, Config)
+when   Group =:= backing_queue_v1
+orelse Group =:= backing_queue_v2 ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+      application, unset_env, [rabbit, variable_queue_default_version]),
+    Config;
 end_per_group1(Group, Config)
 when   Group =:= backing_queue_embed_limit_0
 orelse Group =:= backing_queue_embed_limit_1024 ->
@@ -1506,6 +1525,7 @@ with_fresh_variable_queue(Fun, Mode) ->
                                           {delta, undefined, 0, undefined}},
                                          {q3, 0}, {q4, 0},
                                          {len, 0}]),
+                       %% @todo Some tests probably don't keep this after restart (dropwhile_(sync)_restart, A2).
                        VQ1 = set_queue_mode(Mode, VQ),
                        try
                            _ = rabbit_variable_queue:delete_and_terminate(
