@@ -1106,8 +1106,6 @@ pre_publish(MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State
     ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State]),
     publish(MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State).
 
-%% @todo -spec flush_pre_publish_cache(???, State) -> State when State::state().
-
 flush_pre_publish_cache(TargetRamCount, State) ->
     ?DEBUG("~0p ~0p", [TargetRamCount, State]),
     State.
