@@ -30,6 +30,7 @@ register() ->
         {Class, Name} <- [{policy_validator, <<"alternate-exchange">>},
                           {policy_validator, <<"dead-letter-exchange">>},
                           {policy_validator, <<"dead-letter-routing-key">>},
+                          {policy_validator, <<"dead-letter-strategy">>},
                           {policy_validator, <<"message-ttl">>},
                           {policy_validator, <<"expires">>},
                           {policy_validator, <<"max-length">>},
@@ -83,6 +84,13 @@ validate_policy0(<<"dead-letter-routing-key">>, Value)
     ok;
 validate_policy0(<<"dead-letter-routing-key">>, Value) ->
     {error, "~p is not a valid dead letter routing key", [Value]};
+
+validate_policy0(<<"dead-letter-strategy">>, <<"at-most-once">>) ->
+    ok;
+validate_policy0(<<"dead-letter-strategy">>, <<"at-least-once">>) ->
+    ok;
+validate_policy0(<<"dead-letter-strategy">>, Value) ->
+    {error, "~p is not a valid dead letter strategy", [Value]};
 
 validate_policy0(<<"message-ttl">>, Value)
   when is_integer(Value), Value >= 0 ->

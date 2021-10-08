@@ -445,8 +445,10 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
 
 capabilities() ->
     #{unsupported_policies => [ %% Stream policies
-                                <<"max-age">>, <<"stream-max-segment-size-bytes">>,
-                                <<"queue-leader-locator">>, <<"initial-cluster-size">>],
+                               <<"max-age">>, <<"stream-max-segment-size-bytes">>,
+                               <<"queue-leader-locator">>, <<"initial-cluster-size">>,
+                               %% Quorum policies
+                               <<"dead-letter-strategy">>],
       queue_arguments => [<<"x-expires">>, <<"x-message-ttl">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
                           <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,

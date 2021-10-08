@@ -20,11 +20,13 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([
+         %% ra_machine callbacks
          init/1,
          apply/3,
          state_enter/2,
          tick/2,
          overview/1,
+
          get_checked_out/4,
          %% versioning
          version/0,
@@ -41,6 +43,7 @@
          query_consumer_count/1,
          query_consumers/1,
          query_stat/1,
+         query_stat_dlx/1,
          query_single_active_consumer/1,
          query_in_memory_usage/1,
          query_peek/2,
@@ -51,7 +54,10 @@
 
          %% misc
          dehydrate_state/1,
+         dehydrate_message/1,
          normalize/1,
+         get_msg_header/1,
+         get_header/2,
 
          %% protocol helpers
          make_enqueue/3,
@@ -103,7 +109,7 @@
     #update_config{} |
     #garbage_collection{}.
 
--type command() :: protocol() | ra_machine:builtin_command().
+-type command() :: protocol() | rabbit_fifo_dlx:protocol() | ra_machine:builtin_command().
 %% all the command types supported by ra fifo
 
 -type client_msg() :: delivery().
@@ -126,6 +132,8 @@
               state/0,
               config/0]).
 
+%% This function is never called since only rabbit_fifo_v0:init/1 is called.
+%% See https://github.com/rabbitmq/ra/blob/e0d1e6315a45f5d3c19875d66f9d7bfaf83a46e3/src/ra_machine.erl#L258-L265
 -spec init(config()) -> state().
 init(#{name := Name,
        queue_resource := Resource} = Conf) ->
@@ -143,6 +151,7 @@ update_config(Conf, State) ->
     MaxMemoryBytes = maps:get(max_in_memory_bytes, Conf, undefined),
     DeliveryLimit = maps:get(delivery_limit, Conf, undefined),
     Expires = maps:get(expires, Conf, undefined),
+    MsgTTL = maps:get(msg_ttl, Conf, undefined),
     ConsumerStrategy = case maps:get(single_active_consumer_on, Conf, false) of
                            true ->
                                single_active;
@@ -153,6 +162,7 @@ update_config(Conf, State) ->
     RCISpec = {RCI, RCI},
 
     LastActive = maps:get(created, Conf, undefined),
+    MaxMemoryBytes = maps:get(max_in_memory_bytes, Conf, undefined),
     State#?MODULE{cfg = Cfg#cfg{release_cursor_interval = RCISpec,
                                 dead_letter_handler = DLH,
                                 become_leader_handler = BLH,
@@ -163,8 +173,9 @@ update_config(Conf, State) ->
                                 max_in_memory_bytes = MaxMemoryBytes,
                                 consumer_strategy = ConsumerStrategy,
                                 delivery_limit = DeliveryLimit,
-                                expires = Expires},
-                 last_active = LastActive}.
+                                expires = Expires,
+                                msg_ttl = MsgTTL},
+                  last_active = LastActive}.
 
 zero(_) ->
     0.
@@ -201,30 +212,46 @@ apply(Meta,
     case Cons0 of
         #{ConsumerId := Con0} ->
             complete_and_checkout(Meta, MsgIds, ConsumerId,
-                                  Con0, [], State);
+                                  Con0, [], State, true);
         _ ->
             {State, ok}
 
     end;
 apply(Meta, #discard{msg_ids = MsgIds, consumer_id = ConsumerId},
-      #?MODULE{consumers = Cons0} = State0) ->
-    case Cons0 of
-        #{ConsumerId := #consumer{checked_out = Checked} = Con0} ->
-            % Discarded maintains same order as MsgIds (so that publishing to
-            % dead-letter exchange will be in same order as messages got rejected)
-            Discarded = lists:filtermap(fun(Id) ->
-                                                case maps:find(Id, Checked) of
-                                                    {ok, Msg} ->
-                                                        {true, Msg};
-                                                    error ->
-                                                        false
-                                                end
-                                        end, MsgIds),
-            Effects = dead_letter_effects(rejected, Discarded, State0, []),
-            complete_and_checkout(Meta, MsgIds, ConsumerId, Con0,
-                                  Effects, State0);
+      #?MODULE{consumers = Cons,
+               dlx = DlxState0,
+               cfg = #cfg{dead_letter_handler = DLH}} = State) ->
+    case Cons of
+        #{ConsumerId := #consumer{checked_out = Checked} = Con} ->
+            case DLH of
+                at_least_once ->
+                    DlxState = lists:foldl(fun(MsgId, S) ->
+                                                   case maps:find(MsgId, Checked) of
+                                                       {ok, Msg} ->
+                                                           rabbit_fifo_dlx:discard(Msg, rejected, S);
+                                                       error ->
+                                                           S
+                                                   end
+                                           end, DlxState0, MsgIds),
+                    complete_and_checkout(Meta, MsgIds, ConsumerId, Con,
+                                          [], State#?MODULE{dlx = DlxState}, false);
+                _ ->
+                    % Discarded maintains same order as MsgIds (so that publishing to
+                    % dead-letter exchange will be in same order as messages got rejected)
+                    Discarded = lists:filtermap(fun(Id) ->
+                                                        case maps:find(Id, Checked) of
+                                                            {ok, Msg} ->
+                                                                {true, Msg};
+                                                            error ->
+                                                                false
+                                                        end
+                                                end, MsgIds),
+                    Effects = dead_letter_effects(rejected, Discarded, State, []),
+                    complete_and_checkout(Meta, MsgIds, ConsumerId, Con,
+                                          Effects, State, true)
+            end;
         _ ->
-            {State0, ok}
+            {State, ok}
     end;
 apply(Meta, #return{msg_ids = MsgIds, consumer_id = ConsumerId},
       #?MODULE{consumers = Cons0} = State) ->
@@ -319,17 +346,17 @@ apply(#{index := Index,
             State1 = update_consumer(ConsumerId, ConsumerMeta,
                                      {once, 1, simple_prefetch}, 0,
                                      State0),
-            {success, _, MsgId, Msg, State2} = checkout_one(Meta, State1),
+            {success, _, MsgId, Msg, State2, Effects0} = checkout_one(Meta, State1, []),
             {State4, Effects1} = case Settlement of
                                      unsettled ->
                                          {_, Pid} = ConsumerId,
-                                         {State2, [{monitor, process, Pid}]};
+                                         {State2, [{monitor, process, Pid} | Effects0]};
                                      settled ->
                                          %% immediately settle the checkout
-                                         {State3, _, Effects0} =
+                                         {State3, _, SettleEffects} =
                                          apply(Meta, make_settle(ConsumerId, [MsgId]),
                                                State2),
-                                         {State3, Effects0}
+                                         {State3, SettleEffects ++ Effects0}
                                  end,
             {Reply, Effects2} =
             case Msg of
@@ -366,34 +393,45 @@ apply(#{index := Index}, #purge{},
       #?MODULE{messages_total = Tot,
                returns = Returns,
                messages = Messages,
-               ra_indexes = Indexes0} = State0) ->
-    Total = messages_ready(State0),
-    Indexes1 = lists:foldl(fun (?INDEX_MSG(I, _), Acc0) when is_integer(I) ->
+               ra_indexes = Indexes0,
+               dlx = DlxState0} = State0) ->
+    NumReady = messages_ready(State0),
+    Indexes1 = lists:foldl(fun (?INDEX_MSG(I, ?MSG(_, _)), Acc0) when is_integer(I) ->
                                    rabbit_fifo_index:delete(I, Acc0);
                                (_, Acc) ->
                                    Acc
                            end, Indexes0, lqueue:to_list(Returns)),
-    Indexes = lists:foldl(fun (?INDEX_MSG(I, _), Acc0) when is_integer(I) ->
+    Indexes2 = lists:foldl(fun (?INDEX_MSG(I, ?MSG(_, _)), Acc0) when is_integer(I) ->
                                   rabbit_fifo_index:delete(I, Acc0);
                               (_, Acc) ->
                                   Acc
                           end, Indexes1, lqueue:to_list(Messages)),
+    {DlxState, DiscardMsgs} = rabbit_fifo_dlx:purge(DlxState0),
+    Indexes = lists:foldl(fun (?INDEX_MSG(I, ?MSG(_, _)), Acc0) when is_integer(I) ->
+                                  rabbit_fifo_index:delete(I, Acc0);
+                              (_, Acc) ->
+                                  Acc
+                          end, Indexes2, DiscardMsgs),
+    NumPurged = NumReady + length(DiscardMsgs),
 
     State1 = State0#?MODULE{ra_indexes = Indexes,
                             messages = lqueue:new(),
-                            messages_total = Tot - Total,
+                            messages_total = Tot - NumPurged,
                             returns = lqueue:new(),
+                            dlx = DlxState,
                             msg_bytes_enqueue = 0,
                             prefix_msgs = {0, [], 0, []},
                             msg_bytes_in_memory = 0,
                             msgs_ready_in_memory = 0},
     Effects0 = [garbage_collection],
-    Reply = {purge, Total},
+    Reply = {purge, NumPurged},
     {State, _, Effects} = evaluate_limit(Index, false, State0,
                                          State1, Effects0),
     update_smallest_raft_index(Index, Reply, State, Effects);
 apply(#{index := Idx}, #garbage_collection{}, State) ->
     update_smallest_raft_index(Idx, ok, State, [{aux, garbage_collection}]);
+apply(Meta, {timeout, expire_msgs}, State) ->
+    checkout(Meta, State, State, [], false);
 apply(#{system_time := Ts} = Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                cfg = #cfg{consumer_strategy = single_active},
@@ -531,12 +569,73 @@ apply(#{index := Idx} = Meta, #purge_nodes{nodes = Nodes}, State0) ->
                                            purge_node(Meta, Node, S, E)
                                    end, {State0, []}, Nodes),
     update_smallest_raft_index(Idx, ok, State, Effects);
-apply(#{index := Idx} = Meta, #update_config{config = Conf}, State0) ->
-    {State, Reply, Effects} = checkout(Meta, State0, update_config(Conf, State0), []),
+apply(#{index := Idx} = Meta, #update_config{config = Conf},
+      #?MODULE{cfg = #cfg{dead_letter_handler = Old_DLH}} = State0) ->
+    #?MODULE{cfg = #cfg{dead_letter_handler = DLH},
+             dlx = DlxState,
+             ra_indexes = Indexes0,
+             messages_total = Tot} = State1 = update_config(Conf, State0),
+    %%TODO return aux effect here and move logic over to handle_aux/6 which can return effects as last arguments.
+    {State4, Effects1} = case DLH of
+                             at_least_once ->
+                                 case rabbit_fifo_dlx:consumer_pid(DlxState) of
+                                     undefined ->
+                                         %% Policy changed from at-most-once to at-least-once.
+                                         %% Therefore, start rabbit_fifo_dlx_worker on leader.
+                                         {State1, [{aux, start_dlx_worker}]};
+                                     DlxWorkerPid ->
+                                         %% Leader already exists.
+                                         %% Notify leader of new policy.
+                                         Effect = {send_msg, DlxWorkerPid, lookup_topology, ra_event},
+                                         {State1, [Effect]}
+                                 end;
+                             _ when Old_DLH =:= at_least_once ->
+                                 %% Cleanup any remaining messages stored by rabbit_fifo_dlx
+                                 %% by either dropping or at-most-once dead-lettering.
+                                 ReasonMsgs = rabbit_fifo_dlx:cleanup(DlxState),
+                                 Len = length(ReasonMsgs),
+                                 rabbit_log:debug("Cleaning up ~b dead-lettered messages "
+                                                  "since dead_letter_handler changed from ~s to ~p",
+                                                  [Len, Old_DLH, DLH]),
+                                 Effects0 = dead_letter_effects(undefined, ReasonMsgs, State1, []),
+                                 {_, Msgs} = lists:unzip(ReasonMsgs),
+                                 Indexes = delete_indexes(Msgs, Indexes0),
+                                 State2 = subtract_in_memory(Msgs, State1),
+                                 State3 = State2#?MODULE{dlx = rabbit_fifo_dlx:init(),
+                                                         ra_indexes = Indexes,
+                                                         messages_total = Tot - Len},
+                                 {State3, Effects0};
+                             _ ->
+                                 {State1, []}
+                         end,
+    {State, Reply, Effects} = checkout(Meta, State0, State4, Effects1),
     update_smallest_raft_index(Idx, Reply, State, Effects);
 apply(_Meta, {machine_version, FromVersion, ToVersion}, V0State) ->
     State = convert(FromVersion, ToVersion, V0State),
-    {State, ok, []};
+    {State, ok, [{aux, start_dlx_worker}]};
+%%TODO are there better approach to
+%% 1. matching against opaque rabbit_fifo_dlx:protocol / record (without exposing all the protocol details), and
+%% 2. Separate the logic running in rabbit_fifo and rabbit_fifo_dlx when dead-letter messages is acked?
+apply(#{index := IncomingRaftIdx} = Meta, {dlx, Cmd},
+      #?MODULE{dlx = DlxState0,
+               messages_total = Total0,
+               ra_indexes = Indexes0} = State0) when element(1, Cmd) =:= settle ->
+    {DlxState, AckedMsgs} = rabbit_fifo_dlx:apply(Cmd, DlxState0),
+    Indexes = delete_indexes(AckedMsgs, Indexes0),
+    Total = Total0 - length(AckedMsgs),
+    State1 = subtract_in_memory(AckedMsgs, State0),
+    State2 = State1#?MODULE{dlx = DlxState,
+                            messages_total = Total,
+                            ra_indexes = Indexes},
+    {State, ok, Effects} = checkout(Meta, State0, State2, [], false),
+    update_smallest_raft_index(IncomingRaftIdx, State, Effects);
+apply(Meta, {dlx, Cmd},
+      #?MODULE{dlx = DlxState0} = State0) ->
+    {DlxState, ok} = rabbit_fifo_dlx:apply(Cmd, DlxState0),
+    State1 = State0#?MODULE{dlx = DlxState},
+    %% Run a checkout so that a new DLX consumer will be delivered discarded messages
+    %% directly after it subscribes.
+    checkout(Meta, State0, State1, [], false);
 apply(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
     rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
@@ -627,11 +726,31 @@ convert_v1_to_v2(V1State) ->
                                               end, Ch)}
                     end, ConsumersV1),
 
+    %% The (old) format of dead_letter_handler in RMQ < v3.10 is:
+    %%   {Module, Function, Args}
+    %% The (new) format of dead_letter_handler in RMQ >= v3.10 is:
+    %%   undefined | {at_most_once, {Module, Function, Args}} | at_least_once
+    %%
+    %% Note that the conversion must convert both from old format to new format
+    %% as well as from new format to new format. The latter is because quorum queues
+    %% created in RMQ >= v3.10 are still initialised with rabbit_fifo_v0 as described in
+    %% https://github.com/rabbitmq/ra/blob/e0d1e6315a45f5d3c19875d66f9d7bfaf83a46e3/src/ra_machine.erl#L258-L265
+    DLH = case rabbit_fifo_v1:get_cfg_field(dead_letter_handler, V1State) of
+              {_M, _F, _A = [_DLX = undefined|_]} ->
+                  %% queue was declared in RMQ < v3.10 and no DLX configured
+                  undefined;
+              {_M, _F, _A} = MFA ->
+                  %% queue was declared in RMQ < v3.10 and DLX configured
+                  {at_most_once, MFA};
+              Other ->
+                  Other
+          end,
+
     %% Then add all pending messages back into the index
     Cfg = #cfg{name = rabbit_fifo_v1:get_cfg_field(name, V1State),
                resource = rabbit_fifo_v1:get_cfg_field(resource, V1State),
                release_cursor_interval = rabbit_fifo_v1:get_cfg_field(release_cursor_interval, V1State),
-               dead_letter_handler = rabbit_fifo_v1:get_cfg_field(dead_letter_handler, V1State),
+               dead_letter_handler = DLH,
                become_leader_handler = rabbit_fifo_v1:get_cfg_field(become_leader_handler, V1State),
                %% TODO: what if policy enabling reject_publish was applied before conversion?
                overflow_strategy = rabbit_fifo_v1:get_cfg_field(overflow_strategy, V1State),
@@ -670,14 +789,20 @@ purge_node(Meta, Node, State, Effects) ->
                 end, {State, Effects}, all_pids_for(Node, State)).
 
 %% any downs that re not noconnection
-handle_down(Meta, Pid, #?MODULE{consumers = Cons0,
-                                enqueuers = Enqs0} = State0) ->
+handle_down(#{system_time := DownTs} = Meta, Pid, #?MODULE{consumers = Cons0,
+                                                           enqueuers = Enqs0} = State0) ->
     % Remove any enqueuer for the same pid and enqueue any pending messages
     % This should be ok as we won't see any more enqueues from this pid
     State1 = case maps:take(Pid, Enqs0) of
                  {#enqueuer{pending = Pend}, Enqs} ->
-                     lists:foldl(fun ({_, RIdx, RawMsg}, S) ->
-                                         enqueue(RIdx, RawMsg, S)
+                     lists:foldl(fun ({_, RIdx, Ts, RawMsg}, S) ->
+                                         enqueue(RIdx, Ts, RawMsg, S);
+                                     ({_, RIdx, RawMsg}, S) ->
+                                         %% This is an edge case: It is an out-of-order delivery
+                                         %% from machine version 1.
+                                         %% If message TTL is configured, expiration will be delayed
+                                         %% for the time the message has been pending.
+                                         enqueue(RIdx, DownTs, RawMsg, S)
                                  end, State0#?MODULE{enqueuers = Enqs}, Pend);
                  error ->
                      State0
@@ -738,7 +863,16 @@ update_waiting_consumer_status(Node,
      Consumer#consumer.status =/= cancelled].
 
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
-state_enter(leader, #?MODULE{consumers = Cons,
+state_enter(RaState, #?MODULE{cfg = #cfg{dead_letter_handler = at_least_once,
+                                         resource = QRef,
+                                         name = QName},
+                              dlx = DlxState} = State) ->
+    rabbit_fifo_dlx:state_enter(RaState, QRef, QName, DlxState),
+    state_enter0(RaState, State);
+state_enter(RaState, State) ->
+    state_enter0(RaState, State).
+
+state_enter0(leader, #?MODULE{consumers = Cons,
                              enqueuers = Enqs,
                              waiting_consumers = WaitingConsumers,
                              cfg = #cfg{name = Name,
@@ -753,6 +887,7 @@ state_enter(leader, #?MODULE{consumers = Cons,
     Mons = [{monitor, process, P} || P <- Pids],
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
+    %% TODO reissue timer effect if head of message queue has expiry header set
     FHReservation = [{mod_call, rabbit_quorum_queue, file_handle_leader_reservation, [Resource]}],
     Effects = Mons ++ Nots ++ NodeMons ++ FHReservation,
     case BLH of
@@ -761,7 +896,7 @@ state_enter(leader, #?MODULE{consumers = Cons,
         {Mod, Fun, Args} ->
             [{mod_call, Mod, Fun, Args ++ [Name]} | Effects]
     end;
-state_enter(eol, #?MODULE{enqueuers = Enqs,
+state_enter0(eol, #?MODULE{enqueuers = Enqs,
                           consumers = Custs0,
                           waiting_consumers = WaitingConsumers0}) ->
     Custs = maps:fold(fun({_, P}, V, S) -> S#{P => V} end, #{}, Custs0),
@@ -772,30 +907,32 @@ state_enter(eol, #?MODULE{enqueuers = Enqs,
      || P <- maps:keys(maps:merge(Enqs, AllConsumers))] ++
                    [{aux, eol},
                     {mod_call, rabbit_quorum_queue, file_handle_release_reservation, []}];
-state_enter(State, #?MODULE{cfg = #cfg{resource = _Resource}}) when State =/= leader ->
+state_enter0(State, #?MODULE{cfg = #cfg{resource = _Resource}}) when State =/= leader ->
     FHReservation = {mod_call, rabbit_quorum_queue, file_handle_other_reservation, []},
     [FHReservation];
- state_enter(_, _) ->
+state_enter0(_, _) ->
     %% catch all as not handling all states
     [].
-
 
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
 tick(Ts, #?MODULE{cfg = #cfg{name = Name,
                              resource = QName},
                    msg_bytes_enqueue = EnqueueBytes,
-                   msg_bytes_checkout = CheckoutBytes} = State) ->
+                   msg_bytes_checkout = CheckoutBytes,
+                   dlx = DlxState} = State) ->
     case is_expired(Ts, State) of
         true ->
             [{mod_call, rabbit_quorum_queue, spawn_deleter, [QName]}];
         false ->
+            {_, MsgBytesDiscard} = rabbit_fifo_dlx:stat(DlxState),
             Metrics = {Name,
                        messages_ready(State),
                        num_checked_out(State), % checked out
                        messages_total(State),
                        query_consumer_count(State), % Consumers
                        EnqueueBytes,
-                       CheckoutBytes},
+                       CheckoutBytes,
+                       MsgBytesDiscard},
             [{mod_call, rabbit_quorum_queue,
               handle_tick, [QName, Metrics, all_nodes(State)]}]
     end.
@@ -805,6 +942,9 @@ overview(#?MODULE{consumers = Cons,
                   enqueuers = Enqs,
                   release_cursors = Cursors,
                   enqueue_count = EnqCount,
+                  dlx = DlxState,
+                  msgs_ready_in_memory = InMemReady,
+                  msg_bytes_in_memory = InMemBytes,
                   msg_bytes_enqueue = EnqueueBytes,
                   msg_bytes_checkout = CheckoutBytes,
                   cfg = Cfg} = State) ->
@@ -818,23 +958,28 @@ overview(#?MODULE{consumers = Cons,
              max_in_memory_length => Cfg#cfg.max_in_memory_length,
              max_in_memory_bytes => Cfg#cfg.max_in_memory_bytes,
              expires => Cfg#cfg.expires,
+             msg_ttl => Cfg#cfg.msg_ttl,
              delivery_limit => Cfg#cfg.delivery_limit
-             },
+            },
     {Smallest, _} = smallest_raft_index(State),
-    #{type => ?MODULE,
-      config => Conf,
-      num_consumers => maps:size(Cons),
-      num_checked_out => num_checked_out(State),
-      num_enqueuers => maps:size(Enqs),
-      num_ready_messages => messages_ready(State),
-      num_pending_messages => messages_pending(State),
-      num_messages => messages_total(State),
-      num_release_cursors => lqueue:len(Cursors),
-      release_cursors => [{I, messages_total(S)} || {_, I, S} <- lqueue:to_list(Cursors)],
-      release_cursor_enqueue_counter => EnqCount,
-      enqueue_message_bytes => EnqueueBytes,
-      checkout_message_bytes => CheckoutBytes,
-      smallest_raft_index => Smallest}.
+    Overview = #{type => ?MODULE,
+                 config => Conf,
+                 num_consumers => maps:size(Cons),
+                 num_checked_out => num_checked_out(State),
+                 num_enqueuers => maps:size(Enqs),
+                 num_ready_messages => messages_ready(State),
+                 num_in_memory_ready_messages => InMemReady,
+                 num_pending_messages => messages_pending(State),
+                 num_messages => messages_total(State),
+                 num_release_cursors => lqueue:len(Cursors),
+                 release_cursors => [{I, messages_total(S)} || {_, I, S} <- lqueue:to_list(Cursors)],
+                 release_cursor_enqueue_counter => EnqCount,
+                 enqueue_message_bytes => EnqueueBytes,
+                 checkout_message_bytes => CheckoutBytes,
+                 in_memory_message_bytes => InMemBytes,
+                 smallest_raft_index => Smallest},
+    DlxOverview = rabbit_fifo_dlx:overview(DlxState),
+    maps:merge(Overview, DlxOverview).
 
 -spec get_checked_out(consumer_id(), msg_id(), msg_id(), state()) ->
     [delivery_msg()].
@@ -917,8 +1062,15 @@ handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            {reply, {ok, {Header, Msg}}, Aux0, Log0};
         Err ->
             {reply, Err, Aux0, Log0}
-    end.
-
+    end;
+handle_aux(leader, _, start_dlx_worker, Aux, Log,
+           #?MODULE{cfg = #cfg{resource = QRef,
+                               name = QName,
+                               dead_letter_handler = at_least_once}}) ->
+    rabbit_fifo_dlx:start_worker(QRef, QName),
+    {no_reply, Aux, Log};
+handle_aux(_, _, start_dlx_worker, Aux, Log, _) ->
+    {no_reply, Aux, Log}.
 
 eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}} = MacState,
         #aux{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
@@ -1063,6 +1215,9 @@ query_in_memory_usage(#?MODULE{msg_bytes_in_memory = Bytes,
                                msgs_ready_in_memory = Length}) ->
     {Length, Bytes}.
 
+query_stat_dlx(#?MODULE{dlx = DlxState}) ->
+    rabbit_fifo_dlx:stat(DlxState).
+
 query_peek(Pos, State0) when Pos > 0 ->
     case take_next_msg(State0) of
         empty ->
@@ -1113,8 +1268,15 @@ messages_total(#?MODULE{messages = _M,
                         messages_total = Total,
                         ra_indexes = _Indexes,
                         prefix_msgs = {_RCnt, _R, _PCnt, _P}}) ->
-    Total.
     % lqueue:len(M) + rabbit_fifo_index:size(Indexes) + RCnt + PCnt.
+    Total;
+%% release cursors might be old state (e.g. after recent upgrade)
+messages_total(State)
+  when element(1, State) =:= rabbit_fifo_v1 ->
+    rabbit_fifo_v1:query_messages_total(State);
+messages_total(State)
+  when element(1, State) =:= rabbit_fifo_v0 ->
+    rabbit_fifo_v0:query_messages_total(State).
 
 update_use({inactive, _, _, _} = CUInfo, inactive) ->
     CUInfo;
@@ -1265,8 +1427,9 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerId, Consumer, S0, Effects0
              Effects1}
     end.
 
-apply_enqueue(#{index := RaftIdx} = Meta, From, Seq, RawMsg, State0) ->
-    case maybe_enqueue(RaftIdx, From, Seq, RawMsg, [], State0) of
+apply_enqueue(#{index := RaftIdx,
+                system_time := Ts} = Meta, From, Seq, RawMsg, State0) ->
+    case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, [], State0) of
         {ok, State1, Effects1} ->
             State2 = incr_enqueue_count(incr_total(State1)),
             {State, ok, Effects} = checkout(Meta, State0, State2, Effects1, false),
@@ -1305,10 +1468,11 @@ drop_head(#?MODULE{ra_indexes = Indexes0} = State0, Effects0) ->
             {State0, Effects0}
     end.
 
-enqueue(RaftIdx, RawMsg, #?MODULE{messages = Messages} = State0) ->
+enqueue(RaftIdx, Ts, RawMsg, #?MODULE{messages = Messages} = State0) ->
     %% the initial header is an integer only - it will get expanded to a map
     %% when the next required key is added
-    Header = message_size(RawMsg),
+    Header0 = message_size(RawMsg),
+    Header = maybe_set_msg_ttl(RawMsg, Ts, Header0, State0),
     {State1, Msg} =
         case evaluate_memory_limit(Header, State0) of
             true ->
@@ -1321,6 +1485,39 @@ enqueue(RaftIdx, RawMsg, #?MODULE{messages = Messages} = State0) ->
         end,
     State = add_bytes_enqueue(Header, State1),
     State#?MODULE{messages = lqueue:in(Msg, Messages)}.
+
+maybe_set_msg_ttl(#basic_message{content = #content{properties = none}},
+                  _, Header,
+                  #?MODULE{cfg = #cfg{msg_ttl = undefined}}) ->
+    Header;
+maybe_set_msg_ttl(#basic_message{content = #content{properties = none}},
+                  RaCmdTs, Header,
+                  #?MODULE{cfg = #cfg{msg_ttl = PerQueueMsgTTL}}) ->
+    update_expiry_header(RaCmdTs, PerQueueMsgTTL, Header);
+maybe_set_msg_ttl(#basic_message{content = #content{properties = Props}},
+                  RaCmdTs, Header,
+                  #?MODULE{cfg = #cfg{msg_ttl = PerQueueMsgTTL}}) ->
+    %% rabbit_quorum_queue will leave the properties decoded if and only if
+    %% per message message TTL is set.
+    %% We already check in the channel that expiration must be valid.
+    {ok, PerMsgMsgTTL} = rabbit_basic:parse_expiration(Props),
+    TTL = min(PerMsgMsgTTL, PerQueueMsgTTL),
+    update_expiry_header(RaCmdTs, TTL, Header).
+
+update_expiry_header(_, undefined, Header) ->
+    Header;
+update_expiry_header(RaCmdTs, 0, Header) ->
+    %% We do not comply exactly with the "TTL=0 models AMQP immediate flag" semantics
+    %% as done for classic queues where the message is discarded if it cannot be
+    %% consumed immediately.
+    %% Instead, we discard the message if it cannot be consumed within the same millisecond
+    %% when it got enqueued. This behaviour should be good enough.
+    update_expiry_header(RaCmdTs + 1, Header);
+update_expiry_header(RaCmdTs, TTL, Header) ->
+    update_expiry_header(RaCmdTs + TTL, Header).
+
+update_expiry_header(ExpiryTs, Header) ->
+    update_header(expiry, fun(Ts) -> Ts end, ExpiryTs, Header).
 
 incr_enqueue_count(#?MODULE{enqueue_count = EC,
                             cfg = #cfg{release_cursor_interval = {_Base, C}}
@@ -1363,39 +1560,39 @@ maybe_store_dehydrated_state(_RaftIdx, State) ->
 
 enqueue_pending(From,
                 #enqueuer{next_seqno = Next,
-                          pending = [{Next, RaftIdx, RawMsg} | Pending]} = Enq0,
+                          pending = [{Next, RaftIdx, Ts, RawMsg} | Pending]} = Enq0,
                 State0) ->
-            State = enqueue(RaftIdx, RawMsg, State0),
+            State = enqueue(RaftIdx, Ts, RawMsg, State0),
             Enq = Enq0#enqueuer{next_seqno = Next + 1, pending = Pending},
             enqueue_pending(From, Enq, State);
 enqueue_pending(From, Enq, #?MODULE{enqueuers = Enqueuers0} = State) ->
     State#?MODULE{enqueuers = Enqueuers0#{From => Enq}}.
 
-maybe_enqueue(RaftIdx, undefined, undefined, RawMsg, Effects, State0) ->
+maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg, Effects, State0) ->
     % direct enqueue without tracking
-    State = enqueue(RaftIdx, RawMsg, State0),
+    State = enqueue(RaftIdx, Ts, RawMsg, State0),
     {ok, State, Effects};
-maybe_enqueue(RaftIdx, From, MsgSeqNo, RawMsg, Effects0,
+maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
               #?MODULE{enqueuers = Enqueuers0,
                        ra_indexes = Indexes0} = State0) ->
 
     case maps:get(From, Enqueuers0, undefined) of
         undefined ->
             State1 = State0#?MODULE{enqueuers = Enqueuers0#{From => #enqueuer{}}},
-            {ok, State, Effects} = maybe_enqueue(RaftIdx, From, MsgSeqNo,
+            {ok, State, Effects} = maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo,
                                                  RawMsg, Effects0, State1),
             {ok, State, [{monitor, process, From} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
-            State1 = enqueue(RaftIdx, RawMsg, State0),
+            State1 = enqueue(RaftIdx, Ts, RawMsg, State0),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
             State = enqueue_pending(From, Enq, State1),
             {ok, State, Effects0};
         #enqueuer{next_seqno = Next,
                   pending = Pending0} = Enq0
           when MsgSeqNo > Next ->
-            % out of order enqueue
-            Pending = [{MsgSeqNo, RaftIdx, RawMsg} | Pending0],
+            % out of order delivery
+            Pending = [{MsgSeqNo, RaftIdx, Ts, RawMsg} | Pending0],
             Enq = Enq0#enqueuer{pending = lists:sort(Pending)},
             %% if the enqueue it out of order we need to mark it in the
             %% index
@@ -1426,29 +1623,39 @@ return(#{index := IncomingRaftIdx} = Meta, ConsumerId, Returned,
     {State, ok, Effects} = checkout(Meta, State0, State2, Effects1, false),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
-% used to processes messages that are finished
+% used to process messages that are finished
 complete(Meta, ConsumerId, DiscardedMsgIds,
-         #consumer{checked_out = Checked} = Con0, Effects,
+         #consumer{checked_out = Checked} = Con0,
          #?MODULE{messages_total = Tot,
-                  ra_indexes = Indexes0} = State0) ->
+                  ra_indexes = Indexes0} = State0, Delete) ->
     %% credit_mode = simple_prefetch should automatically top-up credit
     %% as messages are simple_prefetch or otherwise returned
     Discarded = maps:with(DiscardedMsgIds, Checked),
+    DiscardedMsgs = maps:values(Discarded),
+    Len = length(DiscardedMsgs),
     Con = Con0#consumer{checked_out = maps:without(DiscardedMsgIds, Checked),
-                        credit = increase_credit(Con0, map_size(Discarded))},
+                        credit = increase_credit(Con0, Len)},
     State1 = update_or_remove_sub(Meta, ConsumerId, Con, State0),
+    State = lists:foldl(fun(Msg, Acc) ->
+                                add_bytes_settle(
+                                  get_msg_header(Msg), Acc)
+                        end, State1, DiscardedMsgs),
+    case Delete of
+        true ->
+            Indexes = delete_indexes(DiscardedMsgs, Indexes0),
+            State#?MODULE{messages_total = Tot - Len,
+                          ra_indexes = Indexes};
+        false ->
+            State
+    end.
+
+delete_indexes(Msgs, Indexes) ->
     %% TODO: optimise by passing a list to rabbit_fifo_index
-    Indexes = maps:fold(fun (_, ?INDEX_MSG(I, _), Acc0) when is_integer(I) ->
-                                rabbit_fifo_index:delete(I, Acc0);
-                            (_, _, Acc) ->
-                                Acc
-                        end, Indexes0, Discarded),
-    State = maps:fold(fun(_, Msg, Acc) ->
-                              add_bytes_settle(
-                                get_msg_header(Msg), Acc)
-                      end, State1, Discarded),
-    {State#?MODULE{messages_total = Tot - length(DiscardedMsgIds),
-                   ra_indexes = Indexes}, Effects}.
+    lists:foldl(fun (?INDEX_MSG(I, ?MSG(_,_)), Acc) when is_integer(I) ->
+                        rabbit_fifo_index:delete(I, Acc);
+                    (_, Acc) ->
+                        Acc
+                end, Indexes, Msgs).
 
 increase_credit(#consumer{lifetime = once,
                           credit = Credit}, _) ->
@@ -1464,10 +1671,9 @@ increase_credit(#consumer{credit = Current}, Credit) ->
 
 complete_and_checkout(#{index := IncomingRaftIdx} = Meta, MsgIds, ConsumerId,
                       #consumer{} = Con0,
-                      Effects0, State0) ->
-    {State1, Effects1} = complete(Meta, ConsumerId, MsgIds, Con0,
-                                  Effects0, State0),
-    {State, ok, Effects} = checkout(Meta, State0, State1, Effects1, false),
+                      Effects0, State0, Delete) ->
+    State1 = complete(Meta, ConsumerId, MsgIds, Con0, State0, Delete),
+    {State, ok, Effects} = checkout(Meta, State0, State1, Effects0, false),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
 dead_letter_effects(_Reason, _Discarded,
@@ -1475,12 +1681,14 @@ dead_letter_effects(_Reason, _Discarded,
                     Effects) ->
     Effects;
 dead_letter_effects(Reason, Discarded,
-                    #?MODULE{cfg = #cfg{dead_letter_handler = {Mod, Fun, Args}}},
+                    #?MODULE{cfg = #cfg{dead_letter_handler = {at_most_once, {Mod, Fun, Args}}}},
                     Effects) ->
     RaftIdxs = lists:filtermap(
                  fun (?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
                          {true, RaftIdx};
-                     (_) ->
+                     ({_PerMsgReason, ?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))}) when Reason =:= undefined ->
+                         {true, RaftIdx};
+                     (_IgnorePrefixMessage) ->
                          false
                  end, Discarded),
     [{log, RaftIdxs,
@@ -1492,7 +1700,12 @@ dead_letter_effects(Reason, Discarded,
                                       {true, {Reason, Msg}};
                                   (?INDEX_MSG(_, ?MSG(_Header, Msg))) ->
                                       {true, {Reason, Msg}};
-                                  (_) ->
+                                  ({PerMsgReason, ?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))}) when Reason =:= undefined ->
+                                      {enqueue, _, _, Msg} = maps:get(RaftIdx, Lookup),
+                                      {true, {PerMsgReason, Msg}};
+                                  ({PerMsgReason, ?INDEX_MSG(_, ?MSG(_Header, Msg))}) when Reason =:= undefined ->
+                                      {true, {PerMsgReason, Msg}};
+                                  (_IgnorePrefixMessage) ->
                                       false
                               end, Discarded),
               [{mod_call, Mod, Fun, Args ++ [DeadLetters]}]
@@ -1592,7 +1805,9 @@ get_header(Key, Header) when is_map(Header) ->
 return_one(Meta, MsgId, Msg0,
            #?MODULE{returns = Returns,
                     consumers = Consumers,
-                    cfg = #cfg{delivery_limit = DeliveryLimit}} = State0,
+                    dlx = DlxState0,
+                    cfg = #cfg{delivery_limit = DeliveryLimit,
+                               dead_letter_handler = DLH}} = State0,
            Effects0, ConsumerId) ->
     #consumer{checked_out = Checked} = Con0 = maps:get(ConsumerId, Consumers),
     Msg = update_msg_header(delivery_count, fun (C) -> C + 1 end, 1, Msg0),
@@ -1600,9 +1815,17 @@ return_one(Meta, MsgId, Msg0,
     case get_header(delivery_count, Header) of
         DeliveryCount when DeliveryCount > DeliveryLimit ->
             %% TODO: don't do for prefix msgs
-            Effects = dead_letter_effects(delivery_limit, [Msg],
-                                          State0, Effects0),
-            complete(Meta, ConsumerId, [MsgId], Con0, Effects, State0);
+            case DLH of
+                at_least_once ->
+                    DlxState = rabbit_fifo_dlx:discard(Msg, delivery_limit, DlxState0),
+                    State = complete(Meta, ConsumerId, [MsgId], Con0, State0#?MODULE{dlx = DlxState}, false),
+                    {State, Effects0};
+                _ ->
+                    Effects = dead_letter_effects(delivery_limit, [Msg],
+                                                  State0, Effects0),
+                    State = complete(Meta, ConsumerId, [MsgId], Con0, State0, true),
+                    {State, Effects}
+            end;
         _ ->
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked)},
 
@@ -1649,11 +1872,15 @@ return_all(Meta, #?MODULE{consumers = Cons} = State0, Effects0, ConsumerId,
 checkout(Meta, OldState, State, Effects) ->
     checkout(Meta, OldState, State, Effects, true).
 
-checkout(#{index := Index} = Meta, #?MODULE{cfg = #cfg{resource = QName}} = OldState,
+checkout(#{index := Index} = Meta,
+         #?MODULE{cfg = #cfg{resource = QName}} = OldState,
          State0, Effects0, HandleConsumerChanges) ->
-    {State1, _Result, Effects1} = checkout0(Meta, checkout_one(Meta, State0),
-                                            Effects0, #{}),
-    case evaluate_limit(Index, false, OldState, State1, Effects1) of
+    {#?MODULE{dlx = DlxState0} = State1, _Result, Effects1} = checkout0(Meta, checkout_one(Meta, State0, Effects0), #{}),
+    %%TODO For now we checkout the discards queue here. Move it to a better place
+    {DlxState1, DlxDeliveryEffects} = rabbit_fifo_dlx:checkout(DlxState0),
+    State2 = State1#?MODULE{dlx = DlxState1},
+    Effects2 = DlxDeliveryEffects ++ Effects1,
+    case evaluate_limit(Index, false, OldState, State2, Effects2) of
         {State, true, Effects} ->
             case maybe_notify_decorators(State, HandleConsumerChanges) of
                 {true, {MaxActivePriority, IsEmpty}} ->
@@ -1673,27 +1900,31 @@ checkout(#{index := Index} = Meta, #?MODULE{cfg = #cfg{resource = QName}} = OldS
     end.
 
 checkout0(Meta, {success, ConsumerId, MsgId,
-                 ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)), State},
-          Effects, SendAcc0) when is_integer(RaftIdx) ->
+                 ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)), State, Effects},
+          SendAcc0) when is_integer(RaftIdx) ->
     DelMsg = {RaftIdx, {MsgId, Header}},
     SendAcc = maps:update_with(ConsumerId,
-                           fun ({InMem, LogMsgs}) ->
-                                   {InMem, [DelMsg | LogMsgs]}
-                           end, {[], [DelMsg]}, SendAcc0),
-    checkout0(Meta, checkout_one(Meta, State), Effects, SendAcc);
+                               fun ({InMem, LogMsgs}) ->
+                                       {InMem, [DelMsg | LogMsgs]}
+                               end, {[], [DelMsg]}, SendAcc0),
+    checkout0(Meta, checkout_one(Meta, State, Effects), SendAcc);
 checkout0(Meta, {success, ConsumerId, MsgId,
-                 ?INDEX_MSG(Idx, ?MSG(Header, Msg)), State}, Effects,
+                 ?INDEX_MSG(Idx, ?MSG(Header, Msg)), State, Effects},
           SendAcc0) when is_integer(Idx) ->
     DelMsg = {MsgId, {Header, Msg}},
     SendAcc = maps:update_with(ConsumerId,
-                           fun ({InMem, LogMsgs}) ->
-                                   {[DelMsg | InMem], LogMsgs}
-                           end, {[DelMsg], []}, SendAcc0),
-    checkout0(Meta, checkout_one(Meta, State), Effects, SendAcc);
-checkout0(Meta, {success, _ConsumerId, _MsgId, ?TUPLE(_, _), State}, Effects,
+                               fun ({InMem, LogMsgs}) ->
+                                       {[DelMsg | InMem], LogMsgs}
+                               end, {[DelMsg], []}, SendAcc0),
+    checkout0(Meta, checkout_one(Meta, State, Effects), SendAcc);
+checkout0(Meta, {success, _ConsumerId, _MsgId, ?TUPLE(_, _), State, Effects},
           SendAcc) ->
-    checkout0(Meta, checkout_one(Meta, State), Effects, SendAcc);
-checkout0(_Meta, {Activity, State0}, Effects0, SendAcc) ->
+    %% Do not append delivery effect for prefix messages.
+    %% Prefix messages do not exist anymore, but they still go through the
+    %% normal checkout flow to derive correct consumer states
+    %% after recovery and will still be settled or discarded later on.
+    checkout0(Meta, checkout_one(Meta, State, Effects), SendAcc);
+checkout0(_Meta, {Activity, State0, Effects0}, SendAcc) ->
     Effects1 = case Activity of
                    nochange ->
                        append_delivery_effects(Effects0, SendAcc);
@@ -1844,9 +2075,12 @@ reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
                              {dequeue, {MsgId, {Header, Msg}}, Ready}}}]
      end}.
 
-checkout_one(Meta, #?MODULE{service_queue = SQ0,
-                            messages = Messages0,
-                            consumers = Cons0} = InitState) ->
+checkout_one(#{system_time := Ts} = Meta, InitState0, Effects0) ->
+    %% Before checking out any messsage to any consumer,
+    %% first remove all expired messages from the head of the queue.
+    {#?MODULE{service_queue = SQ0,
+              messages = Messages0,
+              consumers = Cons0} = InitState, Effects1} = expire_msgs(Ts, InitState0, Effects0),
     case priority_queue:out(SQ0) of
         {{value, ConsumerId}, SQ1}
           when is_map_key(ConsumerId, Cons0) ->
@@ -1859,11 +2093,11 @@ checkout_one(Meta, #?MODULE{service_queue = SQ0,
                             %% no credit but was still on queue
                             %% can happen when draining
                             %% recurse without consumer on queue
-                            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1});
+                            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1}, Effects1);
                         #consumer{status = cancelled} ->
-                            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1});
+                            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1}, Effects1);
                         #consumer{status = suspected_down} ->
-                            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1});
+                            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1}, Effects1);
                         #consumer{checked_out = Checked0,
                                   next_msg_id = Next,
                                   credit = Credit,
@@ -1881,26 +2115,100 @@ checkout_one(Meta, #?MODULE{service_queue = SQ0,
                                         true ->
                                             add_bytes_checkout(Header, State1);
                                         false ->
+                                            %% TODO do not subtract from memory here since
+                                            %% messages are still in memory when checked out
                                             subtract_in_memory_counts(
                                               Header, add_bytes_checkout(Header, State1))
                                     end,
-                            {success, ConsumerId, Next, ConsumerMsg, State};
+                            {success, ConsumerId, Next, ConsumerMsg, State, Effects1};
                         error ->
                             %% consumer did not exist but was queued, recurse
-                            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1})
+                            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1}, Effects1)
                     end;
                 empty ->
-                    {nochange, InitState}
+                    {nochange, InitState, Effects1}
             end;
         {{value, _ConsumerId}, SQ1} ->
             %% consumer did not exist but was queued, recurse
-            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1});
+            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1}, Effects1);
         {empty, _} ->
+            Effects = timer_effect(Ts, InitState, Effects1),
             case lqueue:len(Messages0) of
-                0 -> {nochange, InitState};
-                _ -> {inactive, InitState}
+                0 ->
+                    {nochange, InitState, Effects};
+                _ ->
+                    {inactive, InitState, Effects}
             end
     end.
+
+%% dequeue all expired messages
+expire_msgs(RaCmdTs, State0, Effects0) ->
+    case take_next_msg(State0) of
+        {?INDEX_MSG(Idx, ?MSG(#{expiry := Expiry} = Header, _) = Msg) = FullMsg, State1}
+          when RaCmdTs >= Expiry ->
+            #?MODULE{dlx = DlxState0,
+                     cfg = #cfg{dead_letter_handler = DLH},
+                     ra_indexes = Indexes0} = State2 = add_bytes_drop(Header, State1),
+            case DLH of
+                at_least_once ->
+                    DlxState = rabbit_fifo_dlx:discard(FullMsg, expired, DlxState0),
+                    State = State2#?MODULE{dlx = DlxState},
+                    expire_msgs(RaCmdTs, State, Effects0);
+                _ ->
+                    Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
+                    State3 = decr_total(State2),
+                    State4 = case Msg of
+                                 ?DISK_MSG(_) ->
+                                     State3;
+                                 _ ->
+                                     subtract_in_memory_counts(Header, State3)
+                             end,
+                    Effects = dead_letter_effects(expired, [FullMsg],
+                                                  State4, Effects0),
+                    State = State4#?MODULE{ra_indexes = Indexes},
+                    expire_msgs(RaCmdTs, State, Effects)
+            end;
+        {?PREFIX_MEM_MSG(#{expiry := Expiry} = Header) = Msg, State1}
+          when RaCmdTs >= Expiry ->
+            State2 = expire_prefix_msg(Msg, Header, State1),
+            expire_msgs(RaCmdTs, State2, Effects0);
+        {?DISK_MSG(#{expiry := Expiry} = Header) = Msg, State1}
+          when RaCmdTs >= Expiry ->
+            State2 = expire_prefix_msg(Msg, Header, State1),
+            expire_msgs(RaCmdTs, State2, Effects0);
+        _ ->
+            {State0, Effects0}
+    end.
+
+expire_prefix_msg(Msg, Header, State0) ->
+    #?MODULE{dlx = DlxState0,
+             cfg = #cfg{dead_letter_handler = DLH}} = State1 = add_bytes_drop(Header, State0),
+    case DLH of
+        at_least_once ->
+            DlxState = rabbit_fifo_dlx:discard(Msg, expired, DlxState0),
+            State1#?MODULE{dlx = DlxState};
+        _ ->
+            State2 = case Msg of
+                         ?DISK_MSG(_) ->
+                             State1;
+                         _ ->
+                             subtract_in_memory_counts(Header, State1)
+                     end,
+            decr_total(State2)
+    end.
+
+timer_effect(RaCmdTs, State, Effects) ->
+    T = case take_next_msg(State) of
+            {?INDEX_MSG(_, ?MSG(#{expiry := Expiry}, _)), _} when is_number(Expiry) ->
+                %% Next message contains 'expiry' header.
+                %% (Re)set timer so that mesage will be dropped or dead-lettered on time.
+                Expiry - RaCmdTs;
+            _ ->
+                %% Next message does not contain 'expiry' header.
+                %% Therefore, do not set timer or cancel timer if it was set.
+                infinity
+        end,
+    [{timer, expire_msgs, T} | Effects].
 
 update_or_remove_sub(_Meta, ConsumerId, #consumer{lifetime = auto,
                                                   credit = 0} = Con,
@@ -1996,21 +2304,22 @@ maybe_queue_consumer(ConsumerId, #consumer{credit = Credit} = Con,
 %% creates a dehydrated version of the current state to be cached and
 %% potentially used to for a snaphot at a later point
 dehydrate_state(#?MODULE{msg_bytes_in_memory = 0,
-                         cfg = #cfg{max_length = 0},
+                         cfg = #cfg{max_in_memory_length = 0},
                          consumers = Consumers} = State) ->
-    %% no messages are kept in memory, no need to
-    %% overly mutate the current state apart from removing indexes and cursors
+    % no messages are kept in memory, no need to
+    % overly mutate the current state apart from removing indexes and cursors
     State#?MODULE{
-                  ra_indexes = rabbit_fifo_index:empty(),
-                  consumers = maps:map(fun (_, C) ->
-                                               dehydrate_consumer(C)
-                                       end, Consumers),
-                  release_cursors = lqueue:new()};
+             ra_indexes = rabbit_fifo_index:empty(),
+             consumers = maps:map(fun (_, C) ->
+                                          dehydrate_consumer(C)
+                                  end, Consumers),
+             release_cursors = lqueue:new()};
 dehydrate_state(#?MODULE{messages = Messages,
                          consumers = Consumers,
                          returns = Returns,
                          prefix_msgs = {PRCnt, PrefRet0, PPCnt, PrefMsg0},
-                         waiting_consumers = Waiting0} = State) ->
+                         waiting_consumers = Waiting0,
+                         dlx = DlxState} = State) ->
     RCnt = lqueue:len(Returns),
     %% TODO: optimise this function as far as possible
     PrefRet1 = lists:foldr(fun (M, Acc) ->
@@ -2031,7 +2340,8 @@ dehydrate_state(#?MODULE{messages = Messages,
                   returns = lqueue:new(),
                   prefix_msgs = {PRCnt + RCnt, PrefRet,
                                  PPCnt + lqueue:len(Messages), PrefMsgs},
-                  waiting_consumers = Waiting}.
+                  waiting_consumers = Waiting,
+                  dlx = rabbit_fifo_dlx:dehydrate(DlxState)}.
 
 dehydrate_messages(Msgs0)  ->
     {OutRes, Msgs} = lqueue:out(Msgs0),
@@ -2053,7 +2363,8 @@ dehydrate_message(?PREFIX_MEM_MSG(_) = M) ->
 dehydrate_message(?DISK_MSG(_) = M) ->
     M;
 dehydrate_message(?INDEX_MSG(_Idx, ?DISK_MSG(_Header) = Msg)) ->
-    %% use disk msgs directly as prefix messages
+    %% Use disk msgs directly as prefix messages.
+    %% This avoids memory allocation since we do not convert.
     Msg;
 dehydrate_message(?INDEX_MSG(Idx, ?MSG(Header, _))) when is_integer(Idx) ->
     ?PREFIX_MEM_MSG(Header).
@@ -2062,11 +2373,13 @@ dehydrate_message(?INDEX_MSG(Idx, ?MSG(Header, _))) when is_integer(Idx) ->
 normalize(#?MODULE{ra_indexes = _Indexes,
                    returns = Returns,
                    messages = Messages,
-                   release_cursors = Cursors} = State) ->
+                   release_cursors = Cursors,
+                   dlx = DlxState} = State) ->
     State#?MODULE{
              returns = lqueue:from_list(lqueue:to_list(Returns)),
              messages = lqueue:from_list(lqueue:to_list(Messages)),
-             release_cursors = lqueue:from_list(lqueue:to_list(Cursors))}.
+             release_cursors = lqueue:from_list(lqueue:to_list(Cursors)),
+             dlx = rabbit_fifo_dlx:normalize(DlxState)}.
 
 is_over_limit(#?MODULE{cfg = #cfg{max_length = undefined,
                                   max_bytes = undefined}}) ->
@@ -2314,3 +2627,14 @@ smallest_raft_index(#?MODULE{cfg = _Cfg,
                     {undefined, State}
             end
     end.
+
+subtract_in_memory(Msgs, State) ->
+    lists:foldl(fun(?INDEX_MSG(_, ?DISK_MSG(_)), S) ->
+                        S;
+                   (?INDEX_MSG(_, ?MSG(H, _)), S) ->
+                        subtract_in_memory_counts(H, S);
+                   (?DISK_MSG(_), S) ->
+                        S;
+                   (?PREFIX_MEM_MSG(H), S) ->
+                        subtract_in_memory_counts(H, S)
+                end, State, Msgs).

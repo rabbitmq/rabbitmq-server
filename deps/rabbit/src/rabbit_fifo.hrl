@@ -2,16 +2,21 @@
 %% macros for memory optimised tuple structures
 -define(TUPLE(A, B), [A | B]).
 
--define(DISK_MSG_TAG, '$disk').
-% -define(PREFIX_DISK_MSG_TAG, '$prefix_disk').
--define(PREFIX_MEM_MSG_TAG, '$prefix_inmem').
+%% We want short atoms since their binary representations will get
+%% persisted in a snapshot for every message.
+%% '$d' stand for 'disk'.
+-define(DISK_MSG_TAG, '$d').
+%% '$m' stand for 'memory'.
+-define(PREFIX_MEM_MSG_TAG, '$m').
 
 -define(DISK_MSG(Header), [Header | ?DISK_MSG_TAG]).
 -define(MSG(Header, RawMsg), [Header | RawMsg]).
 -define(INDEX_MSG(Index, Msg), [Index | Msg]).
+-define(PREFIX_MEM_MSG(Header), [Header | ?PREFIX_MEM_MSG_TAG]).
+
+% -define(PREFIX_DISK_MSG_TAG, '$prefix_disk').
 % -define(PREFIX_DISK_MSG(Header), [?PREFIX_DISK_MSG_TAG | Header]).
 % -define(PREFIX_DISK_MSG(Header), ?DISK_MSG(Header)).
--define(PREFIX_MEM_MSG(Header), [?PREFIX_MEM_MSG_TAG | Header]).
 
 -type option(T) :: undefined | T.
 
@@ -32,11 +37,14 @@
 %% same process
 
 -type msg_header() :: msg_size() |
-                      #{size := msg_size(),
-                        delivery_count => non_neg_integer()}.
+#{size := msg_size(),
+  delivery_count => non_neg_integer(),
+  expiry => milliseconds()}.
 %% The message header:
 %% delivery_count: the number of unsuccessful delivery attempts.
 %%                 A non-zero value indicates a previous attempt.
+%% expiry: Epoch time in ms when a message expires. Set during enqueue.
+%%         Value is determined by per-queue or per-message message TTL.
 %% If it only contains the size it can be condensed to an integer only
 
 -type msg() :: ?MSG(msg_header(), raw_msg()) |
@@ -122,7 +130,7 @@
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
-         pending = [] :: [{msg_seqno(), ra:index(), raw_msg()}],
+         pending = [] :: [{msg_seqno(), ra:index(), milliseconds(), raw_msg()}],
          status = up :: up |
                         suspected_down,
          %% it is useful to have a record of when this was blocked
@@ -137,7 +145,7 @@
         {name :: atom(),
          resource :: rabbit_types:r('queue'),
          release_cursor_interval :: option({non_neg_integer(), non_neg_integer()}),
-         dead_letter_handler :: option(applied_mfa()),
+         dead_letter_handler :: option({at_most_once, applied_mfa()} | at_least_once),
          become_leader_handler :: option(applied_mfa()),
          overflow_strategy = drop_head :: drop_head | reject_publish,
          max_length :: option(non_neg_integer()),
@@ -149,6 +157,7 @@
          max_in_memory_length :: option(non_neg_integer()),
          max_in_memory_bytes :: option(non_neg_integer()),
          expires :: undefined | milliseconds(),
+         msg_ttl :: undefined | milliseconds(),
          unused_1,
          unused_2
         }).
@@ -166,6 +175,7 @@
          % queue of returned msg_in_ids - when checking out it picks from
          returns = lqueue:new() :: lqueue:lqueue(term()),
          % a counter of enqueues - used to trigger shadow copy points
+         % reset to 0 when release_cursor gets stored
          enqueue_count = 0 :: non_neg_integer(),
          % a map containing all the live processes that have ever enqueued
          % a message to this queue as well as a cached value of the smallest
@@ -177,11 +187,19 @@
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
+         %% A release cursor is essentially a snapshot without message bodies
+         %% (aka. "dehydrated state") taken at time T in order to truncate
+         %% the log at some point in the future when all messages that were enqueued
+         %% up to time T have been removed (e.g. consumed, dead-lettered, or dropped).
+         %% This concept enables snapshots to not contain any message bodies.
+         %% Advantage: Smaller snapshots are sent between Ra nodes.
+         %% Working assumption: Messages are consumed in a FIFO-ish order because
+         %% the log is truncated only until the oldest message.
          release_cursors = lqueue:new() :: lqueue:lqueue({release_cursor,
                                                           ra:index(), #rabbit_fifo{}}),
          % consumers need to reflect consumer state at time of snapshot
          % needs to be part of snapshot
-         consumers = #{} :: #{consumer_id() => #consumer{}},
+         consumers = #{} :: #{consumer_id() => consumer()},
          % consumers that require further service are queued here
          % needs to be part of snapshot
          service_queue = priority_queue:new() :: priority_queue:q(),
@@ -194,7 +212,10 @@
          %% overflow calculations).
          %% This is done so that consumers are still served in a deterministic
          %% order on recovery.
+         %% TODO Remove this field and store prefix messages in-place. This will
+         %% simplify the checkout logic.
          prefix_msgs = {0, [], 0, []} :: prefix_msgs(),
+         dlx = rabbit_fifo_dlx:init() :: rabbit_fifo_dlx:state(),
          msg_bytes_enqueue = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer(),
          %% waiting consumers, one is picked active consumer is cancelled or dies
@@ -209,7 +230,7 @@
 
 -type config() :: #{name := atom(),
                     queue_resource := rabbit_types:r('queue'),
-                    dead_letter_handler => applied_mfa(),
+                    dead_letter_handler => option({at_most_once, applied_mfa()} | at_least_once),
                     become_leader_handler => applied_mfa(),
                     release_cursor_interval => non_neg_integer(),
                     max_length => non_neg_integer(),
@@ -220,5 +241,6 @@
                     single_active_consumer_on => boolean(),
                     delivery_limit => non_neg_integer(),
                     expires => non_neg_integer(),
+                    msg_ttl => non_neg_integer(),
                     created => non_neg_integer()
                    }.
