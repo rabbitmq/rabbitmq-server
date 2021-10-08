@@ -130,6 +130,8 @@
               state/0,
               config/0]).
 
+%% This function is never called since only rabbit_fifo_v0:init/1 is called.
+%% See https://github.com/rabbitmq/ra/blob/e0d1e6315a45f5d3c19875d66f9d7bfaf83a46e3/src/ra_machine.erl#L258-L265
 -spec init(config()) -> state().
 init(#{name := Name,
        queue_resource := Resource} = Conf) ->

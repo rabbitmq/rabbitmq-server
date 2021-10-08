@@ -7,7 +7,9 @@
 
 -module(rabbit_dead_letter).
 
--export([publish/5]).
+-export([publish/5,
+         make_msg/5,
+         detect_cycles/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -39,7 +41,7 @@ make_msg(Msg = #basic_message{content       = Content,
             undefined -> {RoutingKeys, fun (H) -> H end};
             _         -> {[RK], fun (H) -> lists:keydelete(<<"CC">>, 1, H) end}
         end,
-    ReasonBin = list_to_binary(atom_to_list(Reason)),
+    ReasonBin = atom_to_binary(Reason),
     TimeSec = os:system_time(seconds),
     PerMsgTTL = per_msg_ttl_header(Content#content.properties),
     HeadersFun2 =

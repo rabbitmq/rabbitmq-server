@@ -112,7 +112,7 @@
 -record(basic_message,
         {exchange_name,     %% The exchange where the message was received
          routing_keys = [], %% Routing keys used during publish
-         content,           %% The message content
+         content,           %% The message #content record
          id,                %% A `rabbit_guid:gen()` generated id
          is_persistent}).   %% Whether the message was published as persistent
 

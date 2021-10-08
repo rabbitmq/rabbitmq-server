@@ -71,6 +71,7 @@
 
 -include_lib("stdlib/include/qlc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqqueue.hrl").
 
 -type msg_id() :: non_neg_integer().
@@ -94,7 +95,9 @@
          single_active_consumer_pid,
          single_active_consumer_ctag,
          messages_ram,
-         message_bytes_ram
+         message_bytes_ram,
+         messages_dlx,
+         message_bytes_dlx
         ]).
 
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, pid, messages, messages_ready,
@@ -227,18 +230,17 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     %% take the minimum value of the policy and the queue arg if present
     MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
-    %% prefer the policy defined strategy if available
-    Overflow = args_policy_lookup(<<"overflow">>, fun (A, _B) -> A end , Q),
+    OverflowBin = args_policy_lookup(<<"overflow">>, fun policyHasPrecedence/2, Q),
+    Overflow = overflow(OverflowBin, drop_head, QName),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
     MaxMemoryLength = args_policy_lookup(<<"max-in-memory-length">>, fun min/2, Q),
     MaxMemoryBytes = args_policy_lookup(<<"max-in-memory-bytes">>, fun min/2, Q),
     DeliveryLimit = args_policy_lookup(<<"delivery-limit">>, fun min/2, Q),
-    Expires = args_policy_lookup(<<"expires">>,
-                                 fun (A, _B) -> A end,
-                                 Q),
+    Expires = args_policy_lookup(<<"expires">>, fun policyHasPrecedence/2, Q),
+    MsgTTL = args_policy_lookup(<<"message-ttl">>, fun min/2, Q),
     #{name => Name,
       queue_resource => QName,
-      dead_letter_handler => dlx_mfa(Q),
+      dead_letter_handler => dead_letter_handler(Q, Overflow),
       become_leader_handler => {?MODULE, become_leader, [QName]},
       max_length => MaxLength,
       max_bytes => MaxBytes,
@@ -246,10 +248,16 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       max_in_memory_bytes => MaxMemoryBytes,
       single_active_consumer_on => single_active_consumer_on(Q),
       delivery_limit => DeliveryLimit,
-      overflow_strategy => overflow(Overflow, drop_head, QName),
+      overflow_strategy => Overflow,
       created => erlang:system_time(millisecond),
-      expires => Expires
+      expires => Expires,
+      msg_ttl => MsgTTL
      }.
+
+policyHasPrecedence(Policy, _QueueArg) ->
+    Policy.
+queueArgHasPrecedence(_Policy, QueueArg) ->
+    QueueArg.
 
 single_active_consumer_on(Q) ->
     QArguments = amqqueue:get_arguments(Q),
@@ -293,7 +301,7 @@ become_leader(QName, Name) ->
           end,
     %% as this function is called synchronously when a ra node becomes leader
     %% we need to ensure there is no chance of blocking as else the ra node
-    %% may not be able to establish it's leadership
+    %% may not be able to establish its leadership
     spawn(fun() ->
                   rabbit_misc:execute_mnesia_transaction(
                     fun() ->
@@ -377,19 +385,20 @@ filter_quorum_critical(Queues, ReplicaStates) ->
 capabilities() ->
     #{unsupported_policies =>
           [ %% Classic policies
-            <<"message-ttl">>, <<"max-priority">>, <<"queue-mode">>,
+            <<"max-priority">>, <<"queue-mode">>,
             <<"single-active-consumer">>, <<"ha-mode">>, <<"ha-params">>,
             <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
             <<"queue-master-locator">>,
             %% Stream policies
             <<"max-age">>, <<"stream-max-segment-size-bytes">>,
             <<"queue-leader-locator">>, <<"initial-cluster-size">>],
-      queue_arguments => [<<"x-expires">>, <<"x-dead-letter-exchange">>,
-                          <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
-                          <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
-                          <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
-                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>],
+          queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
+                              <<"x-dead-letter-strategy">>, <<"x-expires">>, <<"x-max-length">>,
+                              <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
+                              <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
+                              <<"x-single-active-consumer">>, <<"x-queue-type">>,
+                              <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
+                              <<"x-message-ttl">>],
       consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
       server_named => false}.
 
@@ -410,7 +419,7 @@ spawn_notify_decorators(QName, Fun, Args) ->
           end).
 
 handle_tick(QName,
-            {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack},
+            {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack, MsgBytesDiscard},
             Nodes) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
@@ -429,8 +438,8 @@ handle_tick(QName,
                                {consumer_utilisation, Util},
                                {message_bytes_ready, MsgBytesReady},
                                {message_bytes_unacknowledged, MsgBytesUnack},
-                               {message_bytes, MsgBytesReady + MsgBytesUnack},
-                               {message_bytes_persistent, MsgBytesReady + MsgBytesUnack},
+                               {message_bytes, MsgBytesReady + MsgBytesUnack + MsgBytesDiscard},
+                               {message_bytes_persistent, MsgBytesReady + MsgBytesUnack + MsgBytesDiscard},
                                {messages_persistent, M}
 
                                | infos(QName, ?STATISTICS_KEYS -- [consumers])],
@@ -839,8 +848,11 @@ deliver(true, Delivery, QState0) ->
     rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
                                Delivery#delivery.message, QState0).
 
-deliver(QSs, #delivery{confirm = Confirm} = Delivery0) ->
-    Delivery = clean_delivery(Delivery0),
+deliver(QSs, #delivery{message = #basic_message{content = Content0} = Msg,
+                       confirm = Confirm} = Delivery0) ->
+    %% TODO: we could also consider clearing out the message id here
+    Content = prepare_content(Content0),
+    Delivery = Delivery0#delivery{message = Msg#basic_message{content = Content}},
     lists:foldl(
       fun({Q, stateless}, {Qs, Actions}) ->
               QRef = amqqueue:get_pid(Q),
@@ -1253,20 +1265,46 @@ reclaim_memory(Vhost, QueueName) ->
     ra_log_wal:force_roll_over({?RA_WAL_NAME, Node}).
 
 %%----------------------------------------------------------------------------
-dlx_mfa(Q) ->
-    DLX = init_dlx(args_policy_lookup(<<"dead-letter-exchange">>,
-                                      fun res_arg/2, Q), Q),
-    DLXRKey = args_policy_lookup(<<"dead-letter-routing-key">>,
-                                 fun res_arg/2, Q),
-    {?MODULE, dead_letter_publish, [DLX, DLXRKey, amqqueue:get_name(Q)]}.
-
-init_dlx(undefined, _Q) ->
-    undefined;
-init_dlx(DLX, Q) when ?is_amqqueue(Q) ->
+dead_letter_handler(Q, Overflow) ->
+    %% Queue arg continues to take precedence to not break existing configurations
+    %% for queues upgraded from <v3.10 to >=v3.10
+    Exchange = args_policy_lookup(<<"dead-letter-exchange">>, fun queueArgHasPrecedence/2, Q),
+    RoutingKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun queueArgHasPrecedence/2, Q),
+    %% Policy takes precedence because it's a new key introduced in v3.10 and we want
+    %% users to use policies instead of queue args allowing dynamic reconfiguration.
+    %% TODO change to queueArgHasPrecedence for dead-letter-strategy
+    Strategy = args_policy_lookup(<<"dead-letter-strategy">>, fun policyHasPrecedence/2, Q),
     QName = amqqueue:get_name(Q),
-    rabbit_misc:r(QName, exchange, DLX).
+    dlh(Exchange, RoutingKey, Strategy, Overflow, QName).
 
-res_arg(_PolVal, ArgVal) -> ArgVal.
+dlh(undefined, undefined, undefined, _, _) ->
+    undefined;
+dlh(undefined, RoutingKey, undefined, _, QName) ->
+    rabbit_log:warning("Disabling dead-lettering for ~s despite configured dead-letter-routing-key '~s' "
+                       "because dead-letter-exchange is not configured.",
+                       [rabbit_misc:rs(QName), RoutingKey]),
+    undefined;
+dlh(undefined, _, Strategy, _, QName) ->
+    rabbit_log:warning("Disabling dead-lettering for ~s despite configured dead-letter-strategy '~s' "
+                       "because dead-letter-exchange is not configured.",
+                       [rabbit_misc:rs(QName), Strategy]),
+    undefined;
+dlh(_, _, <<"at-least-once">>, reject_publish, _) ->
+    at_least_once;
+dlh(Exchange, RoutingKey, <<"at-least-once">>, drop_head, QName) ->
+    rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~s "
+                       "because configured dead-letter-strategy at-least-once is incompatible with "
+                       "effective overflow strategy drop-head. To enable dead-letter-strategy "
+                       "at-least-once, set overflow strategy to reject-publish.",
+                       [rabbit_misc:rs(QName)]),
+    dlh_at_most_once(Exchange, RoutingKey, QName);
+dlh(Exchange, RoutingKey, _, _, QName) ->
+    dlh_at_most_once(Exchange, RoutingKey, QName).
+
+dlh_at_most_once(Exchange, RoutingKey, QName) ->
+    DLX = rabbit_misc:r(QName, exchange, Exchange),
+    MFA = {?MODULE, dead_letter_publish, [DLX, RoutingKey, QName]},
+    {at_most_once, MFA}.
 
 dead_letter_publish(undefined, _, _, _) ->
     ok;
@@ -1438,6 +1476,28 @@ i(message_bytes_ram, Q) when ?is_amqqueue(Q) ->
         {timeout, _} ->
             0
     end;
+i(messages_dlx, Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_stat_dlx/1) of
+        {ok, {_, {Num, _}}, _} ->
+            Num;
+        {error, _} ->
+            0;
+        {timeout, _} ->
+            0
+    end;
+i(message_bytes_dlx, Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    case ra:local_query(QPid,
+                        fun rabbit_fifo:query_stat_dlx/1) of
+        {ok, {_, {_, Bytes}}, _} ->
+            Bytes;
+        {error, _} ->
+            0;
+        {timeout, _} ->
+            0
+    end;
 i(_K, _Q) -> ''.
 
 open_files(Name) ->
@@ -1582,7 +1642,7 @@ overflow(undefined, Def, _QName) -> Def;
 overflow(<<"reject-publish">>, _Def, _QName) -> reject_publish;
 overflow(<<"drop-head">>, _Def, _QName) -> drop_head;
 overflow(<<"reject-publish-dlx">> = V, Def, QName) ->
-    rabbit_log:warning("Invalid overflow strategy ~p for quorum queue: ~p",
+    rabbit_log:warning("Invalid overflow strategy ~p for quorum queue: ~s",
                        [V, rabbit_misc:rs(QName)]),
     Def.
 
@@ -1626,19 +1686,15 @@ notify_decorators(QName, F, A) ->
     end.
 
 %% remove any data that a quorum queue doesn't need
-clean_delivery(#delivery{message =
-                         #basic_message{content = Content0} = Msg} = Delivery) ->
-    Content = case Content0 of
-                  #content{properties = none} ->
-                      Content0;
-                  #content{protocol = none} ->
-                      Content0;
-                  #content{properties = Props,
-                           protocol = Proto} ->
-                      Content0#content{properties = none,
-                                       properties_bin = Proto:encode_properties(Props)}
-              end,
-
-    %% TODO: we could also consider clearing out the message id here
-    Delivery#delivery{message = Msg#basic_message{content = Content}}.
-
+prepare_content(#content{properties = none} = Content) ->
+    Content;
+prepare_content(#content{protocol = none} = Content) ->
+    Content;
+prepare_content(#content{properties = #'P_basic'{expiration = undefined} = Props,
+                         protocol = Proto} = Content) ->
+    Content#content{properties = none,
+                    properties_bin = Proto:encode_properties(Props)};
+prepare_content(Content) ->
+    %% expiration is set. Therefore, leave properties decoded so that
+    %% rabbit_fifo can directly parse it without having to decode again.
+    Content.
