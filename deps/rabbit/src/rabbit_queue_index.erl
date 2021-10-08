@@ -335,7 +335,8 @@ delete_and_terminate(State) ->
     ok = rabbit_file:recursive_delete([Dir]),
     State1.
 
-pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint,
+%% @todo IsDelivered was removed... Should it be?
+pre_publish(MsgOrId, SeqId, _Location, MsgProps, IsPersistent, JournalSizeHint,
             State = #qistate{pre_publish_cache = PPC,
                              delivered_cache   = DC}) ->
     State1 = maybe_needs_confirming(MsgProps, MsgOrId, State),
@@ -350,13 +351,14 @@ pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint
            SeqId:?SEQ_BITS, Bin/binary,
            (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin] | PPC],
 
-    DC1 =
-        case IsDelivered of
-            true ->
-                [SeqId | DC];
-            false ->
-                DC
-        end,
+    DC1 = DC,
+%    DC1 =
+%        case IsDelivered of
+%            true ->
+%                [SeqId | DC];
+%            false ->
+%                DC
+%        end,
 
     State2 = add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1),
     maybe_flush_pre_publish_cache(
@@ -392,11 +394,11 @@ flush_delivered_cache(State = #qistate{delivered_cache = DC}) ->
     State1 = deliver(lists:reverse(DC), State),
     State1#qistate{delivered_cache = []}.
 
--spec publish(rabbit_types:msg_id(), rabbit_variable_queue:seq_id(),
-              rabbit_types:message_properties(), boolean(), boolean(),
+-spec publish(rabbit_types:msg_id(), rabbit_variable_queue:seq_id(), '_',
+              rabbit_types:message_properties(), boolean(),
               non_neg_integer(), qistate()) -> qistate().
 
-publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint, State) ->
+publish(MsgOrId, SeqId, _Location, MsgProps, IsPersistent, JournalSizeHint, State) ->
     {JournalHdl, State1} =
         get_journal_handle(
           maybe_needs_confirming(MsgProps, MsgOrId, State)),
@@ -409,13 +411,9 @@ publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint, St
                            end):?JPREFIX_BITS,
                           SeqId:?SEQ_BITS, Bin/binary,
                           (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin]),
-    State2 = maybe_flush_journal(
+    maybe_flush_journal(
       JournalSizeHint,
-      add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1)),
-    case IsDelivered of
-        true -> deliver([SeqId], State2);
-        false -> State2
-    end.
+      add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1)).
 
 maybe_needs_confirming(MsgProps, MsgOrId,
         State = #qistate{unconfirmed     = UC,
@@ -438,10 +436,10 @@ maybe_needs_confirming(MsgProps, MsgOrId,
 deliver(SeqIds, State) ->
     deliver_or_ack(del, SeqIds, State).
 
--spec ack([rabbit_variable_queue:seq_id()], qistate()) -> qistate().
+-spec ack([rabbit_variable_queue:seq_id()], qistate()) -> {[], qistate()}.
 
 ack(SeqIds, State) ->
-    deliver_or_ack(ack, SeqIds, State).
+    {[], deliver_or_ack(ack, SeqIds, State)}.
 
 %% This is called when there are outstanding confirms or when the
 %% queue is idle and the journal needs syncing (see needs_sync/1).
@@ -1112,12 +1110,12 @@ read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
                      {Messages, Segments}, Dir) ->
     Segment = segment_find_or_new(Seg, Dir, Segments),
     {segment_entries_foldr(
-       fun (RelSeq, {{MsgOrId, MsgProps, IsPersistent}, IsDelivered, no_ack},
+       fun (RelSeq, {{MsgOrId, MsgProps, IsPersistent}, _IsDelivered, no_ack},
             Acc)
              when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
                   (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
-               [{MsgOrId, reconstruct_seq_id(StartSeg, RelSeq), MsgProps,
-                 IsPersistent, IsDelivered == del} | Acc];
+               [{MsgOrId, reconstruct_seq_id(StartSeg, RelSeq), ?MODULE, MsgProps,
+                 IsPersistent} | Acc]; %% @todo , IsDelivered == del
            (_RelSeq, _Value, Acc) ->
                Acc
        end, Messages, Segment),
