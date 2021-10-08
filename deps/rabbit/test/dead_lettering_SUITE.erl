@@ -93,7 +93,9 @@ init_per_group(quorum_queue, Config) ->
         ok ->
             rabbit_ct_helpers:set_config(
               Config,
-              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                             %%TODO add at-least-once tests
+                             {<<"x-dead-letter-strategy">>, longstr, <<"at-most-once">>}]},
                {queue_durable, true}]);
         Skip ->
             Skip
@@ -708,7 +710,9 @@ dead_letter_policy(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     QName = ?config(queue_name, Config),
     DLXQName = ?config(queue_name_dlx, Config),
-    Args = ?config(queue_args, Config),
+    Args0 = ?config(queue_args, Config),
+    %% declaring a quorum queue with x-dead-letter-strategy without defining a DLX will fail
+    Args = proplists:delete(<<"x-dead-letter-strategy">>, Args0),
     Durable = ?config(queue_durable, Config),
     DLXExchange = ?config(dlx_exchange, Config),
 
