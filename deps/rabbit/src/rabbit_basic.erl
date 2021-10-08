@@ -12,7 +12,8 @@
 -export([publish/4, publish/5, publish/1,
          message/3, message/4, properties/1, prepend_table_header/3,
          extract_headers/1, extract_timestamp/1, map_headers/2, delivery/4,
-         header_routes/1, parse_expiration/1, header/2, header/3]).
+         header_routes/1, parse_expiration/1, header/2, header/3,
+         is_message_persistent/1]).
 -export([build_content/2, from_content/1, msg_size/1,
          maybe_gc_large_msg/1, maybe_gc_large_msg/2]).
 -export([add_header/4,

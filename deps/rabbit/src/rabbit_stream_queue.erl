@@ -957,7 +957,9 @@ capabilities() ->
             <<"single-active-consumer">>, <<"delivery-limit">>,
             <<"ha-mode">>, <<"ha-params">>, <<"ha-sync-mode">>,
             <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
-            <<"queue-master-locator">>],
+            <<"queue-master-locator">>,
+            %% Quorum policies
+            <<"dead-letter-strategy">>],
       queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
                           <<"x-max-length">>, <<"x-max-length-bytes">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
