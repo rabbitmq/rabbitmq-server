@@ -785,6 +785,7 @@ declare_args() ->
      {<<"x-max-priority">>,            fun check_max_priority_arg/2},
      {<<"x-overflow">>,                fun check_overflow/2},
      {<<"x-queue-mode">>,              fun check_queue_mode/2},
+     {<<"x-queue-version">>,           fun check_queue_version/2},
      {<<"x-single-active-consumer">>,  fun check_single_active_consumer_arg/2},
      {<<"x-queue-type">>,              fun check_queue_type/2},
      {<<"x-quorum-initial-group-size">>,     fun check_initial_cluster_size_arg/2},
@@ -1000,6 +1001,21 @@ check_queue_mode(Val, _Args) when is_binary(Val) ->
     end;
 check_queue_mode(_Val, _Args) ->
     {error, invalid_queue_mode}.
+
+check_queue_version({Type, Val}, Args) ->
+    case check_non_neg_int_arg({Type, Val}, Args) of
+        ok when Val == 1 -> ok;
+        ok when Val == 2 -> ok;
+        ok               -> {error, rabbit_misc:format("unsupported queue version '~b'", [Val])};
+        Error            -> Error
+    end;
+check_queue_version(Val, Args) ->
+    case check_non_neg_int_arg(Val, Args) of
+        ok when Val == 1 -> ok;
+        ok when Val == 2 -> ok;
+        ok               -> {error, rabbit_misc:format("unsupported queue version '~b'", [Val])};
+        Error            -> Error
+    end.
 
 -define(KNOWN_QUEUE_TYPES, [<<"classic">>, <<"quorum">>, <<"stream">>]).
 check_queue_type({longstr, Val}, _Args) ->
