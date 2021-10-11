@@ -89,6 +89,14 @@ get_config_state() ->
 set_default_config() ->
     ?LOG_DEBUG("Setting default config",
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    OsirisConfig =
+        case osiris_util:get_replication_configuration_from_tls_dist(
+                fun osiris_log/3) of
+            [] ->
+                [];
+            OsirisTlsReplicationConfig ->
+                [{osiris, OsirisTlsReplicationConfig}]
+        end,
     Config = [
               {ra,
                [
@@ -114,8 +122,19 @@ set_default_config() ->
                 {heap_word_limit, 0},
                 {busy_port, false},
                 {busy_dist_port, true}]}
+                | OsirisConfig
              ],
     apply_erlang_term_based_config(Config).
+
+osiris_log(debug, Fmt, Args) ->
+    ?LOG_DEBUG(Fmt, Args,
+        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+osiris_log(warn, Fmt, Args) ->
+    ?LOG_WARNING(Fmt, Args,
+        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+osiris_log(_, Fmt, Args) ->
+    ?LOG_INFO(Fmt, Args,
+        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}).
 
 find_actual_main_config_file(#{main_config_file := File}) ->
     case filelib:is_regular(File) of
@@ -401,10 +420,11 @@ apply_app_env_vars(_, []) ->
     ok.
 
 log_app_env_var(password = Var, _) ->
-    ?LOG_DEBUG("    - ~s = ~p", [Var, "********"],
+    ?LOG_DEBUG("    - ~s = ********", [Var],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
 log_app_env_var(Var, Value) when is_list(Value) ->
-    % to redact sensitive entries, e.g. {password,"********"} for stream replication over TLS
+    %% To redact sensitive entries,
+    %% e.g. {password,"********"} for stream replication over TLS
     Redacted = redact_env_var(Value),
     ?LOG_DEBUG("    - ~s = ~p", [Var, Redacted],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
@@ -418,11 +438,11 @@ redact_env_var(Value) ->
     Value.
 
 redact_env_var([], Acc) ->
-    Acc;
-redact_env_var([{password, _V} | T], Acc) ->
-    redact_env_var(T, Acc ++ [{password, "********"}]);
-redact_env_var([H | T], Acc) ->
-    redact_env_var(T, Acc ++ [H]).
+    lists:reverse(Acc);
+redact_env_var([{password, _Value} | Rest], Acc) ->
+    redact_env_var(Rest, Acc ++ [{password, "********"}]);
+redact_env_var([AppVar | Rest], Acc) ->
+    redact_env_var(Rest, [AppVar | Acc]).
 
 set_credentials_obfuscation_secret() ->
     ?LOG_DEBUG(
