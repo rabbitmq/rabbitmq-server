@@ -68,6 +68,14 @@ groups() ->
         ]}
     ].
 
+group(backing_queue_tests) ->
+    [
+      %% Several tests based on lazy queues may take more than 30 minutes.
+      {timetrap, {hours, 1}}
+    ];
+group(_) ->
+    [].
+
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
@@ -509,14 +517,13 @@ test_msg_store_client_delete_and_terminate() ->
 %% -------------------------------------------------------------------
 
 setup_backing_queue_test_group(Config) ->
-    {ok, FileSizeLimit} =
-        application:get_env(rabbit, msg_store_file_size_limit),
-    application:set_env(rabbit, msg_store_file_size_limit, 512),
-    application:set_env(rabbit, msg_store_file_size_limit,
-                        FileSizeLimit),
+    {ok, MaxJournal} =
+        application:get_env(rabbit, queue_index_max_journal_entries),
+    application:set_env(rabbit, queue_index_max_journal_entries, 128),
     {ok, Bytes} =
         application:get_env(rabbit, queue_index_embed_msgs_below),
     rabbit_ct_helpers:set_config(Config, [
+        {rmq_queue_index_max_journal_entries, MaxJournal},
         {rmq_queue_index_embed_msgs_below, Bytes}
       ]).
 
@@ -594,25 +601,33 @@ bq_queue_index1(_Config) ->
 
     %% These next bits are just to hit the auto deletion of segment files.
     %% First, partials:
-    %% a) partial pub+ack, then move to new segment
+    %% a) partial pub+del+ack, then move to new segment
     with_empty_test_queue(
       fun (Qi0, _QName) ->
               {Qi1, _SeqIdsMsgIdsC} = queue_index_publish(SeqIdsC,
                                                           false, Qi0),
-              {_DeletedSegments, Qi3} = IndexMod:ack(SeqIdsC, Qi1),
+              Qi2 = case IndexMod of
+                  rabbit_queue_index -> IndexMod:deliver(SeqIdsC, Qi1);
+                  _ -> Qi1
+              end,
+              {_DeletedSegments, Qi3} = IndexMod:ack(SeqIdsC, Qi2),
               Qi4 = IndexMod:flush(Qi3),
               {Qi5, _SeqIdsMsgIdsC1} = queue_index_publish([SegmentSize],
                                                            false, Qi4),
               Qi5
       end),
 
-    %% b) partial pub, then move to new segment, then ack all in old segment
+    %% b) partial pub+del, then move to new segment, then ack all in old segment
     with_empty_test_queue(
       fun (Qi0, _QName) ->
               {Qi1, _SeqIdsMsgIdsC2} = queue_index_publish(SeqIdsC,
                                                            false, Qi0),
+              Qi2 = case IndexMod of
+                  rabbit_queue_index -> IndexMod:deliver(SeqIdsC, Qi1);
+                  _ -> Qi1
+              end,
               {Qi3, _SeqIdsMsgIdsC3} = queue_index_publish([SegmentSize],
-                                                           false, Qi1),
+                                                           false, Qi2),
               {_DeletedSegments, Qi4} = IndexMod:ack(SeqIdsC, Qi3),
               IndexMod:flush(Qi4)
       end),
@@ -622,12 +637,17 @@ bq_queue_index1(_Config) ->
       fun (Qi0, _QName) ->
               {Qi1, _SeqIdsMsgIdsD} = queue_index_publish(SeqIdsD,
                                                           false, Qi0),
-              {_DeletedSegments, Qi3} = IndexMod:ack(SeqIdsD, Qi1),
+              Qi2 = case IndexMod of
+                  rabbit_queue_index -> IndexMod:deliver(SeqIdsD, Qi1);
+                  _ -> Qi1
+              end,
+              {_DeletedSegments, Qi3} = IndexMod:ack(SeqIdsD, Qi2),
               IndexMod:flush(Qi3)
       end),
 
     %% d) get messages in all states to a segment, then flush, then do
-    %% the same again, don't flush and read.
+    %% the same again, don't flush and read. CQ v1: this will hit all
+    %% possibilities in combining the segment with the journal.
     with_empty_test_queue(
       fun (Qi0, _QName) ->
               {Qi1, [Seven,Five,Four|_]} = queue_index_publish([0,1,2,4,5,7],
@@ -654,7 +674,8 @@ bq_queue_index1(_Config) ->
               Qi10
       end),
 
-    %% e) as for (d), but use terminate instead of read.
+    %% e) as for (d), but use terminate instead of read, which (CQ v1) will
+    %% exercise journal_minus_segment, not segment_plus_journal.
     with_empty_test_queue(
       fun (Qi0, QName) ->
               {Qi1, _SeqIdsMsgIdsE} = queue_index_publish([0,1,2,4,5,7],
