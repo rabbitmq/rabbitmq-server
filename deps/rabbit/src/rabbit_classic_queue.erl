@@ -299,9 +299,9 @@ settlement_action(Type, QRef, MsgSeqs, Acc) ->
 deliver(Qs0, #delivery{flow = Flow,
                        msg_seq_no = MsgNo,
                        message = #basic_message{exchange_name = _Ex},
-                       confirm = _Confirm} = Delivery) ->
+                       confirm = Confirm} = Delivery) ->
     %% TODO: record master and slaves for confirm processing
-    {MPids, SPids, Qs, Actions} = qpids(Qs0, MsgNo),
+    {MPids, SPids, Qs, Actions} = qpids(Qs0, Confirm, MsgNo),
     QPids = MPids ++ SPids,
     case Flow of
         %% Here we are tracking messages sent by the rabbit_channel
@@ -361,7 +361,7 @@ purge(Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
     delegate:invoke(QPid, {gen_server2, call, [purge, infinity]}).
 
-qpids(Qs, MsgNo) ->
+qpids(Qs, Confirm, MsgNo) ->
     lists:foldl(
       fun ({Q, S0}, {MPidAcc, SPidAcc, Qs0, Actions0}) ->
               QPid = amqqueue:get_pid(Q),
@@ -369,14 +369,14 @@ qpids(Qs, MsgNo) ->
               QRef = amqqueue:get_name(Q),
               Actions = [{monitor, QPid, QRef}
                          | [{monitor, P, QRef} || P <- SPids]] ++ Actions0,
-              %% confirm record only if MsgNo isn't undefined
+              %% confirm record only if necessary
               S = case S0 of
                       #?STATE{unconfirmed = U0} ->
                           Rec = [QPid | SPids],
-                          U = case MsgNo of
-                                  undefined ->
+                          U = case Confirm of
+                                  false ->
                                       U0;
-                                  _ ->
+                                  true ->
                                       U0#{MsgNo => #msg_status{pending = Rec}}
                               end,
                           S0#?STATE{pid = QPid,
