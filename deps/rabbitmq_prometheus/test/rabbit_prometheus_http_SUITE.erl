@@ -375,7 +375,7 @@ identity_info_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
     ?assertEqual(match, re:run(Body, "^rabbitmq_identity_info{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "rabbitmq_node=", [{capture, none}])),
-    ?assertEqual(match, re:run(Body, "rabbitmq_cluster=", [{capture, none}])).
+    ?assertEqual(match, re:run(Body, "rabbitmq_cluster=", [{capture, none}])),
     ?assertEqual(match, re:run(Body, "rabbitmq_cluster_permanent_id=", [{capture, none}])).
 
 specific_erlang_metrics_present_test(Config) ->
