@@ -379,12 +379,17 @@ apply_erlang_term_based_config([]) ->
     ok.
 
 apply_app_env_vars(App, [{Var, Value} | Rest]) ->
+<<<<<<< HEAD
     _ = rabbit_log_prelaunch:debug("    - ~s = ~p", [Var, Value]),
+=======
+    log_app_env_var(Var, Value),
+>>>>>>> f5f162758e (Redact password in logs when applying default configuration)
     ok = application:set_env(App, Var, Value, [{persistent, true}]),
     apply_app_env_vars(App, Rest);
 apply_app_env_vars(_, []) ->
     ok.
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 set_credentials_obfuscation_secret() ->
@@ -403,6 +408,13 @@ log_app_env_var(password = Var, _) ->
 log_app_env_var(Var, Value) when is_list(Value) ->
     %% To redact sensitive entries,
     %% e.g. {password,"********"} for stream replication over TLS
+=======
+log_app_env_var(password = Var, _) ->
+    ?LOG_DEBUG("    - ~s = ~p", [Var, "********"],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+log_app_env_var(Var, Value) when is_list(Value) ->
+    % to redact sensitive entries, e.g. {password,"********"} for stream replication over TLS
+>>>>>>> f5f162758e (Redact password in logs when applying default configuration)
     Redacted = redact_env_var(Value),
     ?LOG_DEBUG("    - ~s = ~p", [Var, Redacted],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
@@ -416,6 +428,7 @@ redact_env_var(Value) ->
     Value.
 
 redact_env_var([], Acc) ->
+<<<<<<< HEAD
     lists:reverse(Acc);
 redact_env_var([{password, _Value} | Rest], Acc) ->
     redact_env_var(Rest, Acc ++ [{password, "********"}]);
@@ -425,6 +438,14 @@ redact_env_var([AppVar | Rest], Acc) ->
 
 =======
 >>>>>>> eaa0d85e95 (Resolve conflicts)
+=======
+    Acc;
+redact_env_var([{password, _V} | T], Acc) ->
+    redact_env_var(T, Acc ++ [{password, "********"}]);
+redact_env_var([H | T], Acc) ->
+    redact_env_var(T, Acc ++ [H]).
+
+>>>>>>> f5f162758e (Redact password in logs when applying default configuration)
 %% -------------------------------------------------------------------
 %% Config decryption.
 %% -------------------------------------------------------------------
