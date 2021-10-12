@@ -320,7 +320,7 @@ identity_info() ->
         [{
             [
                 {rabbitmq_node, node()},
-                {rabbitmq_cluster, rabbit_nodes:cluster_name()}
+                {rabbitmq_cluster, rabbit_nodes:cluster_name()},
                 {rabbitmq_cluster_permanent_id, rabbit_nodes:persistent_cluster_id()}
             ],
             1
