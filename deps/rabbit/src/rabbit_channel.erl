@@ -817,8 +817,10 @@ handle_info({'DOWN', _MRef, process, QPid, Reason},
             State1 = State0#ch{queue_states = QState1},
             State = handle_queue_actions(Actions, State1),
             noreply_coalesce(State);
-        {eol, QRef} ->
-            State1 = handle_consuming_queue_down_or_eol(QRef, State0),
+        {eol, QState1, QRef} ->
+            State1 = handle_consuming_queue_down_or_eol(QRef, State0#ch{
+                queue_states = QState1
+            }),
             {ConfirmMXs, UC1} =
                 rabbit_confirms:remove_queue(QRef, State1#ch.unconfirmed),
             %% Deleted queue is a special case.
@@ -827,7 +829,7 @@ handle_info({'DOWN', _MRef, process, QPid, Reason},
                                      State1#ch{unconfirmed = UC1}),
             erase_queue_stats(QRef),
             noreply_coalesce(
-              State2#ch{queue_states = rabbit_queue_type:remove(QRef, QStates0)})
+              State2#ch{queue_states = rabbit_queue_type:remove(QRef, State2#ch.queue_states)})
     end;
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
