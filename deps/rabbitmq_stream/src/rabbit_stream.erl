@@ -39,11 +39,23 @@
 -include("rabbit_stream_metrics.hrl").
 
 start(_Type, _Args) ->
-    rabbit_stream_metrics:init(),
-    rabbit_global_counters:init([{protocol, stream}], ?PROTOCOL_COUNTERS),
-    rabbit_global_counters:init([{protocol, stream},
-                                 {queue_type, ?STREAM_QUEUE_TYPE}]),
-    rabbit_stream_sup:start_link().
+    FeatureFlagsEnabled = rabbit_ff_registry:list(enabled),
+    case maps:is_key(stream_queue, FeatureFlagsEnabled) of
+    true -> rabbit_stream_metrics:init(),
+      rabbit_global_counters:init([{protocol, stream}], ?PROTOCOL_COUNTERS),
+      rabbit_global_counters:init([{protocol, stream},
+        {queue_type, ?STREAM_QUEUE_TYPE}]),
+      rabbit_stream_sup:start_link();
+    false ->
+       rabbit_log:warning(
+         "Unable to start the stream plugin. The feature flag stream_queue is disabled \n"++
+         "You need to enable it and restart the broker",
+        []),
+
+      {ok, self()}
+    end.
+
+
 
 tls_host() ->
     case application:get_env(rabbitmq_stream, advertised_tls_host,
