@@ -177,9 +177,30 @@ $(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "
   {rabbitmq_mqtt, [
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
+  {rabbitmq_web_mqtt, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15675 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
+    ]},
+  {rabbitmq_web_mqtt_examples, [
+$(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$((15670 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
+    ]},
   {rabbitmq_stomp, [
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
+<<<<<<< HEAD
+=======
+  {rabbitmq_web_stomp, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15674 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
+    ]},
+  {rabbitmq_web_stomp_examples, [
+$(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$((15670 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
+    ]},
+  {rabbitmq_stream, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((5552 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
+    ]},
+  {rabbitmq_prometheus, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15692 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
+    ]},
+>>>>>>> eec4b45286 (Allow having multiple `make run-broker` simulatneously)
   {ra, [
       {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
       {wal_sync_method, sync}
