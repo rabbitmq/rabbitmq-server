@@ -2174,6 +2174,11 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                     ok
             end,
             State;
+        {error, {stream_not_found, Resource}} ->
+            rabbit_misc:protocol_error(
+              resource_error,
+              "Stream not found for ~s",
+              [rabbit_misc:rs(Resource)]);
         {error, {coordinator_unavailable, Resource}} ->
             rabbit_misc:protocol_error(
               resource_error,

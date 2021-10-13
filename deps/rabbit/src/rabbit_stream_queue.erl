@@ -652,6 +652,8 @@ init(Q) when ?is_amqqueue(Q) ->
                                 leader = Leader,
                                 writer_id = WriterId,
                                 soft_limit = SoftLimit}};
+        {ok, stream_not_found, _} ->
+            {error, stream_not_found};
         {error, coordinator_unavailable} = E ->
             rabbit_log:warning("Failed to start stream client ~p: coordinator unavailable",
                                [rabbit_misc:rs(QName)]),
