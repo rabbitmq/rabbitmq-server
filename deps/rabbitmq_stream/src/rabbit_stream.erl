@@ -48,10 +48,10 @@ start(_Type, _Args) ->
       rabbit_stream_sup:start_link();
     false ->
        rabbit_log:warning(
-         "Unable to start the stream plugin. The feature flag stream_queue is disabled \n"++
-         "You need to enable it and restart the broker",
+         "Unable to start the stream plugin. The stream_queue feature flag is disabled. "++
+         "You need to enable it then disable and re-enable the rabbitmq_stream plugin. ",
+         "See https://www.rabbitmq.com/feature-flags.html ",
         []),
-
       {ok, self()}
     end.
 
