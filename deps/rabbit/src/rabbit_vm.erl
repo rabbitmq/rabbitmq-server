@@ -220,7 +220,7 @@ conn_sups()     ->
 
 ranch_server_sups() ->
     try
-        ets:match(ranch_server, {{conns_sup, '_'}, '$1'})
+        [Pid || {_, _, Pid} <- ranch_server:get_connections_sups()]
     catch
         %% Ranch ETS table doesn't exist yet
         error:badarg  -> []
