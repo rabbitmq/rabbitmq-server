@@ -23,10 +23,16 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumersCommand').
 -define(COMMAND_LIST_PUBLISHERS,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamPublishersCommand').
+-define(COMMAND_ADD_SUPER_STREAM,
+        'Elixir.RabbitMQ.CLI.Ctl.Commands.AddSuperStreamCommand').
+-define(COMMAND_DELETE_SUPER_STREAM,
+        'Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteSuperStreamCommand').
 
 all() ->
-    [{group, list_connections}, {group, list_consumers},
-     {group, list_publishers}].
+    [{group, list_connections},
+     {group, list_consumers},
+     {group, list_publishers},
+     {group, super_streams}].
 
 groups() ->
     [{list_connections, [],
@@ -35,7 +41,13 @@ groups() ->
      {list_consumers, [],
       [list_consumers_merge_defaults, list_consumers_run]},
      {list_publishers, [],
-      [list_publishers_merge_defaults, list_publishers_run]}].
+      [list_publishers_merge_defaults, list_publishers_run]},
+     {super_streams, [],
+      [add_super_stream_merge_defaults,
+       add_super_stream_validate,
+       delete_super_stream_merge_defaults,
+       delete_super_stream_validate,
+       add_delete_super_stream_run]}].
 
 init_per_suite(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -309,6 +321,174 @@ list_publishers_run(Config) ->
     ?awaitMatch(0, publisher_count(Config), ?WAIT),
     ok.
 
+add_super_stream_merge_defaults(_Config) ->
+    ?assertMatch({[<<"super-stream">>],
+                  #{partitions := 3, vhost := <<"/">>}},
+                 ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                                                          #{})),
+
+    ?assertMatch({[<<"super-stream">>],
+                  #{partitions := 5, vhost := <<"/">>}},
+                 ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                                                          #{partitions => 5})),
+
+    DefaultWithRoutingKeys =
+        ?COMMAND_ADD_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                                                 #{routing_keys =>
+                                                       <<"amer,emea,apac">>}),
+    ?assertMatch({[<<"super-stream">>],
+                  #{routing_keys := <<"amer,emea,apac">>, vhost := <<"/">>}},
+                 DefaultWithRoutingKeys),
+
+    {_, Opts} = DefaultWithRoutingKeys,
+    ?assertEqual(false, maps:is_key(partitions, Opts)).
+
+add_super_stream_validate(_Config) ->
+    ?assertMatch({validation_failure, not_enough_args},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([], #{})),
+    ?assertMatch({validation_failure, too_many_args},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>, <<"b">>], #{})),
+    ?assertMatch({validation_failure, _},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{partitions => 1,
+                                                      routing_keys =>
+                                                          <<"a,b,c">>})),
+    ?assertMatch({validation_failure, _},
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{partitions => 0})),
+    ?assertEqual(ok,
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{partitions => 5})),
+    ?assertEqual(ok,
+                 ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>],
+                                                    #{routing_keys =>
+                                                          <<"a,b,c">>})),
+
+    [case Expected of
+         ok ->
+             ?assertEqual(ok,
+                          ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>], Opts));
+         error ->
+             ?assertMatch({validation_failure, _},
+                          ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>], Opts))
+     end
+     || {Opts, Expected}
+            <- [{#{max_length_bytes => 1000}, ok},
+                {#{max_length_bytes => <<"1000">>}, ok},
+                {#{max_length_bytes => <<"100gb">>}, ok},
+                {#{max_length_bytes => <<"50mb">>}, ok},
+                {#{max_length_bytes => <<"50bm">>}, error},
+                {#{max_age => <<"PT10M">>}, ok},
+                {#{max_age => <<"P5DT8H">>}, ok},
+                {#{max_age => <<"foo">>}, error},
+                {#{stream_max_segment_size_bytes => 1000}, ok},
+                {#{stream_max_segment_size_bytes => <<"1000">>}, ok},
+                {#{stream_max_segment_size_bytes => <<"100gb">>}, ok},
+                {#{stream_max_segment_size_bytes => <<"50mb">>}, ok},
+                {#{stream_max_segment_size_bytes => <<"50bm">>}, error},
+                {#{leader_locator => <<"client-local">>}, ok},
+                {#{leader_locator => <<"least-leaders">>}, ok},
+                {#{leader_locator => <<"random">>}, ok},
+                {#{leader_locator => <<"foo">>}, error},
+                {#{initial_cluster_size => <<"1">>}, ok},
+                {#{initial_cluster_size => <<"2">>}, ok},
+                {#{initial_cluster_size => <<"3">>}, ok},
+                {#{initial_cluster_size => <<"0">>}, error},
+                {#{initial_cluster_size => <<"-1">>}, error},
+                {#{initial_cluster_size => <<"foo">>}, error}]],
+    ok.
+
+delete_super_stream_merge_defaults(_Config) ->
+    ?assertMatch({[<<"super-stream">>], #{vhost := <<"/">>}},
+                 ?COMMAND_DELETE_SUPER_STREAM:merge_defaults([<<"super-stream">>],
+                                                             #{})),
+    ok.
+
+delete_super_stream_validate(_Config) ->
+    ?assertMatch({validation_failure, not_enough_args},
+                 ?COMMAND_DELETE_SUPER_STREAM:validate([], #{})),
+    ?assertMatch({validation_failure, too_many_args},
+                 ?COMMAND_DELETE_SUPER_STREAM:validate([<<"a">>, <<"b">>],
+                                                       #{})),
+    ?assertEqual(ok, ?COMMAND_ADD_SUPER_STREAM:validate([<<"a">>], #{})),
+    ok.
+
+add_delete_super_stream_run(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Opts =
+        #{node => Node,
+          timeout => 10000,
+          vhost => <<"/">>},
+
+    % with number of partitions
+    ?assertMatch({ok, _},
+                 ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
+                                               maps:merge(#{partitions => 3},
+                                                          Opts))),
+    ?assertEqual({ok,
+                  [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>]},
+                 partitions(Config, <<"invoices">>)),
+    ?assertMatch({ok, _},
+                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+    ?assertEqual({error, stream_not_found},
+                 partitions(Config, <<"invoices">>)),
+
+    % with routing keys
+    ?assertMatch({ok, _},
+                 ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
+                                               maps:merge(#{routing_keys =>
+                                                                <<" amer,emea , apac">>},
+                                                          Opts))),
+    ?assertEqual({ok,
+                  [<<"invoices-amer">>, <<"invoices-emea">>,
+                   <<"invoices-apac">>]},
+                 partitions(Config, <<"invoices">>)),
+    ?assertMatch({ok, _},
+                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+    ?assertEqual({error, stream_not_found},
+                 partitions(Config, <<"invoices">>)),
+
+    % with arguments
+    ExtraOptions =
+        #{partitions => 3,
+          max_length_bytes => <<"50mb">>,
+          max_age => <<"PT10M">>,
+          stream_max_segment_size_bytes => <<"1mb">>,
+          leader_locator => <<"random">>,
+          initial_cluster_size => <<"1">>},
+
+    ?assertMatch({ok, _},
+                 ?COMMAND_ADD_SUPER_STREAM:run([<<"invoices">>],
+                                               maps:merge(ExtraOptions, Opts))),
+
+    {ok, Q} = queue_lookup(Config, <<"invoices-0">>),
+    Args = amqqueue:get_arguments(Q),
+    ?assertMatch({_, <<"random">>},
+                 rabbit_misc:table_lookup(Args, <<"x-queue-leader-locator">>)),
+    ?assertMatch({_, 1},
+                 rabbit_misc:table_lookup(Args, <<"x-initial-cluster-size">>)),
+    ?assertMatch({_, 1000000},
+                 rabbit_misc:table_lookup(Args,
+                                          <<"x-stream-max-segment-size-bytes">>)),
+    ?assertMatch({_, <<"600s">>},
+                 rabbit_misc:table_lookup(Args, <<"x-max-age">>)),
+    ?assertMatch({_, 50000000},
+                 rabbit_misc:table_lookup(Args, <<"x-max-length-bytes">>)),
+    ?assertMatch({_, <<"stream">>},
+                 rabbit_misc:table_lookup(Args, <<"x-queue-type">>)),
+
+    ?assertMatch({ok, _},
+                 ?COMMAND_DELETE_SUPER_STREAM:run([<<"invoices">>], Opts)),
+
+    ok.
+
+partitions(Config, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 0,
+                                 rabbit_stream_manager,
+                                 partitions,
+                                 [<<"/">>, Name]).
+
 create_stream(S, Stream, C0) ->
     rabbit_stream_SUITE:test_create_stream(gen_tcp, S, Stream, C0).
 
@@ -384,3 +564,11 @@ amqp_params(network, _, Port) ->
     #amqp_params_network{port = Port};
 amqp_params(direct, Node, _) ->
     #amqp_params_direct{node = Node}.
+
+queue_lookup(Config, Q) ->
+    QueueName = rabbit_misc:r(<<"/">>, queue, Q),
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 0,
+                                 rabbit_amqqueue,
+                                 lookup,
+                                 [QueueName]).

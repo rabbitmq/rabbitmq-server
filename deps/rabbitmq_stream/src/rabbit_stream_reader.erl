@@ -2044,7 +2044,7 @@ handle_frame_post_auth(Transport,
                        State,
                        {request, CorrelationId,
                         {create_stream, Stream, Arguments}}) ->
-    case rabbit_stream_utils:enforce_correct_stream_name(Stream) of
+    case rabbit_stream_utils:enforce_correct_name(Stream) of
         {ok, StreamName} ->
             case rabbit_stream_utils:check_configure_permitted(#resource{name =
                                                                              StreamName,
