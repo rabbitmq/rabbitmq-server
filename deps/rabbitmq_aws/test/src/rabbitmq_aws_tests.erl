@@ -485,7 +485,7 @@ api_get_request_test_() ->
                          secret_access_key = "ExpiredAccessKey",
                          region = "us-east-1",
                          expiration = {{3016, 4, 1}, {12, 0, 0}}},
-          meck:expect(httpc, request, 4, {error, "invalid input"}),
+          meck:expect(httpc, request, 4, {error, "network error"}),
           {ok, Pid} = rabbitmq_aws:start_link(),
           rabbitmq_aws:set_region("us-east-1"),
           rabbitmq_aws:set_credentials(State),
@@ -501,7 +501,11 @@ api_get_request_test_() ->
                          secret_access_key = "ExpiredAccessKey",
                          region = "us-east-1",
                          expiration = {{3016, 4, 1}, {12, 0, 0}}},
-          meck:expect(httpc, request, 4, meck:seq([{error, "invalid input"}, {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}], "{\"data\": \"value\"}"}}])),
+          meck:expect(httpc, request, 4, meck:seq([
+              {error, "network error"},
+              {ok, {{"HTTP/1.0", 500, "OK"}, [{"content-type", "application/json"}], "{\"error\": \"server error\"}"}},
+              {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}], "{\"data\": \"value\"}"}}
+          ])),
           {ok, Pid} = rabbitmq_aws:start_link(),
           rabbitmq_aws:set_region("us-east-1"),
           rabbitmq_aws:set_credentials(State),
