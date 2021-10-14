@@ -41,18 +41,18 @@
 start(_Type, _Args) ->
     FeatureFlagsEnabled = rabbit_ff_registry:list(enabled),
     case maps:is_key(stream_queue, FeatureFlagsEnabled) of
-    true -> rabbit_stream_metrics:init(),
-      rabbit_global_counters:init([{protocol, stream}], ?PROTOCOL_COUNTERS),
-      rabbit_global_counters:init([{protocol, stream},
-        {queue_type, ?STREAM_QUEUE_TYPE}]),
-      rabbit_stream_sup:start_link();
-    false ->
-       rabbit_log:warning(
-         "Unable to start the stream plugin. The stream_queue feature flag is disabled. "++
-         "You need to enable stream_queue feature flag then disable and re-enable the rabbitmq_stream plugin. ",
-         "See https://www.rabbitmq.com/feature-flags.html ",
-        []),
-      {ok, self()}
+        true ->
+            rabbit_stream_metrics:init(),
+            rabbit_global_counters:init([{protocol, stream}], ?PROTOCOL_COUNTERS),
+            rabbit_global_counters:init([{protocol, stream}, {queue_type, ?STREAM_QUEUE_TYPE}]),
+            rabbit_stream_sup:start_link();
+        false ->
+            rabbit_log:warning(
+                "Unable to start the stream plugin. The stream_queue feature flag is disabled. "++
+                "Enable stream_queue feature flag then disable and re-enable the rabbitmq_stream plugin. ",
+                "See https://www.rabbitmq.com/feature-flags.html to learn more",
+            []),
+        {ok, self()}
     end.
 
 
