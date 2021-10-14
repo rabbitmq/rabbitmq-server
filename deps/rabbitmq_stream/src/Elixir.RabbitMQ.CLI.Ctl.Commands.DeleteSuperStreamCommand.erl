@@ -36,7 +36,7 @@
          help_section/0]).
 
 scopes() ->
-    [ctl, streams].
+    [streams].
 
 description() ->
     <<"Delete a super stream (experimental feature)">>.
