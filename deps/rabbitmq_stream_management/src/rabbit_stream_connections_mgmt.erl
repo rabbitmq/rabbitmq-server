@@ -30,8 +30,8 @@ web_ui() ->
     true -> [{javascript, <<"stream.js">>}];
     false ->  rabbit_log:warning(
       "Unable to show the stream management plugin. The stream_queue feature flag is disabled. "++
-      "You need to enable stream_queue feature flag then disable and re-enable the rabbitmq_stream_management plugin. ",
-      "See https://www.rabbitmq.com/feature-flags.html ",
+      "Enable stream_queue feature flag then disable and re-enable the rabbitmq_stream_management plugin. ",
+      "See https://www.rabbitmq.com/feature-flags.html to learn more",
       []),
       []
   end.
