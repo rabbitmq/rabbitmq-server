@@ -9,7 +9,8 @@
 
 -export([keep_stream_connections/1,
          keep_tracked_stream_connections/1,
-         is_stream_connection/1]).
+         is_stream_connection/1,
+         is_feature_flag_enabled/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -31,3 +32,7 @@ keep_tracked_stream_connections(Connections) ->
                          false
                  end,
                  Connections).
+
+is_feature_flag_enabled() ->
+  FeatureFlagsEnabled = rabbit_ff_registry:list(enabled),
+  maps:is_key(stream_queue, FeatureFlagsEnabled).

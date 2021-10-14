@@ -24,7 +24,11 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 dispatcher() ->
-    [{"/stream/connections/:vhost/:connection", ?MODULE, []}].
+  case rabbit_stream_management_utils:is_feature_flag_enabled() of
+    true -> [{"/stream/connections/:vhost/:connection", ?MODULE, []}];
+    false -> []
+  end.
+
 
 web_ui() ->
     [].
