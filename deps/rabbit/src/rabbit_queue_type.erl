@@ -398,7 +398,7 @@ handle_down(Pid, Info, #?STATE{monitor_registry = Reg0} = State0) ->
                 {ok, State, Actions} ->
                     {ok, State#?STATE{monitor_registry = Reg}, Actions};
                 eol ->
-                    {eol, QRef};
+                    {eol, State0#?STATE{monitor_registry = Reg}, QRef};
                 Err ->
                     Err
             end;
