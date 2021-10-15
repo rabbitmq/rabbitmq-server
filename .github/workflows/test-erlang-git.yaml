@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.3.4
+      uses: actions/checkout@v2.3.5
     - name: UPDATE RBE IMAGE SHA
       env:
         IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
