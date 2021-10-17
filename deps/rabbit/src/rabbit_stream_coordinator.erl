@@ -255,8 +255,8 @@ process_command([], _Cmd) ->
 process_command([Server | Servers], Cmd) ->
     case ra:process_command(Server, Cmd, ?CMD_TIMEOUT) of
         {timeout, _} ->
-            rabbit_log:warning("Coordinator timeout on server ~s when processing command ~W",
-                               [Server, element(1, Cmd), 10]),
+            rabbit_log:warning("Coordinator timeout on server ~w when processing command ~W",
+                               [element(2, Server), element(1, Cmd), 10]),
             process_command(Servers, Cmd);
         {error, noproc} ->
             process_command(Servers, Cmd);
