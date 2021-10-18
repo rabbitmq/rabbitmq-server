@@ -132,7 +132,6 @@ prop_common(InitialState) ->
 %   recover
 %   set mode classic/lazy
 %   set version v1/v2
-%   publish ("deliver")
 %   ack
 %   reject
 %   policy_changed
@@ -141,20 +140,24 @@ prop_common(InitialState) ->
 %   delete
 %   purge
 %   requeue
+%   ttl behavior
 
 command(St = #cq{amq=undefined}) ->
     {call, ?MODULE, cmd_setup_queue, [St]};
 command(St) ->
     oneof([
-        {call, ?MODULE, cmd_is_process_alive, [St]},
+        {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]},
         {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024)]},
-        {call, ?MODULE, cmd_basic_get_msg, [St]}
+        {call, ?MODULE, cmd_basic_get_msg, [St]},
+        {call, ?MODULE, cmd_is_process_alive, [St]}
     ]).
 
 %% Next state.
 
 next_state(St, AMQ, {call, _, cmd_setup_queue, _}) ->
     St#cq{amq=AMQ};
+next_state(St, _, {call, _, cmd_set_mode, [_, Mode]}) ->
+    St#cq{mode=Mode};
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_publish_msg, _}) ->
     St#cq{q=queue:in(Msg, Q)};
 next_state(St=#cq{q=Q0}, Msg, {call, _, cmd_basic_get_msg, _}) ->
@@ -176,6 +179,11 @@ precondition(_, _) ->
 
 postcondition(St, {call, _, cmd_setup_queue, _}, Q) ->
     element(1, Q) =:= amqqueue;
+%% We check the mode in the cmd_set_mode function
+%% because there is a delay after setting the policy.
+postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode, [_, Mode]}, _) ->
+    do_check_queue_mode(AMQ, Mode),
+    true;
 postcondition(St, {call, _, cmd_publish_msg, _}, Msg) when is_record(Msg, basic_message) ->
     true;
 postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
@@ -188,19 +196,48 @@ postcondition(St, {call, _, cmd_is_process_alive, _}, true) ->
 cmd_setup_queue(#cq{name=Name, mode=Mode, version=Version}) ->
     IsDurable = false,
     IsAutoDelete = false,
+    %% We cannot use args to set mode/version as the arguments override
+    %% the policies and we also want to test policy changes.
+    do_set_queue_mode(Mode),
+    %% @todo Maybe have both in-args and in-policies tested.
     Args = [
-        {<<"x-queue-mode">>, longstr, atom_to_binary(Mode, utf8)},
+%        {<<"x-queue-mode">>, longstr, atom_to_binary(Mode, utf8)},
         {<<"x-queue-version">>, long, Version}
     ],
     QName = rabbit_misc:r(<<"/">>, queue, atom_to_binary(Name, utf8)),
-    {new, Q} = rabbit_amqqueue:declare(QName, IsDurable, IsAutoDelete, Args, none, <<"acting-user">>),
-    Q.
+    {new, AMQ} = rabbit_amqqueue:declare(QName, IsDurable, IsAutoDelete, Args, none, <<"acting-user">>),
+    %% We check that the queue was creating with the right mode/version.
+    do_check_queue_mode(AMQ, Mode),
+    AMQ.
 
 cmd_teardown_queue(#cq{amq=undefined}) ->
     ok;
 cmd_teardown_queue(#cq{amq=AMQ}) ->
     rabbit_amqqueue:delete(AMQ, false, false, <<"acting-user">>),
+    rabbit_policy:delete(<<"/">>, <<"queue-mode-policy">>, <<"acting-user">>),
     ok.
+
+cmd_set_mode(#cq{amq=AMQ}, Mode) ->
+    do_set_queue_mode(Mode).
+
+do_set_queue_mode(Mode) ->
+    rabbit_policy:set(<<"/">>, <<"queue-mode-policy">>, <<".*">>,
+        [{<<"queue-mode">>, atom_to_binary(Mode, utf8)}],
+        0, <<"queues">>, <<"acting-user">>).
+
+%% We loop until the queue has switched mode.
+do_check_queue_mode(AMQ, Mode) ->
+    do_check_queue_mode(AMQ, Mode, 1000).
+
+do_check_queue_mode(_, Mode, 0) ->
+    error({expected_queue_mode, Mode});
+do_check_queue_mode(AMQ, Mode, N) ->
+    timer:sleep(1),
+    [{backing_queue_status, Status}] = rabbit_amqqueue:info(AMQ, [backing_queue_status]),
+    case proplists:get_value(mode, Status) of
+        Mode -> ok;
+        _ -> do_check_queue_mode(AMQ, Mode, N - 1)
+    end.
 
 cmd_publish_msg(#cq{amq=AMQ}, PayloadSize) ->
     Payload = rand:bytes(PayloadSize),
