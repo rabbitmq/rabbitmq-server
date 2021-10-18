@@ -115,8 +115,13 @@ dep_cowboy = hex 2.8.0
 dep_cowlib = hex 2.9.1
 dep_jsx = hex 3.1.0
 dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
+<<<<<<< HEAD
 dep_prometheus = hex 4.8.1
 dep_ra = hex 2.0.2
+=======
+dep_prometheus = git https://github.com/deadtrickster/prometheus.erl 06425c21a39c1564164f1cc3fe5bdfa8b23b1f78
+dep_ra = git https://github.com/rabbitmq/ra.git main
+>>>>>>> 8598c51579 (Pre-render prometheus labels)
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.1
 dep_observer_cli = hex 1.7.1
