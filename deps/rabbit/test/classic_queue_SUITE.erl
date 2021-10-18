@@ -52,7 +52,7 @@ init_per_group(Group = classic_queue_tests, Config) ->
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(Group = classic_queue_tests, Config) ->
+end_per_group(classic_queue_tests, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
@@ -146,7 +146,7 @@ command(St = #cq{amq=undefined}) ->
     {call, ?MODULE, cmd_setup_queue, [St]};
 command(St) ->
     oneof([
-        {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]},
+        {call, ?MODULE, cmd_set_mode, [oneof([default, lazy])]},
         {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024)]},
         {call, ?MODULE, cmd_basic_get_msg, [St]},
         {call, ?MODULE, cmd_is_process_alive, [St]}
@@ -160,7 +160,7 @@ next_state(St, _, {call, _, cmd_set_mode, [_, Mode]}) ->
     St#cq{mode=Mode};
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_publish_msg, _}) ->
     St#cq{q=queue:in(Msg, Q)};
-next_state(St=#cq{q=Q0}, Msg, {call, _, cmd_basic_get_msg, _}) ->
+next_state(St=#cq{q=Q0}, _Msg, {call, _, cmd_basic_get_msg, _}) ->
     %% @todo Should add it to a list of messages that must be acked.
     {_, Q} = queue:out(Q0),
     St#cq{q=Q};
@@ -177,18 +177,17 @@ precondition(_, _) ->
 
 %% Postconditions.
 
-postcondition(St, {call, _, cmd_setup_queue, _}, Q) ->
+postcondition(_, {call, _, cmd_setup_queue, _}, Q) ->
     element(1, Q) =:= amqqueue;
 %% We check the mode in the cmd_set_mode function
 %% because there is a delay after setting the policy.
-postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode, [_, Mode]}, _) ->
-    do_check_queue_mode(AMQ, Mode),
-    true;
-postcondition(St, {call, _, cmd_publish_msg, _}, Msg) when is_record(Msg, basic_message) ->
+postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode, [Mode]}, _) ->
+    do_check_queue_mode(AMQ, Mode) =:= ok;
+postcondition(_, {call, _, cmd_publish_msg, _}, Msg) when is_record(Msg, basic_message) ->
     true;
 postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
     queue:peek(Q) =:= {value, Msg};
-postcondition(St, {call, _, cmd_is_process_alive, _}, true) ->
+postcondition(_, {call, _, cmd_is_process_alive, _}, true) ->
     true.
 
 %% Helpers.
@@ -207,7 +206,7 @@ cmd_setup_queue(#cq{name=Name, mode=Mode, version=Version}) ->
     QName = rabbit_misc:r(<<"/">>, queue, atom_to_binary(Name, utf8)),
     {new, AMQ} = rabbit_amqqueue:declare(QName, IsDurable, IsAutoDelete, Args, none, <<"acting-user">>),
     %% We check that the queue was creating with the right mode/version.
-    do_check_queue_mode(AMQ, Mode),
+    ok = do_check_queue_mode(AMQ, Mode),
     AMQ.
 
 cmd_teardown_queue(#cq{amq=undefined}) ->
@@ -217,7 +216,7 @@ cmd_teardown_queue(#cq{amq=AMQ}) ->
     rabbit_policy:delete(<<"/">>, <<"queue-mode-policy">>, <<"acting-user">>),
     ok.
 
-cmd_set_mode(#cq{amq=AMQ}, Mode) ->
+cmd_set_mode(Mode) ->
     do_set_queue_mode(Mode).
 
 do_set_queue_mode(Mode) ->
@@ -229,8 +228,8 @@ do_set_queue_mode(Mode) ->
 do_check_queue_mode(AMQ, Mode) ->
     do_check_queue_mode(AMQ, Mode, 1000).
 
-do_check_queue_mode(_, Mode, 0) ->
-    error({expected_queue_mode, Mode});
+do_check_queue_mode(_, _, 0) ->
+    error;
 do_check_queue_mode(AMQ, Mode, N) ->
     timer:sleep(1),
     [{backing_queue_status, Status}] = rabbit_amqqueue:info(AMQ, [backing_queue_status]),
