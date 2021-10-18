@@ -814,7 +814,7 @@ queue_leader_locator(undefined) -> <<"client-local">>;
 queue_leader_locator(Val) -> Val.
 
 initial_cluster_size(undefined) ->
-    length(rabbit_mnesia:cluster_nodes(running));
+    length(rabbit_nodes:all());
 initial_cluster_size(Val) ->
     Val.
 

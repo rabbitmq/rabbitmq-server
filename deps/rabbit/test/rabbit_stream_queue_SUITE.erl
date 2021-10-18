@@ -50,7 +50,8 @@ groups() ->
            publish_coordinator_unavailable,
            leader_locator_policy]},
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
-     {cluster_size_3_2, [], [recover]},
+     {cluster_size_3_2, [], [recover,
+                             declare_with_node_down]},
      {cluster_size_3_parallel_1, [parallel], [delete_replica,
                                               delete_last_replica,
                                               delete_classic_replica,
@@ -664,6 +665,21 @@ restart_single_node(Config) ->
     publish(Ch1, Q),
     quorum_queue_utils:wait_for_messages(Config, [[Q, <<"2">>, <<"2">>, <<"0">>]]),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+%% the failing case for this test relies on a particular random condition
+%% please never consider this a flake
+declare_with_node_down(Config) ->
+    [Server1, Server2, Server3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    check_leader_and_replicas(Config, [Server1, Server3]),
+    rabbit_ct_broker_helpers:start_node(Config, Server2),
+    check_leader_and_replicas(Config, Servers),
+    ok.
 
 recover(Config) ->
     [Server | _] = Servers0 = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
