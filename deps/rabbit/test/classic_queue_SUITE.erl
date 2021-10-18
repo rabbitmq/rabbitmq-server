@@ -30,7 +30,10 @@ all() ->
 
 groups() ->
     [{classic_queue_tests, [], [
-        classic_queue_v1
+        classic_queue_v1,
+        lazy_queue_v1,
+        classic_queue_v2,
+        lazy_queue_v2
     ]}].
 
 init_per_suite(Config) ->
@@ -62,6 +65,30 @@ do_classic_queue_v1(_) ->
     true = proper:quickcheck(prop_classic_queue_v1(),
                              [{on_output, on_output_fun()}]).
 
+lazy_queue_v1(Config) ->
+    true = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, do_lazy_queue_v1, [Config]).
+
+do_lazy_queue_v1(_) ->
+    true = proper:quickcheck(prop_lazy_queue_v1(),
+                             [{on_output, on_output_fun()}]).
+
+classic_queue_v2(Config) ->
+    true = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, do_classic_queue_v2, [Config]).
+
+do_classic_queue_v2(_) ->
+    true = proper:quickcheck(prop_classic_queue_v2(),
+                             [{on_output, on_output_fun()}]).
+
+lazy_queue_v2(Config) ->
+    true = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, do_lazy_queue_v2, [Config]).
+
+do_lazy_queue_v2(_) ->
+    true = proper:quickcheck(prop_lazy_queue_v2(),
+                             [{on_output, on_output_fun()}]).
+
 on_output_fun() ->
     fun (".", _) -> ok; % don't print the '.'s on new lines
         ("~n", _) -> ok; % don't print empty lines; CT adds many to logs already
@@ -71,7 +98,22 @@ on_output_fun() ->
 %% Properties.
 
 prop_classic_queue_v1() ->
-    InitialState = #cq{name=?FUNCTION_NAME, mode=classic, version=1},
+    InitialState = #cq{name=?FUNCTION_NAME, mode=default, version=1},
+    prop_common(InitialState).
+
+prop_lazy_queue_v1() ->
+    InitialState = #cq{name=?FUNCTION_NAME, mode=lazy, version=1},
+    prop_common(InitialState).
+
+prop_classic_queue_v2() ->
+    InitialState = #cq{name=?FUNCTION_NAME, mode=default, version=2},
+    prop_common(InitialState).
+
+prop_lazy_queue_v2() ->
+    InitialState = #cq{name=?FUNCTION_NAME, mode=lazy, version=2},
+    prop_common(InitialState).
+
+prop_common(InitialState) ->
     ?FORALL(Commands, commands(?MODULE, InitialState),
         ?TRAPEXIT(begin
             {History, State, Result} = run_commands(?MODULE, Commands),
@@ -143,10 +185,13 @@ postcondition(St, {call, _, cmd_is_process_alive, _}, true) ->
 
 %% Helpers.
 
-cmd_setup_queue(#cq{name=Name, mode=_Mode, version=_Version}) ->
+cmd_setup_queue(#cq{name=Name, mode=Mode, version=Version}) ->
     IsDurable = false,
     IsAutoDelete = false,
-    Args = [], %% @todo Mode/Version in args.
+    Args = [
+        {<<"x-queue-mode">>, longstr, atom_to_binary(Mode, utf8)},
+        {<<"x-queue-version">>, long, Version}
+    ],
     QName = rabbit_misc:r(<<"/">>, queue, atom_to_binary(Name, utf8)),
     {new, Q} = rabbit_amqqueue:declare(QName, IsDurable, IsAutoDelete, Args, none, <<"acting-user">>),
     Q.
