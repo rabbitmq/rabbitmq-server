@@ -227,7 +227,6 @@ remove_bindings(none, X, Bindings) ->
     ok.
 
 remove_binding(#binding{source = S, destination = D, key = RK}) ->
-    Weight = rabbit_data_coercion:to_integer(RK),
     _ = rabbit_log:debug("Consistent hashing exchange: removing binding "
                      "from exchange '~p' to destination '~p' with routing key '~s'",
                      [rabbit_misc:rs(S), rabbit_misc:rs(D), RK]),
@@ -237,7 +236,7 @@ remove_binding(#binding{source = S, destination = D, key = RK}) ->
                                  next_bucket_number = NexN0}] ->
             %% Buckets with lower numbers stay as is; buckets that
             %% belong to this binding are removed; buckets with
-            %% greater numbers are updated (their numbers are adjusted downwards by weight)
+            %% greater numbers are updated (their numbers are adjusted downwards)
             BucketsOfThisBinding = maps:filter(fun (_K, V) -> V =:= D end, BM0),
             case maps:size(BucketsOfThisBinding) of
                 0             -> ok;
@@ -251,10 +250,10 @@ remove_binding(#binding{source = S, destination = D, key = RK}) ->
                     %% final state with "down the ring" buckets updated
                     NewBucketsDownTheRing = maps:fold(
                                               fun(K0, V, Acc)  ->
-                                                      maps:put(K0 - Weight, V, Acc)
+                                                      maps:put(K0 - N, V, Acc)
                                               end, #{}, BucketsDownTheRing),
                     BM1 = maps:merge(UnchangedBuckets, NewBucketsDownTheRing),
-                    NextN = NexN0 - Weight,
+                    NextN = NexN0 - N,
                     State = State0#chx_hash_ring{bucket_map = BM1,
                                                  next_bucket_number = NextN},
 
