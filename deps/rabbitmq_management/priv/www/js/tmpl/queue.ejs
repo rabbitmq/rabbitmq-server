@@ -178,6 +178,9 @@
         </td>
         <% if (is_classic(queue)) { %>
         <td class="r">
+          <%= fmt_num_thousands(queue.messages_ram) %>
+        </td>
+        <td class="r">
           <%= fmt_num_thousands(queue.messages_persistent) %>
         </td>
         <td class="r">
