@@ -40,9 +40,7 @@ init_per_group(_, Config) ->
                                       [fun(StepConfig) ->
                                           rabbit_ct_helpers:merge_app_env(StepConfig,
                                                                           {rabbit,
-                                                                           [{forced_feature_flags_on_init,
-                                                                             [stream_queue]},
-                                                                            {core_metrics_gc_interval,
+                                                                           [{core_metrics_gc_interval,
                                                                              1000}]})
                                        end,
                                        fun(StepConfig) ->
