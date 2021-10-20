@@ -23,7 +23,13 @@ groups() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    Config.
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "mixed version clusters are not supported"};
+        _ ->
+            rabbit_ct_helpers:log_environment(),
+            Config
+    end.
 
 end_per_suite(Config) ->
     Config.

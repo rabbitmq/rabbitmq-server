@@ -86,10 +86,7 @@ suites = [
     ),
     rabbitmq_integration_suite(
         PACKAGE,
-        name = "rabbit_stream_manager_SUITE",
-        test_env = dict({
-            "RABBITMQ_FEATURE_FLAGS": "stream_queue"
-        }.items() + test_env.items())
+        name = "rabbit_stream_manager_SUITE"
     ),
     rabbitmq_integration_suite(
         PACKAGE,
