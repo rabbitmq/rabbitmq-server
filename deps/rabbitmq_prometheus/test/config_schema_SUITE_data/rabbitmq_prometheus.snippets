@@ -144,12 +144,14 @@
                            {ssl_config,[
                                         {ip, "192.168.1.2"},
                                         {port,15691},
-                                        {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-                                        {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-                                        {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-                                        {verify, verify_none},
-                                        {fail_if_no_peer_cert, false}
-                                       ]}
+                                        {ssl_opts, [
+                                          {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+                                          {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                                          {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+                                          {verify, verify_none},
+                                          {fail_if_no_peer_cert, false}
+                                        ]}
+                                    ]}
                           ]}],
     [rabbitmq_prometheus]},
 
@@ -184,31 +186,33 @@
                            {ssl_config,[
                                         {ip, "192.168.1.2"},
                                         {port,15691},
-                                        {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-                                        {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-                                        {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+                                        {ssl_opts, [
+                                          {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+                                          {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+                                          {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
 
-                                        {verify, verify_peer},
-                                        {fail_if_no_peer_cert, false},
+                                          {verify, verify_peer},
+                                          {fail_if_no_peer_cert, false},
 
-                                        {honor_cipher_order,   true},
-                                        {honor_ecc_order,      true},
-                                        {client_renegotiation, false},
-                                        {secure_renegotiate,   true},
+                                          {honor_cipher_order,   true},
+                                          {honor_ecc_order,      true},
+                                          {client_renegotiation, false},
+                                          {secure_renegotiate,   true},
 
-                                        {versions,['tlsv1.2','tlsv1.1']},
-                                        {ciphers, [
-                                          "ECDHE-ECDSA-AES256-GCM-SHA384",
-                                          "ECDHE-RSA-AES256-GCM-SHA384",
-                                          "ECDHE-ECDSA-AES256-SHA384",
-                                          "ECDHE-RSA-AES256-SHA384",
-                                          "ECDH-ECDSA-AES256-GCM-SHA384",
-                                          "ECDH-RSA-AES256-GCM-SHA384",
-                                          "ECDH-ECDSA-AES256-SHA384",
-                                          "ECDH-RSA-AES256-SHA384",
-                                          "DHE-RSA-AES256-GCM-SHA384"
-                                          ]}
-                                       ]}
+                                          {versions,['tlsv1.2','tlsv1.1']},
+                                          {ciphers, [
+                                            "ECDHE-ECDSA-AES256-GCM-SHA384",
+                                            "ECDHE-RSA-AES256-GCM-SHA384",
+                                            "ECDHE-ECDSA-AES256-SHA384",
+                                            "ECDHE-RSA-AES256-SHA384",
+                                            "ECDH-ECDSA-AES256-GCM-SHA384",
+                                            "ECDH-RSA-AES256-GCM-SHA384",
+                                            "ECDH-ECDSA-AES256-SHA384",
+                                            "ECDH-RSA-AES256-SHA384",
+                                            "DHE-RSA-AES256-GCM-SHA384"
+                                            ]}
+                                         ]}
+                                      ]}
                           ]}],
     [rabbitmq_prometheus]},
 
