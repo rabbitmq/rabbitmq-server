@@ -1040,6 +1040,11 @@ process_instruction({set_queue_mode, Mode},
                     State = #state { backing_queue       = BQ,
                                      backing_queue_state = BQS }) ->
     BQS1 = BQ:set_queue_mode(Mode, BQS),
+    {ok, State #state { backing_queue_state = BQS1 }};
+process_instruction({set_queue_version, Version},
+                    State = #state { backing_queue       = BQ,
+                                     backing_queue_state = BQS }) ->
+    BQS1 = BQ:set_queue_version(Version, BQS),
     {ok, State #state { backing_queue_state = BQS1 }}.
 
 maybe_flow_ack(Sender, flow)    -> credit_flow:ack(Sender);

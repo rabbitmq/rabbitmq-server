@@ -22,6 +22,11 @@
          sync/1, needs_sync/1, flush/1,
          bounds/1, next_segment_boundary/1]).
 
+%% Used to upgrade/downgrade from/to the v1 index.
+-export([init_for_conversion/3]).
+-export([init_args/1]).
+-export([delete_segment_file_for_seq_id/2]).
+
 %% Shared with rabbit_classic_queue_store_v2.
 -export([queue_dir/2]).
 
@@ -109,7 +114,11 @@
     %% This fun must be called when messages that expect
     %% confirms have either an ack or their entry
     %% written to disk and file:sync/1 has been called.
-    on_sync :: on_sync_fun()
+    on_sync :: on_sync_fun(),
+
+    %% This fun is never called. It is kept so that we
+    %% can downgrade the queue back to v1.
+    on_sync_msg :: fun()
 }).
 
 -type state() :: #qi{}.
@@ -135,21 +144,34 @@ erase(#resource{ virtual_host = VHost } = Name) ->
 
 %% We do not embed messages and as a result never need the OnSyncMsgFun.
 
-init(#resource{ virtual_host = VHost } = Name, OnSyncFun, _OnSyncMsgFun) ->
-    ?DEBUG("~0p ~0p", [Name, OnSyncFun]),
+init(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
+    ?DEBUG("~0p ~0p ~0p", [Name, OnSyncFun, OnSyncMsgFun]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = queue_dir(VHostDir, Name),
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
-    init1(Name, Dir, OnSyncFun).
+    init1(Name, Dir, OnSyncFun, OnSyncMsgFun).
 
-init1(Name, Dir, OnSyncFun) ->
+init_args(#qi{ queue_name  = QueueName,
+               on_sync     = OnSyncFun,
+               on_sync_msg = OnSyncMsgFun }) ->
+    {QueueName, OnSyncFun, OnSyncMsgFun}.
+
+init_for_conversion(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
+    ?DEBUG("~0p ~0p ~0p", [Name, OnSyncFun, OnSyncMsgFun]),
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    Dir = queue_dir(VHostDir, Name),
+    init1(Name, Dir, OnSyncFun, OnSyncMsgFun).
+
+init1(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
     ensure_queue_name_stub_file(Name, Dir),
     #qi{
         queue_name = Name,
         dir = Dir,
-        on_sync = OnSyncFun
+        on_sync = OnSyncFun,
+        on_sync_msg = OnSyncMsgFun
     }.
 
+%% @todo This should be called on recover too.
 ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) ->
     QueueNameFile = filename:join(Dir, ?QUEUE_NAME_STUB_FILE),
     ok = filelib:ensure_dir(QueueNameFile),
@@ -161,10 +183,11 @@ ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) 
 
 reset_state(State = #qi{ queue_name     = Name,
                          dir            = Dir,
-                         on_sync        = OnSyncFun }) ->
+                         on_sync        = OnSyncFun,
+                         on_sync_msg    = OnSyncMsgFun }) ->
     ?DEBUG("~0p", [State]),
     delete_and_terminate(State),
-    init1(Name, Dir, OnSyncFun).
+    init1(Name, Dir, OnSyncFun, OnSyncMsgFun).
 
 -spec recover(rabbit_amqqueue:name(), shutdown_terms(), boolean(),
                     contains_predicate(),
@@ -186,7 +209,7 @@ recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
                                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = queue_dir(VHostDir, Name),
-    State0 = init1(Name, Dir, OnSyncFun),
+    State0 = init1(Name, Dir, OnSyncFun, OnSyncMsgFun),
     %% We go over all segments if either the index or the
     %% message store has/had to recover. Otherwise we just
     %% take our state from Terms.
@@ -432,7 +455,7 @@ recover_index_v1_loop(State0 = #qi{ queue_name = Name },
                          HiSeqId]),
     {Messages, V1State} = rabbit_queue_index:read(LoSeqId, UpSeqId, V1State0),
     %% We do a garbage collect immediately after the old index read
-    %% because they may have created a lot of garbage.
+    %% because that may have created a lot of garbage.
     garbage_collect(),
     MessagesCount = length(Messages),
     counters:add(CountersRef, ?RECOVER_COUNT, MessagesCount),
@@ -1145,6 +1168,15 @@ next_segment_boundary(SeqId) ->
     ?DEBUG("~0p", [SeqId]),
     SegmentEntryCount = segment_entry_count(),
     (1 + (SeqId div SegmentEntryCount)) * SegmentEntryCount.
+
+%% This function is only used when downgrading to the v1 index.
+%% We potentially close the relevant fd and then delete the
+%% segment file.
+delete_segment_file_for_seq_id(SeqId, State0) ->
+    SegmentEntryCount = segment_entry_count(),
+    Segment = SeqId div SegmentEntryCount,
+    State = delete_segment(Segment, State0),
+    {[Segment], State}.
 
 %% ----
 %%
