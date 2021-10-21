@@ -118,7 +118,7 @@ prop_common(InitialState) ->
         ?TRAPEXIT(begin
             {History, State, Result} = run_commands(?MODULE, Commands),
             cmd_teardown_queue(State),
-            ?WHENFAIL(logger:error("History: ~w~nState: ~w~nResult: ~w",
+            ?WHENFAIL(logger:error("History: ~p~nState: ~p~nResult: ~p",
                                    [History, State, Result]),
                       aggregate(command_names(Commands), Result =:= ok))
         end)
@@ -130,7 +130,6 @@ prop_common(InitialState) ->
 %   kill
 %   terminate
 %   recover
-%   set mode classic/lazy
 %   set version v1/v2
 %   ack
 %   reject
@@ -146,7 +145,9 @@ command(St = #cq{amq=undefined}) ->
     {call, ?MODULE, cmd_setup_queue, [St]};
 command(St) ->
     oneof([
-        {call, ?MODULE, cmd_set_mode, [oneof([default, lazy])]},
+        {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]},
+        {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]},
+        %% @todo set_mode_version at the same time.
         {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024)]},
         {call, ?MODULE, cmd_basic_get_msg, [St]},
         {call, ?MODULE, cmd_is_process_alive, [St]}
@@ -158,6 +159,8 @@ next_state(St, AMQ, {call, _, cmd_setup_queue, _}) ->
     St#cq{amq=AMQ};
 next_state(St, _, {call, _, cmd_set_mode, [_, Mode]}) ->
     St#cq{mode=Mode};
+next_state(St, _, {call, _, cmd_set_version, [_, Version]}) ->
+    St#cq{version=Version};
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_publish_msg, _}) ->
     St#cq{q=queue:in(Msg, Q)};
 next_state(St=#cq{q=Q0}, _Msg, {call, _, cmd_basic_get_msg, _}) ->
@@ -179,10 +182,10 @@ precondition(_, _) ->
 
 postcondition(_, {call, _, cmd_setup_queue, _}, Q) ->
     element(1, Q) =:= amqqueue;
-%% We check the mode in the cmd_set_mode function
-%% because there is a delay after setting the policy.
-postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode, [Mode]}, _) ->
+postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode, [_, Mode]}, _) ->
     do_check_queue_mode(AMQ, Mode) =:= ok;
+postcondition(#cq{amq=AMQ}, {call, _, cmd_set_version, [_, Version]}, _) ->
+    do_check_queue_version(AMQ, Version) =:= ok;
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) when is_record(Msg, basic_message) ->
     true;
 postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
@@ -197,32 +200,28 @@ cmd_setup_queue(#cq{name=Name, mode=Mode, version=Version}) ->
     IsAutoDelete = false,
     %% We cannot use args to set mode/version as the arguments override
     %% the policies and we also want to test policy changes.
-    do_set_queue_mode(Mode),
+    cmd_set_mode_version(Mode, Version),
     %% @todo Maybe have both in-args and in-policies tested.
     Args = [
 %        {<<"x-queue-mode">>, longstr, atom_to_binary(Mode, utf8)},
-        {<<"x-queue-version">>, long, Version}
+%        {<<"x-queue-version">>, long, Version}
     ],
     QName = rabbit_misc:r(<<"/">>, queue, atom_to_binary(Name, utf8)),
     {new, AMQ} = rabbit_amqqueue:declare(QName, IsDurable, IsAutoDelete, Args, none, <<"acting-user">>),
     %% We check that the queue was creating with the right mode/version.
     ok = do_check_queue_mode(AMQ, Mode),
+    ok = do_check_queue_version(AMQ, Version),
     AMQ.
 
 cmd_teardown_queue(#cq{amq=undefined}) ->
     ok;
 cmd_teardown_queue(#cq{amq=AMQ}) ->
     rabbit_amqqueue:delete(AMQ, false, false, <<"acting-user">>),
-    rabbit_policy:delete(<<"/">>, <<"queue-mode-policy">>, <<"acting-user">>),
+    rabbit_policy:delete(<<"/">>, <<"queue-mode-version-policy">>, <<"acting-user">>),
     ok.
 
-cmd_set_mode(Mode) ->
-    do_set_queue_mode(Mode).
-
-do_set_queue_mode(Mode) ->
-    rabbit_policy:set(<<"/">>, <<"queue-mode-policy">>, <<".*">>,
-        [{<<"queue-mode">>, atom_to_binary(Mode, utf8)}],
-        0, <<"queues">>, <<"acting-user">>).
+cmd_set_mode(#cq{version=Version}, Mode) ->
+    do_set_policy(Mode, Version).
 
 %% We loop until the queue has switched mode.
 do_check_queue_mode(AMQ, Mode) ->
@@ -237,6 +236,32 @@ do_check_queue_mode(AMQ, Mode, N) ->
         Mode -> ok;
         _ -> do_check_queue_mode(AMQ, Mode, N - 1)
     end.
+
+cmd_set_version(#cq{mode=Mode}, Version) ->
+    do_set_policy(Mode, Version).
+
+%% We loop until the queue has switched version.
+do_check_queue_version(AMQ, Version) ->
+    do_check_queue_version(AMQ, Version, 1000).
+
+do_check_queue_version(_, _, 0) ->
+    error;
+do_check_queue_version(AMQ, Version, N) ->
+    timer:sleep(1),
+    [{backing_queue_status, Status}] = rabbit_amqqueue:info(AMQ, [backing_queue_status]),
+    case proplists:get_value(version, Status) of
+        Version -> ok;
+        _ -> do_check_queue_version(AMQ, Version, N - 1)
+    end.
+
+cmd_set_mode_version(Mode, Version) ->
+    do_set_policy(Mode, Version).
+
+do_set_policy(Mode, Version) ->
+    rabbit_policy:set(<<"/">>, <<"queue-mode-version-policy">>, <<".*">>,
+        [{<<"queue-mode">>, atom_to_binary(Mode, utf8)},
+         {<<"queue-version">>, Version}],
+        0, <<"queues">>, <<"acting-user">>).
 
 cmd_publish_msg(#cq{amq=AMQ}, PayloadSize) ->
     Payload = rand:bytes(PayloadSize),
