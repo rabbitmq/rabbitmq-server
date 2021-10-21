@@ -108,6 +108,7 @@ init_per_group(Group, Config) ->
     end.
 
 init_per_group1(backing_queue_tests, Config) ->
+    %% @todo Is that test still relevant?
     Module = rabbit_ct_broker_helpers:rpc(Config, 0,
       application, get_env, [rabbit, backing_queue_module]),
     case Module of
@@ -139,6 +140,7 @@ init_per_group1(variable_queue_default, Config) ->
     rabbit_ct_helpers:set_config(Config, {variable_queue_type, default});
 init_per_group1(variable_queue_lazy, Config) ->
     rabbit_ct_helpers:set_config(Config, {variable_queue_type, lazy});
+%% @todo These groups are no longer used?
 init_per_group1(from_cluster_node1, Config) ->
     rabbit_ct_helpers:set_config(Config, {test_direction, {0, 1}});
 init_per_group1(from_cluster_node2, Config) ->

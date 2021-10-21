@@ -17,6 +17,7 @@
          set_ram_duration_target/2, ram_duration/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
+         set_queue_version/2,
          zip_msgs_and_acks/4,  multiple_routing_keys/0, handle_info/2]).
 
 -export([start/2, stop/1]).
@@ -330,6 +331,7 @@
 
 -type msg_location() :: memory
                       | rabbit_msg_store
+                      | rabbit_queue_index
                       | rabbit_classic_queue_store_v2:msg_location().
 -export_type([msg_location/0]).
 
@@ -1028,6 +1030,7 @@ info(disk_writes, #vqstate{disk_write_count = Count}) ->
 info(backing_queue_status, #vqstate {
           q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
           mode             = Mode,
+          version          = Version,
           len              = Len,
           target_ram_count = TargetRamCount,
           next_seq_id      = NextSeqId,
@@ -1037,6 +1040,7 @@ info(backing_queue_status, #vqstate {
                                       ack_out = AvgAckEgressRate }}) ->
 
     [ {mode                , Mode},
+      {version             , Version},
       {q1                  , ?QUEUE:len(Q1)},
       {q2                  , ?QUEUE:len(Q2)},
       {delta               , Delta},
@@ -1106,6 +1110,184 @@ wait_for_msg_store_credit() ->
                  end;
         false -> ok
     end.
+
+%% No change.
+set_queue_version(Version, State = #vqstate { version = Version }) ->
+    State;
+%% v2 -> v1.
+set_queue_version(1, State = #vqstate { version = 2 }) ->
+    convert_from_v2_to_v1(State #vqstate { version = 1 });
+%% v1 -> v2.
+set_queue_version(2, State = #vqstate { version = 1 }) ->
+    convert_from_v1_to_v2(State #vqstate { version = 2 }).
+
+%% We move messages from the v1 index to the v2 index. The message payload
+%% is moved to the v2 store if it was embedded, and left in the per-vhost
+%% store otherwise.
+convert_from_v1_to_v2(State0 = #vqstate{ index_mod   = rabbit_queue_index,
+                                         index_state = V1Index }) ->
+    State = convert_from_v1_to_v2_in_memory(State0),
+    {QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun} = rabbit_queue_index:init_args(V1Index),
+    V2Index0 = rabbit_classic_queue_index_v2:init_for_conversion(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
+    V2Store0 = rabbit_classic_queue_store_v2:init(QueueName, fun(_, _) -> ok end),
+    {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1Index),
+    {V2Index, V2Store} = convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index0, V2Store0, LoSeqId, HiSeqId),
+    %% We have already deleted segments files but not the journal.
+    rabbit_queue_index:delete_journal(V1Index),
+    State#vqstate{ index_mod   = rabbit_classic_queue_index_v2,
+                   index_state = V2Index,
+                   store_state = V2Store }.
+
+convert_from_v1_to_v2_in_memory(State = #vqstate{ q1 = Q1b,
+                                                  q2 = Q2b,
+                                                  q3 = Q3b,
+                                                  q4 = Q4b }) ->
+    Q1 = convert_from_v1_to_v2_queue(Q1b),
+    Q2 = convert_from_v1_to_v2_queue(Q2b),
+    Q3 = convert_from_v1_to_v2_queue(Q3b),
+    Q4 = convert_from_v1_to_v2_queue(Q4b),
+    State#vqstate{ q1 = Q1,
+                   q2 = Q2,
+                   q3 = Q3,
+                   q4 = Q4 }.
+
+%% We change where the message is expected to be persisted to.
+%% We do not need to worry about the message location because
+%% it will only be in memory or in the per-vhost store.
+convert_from_v1_to_v2_queue(Q) ->
+    List0 = ?QUEUE:to_list(Q),
+    List = lists:map(fun
+        (MsgStatus = #msg_status{ persist_to = queue_index }) ->
+            MsgStatus#msg_status{ persist_to = queue_store };
+        (MsgStatus) ->
+            MsgStatus
+    end, List0),
+    ?QUEUE:from_list(List).
+
+convert_from_v1_to_v2_loop(_, _, V2Index, V2Store, HiSeqId, HiSeqId) ->
+    {V2Index, V2Store};
+convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0, LoSeqId, HiSeqId) ->
+    UpSeqId = lists:min([rabbit_queue_index:next_segment_boundary(LoSeqId),
+                         HiSeqId]),
+    {Messages, V1Index} = rabbit_queue_index:read(LoSeqId, UpSeqId, V1Index0),
+    %% We do a garbage collect immediately after the old index read
+    %% because that may have created a lot of garbage.
+    garbage_collect(),
+    {V2Index3, V2Store3} = lists:foldl(fun
+        %% Move embedded messages to the per-queue store.
+        ({Msg = #basic_message{id = MsgId}, SeqId, rabbit_queue_index, Props, IsPersistent},
+         {V2Index1, V2Store1}) ->
+            {MsgLocation, V2Store2} = rabbit_classic_queue_store_v2:write(SeqId, Msg, Props, V2Store1),
+            V2Index2 = rabbit_classic_queue_index_v2:publish(MsgId, SeqId, MsgLocation, Props, IsPersistent, infinity, V2Index1),
+            {V2Index2, V2Store2};
+        %% Keep messages in the per-vhost store where they are.
+        ({MsgId, SeqId, rabbit_msg_store, Props, IsPersistent},
+         {V2Index1, V2Store1}) ->
+            V2Index2 = rabbit_classic_queue_index_v2:publish(MsgId, SeqId, rabbit_msg_store, Props, IsPersistent, infinity, V2Index1),
+            {V2Index2, V2Store1}
+    end, {V2Index0, V2Store0}, Messages),
+    %% Flush to disk to avoid keeping too much in memory between segments.
+    V2Index = rabbit_classic_queue_index_v2:flush(V2Index3),
+    V2Store = rabbit_classic_queue_store_v2:sync(V2Store3),
+    %% We have written everything to disk. We can delete the old segment file
+    %% to free up much needed space, to avoid doubling disk usage during the upgrade.
+    rabbit_queue_index:delete_segment_file_for_seq_id(LoSeqId, V1Index),
+    %% Log some progress to keep the user aware of what's going on, as moving
+    %% embedded messages can take quite some time.
+    #resource{virtual_host = VHost, name = Name} = QueueName,
+    rabbit_log:info("Queue ~s on vhost ~s converted ~b messages from v1 to v2",
+                    [Name, VHost, length(Messages)]),
+    convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index, V2Store, UpSeqId, HiSeqId).
+
+%% We move messages from the v1 index to the v2 index. The message payload
+%% is moved to the v2 store if it was embedded, and left in the per-vhost
+%% store otherwise.
+convert_from_v2_to_v1(State0 = #vqstate{ index_mod   = rabbit_classic_queue_index_v2,
+                                         index_state = V2Index,
+                                         store_state = V2Store }) ->
+    State = convert_from_v2_to_v1_in_memory(State0),
+    {QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun} = rabbit_classic_queue_index_v2:init_args(V2Index),
+    V1Index0 = rabbit_queue_index:init_for_conversion(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
+    {LoSeqId, HiSeqId, _} = rabbit_classic_queue_index_v2:bounds(V2Index),
+    V1Index = convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index, V2Store, LoSeqId, HiSeqId),
+    %% We have already closed the v2 index/store FDs when deleting the files.
+    State#vqstate{ index_mod   = rabbit_queue_index,
+                   index_state = V1Index,
+                   store_state = undefined }.
+
+convert_from_v2_to_v1_in_memory(State0 = #vqstate{ q1 = Q1b,
+                                                   q2 = Q2b,
+                                                   q3 = Q3b,
+                                                   q4 = Q4b }) ->
+    {Q1, State1} = convert_from_v2_to_v1_queue(Q1b, State0),
+    {Q2, State2} = convert_from_v2_to_v1_queue(Q2b, State1),
+    {Q3, State3} = convert_from_v2_to_v1_queue(Q3b, State2),
+    {Q4, State4} = convert_from_v2_to_v1_queue(Q4b, State3),
+    State4#vqstate{ q1 = Q1,
+                    q2 = Q2,
+                    q3 = Q3,
+                    q4 = Q4 }.
+
+%% We fetch the message from the per-queue store if necessary
+%% and mark all messages as delivered to make the v1 index happy.
+convert_from_v2_to_v1_queue(Q, State0) ->
+    List0 = ?QUEUE:to_list(Q),
+    {List, State} = lists:mapfoldl(fun (MsgStatus0, State1 = #vqstate{ store_state = StoreState0 }) ->
+        case MsgStatus0 of
+            #msg_status{ seq_id = SeqId,
+                         msg_location = MsgLocation = {rabbit_classic_queue_store_v2, _, _} } ->
+                {Msg, StoreState} = rabbit_classic_queue_store_v2:read(SeqId, MsgLocation, StoreState0),
+                MsgStatus = MsgStatus0#msg_status{ msg = Msg,
+                                                   msg_location = memory,
+                                                   is_delivered = true,
+                                                   persist_to   = queue_index },
+                State2 = stats(ready0, {MsgStatus0, MsgStatus}, 0, State1),
+                {MsgStatus, State2#vqstate{ store_state = StoreState }};
+            #msg_status{ persist_to = queue_store } ->
+                {MsgStatus0#msg_status{ is_delivered = true,
+                                        persist_to   = queue_index }, State1};
+            _ ->
+                {MsgStatus0#msg_status{ is_delivered = true }, State1}
+        end
+    end, State0, List0),
+    {?QUEUE:from_list(List), State}.
+
+convert_from_v2_to_v1_loop(_, V1Index, _, _, HiSeqId, HiSeqId) ->
+    V1Index;
+convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0, LoSeqId, HiSeqId) ->
+    UpSeqId = lists:min([rabbit_classic_queue_index_v2:next_segment_boundary(LoSeqId),
+                         HiSeqId]),
+    {Messages, V2Index1} = rabbit_classic_queue_index_v2:read(LoSeqId, UpSeqId, V2Index0),
+    logger:error("HEREHERE~n~p~n~p", [Messages, V2Index0]),
+    {V1Index3, V2Store3} = lists:foldl(fun
+        %% Read per-queue store messages before writing to the index.
+        ({_MsgId, SeqId, Location = {rabbit_classic_queue_store_v2, _, _}, Props, IsPersistent},
+         {V1Index1, V2Store1}) ->
+            {Msg, V2Store2} = rabbit_classic_queue_store_v2:read(SeqId, Location, V2Store1),
+            V1Index2 = rabbit_queue_index:publish(Msg, SeqId, rabbit_queue_index, Props, IsPersistent, infinity, V1Index1),
+            V1Index2b = rabbit_queue_index:deliver([SeqId], V1Index2),
+            {V1Index2b, V2Store2};
+        %% Keep messages in the per-vhost store where they are.
+        ({MsgId, SeqId, rabbit_msg_store, Props, IsPersistent},
+         {V1Index1, V2Store1}) ->
+            V1Index2 = rabbit_queue_index:publish(MsgId, SeqId, rabbit_msg_store, Props, IsPersistent, infinity, V1Index1),
+            V1Index2b = rabbit_queue_index:deliver([SeqId], V1Index2),
+            {V1Index2b, V2Store1}
+    end, {V1Index0, V2Store0}, Messages),
+    %% Flush to disk to avoid keeping too much in memory between segments.
+    V1Index = rabbit_queue_index:flush(V1Index3),
+    %% We do a garbage collect because the old index may have created a lot of garbage.
+    garbage_collect(),
+    %% We have written everything to disk. We can delete the old segment file
+    %% to free up much needed space, to avoid doubling disk usage during the upgrade.
+    {DeletedSegments, V2Index} = rabbit_classic_queue_index_v2:delete_segment_file_for_seq_id(LoSeqId, V2Index1),
+    V2Store = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, V2Store3),
+    %% Log some progress to keep the user aware of what's going on, as moving
+    %% embedded messages can take quite some time.
+    #resource{virtual_host = VHost, name = Name} = QueueName,
+    rabbit_log:info("Queue ~s on vhost ~s converted ~b messages from v2 to v1",
+                    [Name, VHost, length(Messages)]),
+    convert_from_v2_to_v1_loop(QueueName, V1Index, V2Index, V2Store, UpSeqId, HiSeqId).
 
 %% Get the Timestamp property of the first msg, if present. This is
 %% the one with the oldest timestamp among the heads of the pending
@@ -1282,7 +1464,7 @@ msg_status(Version, IsPersistent, IsDelivered, SeqId,
                 msg_props     = MsgProps}.
 
 beta_msg_status({Msg = #basic_message{id = MsgId},
-                 SeqId, _MsgLocation, MsgProps, IsPersistent}) ->
+                 SeqId, rabbit_queue_index, MsgProps, IsPersistent}) ->
     MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
     MS0#msg_status{msg_id       = MsgId,
                    msg          = Msg,
@@ -1594,8 +1776,8 @@ read_msg(SeqId, _, _, MsgLocation, State = #vqstate{ store_state = StoreState0 }
         when is_tuple(MsgLocation) ->
     {Msg, StoreState} = ?STORE:read(SeqId, MsgLocation, StoreState0),
     {Msg, State#vqstate{ store_state = StoreState }};
-read_msg(_, MsgId, IsPersistent, _, State = #vqstate{msg_store_clients = MSCState,
-                                                     disk_read_count   = Count}) ->
+read_msg(_, MsgId, IsPersistent, rabbit_msg_store, State = #vqstate{msg_store_clients = MSCState,
+                                                                    disk_read_count   = Count}) ->
     {{ok, Msg = #basic_message {}}, MSCState1} =
         msg_store_read(MSCState, IsPersistent, MsgId),
     {Msg, State #vqstate {msg_store_clients = MSCState1,
@@ -2125,7 +2307,7 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
                        {MsgStatus#msg_status{ msg_location = MsgLocation },
                         State#vqstate{ store_state = StoreState,
                                        disk_write_count = Count + 1}};
-        queue_index -> {MsgStatus#msg_status{msg_location = ?IN_QUEUE_INDEX}, State}
+        queue_index -> {MsgStatus, State}
     end;
 maybe_write_msg_to_disk(_Force, MsgStatus, State) ->
     {MsgStatus, State}.
@@ -2219,7 +2401,6 @@ maybe_write_index_to_disk(_Force, MsgStatus, State) ->
     {MsgStatus, State}.
 
 maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus, State) ->
-    %% @todo This should update the msg_status so that we know at what offset the message was written.
     {MsgStatus1, State1} = maybe_write_msg_to_disk(ForceMsg, MsgStatus, State),
     maybe_write_index_to_disk(ForceIndex, MsgStatus1, State1).
 

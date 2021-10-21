@@ -42,6 +42,7 @@
 -type msg_pred() :: fun ((rabbit_types:message_properties()) -> boolean()).
 
 -type queue_mode() :: atom().
+-type queue_version() :: pos_integer().
 
 %% Called on startup with a vhost and a list of durable queue names on this vhost.
 %% The queues aren't being started at this point, but this call allows the
@@ -249,6 +250,8 @@
                       -> {{true, drop} | {true, reject} | boolean(), state()}.
 
 -callback set_queue_mode(queue_mode(), state()) -> state().
+
+-callback set_queue_version(queue_version(), state()) -> state().
 
 -callback zip_msgs_and_acks([delivered_publish()],
                             [ack()], Acc, state())

@@ -31,8 +31,11 @@
 %% after a non-clean shutdown.
 -export([queue_index_walker_reader/2]).
 
-%% Used to upgrade to the modern index.
+%% Used to upgrade/downgrade to/from the v2 index.
+-export([init_args/1]).
+-export([init_for_conversion/3]).
 -export([delete_segment_file_for_seq_id/2]).
+-export([delete_journal/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -294,6 +297,19 @@ init(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     State = #qistate { dir = Dir } = blank_state(VHostDir, Name),
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
+    State#qistate{on_sync     = OnSyncFun,
+                  on_sync_msg = OnSyncMsgFun}.
+
+init_args(#qistate{ queue_name  = QueueName,
+                    on_sync     = OnSyncFun,
+                    on_sync_msg = OnSyncMsgFun }) ->
+    {QueueName, OnSyncFun, OnSyncMsgFun}.
+
+init_for_conversion(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
+    #{segment_entry_count := SegmentEntryCount} = rabbit_vhost:read_config(VHost),
+    put(segment_entry_count, SegmentEntryCount),
+    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
+    State = blank_state(VHostDir, Name),
     State#qistate{on_sync     = OnSyncFun,
                   on_sync_msg = OnSyncMsgFun}.
 
@@ -1114,6 +1130,7 @@ read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
             Acc)
              when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
                   (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
+               %% @todo Location is wrong. Should only be ?MODULE if MsgOrId is a record.
                [{MsgOrId, reconstruct_seq_id(StartSeg, RelSeq), ?MODULE, MsgProps,
                  IsPersistent} | Acc]; %% @todo , IsDelivered == del
            (_RelSeq, _Value, Acc) ->
@@ -1547,11 +1564,7 @@ update_recovery_term(#resource{virtual_host = VHost} = QueueName, Term) ->
     rabbit_recovery_terms:store(VHost, Key, Term).
 
 
-%%----------------------------------------------------------------------------
-%% Upgrade to the modern index
-%%----------------------------------------------------------------------------
-
-%% This function is only used when upgrading to the new index.
+%% This function is only used when upgrading to the v2 index.
 %% We delete the segment file without updating the state.
 %% We will drop the state later on so we don't care much
 %% about how accurate it is as long as we can read from
@@ -1560,7 +1573,21 @@ delete_segment_file_for_seq_id(SeqId, #qistate { segments = Segments }) ->
     {Seg, _} = seq_id_to_seg_and_rel_seq_id(SeqId),
     case segment_find(Seg, Segments) of
         {ok, #segment { path = Path }} ->
-            ok = rabbit_file:delete(Path);
+            case rabbit_file:delete(Path) of
+                ok -> ok;
+                %% The file may not exist on disk yet.
+                {error, enoent} -> ok
+            end;
         error ->
             ok
     end.
+
+delete_journal(#qistate { dir = Dir, journal_handle = JournalHdl }) ->
+    %% Close the journal handle if any.
+    ok = case JournalHdl of
+        undefined -> ok;
+        _         -> file_handle_cache:close(JournalHdl)
+    end,
+    %% Delete the journal file.
+    _ = rabbit_file:delete(filename:join(Dir, "journal.jif")),
+    ok.
