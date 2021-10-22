@@ -6,8 +6,9 @@
 %%
 
 -module(classic_queue_SUITE).
-
 -compile(export_all).
+
+-define(NUM_TESTS, 500).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("proper/include/proper.hrl").
@@ -63,7 +64,8 @@ classic_queue_v1(Config) ->
 
 do_classic_queue_v1(_) ->
     true = proper:quickcheck(prop_classic_queue_v1(),
-                             [{on_output, on_output_fun()}]).
+                             [{on_output, on_output_fun()},
+                              {numtests, ?NUM_TESTS}]).
 
 lazy_queue_v1(Config) ->
     true = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -71,7 +73,8 @@ lazy_queue_v1(Config) ->
 
 do_lazy_queue_v1(_) ->
     true = proper:quickcheck(prop_lazy_queue_v1(),
-                             [{on_output, on_output_fun()}]).
+                             [{on_output, on_output_fun()},
+                              {numtests, ?NUM_TESTS}]).
 
 classic_queue_v2(Config) ->
     true = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -79,7 +82,8 @@ classic_queue_v2(Config) ->
 
 do_classic_queue_v2(_) ->
     true = proper:quickcheck(prop_classic_queue_v2(),
-                             [{on_output, on_output_fun()}]).
+                             [{on_output, on_output_fun()},
+                              {numtests, ?NUM_TESTS}]).
 
 lazy_queue_v2(Config) ->
     true = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -87,7 +91,8 @@ lazy_queue_v2(Config) ->
 
 do_lazy_queue_v2(_) ->
     true = proper:quickcheck(prop_lazy_queue_v2(),
-                             [{on_output, on_output_fun()}]).
+                             [{on_output, on_output_fun()},
+                              {numtests, ?NUM_TESTS}]).
 
 on_output_fun() ->
     fun (".", _) -> ok; % don't print the '.'s on new lines
@@ -144,13 +149,12 @@ prop_common(InitialState) ->
 command(St = #cq{amq=undefined}) ->
     {call, ?MODULE, cmd_setup_queue, [St]};
 command(St) ->
-    oneof([
-        {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]},
-        {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]},
+    weighted_union([
+        {100, {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]}},
+        {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         %% @todo set_mode_version at the same time.
-        {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024)]},
-        {call, ?MODULE, cmd_basic_get_msg, [St]},
-        {call, ?MODULE, cmd_is_process_alive, [St]}
+        {900, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024)]}},
+        {900, {call, ?MODULE, cmd_basic_get_msg, [St]}}
     ]).
 
 %% Next state.
@@ -189,9 +193,7 @@ postcondition(#cq{amq=AMQ}, {call, _, cmd_set_version, [_, Version]}, _) ->
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) when is_record(Msg, basic_message) ->
     true;
 postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
-    queue:peek(Q) =:= {value, Msg};
-postcondition(_, {call, _, cmd_is_process_alive, _}, true) ->
-    true.
+    queue:peek(Q) =:= {value, Msg}.
 
 %% Helpers.
 
@@ -282,7 +284,3 @@ cmd_basic_get_msg(#cq{amq=AMQ}) ->
                                   <<"cmd_basic_get_msg">>,
                                   rabbit_queue_type:init()),
     Msg.
-
-cmd_is_process_alive(#cq{amq=AMQ}) ->
-    QPid = amqqueue:get_pid(AMQ),
-    erlang:is_process_alive(QPid).
