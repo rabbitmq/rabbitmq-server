@@ -177,9 +177,6 @@ next_state(St, _, _) ->
 
 %% Preconditions.
 
-%% @todo We probably want to do basic_get when it's empty too!!
-precondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}) ->
-    not queue:is_empty(Q);
 precondition(_, _) ->
     true.
 
@@ -197,6 +194,8 @@ postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode_version, [Mode, Version]}, _)
     (do_check_queue_version(AMQ, Version) =:= ok);
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) when is_record(Msg, basic_message) ->
     true;
+postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, empty) ->
+    queue:is_empty(Q);
 postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
     queue:peek(Q) =:= {value, Msg}.
 
@@ -282,10 +281,14 @@ cmd_publish_msg(#cq{amq=AMQ}, PayloadSize) ->
     ok = rabbit_amqqueue:deliver([AMQ], Delivery),
     Msg.
 
-cmd_basic_get_msg(#cq{amq=AMQ}) ->
+cmd_basic_get_msg(#cq{amq=AMQ, q=Q}) ->
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
-    {ok, _CountMinusOne, {_QName, _QPid, _AckTag, false, Msg}, _} =
-        rabbit_amqqueue:basic_get(AMQ, true, Limiter,
-                                  <<"cmd_basic_get_msg">>,
-                                  rabbit_queue_type:init()),
-    Msg.
+    Res = rabbit_amqqueue:basic_get(AMQ, true, Limiter,
+                                    <<"cmd_basic_get_msg">>,
+                                    rabbit_queue_type:init()),
+    case {queue:is_empty(Q), Res} of
+        {true, {empty, _}} ->
+            empty;
+        {false, {ok, _CountMinusOne, {_QName, _QPid, _AckTag, false, Msg}, _}} ->
+            Msg
+    end.
