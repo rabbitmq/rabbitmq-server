@@ -137,11 +137,9 @@ prop_common(InitialState) ->
 %   recover
 %   ack
 %   reject
-%   policy_changed
 %   consume
 %   cancel
 %   delete
-%   purge
 %   requeue
 %   ttl behavior
 
@@ -153,7 +151,8 @@ command(St) ->
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
         {900, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean()]}},
-        {900, {call, ?MODULE, cmd_basic_get_msg, [St]}}
+        {900, {call, ?MODULE, cmd_basic_get_msg, [St]}},
+        {100, {call, ?MODULE, cmd_purge, [St]}}
     ]).
 
 %% Next state.
@@ -172,6 +171,8 @@ next_state(St=#cq{q=Q0}, _Msg, {call, _, cmd_basic_get_msg, _}) ->
     %% @todo Should add it to a list of messages that must be acked.
     {_, Q} = queue:out(Q0),
     St#cq{q=Q};
+next_state(St, _, {call, _, cmd_purge, _}) ->
+    St#cq{q=queue:new()};
 next_state(St, _, _) ->
     St.
 
@@ -197,7 +198,9 @@ postcondition(_, {call, _, cmd_publish_msg, _}, Msg) when is_record(Msg, basic_m
 postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, empty) ->
     queue:is_empty(Q);
 postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
-    queue:peek(Q) =:= {value, Msg}.
+    queue:peek(Q) =:= {value, Msg};
+postcondition(_, {call, _, cmd_purge, _}, {ok, _}) ->
+    true.
 
 %% Helpers.
 
@@ -292,3 +295,6 @@ cmd_basic_get_msg(#cq{amq=AMQ, q=Q}) ->
         {false, {ok, _CountMinusOne, {_QName, _QPid, _AckTag, false, Msg}, _}} ->
             Msg
     end.
+
+cmd_purge(#cq{amq=AMQ}) ->
+    rabbit_amqqueue:purge(AMQ).
