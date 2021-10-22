@@ -135,7 +135,6 @@ prop_common(InitialState) ->
 %   kill
 %   terminate
 %   recover
-%   set version v1/v2
 %   ack
 %   reject
 %   policy_changed
@@ -152,7 +151,7 @@ command(St) ->
     weighted_union([
         {100, {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]}},
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
-        %% @todo set_mode_version at the same time.
+        {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
         {900, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024)]}},
         {900, {call, ?MODULE, cmd_basic_get_msg, [St]}}
     ]).
@@ -165,6 +164,8 @@ next_state(St, _, {call, _, cmd_set_mode, [_, Mode]}) ->
     St#cq{mode=Mode};
 next_state(St, _, {call, _, cmd_set_version, [_, Version]}) ->
     St#cq{version=Version};
+next_state(St, _, {call, _, cmd_set_mode_version, [Mode, Version]}) ->
+    St#cq{mode=Mode, version=Version};
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_publish_msg, _}) ->
     St#cq{q=queue:in(Msg, Q)};
 next_state(St=#cq{q=Q0}, _Msg, {call, _, cmd_basic_get_msg, _}) ->
@@ -190,6 +191,10 @@ postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode, [_, Mode]}, _) ->
     do_check_queue_mode(AMQ, Mode) =:= ok;
 postcondition(#cq{amq=AMQ}, {call, _, cmd_set_version, [_, Version]}, _) ->
     do_check_queue_version(AMQ, Version) =:= ok;
+postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode_version, [Mode, Version]}, _) ->
+    (do_check_queue_mode(AMQ, Mode) =:= ok)
+    andalso
+    (do_check_queue_version(AMQ, Version) =:= ok);
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) when is_record(Msg, basic_message) ->
     true;
 postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
