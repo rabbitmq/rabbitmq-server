@@ -152,7 +152,7 @@ command(St) ->
         {100, {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]}},
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
-        {900, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024)]}},
+        {900, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean()]}},
         {900, {call, ?MODULE, cmd_basic_get_msg, [St]}}
     ]).
 
@@ -269,14 +269,13 @@ do_set_policy(Mode, Version) ->
          {<<"queue-version">>, Version}],
         0, <<"queues">>, <<"acting-user">>).
 
-cmd_publish_msg(#cq{amq=AMQ}, PayloadSize) ->
+cmd_publish_msg(#cq{amq=AMQ}, PayloadSize, Confirm, Mandatory) ->
     Payload = rand:bytes(PayloadSize),
     Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
                                <<>>, #'P_basic'{delivery_mode = 2},
                                Payload),
-    %% @todo Confirm/mandatory variants.
-    Delivery = #delivery{mandatory = false, sender = self(),
-                         confirm = false, message = Msg,% msg_seq_no = Seq,
+    Delivery = #delivery{mandatory = Mandatory, sender = self(),
+                         confirm = Confirm, message = Msg,% msg_seq_no = Seq,
                          flow = noflow},
     ok = rabbit_amqqueue:deliver([AMQ], Delivery),
     Msg.
@@ -289,6 +288,7 @@ cmd_basic_get_msg(#cq{amq=AMQ, q=Q}) ->
     case {queue:is_empty(Q), Res} of
         {true, {empty, _}} ->
             empty;
+        %% @todo The AckTag should be passed on so we can later ack.
         {false, {ok, _CountMinusOne, {_QName, _QPid, _AckTag, false, Msg}, _}} ->
             Msg
     end.
