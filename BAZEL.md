@@ -35,7 +35,7 @@ Create a `user.bazelrc` by making a copy of `user-template.bazelrc` and updating
 
 ### Running tests
 
-Many rabbit tests spawn single or clustered rabbit nodes, and therefore it's best to run test suites sequentially on a single machine. Hence the `build --local_test_jobs=1` flag used in `.bazelrc`. Naturally that restriction does not hold if utilizing remote execution (as is the case for RabbitMQ's CI pipelines).
+Many rabbit tests spawn single or clustered rabbit nodes, and therefore it's best to run test suites sequentially on a single machine. Hence the `build --local_test_jobs=1` flag used in `.bazelrc`. Additionally, it may be reasonable to disable test sharding and stream test output when running tests locally with `--test_sharding_strategy=disabled` & `--test_output=streamed` additional arguments. Naturally that restriction does not hold if utilizing remote execution (as is the case for RabbitMQ's CI pipelines).
 
 Erlang Common Test logs will not be placed in the logs directory when run with bazel. They can be found under `bazel-testlogs`. For instance, those of the rabbit application's backing_queue suite will be under `bazel-testlogs/deps/rabbit/backing_queue_SUITE/test.outputs/`.
 
