@@ -686,6 +686,13 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
         false -> try ets:update_counter(FlyingEts, Key, {2, Diff}) of
                      0    -> ok;
                      Diff -> ok;
+                     Err when Err >= 2 ->
+                         %% The message must be referenced twice in the queue
+                         %% index. There is a bug somewhere, but we don't want
+                         %% to take down anything just because of this. Let's
+                         %% process the message as if the copies were in
+                         %% different queues (fan-out).
+                         ok;
                      Err  -> throw({bad_flying_ets_update, Diff, Err, Key})
                  catch error:badarg ->
                          %% this is guaranteed to succeed since the
@@ -1082,6 +1089,14 @@ update_flying(Diff, MsgId, CRef, #msstate { flying_ets = FlyingEts }) ->
                         process;
         [{_, 0}]     -> true = ets:delete_object(FlyingEts, {Key, 0}),
                         ignore;
+        [{_, Err}] when Err >= 2 ->
+            %% The message must be referenced twice in the queue index. There
+            %% is a bug somewhere, but we don't want to take down anything
+            %% just because of this. Let's process the message as if the
+            %% copies were in different queues (fan-out).
+            ets:update_counter(FlyingEts, Key, {2, Diff}),
+            true = ets:delete_object(FlyingEts, {Key, 0}),
+            process;
         [{_, Err}]   -> throw({bad_flying_ets_record, Diff, Err, Key})
     end.
 %% [1] We can get here, for example, in the following scenario: There
