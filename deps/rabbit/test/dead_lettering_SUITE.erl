@@ -28,6 +28,7 @@ groups() ->
                        dead_letter_nack_requeue,
                        dead_letter_nack_requeue_multiple,
                        dead_letter_reject,
+                       dead_letter_reject_many,
                        dead_letter_reject_requeue,
                        dead_letter_max_length_drop_head,
                        dead_letter_missing_exchange,
@@ -309,6 +310,36 @@ dead_letter_reject(Config) ->
     %% Consume the last two from the queue
     _ = consume(Ch, QName, [P2, P3]),
     consume_empty(Ch, QName).
+
+%% 1) Many messages are rejected. They get dead-lettered in correct order.
+dead_letter_reject_many(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName),
+
+    %% Publish 100 messages
+    Payloads = lists:map(fun erlang:integer_to_binary/1, lists:seq(1, 100)),
+    publish(Ch, QName, Payloads),
+    wait_for_messages(Config, [[QName, <<"100">>, <<"100">>, <<"0">>]]),
+
+    %% Reject all messages using same consumer
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName}, self()),
+    CTag = receive #'basic.consume_ok'{consumer_tag = C} -> C end,
+    [begin
+         receive {#'basic.deliver'{consumer_tag = CTag, delivery_tag = DTag}, #amqp_msg{payload = P}} ->
+                     amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag, requeue = false})
+         after 5000 ->
+                   amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+                   exit(timeout)
+         end
+     end || P <- Payloads],
+    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+
+    %% Consume all messages from dead letter queue in correct order (i.e. from payload <<1>> to <<100>>)
+    wait_for_messages(Config, [[DLXQName, <<"100">>, <<"100">>, <<"0">>]]),
+    _ = consume(Ch, DLXQName, Payloads),
+    consume_empty(Ch, DLXQName).
 
 %% 1) Message is rejected with basic.reject, requeue=true. Dead-lettering does not take place.
 dead_letter_reject_requeue(Config) ->
