@@ -227,7 +227,7 @@ DeclarePublisherRequest => Key Version CorrelationId PublisherId [PublisherRefer
   PublisherReference => string // max 256 characters
   Stream => string
 
-DeclarePublisherResponse => Key Version CorrelationId ResponseCode PublisherId
+DeclarePublisherResponse => Key Version CorrelationId ResponseCode
   Key => uint16 // 1
   Version => uint16
   CorrelationId => uint32
@@ -491,12 +491,14 @@ SaslHandshakeRequest => Key Version CorrelationId Mechanism
   Key => uint16 // 18
   Version => uint16
   CorrelationId => uint32
+  Mechanism => string
 
-SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanism]
+SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanisms]
   Key => uint16 // 18
   Version => uint16
   CorrelationId => uint32
   ResponseCode => uint16
+  Mechanisms => [Mechanism]
   Mechanism => string
 ```
 
