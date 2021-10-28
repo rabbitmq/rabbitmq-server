@@ -762,8 +762,7 @@ handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
                            State0#state{consumer_deliveries =
                                         update_consumer(Tag, LastId,
                                                         length(IdMsgs),
-                                                        C#consumer{last_msg_id = LastId},
-                                                        CDels0)})
+                                                        C, CDels0)})
     end.
 
 transform_msgs(QName, QRef, Msgs) ->
