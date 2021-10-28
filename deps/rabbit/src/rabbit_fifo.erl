@@ -208,8 +208,17 @@ apply(Meta,
 apply(Meta, #discard{msg_ids = MsgIds, consumer_id = ConsumerId},
       #?MODULE{consumers = Cons0} = State0) ->
     case Cons0 of
-        #{ConsumerId := Con0} ->
-            Discarded = maps:with(MsgIds, Con0#consumer.checked_out),
+        #{ConsumerId := #consumer{checked_out = Checked} = Con0} ->
+            % Discarded maintains same order as MsgIds (so that publishing to
+            % dead-letter exchange will be in same order as messages got rejected)
+            Discarded = lists:filtermap(fun(Id) ->
+                                                case maps:find(Id, Checked) of
+                                                    {ok, Msg} ->
+                                                        {true, Msg};
+                                                    error ->
+                                                        false
+                                                end
+                                        end, MsgIds),
             Effects = dead_letter_effects(rejected, Discarded, State0, []),
             complete_and_checkout(Meta, MsgIds, ConsumerId, Con0,
                                   Effects, State0);
@@ -1191,7 +1200,7 @@ drop_head(#?MODULE{ra_indexes = Indexes0} = State0, Effects0) ->
                         'empty' -> State2;
                         _ -> subtract_in_memory_counts(Header, State2)
                     end,
-            Effects = dead_letter_effects(maxlen, #{none => FullMsg},
+            Effects = dead_letter_effects(maxlen, [FullMsg],
                                           State, Effects0),
             {State, Effects};
         {{'$prefix_msg', Header}, State1} ->
@@ -1388,24 +1397,24 @@ dead_letter_effects(_Reason, _Discarded,
 dead_letter_effects(Reason, Discarded,
                     #?MODULE{cfg = #cfg{dead_letter_handler = {Mod, Fun, Args}}},
                     Effects) ->
-    RaftIdxs = maps:fold(
-                    fun (_, {_, {RaftIdx, {_Header, 'empty'}}}, Acc) ->
-                            [RaftIdx | Acc];
-                        (_, _, Acc) ->
-                            Acc
-                    end, [], Discarded),
+    RaftIdxs = lists:filtermap(
+                 fun ({_, {RaftIdx, {_Header, 'empty'}}}) ->
+                         {true, RaftIdx};
+                     (_) ->
+                         false
+                 end, Discarded),
     [{log, RaftIdxs,
       fun (Log) ->
               Lookup = maps:from_list(lists:zip(RaftIdxs, Log)),
-              DeadLetters = maps:fold(
-                              fun (_, {_, {RaftIdx, {_Header, 'empty'}}}, Acc) ->
+              DeadLetters = lists:filtermap(
+                              fun ({_, {RaftIdx, {_Header, 'empty'}}}) ->
                                       {enqueue, _, _, Msg} = maps:get(RaftIdx, Lookup),
-                                      [{Reason, Msg} | Acc];
-                                  (_, {_, {_, {_Header, Msg}}}, Acc) ->
-                                      [{Reason, Msg} | Acc];
-                                  (_, _, Acc) ->
-                                      Acc
-                              end, [], Discarded),
+                                      {true, {Reason, Msg}};
+                                  ({_, {_, {_Header, Msg}}}) ->
+                                      {true, {Reason, Msg}};
+                                  (_) ->
+                                      false
+                              end, Discarded),
               [{mod_call, Mod, Fun, Args ++ [DeadLetters]}]
       end} | Effects].
 
@@ -1509,7 +1518,7 @@ return_one(Meta, MsgId, MsgNum, {RaftId, {Header0, RawMsg}},
     case maps:get(delivery_count, Header) of
         DeliveryCount when DeliveryCount > DeliveryLimit ->
             DlMsg = {MsgNum, Msg0},
-            Effects = dead_letter_effects(delivery_limit, #{none => DlMsg},
+            Effects = dead_letter_effects(delivery_limit, [DlMsg],
                                           State0, Effects0),
             complete(Meta, ConsumerId, #{MsgId => DlMsg}, Con0, Effects, State0);
         _ ->
