@@ -8,7 +8,7 @@
 -module(classic_queue_SUITE).
 -compile(export_all).
 
--define(NUM_TESTS, 100).
+-define(NUM_TESTS, 500).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("proper/include/proper.hrl").
@@ -193,8 +193,8 @@ command(St) ->
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
         %% These are direct publish/basic_get(autoack)/purge.
-%        {900, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean()]}},
-%        {900, {call, ?MODULE, cmd_basic_get_msg, [St]}},
+        {900, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean()]}},
+        {900, {call, ?MODULE, cmd_basic_get_msg, [St]}},
 %        {100, {call, ?MODULE, cmd_purge, [St]}},
         %% These are channel-based operations.
         {100, {call, ?MODULE, cmd_channel_open, [St]}}
@@ -217,7 +217,6 @@ next_state(St, _, {call, _, cmd_set_version, [_, Version]}) ->
     St#cq{version=Version};
 next_state(St, _, {call, _, cmd_set_mode_version, [Mode, Version]}) ->
     St#cq{mode=Mode, version=Version};
-%% @todo Those are no longer working because the record differs.
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_publish_msg, _}) ->
     IntQ = maps:get(internal, Q, queue:new()),
     St#cq{q=Q#{internal => queue:in(Msg, IntQ)}};
@@ -241,22 +240,27 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_basic_get, _}) ->
 
 %% @todo This function is not working in a symbolic context.
 %%       We cannot rely on Q for driving preconditions as a result.
+%%
+%% We remove at most one message.
 queue_out(Qs0, Msg) ->
-    maps:fold(fun
-        (Ch, ChQ, Qs1) ->
+    {Qs, _} = maps:fold(fun
+        (Ch, ChQ, {Qs1, true}) ->
+            {Qs1#{Ch => ChQ}, true};
+        (Ch, ChQ, {Qs1, false}) ->
             case queue:peek(ChQ) of
                 {value, Msg} ->
                     case queue:len(ChQ) of
                         1 ->
-                            Qs1;
+                            {Qs1, true};
                         _ ->
                             {_, ChQOut} = queue:out(ChQ),
-                            Qs1#{Ch => ChQOut}
+                            {Qs1#{Ch => ChQOut}, true}
                     end;
                 _ ->
-                    Qs1#{Ch => ChQ}
+                    {Qs1#{Ch => ChQ}, false}
             end
-    end, #{}, Qs0).
+    end, {#{}, false}, Qs0),
+    Qs.
 
 %% Preconditions.
 
@@ -282,11 +286,16 @@ postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode_version, [Mode, Version]}, _)
     andalso
     (do_check_queue_version(AMQ, Version) =:= ok);
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) ->
-    is_record(Msg, basic_message);
+    is_record(Msg, amqp_msg);
 postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, empty) ->
-    queue:is_empty(Q);
+    %% Due to the asynchronous nature of publishing it may be
+    %% possible to have published a message but an immediate basic.get
+    %% on a separate channel cannot retrieve it. In that case we accept
+    %% an empty return value only if the channel we are calling
+    %% basic.get on has no messages published and not consumed.
+    not maps:is_key(internal, Q);
 postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
-    queue:peek(Q) =:= {value, Msg};
+    queue_peek_has_msg(Q, Msg);
 postcondition(_, {call, _, cmd_purge, _}, {ok, _}) ->
     true;
 postcondition(_, {call, _, cmd_channel_open, _}, _) ->
@@ -307,12 +316,11 @@ postcondition(#cq{q=Q}, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
     %% basic.get on has no messages published and not consumed.
     not maps:is_key(Ch, Q);
 postcondition(#cq{q=Q}, {call, _, cmd_channel_basic_get, _}, Msg) ->
-    case queue_peek_has_msg(Q, Msg) of
-        false ->
-    logger:error("MSG ~p~n~n~n", [Msg]);
-    _ -> ok end,
     queue_peek_has_msg(Q, Msg).
 
+%% We want to confirm at least one of this exact message
+%% was published. There might be multiple if the randomly
+%% generated payload got two identical values.
 queue_peek_has_msg(Qs, Msg) ->
     NumFound = maps:fold(fun
         (_, ChQ, NumFound1) ->
@@ -323,7 +331,7 @@ queue_peek_has_msg(Qs, Msg) ->
                     NumFound1
             end
     end, 0, Qs),
-    1 =:= NumFound.
+    NumFound >= 1.
 
 %% Helpers.
 
@@ -404,20 +412,22 @@ cmd_publish_msg(#cq{amq=AMQ}, PayloadSize, Confirm, Mandatory) ->
                          confirm = Confirm, message = Msg,% msg_seq_no = Seq,
                          flow = noflow},
     ok = rabbit_amqqueue:deliver([AMQ], Delivery),
-    Msg.
+    {MsgProps, MsgPayload} = rabbit_basic_common:from_content(Msg#basic_message.content),
+    #amqp_msg{props=MsgProps, payload=MsgPayload}.
 
-cmd_basic_get_msg(#cq{amq=AMQ, q=Q}) ->
+cmd_basic_get_msg(#cq{amq=AMQ}) ->
     {ok, Limiter} = rabbit_limiter:start_link(no_id),
     %% The second argument means that we will not be sending
     %% a ack message. @todo Maybe handle both cases.
     Res = rabbit_amqqueue:basic_get(AMQ, true, Limiter,
                                     <<"cmd_basic_get_msg">>,
                                     rabbit_queue_type:init()),
-    case {queue:is_empty(Q), Res} of
-        {true, {empty, _}} ->
+    case Res of
+        {empty, _} ->
             empty;
-        {false, {ok, _CountMinusOne, {_QName, _QPid, _AckTag, false, Msg}, _}} ->
-            Msg
+        {ok, _CountMinusOne, {_QName, _QPid, _AckTag, false, Msg}, _} ->
+            {MsgProps, MsgPayload} = rabbit_basic_common:from_content(Msg#basic_message.content),
+            #amqp_msg{props=MsgProps, payload=MsgPayload}
     end.
 
 cmd_purge(#cq{amq=AMQ}) ->
