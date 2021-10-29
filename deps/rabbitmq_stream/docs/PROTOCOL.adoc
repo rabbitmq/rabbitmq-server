@@ -1,6 +1,6 @@
-= RabbitMQ Stream Protocol Reference
+= RabbitMQ Streams Protocol Reference
 
-This is the reference of the RabbitMQ stream protocol. Note the protocol
+This is the reference of the RabbitMQ Streams protocol. Note the protocol
 is still under development and is subject to change.
 
 The https://github.com/rabbitmq/rabbitmq-stream-java-client[RabbitMQ Stream Java client]
@@ -660,5 +660,5 @@ answers whether it accepts the access or not.
 
 == Resources
 
-- https://docs.google.com/presentation/d/1Hlv4qaWm2PRU04dVPmShP9wU7TEQEttXdsbV8P54Uvw/edit#slide=id.gdbeadf9676_0_37[RabbitMQ stream client] : a general guide line to write a stream client
+- https://docs.google.com/presentation/d/1Hlv4qaWm2PRU04dVPmShP9wU7TEQEttXdsbV8P54Uvw/edit#slide=id.gdbeadf9676_0_37[RabbitMQ Streams client] : a general guide line to write a streams client
 - https://docs.google.com/presentation/d/1BFwf01LcicZ-SyxE1CycZv2gUQMPFGdtFkVuXhgkoTE/edit#slide=id.p1[RabbitMQ Streams Internals]: how the streams work internally 
