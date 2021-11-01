@@ -611,7 +611,7 @@ handle_ra_event(Leader, {machine, leader_change}, State0) ->
     %% we need to update leader
     %% and resend any pending commands
     State = resend_all_pending(State0#state{leader = Leader}),
-    {ok, State, []};
+    {ok, cancel_timer(State), []};
 handle_ra_event(_From, {rejected, {not_leader, undefined, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
     {ok, State0, []};
