@@ -15,7 +15,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     github_bazel_erlang_lib(
         name = "aten",
         org = "rabbitmq",
-        sha256 = "b78679349168f27d7047f3283c9d766760b234d98c762aca9a1907f4ee3fd406",
+        # sha256 = "b78679349168f27d7047f3283c9d766760b234d98c762aca9a1907f4ee3fd406",
         ref = "v0.5.7",
         version = "0.5.7",
     )
