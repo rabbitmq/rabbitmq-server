@@ -742,6 +742,7 @@ overview(#?MODULE{consumers = Cons,
       num_checked_out => num_checked_out(State),
       num_enqueuers => maps:size(Enqs),
       num_ready_messages => messages_ready(State),
+      num_pending_messages => messages_pending(State),
       num_messages => messages_total(State),
       num_release_cursors => lqueue:len(Cursors),
       release_cursors => [I || {_, I, _} <- lqueue:to_list(Cursors)],
@@ -1010,6 +1011,11 @@ usage(Name) when is_atom(Name) ->
     end.
 
 %%% Internal
+
+messages_pending(#?MODULE{enqueuers = Enqs}) ->
+    maps:fold(fun(_, #enqueuer{pending = P}, Acc) ->
+                      length(P) + Acc
+              end, 0, Enqs).
 
 messages_ready(#?MODULE{messages = M,
                         prefix_msgs = {RCnt, _R, PCnt, _P},
@@ -1301,7 +1307,7 @@ maybe_enqueue(RaftIdx, From, MsgSeqNo, RawMsg, Effects0,
         #enqueuer{next_seqno = Next,
                   pending = Pending0} = Enq0
           when MsgSeqNo > Next ->
-            % out of order delivery
+            % out of order enqueue
             Pending = [{MsgSeqNo, RaftIdx, RawMsg} | Pending0],
             Enq = Enq0#enqueuer{pending = lists:sort(Pending)},
             {ok, State0#?MODULE{enqueuers = Enqueuers0#{From => Enq}}, Effects0};
