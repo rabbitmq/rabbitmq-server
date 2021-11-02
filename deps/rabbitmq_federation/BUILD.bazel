@@ -84,6 +84,7 @@ suites = [
             ":rabbit_federation_test_util",
         ],
         flaky = True,
+        shard_count = 6,
     ),
     rabbitmq_integration_suite(
         PACKAGE,
