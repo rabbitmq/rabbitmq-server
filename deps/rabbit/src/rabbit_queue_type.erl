@@ -389,7 +389,7 @@ recover(VHost, Qs) ->
              end, {[], []}, ByType).
 
 -spec handle_down(pid(), term(), state()) ->
-    {ok, state(), actions()} | {eol, queue_ref()} | {error, term()}.
+    {ok, state(), actions()} | {eol, state(), queue_ref()} | {error, term()}.
 handle_down(Pid, Info, #?STATE{monitor_registry = Reg0} = State0) ->
     %% lookup queue ref in monitor registry
     case maps:take(Pid, Reg0) of

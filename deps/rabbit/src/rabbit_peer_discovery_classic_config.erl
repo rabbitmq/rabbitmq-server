@@ -47,7 +47,7 @@ lock(Node) ->
   end.
 
 -spec unlock({{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}) ->
-    ok | {error, Reason :: string()}.
+    ok.
 
 unlock({LockId, Nodes}) ->
   global:del_lock(LockId, Nodes),

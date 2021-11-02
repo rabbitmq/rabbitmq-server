@@ -239,7 +239,7 @@ query_local_pid(StreamId, Node, #?MODULE{streams = Streams}) ->
     end.
 
 -spec register_listener(amqqueue:amqqueue()) ->
-    {error, term()} | {ok, ok, atom() | {atom(), atom()}}.
+    {error, term()} | {ok, ok | stream_not_found, atom() | {atom(), atom()}}.
 register_listener(Q) when ?is_amqqueue(Q)->
     #{name := StreamId} = amqqueue:get_type_state(Q),
     process_command({register_listener,
