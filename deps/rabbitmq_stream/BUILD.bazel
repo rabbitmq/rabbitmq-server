@@ -86,7 +86,7 @@ suites = [
     ),
     rabbitmq_integration_suite(
         PACKAGE,
-        name = "rabbit_stream_manager_SUITE"
+        name = "rabbit_stream_manager_SUITE",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
