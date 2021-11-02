@@ -526,6 +526,7 @@ restart_upstream(Config) ->
     Qgoes = bind_queue(Downstream, <<"hare.downstream">>, <<"goes">>),
 
     rabbit_ct_client_helpers:close_channels_and_connection(Config, Hare),
+    timer:sleep(3000),
     rabbit_ct_broker_helpers:stop_node(Config, Hare),
 
     Qcomes = bind_queue(Downstream, <<"hare.downstream">>, <<"comes">>),
