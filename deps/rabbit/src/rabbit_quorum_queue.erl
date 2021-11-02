@@ -415,7 +415,9 @@ handle_tick(QName,
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
     Self = self(),
-    _ = spawn(fun() ->
+    _ = spawn(
+          fun() ->
+                  try
                       R = reductions(Name),
                       rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
                       Util = case C of
@@ -454,7 +456,11 @@ handle_tick(QName,
 
                               ok
                       end
-              end),
+                  catch
+                      _:_ ->
+                          ok
+                  end
+          end),
     ok.
 
 repair_leader_record(QName, Self) ->
