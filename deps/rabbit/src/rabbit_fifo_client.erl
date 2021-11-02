@@ -142,9 +142,10 @@ init(ClusterName = #resource{}, Servers, SoftLimit, BlockFun, UnblockFun) ->
 enqueue(Correlation, Msg,
         #state{queue_status = undefined,
                next_enqueue_seq = 1,
-               cfg = #cfg{timeout = Timeout}} = State0) ->
+               cfg = #cfg{servers = Servers,
+                          timeout = Timeout}} = State0) ->
     %% it is the first enqueue, check the version
-    {_, Node} = Server = pick_server(State0),
+    {_, Node} = pick_server(State0),
     case rpc:call(Node, ra_machine, version, [{machine, rabbit_fifo, #{}}]) of
         0 ->
             %% the leader is running the old version
@@ -155,14 +156,21 @@ enqueue(Correlation, Msg,
             %% were running the new version on the leader do sync initialisation
             %% of enqueuer session
             Reg = rabbit_fifo:make_register_enqueuer(self()),
-            case ra:process_command(Server, Reg, Timeout) of
-                {ok, reject_publish, _} ->
-                    {reject_publish, State0#state{queue_status = reject_publish}};
-                {ok, ok, _} ->
-                    enqueue(Correlation, Msg, State0#state{queue_status = go});
+            case ra:process_command(Servers, Reg, Timeout) of
+                {ok, reject_publish, Leader} ->
+                    {reject_publish, State0#state{leader = Leader,
+                                                  queue_status = reject_publish}};
+                {ok, ok, Leader} ->
+                    enqueue(Correlation, Msg, State0#state{leader = Leader,
+                                                           queue_status = go});
+                {error, {no_more_servers_to_try, _Errs}} ->
+                    %% if we are not able to process the register command
+                    %% it is safe to reject the message as we never attempted
+                    %% to send it
+                    {reject_publish, State0};
+                %% TODO: not convinced this can ever happen when using
+                %% a list of servers
                 {timeout, _} ->
-                    %% if we timeout it is probably better to reject
-                    %% the message than being uncertain
                     {reject_publish, State0};
                 Err ->
                     exit(Err)
