@@ -130,7 +130,7 @@ def _impl(ctx):
     deps = flat_deps(ctx.attr.deps)
 
     runfiles = ctx.runfiles([ebin])
-    for dep in ctx.attr.deps:
+    for dep in deps:
         runfiles = runfiles.merge(dep[DefaultInfo].default_runfiles)
 
     return [

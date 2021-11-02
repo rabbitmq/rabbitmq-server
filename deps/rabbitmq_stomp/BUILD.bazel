@@ -88,6 +88,7 @@ erlc(
         "src/**/*.hrl",
     ]),
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    dest = "test",
     deps = [
         ":test_bazel_erlang_lib",
         "@lager//:bazel_erlang_lib",
