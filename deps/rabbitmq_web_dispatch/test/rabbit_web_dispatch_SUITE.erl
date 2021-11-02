@@ -71,12 +71,9 @@ query_static_resource_test1(Host, Port) ->
     rabbit_web_dispatch:register_static_context(test, [{port, Port}],
                                                 "rabbit_web_dispatch_test",
                                                 ?MODULE, "test/priv/www", "Test"),
-    inets:start(),
     {ok, {_Status, _Headers, Body}} =
         httpc:request(format("http://~s:~w/rabbit_web_dispatch_test/index.html", [Host, Port])),
-    ?assert(string:str(Body, "RabbitMQ HTTP Server Test Page") /= 0),
-
-    passed.
+    ?assertMatch(I when I > 0, string:str(Body, "RabbitMQ HTTP Server Test Page")).
 
 add_idempotence_test(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_http_extra),
