@@ -128,10 +128,7 @@ def rabbitmq_integration_suite(
         erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
         additional_hdrs = additional_hdrs,
         additional_srcs = additional_srcs,
-        data = [
-            "//deps/rabbitmq_ct_helpers/tools/tls-certs:Makefile",
-            "//deps/rabbitmq_ct_helpers/tools/tls-certs:openssl.cnf.in",
-        ] + data,
+        data = data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
             "RABBITMQ_CT_SKIP_AS_ERROR": "true",
@@ -160,10 +157,7 @@ def rabbitmq_integration_suite(
         name = name + "-mixed",
         suite_name = name,
         tags = tags + ["mixed-version-cluster"],
-        data = [
-            "//deps/rabbitmq_ct_helpers/tools/tls-certs:Makefile",
-            "//deps/rabbitmq_ct_helpers/tools/tls-certs:openssl.cnf.in",
-        ] + data,
+        data = data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
             "RABBITMQ_FEATURE_FLAGS": "",

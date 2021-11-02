@@ -482,7 +482,9 @@ load_rabbitmqctl_app(Config) ->
             Config;
         {error, {already_loaded, rabbitmqctl}} ->
             Config;
-        {error, _} ->
+        {error, Reason} ->
+            ct:pal(?LOW_IMPORTANCE,
+              "Failed to load rabbitmqctl application: ~p", [Reason]),
             {skip, "Application rabbitmqctl could not be loaded, " ++
                 "please place compiled rabbitmq_cli on the code path"}
     end.
