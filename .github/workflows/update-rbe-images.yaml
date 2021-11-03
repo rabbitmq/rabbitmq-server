@@ -26,9 +26,11 @@ jobs:
       env:
         IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
         TAG: linux-erlang-${{ matrix.erlang_version }}
+        PR_BRANCH: bump-rbe-image-${{ matrix.short_version }}
       run: |
-        git ls-remote --exit-code --heads origin bump-rbe-image-${{ matrix.short_version }} \
-          && git switch bump-rbe-image-${{ matrix.short_version }}
+        git ls-remote --exit-code --heads origin ${PR_BRANCH} \
+          && git fetch origin ${PR_BRANCH}:${PR_BRANCH} \
+          && git switch ${PR_BRANCH}
 
         # buildbuddy caches the container image, so we must use a specific sha to ensure
         # the latest is used
