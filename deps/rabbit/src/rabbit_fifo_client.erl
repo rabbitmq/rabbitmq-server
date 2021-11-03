@@ -31,13 +31,15 @@
          update_machine_state/2,
          pending_size/1,
          stat/1,
-         stat/2
+         stat/2,
+         query_single_active_consumer/1
          ]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(SOFT_LIMIT, 32).
 -define(TIMER_TIME, 10000).
+-define(COMMAND_TIMEOUT, 30000).
 
 -type seq() :: non_neg_integer().
 %% last_applied is initialised to -1
@@ -149,8 +151,6 @@ enqueue(Correlation, Msg,
     case rpc:call(Node, ra_machine, version, [{machine, rabbit_fifo, #{}}]) of
         0 ->
             %% the leader is running the old version
-            %% so we can't initialize the enqueuer session safely
-            %% fall back on old behavour
             enqueue(Correlation, Msg, State0#state{queue_status = go});
         1 ->
             %% were running the new version on the leader do sync initialisation
@@ -395,6 +395,20 @@ checkout(ConsumerTag, NumUnsettled, CreditMode, Meta,
                                        ack = Ack}, CDels0),
     try_process_command(Servers, Cmd, State0#state{consumer_deliveries = SDels}).
 
+
+-spec query_single_active_consumer(state()) ->
+    {ok, term()} | {error, term()} | {timeout, term()}.
+query_single_active_consumer(#state{leader = undefined}) ->
+    {error, leader_not_known};
+query_single_active_consumer(#state{leader = Leader}) ->
+    case ra:local_query(Leader, fun rabbit_fifo:query_single_active_consumer/1,
+                        ?COMMAND_TIMEOUT) of
+        {ok, {_, Reply}, _} ->
+            {ok, Reply};
+        Err ->
+            Err
+    end.
+
 %% @doc Provide credit to the queue
 %%
 %% This only has an effect if the consumer uses credit mode: credited
@@ -444,8 +458,8 @@ cancel_checkout(ConsumerTag, #state{consumer_deliveries = CDels} = State0) ->
 %% @doc Purges all the messages from a rabbit_fifo queue and returns the number
 %% of messages purged.
 -spec purge(ra:server_id()) -> {ok, non_neg_integer()} | {error | timeout, term()}.
-purge(Node) ->
-    case ra:process_command(Node, rabbit_fifo:make_purge()) of
+purge(Server) ->
+    case ra:process_command(Server, rabbit_fifo:make_purge(), ?COMMAND_TIMEOUT) of
         {ok, {purge, Reply}, _} ->
             {ok, Reply};
         Err ->
@@ -482,7 +496,7 @@ cluster_name(#state{cfg = #cfg{cluster_name = ClusterName}}) ->
     ClusterName.
 
 update_machine_state(Server, Conf) ->
-    case ra:process_command(Server, rabbit_fifo:make_update_config(Conf)) of
+    case ra:process_command(Server, rabbit_fifo:make_update_config(Conf), ?COMMAND_TIMEOUT) of
         {ok, ok, _} ->
             ok;
         Err ->
@@ -640,8 +654,9 @@ untracked_enqueue([Node | _], Msg) ->
 
 %% Internal
 
-try_process_command([Server | Rem], Cmd, State) ->
-    case ra:process_command(Server, Cmd, 30000) of
+try_process_command([Server | Rem], Cmd,
+                    #state{cfg = #cfg{timeout = Timeout}} = State) ->
+    case ra:process_command(Server, Cmd, Timeout) of
         {ok, _, Leader} ->
             {ok, State#state{leader = Leader}};
         Err when length(Rem) =:= 0 ->
@@ -801,7 +816,7 @@ get_missing_deliveries(Leader, From, To, ConsumerTag) ->
     Query = fun (State) ->
                     rabbit_fifo:get_checked_out(ConsumerId, From, To, State)
             end,
-    case ra:local_query(Leader, Query) of
+    case ra:local_query(Leader, Query, ?COMMAND_TIMEOUT) of
         {ok, {_, Missing}, _} ->
             Missing;
         {error, Error} ->
