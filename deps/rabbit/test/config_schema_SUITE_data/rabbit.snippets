@@ -139,6 +139,15 @@ cluster_formation.dns.hostname = discovery.eng.example.local",
   []},
  {cluster_formation_ram_ignored,
   "cluster_formation.node_type = ram",[],[]},
+ {cluster_formation_target_cluster_size_hint,
+  "cluster_formation.target_cluster_size_hint = 3",
+  [{rabbit, [
+    {cluster_formation, [
+       {target_cluster_size_hint, 3}
+     ]}
+   ]}],
+ []},
+
  {tcp_listen_options,
   "tcp_listen_options.backlog = 128
 tcp_listen_options.nodelay = true
