@@ -2091,7 +2091,13 @@ maybe_clear_recoverable_node(Node, Q) ->
 -spec on_node_down(node()) -> 'ok'.
 
 on_node_down(Node) ->
-    {QueueNames, QueueDeletions} = delete_queues_on_node_down(Node),
+    {Time, {QueueNames, QueueDeletions}} = timer:tc(fun() -> delete_queues_on_node_down(Node) end),
+    case length(QueueNames) of
+        0 -> ok;
+        _ -> _ = rabbit_log:info(
+            "~p transient queues from an old incarnation of node ~p deleted in ~fs",
+            [length(QueueNames), Node, Time/1000000])
+    end,
     notify_queue_binding_deletions(QueueDeletions),
     rabbit_core_metrics:queues_deleted(QueueNames),
     notify_queues_deleted(QueueNames),
