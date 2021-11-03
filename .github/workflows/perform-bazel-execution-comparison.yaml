@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.3.5
+      uses: actions/checkout@v2.4.0
     - name: CONFIGURE BAZEL
       run: |
         echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.3.5
+      uses: actions/checkout@v2.4.0
     - name: CONFIGURE BAZEL
       run: |
         echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
@@ -73,7 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: CHECKOUT BAZEL
-      uses: actions/checkout@v2.3.5
+      uses: actions/checkout@v2.4.0
       with:
         repository: bazelbuild/bazel
         path: bazel

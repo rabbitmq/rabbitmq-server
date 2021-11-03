@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.3.5
+      uses: actions/checkout@v2.4.0
     - name: CONFIGURE BAZEL
       run: |
         echo "${{ secrets.BUILDBUDDY_CERT }}" > buildbuddy-cert.pem
@@ -60,7 +60,7 @@ jobs:
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.3.5
+      uses: actions/checkout@v2.4.0
     - name: CONFIGURE OTP & ELIXIR
       uses: erlef/setup-beam@v1.9
       with:
