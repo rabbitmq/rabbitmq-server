@@ -2342,20 +2342,21 @@ maybe_batch_write_index_to_disk(Force,
             queue_store -> {MsgId, DiskWriteCount};
             queue_index -> {prepare_to_store(Msg), DiskWriteCount + 1}
         end,
-    IndexState1 = IndexMod:pre_publish(
-                    MsgOrId, SeqId, MsgLocation, MsgProps, IsPersistent,
-                    TargetRamCount, IndexState),
-    %% We always deliver messages when the old index is used.
-    %% We are actually tracking message deliveries per-queue
-    %% but the old index expects delivers to be handled
-    %% per-message. Always delivering on publish prevents
-    %% issues related to delivers.
-    IndexState2 = case IndexMod of
-        rabbit_queue_index -> IndexMod:deliver([SeqId], IndexState1);
-        _ -> IndexState1
+    IndexState1 = case IndexMod of
+        %% The old index needs IsDelivered to apply some of its optimisations.
+        %% But because the deliver tracking is now in the queue we always pass 'true'.
+        %% It also does not need the location so it is not given here.
+        rabbit_queue_index ->
+            IndexMod:pre_publish(
+                            MsgOrId, SeqId, MsgProps, IsPersistent, true,
+                            TargetRamCount, IndexState);
+        _ ->
+            IndexMod:pre_publish(
+                            MsgOrId, SeqId, MsgLocation, MsgProps, IsPersistent,
+                            TargetRamCount, IndexState)
     end,
     {MsgStatus#msg_status{index_on_disk = true},
-     State#vqstate{index_state      = IndexState2,
+     State#vqstate{index_state      = IndexState1,
                    disk_write_count = DiskWriteCount1}};
 maybe_batch_write_index_to_disk(_Force, MsgStatus, State) ->
     {MsgStatus, State}.
@@ -2451,7 +2452,6 @@ determine_persist_to(Version,
 
 persist_to(#msg_status{persist_to = To}) -> To.
 
-%% @todo It's fine to have this but we should tell the store how big is the payload for the cache limits.
 prepare_to_store(Msg) ->
     Msg#basic_message{
       %% don't persist any recoverable decoded properties
@@ -2600,6 +2600,7 @@ accumulate_ack(#msg_status { seq_id        = SeqId,
      end,
      case MsgLocation of
          ?IN_QUEUE_STORE -> [SeqId|SeqIdsInStore];
+         ?IN_QUEUE_INDEX -> [SeqId|SeqIdsInStore];
          _               -> SeqIdsInStore
      end,
      [MsgId | AllMsgIds]}.
