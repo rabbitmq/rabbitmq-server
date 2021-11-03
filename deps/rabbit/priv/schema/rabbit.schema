@@ -1000,6 +1000,18 @@ end}.
      {validators, ["non_zero_positive_integer"]}
     ]}.
 
+
+%% Target cluster size hint may be used by certain core features or plugins to perform
+%% actions that should only be performed when a certain number of nodes (or a quorum of a certain number)
+%% has already joined (started).
+%%
+
+{mapping, "cluster_formation.target_cluster_size_hint", "rabbit.cluster_formation.target_cluster_size_hint", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+
 %% Classic config-driven peer discovery backend.
 %%
 %% Make clustering happen *automatically* at startup - only applied

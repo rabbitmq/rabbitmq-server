@@ -14,7 +14,7 @@
          await_running_count/2, is_single_node_cluster/0,
          boot/0]).
 -export([persistent_cluster_id/0, seed_internal_cluster_id/0, seed_user_provided_cluster_name/0]).
--export([all_running_with_hashes/0]).
+-export([all/0, all_running_with_hashes/0, target_cluster_size_hint/0, reached_target_cluster_size/0]).
 -export([lock_id/1, lock_retries/0]).
 
 -include_lib("kernel/include/inet.hrl").
@@ -29,6 +29,8 @@
 % https://github.com/erlang/otp/blob/d256ae477014158a49bb860b283df9c040011197/lib/kernel/src/global.erl#L2062-L2075
 % 80 corresponds to a timeout of ca 300 seconds.
 -define(DEFAULT_LOCK_RETRIES, 80).
+
+-define(DEFAULT_TARGET_CLUSTER_SIZE, 1).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -137,6 +139,9 @@ set_cluster_name(Name, Username) ->
 ensure_epmd() ->
     rabbit_nodes_common:ensure_epmd().
 
+-spec all() -> [node()].
+all() -> rabbit_mnesia:cluster_nodes(all).
+
 -spec all_running() -> [node()].
 all_running() -> rabbit_mnesia:cluster_nodes(running).
 
@@ -170,15 +175,32 @@ await_running_count_with_retries(TargetCount, Retries) ->
 all_running_with_hashes() ->
     maps:from_list([{erlang:phash2(Node), Node} || Node <- all_running()]).
 
+-spec target_cluster_size_hint() -> non_neg_integer().
+target_cluster_size_hint() ->
+    cluster_formation_key_or_default(target_cluster_size_hint, ?DEFAULT_TARGET_CLUSTER_SIZE).
+
+-spec reached_target_cluster_size() -> boolean().
+reached_target_cluster_size() ->
+    running_count() >= target_cluster_size_hint().
+
+
 -spec lock_id(Node :: node()) -> {ResourceId :: string(), LockRequesterId :: node()}.
 lock_id(Node) ->
   {cookie_hash(), Node}.
 
 -spec lock_retries() -> integer().
 lock_retries() ->
-  case application:get_env(rabbit, cluster_formation) of
-      {ok, PropList} ->
-        proplists:get_value(internal_lock_retries, PropList, ?DEFAULT_LOCK_RETRIES);
-      undefined ->
-          ?DEFAULT_LOCK_RETRIES
-  end.
+    cluster_formation_key_or_default(internal_lock_retries, ?DEFAULT_LOCK_RETRIES).
+
+
+%%
+%% Implementation
+%%
+
+cluster_formation_key_or_default(Key, Default) ->
+    case application:get_env(rabbit, cluster_formation) of
+        {ok, PropList} ->
+          proplists:get_value(Key, PropList, Default);
+        undefined ->
+            Default
+    end.
