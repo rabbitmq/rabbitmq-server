@@ -602,11 +602,19 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
                     {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)};
                 _ ->
                     [{Length, Destination} | _] = sort_by_number_of_queues(Candidates, ByNode),
+<<<<<<< HEAD
                     _ = rabbit_log:warning("Migrating queue ~p from node ~p with ~p queues to node ~p with ~p queues",
                                        [Name, N, length(All), Destination, Length]),
                     case Module:transfer_leadership(Q, Destination) of
                         {migrated, NewNode} ->
                             _ = rabbit_log:warning("Queue ~p migrated to ~p", [Name, NewNode]),
+=======
+                    rabbit_log:info("Migrating queue ~p from node ~p with ~p queues to node ~p with ~p queues",
+                                       [Name, N, length(All), Destination, Length]),
+                    case Module:transfer_leadership(Q, Destination) of
+                        {migrated, NewNode} ->
+                            rabbit_log:info("Queue ~p migrated to ~p", [Name, NewNode]),
+>>>>>>> 8efaeea04c (Turn down logging from queue rebalancing)
                             {migrated, update_migrated_queue(Destination, N, Queue, Queues, ByNode)};
                         {not_migrated, Reason} ->
                             _ = rabbit_log:warning("Error migrating queue ~p: ~p", [Name, Reason]),
@@ -618,7 +626,11 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
                                "Do nothing", [N, length(All)]),
             maybe_migrate(ByNode, MaxQueuesDesired, Nodes);
         All ->
+<<<<<<< HEAD
             _ = rabbit_log:warning("Node ~p only contains ~p queues, do nothing",
+=======
+            rabbit_log:debug("Node ~p only contains ~p queues, do nothing",
+>>>>>>> 8efaeea04c (Turn down logging from queue rebalancing)
                                [N, length(All)]),
             maybe_migrate(ByNode, MaxQueuesDesired, Nodes)
     end.
