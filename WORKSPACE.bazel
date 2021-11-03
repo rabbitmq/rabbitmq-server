@@ -29,10 +29,10 @@ load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
 
 rules_pkg_dependencies()
 
-http_archive(
+git_repository(
     name = "bazel-erlang",
-    strip_prefix = "bazel-erlang-main",
-    urls = ["https://github.com/rabbitmq/bazel-erlang/archive/main.zip"],
+    commit = "a84ffac78fa021cb9a95cef513af2fa6675507cc",
+    remote = "git@github.com:rabbitmq/bazel-erlang.git",
 )
 
 load("@bazel-erlang//:bazel_erlang.bzl", "bazel_erlang_deps")
