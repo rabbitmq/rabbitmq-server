@@ -351,8 +351,7 @@ delete_and_terminate(State) ->
     ok = rabbit_file:recursive_delete([Dir]),
     State1.
 
-%% @todo IsDelivered was removed... Should it be?
-pre_publish(MsgOrId, SeqId, _Location, MsgProps, IsPersistent, JournalSizeHint,
+pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint,
             State = #qistate{pre_publish_cache = PPC,
                              delivered_cache   = DC}) ->
     State1 = maybe_needs_confirming(MsgProps, MsgOrId, State),
@@ -367,14 +366,13 @@ pre_publish(MsgOrId, SeqId, _Location, MsgProps, IsPersistent, JournalSizeHint,
            SeqId:?SEQ_BITS, Bin/binary,
            (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin] | PPC],
 
-    DC1 = DC,
-%    DC1 =
-%        case IsDelivered of
-%            true ->
-%                [SeqId | DC];
-%            false ->
-%                DC
-%        end,
+    DC1 =
+        case IsDelivered of
+            true ->
+                [SeqId | DC];
+            false ->
+                DC
+        end,
 
     State2 = add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1),
     maybe_flush_pre_publish_cache(
@@ -1130,8 +1128,11 @@ read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
             Acc)
              when (Seg > StartSeg orelse StartRelSeq =< RelSeq) andalso
                   (Seg < EndSeg   orelse EndRelSeq   >= RelSeq) ->
-               %% @todo Location is wrong. Should only be ?MODULE if MsgOrId is a record.
-               [{MsgOrId, reconstruct_seq_id(StartSeg, RelSeq), ?MODULE, MsgProps,
+               MsgLocation = case is_tuple(MsgOrId) of
+                   true -> rabbit_queue_index;
+                   false -> rabbit_msg_store
+               end,
+               [{MsgOrId, reconstruct_seq_id(StartSeg, RelSeq), MsgLocation, MsgProps,
                  IsPersistent} | Acc]; %% @todo , IsDelivered == del
            (_RelSeq, _Value, Acc) ->
                Acc
