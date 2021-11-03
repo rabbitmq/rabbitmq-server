@@ -22,18 +22,14 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2.4.0
-    - name: SKIP IF THE PR ALREADY EXISTS
-      id: check-for-branch
-      run: |
-        set +e
-        git ls-remote --exit-code --heads origin bump-rbe-image-${{ matrix.short_version }}
-        echo "::set-output name=c::$?"
     - name: UPDATE RBE IMAGE SHA
-      if: steps.check-for-branch.outputs.c != 0
       env:
         IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
         TAG: linux-erlang-${{ matrix.erlang_version }}
       run: |
+        git ls-remote --exit-code --heads origin bump-rbe-image-${{ matrix.short_version }} \
+          && git checkout bump-rbe-image-${{ matrix.short_version }}
+
         # buildbuddy caches the container image, so we must use a specific sha to ensure
         # the latest is used
         echo "Retrieving current digest for ${IMAGE}:${TAG}"
@@ -43,6 +39,7 @@ jobs:
         npx buildozer \
           "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
           //:erlang_${{ matrix.short_version }}_platform || test $? -eq 3
+        git diff
     - name: CREATE PULL REQUEST
       if: steps.check-for-branch.outputs.c != 0
       uses: peter-evans/create-pull-request@v3
