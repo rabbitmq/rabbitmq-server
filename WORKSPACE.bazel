@@ -31,7 +31,7 @@ rules_pkg_dependencies()
 
 git_repository(
     name = "bazel-erlang",
-    commit = "c85ebaa61235734f592d87cf9c2b2055dfa245df",
+    commit = "63f7f4213a4f50e2bd891c98be403a45def8d1cf",
     remote = "https://github.com/rabbitmq/bazel-erlang.git",
 )
 
