@@ -1,0 +1,43 @@
+name: Test Erlang Git Master
+on:
+  schedule:
+  - cron: '0 2 * * *'
+  workflow_dispatch:
+jobs:
+  test-erlang-git:
+    name: Test (Erlang Git Master)
+    runs-on: ubuntu-18.04
+    timeout-minutes: 120
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.4.0
+    - name: UPDATE RBE IMAGE SHA
+      env:
+        IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
+        TAG: linux-erlang-git-master
+      run: |
+        # buildbuddy caches the container image, so we must use a specific sha to ensure
+        # the latest is used
+        DIGEST="$(skopeo inspect --format '{{.Digest}}' docker://${IMAGE}:${TAG})"
+        echo "Will use ${IMAGE}@${DIGEST}"
+        sudo npm install --global --silent @bazel/buildozer
+        npx buildozer \
+          "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
+          //:erlang_git_platform
+    - name: CONFIGURE BAZEL
+      run: |
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-erlang-git
+        EOF
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: RUN TESTS
+      run: |
+        bazelisk test //... \
+          --config=rbe-git \
+          --test_tag_filters=-mixed-version-cluster,-exclusive,-aws \
+          --verbose_failures
