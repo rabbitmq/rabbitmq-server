@@ -446,7 +446,7 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
                                    cast(Rep, {partial_partition,
                                                          Node, node(), RepGUID});
                                 _ ->
-                                   rabbit_log:warning("Node ~p was restarted", [Node]),
+                                   _ = rabbit_log:warning("Node ~p was restarted", [Node]),
                                    ok
                            end
                    end);
