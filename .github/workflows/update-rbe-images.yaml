@@ -28,7 +28,7 @@ jobs:
         TAG: linux-erlang-${{ matrix.erlang_version }}
       run: |
         git ls-remote --exit-code --heads origin bump-rbe-image-${{ matrix.short_version }} \
-          && git switch bump-rbe-image-${{ matrix.short_version }}
+          && git checkout bump-rbe-image-${{ matrix.short_version }}
 
         # buildbuddy caches the container image, so we must use a specific sha to ensure
         # the latest is used
