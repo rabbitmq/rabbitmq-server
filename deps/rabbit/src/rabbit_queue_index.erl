@@ -1133,7 +1133,7 @@ read_bounded_segment(Seg, {StartSeg, StartRelSeq}, {EndSeg, EndRelSeq},
                    false -> rabbit_msg_store
                end,
                [{MsgOrId, reconstruct_seq_id(StartSeg, RelSeq), MsgLocation, MsgProps,
-                 IsPersistent} | Acc]; %% @todo , IsDelivered == del
+                 IsPersistent} | Acc];
            (_RelSeq, _Value, Acc) ->
                Acc
        end, Messages, Segment),
