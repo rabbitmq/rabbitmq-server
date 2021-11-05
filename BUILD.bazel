@@ -42,7 +42,7 @@ platform(
     exec_properties = {
         "OSFamily": "Linux",
         # linux-erlang-24.0
-        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:52a81330352656180952e9c3f09e510a529cc0ed4fd6bc3b480ad313f2ddc3ae",
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:e80f70e44a28780e6af34f4604f83cfe269603bb6ab7d177053591bde53e0232",
     },
 )
 
