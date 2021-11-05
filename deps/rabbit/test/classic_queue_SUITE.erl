@@ -166,6 +166,7 @@ minimal_config(Config) ->
 %   delete
 %   requeue
 %   ttl behavior: how to test this?
+%   change CRC configuration
 
 command(St = #cq{amq=undefined}) ->
     {call, ?MODULE, cmd_setup_queue, [St]};
