@@ -171,7 +171,6 @@ init1(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
         on_sync_msg = OnSyncMsgFun
     }.
 
-%% @todo This should be called on recover too.
 ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) ->
     QueueNameFile = filename:join(Dir, ?QUEUE_NAME_STUB_FILE),
     ok = filelib:ensure_dir(QueueNameFile),
