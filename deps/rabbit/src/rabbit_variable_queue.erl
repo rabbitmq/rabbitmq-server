@@ -358,12 +358,10 @@
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
--define(INDEX, rabbit_classic_queue_index_v2).
--define(STORE, rabbit_classic_queue_store_v2). %% @todo Rename to ?QUEUE_STORE maybe?
 -define(QUEUE, lqueue).
 
 -define(IN_SHARED_STORE, rabbit_msg_store).
--define(IN_QUEUE_STORE, {?STORE, _, _}).
+-define(IN_QUEUE_STORE, {rabbit_classic_queue_store_v2, _, _}).
 -define(IN_QUEUE_INDEX, rabbit_queue_index).
 -define(IN_MEMORY, memory).
 
@@ -553,7 +551,7 @@ init(Q, new, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) w
     %% between queue versions unnecessarily.
     IndexMod = index_mod(Q),
     IndexState = IndexMod:init(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
-    StoreState = ?STORE:init(QueueName, MsgOnDiskFun),
+    StoreState = rabbit_classic_queue_store_v2:init(QueueName, MsgOnDiskFun),
     VHost = QueueName#resource.virtual_host,
     init(queue_version(Q),
          IsDurable, IndexMod, IndexState, StoreState, 0, 0, [],
@@ -595,7 +593,7 @@ init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun)
               VHost,
               ?PERSISTENT_MSG_STORE),
           ContainsCheckFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
-    StoreState = ?STORE:init(QueueName, MsgOnDiskFun),
+    StoreState = rabbit_classic_queue_store_v2:init(QueueName, MsgOnDiskFun),
     init(queue_version(Q),
          IsDurable, IndexMod, IndexState, StoreState, DeltaCount, DeltaBytes, RecoveryTerms,
          PersistentClient, TransientClient, VHost).
@@ -646,7 +644,7 @@ terminate(_Reason, State) ->
              {persistent_bytes,    PBytes}],
     a(State1#vqstate {
         index_state = IndexMod:terminate(VHost, Terms, IndexState),
-        store_state = ?STORE:terminate(StoreState),
+        store_state = rabbit_classic_queue_store_v2:terminate(StoreState),
         msg_store_clients = undefined }).
 
 %% the only difference between purge and delete is that delete also
@@ -772,11 +770,11 @@ ack([SeqId], State) ->
                           end,
             StoreState1 = case MsgLocation of
                 ?IN_SHARED_STORE  -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]), StoreState0;
-                ?IN_QUEUE_STORE   -> ?STORE:remove(SeqId, StoreState0);
+                ?IN_QUEUE_STORE   -> rabbit_classic_queue_store_v2:remove(SeqId, StoreState0);
                 ?IN_QUEUE_INDEX   -> StoreState0;
                 ?IN_MEMORY        -> StoreState0
             end,
-            StoreState = ?STORE:delete_segments(DeletedSegments, StoreState1),
+            StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState1),
             {[MsgId],
              a(State1 #vqstate { index_state      = IndexState1,
                                  store_state      = StoreState,
@@ -799,8 +797,8 @@ ack(AckTags, State) ->
                   end
           end, {accumulate_ack_init(), State}, AckTags),
     {DeletedSegments, IndexState1} = IndexMod:ack(IndexOnDiskSeqIds, IndexState),
-    StoreState1 = ?STORE:delete_segments(DeletedSegments, StoreState0),
-    StoreState = lists:foldl(fun ?STORE:remove/2, StoreState1, SeqIdsInStore),
+    StoreState1 = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState0),
+    StoreState = lists:foldl(fun rabbit_classic_queue_store_v2:remove/2, StoreState1, SeqIdsInStore),
     remove_msgs_by_id(MsgIdsByStore, MSCState),
     {lists:reverse(AllMsgIds),
      a(State1 #vqstate { index_state      = IndexState1,
@@ -970,7 +968,7 @@ needs_timeout(#vqstate { index_mod   = IndexMod,
 timeout(State = #vqstate { index_mod   = IndexMod,
                            index_state = IndexState0,
                            store_state = StoreState0 }) ->
-    StoreState = ?STORE:sync(StoreState0),
+    StoreState = rabbit_classic_queue_store_v2:sync(StoreState0),
     IndexState = IndexMod:sync(IndexState0),
     State #vqstate { index_state = IndexState,
                      store_state = StoreState }.
@@ -1766,7 +1764,7 @@ read_msg(#msg_status{msg = Msg}, State) ->
 
 read_msg(SeqId, _, _, MsgLocation, State = #vqstate{ store_state = StoreState0 })
         when is_tuple(MsgLocation) ->
-    {Msg, StoreState} = ?STORE:read(SeqId, MsgLocation, StoreState0),
+    {Msg, StoreState} = rabbit_classic_queue_store_v2:read(SeqId, MsgLocation, StoreState0),
     {Msg, State#vqstate{ store_state = StoreState }};
 read_msg(_, MsgId, IsPersistent, rabbit_msg_store, State = #vqstate{msg_store_clients = MSCState,
                                                                     disk_read_count   = Count}) ->
@@ -1876,7 +1874,7 @@ remove(false, MsgStatus = #msg_status {
     %% Remove from msg_store and queue index, if necessary
     StoreState1 = case MsgLocation of
         ?IN_SHARED_STORE -> ok = msg_store_remove(MSCState, IsPersistent, [MsgId]), StoreState0;
-        ?IN_QUEUE_STORE  -> ?STORE:remove(SeqId, StoreState0);
+        ?IN_QUEUE_STORE  -> rabbit_classic_queue_store_v2:remove(SeqId, StoreState0);
         ?IN_QUEUE_INDEX  -> StoreState0;
         ?IN_MEMORY       -> StoreState0
     end,
@@ -1887,7 +1885,7 @@ remove(false, MsgStatus = #msg_status {
             false -> {[], IndexState1}
         end,
 
-    StoreState = ?STORE:delete_segments(DeletedSegments, StoreState1),
+    StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState1),
 
     State1 = stats({-1, 0}, {MsgStatus, none}, 0, State),
 
@@ -2101,7 +2099,7 @@ process_delivers_and_acks_fun(deliver_and_ack) ->
                                             store_state = StoreState0}) ->
             {DeletedSegments, IndexState1} = IndexMod:ack(Acks, IndexState),
 
-            StoreState = ?STORE:delete_segments(DeletedSegments, StoreState0),
+            StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState0),
 
             State #vqstate { index_state = IndexState1,
                              store_state = StoreState,
@@ -2261,7 +2259,7 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
                                             prepare_to_store(Msg)),
                        {MsgStatus#msg_status{msg_location = ?IN_SHARED_STORE},
                         State#vqstate{disk_write_count = Count + 1}};
-        queue_store -> {MsgLocation, StoreState} = ?STORE:write(SeqId, prepare_to_store(Msg), Props, StoreState0),
+        queue_store -> {MsgLocation, StoreState} = rabbit_classic_queue_store_v2:write(SeqId, prepare_to_store(Msg), Props, StoreState0),
                        {MsgStatus#msg_status{ msg_location = MsgLocation },
                         State#vqstate{ store_state = StoreState,
                                        disk_write_count = Count + 1}};
@@ -2479,14 +2477,14 @@ purge_pending_ack(KeepPersistent,
                                      store_state       = StoreState0,
                                      msg_store_clients = MSCState }) ->
     {IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, State1} = purge_pending_ack1(State),
-    StoreState1 = lists:foldl(fun ?STORE:remove/2, StoreState0, SeqIdsInStore),
+    StoreState1 = lists:foldl(fun rabbit_classic_queue_store_v2:remove/2, StoreState0, SeqIdsInStore),
     %% @todo Sounds like we might want to remove only transients from the cache?
     case KeepPersistent of
         true  -> remove_transient_msgs_by_id(MsgIdsByStore, MSCState),
                  State1 #vqstate { store_state = StoreState1 };
         false -> {DeletedSegments, IndexState1} =
                      IndexMod:ack(IndexOnDiskSeqIds, IndexState),
-                 StoreState = ?STORE:delete_segments(DeletedSegments, StoreState1),
+                 StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState1),
                  remove_msgs_by_id(MsgIdsByStore, MSCState),
                  State1 #vqstate { index_state = IndexState1,
                                    store_state = StoreState }
