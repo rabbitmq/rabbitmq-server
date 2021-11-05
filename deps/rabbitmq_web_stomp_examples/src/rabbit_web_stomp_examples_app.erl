@@ -11,7 +11,7 @@
 -export([start/2,stop/1]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
-%% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
+%% http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
 -behaviour(supervisor).
 -export([init/1]).
 
