@@ -10,7 +10,8 @@
 -behaviour(application).
 -export([start/2, stop/1]).
 
-%% Dummy supervisor to get this application behaviour working
+%% Dummy supervisor - see Ulf Wiger's comment at
+%% http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
 -behaviour(supervisor).
 -export([create_ldap_pool/0, init/1]).
 
