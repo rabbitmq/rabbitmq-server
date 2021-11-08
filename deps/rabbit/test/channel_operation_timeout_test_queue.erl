@@ -43,6 +43,7 @@
           ram_pending_ack,    %% msgs using store, still in RAM
           disk_pending_ack,   %% msgs in store, paged out
           qi_pending_ack,     %% msgs using qi, *can't* be paged out
+          index_mod,
           index_state,
           store_state,
           msg_store_clients,
@@ -80,6 +81,7 @@
 
           %% default queue or lazy queue
           mode,
+          version = 1,
           %% number of reduce_memory_usage executions, once it
           %% reaches a threshold the queue will manually trigger a runtime GC
             %% see: maybe_execute_gc/1
@@ -98,7 +100,7 @@
           msg,
           is_persistent,
           is_delivered,
-          msg_location, %% ?IN_SHARED_STORE | ?IN_QUEUE_STORE | ?IN_MEMORY -- we no longer embed in the index
+          msg_location, %% ?IN_SHARED_STORE | ?IN_QUEUE_STORE | ?IN_QUEUE_INDEX | ?IN_MEMORY
           index_on_disk,
           persist_to,
           msg_props
