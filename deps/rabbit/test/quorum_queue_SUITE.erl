@@ -1450,7 +1450,7 @@ confirm_availability_on_leader_change(Config) ->
                           Ch = rabbit_ct_client_helpers:open_channel(Config, Node1),
                           #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
                           ConfirmLoop = fun Loop() ->
-                                                ok = publish_confirm(Ch, QQ, 5000),
+                                                ok = publish_confirm(Ch, QQ, 15000),
                                                 receive
                                                     {done, P} ->
                                                         P ! publisher_done,
@@ -1470,9 +1470,13 @@ confirm_availability_on_leader_change(Config) ->
     timer:sleep(500),
     Publisher ! {done, self()},
     receive
-        publisher_done -> ok;
-        {'EXIT', Publisher, Err} -> exit(Err)
+        publisher_done ->
+            ok;
+        {'EXIT', Publisher, Err} ->
+            ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
+            exit(Err)
     after 30000 ->
+              ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
               flush(100),
               exit(nothing_received_from_publisher_process)
     end,

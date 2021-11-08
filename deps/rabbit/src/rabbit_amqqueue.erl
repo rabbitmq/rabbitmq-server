@@ -677,7 +677,7 @@ priv_absent(QueueName, QPid, true, nodedown) ->
     rabbit_misc:protocol_error(
       not_found,
       "home node '~s' of durable ~s is down or inaccessible",
-      [node(QPid), rabbit_misc:rs(QueueName)]);
+      [amqqueue:qnode(QPid), rabbit_misc:rs(QueueName)]);
 
 priv_absent(QueueName, _QPid, _IsDurable, stopped) ->
     rabbit_misc:protocol_error(

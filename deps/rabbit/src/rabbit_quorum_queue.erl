@@ -415,7 +415,9 @@ handle_tick(QName,
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
     Self = self(),
-    _ = spawn(fun() ->
+    _ = spawn(
+          fun() ->
+                  try
                       R = reductions(Name),
                       rabbit_core_metrics:queue_stats(QName, MR, MU, M, R),
                       Util = case C of
@@ -454,7 +456,11 @@ handle_tick(QName,
 
                               ok
                       end
-              end),
+                  catch
+                      _:_ ->
+                          ok
+                  end
+          end),
     ok.
 
 repair_leader_record(QName, Self) ->
@@ -704,7 +710,7 @@ dequeue(NoAck, _LimiterPid, CTag0, QState0) ->
               rabbit_queue_type:consume_spec(),
               rabbit_fifo_client:state()) ->
     {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |
-    {error, global_qos_not_supported_for_queue_type}.
+    {error, global_qos_not_supported_for_queue_type | timeout}.
 consume(Q, #{limiter_active := true}, _State)
   when ?amqqueue_is_quorum(Q) ->
     {error, global_qos_not_supported_for_queue_type};
@@ -720,7 +726,6 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
     %% TODO: validate consumer arguments
     %% currently quorum queues do not support any arguments
     QName = amqqueue:get_name(Q),
-    QPid = amqqueue:get_pid(Q),
     maybe_send_reply(ChPid, OkMsg),
     ConsumerTag = quorum_ctag(ConsumerTag0),
     %% A prefetch count of 0 means no limitation,
@@ -752,35 +757,42 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                                                QState1);
                    _ -> QState1
                end,
-    case ra:local_query(QPid,
-                        fun rabbit_fifo:query_single_active_consumer/1) of
-        {ok, {_, SacResult}, _} ->
-            SingleActiveConsumerOn = single_active_consumer_on(Q),
-            {IsSingleActiveConsumer, ActivityStatus} = case {SingleActiveConsumerOn, SacResult} of
-                                                           {false, _} ->
-                                                               {true, up};
-                                                           {true, {value, {ConsumerTag, ChPid}}} ->
-                                                               {true, single_active};
-                                                           _ ->
-                                                               {false, waiting}
-                                                       end,
+    case single_active_consumer_on(Q) of
+        true ->
+            %% get the leader from state
+            case rabbit_fifo_client:query_single_active_consumer(QState) of
+                {ok, SacResult} ->
+                    ActivityStatus = case SacResult of
+                                         {value, {ConsumerTag, ChPid}} ->
+                                             single_active;
+                                         _ ->
+                                             waiting
+                                     end,
+                    rabbit_core_metrics:consumer_created(
+                      ChPid, ConsumerTag, ExclusiveConsume,
+                      AckRequired, QName,
+                      ConsumerPrefetchCount, true, %% IsSingleSctiveconsumer
+                      ActivityStatus, Args),
+                    emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                          AckRequired, QName, Prefetch,
+                                          Args, none, ActingUser),
+                    {ok, QState, []};
+                {error, Error} ->
+                    Error;
+                {timeout, _} ->
+                    {error, timeout}
+            end;
+        false ->
             rabbit_core_metrics:consumer_created(
-                    ChPid, ConsumerTag, ExclusiveConsume,
-                    AckRequired, QName,
-                    ConsumerPrefetchCount, IsSingleActiveConsumer,
-                    ActivityStatus, Args),
+              ChPid, ConsumerTag, ExclusiveConsume,
+              AckRequired, QName,
+              ConsumerPrefetchCount, false, %% issingleactiveconsumer
+              up, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                    AckRequired, QName, Prefetch,
-                    Args, none, ActingUser),
-            {ok, QState, []};
-        {error, Error} ->
-            Error;
-        {timeout, _} ->
-            {error, timeout}
+                                  AckRequired, QName, Prefetch,
+                                  Args, none, ActingUser),
+            {ok, QState, []}
     end.
-
-% -spec basic_cancel(rabbit_types:ctag(), ChPid :: pid(), any(), rabbit_fifo_client:state()) ->
-%                           {'ok', rabbit_fifo_client:state()}.
 
 cancel(_Q, ConsumerTag, OkMsg, _ActingUser, State) ->
     maybe_send_reply(self(), OkMsg),
@@ -898,8 +910,8 @@ stat(Q, Timeout) when ?is_amqqueue(Q) ->
 -spec purge(amqqueue:amqqueue()) ->
     {ok, non_neg_integer()}.
 purge(Q) when ?is_amqqueue(Q) ->
-    Node = amqqueue:get_pid(Q),
-    rabbit_fifo_client:purge(Node).
+    Server = amqqueue:get_pid(Q),
+    rabbit_fifo_client:purge(Server).
 
 requeue(ConsumerTag, MsgIds, QState) ->
     rabbit_fifo_client:return(quorum_ctag(ConsumerTag), MsgIds, QState).
