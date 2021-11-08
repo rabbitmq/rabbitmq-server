@@ -771,7 +771,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                     rabbit_core_metrics:consumer_created(
                       ChPid, ConsumerTag, ExclusiveConsume,
                       AckRequired, QName,
-                      ConsumerPrefetchCount, true, %% IsSingleSctiveconsumer
+                      ConsumerPrefetchCount, ActivityStatus == single_active, %% Active
                       ActivityStatus, Args),
                     emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                           AckRequired, QName, Prefetch,
@@ -786,7 +786,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
             rabbit_core_metrics:consumer_created(
               ChPid, ConsumerTag, ExclusiveConsume,
               AckRequired, QName,
-              ConsumerPrefetchCount, false, %% issingleactiveconsumer
+              ConsumerPrefetchCount, true, %% Active
               up, Args),
             emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                   AckRequired, QName, Prefetch,
