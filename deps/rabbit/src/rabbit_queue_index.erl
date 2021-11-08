@@ -117,6 +117,12 @@
 %% For notes on Clean Shutdown and startup, see documentation in
 %% rabbit_variable_queue.
 %%
+%% v2 UPDATE: The queue index is still keeping track of delivers
+%% as noted in the above comment. However the queue will immediately
+%% mark messages as delivered, because it now keeps track of delivers
+%% at the queue level. The index still needs to keep track of deliver
+%% entries because of its pub->del->ack logic.
+%%
 %%----------------------------------------------------------------------------
 
 %% ---- Journal details ----

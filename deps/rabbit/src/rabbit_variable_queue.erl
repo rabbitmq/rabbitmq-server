@@ -261,6 +261,16 @@
 %% scanning the entire queue on startup in order to delete transient
 %% messages that were only pushed to disk to save memory.
 %%
+%% v2 UPDATE: The queue is keeping track of delivers via the
+%% next_deliver_seq_id variable. This variable gets increased
+%% with every (first-time) delivery. When delivering messages
+%% the seq_id of the message is checked against this variable
+%% to determine whether the message is a redelivery. The variable
+%% is stored in the queue terms on graceful shutdown. On dirty
+%% recovery the variable becomes the seq_id of the most recent
+%% message in the queue (effectively marking all messages as
+%% delivered, like the v1 index was doing).
+%%
 %%----------------------------------------------------------------------------
 
 -behaviour(rabbit_backing_queue).
