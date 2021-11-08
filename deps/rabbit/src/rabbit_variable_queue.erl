@@ -2486,12 +2486,17 @@ purge_pending_ack(KeepPersistent,
 purge_pending_ack_delete_and_terminate(
   State = #vqstate { index_mod         = IndexMod,
                      index_state       = IndexState,
+                     store_state       = StoreState,
                      msg_store_clients = MSCState }) ->
     {_, MsgIdsByStore, _SeqIdsInStore, State1} = purge_pending_ack1(State),
+    StoreState1 = case StoreState of
+        undefined -> undefined;
+        _ -> rabbit_classic_queue_store_v2:terminate(StoreState)
+    end,
     IndexState1 = IndexMod:delete_and_terminate(IndexState),
-    %% @todo delete queue store.
     remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
-    State1 #vqstate { index_state = IndexState1 }.
+    State1 #vqstate { index_state = IndexState1,
+                      store_state = StoreState1 }.
 
 purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
                                       disk_pending_ack  = DPA,
