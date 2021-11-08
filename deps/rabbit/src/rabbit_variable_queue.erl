@@ -809,7 +809,7 @@ ack(AckTags, State) ->
     {DeletedSegments, IndexState1} = IndexMod:ack(IndexOnDiskSeqIds, IndexState),
     StoreState1 = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState0),
     StoreState = lists:foldl(fun rabbit_classic_queue_store_v2:remove/2, StoreState1, SeqIdsInStore),
-    remove_msgs_by_id(MsgIdsByStore, MSCState),
+    remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
     {lists:reverse(AllMsgIds),
      a(State1 #vqstate { index_state      = IndexState1,
                          store_state      = StoreState,
@@ -2075,7 +2075,7 @@ remove_queue_entries(Q, DelsAndAcksFun,
     {MsgIdsByStore, NextDeliverSeqId, Acks, State1} =
         ?QUEUE:foldl(fun remove_queue_entries1/2,
                      {maps:new(), NextDeliverSeqId0, [], State}, Q),
-    remove_msgs_by_id(MsgIdsByStore, MSCState),
+    remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
     DelsAndAcksFun(NextDeliverSeqId, Acks, State1).
 
 remove_queue_entries1(
@@ -2478,7 +2478,7 @@ purge_pending_ack(KeepPersistent,
         false -> {DeletedSegments, IndexState1} =
                      IndexMod:ack(IndexOnDiskSeqIds, IndexState),
                  StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState1),
-                 remove_msgs_by_id(MsgIdsByStore, MSCState),
+                 remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
                  State1 #vqstate { index_state = IndexState1,
                                    store_state = StoreState }
     end.
@@ -2490,7 +2490,7 @@ purge_pending_ack_delete_and_terminate(
     {_, MsgIdsByStore, _SeqIdsInStore, State1} = purge_pending_ack1(State),
     IndexState1 = IndexMod:delete_and_terminate(IndexState),
     %% @todo delete queue store.
-    remove_msgs_by_id(MsgIdsByStore, MSCState),
+    remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
     State1 #vqstate { index_state = IndexState1 }.
 
 purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
@@ -2517,8 +2517,7 @@ purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
 %% transient ones. The msg_store_remove/3 function takes this boolean
 %% flag to determine from which store the messages should be removed
 %% from.
-%% @todo This is for the per-vhost store only. Rename function.
-remove_msgs_by_id(MsgIdsByStore, MSCState) ->
+remove_vhost_msgs_by_id(MsgIdsByStore, MSCState) ->
     [ok = msg_store_remove(MSCState, IsPersistent, MsgIds)
      || {IsPersistent, MsgIds} <- maps:to_list(MsgIdsByStore)].
 
