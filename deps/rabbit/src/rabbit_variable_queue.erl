@@ -1131,11 +1131,12 @@ set_queue_version(2, State = #vqstate { version = 1 }) ->
 %% is moved to the v2 store if it was embedded, and left in the per-vhost
 %% store otherwise.
 convert_from_v1_to_v2(State0 = #vqstate{ index_mod   = rabbit_queue_index,
-                                         index_state = V1Index }) ->
+                                         index_state = V1Index,
+                                         store_state = V2Store0 }) ->
     State = convert_from_v1_to_v2_in_memory(State0),
     {QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun} = rabbit_queue_index:init_args(V1Index),
     V2Index0 = rabbit_classic_queue_index_v2:init_for_conversion(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
-    V2Store0 = rabbit_classic_queue_store_v2:init(QueueName, fun(_, _) -> ok end),
+    %% We do not need to init the v2 per-queue store because we already did so in the queue init.
     {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1Index),
     {V2Index, V2Store} = convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index0, V2Store0, LoSeqId, HiSeqId),
     %% We have already deleted segments files but not the journal.
@@ -1210,16 +1211,16 @@ convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0, LoSeqId, HiS
 %% store otherwise.
 convert_from_v2_to_v1(State0 = #vqstate{ index_mod   = rabbit_classic_queue_index_v2,
                                          index_state = V2Index,
-                                         store_state = V2Store }) ->
+                                         store_state = V2Store0 }) ->
     State = convert_from_v2_to_v1_in_memory(State0),
     {QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun} = rabbit_classic_queue_index_v2:init_args(V2Index),
     V1Index0 = rabbit_queue_index:init_for_conversion(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     {LoSeqId, HiSeqId, _} = rabbit_classic_queue_index_v2:bounds(V2Index),
-    V1Index = convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index, V2Store, LoSeqId, HiSeqId),
+    {V1Index, V2Store} = convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index, V2Store0, LoSeqId, HiSeqId),
     %% We have already closed the v2 index/store FDs when deleting the files.
     State#vqstate{ index_mod   = rabbit_queue_index,
                    index_state = V1Index,
-                   store_state = undefined }.
+                   store_state = V2Store }.
 
 convert_from_v2_to_v1_in_memory(State0 = #vqstate{ q1 = Q1b,
                                                    q2 = Q2b,
@@ -1258,8 +1259,8 @@ convert_from_v2_to_v1_queue(Q, State0) ->
     end, State0, List0),
     {?QUEUE:from_list(List), State}.
 
-convert_from_v2_to_v1_loop(_, V1Index, _, _, HiSeqId, HiSeqId) ->
-    V1Index;
+convert_from_v2_to_v1_loop(_, V1Index, _, V2Store, HiSeqId, HiSeqId) ->
+    {V1Index, V2Store};
 convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0, LoSeqId, HiSeqId) ->
     UpSeqId = lists:min([rabbit_classic_queue_index_v2:next_segment_boundary(LoSeqId),
                          HiSeqId]),
@@ -2014,7 +2015,6 @@ purge_when_pending_acks(State) ->
 
 purge_and_index_reset(State) ->
     State1 = purge1(process_delivers_and_acks_fun(none), State),
-    %% @todo Also reset the store.
     a(reset_qi_state(State1)).
 
 %% This function removes messages from each of {q1, q2, q3, q4}.
@@ -2039,9 +2039,13 @@ purge1(AfterFun, State = #vqstate { q4 = Q4}) ->
 
     a(State3#vqstate{q1 = ?QUEUE:new()}).
 
-reset_qi_state(State = #vqstate{index_mod   = IndexMod,
-                                index_state = IndexState}) ->
-    State#vqstate{index_state = IndexMod:reset_state(IndexState)}.
+reset_qi_state(State = #vqstate{ index_mod   = IndexMod,
+                                 index_state = IndexState0,
+                                 store_state = StoreState0 }) ->
+    StoreState = rabbit_classic_queue_store_v2:terminate(StoreState0),
+    IndexState = IndexMod:reset_state(IndexState0),
+    State#vqstate{ index_state = IndexState,
+                   store_state = StoreState }.
 
 is_pending_ack_empty(State) ->
     count_pending_acks(State) =:= 0.
@@ -2489,10 +2493,7 @@ purge_pending_ack_delete_and_terminate(
                      store_state       = StoreState,
                      msg_store_clients = MSCState }) ->
     {_, MsgIdsByStore, _SeqIdsInStore, State1} = purge_pending_ack1(State),
-    StoreState1 = case StoreState of
-        undefined -> undefined;
-        _ -> rabbit_classic_queue_store_v2:terminate(StoreState)
-    end,
+    StoreState1 = rabbit_classic_queue_store_v2:terminate(StoreState),
     IndexState1 = IndexMod:delete_and_terminate(IndexState),
     remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
     State1 #vqstate { index_state = IndexState1,
