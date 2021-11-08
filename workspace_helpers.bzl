@@ -212,8 +212,7 @@ erlang_lib(
 
     hex_pm_bazel_erlang_lib(
         name = "ra",
-        version = "2.0.0",
-        sha256 = "6d29d58040279ed214d3365dfdc81a7feca7531fe24f3425f6dc8fc3a0d9a519",
+        version = "2.0.2",
         first_srcs = [
             "src/ra_machine.erl",
             "src/ra_snapshot.erl",
