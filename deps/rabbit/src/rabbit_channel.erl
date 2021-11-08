@@ -1475,6 +1475,10 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                     rabbit_misc:protocol_error(
                       not_implemented, "~s does not support global qos",
                       [rabbit_misc:rs(QueueName)]);
+                {error, timeout} ->
+                    rabbit_misc:protocol_error(
+                      internal_error, "~s timeout occurred during consume operation",
+                      [rabbit_misc:rs(QueueName)]);
                 {error, no_local_stream_replica_available} ->
                     rabbit_misc:protocol_error(
                       resource_error, "~s does not not have a running local replica",
@@ -1802,6 +1806,8 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
         {{error, global_qos_not_supported_for_queue_type} = E, _Q} ->
             E;
         {{error, no_local_stream_replica_available} = E, _Q} ->
+            E;
+        {{error, timeout} = E, _Q} ->
             E;
         {{protocol_error, Type, Reason, ReasonArgs}, _Q} ->
             rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
