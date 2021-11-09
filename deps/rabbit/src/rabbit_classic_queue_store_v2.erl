@@ -244,8 +244,13 @@ maybe_mark_unconfirmed(_, _, State) ->
 sync(State = #qs{ confirms = Confirms,
                   on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State]),
-    OnSyncFun(Confirms, written),
-    State#qs{ confirms = gb_sets:new() }.
+    case gb_sets:is_empty(Confirms) of
+        true ->
+            State;
+        false ->
+            OnSyncFun(Confirms, written),
+            State#qs{ confirms = gb_sets:new() }
+    end.
 
 -spec read(rabbit_variable_queue:seq_id(), msg_location(), State)
         -> {rabbit_types:basic_message(), State} when State::state().
