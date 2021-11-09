@@ -30,7 +30,9 @@
 -define(WAIT, 5000).
 
 all() ->
-    [{group, single_node}, {group, cluster}].
+    [{group, single_node},
+     {group, single_node_1},
+     {group, cluster}].
 
 groups() ->
     [{single_node, [],
@@ -47,7 +49,7 @@ groups() ->
        timeout_close_sent]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
-     {single_node, [], [test_global_counters]},
+     {single_node_1, [], [test_global_counters]},
      {cluster, [], [test_stream, test_stream_tls, java]}].
 
 init_per_suite(Config) ->
@@ -62,7 +64,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(single_node, Config) ->
+init_per_group(Group, Config) when Group == single_node orelse Group == single_node_1 ->
     Config1 =
         rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]),
     Config2 =
