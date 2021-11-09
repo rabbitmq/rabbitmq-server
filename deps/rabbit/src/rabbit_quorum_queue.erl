@@ -569,7 +569,8 @@ recover(_Vhost, Queues) ->
          %% present in the rabbit_queue table and not just in
          %% rabbit_durable_queue
          %% So many code paths are dependent on this.
-         {ok, Q} = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Q0),
+         ok = rabbit_amqqueue:store_queue_ram_dirty(Q0),
+         Q = Q0,
          case Res of
              ok ->
                  {[Q | R0], F0};
