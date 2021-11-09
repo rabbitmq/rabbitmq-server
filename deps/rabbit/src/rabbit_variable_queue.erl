@@ -984,9 +984,10 @@ timeout(State = #vqstate { index_mod   = IndexMod,
                      store_state = StoreState }.
 
 handle_pre_hibernate(State = #vqstate { index_mod   = IndexMod,
-                                        index_state = IndexState }) ->
-    %% @todo Sync the store before the index but only if IndexMod:needs_sync != false.
-    State #vqstate { index_state = IndexMod:flush(IndexState) }.
+                                        index_state = IndexState,
+                                        store_state = StoreState }) ->
+    State #vqstate { index_state = IndexMod:flush(IndexState),
+                     store_state = rabbit_classic_queue_store_v2:sync(StoreState) }.
 
 handle_info(bump_reduce_memory_use, State = #vqstate{ waiting_bump = true }) ->
     State#vqstate{ waiting_bump = false };
@@ -2852,9 +2853,11 @@ reduce_memory_use(State = #vqstate {
             _  ->
                 {false, State1}
         end,
-    #vqstate{ index_mod = IndexMod, index_state = IndexState } = State3,
-    %% @todo Sync the store before the index but only if IndexMod:needs_sync != false.
-    State4 = State3#vqstate{ index_state = IndexMod:flush(IndexState) },
+    #vqstate{ index_mod   = IndexMod,
+              index_state = IndexState,
+              store_state = StoreState } = State3,
+    State4 = State3#vqstate{ index_state = IndexMod:flush(IndexState),
+                             store_state = rabbit_classic_queue_store_v2:sync(StoreState) },
     %% We can be blocked by the credit flow, or limited by a batch size,
     %% or finished with flushing.
     %% If blocked by the credit flow - the credit grant will resume processing,
@@ -2896,9 +2899,11 @@ reduce_memory_use(State = #vqstate {
             S2 ->
                 push_betas_to_deltas(S2, State1)
         end,
-    #vqstate{ index_mod = IndexMod, index_state = IndexState } = State3,
-    %% @todo Sync the store before the index but only if IndexMod:needs_sync != false.
-    State4 = State3#vqstate{ index_state = IndexMod:flush(IndexState) },
+    #vqstate{ index_mod   = IndexMod,
+              index_state = IndexState,
+              store_state = StoreState } = State3,
+    State4 = State3#vqstate{ index_state = IndexMod:flush(IndexState),
+                             store_state = rabbit_classic_queue_store_v2:sync(StoreState) },
     garbage_collect(),
     State4.
 
