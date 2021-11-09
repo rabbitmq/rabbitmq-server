@@ -38,6 +38,15 @@
 -define(HEADER_SIZE, 64). %% bytes
 -define(ENTRY_SIZE,  32). %% bytes
 
+%% The file_handle_cache module tracks reservations at
+%% the level of the process. This means we cannot
+%% handle them independently in the store and index.
+%% Because the index may reserve more FDs than the
+%% store the index becomes responsible for this and
+%% will always reserve at least 2 FDs, and release
+%% everything when terminating.
+-define(STORE_FD_RESERVATIONS, 2).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/file.hrl").
 
@@ -605,7 +614,7 @@ reduce_fd_usage(SegmentToOpen, State = #qi{ fds = OpenFds })
         #{SegmentToOpen := _} ->
             State;
         _ ->
-            file_handle_cache:set_reservation(map_size(OpenFds) + 1),
+            file_handle_cache:set_reservation(?STORE_FD_RESERVATIONS + map_size(OpenFds) + 1),
             State
     end;
 reduce_fd_usage(SegmentToOpen, State = #qi{ fds = OpenFds0 }) ->
@@ -832,10 +841,7 @@ delete_segment(Segment, State0 = #qi{ fds = OpenFds0 }) ->
     State = case maps:take(Segment, OpenFds0) of
         {Fd, OpenFds} ->
             ok = file:close(Fd),
-            case map_size(OpenFds) of
-                0 -> file_handle_cache:release_reservation();
-                N -> file_handle_cache:set_reservation(N)
-            end,
+            file_handle_cache:set_reservation(?STORE_FD_RESERVATIONS + map_size(OpenFds)),
             State0#qi{ fds = OpenFds };
         error ->
             State0
