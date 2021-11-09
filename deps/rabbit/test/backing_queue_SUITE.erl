@@ -560,13 +560,18 @@ bq_queue_index1(_Config) ->
     SeqIdsC = lists:seq(0, trunc(SegmentSize/2)),
     SeqIdsD = lists:seq(0, SegmentSize*4),
 
+    VerifyReadWithPublishedFun = case IndexMod of
+        rabbit_queue_index -> fun verify_read_with_published_v1/3;
+        rabbit_classic_queue_index_v2 -> fun verify_read_with_published_v2/3
+    end,
+
     with_empty_test_queue(
       fun (Qi0, QName) ->
               {0, 0, Qi1} = IndexMod:bounds(Qi0),
               {Qi2, SeqIdsMsgIdsA} = queue_index_publish(SeqIdsA, false, Qi1),
               {0, SegmentSize, Qi3} = IndexMod:bounds(Qi2),
               {ReadA, Qi4} = IndexMod:read(0, SegmentSize, Qi3),
-              ok = verify_read_with_published(false, false, ReadA,
+              ok = VerifyReadWithPublishedFun(false, ReadA,
                                               lists:reverse(SeqIdsMsgIdsA)),
               %% should get length back as 0, as all the msgs were transient
               {0, 0, Qi6} = restart_test_queue(Qi4, QName),
@@ -574,7 +579,7 @@ bq_queue_index1(_Config) ->
               {Qi8, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
               {0, TwoSegs, Qi9} = IndexMod:bounds(Qi8),
               {ReadB, Qi10} = IndexMod:read(0, SegmentSize, Qi9),
-              ok = verify_read_with_published(false, true, ReadB,
+              ok = VerifyReadWithPublishedFun(true, ReadB,
                                               lists:reverse(SeqIdsMsgIdsB)),
               %% should get length back as MostOfASegment
               LenB = length(SeqIdsB),
@@ -585,7 +590,7 @@ bq_queue_index1(_Config) ->
                   rabbit_queue_index ->
                       Qi14 = IndexMod:deliver(SeqIdsB, Qi13),
                       {ReadC, Qi14b} = IndexMod:read(0, SegmentSize, Qi14),
-                      ok = verify_read_with_published(true, true, ReadC,
+                      ok = VerifyReadWithPublishedFun(true, ReadC,
                                                       lists:reverse(SeqIdsMsgIdsB)),
                       Qi14b;
                   _ ->
@@ -668,10 +673,10 @@ bq_queue_index1(_Config) ->
               {_DeletedSegments7, Qi7} = IndexMod:ack([1,2,3], Qi6),
               {[], Qi8} = IndexMod:read(0, 4, Qi7),
               {ReadD, Qi9} = IndexMod:read(4, 7, Qi8),
-              ok = verify_read_with_published(true, false, ReadD,
+              ok = VerifyReadWithPublishedFun(false, ReadD,
                                               [Four, Five, Six]),
               {ReadE, Qi10} = IndexMod:read(7, 9, Qi9),
-              ok = verify_read_with_published(false, false, ReadE,
+              ok = VerifyReadWithPublishedFun(false, ReadE,
                                               [Seven, Eight]),
               Qi10
       end),
@@ -702,6 +707,26 @@ bq_queue_index1(_Config) ->
     {ok, _} = rabbit_variable_queue:start(?VHOST, []),
 
     passed.
+
+verify_read_with_published_v1(_Persistent, [], _) ->
+    ok;
+verify_read_with_published_v1(Persistent,
+                           [{MsgId, SeqId, _Location, _Props, Persistent}|Read],
+                           [{SeqId, MsgId}|Published]) ->
+    verify_read_with_published_v1(Persistent, Read, Published);
+verify_read_with_published_v1(_Persistent, _Read, _Published) ->
+    ko.
+
+%% The v2 index does not store the MsgId unless required.
+%% We therefore do not check it.
+verify_read_with_published_v2(_Persistent, [], _) ->
+    ok;
+verify_read_with_published_v2(Persistent,
+                           [{_MsgId1, SeqId, _Location, _Props, Persistent}|Read],
+                           [{SeqId, _MsgId2}|Published]) ->
+    verify_read_with_published_v2(Persistent, Read, Published);
+verify_read_with_published_v2(_Persistent, _Read, _Published) ->
+    ko.
 
 bq_queue_index_props(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -1496,17 +1521,6 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
     true = rabbit_msg_store:contains(LastMsgIdWritten, MSCState),
     ok = rabbit_msg_store:client_delete_and_terminate(MSCState),
     {A, B}.
-
-%% @todo Check for Delivered intentionally removed since it's now per-queue not per-message.
-%% @todo Check for MsgId intentionally removed since it's no longer stored if not necessary.
-verify_read_with_published(_Delivered, _Persistent, [], _) ->
-    ok;
-verify_read_with_published(Delivered, Persistent,
-                           [{_MsgId1, SeqId, _Location, _Props, Persistent}|Read],
-                           [{SeqId, _MsgId2}|Published]) ->
-    verify_read_with_published(Delivered, Persistent, Read, Published);
-verify_read_with_published(_Delivered, _Persistent, _Read, _Published) ->
-    ko.
 
 nop(_) -> ok.
 nop(_, _) -> ok.
