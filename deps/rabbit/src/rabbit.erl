@@ -913,8 +913,8 @@ start(normal, []) ->
         ?LOG_DEBUG("== Boot steps =="),
 
         ok = rabbit_boot_steps:run_boot_steps([rabbit | Plugins]),
-        run_postlaunch_phase(Plugins),
         rabbit_boot_state:set(core_started),
+        run_postlaunch_phase(Plugins),
         {ok, SupPid}
     catch
         throw:{error, _} = Error ->
