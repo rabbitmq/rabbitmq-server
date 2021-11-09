@@ -91,6 +91,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "rabbit_stream_SUITE",
+        shard_count = 3,
         deps = [
             "//deps/rabbit:bazel_erlang_lib",
             "//deps/rabbitmq_stream_common:bazel_erlang_lib",
