@@ -42,6 +42,11 @@
 %% need to look into the store to discard them. Messages on disk
 %% will be dropped at the same time as the index deletes the
 %% corresponding segment file.
+%%
+%% The file_handle_cache reservations are done by the v2 index
+%% because they are handled at a pid level. Since we are using
+%% up to 2 FDs in this module we make the index reserve 2 extra
+%% FDs.
 
 -module(rabbit_classic_queue_store_v2).
 
