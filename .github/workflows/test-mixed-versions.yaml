@@ -27,10 +27,24 @@ jobs:
         erlang_version:
         - "23"
         - "24"
+        include:
+        - erlang_version: "23"
+          rbe_default_branch: linux-erlang-23.3
+        - erlang_version: "24"
+          rbe_default_branch: linux-erlang-24.1
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
+<<<<<<< HEAD
       uses: actions/checkout@v2.3.4
+=======
+      uses: actions/checkout@v2.4.0
+    - name: SELECT ERLANG VERSION
+      run: |
+        sudo npm install --global --silent @bazel/buildozer
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set branch "${{ matrix.rbe_default_branch }}"' -:rbe_default)" > WORKSPACE.bazel
+        git diff
+>>>>>>> 92068f481c (Use externailzed rbe config in bazel)
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -39,13 +53,15 @@ jobs:
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
           build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${{ matrix.erlang_version }}
+
+          build:rbe --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
       run: |
         bazelisk test //... \
-          --config=rbe-${{ matrix.erlang_version }} \
+          --config=rbe \
           --test_tag_filters=mixed-version-cluster,-exclusive,-aws \
           --verbose_failures
   test-exclusive-mixed-versions:

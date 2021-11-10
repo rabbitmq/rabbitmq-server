@@ -18,6 +18,7 @@ elixir_home(
 )
 
 platform(
+<<<<<<< HEAD
     name = "erlang_23_platform",
     constraint_values = [
         "@platforms//os:linux",
@@ -46,6 +47,8 @@ platform(
 )
 
 platform(
+=======
+>>>>>>> 92068f481c (Use externailzed rbe config in bazel)
     name = "erlang_git_platform",
     constraint_values = [
         "@platforms//os:linux",

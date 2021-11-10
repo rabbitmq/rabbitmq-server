@@ -1,0 +1,123 @@
+name: Gather Bazel Execution Logs
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'A bazel label representing the test target'
+        required: true
+        default: '//deps/rabbit:rabbit_stream_queue_SUITE'
+jobs:
+  run-a:
+    name: Run A
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        erlang_version:
+        - "24"
+        include:
+        - erlang_version: "24"
+          rbe_default_branch: linux-erlang-24.1
+          cache_name: ci-bazel-cache-analysis
+    timeout-minutes: 120
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.4.0
+    - name: SELECT ERLANG VERSION
+      run: |
+        sudo npm install --global --silent @bazel/buildozer
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set branch "${{ matrix.rbe_default_branch }}"' -:rbe_default)" > WORKSPACE.bazel
+        git diff
+    - name: CONFIGURE BAZEL
+      run: |
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${{ matrix.cache_name }}
+
+          build:rbe --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
+        EOF
+    - name: RUN TESTS
+      run: |
+        bazelisk test ${{ github.event.inputs.target }} \
+          --config=rbe \
+          --execution_log_binary_file=/tmp/exec.log
+    - name: SAVE EXECUTION LOG BINARY
+      uses: actions/upload-artifact@v2-preview
+      with:
+        name: execution-log-binary-A
+        path: /tmp/exec.log
+  run-b:
+    name: Run B
+    needs: run-a
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        erlang_version:
+        - "24"
+        include:
+        - erlang_version: "24"
+          rbe_default_branch: linux-erlang-24.1
+          cache_name: ci-bazel-cache-analysis
+    timeout-minutes: 120
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.4.0
+    - name: SELECT ERLANG VERSION
+      run: |
+        sudo npm install --global --silent @bazel/buildozer
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set branch "${{ matrix.rbe_default_branch }}"' -:rbe_default)" > WORKSPACE.bazel
+        git diff
+    - name: CONFIGURE BAZEL
+      run: |
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${{ matrix.cache_name }}
+
+          build:rbe --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
+        EOF
+    - name: RUN TESTS
+      run: |
+        bazelisk test ${{ github.event.inputs.target }} \
+          --config=rbe \
+          --execution_log_binary_file=/tmp/exec.log
+    - name: SAVE EXECUTION LOG BINARY
+      uses: actions/upload-artifact@v2-preview
+      with:
+        name: execution-log-binary-B
+        path: /tmp/exec.log
+  parse-logs:
+    name: Parse Logs
+    needs: [run-a, run-b]
+    runs-on: ubuntu-latest
+    steps:
+    - name: CHECKOUT BAZEL
+      uses: actions/checkout@v2.4.0
+      with:
+        repository: bazelbuild/bazel
+        path: bazel
+    - name: MOUNT BAZEL CACHE
+      uses: actions/cache@v2
+      with:
+        path: "/home/runner/.cache/bazel"
+        key: bazel
+    - name: BUILD EXECLOG PARSER
+      working-directory: bazel
+      run: |
+        bazelisk build src/tools/execlog:parser
+    - name: FETCH LOGS
+      uses: actions/download-artifact@v2
+    - name: PARSE LOGS
+      run: |
+        bazel/bazel-bin/src/tools/execlog/parser \
+          --log_path=./execution-log-binary-A/exec.log \
+          --log_path=./execution-log-binary-B/exec.log \
+          --output_path=/tmp/execution-log-binary-A.log.txt \
+          --output_path=/tmp/execution-log-binary-B.log.txt
+    - name: SAVE PARSED LOGS
+      uses: actions/upload-artifact@v2-preview
+      with:
+        name: parsed-logs
+        path: /tmp/execution-log-binary-*.log.txt
