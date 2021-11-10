@@ -405,7 +405,7 @@ do_set_policy(Mode, Version) ->
         0, <<"queues">>, <<"acting-user">>).
 
 cmd_publish_msg(#cq{amq=AMQ}, PayloadSize, Confirm, Mandatory) ->
-    Payload = rand:bytes(PayloadSize),
+    Payload = do_rand_payload(PayloadSize),
     Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
                                <<>>, #'P_basic'{delivery_mode = 2}, %% @todo expiration ; @todo different delivery_mode? more?
                                Payload),
@@ -451,7 +451,7 @@ cmd_channel_close(Ch) ->
     amqp_channel:close(Ch).
 
 cmd_channel_publish(#cq{name=Name}, Ch, PayloadSize, _Mandatory) ->
-    Payload = rand:bytes(PayloadSize),
+    Payload = do_rand_payload(PayloadSize),
     Msg = #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                     payload = Payload},
     ok = amqp_channel:call(Ch,
@@ -465,4 +465,11 @@ cmd_channel_basic_get(#cq{name=Name}, Ch) ->
             empty;
         {_GetOk = #'basic.get_ok'{}, Msg} ->
             Msg
+    end.
+
+do_rand_payload(PayloadSize) ->
+    case erlang:function_exported(rand, bytes, 1) of
+        true -> rand:bytes(PayloadSize);
+        %% Slower failover for OTP < 24.0.
+        false -> crypto:strong_rand_bytes(PayloadSize)
     end.
