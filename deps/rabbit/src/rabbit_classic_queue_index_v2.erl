@@ -30,6 +30,9 @@
 %% Shared with rabbit_classic_queue_store_v2.
 -export([queue_dir/2]).
 
+%% Internal. Used by tests.
+-export([segment_file/2]).
+
 -define(QUEUE_NAME_STUB_FILE, ".queue_name").
 -define(SEGMENT_EXTENSION, ".qi").
 
@@ -114,6 +117,25 @@
     %% number of unacked messages remaining in the
     %% segment. We use this to determine whether a
     %% segment file can be deleted.
+    %%
+    %% We keep an accurate count of messages that are
+    %% alive in the segment file. The segment file gets
+    %% deleted when the number of messages gets to 0.
+    %% The segment file might be recreated (and reallocated)
+    %% when a new message comes in.
+    %%
+    %% This is OK because lazy queues will always write
+    %% to the index and so there is only a possible loss
+    %% in performance (extra file operations) when the
+    %% queue is processing few messages.
+    %%
+    %% Non-lazy queues will only write to the index when
+    %% messages are either persistent or there is memory
+    %% pressure. Here again the possible loss of performance
+    %% is expected when few messages get written to the index.
+    %%
+    %% Finally, because we are not using fsync, the file
+    %% operations may never hit the disk to begin with.
     segments = #{} :: #{non_neg_integer() => pos_integer()},
 
     %% File descriptors. We will keep up to 4 FDs
@@ -550,9 +572,9 @@ publish(MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount,
     %% and update our segments state.
     SegmentEntryCount = segment_entry_count(),
     ThisSegment = SeqId div SegmentEntryCount,
-    State2 = case maps:is_key(ThisSegment, Segments) of
-        true -> State1;
-        false -> new_segment_file(ThisSegment, State1)
+    State2 = case maps:get(ThisSegment, Segments, undefined) of
+        undefined -> new_segment_file(ThisSegment, State1);
+        ThisSegmentCount -> State1#qi{ segments = Segments#{ ThisSegment => ThisSegmentCount + 1 }}
     end,
     %% When publisher confirms have been requested for this
     %% message we mark the message as unconfirmed.
@@ -594,8 +616,7 @@ new_segment_file(Segment, State = #qi{ segments = Segments }) ->
                            ToSeqId:64/unsigned,
                            0:344 >>),
     %% Keep the file open.
-    %% @todo Does segment file deleting work when not all entries get written? Probably not. Should keep an accurate count.
-    State#qi{ segments = Segments#{Segment => SegmentEntryCount},
+    State#qi{ segments = Segments#{Segment => 1},
               fds = OpenFds#{Segment => Fd} }.
 
 %% We try to keep the number of FDs open at 4 at a maximum.
