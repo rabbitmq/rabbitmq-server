@@ -60,10 +60,15 @@ groups() ->
         {backing_queue_embed_limit_0, [], ?BACKING_QUEUE_TESTCASES},
         {backing_queue_embed_limit_1024, [], ?BACKING_QUEUE_TESTCASES}
     ],
+    V2Only = [
+        v2_delete_segment_file_completely_acked,
+        v2_delete_segment_file_partially_acked,
+        v2_delete_segment_file_partially_acked_with_holes
+    ],
     [
      {backing_queue_tests, [], [
           msg_store,
-          {backing_queue_v2, [], Common},
+          {backing_queue_v2, [], Common ++ V2Only},
           {backing_queue_v1, [], Common}
         ]}
     ].
@@ -748,6 +753,92 @@ bq_queue_index_props1(_Config) ->
 
     ok = rabbit_variable_queue:stop(?VHOST),
     {ok, _} = rabbit_variable_queue:start(?VHOST, []),
+
+    passed.
+
+v2_delete_segment_file_completely_acked(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, v2_delete_segment_file_completely_acked1, [Config]).
+
+v2_delete_segment_file_completely_acked1(_Config) ->
+    IndexMod = rabbit_classic_queue_index_v2,
+    SegmentSize = IndexMod:next_segment_boundary(0),
+    SeqIds = lists:seq(0, SegmentSize - 1),
+
+    with_empty_test_queue(
+      fun (Qi0, QName) ->
+              %% Publish a full segment file.
+              {Qi1, SeqIdsMsgIds} = queue_index_publish(SeqIds, true, Qi0),
+              SegmentSize = length(SeqIdsMsgIds),
+              {0, SegmentSize, Qi2} = IndexMod:bounds(Qi1),
+              %% Confirm that the file exists on disk.
+              Path = IndexMod:segment_file(0, Qi2),
+              true = filelib:is_file(Path),
+              %% Ack the full segment file.
+              {[0], Qi3} = IndexMod:ack(SeqIds, Qi2),
+              %% Confirm that the file was deleted.
+              false = filelib:is_file(Path),
+              Qi3
+      end),
+
+    passed.
+
+v2_delete_segment_file_partially_acked(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, v2_delete_segment_file_partially_acked1, [Config]).
+
+v2_delete_segment_file_partially_acked1(_Config) ->
+    IndexMod = rabbit_classic_queue_index_v2,
+    SegmentSize = IndexMod:next_segment_boundary(0),
+    SeqIds = lists:seq(0, SegmentSize div 2),
+    SeqIdsLen = length(SeqIds),
+
+    with_empty_test_queue(
+      fun (Qi0, QName) ->
+              %% Publish a partial segment file.
+              {Qi1, SeqIdsMsgIds} = queue_index_publish(SeqIds, true, Qi0),
+              SeqIdsLen = length(SeqIdsMsgIds),
+              {0, SegmentSize, Qi2} = IndexMod:bounds(Qi1),
+              %% Confirm that the file exists on disk.
+              Path = IndexMod:segment_file(0, Qi2),
+              true = filelib:is_file(Path),
+              %% Ack the partial segment file.
+              {[0], Qi3} = IndexMod:ack(SeqIds, Qi2),
+              %% Confirm that the file was deleted.
+              false = filelib:is_file(Path),
+              Qi3
+      end),
+
+    passed.
+
+v2_delete_segment_file_partially_acked_with_holes(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, v2_delete_segment_file_partially_acked_with_holes1, [Config]).
+
+v2_delete_segment_file_partially_acked_with_holes1(_Config) ->
+    IndexMod = rabbit_classic_queue_index_v2,
+    SegmentSize = IndexMod:next_segment_boundary(0),
+    SeqIdsA = lists:seq(0, SegmentSize div 2),
+    SeqIdsB = lists:seq(11 + SegmentSize div 2, SegmentSize - 1),
+    SeqIdsLen = length(SeqIdsA) + length(SeqIdsB),
+
+    with_empty_test_queue(
+      fun (Qi0, QName) ->
+              %% Publish a partial segment file with holes.
+              {Qi1, SeqIdsMsgIdsA} = queue_index_publish(SeqIdsA, true, Qi0),
+              {Qi2, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi1),
+              SeqIdsLen = length(SeqIdsMsgIdsA) + length(SeqIdsMsgIdsB),
+              {0, SegmentSize, Qi3} = IndexMod:bounds(Qi2),
+              %% Confirm that the file exists on disk.
+              Path = IndexMod:segment_file(0, Qi3),
+              true = filelib:is_file(Path),
+              %% Ack the partial segment file with holes.
+              {[], Qi4} = IndexMod:ack(SeqIdsA, Qi3),
+              {[0], Qi5} = IndexMod:ack(SeqIdsB, Qi4),
+              %% Confirm that the file was deleted.
+              false = filelib:is_file(Path),
+              Qi5
+      end),
 
     passed.
 
@@ -1489,7 +1580,7 @@ with_empty_test_queue(Fun) ->
 
 init_queue_index() ->
     %% We must set the segment entry count in the process dictionary
-    %% for tests that call the queue index directly to have a correct
+    %% for tests that call the v1 queue index directly to have a correct
     %% value.
     put(segment_entry_count, 2048),
     ok.
