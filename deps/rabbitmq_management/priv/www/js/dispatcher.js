@@ -179,8 +179,13 @@ dispatcher_add(function(sammy) {
     sammy.get('#/users/:id', function() {
         var vhosts = JSON.parse(sync_get('/vhosts'));
         const current_vhost = get_pref('vhost');
-        let index_vhost = vhosts.findIndex(v => v.name === current_vhost);
-        index_vhost = index_vhost === -1 ? 0 : index_vhost;
+        var index_vhost = 0;
+        for (var i = 0; i < vhosts.length; i++) {
+            if (vhosts[i].name === current_vhost) {
+                index_vhost = i;
+                break;
+            }
+        }
         render({'user': '/users/' + esc(this.params['id']),
                     'permissions': '/users/' + esc(this.params['id']) + '/permissions',
                     'topic_permissions': '/users/' + esc(this.params['id']) + '/topic-permissions',
