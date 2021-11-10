@@ -766,7 +766,7 @@ v2_delete_segment_file_completely_acked1(_Config) ->
     SeqIds = lists:seq(0, SegmentSize - 1),
 
     with_empty_test_queue(
-      fun (Qi0, QName) ->
+      fun (Qi0, _QName) ->
               %% Publish a full segment file.
               {Qi1, SeqIdsMsgIds} = queue_index_publish(SeqIds, true, Qi0),
               SegmentSize = length(SeqIdsMsgIds),
@@ -794,7 +794,7 @@ v2_delete_segment_file_partially_acked1(_Config) ->
     SeqIdsLen = length(SeqIds),
 
     with_empty_test_queue(
-      fun (Qi0, QName) ->
+      fun (Qi0, _QName) ->
               %% Publish a partial segment file.
               {Qi1, SeqIdsMsgIds} = queue_index_publish(SeqIds, true, Qi0),
               SeqIdsLen = length(SeqIdsMsgIds),
@@ -823,7 +823,7 @@ v2_delete_segment_file_partially_acked_with_holes1(_Config) ->
     SeqIdsLen = length(SeqIdsA) + length(SeqIdsB),
 
     with_empty_test_queue(
-      fun (Qi0, QName) ->
+      fun (Qi0, _QName) ->
               %% Publish a partial segment file with holes.
               {Qi1, SeqIdsMsgIdsA} = queue_index_publish(SeqIdsA, true, Qi0),
               {Qi2, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi1),
