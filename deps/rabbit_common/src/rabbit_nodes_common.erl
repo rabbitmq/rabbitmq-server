@@ -226,7 +226,7 @@ connection_succeeded_diagnostics() ->
     case gen_event:call(error_logger, ?ERROR_LOGGER_HANDLER, get_connection_report) of
         [] ->
             [{"  * TCP connection succeeded but Erlang distribution failed ~n"
-              "  * suggestion: check if the Erlang cookie identical for all server nodes and CLI tools~n"
+              "  * suggestion: check if the Erlang cookie is identical for all server nodes and CLI tools~n"
               "  * suggestion: check if all server nodes and CLI tools use consistent hostnames when addressing each other~n"
               "  * suggestion: check if inter-node connections may be configured to use TLS. If so, all nodes and CLI tools must do that~n"
              "   * suggestion: see the CLI, clustering and networking guides on https://rabbitmq.com/documentation.html to learn more~n", []}];
