@@ -12,6 +12,7 @@
 -define(PROPERTIES_HEADER, <<"x-amqp-1.0-properties">>).
 -define(APP_PROPERTIES_HEADER, <<"x-amqp-1.0-app-properties">>).
 -define(MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
+-define(STREAM_OFFSET_HEADER, <<"x-stream-offset">>).
 -define(FOOTER, <<"x-amqp-1.0-footer">>).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -201,11 +202,29 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
        first_acquirer = not Redelivered,
        delivery_count = undefined},
     HeadersBin = amqp10_framing:encode_bin(Header10),
-    MsgAnnoBin =
+    MsgAnnoBin0 =
         case table_lookup(Headers, ?MESSAGE_ANNOTATIONS_HEADER) of
             undefined  -> <<>>;
             {_, MABin} -> MABin
-    end,
+        end,
+    MsgAnnoBin =
+        case table_lookup(Headers, ?STREAM_OFFSET_HEADER) of
+            undefined ->
+                MsgAnnoBin0;
+            {_, StreamOffset} when is_integer(StreamOffset) ->
+                case amqp10_framing:decode_bin(MsgAnnoBin0) of
+                    [#'v1_0.message_annotations'{content = C0} = MA] ->
+                        Contents = map_add(utf8, ?STREAM_OFFSET_HEADER,
+                                           ulong, StreamOffset, C0),
+                        amqp10_framing:encode_bin(
+                          MA#'v1_0.message_annotations'{content = Contents});
+                    [] ->
+                        Contents = map_add(utf8, ?STREAM_OFFSET_HEADER,
+                                           ulong, StreamOffset, []),
+                        amqp10_framing:encode_bin(
+                          #'v1_0.message_annotations'{content = Contents})
+                end
+        end,
     PropsBin =
         case table_lookup(Headers, ?PROPERTIES_HEADER) of
             {_, Props10Bin} ->
@@ -259,3 +278,7 @@ wrap(Type, Val) ->
 table_lookup(undefined, _)    -> undefined;
 table_lookup(Headers, Header) -> rabbit_misc:table_lookup(Headers, Header).
 
+map_add(_T, _Key, _Type, undefined, Acc) ->
+    Acc;
+map_add(KeyType, Key, Type, Value, Acc) ->
+    [{wrap(KeyType, Key), wrap(Type, Value)} | Acc].

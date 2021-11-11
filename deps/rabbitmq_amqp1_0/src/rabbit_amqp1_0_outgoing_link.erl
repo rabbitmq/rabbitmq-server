@@ -7,7 +7,7 @@
 
 -module(rabbit_amqp1_0_outgoing_link).
 
--export([attach/3, delivery/6, transferred/3, credit_drained/3, flow/3]).
+-export([attach/3, detach/3, delivery/6, transferred/3, credit_drained/3, flow/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -23,6 +23,11 @@
                         send_settled,
                         default_outcome,
                         route_state}).
+
+detach(#'v1_0.detach'{handle = Handle}, BCh,_Link) ->
+    CTag = handle_to_ctag(Handle),
+    rabbit_amqp1_0_channel:call(BCh, #'basic.cancel'{consumer_tag = CTag}),
+    ok.
 
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
@@ -46,6 +51,8 @@ attach(#'v1_0.attach'{name = Name,
                        DCh) of
         {ok, Source1, OutgoingLink = #outgoing_link{queue = QueueName}} ->
             CTag = handle_to_ctag(Handle),
+            Args = source_filters_to_consumer_args(Source1),
+
             case rabbit_amqp1_0_channel:subscribe(
                    BCh, #'basic.consume'{
                      queue = QueueName,
@@ -56,7 +63,8 @@ attach(#'v1_0.attach'{name = Name,
                      no_ack = false,
                      %% TODO exclusive?
                      exclusive = false,
-                     arguments = [{<<"x-credit">>, table,
+                     arguments = Args ++
+                                  [{<<"x-credit">>, table,
                                    [{<<"credit">>, long,    0},
                                     {<<"drain">>,  bool, false}]}]},
                    self()) of
@@ -140,6 +148,7 @@ default(Thing,    _Default) -> Thing.
 ensure_source(Source = #'v1_0.source'{address       = Address,
                                       dynamic       = Dynamic,
                                       durable       = Durable,
+                                      filter = _Filters,
                                       %% TODO
                                       expiry_policy = _ExpiryPolicy,
                                       %% TODO
@@ -238,3 +247,18 @@ transferred(DeliveryTag, Channel,
             ok
     end,
     Link#outgoing_link{delivery_count = serial_add(Count, 1)}.
+
+source_filters_to_consumer_args(#'v1_0.source'{filter = {map, KVList}}) ->
+    Key = {symbol, <<"rabbitmq:stream-offset-spec">>},
+    case lists:keyfind(Key, 1, KVList) of
+        {_, {timestamp, Ts}} ->
+            [{<<"x-stream-offset">>, timestamp, Ts div 1000}]; %% 0.9.1 uses second based timestamps
+        {_, {utf8, Spec}} ->
+            [{<<"x-stream-offset">>, longstr, Spec}]; %% next, last, first and "10m" etc
+        {_, {_, Offset}} when is_integer(Offset) ->
+            [{<<"x-stream-offset">>, long, Offset}]; %% integer offset
+        _ ->
+            []
+    end;
+source_filters_to_consumer_args(_Source) ->
+    [].

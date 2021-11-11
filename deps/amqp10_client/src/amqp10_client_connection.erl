@@ -92,8 +92,6 @@
 -export_type([connection_config/0,
               amqp10_socket/0]).
 
--define(DEFAULT_TIMEOUT, 5000).
-
 %% -------------------------------------------------------------------
 %% Public API.
 %% -------------------------------------------------------------------
@@ -257,7 +255,7 @@ open_sent(_EvtType, #'v1_0.open'{max_frame_size = MFSz,
                        S2
                end, State1, PendingSessionReqs),
     ok = notify_opened(Config),
-    {next_state, opened, State2};
+    {next_state, opened, State2#state{pending_session_reqs = []}};
 open_sent({call, From}, begin_session,
           #state{pending_session_reqs = PendingSessionReqs} = State) ->
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
@@ -297,6 +295,13 @@ opened(_EvtType, Frame, State) ->
 
 close_sent(_EvtType, heartbeat, State) ->
     {next_state, close_sent, State};
+close_sent(_EvtType, {'EXIT', _Pid, shutdown}, State) ->
+    %% monitored processes may exit during closure
+    {next_state, close_sent, State};
+close_sent(_EvtType, {'DOWN', _Ref, process, ReaderPid, _},
+           #state{reader = ReaderPid} = State) ->
+    %% if the reader exits we probably wont receive a close frame
+    {stop, normal, State};
 close_sent(_EvtType, #'v1_0.close'{}, State) ->
     %% TODO: we should probably set up a timer before this to ensure
     %% we close down event if no reply is received
