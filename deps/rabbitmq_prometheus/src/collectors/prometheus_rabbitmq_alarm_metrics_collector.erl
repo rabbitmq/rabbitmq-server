@@ -61,9 +61,9 @@ collect_mf(_Registry, Callback) ->
                                    [untyped_metric(maps:get(memory_limit, ActiveAlarms, 0))])),
                 ok;
             Error ->
-                rabbit_log:error("alarm_metrics_collector failed to emit metrics: "
-                                 "rabbitm_alarm:get_local_alarms returned ~p",
-                                 [Error]),
+                _ = rabbit_log:error("alarm_metrics_collector failed to emit metrics: "
+                                     "rabbitm_alarm:get_local_alarms returned ~p",
+                                     [Error]),
                 %% We are not going to render any alarm metrics here.
                 %% Breaks continuity but at least doesn't crash the
                 %% whole scraping endpoint
