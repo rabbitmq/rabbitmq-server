@@ -873,8 +873,8 @@ suites = [
         name = "unit_gm_SUITE",
         size = "small",
         runtime_deps = [
-            "@meck//:bazel_erlang_lib",
             "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
+            "@meck//:bazel_erlang_lib",
         ],
     ),
     rabbitmq_suite(
@@ -954,6 +954,7 @@ suites = [
         PACKAGE,
         name = "vhost_SUITE",
         flaky = True,
+        shard_count = 4,
     ),
 ]
 
