@@ -25,10 +25,10 @@
 %% as observed by RabbitMQ.
 
 %% Used by `/metrics` and `/metrics/per-object`.
--define(METRIC_NAME_PREFIX, "rabbitmq_").
+-define(METRIC_NAME_PREFIX, <<"rabbitmq_">>).
 
 %% Used by `/metrics/detailed` endpoint
--define(DETAILED_METRIC_NAME_PREFIX, "rabbitmq_detailed_").
+-define(DETAILED_METRIC_NAME_PREFIX, <<"rabbitmq_detailed_">>).
 
 %% ==The source of these metrics can be found in the rabbit_core_metrics module==
 %% The relevant files are:
@@ -328,7 +328,8 @@ identity_info() ->
     }.
 
 add_metric_family({Name, Type, Help, Metrics}, Callback) ->
-  Callback(create_mf(?METRIC_NAME(Name), Help, Type, Metrics)).
+    MN = <<?METRIC_NAME_PREFIX/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
+    Callback(create_mf(MN, Help, Type, Metrics)).
 
 mf(Callback, Prefix, Contents, Data) ->
     [begin
@@ -340,7 +341,7 @@ mf(Callback, Prefix, Contents, Data) ->
                end,
         Callback(
             create_mf(
-                [Prefix, prometheus_model_helpers:metric_name(Name)],
+                <<Prefix/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
                 Help,
                 catch_boolean(Type),
                 ?MODULE,
@@ -357,7 +358,7 @@ mf(Callback, Prefix, Contents, Data) ->
               end,
         Callback(
             create_mf(
-                [Prefix, prometheus_model_helpers:metric_name(Name)],
+                <<Prefix/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
                 Help,
                 catch_boolean(Type),
                 ?MODULE,
@@ -369,7 +370,7 @@ mf(Callback, Prefix, Contents, Data) ->
 mf_totals(Callback, Name, Type, Help, Size) ->
     Callback(
         create_mf(
-            ?METRIC_NAME(Name),
+            <<?METRIC_NAME_PREFIX/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
             Help,
             catch_boolean(Type),
             Size
@@ -383,14 +384,18 @@ labels(Item) ->
     label(element(1, Item)).
 
 label(#resource{virtual_host = VHost, kind = exchange, name = Name}) ->
-    [{vhost, VHost}, {exchange, Name}];
+    <<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\"">>;
 label(#resource{virtual_host = VHost, kind = queue, name = Name}) ->
-    [{vhost, VHost}, {queue, Name}];
+    <<"vhost=\"", VHost/binary, "\",queue=\"", Name/binary, "\"">>;
 label({P, {#resource{virtual_host = QVHost, kind = queue, name = QName},
             #resource{virtual_host = EVHost, kind = exchange, name = EName}}}) when is_pid(P) ->
     %% channel_queue_exchange_metrics {channel_id, {queue_id, exchange_id}}
-    [{channel, P}, {queue_vhost, QVHost}, {queue, QName},
-     {exchange_vhost, EVHost}, {exchange, EName}];
+    <<"channel=\"", (iolist_to_binary(pid_to_list(P)))/binary, "\",",
+      "queue_vhost=\"", QVHost/binary, "\",",
+      "queue=\"", QName/binary, "\",",
+      "exchange_vhost=\"", EVHost/binary, "\",",
+      "exchange=\"", EName/binary, "\""
+    >>;
 label({RemoteAddress, Username, Protocol}) when is_binary(RemoteAddress), is_binary(Username),
                                                 is_atom(Protocol) ->
     lists:filter(fun({_, V}) ->
@@ -398,13 +403,17 @@ label({RemoteAddress, Username, Protocol}) when is_binary(RemoteAddress), is_bin
                  end, [{remote_address, RemoteAddress}, {username, Username},
                        {protocol, atom_to_binary(Protocol, utf8)}]);
 label({I1, I2}) ->
-    label(I1) ++ label(I2);
+    case {label(I1), label(I2)} of
+        {<<>>, L} -> L;
+        {L, <<>>} -> L;
+        {L1, L2} -> <<L1/binary, ",", L2/binary>>
+    end;
 label(P) when is_pid(P) ->
-    [{channel, P}];
+    <<"channel=\"", (iolist_to_binary(pid_to_list(P)))/binary, "\"">>;
 label(A) when is_atom(A) ->
     case is_protocol(A) of
-        true -> [{protocol, atom_to_binary(A, utf8)}];
-        false -> []
+        true -> <<"protocol=\"", (atom_to_binary(A, utf8))/binary, "\"">>;
+        false -> <<>>
     end.
 
 is_protocol(P) ->

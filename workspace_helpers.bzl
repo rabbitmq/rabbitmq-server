@@ -178,10 +178,12 @@ erlang_lib(
         remote = "https://github.com/rabbitmq/osiris.git",
     )
 
-    hex_pm_bazel_erlang_lib(
+    github_bazel_erlang_lib(
         name = "prometheus",
-        version = "4.8.1",
-        sha256 = "6edfbe928d271c7f657a6f2c46258738086584bd6cae4a000b8b9a6009ba23a5",
+        repo = "prometheus.erl",
+        org = "deadtrickster",
+        ref = "06425c21a39c1564164f1cc3fe5bdfa8b23b1f78",
+        version = "06425c21a39c1564164f1cc3fe5bdfa8b23b1f78",
         first_srcs = [
             "src/prometheus_collector.erl",
             "src/prometheus_format.erl",
