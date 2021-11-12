@@ -71,6 +71,7 @@ def rabbitmq_lib(
         erlc_opts = RABBITMQ_ERLC_OPTS,
         test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
         first_srcs = [],
+        extra_priv = [],
         build_deps = [],
         deps = [],
         runtime_deps = []):
@@ -82,6 +83,7 @@ def rabbitmq_lib(
         app_registered = app_registered,
         app_env = app_env,
         extra_apps = extra_apps,
+        extra_priv = extra_priv,
         erlc_opts = erlc_opts,
         first_srcs = first_srcs,
         build_deps = build_deps,
@@ -97,6 +99,7 @@ def rabbitmq_lib(
         app_registered = app_registered,
         app_env = app_env,
         extra_apps = extra_apps,
+        extra_priv = extra_priv,
         erlc_opts = test_erlc_opts,
         first_srcs = first_srcs,
         build_deps = with_test_versions(build_deps),
