@@ -20,7 +20,6 @@ jobs:
         include:
         - image_tag_suffix: otp-max
           erlang_version: "24"
-          rbe_default_branch: linux-erlang-24.1
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
@@ -32,11 +31,6 @@ jobs:
         check-name: build-publish-dev (${{ matrix.image_tag_suffix }})
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
-    - name: SELECT ERLANG VERSION
-      run: |
-        sudo npm install --global --silent @bazel/buildozer
-        echo "$(cat WORKSPACE.bazel | npx buildozer 'set branch "${{ matrix.rbe_default_branch }}"' -:rbe_default)" > WORKSPACE.bazel
-        git diff
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -45,8 +39,6 @@ jobs:
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
           build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-aws-${{ matrix.erlang_version }}
-
-          build:rbe --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
@@ -54,7 +46,7 @@ jobs:
       run: |
         branch_or_tag="${GITHUB_REF##*/}"
         bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
-          --config=rbe \
+          --config=rbe-${{ matrix.erlang_version }} \
           --test_tag_filters=aws \
           --build_tests_only \
           --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
