@@ -828,6 +828,19 @@ next_enqueue_seq(#state{next_enqueue_seq = Seq} = State) ->
 consumer_id(ConsumerTag) ->
     {ConsumerTag, self()}.
 
+send_command(Server, Correlation, Command, _Priority,
+             #state{pending = Pending,
+                    cfg = #cfg{soft_limit = SftLmt}} = State0)
+  when element(1, Command) == return ->
+    %% returns are sent to the aux machine for pre-evaluation
+    {Seq, State} = next_seq(State0),
+    ok = ra:cast_aux_command(Server, {Command, Seq, self()}),
+    Tag = case maps:size(Pending) >= SftLmt of
+              true -> slow;
+              false -> ok
+          end,
+    {Tag, State#state{pending = Pending#{Seq => {Correlation, Command}},
+                      slow = Tag == slow}};
 send_command(Server, Correlation, Command, Priority,
              #state{pending = Pending,
                     cfg = #cfg{soft_limit = SftLmt}} = State0) ->
@@ -839,6 +852,7 @@ send_command(Server, Correlation, Command, Priority,
           end,
     {Tag, State#state{pending = Pending#{Seq => {Correlation, Command}},
                       slow = Tag == slow}}.
+
 
 resend_command(Node, Correlation, Command,
                #state{pending = Pending} = State0) ->

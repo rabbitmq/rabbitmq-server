@@ -81,11 +81,12 @@ groups() ->
                                             quorum_cluster_size_7,
                                             node_removal_is_not_quorum_critical
                                            ]},
-                      {clustered_with_partitions, [], [
-                                            reconnect_consumer_and_publish,
-                                            reconnect_consumer_and_wait,
-                                            reconnect_consumer_and_wait_channel_down
-                                           ]}
+                      {clustered_with_partitions, [],
+                       [
+                        reconnect_consumer_and_publish,
+                        reconnect_consumer_and_wait,
+                        reconnect_consumer_and_wait_channel_down
+                       ]}
                      ]}
     ].
 
@@ -1889,7 +1890,11 @@ subscribe_redelivery_count(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+                 declare(Ch, QQ,
+                         [
+                          {<<"x-queue-type">>, longstr, <<"quorum">>},
+                          {<<"x-max-in-memory-length">>, long, 0}
+                         ])),
 
     RaName = ra_name(QQ),
     publish(Ch, QQ),
@@ -1919,6 +1924,7 @@ subscribe_redelivery_count(Config) ->
                                                 multiple     = false,
                                                 requeue      = true})
     after 5000 ->
+              flush(1),
               exit(basic_deliver_timeout_2)
     end,
 

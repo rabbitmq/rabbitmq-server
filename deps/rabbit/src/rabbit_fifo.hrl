@@ -122,6 +122,7 @@
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
+         unused,
          pending = [] :: [{msg_seqno(), ra:index(), raw_msg()}],
          status = up :: up |
                         suspected_down,
