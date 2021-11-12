@@ -7,6 +7,7 @@
 
 -module(rabbit_amqqueue).
 
+-export([store_queue_ram_dirty/1]).
 -export([warn_file_limit/0]).
 -export([recover/1, stop/1, start/1, declare/6, declare/7,
          delete_immediately/1, delete_exclusive/2, delete/4, purge/1,
@@ -329,6 +330,9 @@ store_queue(Q) when not ?amqqueue_is_durable(Q) ->
 
 store_queue_ram(Q) ->
     ok = mnesia:write(rabbit_queue, rabbit_queue_decorator:set(Q), write).
+
+store_queue_ram_dirty(Q) ->
+    ok = mnesia:dirty_write(rabbit_queue, rabbit_queue_decorator:set(Q)).
 
 -spec update_decorators(name()) -> 'ok'.
 
