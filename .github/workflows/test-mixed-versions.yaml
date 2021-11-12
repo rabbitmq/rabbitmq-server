@@ -48,6 +48,7 @@ jobs:
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
       run: |
+        sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
           --config=rbe-${{ matrix.erlang_version }} \
           --test_tag_filters=mixed-version-cluster,-exclusive,-aws \
