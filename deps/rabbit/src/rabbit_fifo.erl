@@ -1,4 +1,4 @@
-%% This Source Code Form is subject to the terms of the Mozilla Public
+%% This Source Code Form is subject tconsumer_ido the terms of the Mozilla Public
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
@@ -77,6 +77,9 @@
 -record(enqueue, {pid :: option(pid()),
                   seq :: option(msg_seqno()),
                   msg :: raw_msg()}).
+-record(requeue, {consumer_id :: consumer_id(),
+                  msg_id :: msg_id(),
+                  msg :: indexed_msg()}).
 -record(register_enqueuer, {pid :: pid()}).
 -record(checkout, {consumer_id :: consumer_id(),
                    spec :: checkout_spec(),
@@ -98,6 +101,7 @@
 
 -opaque protocol() ::
     #enqueue{} |
+    #requeue{} |
     #register_enqueuer{} |
     #checkout{} |
     #settle{} |
@@ -261,6 +265,52 @@ apply(Meta, #return{msg_ids = MsgIds, consumer_id = ConsumerId},
             return(Meta, ConsumerId, Returned, [], State);
         _ ->
             {State, ok}
+    end;
+apply(#{index := Idx} = Meta,
+      #requeue{consumer_id = ConsumerId,
+               msg_id = MsgId,
+               %% as we read the message from disk it is already
+               %% an inmemory message
+               msg = ?INDEX_MSG(OldIdx, ?MSG(_Header, _RawMsg) = Msg)},
+      #?MODULE{consumers = Cons0,
+               messages = Messages,
+               ra_indexes = Indexes0} = State00) ->
+    case Cons0 of
+        #{ConsumerId := #consumer{checked_out = Checked0} = Con0}
+          when is_map_key(MsgId, Checked0) ->
+            %% construct an index message with the current raft index
+            %% and update delivery count before adding it to the message queue
+            ?INDEX_MSG(_, ?MSG(Header, _)) = IdxMsg0 =
+                update_msg_header(delivery_count, fun incr/1, 1, ?INDEX_MSG(Idx, Msg)),
+
+            State0 = add_bytes_return(Header, State00),
+            {State1, IdxMsg} =
+                case evaluate_memory_limit(Header, State0) of
+                    true ->
+                        % indexed message with header map
+                        {State0, ?INDEX_MSG(Idx, ?DISK_MSG(Header))};
+                    false ->
+                        {add_in_memory_counts(Header, State0), IdxMsg0}
+                end,
+            Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked0),
+                                credit = increase_credit(Con0, 1)},
+            State2 = update_or_remove_sub(
+                       Meta,
+                       ConsumerId,
+                       Con,
+                       State1#?MODULE{ra_indexes = rabbit_fifo_index:delete(OldIdx, Indexes0),
+                                      messages = lqueue:in(IdxMsg, Messages)}),
+
+            %% We have to increment the enqueue counter to ensure release cursors
+            %% are generated
+            State3 = incr_enqueue_count(State2),
+
+            {State, Ret, Effs} = checkout(Meta, State0, State3, []),
+            update_smallest_raft_index(Idx, Ret,
+                                       maybe_store_dehydrated_state(Idx,  State),
+                                       Effs);
+        _ ->
+            {State00, ok}
     end;
 apply(Meta, #credit{credit = NewCredit, delivery_count = RemoteDelCnt,
                     drain = Drain, consumer_id = ConsumerId},
@@ -1016,11 +1066,48 @@ init_aux(Name) when is_atom(Name) ->
          capacity = {inactive, Now, 1, 1.0}}.
 
 handle_aux(leader, _, garbage_collection, State, Log, MacState) ->
-    % ra_log_wal:force_roll_over(ra_log_wal),
     {no_reply, force_eval_gc(Log, MacState, State), Log};
 handle_aux(follower, _, garbage_collection, State, Log, MacState) ->
-    % ra_log_wal:force_roll_over(ra_log_wal),
     {no_reply, force_eval_gc(Log, MacState, State), Log};
+handle_aux(leader, cast, {#return{msg_ids = MsgIds,
+                                  consumer_id = ConsumerId}, Corr, Pid},
+           Aux0, Log0, #?MODULE{cfg = #cfg{delivery_limit = undefined},
+                                consumers = Consumers,
+                                ra_indexes = _Indexes}) ->
+    case Consumers of
+        #{ConsumerId := #consumer{checked_out = Checked}} ->
+            {Log, ToReturn} =
+                maps:fold(
+                  fun (MsgId, ?INDEX_MSG(Idx, ?DISK_MSG(Header)), {L0, Acc}) ->
+                          %% it is possible this is not found if the consumer
+                          %% crashed and the message got removed
+                          %% TODO: handle when log entry is not found
+                          case ra_log:fetch(Idx, L0) of
+                              {{_, _, {_, _, Cmd, _}}, L} ->
+                                  Msg = case Cmd of
+                                            #enqueue{msg = M} -> M;
+                                            #requeue{msg = ?INDEX_MSG(_, ?MSG(_H, M))} ->
+                                                M
+                                        end,
+                                  IdxMsg = ?INDEX_MSG(Idx, ?MSG(Header, Msg)),
+                                  {L, [{MsgId, IdxMsg} | Acc]};
+                              {undefined, L} ->
+                                  {L, Acc}
+                          end;
+                      (MsgId, IdxMsg, {L0, Acc}) ->
+                          {L0, [{MsgId, IdxMsg} | Acc]}
+                  end, {Log0, []}, maps:with(MsgIds, Checked)),
+
+            Appends = make_requeue(ConsumerId, {notify, Corr, Pid},
+                                   lists:sort(ToReturn), []),
+            {no_reply, Aux0, Log, Appends};
+        _ ->
+            {no_reply, Aux0, Log0}
+    end;
+handle_aux(leader, cast, {#return{} = Ret, Corr, Pid},
+           Aux0, Log, #?MODULE{}) ->
+    %% for returns with a delivery limit set we can just return as before
+    {no_reply, Aux0, Log, [{append, Ret, {notify, Corr, Pid}}]};
 handle_aux(_RaState, cast, eval, Aux0, Log, _MacState) ->
     {no_reply, Aux0, Log};
 handle_aux(_RaState, cast, Cmd, #aux{capacity = Use0} = Aux0,
@@ -1810,7 +1897,7 @@ return_one(Meta, MsgId, Msg0,
                                dead_letter_handler = DLH}} = State0,
            Effects0, ConsumerId) ->
     #consumer{checked_out = Checked} = Con0 = maps:get(ConsumerId, Consumers),
-    Msg = update_msg_header(delivery_count, fun (C) -> C + 1 end, 1, Msg0),
+    Msg = update_msg_header(delivery_count, fun incr/1, 1, Msg0),
     Header = get_msg_header(Msg),
     case get_header(delivery_count, Header) of
         DeliveryCount when DeliveryCount > DeliveryLimit ->
@@ -2055,7 +2142,11 @@ delivery_effect({CTag, CPid}, IdxMsgs, InMemMsgs) ->
     {RaftIdxs, Data} = lists:unzip(IdxMsgs),
     {log, RaftIdxs,
      fun(Log) ->
-             Msgs0 = lists:zipwith(fun ({enqueue, _, _, Msg}, {MsgId, Header}) ->
+             Msgs0 = lists:zipwith(fun
+                                       (#enqueue{msg = Msg}, {MsgId, Header}) ->
+                                           {MsgId, {Header, Msg}};
+                                       (#requeue{msg = ?INDEX_MSG(_, ?MSG(_, Msg))},
+                                        {MsgId, Header}) ->
                                            {MsgId, {Header, Msg}}
                                    end, Log, Data),
              Msgs = case  InMemMsgs of
@@ -2088,7 +2179,7 @@ checkout_one(#{system_time := Ts} = Meta, InitState0, Effects0) ->
                 {ConsumerMsg, State0} ->
                     %% there are consumers waiting to be serviced
                     %% process consumer checkout
-                    case maps:get(ConsumerId, Cons0) of
+                    case maps:get(ConsumerId, Cons0, error) of
                         #consumer{credit = 0} ->
                             %% no credit but was still on queue
                             %% can happen when draining
@@ -2638,3 +2729,24 @@ subtract_in_memory(Msgs, State) ->
                    (?PREFIX_MEM_MSG(H), S) ->
                         subtract_in_memory_counts(H, S)
                 end, State, Msgs).
+
+make_requeue(ConsumerId, Notify, [{MsgId, Msg}], Acc) ->
+    lists:reverse([{append,
+                    #requeue{consumer_id = ConsumerId,
+                             msg_id = MsgId,
+                             msg = Msg},
+                    Notify}
+                   | Acc]);
+make_requeue(ConsumerId, Notify, [{MsgId, Msg} | Rem], Acc) ->
+    make_requeue(ConsumerId, Notify, Rem,
+                         [{append,
+                           #requeue{consumer_id = ConsumerId,
+                                    msg_id = MsgId,
+                                    msg = Msg},
+                           noreply}
+                          | Acc]);
+make_requeue(_ConsumerId, _Notify, [], []) ->
+    [].
+
+incr(I) ->
+    I + 1.
