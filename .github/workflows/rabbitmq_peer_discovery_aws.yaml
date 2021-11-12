@@ -1,6 +1,10 @@
 name: Peer Discovery AWS Integration Test
 on:
   push:
+    branches:
+      - master
+      - v3.9.x
+      - v3.8.x
     paths:
       - 'deps/rabbitmq_peer_discovery_aws/**'
       - .github/workflows/rabbitmq_peer_discovery_aws.yaml
