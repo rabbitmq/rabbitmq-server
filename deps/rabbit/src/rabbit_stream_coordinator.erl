@@ -922,7 +922,9 @@ update_stream0(#{system_time := _Ts} = _Meta,
                         M#member{target = deleted}
                 end, Members0),
     Stream0#stream{members = Members,
-                   % reply_to = maps:get(from, Meta, undefined),
+                   %% reset reply_to here to ensure a reply
+                   %% is returned as the command has been accepted
+                   reply_to = undefined,
                    target = deleted};
 update_stream0(#{system_time := _Ts} = _Meta,
                {add_replica, _StreamId, #{node := Node}},
@@ -1260,12 +1262,7 @@ evaluate_stream(#{index := Idx} = Meta,
              Action = {aux, {delete_member, StreamId, LeaderNode,
                              make_writer_conf(Writer0, Stream0)}},
              Writer = Writer0#member{current = {deleting, Idx}},
-             Effs = case From of
-                        undefined ->
-                            [Action | Effs0];
-                        _ ->
-                            wrap_reply(From, {ok, 0}) ++ [Action | Effs0]
-                    end,
+             Effs = [Action | Effs0],
              Stream = Stream0#stream{reply_to = undefined},
              eval_replicas(Meta, Writer, Replicas, Stream, Effs);
          {#member{state = {down, Epoch},
