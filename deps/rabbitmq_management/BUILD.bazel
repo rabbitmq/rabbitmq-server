@@ -3,6 +3,7 @@ load("@bazel-erlang//:xref.bzl", "xref")
 load("@bazel-erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
+    "APP_VERSION",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
@@ -54,12 +55,23 @@ RUNTIME_DEPS = [
     "@cowlib//:bazel_erlang_lib",
 ]
 
+genrule(
+    name = "rabbitmqadmin",
+    srcs = ["bin/rabbitmqadmin"],
+    outs = ["priv/www/cli/rabbitmqadmin"],
+    cmd = """set -euxo pipefail
+
+sed 's/%%VSN%%/{}/' $< > $@
+""".format(APP_VERSION),
+)
+
 rabbitmq_lib(
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_module = APP_MODULE,
     app_name = APP_NAME,
     extra_apps = EXTRA_APPS,
+    extra_priv = [":rabbitmqadmin"],
     first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
