@@ -130,7 +130,7 @@
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
-         pending = [] :: [{msg_seqno(), ra:index(), milliseconds(), raw_msg()}],
+         unused,
          status = up :: up |
                         suspected_down,
          %% it is useful to have a record of when this was blocked
