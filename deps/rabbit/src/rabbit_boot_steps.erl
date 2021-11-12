@@ -39,7 +39,9 @@ run_step(Attributes, AttributeName) ->
         rabbit_log:debug("Applying MFA: M = ~s, F = ~s, A = ~p",
                         [M, F, A]),
         case apply(M,F,A) of
-            ok              -> ok;
+            ok              ->
+                rabbit_log:debug("Finished MFA: M = ~s, F = ~s, A = ~p",
+                                 [M, F, A]);
             {error, Reason} -> exit({error, Reason})
         end
      end
