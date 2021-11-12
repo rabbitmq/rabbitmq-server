@@ -15,6 +15,7 @@ jobs:
         include:
         - image_tag_suffix: otp-max
           erlang_version: "24"
+          rbe_default_branch: linux-erlang-24.1
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
