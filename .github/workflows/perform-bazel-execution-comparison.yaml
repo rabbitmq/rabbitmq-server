@@ -6,29 +6,41 @@ on:
         description: 'A bazel label representing the test target'
         required: true
         default: '//deps/rabbit:rabbit_stream_queue_SUITE'
-env:
-  ERLANG_MAJOR: "24"
-  CACHE_NAME: ci-bazel-cache-analysis
 jobs:
   run-a:
     name: Run A
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        erlang_version:
+        - "24"
+        include:
+        - erlang_version: "24"
+          rbe_default_branch: linux-erlang-24.1
+          cache_name: ci-bazel-cache-analysis
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2.4.0
+    - name: SELECT ERLANG VERSION
+      run: |
+        sudo npm install --global --silent @bazel/buildozer
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set branch "${{ matrix.rbe_default_branch }}"' -:rbe_default)" > WORKSPACE.bazel
+        git diff
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
           build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
 
           build:buildbuddy --build_metadata=ROLE=CI
-          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${CACHE_NAME}
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${{ matrix.cache_name }}
+
+          build:rbe --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
         EOF
     - name: RUN TESTS
       run: |
         bazelisk test ${{ github.event.inputs.target }} \
-          --config=rbe-${ERLANG_MAJOR} \
+          --config=rbe \
           --execution_log_binary_file=/tmp/exec.log
     - name: SAVE EXECUTION LOG BINARY
       uses: actions/upload-artifact@v2-preview
@@ -39,22 +51,37 @@ jobs:
     name: Run B
     needs: run-a
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        erlang_version:
+        - "24"
+        include:
+        - erlang_version: "24"
+          rbe_default_branch: linux-erlang-24.1
+          cache_name: ci-bazel-cache-analysis
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2.4.0
+    - name: SELECT ERLANG VERSION
+      run: |
+        sudo npm install --global --silent @bazel/buildozer
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set branch "${{ matrix.rbe_default_branch }}"' -:rbe_default)" > WORKSPACE.bazel
+        git diff
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
           build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
 
           build:buildbuddy --build_metadata=ROLE=CI
-          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${CACHE_NAME}
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${{ matrix.cache_name }}
+
+          build:rbe --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
         EOF
     - name: RUN TESTS
       run: |
         bazelisk test ${{ github.event.inputs.target }} \
-          --config=rbe-${ERLANG_MAJOR} \
+          --config=rbe \
           --execution_log_binary_file=/tmp/exec.log
     - name: SAVE EXECUTION LOG BINARY
       uses: actions/upload-artifact@v2-preview

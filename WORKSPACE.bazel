@@ -14,7 +14,16 @@ buildbuddy_deps()
 
 load("@io_buildbuddy_buildbuddy_toolchain//:rules.bzl", "buildbuddy")
 
-buildbuddy(name = "buildbuddy_toolchain")
+buildbuddy(
+    name = "buildbuddy_toolchain",
+    llvm = True,
+)
+
+git_repository(
+    name = "rbe_default",
+    branch = "linux-erlang-24.1",
+    remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
+)
 
 http_archive(
     name = "rules_pkg",
