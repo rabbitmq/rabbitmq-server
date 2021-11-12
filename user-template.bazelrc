@@ -11,3 +11,7 @@ build --spawn_strategy=local
 build --flaky_test_attempts=1
 
 build:buildbuddy --remote_header=x-buildbuddy-api-key=YOUR_API_KEY
+
+# cross compile for linux (if on macOS) with rbe
+build:rbe --host_cpu=k8
+build:rbe --cpu=k8
