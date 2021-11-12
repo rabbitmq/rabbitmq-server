@@ -466,16 +466,16 @@ aggregate_entry({Name, Ready, Unack, Msgs, Red}, NextStats, Ops0,
                        lookup_queue = QueueFun} = State) ->
     Stats = ?vhost_msg_stats(Ready, Unack, Msgs),
     Diff = get_difference(Name, Stats, State),
-    Ops1 = insert_entry_ops(vhost_msg_stats, vhost(Name), true, Diff, Ops0,
-                            GPolicies),
+    Ops1 = maybe_insert_entry_ops(Name, vhost_msg_stats, vhost(Name), true,
+                                  Diff, Ops0, GPolicies),
     Ops2 = case QueueFun(Name) of
                true ->
                    QPS =?queue_process_stats(Red),
                    O1 = insert_entry_ops(queue_process_stats, Name, false, QPS,
                                          Ops1, BPolicies),
                    QMS = ?queue_msg_stats(Ready, Unack, Msgs),
-                   insert_entry_ops(queue_msg_stats, Name, false, QMS,
-                                    O1, BPolicies);
+                   maybe_insert_entry_ops(Name, queue_msg_stats, Name, false,
+                                          QMS, O1, BPolicies);
                _ ->
                    Ops1
            end,
@@ -582,6 +582,20 @@ insert_entry_op(Table, Key, Entry, Ops) ->
                                              {insert_entry, sum_entry(Entry0, Entry)}
                                      end, {insert_entry, Entry}, TableOps0),
     maps:put(Table, TableOps, Ops).
+
+maybe_insert_entry_ops(Name, Table, Id, Incr, Entry, Ops, Policies) ->
+    case needs_filtering_out(Name) of
+        true -> Ops;
+        false -> insert_entry_ops(Table, Id, Incr, Entry, Ops, Policies)
+    end.
+
+needs_filtering_out(#resource{name = Name}) ->
+    case rabbit_mgmt_agent_config:get_env(filter_aggregated_queue_metrics_pattern) of
+        undefined ->
+            false;
+        Pattern ->
+            match == re:run(Name, Pattern, [{capture, none}])
+    end.
 
 insert_entry_ops(Table, Id, Incr, Entry, Ops, Policies) ->
     lists:foldl(fun({Size, Interval}, Acc) ->
