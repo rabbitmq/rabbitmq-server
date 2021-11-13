@@ -66,9 +66,18 @@ process_frame(#mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
     {error, connect_expected, PState};
 process_frame(Frame = #mqtt_frame{ fixed = #mqtt_frame_fixed{ type = Type }},
               PState) ->
-    case process_request(Type, Frame, PState) of
+    try process_request(Type, Frame, PState) of
         {ok, PState1} -> {ok, PState1, PState1#proc_state.connection};
         Ret -> Ret
+    catch
+        _:{{shutdown, {server_initiated_close, 403, _}}, _} ->
+            %% NB: MQTT spec says we should ack normally, ie pretend
+            %% there was no auth error, but here we are closing the
+            %% connection with an error. This is what happens anyway
+            %% if there is an authorization failure at the AMQP 0-9-1
+            %% client level. And error was already logged by AMQP
+            %% channel, so no need for custom logging.
+            {error, access_refused, PState}
     end.
 
 add_client_id_to_adapter_info(ClientId, #amqp_adapter_info{additional_info = AdditionalInfo0} = AdapterInfo) ->
@@ -133,8 +142,7 @@ process_request(?CONNECT,
                     {UserBin, PassBin} ->
                         case process_login(UserBin, PassBin, ProtoVersion, PState1) of
                             connack_dup_auth ->
-                                {SessionPresent0, PState2} = maybe_clean_sess(PState1),
-                                {{?CONNACK_ACCEPT, SessionPresent0}, PState2};
+                                maybe_clean_sess(PState1);
                             {?CONNACK_ACCEPT, Conn, VHost, AState} ->
                                 case rabbit_mqtt_collector:register(ClientId, self()) of
                                     {ok, Corr} ->
@@ -156,8 +164,7 @@ process_request(?CONNECT,
                                                 retainer_pid = RetainerPid,
                                                 auth_state = AState,
                                                 register_state = {pending, Corr}},
-                                    {SessionPresent1, PState4} = maybe_clean_sess(PState3),
-                                    {{?CONNACK_ACCEPT, SessionPresent1}, PState4};
+                                    maybe_clean_sess(PState3);
                                   %% e.g. this node was removed from the MQTT cluster members
                                   {error, _} = Err ->
                                     rabbit_log_connection:error("MQTT cannot accept a connection: "
@@ -256,44 +263,43 @@ process_request(?SUBSCRIBE,
                             message_id  = StateMsgId,
                             mqtt2amqp_fun = Mqtt2AmqpFun} = PState0) ->
     rabbit_log_connection:debug("Received a SUBSCRIBE for topic(s) ~p", [Topics]),
-    check_subscribe(Topics, fun() ->
-        {QosResponse, PState1} =
-            lists:foldl(fun (#mqtt_topic{name = TopicName,
-                                         qos  = Qos}, {QosList, PState}) ->
-                           SupportedQos = supported_subs_qos(Qos),
-                           {Queue, #proc_state{subscriptions = Subs} = PState1} =
-                               ensure_queue(SupportedQos, PState),
-                           RoutingKey = Mqtt2AmqpFun(TopicName),
-                           Binding = #'queue.bind'{
-                                       queue       = Queue,
-                                       exchange    = Exchange,
-                                       routing_key = RoutingKey},
-                           #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
-                           SupportedQosList = case maps:find(TopicName, Subs) of
-                               {ok, L} -> [SupportedQos|L];
-                               error   -> [SupportedQos]
-                           end,
-                           {[SupportedQos | QosList],
-                            PState1 #proc_state{
-                                subscriptions =
-                                    maps:put(TopicName, SupportedQosList, Subs)}}
-                       end, {[], PState0}, Topics),
-        SendFun(#mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
-                            variable = #mqtt_frame_suback{
-                                        message_id = SubscribeMsgId,
-                                        qos_table  = QosResponse}}, PState1),
-        %% we may need to send up to length(Topics) messages.
-        %% if QoS is > 0 then we need to generate a message id,
-        %% and increment the counter.
-        StartMsgId = safe_max_id(SubscribeMsgId, StateMsgId),
-        N = lists:foldl(fun (Topic, Acc) ->
-                          case maybe_send_retained_message(RPid, Topic, Acc, PState1) of
-                            {true, X} -> Acc + X;
-                            false     -> Acc
-                          end
-                        end, StartMsgId, Topics),
-        {ok, PState1#proc_state{message_id = N}}
-    end, PState0);
+
+    {QosResponse, PState1} =
+        lists:foldl(fun (#mqtt_topic{name = TopicName,
+                                     qos  = Qos}, {QosList, PState}) ->
+                       SupportedQos = supported_subs_qos(Qos),
+                       {Queue, #proc_state{subscriptions = Subs} = PState1} =
+                           ensure_queue(SupportedQos, PState),
+                       RoutingKey = Mqtt2AmqpFun(TopicName),
+                       Binding = #'queue.bind'{
+                                   queue       = Queue,
+                                   exchange    = Exchange,
+                                   routing_key = RoutingKey},
+                       #'queue.bind_ok'{} = amqp_channel:call(Channel, Binding),
+                       SupportedQosList = case maps:find(TopicName, Subs) of
+                           {ok, L} -> [SupportedQos|L];
+                           error   -> [SupportedQos]
+                       end,
+                       {[SupportedQos | QosList],
+                        PState1 #proc_state{
+                            subscriptions =
+                                maps:put(TopicName, SupportedQosList, Subs)}}
+                   end, {[], PState0}, Topics),
+    SendFun(#mqtt_frame{fixed    = #mqtt_frame_fixed{type = ?SUBACK},
+                        variable = #mqtt_frame_suback{
+                                    message_id = SubscribeMsgId,
+                                    qos_table  = QosResponse}}, PState1),
+    %% we may need to send up to length(Topics) messages.
+    %% if QoS is > 0 then we need to generate a message id,
+    %% and increment the counter.
+    StartMsgId = safe_max_id(SubscribeMsgId, StateMsgId),
+    N = lists:foldl(fun (Topic, Acc) ->
+                      case maybe_send_retained_message(RPid, Topic, Acc, PState1) of
+                        {true, X} -> Acc + X;
+                        false     -> Acc
+                      end
+                    end, StartMsgId, Topics),
+    {ok, PState1#proc_state{message_id = N}};
 
 process_request(?UNSUBSCRIBE,
                 #mqtt_frame{
@@ -489,35 +495,65 @@ delivery_qos(Tag, Headers,   #proc_state{ consumer_tags = {_, Tag} }) ->
 
 maybe_clean_sess(PState = #proc_state { clean_sess = false,
                                         connection = Conn,
+                                        auth_state = #auth_state{vhost = VHost},
                                         client_id  = ClientId }) ->
-    SessionPresent = session_present(Conn, ClientId),
-    {_Queue, PState1} = ensure_queue(?QOS_1, PState),
-    {SessionPresent, PState1};
+    SessionPresent = session_present(VHost, ClientId),
+    case SessionPresent of
+        false ->
+            %% ensure_queue/2 not only ensures that queue is created, but also starts consuming from it.
+            %% Let's avoid creating that queue until explicitly asked by a client.
+            %% Then publish-only clients, that connect with clean_sess=true due to some misconfiguration,
+            %% will consume less resources.
+            {{?CONNACK_ACCEPT, SessionPresent}, PState};
+        true ->
+            try ensure_queue(?QOS_1, PState) of
+                {_Queue, PState1} -> {{?CONNACK_ACCEPT, SessionPresent}, PState1}
+            catch
+                exit:({{shutdown, {server_initiated_close, 403, _}}, _}) ->
+                    %% Connection is not yet propagated to #proc_state{}, let's close it here
+                    catch amqp_connection:close(Conn),
+                    rabbit_log_connection:error("MQTT cannot recover a session, user is missing permissions"),
+                    {?CONNACK_SERVER, PState};
+                C:E:S ->
+                    %% Connection is not yet propagated to
+                    %% #proc_state{}, let's close it here.
+                    %% This is an exceptional situation anyway, but
+                    %% doing this will prevent second crash from
+                    %% amqp client being logged.
+                    catch amqp_connection:close(Conn),
+                    erlang:raise(C, E, S)
+            end
+    end;
 maybe_clean_sess(PState = #proc_state { clean_sess = true,
                                         connection = Conn,
+                                        auth_state = #auth_state{vhost = VHost},
                                         client_id  = ClientId }) ->
     {_, Queue} = rabbit_mqtt_util:subcription_queue_name(ClientId),
     {ok, Channel} = amqp_connection:open_channel(Conn),
-    ok = try amqp_channel:call(Channel, #'queue.delete'{ queue = Queue }) of
-             #'queue.delete_ok'{} -> ok
-         catch
-             exit:_Error -> ok
-         after
-             amqp_channel:close(Channel)
-         end,
-    {false, PState}.
+    case session_present(VHost, ClientId) of
+        false ->
+            {{?CONNACK_ACCEPT, false}, PState};
+        true ->
+            try amqp_channel:call(Channel, #'queue.delete'{ queue = Queue }) of
+                #'queue.delete_ok'{} -> {{?CONNACK_ACCEPT, false}, PState}
+            catch
+                exit:({{shutdown, {server_initiated_close, 403, _}}, _}) ->
+                    %% Connection is not yet propagated to #proc_state{}, let's close it here
+                    catch amqp_connection:close(Conn),
+                    rabbit_log_connection:error("MQTT cannot start a clean session: "
+                                                "`configure` permission missing for queue `~p`", [Queue]),
+                    {?CONNACK_SERVER, PState}
+            after
+                catch amqp_channel:close(Channel)
+            end
+    end.
 
-session_present(Conn, ClientId)  ->
+session_present(VHost, ClientId)  ->
     {_, QueueQ1} = rabbit_mqtt_util:subcription_queue_name(ClientId),
-    Declare = #'queue.declare'{queue   = QueueQ1,
-                               passive = true},
-    {ok, Channel} = amqp_connection:open_channel(Conn),
-    try
-        amqp_channel:call(Channel, Declare),
-        amqp_channel:close(Channel),
-        true
-    catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
-            false
+    QueueName = rabbit_misc:r(VHost, queue, QueueQ1),
+    case rabbit_amqqueue:lookup(QueueName) of
+        {ok, _} -> true;
+        {error, not_found} -> false
     end.
 
 make_will_msg(#mqtt_frame_connect{ will_flag   = false }) ->
@@ -832,6 +868,22 @@ send_will(PState = #proc_state{will_msg = WillMsg = #mqtt_msg{retain = Retain,
     end,
     PState #proc_state{ channels = {undefined, undefined} }.
 
+%% TODO amqp_pub/2 is publishing messages asynchronously, using
+%% amqp_channel:cast_flow/3
+%%
+%% It does access check using check_publish/3 before submitting, but
+%% this is superfluous, as actual publishing will do the same
+%% check. While check results cached, it's still some unnecessary
+%% work.
+%%
+%% And the only reason to keep it that way is that it prevents useless
+%% crash messages flooding logs, as there is no code to handle async
+%% channel crash gracefully.
+%%
+%% It'd be better to rework the whole thing, removing performance
+%% penalty and some 50 lines of duplicate code. Maybe unlinking from
+%% channel, and adding it as a child of connection supervisor instead.
+%% But exact details are not yet clear.
 amqp_pub(undefined, PState) ->
     PState;
 
@@ -944,22 +996,9 @@ handle_ra_event(Evt, PState) ->
     rabbit_log:debug("unhandled ra_event: ~w ", [Evt]),
     PState.
 
-%% NB: check_*: MQTT spec says we should ack normally, ie pretend there
-%% was no auth error, but here we are closing the connection with an error. This
-%% is what happens anyway if there is an authorization failure at the AMQP 0-9-1 client level.
-
 check_publish(TopicName, Fn, PState) ->
   case check_topic_access(TopicName, write, PState) of
     ok -> Fn();
-    _ -> {error, unauthorized, PState}
-  end.
-
-check_subscribe([], Fn, _) ->
-  Fn();
-
-check_subscribe([#mqtt_topic{name = TopicName} | Topics], Fn, PState) ->
-  case check_topic_access(TopicName, read, PState) of
-    ok -> check_subscribe(Topics, Fn, PState);
     _ -> {error, unauthorized, PState}
   end.
 
