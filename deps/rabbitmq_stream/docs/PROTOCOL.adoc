@@ -327,17 +327,21 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
 ```
 Deliver => Key Version SubscriptionId OsirisChunk
   Key => uint16 // 0x0008
-  Version => uint32
+  Version => uint16
   SubscriptionId => uint8
   OsirisChunk => MagicVersion NumEntries NumRecords Epoch ChunkFirstOffset ChunkCrc DataLength Messages
   MagicVersion => int8
+  ChunkType => int8 // 0: user, 1: tracking delta, 2: tracking snapshot
   NumEntries => uint16
   NumRecords => uint32
+  Timestamp => int64 // in milliseconds, since epoch
   Epoch => uint64
   ChunkFirstOffset => uint64
   ChunkCrc => int32
   DataLength => uint32
-  Messages => [Message] // no int32 for the size for this array
+  TrailerLength => uint32
+  Reserved => unit32 // unused 4 bytes
+  Messages => [Message] // no int32 for the size for this array; the size is defined by NumEntries field above
   Message => EntryTypeAndSize
   Data => bytes
 ```
