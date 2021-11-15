@@ -757,15 +757,16 @@ make_stream_conf(Node, Q) ->
                                      R =/= undefined
                              end, [{max_bytes, MaxBytes},
                                    {max_age, MaxAge}]),
-    add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes, #{reference => QName,
-                                                       name => Name,
-                                                       retention => Retention,
-                                                       nodes => [Node | Replicas],
-                                                       leader_locator_strategy => LeaderLocator,
-                                                       leader_node => Node,
-                                                       replica_nodes => Replicas,
-                                                       event_formatter => Formatter,
-                                                       epoch => 1}).
+    add_if_defined(max_segment_size_bytes, MaxSegmentSizeBytes,
+                   #{reference => QName,
+                     name => Name,
+                     retention => Retention,
+                     nodes => [Node | Replicas],
+                     leader_locator_strategy => LeaderLocator,
+                     leader_node => Node,
+                     replica_nodes => Replicas,
+                     event_formatter => Formatter,
+                     epoch => 1}).
 
 select_stream_nodes(Size, All) when length(All) =< Size ->
     All;
