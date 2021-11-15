@@ -61,6 +61,7 @@ groups() ->
                                               initial_cluster_size_two,
                                               initial_cluster_size_one_policy,
                                               leader_locator_client_local,
+                                              declare_delete_same_stream,
                                               leader_locator_random,
                                               leader_locator_least_leaders]},
      {cluster_size_3_parallel_2, [parallel], all_tests()},
@@ -1641,6 +1642,21 @@ initial_cluster_size_one_policy(Config) ->
 
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"cluster-size">>),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+declare_delete_same_stream(Config) ->
+    Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Q = ?config(queue_name, Config),
+
+    [begin
+         Ch = rabbit_ct_client_helpers:open_channel(Config, S),
+         ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                      declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+         ?assertMatch(#'queue.delete_ok'{},
+                      amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+         rabbit_ct_client_helpers:close_channel(Ch)
+     end || _ <- lists:seq(1, 20), S <- Servers],
+
+    ok.
 
 leader_locator_client_local(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
