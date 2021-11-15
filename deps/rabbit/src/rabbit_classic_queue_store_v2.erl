@@ -181,8 +181,11 @@ write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
     %% combined with the SeqId is enough to find the
     %% message again.
     {Fd, Offset, State1} = get_write_fd(Segment, State0),
-    %% We remove MsgId because we are not going to use it after reading it back from disk.
-    MsgIovec = term_to_iovec(Msg#basic_message{ id = undefined }),
+    %% @todo We could remove MsgId because we are not going to use it
+    %%       after reading it back from disk. But we have to support
+    %%       going back to v1 for the time being. When rolling back
+    %%       to v1 is no longer possible, set `id = undefined` here.
+    MsgIovec = term_to_iovec(Msg),
     Size = iolist_size(MsgIovec),
     %% Calculate the CRC for the data if configured to do so.
     %% We will truncate the CRC to 16 bits to save on space. (Idea taken from postgres.)
