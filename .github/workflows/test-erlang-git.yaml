@@ -32,6 +32,19 @@ jobs:
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
           build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-erlang-git
+
+          build:rbe-git --crosstool_top=@buildbuddy_toolchain//:toolchain
+          build:rbe-git --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
+          build:rbe-git --javabase=@buildbuddy_toolchain//:javabase_jdk8
+          build:rbe-git --host_javabase=@buildbuddy_toolchain//:javabase_jdk8
+          build:rbe-git --java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+          build:rbe-git --host_java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+
+          build:rbe-git --host_platform=//:erlang_git_platform
+          build:rbe-git --platforms=//:erlang_git_platform
+          build:rbe-git --extra_execution_platforms=//:erlang_git_platform
+          build:rbe-git --@bazel-erlang//:erlang_home=/usr/local/lib/erlang
+          build:rbe-git --@bazel-erlang//:erlang_version=25
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
