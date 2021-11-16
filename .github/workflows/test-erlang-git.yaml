@@ -6,7 +6,7 @@ on:
 jobs:
   test-erlang-git:
     name: Test (Erlang Git Master)
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY

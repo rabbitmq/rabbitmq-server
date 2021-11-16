@@ -16,7 +16,7 @@ on:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -49,7 +49,7 @@ jobs:
           --verbose_failures
   test-exclusive:
     name: Test (Exclusive Tests)
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         erlang_version:
