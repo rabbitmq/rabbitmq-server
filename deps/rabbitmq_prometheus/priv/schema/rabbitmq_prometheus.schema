@@ -126,3 +126,5 @@ end}.
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 {mapping, "prometheus.ssl.max_keepalive", "rabbitmq_prometheus.ssl_config.cowboy_opts.max_keepalive",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+{mapping, "prometheus.filter_aggregated_queue_metrics_pattern", "rabbitmq_prometheus.filter_aggregated_queue_metrics_pattern", [{datatype, string}]}.
