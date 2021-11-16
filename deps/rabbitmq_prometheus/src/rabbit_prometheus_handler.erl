@@ -163,6 +163,11 @@ put_filtering_options_into_process_dictionary(Request) ->
             put(prometheus_mf_filter, Fs);
         _ -> ok
     end,
+    case rabbit_mgmt_agent_config:get_env(filter_aggregated_queue_metrics_pattern) of
+        undefined -> ok;
+        Pattern ->
+            put(prometheus_queue_filter, Pattern)
+    end,
     ok.
 
 parse_vhosts(N) when is_binary(N) ->
