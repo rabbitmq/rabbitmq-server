@@ -95,7 +95,7 @@ groups() ->
     ].
 
 suite() ->
-    [{timetrap, {minutes, 5}}].
+    [{timetrap, {minutes, 3}}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
