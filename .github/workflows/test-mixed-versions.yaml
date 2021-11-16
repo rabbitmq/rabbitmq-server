@@ -20,7 +20,7 @@ on:
 jobs:
   test-mixed-versions:
     name: Test (Mixed Version Cluster)
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -50,7 +50,7 @@ jobs:
           --verbose_failures
   test-exclusive-mixed-versions:
     name: Test (Exclusive Tests with Mixed Version Cluster)
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         erlang_version:
