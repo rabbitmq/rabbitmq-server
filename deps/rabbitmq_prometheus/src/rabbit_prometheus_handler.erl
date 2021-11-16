@@ -163,7 +163,7 @@ put_filtering_options_into_process_dictionary(Request) ->
             put(prometheus_mf_filter, Fs);
         _ -> ok
     end,
-    case rabbit_mgmt_agent_config:get_env(filter_aggregated_queue_metrics_pattern) of
+    case application:get_env(rabbitmq_prometheus, filter_aggregated_queue_metrics_pattern, undefined) of
         undefined -> ok;
         Pattern ->
             put(prometheus_queue_filter, Pattern)
