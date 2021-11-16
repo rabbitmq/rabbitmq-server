@@ -1803,6 +1803,37 @@ end}.
     {validators, ["non_zero_positive_integer"]}
 ]}.
 
+{mapping, "distribution.listener.port_range.min", "kernel.inet_dist_listen_min", [
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "distribution.listener.port_range.max", "kernel.inet_dist_listen_max", [
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "distribution.listener.interface", "kernel.inet_dist_use_interface", [
+    {datatype, [string]},
+    {validators, ["is_ip"]}
+]}.
+
+{translation, "kernel.inet_dist_use_interface",
+    fun(Conf) ->
+            case cuttlefish:conf_get("distribution.listener.interface", Conf, undefined) of
+                undefined ->
+                    cuttlefish:unset();
+                Value when is_list(Value) ->
+                    case inet:parse_address(Value) of
+                        {ok, Parsed} -> Parsed;
+                        {error, _}   -> cuttlefish:invalid("should be a valid IP address")
+                    end;
+                _ ->
+                    cuttlefish:invalid("should be a valid IP address")
+            end
+    end
+}.
+
 % ==========================
 % sysmon_handler section
 % ==========================
@@ -2104,7 +2135,7 @@ fun(File) ->
     end
 end}.
 
-{validator, "is_ip", "string is a valid IP address",
+{validator, "is_ip", "value should be a valid IP address",
 fun(IpStr) ->
     Res = inet:parse_address(IpStr),
     element(1, Res) == ok
