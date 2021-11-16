@@ -7,7 +7,7 @@ build:buildbuddy --remote_cache=grpcs://remote.buildbuddy.io
 build:buildbuddy --remote_timeout=1200
 build:buildbuddy --grpc_keepalive_time=360s
 build:buildbuddy --grpc_keepalive_timeout=360s
-build:buildbuddy --remote_download_toplevel
+build:buildbuddy --remote_download_minimal
 build:buildbuddy --build_metadata=REPO_URL=https://github.com/rabbitmq/rabbitmq-server.git
 
 build:rbe --config=buildbuddy
