@@ -817,7 +817,18 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
             rabbit_log:debug("~s: running mnesia update for ~s: ~W",
                              [?MODULE, StreamId, Conf, 10]),
             Fun = fun (Q) ->
-                          amqqueue:set_type_state(amqqueue:set_pid(Q, LeaderPid), Conf)
+                          case amqqueue:get_type_state(Q) of
+                              #{name := S} when S == StreamId ->
+                                  %% the stream id matches so we can update the
+                                  %% amqqueue record
+                                  amqqueue:set_type_state(
+                                    amqqueue:set_pid(Q, LeaderPid), Conf);
+                              _ ->
+                                  %% if the stream id isn't a match this is a stale
+                                  %% update from a previous stream incarnation for the
+                                  %% same queue name and we ignore it
+                                  Q
+                          end
                   end,
             try rabbit_misc:execute_mnesia_transaction(
                   fun() ->
