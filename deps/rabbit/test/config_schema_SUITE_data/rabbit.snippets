@@ -72,6 +72,28 @@ ssl_options.fail_if_no_peer_cert = true",
  {num_acceptors,
   "num_acceptors.ssl = 1",[{rabbit,[{num_ssl_acceptors,1}]}],[]},
 
+ {distribution_listener,
+ "distribution.listener.interface = 192.168.0.1
+  distribution.listener.port_range.min = 25679
+  distribution.listener.port_range.max = 25679",
+ [{kernel, [
+    {inet_dist_listen_min, 25679},
+    {inet_dist_listen_max, 25679},
+    {inet_dist_use_interface, {192,168,0,1}}
+   ]}],
+ []},
+
+ {distribution_listener_ipv6,
+ "distribution.listener.interface = ::1
+  distribution.listener.port_range.min = 25679
+  distribution.listener.port_range.max = 25679",
+ [{kernel, [
+    {inet_dist_listen_min, 25679},
+    {inet_dist_listen_max, 25679},
+    {inet_dist_use_interface, {0,0,0,0,0,0,0,1}}
+   ]}],
+ []},
+
  {socket_writer_gc_threshold,
   "socket_writer.gc_threshold = 999666111", [{rabbit, [{writer_gc_threshold, 999666111}]}],[]},
 
