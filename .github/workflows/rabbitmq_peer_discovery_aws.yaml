@@ -27,6 +27,11 @@ jobs:
         check-name: build-publish-dev (${{ matrix.image_tag_suffix }})
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         wait-interval: 30 # seconds
+    - name: MOUNT BAZEL CACHE
+      uses: actions/cache@v1
+      with:
+        path: "/home/runner/repo-cache/"
+        key: repo-cache
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -35,6 +40,9 @@ jobs:
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
           build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-aws-${{ matrix.erlang_version }}
+          build:buildbuddy --repository_cache=/home/runner/repo-cache/
+          build:buildbuddy --color=yes
+          build:buildbuddy --disk_cache=
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3

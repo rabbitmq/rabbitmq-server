@@ -24,6 +24,11 @@ jobs:
         npx buildozer \
           "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
           //:erlang_git_platform
+    - name: MOUNT BAZEL CACHE
+      uses: actions/cache@v1
+      with:
+        path: "/home/runner/repo-cache/"
+        key: repo-cache
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -32,6 +37,9 @@ jobs:
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
           build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-erlang-git
+          build:buildbuddy --repository_cache=/home/runner/repo-cache/
+          build:buildbuddy --color=yes
+          build:buildbuddy --disk_cache=
 
           build:rbe-git --crosstool_top=@buildbuddy_toolchain//:toolchain
           build:rbe-git --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
