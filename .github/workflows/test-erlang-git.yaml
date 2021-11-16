@@ -1,0 +1,64 @@
+name: Test Erlang Git Master
+on:
+  schedule:
+  - cron: '0 2 * * *'
+  workflow_dispatch:
+jobs:
+  test-erlang-git:
+    name: Test (Erlang Git Master)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.4.0
+    - name: UPDATE RBE IMAGE SHA
+      env:
+        IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
+        TAG: linux-erlang-git-master
+      run: |
+        # buildbuddy caches the container image, so we must use a specific sha to ensure
+        # the latest is used
+        DIGEST="$(skopeo inspect --format '{{.Digest}}' docker://${IMAGE}:${TAG})"
+        echo "Will use ${IMAGE}@${DIGEST}"
+        sudo npm install --global --silent @bazel/buildozer
+        npx buildozer \
+          "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
+          //:erlang_git_platform
+    - name: MOUNT BAZEL CACHE
+      uses: actions/cache@v1
+      with:
+        path: "/home/runner/repo-cache/"
+        key: repo-cache
+    - name: CONFIGURE BAZEL
+      run: |
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-erlang-git
+          build:buildbuddy --repository_cache=/home/runner/repo-cache/
+          build:buildbuddy --color=yes
+          build:buildbuddy --disk_cache=
+
+          build:rbe-git --crosstool_top=@buildbuddy_toolchain//:toolchain
+          build:rbe-git --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
+          build:rbe-git --javabase=@buildbuddy_toolchain//:javabase_jdk8
+          build:rbe-git --host_javabase=@buildbuddy_toolchain//:javabase_jdk8
+          build:rbe-git --java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+          build:rbe-git --host_java_toolchain=@buildbuddy_toolchain//:toolchain_jdk8
+
+          build:rbe-git --host_platform=//:erlang_git_platform
+          build:rbe-git --platforms=//:erlang_git_platform
+          build:rbe-git --extra_execution_platforms=//:erlang_git_platform
+          build:rbe-git --@bazel-erlang//:erlang_home=/usr/local/lib/erlang
+          build:rbe-git --@bazel-erlang//:erlang_version=25
+        EOF
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: RUN TESTS
+      run: |
+        bazelisk test //... \
+          --config=rbe-git \
+          --test_tag_filters=-mixed-version-cluster,-exclusive,-aws \
+          --verbose_failures
