@@ -77,7 +77,7 @@
 
 -module(rabbit_feature_flags).
 
--include_lib("eunit/include/eunit.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -export([list/0,
          list/1,
