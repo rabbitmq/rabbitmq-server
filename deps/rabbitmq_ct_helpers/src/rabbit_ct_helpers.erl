@@ -605,8 +605,11 @@ get_selection(Config) ->
 
 
 symlink_priv_dir(Config) ->
-    case os:type() of
-        {win32, _} ->
+    case {os:type(), ?config(rabbitmq_run_cmd, Config)} of
+        {{win32, _}, _} ->
+            Config;
+        {_, Cmd} when Cmd =/= undefined ->
+            %% skip if bazel
             Config;
         _ ->
             SrcDir = ?config(current_srcdir, Config),
