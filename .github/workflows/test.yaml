@@ -27,19 +27,25 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
 <<<<<<< HEAD
+<<<<<<< HEAD
       uses: actions/checkout@v2
 =======
 <<<<<<< HEAD
       uses: actions/checkout@v2.3.4
 =======
+=======
+>>>>>>> 7bb75ac61b (Fixup merge)
       uses: actions/checkout@v2.4.0
     - name: MOUNT BAZEL CACHE
       uses: actions/cache@v1
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
+<<<<<<< HEAD
 >>>>>>> 470c94692c (Use the GitHub Actions Cache in conjuction with buildbuddy)
 >>>>>>> 13012c3981 (Use the GitHub Actions Cache in conjuction with buildbuddy)
+=======
+>>>>>>> 7bb75ac61b (Fixup merge)
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc

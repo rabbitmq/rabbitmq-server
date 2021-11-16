@@ -29,16 +29,12 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-<<<<<<< HEAD
-      uses: actions/checkout@v2.3.4
-=======
       uses: actions/checkout@v2.4.0
     - name: MOUNT BAZEL CACHE
       uses: actions/cache@v1
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
->>>>>>> 470c94692c (Use the GitHub Actions Cache in conjuction with buildbuddy)
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
