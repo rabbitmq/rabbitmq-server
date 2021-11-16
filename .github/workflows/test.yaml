@@ -16,7 +16,7 @@ on:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -27,6 +27,11 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v2.4.0
+    - name: MOUNT BAZEL CACHE
+      uses: actions/cache@v1
+      with:
+        path: "/home/runner/repo-cache/"
+        key: repo-cache
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -35,6 +40,9 @@ jobs:
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
           build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${{ matrix.erlang_version }}
+          build:buildbuddy --repository_cache=/home/runner/repo-cache/
+          build:buildbuddy --color=yes
+          build:buildbuddy --disk_cache=
         EOF
 
         bazelisk info release
@@ -49,7 +57,7 @@ jobs:
           --verbose_failures
   test-exclusive:
     name: Test (Exclusive Tests)
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         erlang_version:
@@ -64,6 +72,11 @@ jobs:
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: 1.11.4
+    - name: MOUNT BAZEL CACHE
+      uses: actions/cache@v1
+      with:
+        path: "/home/runner/repo-cache/"
+        key: repo-cache
     - name: CONFIGURE BAZEL
       run: |
         ERLANG_HOME="$(dirname $(dirname $(which erl)))"
@@ -74,6 +87,9 @@ jobs:
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
           build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-exclusive-${{ matrix.erlang_version }}
+          build:buildbuddy --repository_cache=/home/runner/repo-cache/
+          build:buildbuddy --color=yes
+          build:buildbuddy --disk_cache=
 
           build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@bazel-erlang//:erlang_home=${ERLANG_HOME}
