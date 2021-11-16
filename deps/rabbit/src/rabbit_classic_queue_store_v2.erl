@@ -275,7 +275,7 @@ read(SeqId, DiskLocation, State = #qs{ cache = Cache }) ->
 read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
     SegmentEntryCount = segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
-    {Fd, State} = get_read_fd(Segment, State0),
+    {ok, Fd, State} = get_read_fd(Segment, State0),
     {ok, MsgBin0} = file:pread(Fd, Offset, ?ENTRY_HEADER_SIZE + Size),
     %% Assert the size to make sure we read the correct data.
     %% Check the CRC if configured to do so.
@@ -307,51 +307,27 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
 get_read_fd(Segment, State = #qs{ read_segment = Segment,
                                   read_fd = Fd }) ->
     maybe_flush_write_fd(Segment, State),
-    {Fd, State};
+    {ok, Fd, State};
 get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
     maybe_close_fd(OldFd),
     maybe_flush_write_fd(Segment, State),
-    {ok, Fd} = file:open(segment_file(Segment, State), [read, raw, binary]),
-    {ok, <<?MAGIC:32,?VERSION:8,
-           _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,
-           _/bits>>} = file:read(Fd, ?HEADER_SIZE),
-    {Fd, State#qs{ read_segment = Segment,
-                   read_fd = Fd }}.
-
--spec check_msg_on_disk(rabbit_variable_queue:seq_id(), msg_location(), State)
-        -> {ok | {error, any()}, State} when State::state().
-
-check_msg_on_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
-    SegmentEntryCount = segment_entry_count(),
-    Segment = SeqId div SegmentEntryCount,
-    {Fd, State} = get_read_fd(Segment, State0),
-    case file:pread(Fd, Offset, ?ENTRY_HEADER_SIZE + Size) of
-        {ok, MsgBin0} ->
-            %% Assert the size to make sure we read the correct data.
-            %% Check the CRC if configured to do so.
-            case MsgBin0 of
-                <<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits, _:8, MsgBin:Size/binary>> ->
-                    case UseCRC32 of
-                        0 ->
-                            {ok, State};
-                        1 ->
-                            %% We only want to check the CRC32 if configured to do so.
-                            case check_crc32() of
-                                false ->
-                                    {ok, State};
-                                true ->
-                                    CRC32 = erlang:crc32(MsgBin),
-                                    case <<CRC32:16>> of
-                                        CRC32Expected -> {ok, State};
-                                        _ -> {{error, bad_crc}, State}
-                                    end
-                            end
-                    end;
-                _ ->
-                    {{error, bad_size}, State}
+    case file:open(segment_file(Segment, State), [read, raw, binary]) of
+        {ok, Fd} ->
+            case file:read(Fd, ?HEADER_SIZE) of
+                {ok, <<?MAGIC:32,?VERSION:8,
+                       _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,
+                       _/bits>>} ->
+                    {ok, Fd, State#qs{ read_segment = Segment,
+                                       read_fd = Fd }};
+                eof ->
+                    %% Something is wrong with the file. Close it
+                    %% and let the caller decide what to do with it.
+                    file:close(Fd),
+                    {{error, bad_header}, State#qs{ read_segment = undefined,
+                                                    read_fd = undefined }}
             end;
-        Error ->
-            {Error, State}
+        {error, enoent} ->
+            {{error, no_file}, State}
     end.
 
 maybe_flush_write_fd(Segment, #qs{ write_segment = Segment,
@@ -367,6 +343,48 @@ maybe_flush_write_fd(Segment, #qs{ write_segment = Segment,
     gen_statem:call(Pid, '$synchronous_flush');
 maybe_flush_write_fd(_, _) ->
     ok.
+
+-spec check_msg_on_disk(rabbit_variable_queue:seq_id(), msg_location(), State)
+        -> {ok | {error, any()}, State} when State::state().
+
+check_msg_on_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
+    SegmentEntryCount = segment_entry_count(),
+    Segment = SeqId div SegmentEntryCount,
+    case get_read_fd(Segment, State0) of
+        {ok, Fd, State} ->
+            case file:pread(Fd, Offset, ?ENTRY_HEADER_SIZE + Size) of
+                {ok, MsgBin0} ->
+                    %% Assert the size to make sure we read the correct data.
+                    %% Check the CRC if configured to do so.
+                    case MsgBin0 of
+                        <<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits, _:8, MsgBin:Size/binary>> ->
+                            case UseCRC32 of
+                                0 ->
+                                    {ok, State};
+                                1 ->
+                                    %% We only want to check the CRC32 if configured to do so.
+                                    case check_crc32() of
+                                        false ->
+                                            {ok, State};
+                                        true ->
+                                            CRC32 = erlang:crc32(MsgBin),
+                                            case <<CRC32:16>> of
+                                                CRC32Expected -> {ok, State};
+                                                _ -> {{error, bad_crc}, State}
+                                            end
+                                    end
+                            end;
+                        _ ->
+                            {{error, bad_size}, State}
+                    end;
+                eof ->
+                    {{error, eof}, State};
+                Error ->
+                    {Error, State}
+            end;
+        {Error, State} ->
+            {Error, State}
+    end.
 
 -spec remove(rabbit_variable_queue:seq_id(), State) -> State when State::state().
 
