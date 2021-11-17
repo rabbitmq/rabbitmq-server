@@ -686,6 +686,8 @@ phase_delete_member(StreamId, #{node := Node} = Arg, Conf) ->
     fun() ->
             try osiris_server_sup:delete_child(Node, Conf) of
                 ok ->
+                    rabbit_log:info("~s: Member deleted for ~s : on node ~s",
+                                    [?MODULE, StreamId, Node]),
                     send_self_command({member_deleted, StreamId, Arg});
                 _ ->
                     send_action_failed(StreamId, deleting, Arg)
