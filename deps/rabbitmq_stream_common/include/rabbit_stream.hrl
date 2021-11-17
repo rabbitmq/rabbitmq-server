@@ -23,6 +23,7 @@
 -define(COMMAND_HEARTBEAT, 23).
 -define(COMMAND_ROUTE, 24).
 -define(COMMAND_PARTITIONS, 25).
+-define(COMMAND_CONSUMER_UPDATE, 26).
 
 -define(REQUEST, 0).
 -define(RESPONSE, 1).
@@ -50,6 +51,7 @@
 -define(RESPONSE_CODE_NO_OFFSET, 19).
 
 
+-define(OFFSET_TYPE_NONE, 0).
 -define(OFFSET_TYPE_FIRST, 1).
 -define(OFFSET_TYPE_LAST, 2).
 -define(OFFSET_TYPE_NEXT, 3).

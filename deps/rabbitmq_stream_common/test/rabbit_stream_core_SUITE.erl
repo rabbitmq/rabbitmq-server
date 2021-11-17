@@ -103,6 +103,7 @@ roundtrip(_Config) ->
     test_roundtrip({request, 99, {close, 99, <<"reason">>}}),
     test_roundtrip({request, 99, {route, <<"rkey.*">>, <<"exchange">>}}),
     test_roundtrip({request, 99, {partitions, <<"super stream">>}}),
+    test_roundtrip({request, 99, {consumer_update, 1, true}}),
     %% RESPONSES
     [test_roundtrip({response, 99, {Tag, 53}})
      || Tag
@@ -128,10 +129,10 @@ roundtrip(_Config) ->
     test_roundtrip({response, 0, {tune, 10000, 12345}}),
     %  %% NB: does not write correlation id
     test_roundtrip({response, 0, {credit, 98, 200}}),
-    %  %% TODO should route return a list of routed streams?
     test_roundtrip({response, 99, {route, 1, <<"stream_name">>}}),
     test_roundtrip({response, 99,
                     {partitions, 1, [<<"stream1">>, <<"stream2">>]}}),
+    test_roundtrip({response, 99, {consumer_update, 1, none}}),
     ok.
 
 roundtrip_metadata(_Config) ->
