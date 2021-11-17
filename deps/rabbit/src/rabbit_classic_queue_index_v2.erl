@@ -1034,7 +1034,12 @@ sync(State0 = #qi{ confirms = Confirms,
                    on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State0]),
     State = flush_buffer(State0, full),
-    OnSyncFun(Confirms),
+    _ = case gb_sets:is_empty(Confirms) of
+        true ->
+            ok;
+        false ->
+            OnSyncFun(Confirms)
+    end,
     State#qi{ confirms = gb_sets:new() }.
 
 -spec needs_sync(state()) -> 'false'.
