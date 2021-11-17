@@ -31,6 +31,8 @@ jobs:
         EOF
     - name: RUN TESTS
       run: |
+        sudo sysctl -w net.ipv4.tcp_keepalive_time=60
+        sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test ${{ github.event.inputs.target }} \
           --config=rbe-${{ matrix.erlang_version }} \
           --execution_log_binary_file=/tmp/exec.log
@@ -64,6 +66,8 @@ jobs:
         EOF
     - name: RUN TESTS
       run: |
+        sudo sysctl -w net.ipv4.tcp_keepalive_time=60
+        sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test ${{ github.event.inputs.target }} \
           --config=rbe-${{ matrix.erlang_version }} \
           --execution_log_binary_file=/tmp/exec.log
