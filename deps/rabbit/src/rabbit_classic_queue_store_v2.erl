@@ -411,7 +411,9 @@ delete_segments([], State) ->
 delete_segments(Segments, State0 = #qs{ write_segment = WriteSegment,
                                         write_fd = WriteFd,
                                         read_segment = ReadSegment,
-                                        read_fd = ReadFd }) ->
+                                        read_fd = ReadFd,
+                                        cache = Cache0,
+                                        cache_size = CacheSize0 }) ->
     ?DEBUG("~0p ~0p", [Segments, State0]),
     %% First we have to close fds for the segments, if any.
     %% 'undefined' is never in Segments so we don't
@@ -446,7 +448,23 @@ delete_segments(Segments, State0 = #qs{ write_segment = WriteSegment,
             {error, enoent} -> ok
         end
     || Segment <- Segments],
-    State.
+    %% Finally, we remove any entries from the cache that fall within
+    %% the segments that were deleted. For simplicity's sake, we take
+    %% the highest SeqId from these files and remove any SeqId lower
+    %% than or equal to this SeqId from the cache.
+    HighestSegment = lists:foldl(fun
+        (S, SAcc) when S > SAcc -> S;
+        (_, SAcc) -> SAcc
+    end, -1, Segments),
+    HighestSeqId = HighestSegment * segment_entry_count(),
+    {Cache, CacheSize} = maps:fold(fun
+        (SeqId, {MsgSize, _}, {CacheAcc, CacheSize1}) when SeqId =< HighestSeqId ->
+            {CacheAcc, CacheSize1 - MsgSize};
+        (SeqId, Value, {CacheAcc, CacheSize1}) ->
+            {CacheAcc#{SeqId => Value}, CacheSize1}
+    end, {#{}, CacheSize0}, Cache0),
+    State#qs{ cache = Cache,
+              cache_size = CacheSize }.
 
 %% ----
 %%
