@@ -68,6 +68,7 @@ erlc(
     name = "test_utils",
     srcs = glob(["test/src/*.erl"]),
     hdrs = glob(["test/src/*.hrl"]),
+    dest = "test",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         "@lager//:bazel_erlang_lib",
