@@ -22,6 +22,9 @@
 
 -export([start/2, stop/1]).
 
+%% Used during dirty recovery to resume conversion between versions.
+-export([convert_from_v1_to_v2_loop/7]).
+
 %% exported for testing only
 -export([start_msg_store/3, stop_msg_store/1, init/6]).
 
@@ -1128,20 +1131,31 @@ set_queue_version(1, State = #vqstate { version = 2 }) ->
 set_queue_version(2, State = #vqstate { version = 1 }) ->
     convert_from_v1_to_v2(State #vqstate { version = 2 }).
 
+-define(CONVERT_COUNT, 1).
+-define(CONVERT_BYTES, 2). %% Unused.
+-define(CONVERT_COUNTER_SIZE, 2).
+
 %% We move messages from the v1 index to the v2 index. The message payload
 %% is moved to the v2 store if it was embedded, and left in the per-vhost
 %% store otherwise.
 convert_from_v1_to_v2(State0 = #vqstate{ index_mod   = rabbit_queue_index,
                                          index_state = V1Index,
                                          store_state = V2Store0 }) ->
-    State = convert_from_v1_to_v2_in_memory(State0),
     {QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun} = rabbit_queue_index:init_args(V1Index),
+    #resource{virtual_host = VHost, name = QName} = QueueName,
+    rabbit_log:info("Converting running queue ~s in vhost ~s from v1 to v2", [QName, VHost]),
+    State = convert_from_v1_to_v2_in_memory(State0),
     V2Index0 = rabbit_classic_queue_index_v2:init_for_conversion(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     %% We do not need to init the v2 per-queue store because we already did so in the queue init.
     {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1Index),
-    {V2Index, V2Store} = convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index0, V2Store0, LoSeqId, HiSeqId),
+    CountersRef = counters:new(?CONVERT_COUNTER_SIZE, []),
+    {V2Index, V2Store} = convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index0, V2Store0,
+                                                    {CountersRef, ?CONVERT_COUNT, ?CONVERT_BYTES},
+                                                    LoSeqId, HiSeqId),
     %% We have already deleted segments files but not the journal.
     rabbit_queue_index:delete_journal(V1Index),
+    rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v1 to v2",
+                    [QName, VHost, counters:get(CountersRef, ?CONVERT_COUNT)]),
     State#vqstate{ index_mod   = rabbit_classic_queue_index_v2,
                    index_state = V2Index,
                    store_state = V2Store }.
@@ -1172,26 +1186,34 @@ convert_from_v1_to_v2_queue(Q) ->
     end, List0),
     ?QUEUE:from_list(List).
 
-convert_from_v1_to_v2_loop(_, _, V2Index, V2Store, HiSeqId, HiSeqId) ->
+convert_from_v1_to_v2_loop(_, _, V2Index, V2Store, _, HiSeqId, HiSeqId) ->
     {V2Index, V2Store};
-convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0, LoSeqId, HiSeqId) ->
+convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0,
+                           Counters = {CountersRef, CountIx, BytesIx},
+                           LoSeqId, HiSeqId) ->
     UpSeqId = lists:min([rabbit_queue_index:next_segment_boundary(LoSeqId),
                          HiSeqId]),
     {Messages, V1Index} = rabbit_queue_index:read(LoSeqId, UpSeqId, V1Index0),
     %% We do a garbage collect immediately after the old index read
     %% because that may have created a lot of garbage.
     garbage_collect(),
+    MessagesCount = length(Messages),
+    counters:add(CountersRef, CountIx, MessagesCount),
     {V2Index3, V2Store3} = lists:foldl(fun
         %% Move embedded messages to the per-queue store.
         ({Msg = #basic_message{id = MsgId}, SeqId, rabbit_queue_index, Props, IsPersistent},
          {V2Index1, V2Store1}) ->
             {MsgLocation, V2Store2} = rabbit_classic_queue_store_v2:write(SeqId, Msg, Props, V2Store1),
             V2Index2 = rabbit_classic_queue_index_v2:publish(MsgId, SeqId, MsgLocation, Props, IsPersistent, infinity, V2Index1),
+            MsgSize = Props#message_properties.size,
+            counters:add(CountersRef, BytesIx, MsgSize),
             {V2Index2, V2Store2};
         %% Keep messages in the per-vhost store where they are.
         ({MsgId, SeqId, rabbit_msg_store, Props, IsPersistent},
          {V2Index1, V2Store1}) ->
             V2Index2 = rabbit_classic_queue_index_v2:publish(MsgId, SeqId, rabbit_msg_store, Props, IsPersistent, infinity, V2Index1),
+            MsgSize = Props#message_properties.size,
+            counters:add(CountersRef, BytesIx, MsgSize),
             {V2Index2, V2Store1}
     end, {V2Index0, V2Store0}, Messages),
     %% Flush to disk to avoid keeping too much in memory between segments.
@@ -1203,9 +1225,9 @@ convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0, LoSeqId, HiS
     %% Log some progress to keep the user aware of what's going on, as moving
     %% embedded messages can take quite some time.
     #resource{virtual_host = VHost, name = Name} = QueueName,
-    rabbit_log:info("Queue ~s on vhost ~s converted ~b messages from v1 to v2",
-                    [Name, VHost, length(Messages)]),
-    convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index, V2Store, UpSeqId, HiSeqId).
+    rabbit_log:info("Queue ~s in vhost ~s converted ~b messages from v1 to v2",
+                    [Name, VHost, MessagesCount]),
+    convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index, V2Store, Counters, UpSeqId, HiSeqId).
 
 %% We move messages from the v1 index to the v2 index. The message payload
 %% is moved to the v2 store if it was embedded, and left in the per-vhost
@@ -1292,7 +1314,7 @@ convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0, LoSeqId, HiS
     %% Log some progress to keep the user aware of what's going on, as moving
     %% embedded messages can take quite some time.
     #resource{virtual_host = VHost, name = Name} = QueueName,
-    rabbit_log:info("Queue ~s on vhost ~s converted ~b messages from v2 to v1",
+    rabbit_log:info("Queue ~s in vhost ~s converted ~b messages from v2 to v1",
                     [Name, VHost, length(Messages)]),
     convert_from_v2_to_v1_loop(QueueName, V1Index, V2Index, V2Store, UpSeqId, HiSeqId).
 
