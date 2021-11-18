@@ -180,10 +180,10 @@ callback_mode() ->
 
 terminate(Reason, State,
           #statem_data{transport = Transport,
-                       connection = #stream_connection{socket = Socket},
+                       connection = Connection,
                        connection_state = ConnectionState} =
               StatemData) ->
-    close(Transport, Socket, ConnectionState),
+    close(Transport, Connection, ConnectionState),
     rabbit_networking:unregister_non_amqp_connection(self()),
     notify_connection_closed(StatemData),
     rabbit_log:debug("~s terminating in state '~s' with reason '~W'",
@@ -646,15 +646,21 @@ augment_infos_with_user_provided_connection_name(Infos,
             Infos
     end.
 
-close(Transport, S,
+close(Transport,
+      #stream_connection{socket = S, virtual_host = VirtualHost},
       #stream_connection_state{consumers = Consumers}) ->
-    [case Log of
-         undefined ->
-             ok; %% segment may not be defined on subscription (single active consumer)
-         L ->
-             osiris_log:close(L)
+    [begin
+         maybe_unregister_consumer(VirtualHost, Consumer,
+                                   single_active_consumer(Properties)),
+         case Log of
+             undefined ->
+                 ok; %% segment may not be defined on subscription (single active consumer)
+             L ->
+                 osiris_log:close(L)
+         end
      end
-     || #consumer{log = Log} <- maps:values(Consumers)],
+     || #consumer{log = Log, configuration = #consumer_configuration{properties = Properties}} = Consumer
+            <- maps:values(Consumers)],
     Transport:shutdown(S, write),
     Transport:close(S).
 
