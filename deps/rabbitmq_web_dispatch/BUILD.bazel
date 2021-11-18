@@ -43,9 +43,6 @@ test_erlang_lib(
     app_name = APP_NAME,
     app_version = APP_VERSION,
     extra_apps = EXTRA_APPS,
-    extra_priv = [
-        "test/priv/www/index.html",
-    ],
     deps = DEPS,
 )
 
@@ -84,6 +81,9 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "rabbit_web_dispatch_SUITE",
+        data = [
+            "test/priv/www/index.html",
+        ],
     ),
     rabbitmq_suite(
         name = "rabbit_web_dispatch_unit_SUITE",

@@ -51,7 +51,7 @@ for certain `rabbitmq_cli` tests to pass. This is because `rabbitmqctl wait` she
 
 ### Running tests
 
-Many rabbit tests spawn single or clustered rabbit nodes, and therefore it's best to run test suites sequentially on a single machine. Hence the `--test_strategy=exclusive` flag used in `.bazelrc` above. Naturally that restriction does not hold if utilizing remote execution (as is the case for RabbitMQ's CI pipelines).
+Many rabbit tests spawn single or clustered rabbit nodes, and therefore it's best to run test suites sequentially on a single machine. Hence the `build --local_test_jobs=1` flag used in `.bazelrc`. Additionally, it may be reasonable to disable test sharding and stream test output when running tests locally with `--test_output=streamed` as an additional argument (to just disable sharding, but not stream output, use `--test_sharding_strategy=disabled`). Naturally that restriction does not hold if utilizing remote execution (as is the case for RabbitMQ's CI pipelines).
 
 Erlang Common Test logs will not be placed in the logs directory when run with bazel. They can be found under `bazel-testlogs`. For instance, those of the rabbit application's backing_queue suite will be under `bazel-testlogs/deps/rabbit/backing_queue_SUITE/test.outputs/`.
 

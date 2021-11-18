@@ -7,4 +7,8 @@ erlang_lib(
         "@proper//:bazel_erlang_lib",
         "//deps/rabbit_common:bazel_erlang_lib",
     ],
+    extra_priv = [
+        "tools/tls-certs/Makefile",
+        "tools/tls-certs/openssl.cnf.in",
+    ],
 )
