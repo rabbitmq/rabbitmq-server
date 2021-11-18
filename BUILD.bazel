@@ -117,8 +117,6 @@ versioned_rabbitmq_home(
     plugins = ALL_PLUGINS,
 )
 
-# need to add the INSTALL file
-
 pkg_tar(
     name = "license-files",
     srcs = [
