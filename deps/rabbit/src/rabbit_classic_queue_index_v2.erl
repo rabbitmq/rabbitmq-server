@@ -424,30 +424,30 @@ recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
 recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
     #resource{virtual_host = VHost, name = QName} = Name,
-    rabbit_log:info("Converting clean queue ~s on vhost ~s to the new index format", [QName, VHost]),
+    rabbit_log:info("Converting clean queue ~s in vhost ~s from v1 to v2", [QName, VHost]),
     {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
                                                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun),
     %% We will ignore the counter results because on clean shutdown
     %% we do not need to calculate the values again. This lets us
     %% share code with dirty recovery.
-    DummyCountersRef = counters:new(2, []),
-    State = recover_index_v1_common(State0, V1State, DummyCountersRef),
-    rabbit_log:info("Queue ~s on vhost ~s converted ~b total messages to the new index format",
-                    [QName, VHost, counters:get(DummyCountersRef, ?RECOVER_COUNT)]),
+    CountersRef = counters:new(?RECOVER_COUNTER_SIZE, []),
+    State = recover_index_v1_common(State0, V1State, CountersRef),
+    rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v1 to v2",
+                    [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 
 recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                        CountersRef) ->
     #resource{virtual_host = VHost, name = QName} = Name,
-    rabbit_log:info("Converting dirty queue ~s on vhost ~s to the new index format", [QName, VHost]),
+    rabbit_log:info("Converting dirty queue ~s in vhost ~s from v1 to v2", [QName, VHost]),
     %% We ignore the count and bytes returned here because we cannot trust
     %% rabbit_queue_index: it has a bug that may lead to more bytes being
     %% returned than it really has.
     {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
                                                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun),
     State = recover_index_v1_common(State0, V1State, CountersRef),
-    rabbit_log:info("Queue ~s on vhost ~s converted ~b total messages to the new index format",
+    rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v1 to v2",
                     [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 
@@ -459,7 +459,10 @@ recover_index_v1_common(State0 = #qi{ queue_name = Name, dir = Dir },
     StoreState0 = rabbit_classic_queue_store_v2:init(Name, fun(_, _) -> ok end),
     %% Go through the old index and publish messages to the new one.
     {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1State),
-    {State1, StoreState} = recover_index_v1_loop(State0, StoreState0, V1State, CountersRef, LoSeqId, HiSeqId),
+    %% We use a common function also used with conversion on policy change.
+    {State1, StoreState} = rabbit_variable_queue:convert_from_v1_to_v2_loop(Name, V1State, State0, StoreState0,
+                                                                            {CountersRef, ?RECOVER_COUNT, ?RECOVER_BYTES},
+                                                                            LoSeqId, HiSeqId),
     %% Terminate the message store client.
     _ = rabbit_classic_queue_store_v2:terminate(StoreState),
     %% Close the old index journal handle if any.
@@ -476,48 +479,6 @@ recover_index_v1_common(State0 = #qi{ queue_name = Name, dir = Dir },
     %% Clean up all the garbage that we have surely been creating.
     garbage_collect(),
     State.
-
-recover_index_v1_loop(State, StoreState, _, _, HiSeqId, HiSeqId) ->
-    {State, StoreState};
-recover_index_v1_loop(State0 = #qi{ queue_name = Name },
-                      StoreState0, V1State0, CountersRef, LoSeqId, HiSeqId) ->
-    UpSeqId = lists:min([rabbit_queue_index:next_segment_boundary(LoSeqId),
-                         HiSeqId]),
-    {Messages, V1State} = rabbit_queue_index:read(LoSeqId, UpSeqId, V1State0),
-    %% We do a garbage collect immediately after the old index read
-    %% because that may have created a lot of garbage.
-    garbage_collect(),
-    MessagesCount = length(Messages),
-    counters:add(CountersRef, ?RECOVER_COUNT, MessagesCount),
-    {State3, StoreState3} = lists:foldl(fun
-        %% Move embedded messages to the per-queue store.
-        ({Msg = #basic_message{id = MsgId}, SeqId, Props, IsPersistent, _IsDelivered},
-         {State1, StoreState1}) ->
-            MsgSize = Props#message_properties.size,
-            {MsgLocation, StoreState2} = rabbit_classic_queue_store_v2:write(SeqId, MsgSize, Msg, StoreState1),
-            counters:add(CountersRef, ?RECOVER_BYTES, MsgSize),
-            State2 = publish(MsgId, SeqId, MsgLocation, Props, IsPersistent, infinity, State1),
-            {State2, StoreState2};
-        %% Keep messages in the per-vhost store where they are.
-        ({MsgId, SeqId, Props, IsPersistent, _IsDelivered},
-         {State1, StoreState1}) ->
-            MsgSize = Props#message_properties.size,
-            counters:add(CountersRef, ?RECOVER_BYTES, MsgSize),
-            State2 = publish(MsgId, SeqId, rabbit_msg_store, Props, IsPersistent, infinity, State1),
-            {State2, StoreState1}
-    end, {State0, StoreState0}, Messages),
-    %% Flush to disk to avoid keeping too much in memory between segments.
-    State = flush(State3),
-    StoreState = rabbit_classic_queue_store_v2:sync(StoreState3),
-    %% We have written everything to disk. We can delete the old segment file
-    %% to free up much needed space, to avoid doubling disk usage during the upgrade.
-    rabbit_queue_index:delete_segment_file_for_seq_id(LoSeqId, V1State),
-    %% Log some progress to keep the user aware of what's going on, as moving
-    %% embedded messages can take quite some time.
-    #resource{virtual_host = VHost, name = QName} = Name,
-    rabbit_log:info("Queue ~s on vhost ~s converted ~b more messages to the new index format",
-                    [QName, VHost, MessagesCount]),
-    recover_index_v1_loop(State, StoreState, V1State, CountersRef, UpSeqId, HiSeqId).
 
 -spec terminate(rabbit_types:vhost(), [any()], State) -> State when State::state().
 
