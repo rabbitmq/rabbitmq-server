@@ -27,8 +27,10 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
--export([register_consumer/4]).
+-export([register_consumer/5,
+         unregister_consumer/5]).
 
+-type vhost() :: binary().
 -type stream() :: binary().
 -type consumer_name() :: binary().
 -type subscription_id() :: byte().
@@ -36,14 +38,28 @@
 -record(consumer,
         {pid :: pid(), subscription_id :: subscription_id()}).
 -record(group, {consumers :: [#consumer{}]}).
--record(stream_groups, {groups :: #{consumer_name() => #group{}}}).
--record(state, {stream_groups :: #{stream() => #stream_groups{}}}).
+-record(state,
+        {groups :: #{{vhost(), stream(), consumer_name()} => #group{}}}).
 
-register_consumer(Stream,
+register_consumer(VirtualHost,
+                  Stream,
                   ConsumerName,
                   ConnectionPid,
                   SubscriptionId) ->
     call({register_consumer,
+          VirtualHost,
+          Stream,
+          ConsumerName,
+          ConnectionPid,
+          SubscriptionId}).
+
+unregister_consumer(VirtualHost,
+                    Stream,
+                    ConsumerName,
+                    ConnectionPid,
+                    SubscriptionId) ->
+    call({unregister_consumer,
+          VirtualHost,
           Stream,
           ConsumerName,
           ConnectionPid,
@@ -86,7 +102,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{stream_groups = #{}}}.
+    {ok, #state{groups = #{}}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -103,50 +119,110 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call({register_consumer,
+             VirtualHost,
              Stream,
              ConsumerName,
              ConnectionPid,
              SubscriptionId},
-            _From, #state{stream_groups = StreamGroups0} = State) ->
+            _From, #state{groups = StreamGroups0} = State) ->
     StreamGroups1 =
-        maybe_create_group(Stream, ConsumerName, StreamGroups0),
-    Group0 = lookup_group(Stream, ConsumerName, StreamGroups1),
+        maybe_create_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
+    Group0 =
+        lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups1),
     Consumer =
         #consumer{pid = ConnectionPid, subscription_id = SubscriptionId},
     Group = add_to_group(Consumer, Group0),
     Active = is_active(Consumer, Group),
     StreamGroups2 =
-        update_groups(Stream, ConsumerName, Group, StreamGroups1),
-    {reply, {ok, Active}, State#state{stream_groups = StreamGroups2}};
+        update_groups(VirtualHost,
+                      Stream,
+                      ConsumerName,
+                      Group,
+                      StreamGroups1),
+    {reply, {ok, Active}, State#state{groups = StreamGroups2}};
+handle_call({unregister_consumer,
+             VirtualHost,
+             Stream,
+             ConsumerName,
+             ConnectionPid,
+             SubscriptionId},
+            _From, #state{groups = StreamGroups0} = State0) ->
+    State1 =
+        case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
+            error ->
+                State0;
+            Group0 ->
+                #group{consumers = Consumers0} = Group0,
+                Consumers1 =
+                    case lists:search(fun(#consumer{pid = ConnPid,
+                                                    subscription_id = SubId}) ->
+                                         ConnPid == ConnectionPid
+                                         andalso SubId == SubscriptionId
+                                      end,
+                                      Consumers0)
+                    of
+                        {value, Consumer} ->
+                            rabbit_log:debug("Unregistering consumer ~p from group",
+                                             [Consumer]),
+                            case lists:nth(1, Consumers0) of
+                                Consumer ->
+                                    rabbit_log:debug("Unregistering the active consumer"),
+                                    %% this is active one, remove it and notify the new active one if group not empty
+                                    Cs = lists:delete(Consumer, Consumers0),
+                                    case Cs of
+                                        [] ->
+                                            %% group is empty now
+                                            rabbit_log:debug("Group is now empty"),
+                                            ok;
+                                        _ ->
+                                            %% get new active one (the first) and notify it
+                                            #consumer{pid = Pid,
+                                                      subscription_id = SubId} =
+                                                lists:nth(1, Cs),
+                                            rabbit_log:debug("New active consumer is ~p ~p",
+                                                             [Pid, SubId]),
+                                            Pid
+                                            ! {sac,
+                                               {{subscription_id, SubId},
+                                                {active, true}}}
+                                    end,
+                                    Cs;
+                                _ActiveConsumer ->
+                                    rabbit_log:debug("Not the active consumer, just removing from the "
+                                                     "group"),
+                                    lists:delete(Consumer, Consumers0)
+                            end;
+                        error ->
+                            rabbit_log:debug("Could not find consumer ~p ~p in group ~p ~p ~p",
+                                             [ConnectionPid,
+                                              SubscriptionId,
+                                              VirtualHost,
+                                              Stream,
+                                              ConsumerName]),
+                            Consumers0
+                    end,
+                SGS = update_groups(VirtualHost,
+                                    Stream,
+                                    ConsumerName,
+                                    Group0#group{consumers = Consumers1},
+                                    StreamGroups0),
+                State0#state{groups = SGS}
+        end,
+    {reply, ok, State1};
 handle_call(which_children, _From, State) ->
     {reply, [], State}.
 
-maybe_create_group(Stream, ConsumerName, StreamGroups) ->
+maybe_create_group(VirtualHost, Stream, ConsumerName, StreamGroups) ->
     case StreamGroups of
-        #{Stream := #stream_groups{groups = #{ConsumerName := _Consumers}}} ->
-            %% the group already exists
+        #{{VirtualHost, Stream, ConsumerName} := _Group} ->
             StreamGroups;
-        #{Stream := #stream_groups{groups = GroupsForTheStream} = SG} ->
-            %% there are groups for this streams, but not one for this consumer name
-            GroupsForTheStream1 =
-                maps:put(ConsumerName, #group{consumers = []},
-                         GroupsForTheStream),
-            StreamGroups#{Stream =>
-                              SG#stream_groups{groups = GroupsForTheStream1}};
         SGS ->
-            SG = maps:get(Stream, SGS, #stream_groups{groups = #{}}),
-            #stream_groups{groups = Groups} = SG,
-            Groups1 = maps:put(ConsumerName, #group{consumers = []}, Groups),
-            SGS#{Stream => SG#stream_groups{groups = Groups1}}
+            maps:put({VirtualHost, Stream, ConsumerName},
+                     #group{consumers = []}, SGS)
     end.
 
-lookup_group(Stream, ConsumerName, StreamGroups) ->
-    case StreamGroups of
-        #{Stream := #stream_groups{groups = #{ConsumerName := Group}}} ->
-            Group;
-        _ ->
-            error
-    end.
+lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups) ->
+    maps:get({VirtualHost, Stream, ConsumerName}, StreamGroups).
 
 add_to_group(Consumer, #group{consumers = Consumers} = Group) ->
     Group#group{consumers = Consumers ++ [Consumer]}.
@@ -158,10 +234,20 @@ is_active(Consumer, #group{consumers = [Consumer | _]}) ->
 is_active(_, _) ->
     false.
 
-update_groups(Stream, ConsumerName, Group, StreamGroups) ->
-    #{Stream := #stream_groups{groups = Groups}} = StreamGroups,
-    Groups1 = maps:put(ConsumerName, Group, Groups),
-    StreamGroups#{Stream => #stream_groups{groups = Groups1}}.
+update_groups(VirtualHost,
+              Stream,
+              ConsumerName,
+              #group{consumers = []},
+              StreamGroups) ->
+    rabbit_log:debug("Group ~p ~p ~p is now empty, removing it",
+                     [VirtualHost, Stream, ConsumerName]),
+    maps:remove({VirtualHost, Stream, ConsumerName}, StreamGroups);
+update_groups(VirtualHost,
+              Stream,
+              ConsumerName,
+              Group,
+              StreamGroups) ->
+    maps:put({VirtualHost, Stream, ConsumerName}, Group, StreamGroups).
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
