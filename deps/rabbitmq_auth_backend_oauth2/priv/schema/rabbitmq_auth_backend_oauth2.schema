@@ -49,7 +49,7 @@
 
 %% A map of signing keys
 %%
-%% {signing_keys, #{<<"id1">> => <<"value1">>,<<"id2">> => <<"value2">>}}
+%% {signing_keys, #{<<"id1">> => {pem, <<"value1">>}, <<"id2">> => {pem, <<"value2">>}}}
 %% validator doesn't work
 
 {mapping,
@@ -73,7 +73,7 @@
         end,
     SigningKeys =
         lists:map(fun({Id, Path}) ->
-                    {list_to_binary(lists:last(Id)), TryReadingFileFun(Path)}
+                    {list_to_binary(lists:last(Id)), {pem, TryReadingFileFun(Path)}}
                   end, Settings),
     maps:from_list(SigningKeys)
  end}.
