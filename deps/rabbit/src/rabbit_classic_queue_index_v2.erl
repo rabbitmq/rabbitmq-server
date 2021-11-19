@@ -7,7 +7,7 @@
 
 -module(rabbit_classic_queue_index_v2).
 
--export([erase/1, init/3, reset_state/1, recover/6,
+-export([erase/1, init/3, reset_state/1, recover/7,
          terminate/3, delete_and_terminate/1,
          publish/7, ack/2, read/3]).
 
@@ -221,7 +221,8 @@ reset_state(State = #qi{ queue_name     = Name,
 
 -spec recover(rabbit_amqqueue:name(), shutdown_terms(), boolean(),
                     contains_predicate(),
-                    on_sync_fun(), on_sync_fun()) ->
+                    on_sync_fun(), on_sync_fun(),
+                    main | convert) ->
                         {'undefined' | non_neg_integer(),
                          'undefined' | non_neg_integer(), state()}.
 
@@ -234,7 +235,7 @@ reset_state(State = #qi{ queue_name     = Name,
 -define(RECOVER_COUNTER_SIZE, 6).
 
 recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
-        IsMsgStoreClean, ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
+        IsMsgStoreClean, ContainsCheckFun, OnSyncFun, OnSyncMsgFun, Context) ->
     ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [Name, Terms, IsMsgStoreClean,
                                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
@@ -247,8 +248,8 @@ recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
     case IsIndexClean andalso IsMsgStoreClean of
         true ->
             State = case proplists:get_value(v2_index_state, Terms, undefined) of
-                %% We are recovering a queue that was using the old index.
-                undefined ->
+                %% We are recovering a queue that was using the v1 index.
+                undefined when Context =:= main ->
                     recover_index_v1_clean(State0, Terms, IsMsgStoreClean,
                                            ContainsCheckFun, OnSyncFun, OnSyncMsgFun);
                 {?VERSION, Segments} ->
@@ -263,7 +264,7 @@ recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
             CountersRef = counters:new(?RECOVER_COUNTER_SIZE, []),
             State = recover_segments(State0, Terms, IsMsgStoreClean,
                                      ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
-                                     CountersRef),
+                                     CountersRef, Context),
             rabbit_log:warning("Queue ~s in vhost ~s dropped ~b/~b/~b persistent messages "
                                "and ~b transient messages during dirty recovery",
                                [QueueName, VHost,
@@ -277,7 +278,7 @@ recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
     end.
 
 recover_segments(State0 = #qi { queue_name = Name, dir = Dir }, Terms, IsMsgStoreClean,
-                 ContainsCheckFun, OnSyncFun, OnSyncMsgFun, CountersRef) ->
+                 ContainsCheckFun, OnSyncFun, OnSyncMsgFun, CountersRef, Context) ->
     SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
     State = case SegmentFiles of
         %% No segments found.
@@ -294,16 +295,22 @@ recover_segments(State0 = #qi { queue_name = Name, dir = Dir }, Terms, IsMsgStor
             _ = rabbit_classic_queue_store_v2:terminate(StoreState),
             State1
     end,
-    %% We always try to see if there are segment files from the old index as well.
-    case rabbit_file:wildcard(".*\\.idx", Dir) of
-        %% We are recovering a dirty queue that was using the old index.
-        [_|_] ->
-            recover_index_v1_dirty(State, Terms, IsMsgStoreClean,
-                                   ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
-                                   CountersRef);
-        %% Otherwise keep default values.
-        [] ->
-            State
+    case Context of
+        convert ->
+            State;
+        main ->
+            %% We try to see if there are segment files from the v1 index.
+            case rabbit_file:wildcard(".*\\.idx", Dir) of
+                %% We are recovering a dirty queue that was using the v1 index or in
+                %% the process of converting from v1 to v2.
+                [_|_] ->
+                    recover_index_v1_dirty(State, Terms, IsMsgStoreClean,
+                                           ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
+                                           CountersRef);
+                %% Otherwise keep default values.
+                [] ->
+                    State
+            end
     end.
 
 recover_segments(State, _, StoreState, _, []) ->
@@ -426,7 +433,8 @@ recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
     #resource{virtual_host = VHost, name = QName} = Name,
     rabbit_log:info("Converting clean queue ~s in vhost ~s from v1 to v2", [QName, VHost]),
     {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
-                                                 ContainsCheckFun, OnSyncFun, OnSyncMsgFun),
+                                                 ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
+                                                 convert),
     %% We will ignore the counter results because on clean shutdown
     %% we do not need to calculate the values again. This lets us
     %% share code with dirty recovery.
@@ -445,36 +453,37 @@ recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
     %% rabbit_queue_index: it has a bug that may lead to more bytes being
     %% returned than it really has.
     {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
-                                                 ContainsCheckFun, OnSyncFun, OnSyncMsgFun),
+                                                 ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
+                                                 convert),
     State = recover_index_v1_common(State0, V1State, CountersRef),
     rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v1 to v2",
                     [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 
 %% At this point all messages are persistent because transient messages
-%% were dropped during the old index recovery.
+%% were dropped during the v1 index recovery.
 recover_index_v1_common(State0 = #qi{ queue_name = Name, dir = Dir },
                         V1State, CountersRef) ->
     %% Use a temporary per-queue store state to store embedded messages.
     StoreState0 = rabbit_classic_queue_store_v2:init(Name, fun(_, _) -> ok end),
-    %% Go through the old index and publish messages to the new one.
+    %% Go through the v1 index and publish messages to the v2 index.
     {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1State),
     %% We use a common function also used with conversion on policy change.
     {State1, StoreState} = rabbit_variable_queue:convert_from_v1_to_v2_loop(Name, V1State, State0, StoreState0,
                                                                             {CountersRef, ?RECOVER_COUNT, ?RECOVER_BYTES},
                                                                             LoSeqId, HiSeqId),
-    %% Terminate the message store client.
+    %% Terminate the v2 store client.
     _ = rabbit_classic_queue_store_v2:terminate(StoreState),
-    %% Close the old index journal handle if any.
+    %% Close the v1 index journal handle if any.
     JournalHdl = element(4, V1State),
     ok = case JournalHdl of
         undefined -> ok;
         _         -> file_handle_cache:close(JournalHdl)
     end,
-    %% Delete the old index files.
+    %% Delete the v1 index files.
     OldFiles = ["journal.jif"|rabbit_file:wildcard(".*\\.idx", Dir)],
     _ = [rabbit_file:delete(filename:join(Dir, F)) || F <- OldFiles],
-    %% Ensure that everything in the new index is written to disk.
+    %% Ensure that everything in the v2 index is written to disk.
     State = flush(State1),
     %% Clean up all the garbage that we have surely been creating.
     garbage_collect(),
@@ -1024,7 +1033,7 @@ flush(State) ->
 %% ----
 %%
 %% Defer to rabbit_queue_index for recovery for the time being.
-%% We can move the functions here when the old index is removed.
+%% We can move the functions here when the v1 index is removed.
 
 start(VHost, DurableQueueNames) ->
     ?DEBUG("~0p ~0p", [VHost, DurableQueueNames]),
@@ -1065,8 +1074,8 @@ queue_index_walker_reader(#resource{ virtual_host = VHost } = Name, Gatherer) ->
     Dir = queue_dir(VHostDir, Name),
     SegmentFiles = rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir),
     _ = [queue_index_walker_segment(filename:join(Dir, F), Gatherer) || F <- SegmentFiles],
-    %% When there are files belonging to the old index, we go through
-    %% the old index walker function as well.
+    %% When there are files belonging to the v1 index, we go through
+    %% the v1 index walker function as well.
     case rabbit_file:wildcard(".*\\.idx", Dir) of
         [_|_] ->
             rabbit_queue_index:queue_index_walker_reader(Name, Gatherer);
@@ -1114,7 +1123,7 @@ stop(VHost) ->
 %% rabbit_variable_queue.
 %%
 %% @todo The way pre_publish works is still fairly puzzling.
-%%       When the old index gets removed we can just drop
+%%       When the v1 index gets removed we can just drop
 %%       these functions.
 
 pre_publish(MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State) ->
