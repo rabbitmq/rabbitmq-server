@@ -1546,7 +1546,8 @@ init_test_queue(QName) ->
             fun (MsgId) ->
                     rabbit_msg_store:contains(MsgId, PersistentClient)
             end,
-            fun nop/1, fun nop/1),
+            fun nop/1, fun nop/1,
+            main),
     ok = rabbit_msg_store:client_delete_and_terminate(PersistentClient),
     Res.
 
