@@ -5,6 +5,19 @@ After=network.target epmd@0.0.0.0.socket
 Wants=network.target epmd@0.0.0.0.socket
 
 [Service]
+# Note: You *may* wish to uncomment the following lines to apply systemd
+# hardening effort to RabbitMQ, to prevent your system from being illegally 
+# modified by undiscovered vulnerabilities in RabbitMQ.
+# ProtectSystem=full
+# ProtectHome=true
+# PrivateDevices=true
+# ProtectHostname=true
+# ProtectClock=true
+# ProtectKernelTunables=true
+# ProtectKernelModules=true
+# ProtectKernelLogs=true
+# ProtectControlGroups=true
+# RestrictRealtime=true
 Type=notify
 User=rabbitmq
 Group=rabbitmq
