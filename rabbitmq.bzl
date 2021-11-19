@@ -44,12 +44,49 @@ RABBITMQ_DIALYZER_OPTS = [
 
 APP_VERSION = "3.8"
 
+ALL_PLUGINS = [
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
+    "//deps/rabbitmq_auth_backend_cache:bazel_erlang_lib",
+    "//deps/rabbitmq_auth_backend_http:bazel_erlang_lib",
+    "//deps/rabbitmq_auth_backend_ldap:bazel_erlang_lib",
+    "//deps/rabbitmq_auth_backend_oauth2:bazel_erlang_lib",
+    "//deps/rabbitmq_auth_mechanism_ssl:bazel_erlang_lib",
+    "//deps/rabbitmq_consistent_hash_exchange:bazel_erlang_lib",
+    "//deps/rabbitmq_event_exchange:bazel_erlang_lib",
+    "//deps/rabbitmq_federation:bazel_erlang_lib",
+    "//deps/rabbitmq_federation_management:bazel_erlang_lib",
+    "//deps/rabbitmq_jms_topic_exchange:bazel_erlang_lib",
+    "//deps/rabbitmq_management:bazel_erlang_lib",
+    "//deps/rabbitmq_mqtt:bazel_erlang_lib",
+    "//deps/rabbitmq_peer_discovery_aws:bazel_erlang_lib",
+    "//deps/rabbitmq_peer_discovery_consul:bazel_erlang_lib",
+    "//deps/rabbitmq_peer_discovery_etcd:bazel_erlang_lib",
+    "//deps/rabbitmq_peer_discovery_k8s:bazel_erlang_lib",
+    "//deps/rabbitmq_prometheus:bazel_erlang_lib",
+    "//deps/rabbitmq_random_exchange:bazel_erlang_lib",
+    "//deps/rabbitmq_recent_history_exchange:bazel_erlang_lib",
+    "//deps/rabbitmq_sharding:bazel_erlang_lib",
+    "//deps/rabbitmq_shovel:bazel_erlang_lib",
+    "//deps/rabbitmq_shovel_management:bazel_erlang_lib",
+    "//deps/rabbitmq_stomp:bazel_erlang_lib",
+    "//deps/rabbitmq_top:bazel_erlang_lib",
+    "//deps/rabbitmq_tracing:bazel_erlang_lib",
+    "//deps/rabbitmq_trust_store:bazel_erlang_lib",
+    "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
+    "//deps/rabbitmq_web_mqtt:bazel_erlang_lib",
+    "//deps/rabbitmq_web_stomp:bazel_erlang_lib",
+]
+
 LABELS_WITH_TEST_VERSIONS = [
     "//deps/amqp10_common:bazel_erlang_lib",
     "//deps/rabbit_common:bazel_erlang_lib",
     "//deps/rabbit:bazel_erlang_lib",
     "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
 ]
+
+def all_plugins(rabbitmq_workspace = "@rabbitmq-server"):
+    return [rabbitmq_workspace + p for p in ALL_PLUGINS]
 
 def with_test_versions(deps):
     r = []
