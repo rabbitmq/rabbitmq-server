@@ -236,3 +236,33 @@ Group `channel_queue_exchange_metrics`:
 | Metric                                           | Description                                  |
 |--------------------------------------------------|----------------------------------------------|
 | rabbitmq_detailed_queue_messages_published_total | Total number of messages published to queues |
+
+### Virtual hosts and exchange metrics
+
+These can make sense in some scenarios, e.g. when vhost/exchanges are
+created using self-service automation. They are also a bit different
+from the rest of the metrics, as they not exactly per-node metrics,
+but cluster wide. So any aggregations of these values accross multiple
+nodes make no sense.
+
+Group `vhost_status`:
+
+| Metric                         | Description                      |
+|--------------------------------|----------------------------------|
+| rabbitmq_detailed_vhost_status | Whether a given vhost is running |
+
+Group `exchange_names`:
+
+| Metric                          | Description                                                                                              |
+|---------------------------------|----------------------------------------------------------------------------------------------------------|
+| rabbitmq_detailed_exchange_name | Enumerates exchanges without any additional info (cheaper than `exchange_bindings`, cluster-wide number) |
+
+Group `exchange_bindings`:
+
+| Metric                              | Description                                                            |
+|-------------------------------------|------------------------------------------------------------------------|
+| rabbitmq_detailed_exchange_bindings | Number of bindings for an exchange (WARNING: it's cluster-wide number) |
+
+
+
+
