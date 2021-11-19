@@ -24,6 +24,7 @@
 
 %% Used during dirty recovery to resume conversion between versions.
 -export([convert_from_v1_to_v2_loop/7]).
+-export([convert_from_v2_to_v1_loop/6]).
 
 %% exported for testing only
 -export([start_msg_store/3, stop_msg_store/1, init/6]).
@@ -605,7 +606,8 @@ init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun)
           rabbit_vhost_msg_store:successfully_recovered_state(
               VHost,
               ?PERSISTENT_MSG_STORE),
-          ContainsCheckFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
+          ContainsCheckFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun,
+          main),
     StoreState = rabbit_classic_queue_store_v2:init(QueueName, MsgOnDiskFun),
     init(queue_version(Q),
          IsDurable, IndexMod, IndexState, StoreState, DeltaCount, DeltaBytes, RecoveryTerms,

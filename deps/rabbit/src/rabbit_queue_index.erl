@@ -9,7 +9,7 @@
 
 -compile({inline, [segment_entry_count/0]}).
 
--export([erase/1, init/3, reset_state/1, recover/6,
+-export([erase/1, init/3, reset_state/1, recover/7,
          terminate/3, delete_and_terminate/1,
          pre_publish/7, flush_pre_publish_cache/2,
          publish/7, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
@@ -321,12 +321,13 @@ init_for_conversion(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncM
 
 -spec recover(rabbit_amqqueue:name(), shutdown_terms(), boolean(),
                     contains_predicate(),
-                    on_sync_fun(), on_sync_fun()) ->
+                    on_sync_fun(), on_sync_fun(),
+                    main | convert) ->
                         {'undefined' | non_neg_integer(),
                          'undefined' | non_neg_integer(), qistate()}.
 
 recover(#resource{ virtual_host = VHost } = Name, Terms, MsgStoreRecovered,
-        ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
+        ContainsCheckFun, OnSyncFun, OnSyncMsgFun, Context) ->
     #{segment_entry_count := SegmentEntryCount} = rabbit_vhost:read_config(VHost),
     put(segment_entry_count, SegmentEntryCount),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
@@ -336,10 +337,10 @@ recover(#resource{ virtual_host = VHost } = Name, Terms, MsgStoreRecovered,
     CleanShutdown = Terms /= non_clean_shutdown,
     case CleanShutdown andalso MsgStoreRecovered of
         true  -> case proplists:get_value(segments, Terms, non_clean_shutdown) of
-                     non_clean_shutdown -> init_dirty(false, ContainsCheckFun, State1);
+                     non_clean_shutdown -> init_dirty(false, ContainsCheckFun, State1, Context);
                      RecoveredCounts    -> init_clean(RecoveredCounts, State1)
                  end;
-        false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
+        false -> init_dirty(CleanShutdown, ContainsCheckFun, State1, Context)
     end.
 
 -spec terminate(rabbit_types:vhost(), [any()], qistate()) -> qistate().
@@ -652,7 +653,7 @@ init_clean(RecoveredCounts, State) ->
     %% wrong thing to return
     {undefined, undefined, State1 # qistate { segments = Segments1 }}.
 
-init_dirty(CleanShutdown, ContainsCheckFun, State) ->
+init_dirty(CleanShutdown, ContainsCheckFun, State, Context) ->
     %% Recover the journal completely. This will also load segments
     %% which have entries in the journal and remove duplicates. The
     %% counts will correctly reflect the combination of the segment
@@ -680,7 +681,57 @@ init_dirty(CleanShutdown, ContainsCheckFun, State) ->
           end, {Segments, 0, 0, 0}, all_segment_nums(State1)),
     State2 = maybe_flush_journal(State1 #qistate { segments = Segments1,
                                                    dirty_count = DirtyCount }),
-    {Count, Bytes, State2}.
+    {ConvertCount, ConvertBytes, State3} = case Context of
+        convert ->
+            {0, 0, State2};
+        main ->
+            %% We try to see if there are segment files from the v2 index.
+            case rabbit_file:wildcard(".*\\.qi", Dir) of
+                %% We are recovering a dirty queue that was using the v2 index or in
+                %% the process of converting from v2 to v1.
+                [_|_] ->
+                    recover_index_v2_dirty(State2, ContainsCheckFun);
+                %% Otherwise keep default values.
+                [] ->
+                    {0, 0, State2}
+            end
+    end,
+    {Count + ConvertCount, Bytes + ConvertBytes, State3}.
+
+recover_index_v2_dirty(State0 = #qistate { queue_name = Name,
+                                           on_sync = OnSyncFun,
+                                           on_sync_msg = OnSyncMsgFun },
+                       ContainsCheckFun) ->
+    #resource{virtual_host = VHost, name = QName} = Name,
+    rabbit_log:info("Converting dirty queue ~s in vhost ~s from v2 to v1", [QName, VHost]),
+    {Count, Bytes, V2State} = rabbit_classic_queue_index_v2:recover(Name, non_clean_shutdown, true,
+                                                                    ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
+                                                                    convert),
+    State = recover_index_v2_common(State0, V2State),
+    rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v2 to v1",
+                    [QName, VHost, Count]),
+    {Count, Bytes, State}.
+
+%% At this point all messages are persistent because transient messages
+%% were dropped during the v2 index recovery.
+recover_index_v2_common(State0 = #qistate { queue_name = Name, dir = Dir },
+                        V2State) ->
+    %% Use a temporary per-queue store state to read embedded messages.
+    StoreState0 = rabbit_classic_queue_store_v2:init(Name, fun(_, _) -> ok end),
+    %% Go through the v2 index and publish messages to v1 index.
+    {LoSeqId, HiSeqId, _} = rabbit_classic_queue_index_v2:bounds(V2State),
+    %% We use a common function also used with conversion on policy change.
+    {State1, _StoreState} = rabbit_variable_queue:convert_from_v2_to_v1_loop(Name, State0, V2State, StoreState0,
+                                                                            LoSeqId, HiSeqId),
+    %% Delete any remaining v2 index files.
+    OldFiles = rabbit_file:wildcard(".*\\.qi", Dir)
+            ++ rabbit_file:wildcard(".*\\.qs", Dir),
+    _ = [rabbit_file:delete(filename:join(Dir, F)) || F <- OldFiles],
+    %% Ensure that everything in the v1 index is written to disk.
+    State = flush(State1),
+    %% Clean up all the garbage that we have surely been creating.
+    garbage_collect(),
+    State.
 
 terminate(State = #qistate { journal_handle = JournalHdl,
                              segments = Segments }) ->
