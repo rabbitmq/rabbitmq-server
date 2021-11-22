@@ -9,6 +9,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
 
@@ -16,7 +17,7 @@ all() ->
     [{group, non_parallel_tests}].
 
 groups() ->
-    [{non_parallel_tests, [], [manage_super_stream, lookup_leader]}].
+    [{non_parallel_tests, [], [manage_super_stream, lookup_leader, partition_index]}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -123,6 +124,54 @@ manage_super_stream(Config) ->
                                       <<"invoices-2">>],
                                      [<<"0">>, <<"1">>, <<"2">>])),
 
+    ?assertMatch({ok, _}, delete_stream(Config, <<"invoices-1">>)),
+    ok.
+
+partition_index(Config) ->
+    % create super stream
+    ?assertEqual(ok,
+                 create_super_stream(Config,
+                                     <<"invoices">>,
+                                     [<<"invoices-0">>, <<"invoices-1">>,
+                                      <<"invoices-2">>],
+                                     [<<"0">>, <<"1">>, <<"2">>])),
+    [?assertEqual({ok, Index},
+                  partition_index(Config, <<"invoices">>, Stream))
+     || {Index, Stream}
+            <- [{0, <<"invoices-0">>}, {1, <<"invoices-1">>},
+                {2, <<"invoices-2">>}]],
+
+    ?assertEqual(ok, delete_super_stream(Config, <<"invoices">>)),
+
+    C = start_amqp_connection(Config),
+    {ok, Ch} = amqp_connection:open_channel(C),
+
+    StreamsWithIndexes =
+        [<<"invoices-0">>, <<"invoices-1">>, <<"invoices-2">>],
+    create_super_stream_topology(<<"invoices">>, StreamsWithIndexes, Ch),
+
+    [?assertEqual({ok, Index},
+                  partition_index(Config, <<"invoices">>, Stream))
+     || {Index, Stream}
+            <- [{0, <<"invoices-0">>}, {1, <<"invoices-1">>},
+                {2, <<"invoices-2">>}]],
+
+    delete_super_stream_topology(<<"invoices">>, StreamsWithIndexes, Ch),
+
+    StreamsWithNoIndexes =
+        [<<"invoices-amer">>, <<"invoices-emea">>, <<"invoices-apac">>],
+    create_super_stream_topology(<<"invoices">>, StreamsWithNoIndexes,
+                                 Ch),
+
+    [?assertEqual({ok, -1},
+                  partition_index(Config, <<"invoices">>, Stream))
+     || Stream
+            <- [<<"invoices-amer">>, <<"invoices-emea">>, <<"invoices-apac">>]],
+
+    delete_super_stream_topology(<<"invoices">>, StreamsWithNoIndexes,
+                                 Ch),
+
+    amqp_connection:close(C),
     ok.
 
 create_super_stream(Config, Name, Partitions, RKs) ->
@@ -178,3 +227,59 @@ route(Config, RoutingKey, SuperStream) ->
                                  rabbit_stream_manager,
                                  route,
                                  [RoutingKey, <<"/">>, SuperStream]).
+
+partition_index(Config, SuperStream, Stream) ->
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 0,
+                                 rabbit_stream_manager,
+                                 partition_index,
+                                 [<<"/">>, SuperStream, Stream]).
+
+start_amqp_connection(Config) ->
+    Port =
+        rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    {ok, Connection} =
+        amqp_connection:start(#amqp_params_network{port = Port}),
+    Connection.
+
+create_super_stream_topology(SuperStream, Streams, Ch) ->
+    ExchangeDeclare =
+        #'exchange.declare'{exchange = SuperStream,
+                            type = <<"direct">>,
+                            passive = false,
+                            durable = true,
+                            auto_delete = false,
+                            internal = false,
+                            nowait = false,
+                            arguments = []},
+    #'exchange.declare_ok'{} = amqp_channel:call(Ch, ExchangeDeclare),
+
+    [begin
+         QueueDeclare =
+             #'queue.declare'{queue = S,
+                              durable = true,
+                              exclusive = false,
+                              auto_delete = false,
+                              arguments =
+                                  [{<<"x-queue-type">>, longstr,
+                                    <<"stream">>}]},
+         #'queue.declare_ok'{} = amqp_channel:call(Ch, QueueDeclare),
+         Binding =
+             #'queue.bind'{queue = S,
+                           exchange = SuperStream,
+                           routing_key = S},
+         #'queue.bind_ok'{} = amqp_channel:call(Ch, Binding)
+     end
+     || S <- Streams],
+    ok.
+
+delete_super_stream_topology(SuperStream, Streams, Ch) ->
+    DeleteExchange = #'exchange.delete'{exchange = SuperStream},
+    #'exchange.delete_ok'{} = amqp_channel:call(Ch, DeleteExchange),
+
+    [begin
+         DeleteQueue = #'queue.delete'{queue = S},
+         #'queue.delete_ok'{} = amqp_channel:call(Ch, DeleteQueue)
+     end
+     || S <- Streams],
+    ok.

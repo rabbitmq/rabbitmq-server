@@ -784,6 +784,7 @@ open(info, {sac, {{subscription_id, SubId}, {active, Active}}},
     {Connection1, ConnState1} =
         case Consumers0 of
             #{SubId := Consumer0} ->
+                %% FIXME check consumer is SAC, to avoid changing a regular consumer
                 Consumer1 = Consumer0#consumer{configuration = #consumer_configuration{active = Active}},
                 Conn1 =
                     maybe_notify_consumer(Transport,
@@ -1860,6 +1861,7 @@ handle_frame_post_auth(Transport,
                                                         Stream,
                                                         ConsumerName,
                                                         SubscriptionId,
+                                                        Properties,
                                                         Sac),
 
                             Connection1 =
@@ -2646,16 +2648,19 @@ maybe_dispatch_on_subscription(_Transport,
     Consumers1 = Consumers#{SubscriptionId => ConsumerState},
     State#stream_connection_state{consumers = Consumers1}.
 
-maybe_register_consumer(_, _, _, _, false = _Sac) ->
+maybe_register_consumer(_, _, _, _, _, false = _Sac) ->
     true;
 maybe_register_consumer(VirtualHost,
                         Stream,
                         ConsumerName,
                         SubscriptionId,
+                        Properties,
                         true) ->
+    PartitionIndex = partition_index(VirtualHost, Stream, Properties),
     {ok, Active} =
         rabbit_stream_sac_coordinator:register_consumer(VirtualHost,
                                                         Stream,
+                                                        PartitionIndex,
                                                         ConsumerName,
                                                         self(),
                                                         SubscriptionId),
@@ -2698,6 +2703,21 @@ maybe_unregister_consumer(VirtualHost,
                                                       ConsumerName,
                                                       self(),
                                                       SubscriptionId).
+
+partition_index(VirtualHost, Stream, Properties) ->
+    case Properties of
+        #{<<"super-stream">> := SuperStream} ->
+            case rabbit_stream_manager:partition_index(VirtualHost, SuperStream,
+                                                       Stream)
+            of
+                {ok, Index} ->
+                    Index;
+                _ ->
+                    -1
+            end;
+        _ ->
+            -1
+    end.
 
 notify_connection_closed(#statem_data{connection =
                                           #stream_connection{name = Name,

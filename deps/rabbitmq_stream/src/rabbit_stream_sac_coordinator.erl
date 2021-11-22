@@ -27,7 +27,7 @@
          handle_info/2,
          terminate/2,
          code_change/3]).
--export([register_consumer/5,
+-export([register_consumer/6,
          unregister_consumer/5]).
 
 -type vhost() :: binary().
@@ -36,19 +36,23 @@
 -type subscription_id() :: byte().
 
 -record(consumer,
-        {pid :: pid(), subscription_id :: subscription_id()}).
--record(group, {consumers :: [#consumer{}]}).
+        {pid :: pid(), subscription_id :: subscription_id(),
+         active :: boolean()}).
+-record(group,
+        {consumers :: [#consumer{}], partition_index :: integer()}).
 -record(state,
         {groups :: #{{vhost(), stream(), consumer_name()} => #group{}}}).
 
 register_consumer(VirtualHost,
                   Stream,
+                  PartitionIndex,
                   ConsumerName,
                   ConnectionPid,
                   SubscriptionId) ->
     call({register_consumer,
           VirtualHost,
           Stream,
+          PartitionIndex,
           ConsumerName,
           ConnectionPid,
           SubscriptionId}).
@@ -121,23 +125,39 @@ init([]) ->
 handle_call({register_consumer,
              VirtualHost,
              Stream,
+             PartitionIndex,
              ConsumerName,
              ConnectionPid,
              SubscriptionId},
             _From, #state{groups = StreamGroups0} = State) ->
+    %% TODO monitor connection PID to remove consumers when their connection dies
+    %% this could require some index to avoid crawling the whole data structure
+    %% this is necessary to fail over to another consumer when one dies abruptly
+    %% also, check the liveliness of each consumer whenever there's a change in the group,
+    %% to make sure to get rid of zombies
+    %%
+    %% TODO monitor streams and virtual hosts as well
     StreamGroups1 =
-        maybe_create_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
+        maybe_create_group(VirtualHost,
+                           Stream,
+                           PartitionIndex,
+                           ConsumerName,
+                           StreamGroups0),
     Group0 =
         lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups1),
     Consumer =
-        #consumer{pid = ConnectionPid, subscription_id = SubscriptionId},
-    Group = add_to_group(Consumer, Group0),
-    Active = is_active(Consumer, Group),
+        #consumer{pid = ConnectionPid,
+                  subscription_id = SubscriptionId,
+                  active = false},
+    Group1 = add_to_group(Consumer, Group0),
+    Active = compute_active_flag(Consumer, Group1),
+    #group{consumers = Consumers0} = Group1,
+    Consumers1 = update_active_flag(Consumer, Active, Consumers0),
     StreamGroups2 =
         update_groups(VirtualHost,
                       Stream,
                       ConsumerName,
-                      Group,
+                      Group1#group{consumers = Consumers1},
                       StreamGroups1),
     {reply, {ok, Active}, State#state{groups = StreamGroups2}};
 handle_call({unregister_consumer,
@@ -164,8 +184,8 @@ handle_call({unregister_consumer,
                         {value, Consumer} ->
                             rabbit_log:debug("Unregistering consumer ~p from group",
                                              [Consumer]),
-                            case lists:nth(1, Consumers0) of
-                                Consumer ->
+                            case Consumer of
+                                #consumer{active = true} ->
                                     rabbit_log:debug("Unregistering the active consumer"),
                                     %% this is active one, remove it and notify the new active one if group not empty
                                     Cs = lists:delete(Consumer, Consumers0),
@@ -173,23 +193,25 @@ handle_call({unregister_consumer,
                                         [] ->
                                             %% group is empty now
                                             rabbit_log:debug("Group is now empty"),
-                                            ok;
+                                            Cs;
                                         _ ->
                                             %% get new active one (the first) and notify it
+                                            NewActive = lists:nth(1, Cs),
                                             #consumer{pid = Pid,
                                                       subscription_id = SubId} =
-                                                lists:nth(1, Cs),
+                                                NewActive,
                                             rabbit_log:debug("New active consumer is ~p ~p",
                                                              [Pid, SubId]),
                                             Pid
                                             ! {sac,
                                                {{subscription_id, SubId},
-                                                {active, true}}}
-                                    end,
-                                    Cs;
+                                                {active, true}}},
+                                            update_active_flag(NewActive, true,
+                                                               Cs)
+                                    end;
                                 _ActiveConsumer ->
-                                    rabbit_log:debug("Not the active consumer, just removing from the "
-                                                     "group"),
+                                    rabbit_log:debug("Not the active consumer, just removing it from "
+                                                     "the group"),
                                     lists:delete(Consumer, Consumers0)
                             end;
                         error ->
@@ -212,13 +234,18 @@ handle_call({unregister_consumer,
 handle_call(which_children, _From, State) ->
     {reply, [], State}.
 
-maybe_create_group(VirtualHost, Stream, ConsumerName, StreamGroups) ->
+maybe_create_group(VirtualHost,
+                   Stream,
+                   PartitionIndex,
+                   ConsumerName,
+                   StreamGroups) ->
     case StreamGroups of
         #{{VirtualHost, Stream, ConsumerName} := _Group} ->
             StreamGroups;
         SGS ->
             maps:put({VirtualHost, Stream, ConsumerName},
-                     #group{consumers = []}, SGS)
+                     #group{consumers = [], partition_index = PartitionIndex},
+                     SGS)
     end.
 
 lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups) ->
@@ -227,12 +254,22 @@ lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups) ->
 add_to_group(Consumer, #group{consumers = Consumers} = Group) ->
     Group#group{consumers = Consumers ++ [Consumer]}.
 
-is_active(Consumer, #group{consumers = [Consumer]}) ->
+compute_active_flag(Consumer,
+                    #group{partition_index = -1, consumers = [Consumer]}) ->
     true;
-is_active(Consumer, #group{consumers = [Consumer | _]}) ->
+compute_active_flag(Consumer,
+                    #group{partition_index = -1, consumers = [Consumer | _]}) ->
     true;
-is_active(_, _) ->
+compute_active_flag(_, _) ->
     false.
+
+update_active_flag(Consumer, Active, Consumers) ->
+    lists:foldl(fun (C, Acc) when C == Consumer ->
+                        Acc ++ [Consumer#consumer{active = Active}];
+                    (C, Acc) ->
+                        Acc ++ [C]
+                end,
+                [], Consumers).
 
 update_groups(VirtualHost,
               Stream,
