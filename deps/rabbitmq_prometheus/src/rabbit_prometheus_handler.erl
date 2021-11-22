@@ -166,7 +166,8 @@ put_filtering_options_into_process_dictionary(Request) ->
     case application:get_env(rabbitmq_prometheus, filter_aggregated_queue_metrics_pattern, undefined) of
         undefined -> ok;
         Pattern ->
-            put(prometheus_queue_filter, Pattern)
+            {ok, CompiledPattern} = re:compile(Pattern),
+            put(prometheus_queue_filter, CompiledPattern)
     end,
     ok.
 
