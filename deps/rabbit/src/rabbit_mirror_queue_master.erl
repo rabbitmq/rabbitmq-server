@@ -225,15 +225,17 @@ purge(State = #state { gm                  = GM,
 -spec purge_acks(_) -> no_return().
 purge_acks(_State) -> exit({not_implemented, {?MODULE, purge_acks}}).
 
-publish(Msg = #basic_message { id = MsgId }, MsgProps, IsDelivered, ChPid, Flow,
+publish(MessageContainer, MsgProps, IsDelivered, ChPid, Flow,
         State = #state { gm                  = GM,
                          seen_status         = SS,
                          backing_queue       = BQ,
                          backing_queue_state = BQS }) ->
+    MsgId = rabbit_message_container:get_internal(MessageContainer, id),
     false = maps:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish, ChPid, Flow, MsgProps, Msg},
-                      rabbit_basic:msg_size(Msg)),
-    BQS1 = BQ:publish(Msg, MsgProps, IsDelivered, ChPid, Flow, BQS),
+    %% TODO should msg size be part of the container API???
+    ok = gm:broadcast(GM, {publish, ChPid, Flow, MsgProps, MessageContainer},
+                      rabbit_message_container:msg_size(MessageContainer)),
+    BQS1 = BQ:publish(MessageContainer, MsgProps, IsDelivered, ChPid, Flow, BQS),
     ensure_monitoring(ChPid, State #state { backing_queue_state = BQS1 }).
 
 batch_publish(Publishes, ChPid, Flow,
@@ -257,15 +259,16 @@ batch_publish(Publishes, ChPid, Flow,
 %% IsDelivered flag to true, so to avoid iterating over the messages
 %% again at the mirror, we do it here.
 
-publish_delivered(Msg = #basic_message { id = MsgId }, MsgProps,
+publish_delivered(MessageContainer, MsgProps,
                   ChPid, Flow, State = #state { gm                  = GM,
                                                 seen_status         = SS,
                                                 backing_queue       = BQ,
                                                 backing_queue_state = BQS }) ->
+    MsgId = rabbit_message_container:get_internal(MessageContainer, id),
     false = maps:is_key(MsgId, SS), %% ASSERTION
-    ok = gm:broadcast(GM, {publish_delivered, ChPid, Flow, MsgProps, Msg},
-                      rabbit_basic:msg_size(Msg)),
-    {AckTag, BQS1} = BQ:publish_delivered(Msg, MsgProps, ChPid, Flow, BQS),
+    ok = gm:broadcast(GM, {publish_delivered, ChPid, Flow, MsgProps, MessageContainer},
+                      rabbit_message_container:msg_size(MessageContainer)),
+    {AckTag, BQS1} = BQ:publish_delivered(MessageContainer, MsgProps, ChPid, Flow, BQS),
     State1 = State #state { backing_queue_state = BQS1 },
     {AckTag, ensure_monitoring(ChPid, State1)}.
 
@@ -436,11 +439,12 @@ invoke(Mod, Fun, State = #state { backing_queue       = BQ,
                                   backing_queue_state = BQS }) ->
     State #state { backing_queue_state = BQ:invoke(Mod, Fun, BQS) }.
 
-is_duplicate(Message = #basic_message { id = MsgId },
+is_duplicate(MessageContainer,
              State = #state { seen_status         = SS,
                               backing_queue       = BQ,
                               backing_queue_state = BQS,
                               confirmed           = Confirmed }) ->
+    MsgId = rabbit_message_container:get_internal(MessageContainer, id),
     %% Here, we need to deal with the possibility that we're about to
     %% receive a message that we've already seen when we were a mirror
     %% (we received it via gm). Thus if we do receive such message now
@@ -452,7 +456,7 @@ is_duplicate(Message = #basic_message { id = MsgId },
         error ->
             %% We permit the underlying BQ to have a peek at it, but
             %% only if we ourselves are not filtering out the msg.
-            {Result, BQS1} = BQ:is_duplicate(Message, BQS),
+            {Result, BQS1} = BQ:is_duplicate(MessageContainer, BQS),
             {Result, State #state { backing_queue_state = BQS1 }};
         {ok, published} ->
             %% It already got published when we were a mirror and no

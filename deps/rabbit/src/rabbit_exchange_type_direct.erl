@@ -32,7 +32,8 @@ description() ->
 serialise_events() -> false.
 
 route(#exchange{name = Name},
-      #delivery{message = #basic_message{routing_keys = Routes}}) ->
+      #delivery{message = MessageContainer}) ->
+    Routes = rabbit_message_container:get_internal(MessageContainer, routing_keys),
     rabbit_router:match_routing_key(Name, Routes).
 
 validate(_X) -> ok.

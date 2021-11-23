@@ -30,10 +30,10 @@ publish(Msg, Reason, X, RK, QName) ->
                                   Delivery, stateless),
     ok.
 
-make_msg(Msg = #basic_message{content       = Content,
-                              exchange_name = Exchange,
-                              routing_keys  = RoutingKeys},
-         Reason, DLX, RK, #resource{name = QName}) ->
+make_msg(MessageContainer, Reason, DLX, RK, #resource{name = QName}) ->
+    Content = rabbit_message_container:get_internal(MessageContainer, content),
+    Exchange = rabbit_message_container:get_internal(MessageContainer, exchange_name),
+    RoutingKeys = rabbit_message_container:get_internal(MessageContainer, routing_keys),
     {DeathRoutingKeys, HeadersFun1} =
         case RK of
             undefined -> {RoutingKeys, fun (H) -> H end};
@@ -55,15 +55,15 @@ make_msg(Msg = #basic_message{content       = Content,
                         {<<"routing-keys">>, array,     RKs1}] ++ PerMsgTTL,
                 HeadersFun1(update_x_death_header(Info, Headers))
         end,
+
     Content1 = #content{properties = Props} =
         rabbit_basic:map_headers(HeadersFun2, Content),
     Content2 = Content1#content{properties =
                                     Props#'P_basic'{expiration = undefined}},
-    Msg#basic_message{exchange_name = DLX,
-                      id            = rabbit_guid:gen(),
-                      routing_keys  = DeathRoutingKeys,
-                      content       = Content2}.
-
+    MC0 = rabbit_message_container:set_internal(MessageContainer, exchange_name, DLX),
+    MC1 = rabbit_message_container:set_internal(MC0, id, rabbit_guid:gen()),
+    MC2 = rabbit_message_container:set_internal(MC1, routing_keys, DeathRoutingKeys),
+    rabbit_message_container:set_internal(MC2, content, Content2).
 
 x_death_event_key(Info, Key) ->
     case lists:keysearch(Key, 1, Info) of
@@ -193,7 +193,8 @@ per_msg_ttl_header(_) ->
 detect_cycles(rejected, _Msg, Queues) ->
     {Queues, []};
 
-detect_cycles(_Reason, #basic_message{content = Content}, Queues) ->
+detect_cycles(_Reason, MessageContainer, Queues) ->
+    Content = rabbit_message_container:get_internal(MessageContainer, content),
     #content{properties = #'P_basic'{headers = Headers}} =
         rabbit_binary_parser:ensure_content_decoded(Content),
     NoCycles = {Queues, []},

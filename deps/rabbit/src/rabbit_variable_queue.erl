@@ -1195,32 +1195,32 @@ cons_if(false, _E, L) -> L.
 gb_sets_maybe_insert(false, _Val, Set) -> Set;
 gb_sets_maybe_insert(true,   Val, Set) -> gb_sets:add(Val, Set).
 
-msg_status(IsPersistent, IsDelivered, SeqId,
-           Msg = #basic_message {id = MsgId}, MsgProps, IndexMaxSize) ->
+msg_status(IsPersistent, IsDelivered, SeqId, MessageContainer, MsgProps, IndexMaxSize) ->
+    MsgId = rabbit_message_container:get_internal(MessageContainer, id),
     #msg_status{seq_id        = SeqId,
                 msg_id        = MsgId,
-                msg           = Msg,
+                msg           = MessageContainer,
                 is_persistent = IsPersistent,
                 is_delivered  = IsDelivered,
                 msg_in_store  = false,
                 index_on_disk = false,
-                persist_to    = determine_persist_to(Msg, MsgProps, IndexMaxSize),
+                persist_to    = determine_persist_to(MessageContainer, MsgProps, IndexMaxSize),
                 msg_props     = MsgProps}.
 
-beta_msg_status({Msg = #basic_message{id = MsgId},
-                 SeqId, MsgProps, IsPersistent, IsDelivered}) ->
-    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent, IsDelivered),
-    MS0#msg_status{msg_id       = MsgId,
-                   msg          = Msg,
-                   persist_to   = queue_index,
-                   msg_in_store = false};
-
-beta_msg_status({MsgId, SeqId, MsgProps, IsPersistent, IsDelivered}) ->
+beta_msg_status({MsgId, SeqId, MsgProps, IsPersistent, IsDelivered}) when is_binary(MsgId) ->
     MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent, IsDelivered),
     MS0#msg_status{msg_id       = MsgId,
                    msg          = undefined,
                    persist_to   = msg_store,
-                   msg_in_store = true}.
+                   msg_in_store = true};
+
+beta_msg_status({MessageContainer, SeqId, MsgProps, IsPersistent, IsDelivered}) ->
+    MsgId = rabbit_message_container:get_internal(MessageContainer, id),
+    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent, IsDelivered),
+    MS0#msg_status{msg_id       = MsgId,
+                   msg          = MessageContainer,
+                   persist_to   = queue_index,
+                   msg_in_store = false}.
 
 beta_msg_status0(SeqId, MsgProps, IsPersistent, IsDelivered) ->
   #msg_status{seq_id        = SeqId,
@@ -1809,7 +1809,7 @@ process_delivers_and_acks_fun(_) ->
 %% Internal gubbins for publishing
 %%----------------------------------------------------------------------------
 
-publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
+publish1(MessageContainer,
          MsgProps = #message_properties { needs_confirming = NeedsConfirming },
          IsDelivered, _ChPid, _Flow, PersistFun,
          State = #vqstate { q1 = Q1, q3 = Q3, q4 = Q4,
@@ -1819,8 +1819,10 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                             in_counter          = InCount,
                             durable             = IsDurable,
                             unconfirmed         = UC }) ->
+    MsgId = rabbit_message_container:get_internal(MessageContainer, id),
+    IsPersistent = rabbit_message_container:get_internal(MessageContainer, is_persistent),
     IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
+    MsgStatus = msg_status(IsPersistent1, IsDelivered, SeqId, MessageContainer, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = case ?QUEUE:is_empty(Q3) of
                  false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
@@ -1857,8 +1859,7 @@ batch_publish1({Msg, MsgProps, IsDelivered}, {ChPid, Flow, State}) ->
     {ChPid, Flow, publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
                            fun maybe_prepare_write_to_disk/4, State)}.
 
-publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
-                                          id = MsgId },
+publish_delivered1(MessageContainer,
                    MsgProps = #message_properties {
                                  needs_confirming = NeedsConfirming },
                    _ChPid, _Flow, PersistFun,
@@ -1869,8 +1870,10 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                       in_counter          = InCount,
                                       durable             = IsDurable,
                                       unconfirmed         = UC }) ->
+    MsgId = rabbit_message_container:get_internal(MessageContainer, id),
+    IsPersistent = rabbit_message_container:get_internal(MessageContainer, is_persistent),
     IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
+    MsgStatus = msg_status(IsPersistent1, true, SeqId, MessageContainer, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
@@ -1880,8 +1883,7 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                      in_counter       = InCount  + 1,
                                      unconfirmed      = UC1 }),
     {SeqId, State3};
-publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
-                                          id = MsgId },
+publish_delivered1(MessageContainer,
                    MsgProps = #message_properties {
                                  needs_confirming = NeedsConfirming },
                    _ChPid, _Flow, PersistFun,
@@ -1892,8 +1894,10 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent,
                                       in_counter          = InCount,
                                       durable             = IsDurable,
                                       unconfirmed         = UC }) ->
+    MsgId = rabbit_message_container:get_internal(MessageContainer, id),
+    IsPersistent = rabbit_message_container:get_internal(MessageContainer, is_persistent),
     IsPersistent1 = IsDurable andalso IsPersistent,
-    MsgStatus = msg_status(IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
+    MsgStatus = msg_status(IsPersistent1, true, SeqId, MessageContainer, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
@@ -2005,11 +2009,12 @@ maybe_prepare_write_to_disk(ForceMsg, ForceIndex, MsgStatus, State) ->
     {MsgStatus1, State1} = maybe_write_msg_to_disk(ForceMsg, MsgStatus, State),
     maybe_batch_write_index_to_disk(ForceIndex, MsgStatus1, State1).
 
-determine_persist_to(#basic_message{
-                        content = #content{properties     = Props,
-                                           properties_bin = PropsBin}},
+determine_persist_to(MessageContainer,
                      #message_properties{size = BodySize},
                      IndexMaxSize) ->
+    #content{properties     = Props,
+             properties_bin = PropsBin} = rabbit_message_container:get_internal(MessageContainer,
+                                                                                content),
     %% The >= is so that you can set the env to 0 and never persist
     %% to the index.
     %%
@@ -2042,10 +2047,7 @@ determine_persist_to(#basic_message{
 persist_to(#msg_status{persist_to = To}) -> To.
 
 prepare_to_store(Msg) ->
-    Msg#basic_message{
-      %% don't persist any recoverable decoded properties
-      content = rabbit_binary_parser:clear_decoded_content(
-                  Msg #basic_message.content)}.
+    rabbit_message_container:prepare_to_store(Msg).
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks

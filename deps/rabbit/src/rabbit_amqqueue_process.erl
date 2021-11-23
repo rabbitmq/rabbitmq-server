@@ -611,20 +611,19 @@ send_or_record_confirm(#delivery{confirm    = false}, State) ->
 send_or_record_confirm(#delivery{confirm    = true,
                                  sender     = SenderPid,
                                  msg_seq_no = MsgSeqNo,
-                                 message    = #basic_message {
-                                   is_persistent = true,
-                                   id            = MsgId}},
+                                 message    = MessageContainer},
                        State = #q{q                 = Q,
                                   msg_id_to_channel = MTC})
   when ?amqqueue_is_durable(Q) ->
-    MTC1 = maps:put(MsgId, {SenderPid, MsgSeqNo}, MTC),
-    {eventually, State#q{msg_id_to_channel = MTC1}};
-send_or_record_confirm(#delivery{confirm    = true,
-                                 sender     = SenderPid,
-                                 msg_seq_no = MsgSeqNo},
-                       #q{q = Q} = State) ->
-    confirm_to_sender(SenderPid, amqqueue:get_name(Q), [MsgSeqNo]),
-    {immediately, State}.
+    case rabbit_message_container:get_internal(MessageContainer, is_persistent) of
+        true ->
+            MsgId = rabbit_message_container:get_internal(MessageContainer, id),
+            MTC1 = maps:put(MsgId, {SenderPid, MsgSeqNo}, MTC),
+            {eventually, State#q{msg_id_to_channel = MTC1}};
+        false ->
+            confirm_to_sender(SenderPid, amqqueue:get_name(Q), [MsgSeqNo]),
+            {immediately, State}
+    end.
 
 %% This feature was used by `rabbit_amqqueue_process` and
 %% `rabbit_mirror_queue_slave` up-to and including RabbitMQ 3.7.x. It is
@@ -819,14 +818,15 @@ send_reject_publish(#delivery{confirm = false},
 
 will_overflow(_, #q{max_length = undefined,
                     max_bytes  = undefined}) -> false;
-will_overflow(#delivery{message = Message},
+will_overflow(#delivery{message = MessageContainer},
               #q{max_length          = MaxLen,
                  max_bytes           = MaxBytes,
                  backing_queue       = BQ,
                  backing_queue_state = BQS}) ->
     ExpectedQueueLength = BQ:len(BQS) + 1,
 
-    #basic_message{content = #content{payload_fragments_rev = PFR}} = Message,
+    Content = rabbit_message_container:get_internal(MessageContainer, content),
+    #content{payload_fragments_rev = PFR} = Content,
     MessageSize = iolist_size(PFR),
     ExpectedQueueSizeBytes = BQ:info(message_bytes_ready, BQS) + MessageSize,
 
@@ -966,14 +966,16 @@ subtract_acks(ChPid, AckTags, State = #q{consumers = Consumers}, Fun) ->
                                    run_message_queue(true, Fun(State1))
     end.
 
-message_properties(Message = #basic_message{content = Content},
+message_properties(MessageContainer,
                    Confirm, #q{ttl = TTL}) ->
+    Content = rabbit_message_container:get_internal(MessageContainer, content),
+    %% TODO how wrapped should it be for the fragments here?
     #content{payload_fragments_rev = PFR} = Content,
-    #message_properties{expiry           = calculate_msg_expiry(Message, TTL),
+    #message_properties{expiry           = calculate_msg_expiry(Content, TTL),
                         needs_confirming = Confirm == eventually,
                         size             = iolist_size(PFR)}.
 
-calculate_msg_expiry(#basic_message{content = Content}, TTL) ->
+calculate_msg_expiry(Content, TTL) ->
     #content{properties = Props} =
         rabbit_binary_parser:ensure_content_decoded(Content),
     %% We assert that the expiration must be valid - we check in the channel.

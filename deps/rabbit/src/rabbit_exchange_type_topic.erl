@@ -36,7 +36,8 @@ serialise_events() -> false.
 
 %% NB: This may return duplicate results in some situations (that's ok)
 route(#exchange{name = X},
-      #delivery{message = #basic_message{routing_keys = Routes}}) ->
+      #delivery{message = MessageContainer}) ->
+    Routes = rabbit_message_container:get_internal(MessageContainer, routing_keys),
     lists:append([begin
                       Words = split_topic_key(RKey),
                       mnesia:async_dirty(fun trie_match/2, [X, Words])

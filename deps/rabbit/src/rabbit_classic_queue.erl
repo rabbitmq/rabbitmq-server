@@ -300,7 +300,6 @@ settlement_action(Type, QRef, MsgSeqs, Acc) ->
     {[{amqqueue:amqqueue(), state()}], rabbit_queue_type:actions()}.
 deliver(Qs0, #delivery{flow = Flow,
                        msg_seq_no = MsgNo,
-                       message = #basic_message{exchange_name = _Ex},
                        confirm = Confirm} = Delivery) ->
     %% TODO: record master and slaves for confirm processing
     {MPids, SPids, Qs, Actions} = qpids(Qs0, Confirm, MsgNo),

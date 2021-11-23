@@ -407,7 +407,8 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
 
 route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
                 decorators = Decorators} = X,
-      #delivery{message = #basic_message{routing_keys = RKs}} = Delivery) ->
+      #delivery{message = MessageContainer} = Delivery) ->
+    RKs = rabbit_message_container:get_internal(MessageContainer, routing_keys),
     case RName of
         <<>> ->
             RKsSorted = lists:usort(RKs),

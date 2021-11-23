@@ -411,8 +411,8 @@ maybe_needs_confirming(MsgProps, MsgOrId,
         State = #qistate{unconfirmed     = UC,
                          unconfirmed_msg = UCM}) ->
     MsgId = case MsgOrId of
-                #basic_message{id = Id} -> Id;
-                Id when is_binary(Id)   -> Id
+                Id when is_binary(Id)   -> Id;
+                MessageContainer -> rabbit_message_container:get_internal(MessageContainer, id)
             end,
     ?MSG_ID_BYTES = size(MsgId),
     case {MsgProps#message_properties.needs_confirming, MsgOrId} of
@@ -768,8 +768,9 @@ create_pub_record_body(MsgOrId, #message_properties { expiry = Expiry,
     case MsgOrId of
         MsgId when is_binary(MsgId) ->
             {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS>>, <<>>};
-        #basic_message{id = MsgId} ->
-            MsgBin = term_to_binary(MsgOrId),
+        MsgOrId ->
+            MsgId = rabbit_message_container:get_internal(MsgOrId, id),
+            MsgBin = rabbit_message_container:serialize(MsgOrId),
             {<<MsgId/binary, ExpiryBin/binary, Size:?SIZE_BITS>>, MsgBin}
     end.
 
