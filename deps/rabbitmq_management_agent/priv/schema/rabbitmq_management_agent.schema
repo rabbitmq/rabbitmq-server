@@ -2,3 +2,4 @@
 %% Also the management application will refuse to start if metrics collection is disabled
 {mapping, "management_agent.disable_metrics_collector", "rabbitmq_management_agent.disable_metrics_collector",
     [{datatype, {enum, [true, false]}}]}.
+{mapping, "management_agent.filter_aggregated_queue_metrics_pattern", "rabbitmq_management_agent.filter_aggregated_queue_metrics_pattern", [{datatype, string}]}.
