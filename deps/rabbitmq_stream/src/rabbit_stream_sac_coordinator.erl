@@ -159,6 +159,11 @@ handle_call({register_consumer,
                       ConsumerName,
                       Group1#group{consumers = Consumers1},
                       StreamGroups1),
+    ConnectionPid
+    ! {sac,
+       {{subscription_id, SubscriptionId}, {active, Active},
+        {side_effects, []}}},
+
     {reply, {ok, Active}, State#state{groups = StreamGroups2}};
 handle_call({unregister_consumer,
              VirtualHost,
@@ -205,7 +210,8 @@ handle_call({unregister_consumer,
                                             Pid
                                             ! {sac,
                                                {{subscription_id, SubId},
-                                                {active, true}}},
+                                                {active, true},
+                                                {side_effects, []}}},
                                             update_active_flag(NewActive, true,
                                                                Cs)
                                     end;
