@@ -29,6 +29,7 @@
 
 %% Used by `/metrics/detailed` endpoint
 -define(DETAILED_METRIC_NAME_PREFIX, <<"rabbitmq_detailed_">>).
+-define(CLUSTER_METRIC_NAME_PREFIX, <<"rabbitmq_cluster_">>).
 
 %% ==The source of these metrics can be found in the rabbit_core_metrics module==
 %% The relevant files are:
@@ -215,15 +216,15 @@
 ]).
 
 %% Metrics that can be only requested through `/metrics/detailed`
--define(METRICS_RAW_DETAILED,[
+-define(METRICS_CLUSTER,[
     {vhost_status, [
         {2, undefined, vhost_status, gauge, "Whether a given vhost is running"}
     ]},
     {exchange_bindings, [
-        {2, undefined, exchange_bindings, gauge, "Number of bindings for an exchange (WARNING: it's cluster-wide number)"}
+        {2, undefined, exchange_bindings, gauge, "Number of bindings for an exchange. This value is cluster-wide."}
     ]},
     {exchange_names, [
-        {2, undefined, exchange_name, gauge, "Enumerates exchanges without any additional info (cheaper than `exchange_bindings`, cluster-wide number)"}
+        {2, undefined, exchange_name, gauge, "Enumerates exchanges without any additional info. This value is cluster-wide. A cheaper alternative to `exchange_bindings`"}
     ]}
 ]).
 
@@ -245,7 +246,8 @@ register() ->
 deregister_cleanup(_) -> ok.
 
 collect_mf('detailed', Callback) ->
-    collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), queues_filter_from_pdict(), enabled_mfs_from_pdict(), Callback),
+    collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), queues_filter_from_pdict(), enabled_mfs_from_pdict(?METRICS_RAW), Callback),
+    collect(true, ?CLUSTER_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), queues_filter_from_pdict(),  enabled_mfs_from_pdict(?METRICS_CLUSTER), Callback),
     %% identity is here to enable filtering on a cluster name (as already happens in existing dashboards)
     emit_identity_info(Callback),
     ok;
@@ -703,13 +705,13 @@ sum('', B) ->
 sum(A, B) ->
     A + B.
 
-enabled_mfs_from_pdict() ->
+enabled_mfs_from_pdict(AllMFs) ->
     case get(prometheus_mf_filter) of
         undefined ->
             [];
         MFNames ->
             MFNameSet = sets:from_list(MFNames),
-            [ MF || MF = {Table, _} <- ?METRICS_RAW ++ ?METRICS_RAW_DETAILED, sets:is_element(Table, MFNameSet) ]
+            [ MF || MF = {Table, _} <- AllMFs, sets:is_element(Table, MFNameSet) ]
     end.
 
 vhosts_filter_from_pdict() ->
