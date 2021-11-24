@@ -435,6 +435,9 @@ handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
 handle_call({partition_index, VirtualHost, SuperStream, Stream},
             _From, State) ->
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
+    rabbit_log:debug("Looking for partition index of stream ~p in super "
+                     "stream ~p (virtual host ~p)",
+                     [Stream, SuperStream, VirtualHost]),
     Res = try
               rabbit_exchange:lookup_or_die(ExchangeName),
               UnorderedBindings =
@@ -444,6 +447,7 @@ handle_call({partition_index, VirtualHost, SuperStream, Stream},
                       is_resource_stream_queue(D), Q == Stream],
               OrderedBindings =
                   rabbit_stream_utils:sort_partitions(UnorderedBindings),
+              rabbit_log:debug("Bindings: ~p", [OrderedBindings]),
               case OrderedBindings of
                   [] ->
                       {error, stream_not_found};

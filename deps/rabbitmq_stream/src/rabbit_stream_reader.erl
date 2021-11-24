@@ -788,7 +788,22 @@ open(info,
         case Consumers0 of
             #{SubId := Consumer0} ->
                 %% FIXME check consumer is SAC, to avoid changing a regular consumer
-                Consumer1 = Consumer0#consumer{configuration = #consumer_configuration{active = Active}},
+                #consumer{log = Log0} = Consumer0,
+                Log1 =
+                    case {Active, Log0} of
+                        {false, undefined} ->
+                            undefined;
+                        {false, L} ->
+                            rabbit_log:debug("Closing Osiris segment of subscription ~p for "
+                                             "now",
+                                             [SubId]),
+                            osiris_log:close(L),
+                            undefined;
+                        _ ->
+                            Log0
+                    end,
+                Consumer1 = Consumer0#consumer{configuration = #consumer_configuration{active = Active}, log = Log1},
+
                 Conn1 =
                     maybe_notify_consumer(Transport,
                                           Connection0,
@@ -2413,7 +2428,7 @@ handle_frame_post_auth(Transport,
                          ResponseOffsetSpec}}) ->
     %% FIXME check response code? It's supposed to be OK all the time.
     case maps:take(CorrelationId, Requests0) of
-        {{{subscription_id, SubscriptionId}, {side_effects, _SideEffects}},
+        {{{subscription_id, SubscriptionId}, {side_effects, SideEffects}},
          Rs} ->
             rabbit_log:debug("Received consumer update response for subscription ~p",
                              [SubscriptionId]),
@@ -2499,6 +2514,7 @@ handle_frame_post_auth(Transport,
                                          [SubscriptionId]),
                         Consumers
                 end,
+            apply_sac_side_effects(SideEffects),
 
             {Connection#stream_connection{outstanding_requests = Rs},
              State#stream_connection_state{consumers = Consumers1}};
@@ -2720,6 +2736,17 @@ partition_index(VirtualHost, Stream, Properties) ->
         _ ->
             -1
     end.
+
+apply_sac_side_effects([]) ->
+    ok;
+apply_sac_side_effects([Effect | T]) ->
+    apply_sac_side_effect(Effect),
+    apply_sac_side_effects(T).
+
+apply_sac_side_effect({message, Pid, Msg}) ->
+    Pid ! Msg;
+apply_sac_side_effect(Effect) ->
+    rabbit_log:warning("Unknown SAC side effect: ~p", [Effect]).
 
 notify_connection_closed(#statem_data{connection =
                                           #stream_connection{name = Name,

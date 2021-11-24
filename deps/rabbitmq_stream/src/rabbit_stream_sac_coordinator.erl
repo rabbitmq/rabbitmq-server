@@ -137,6 +137,12 @@ handle_call({register_consumer,
     %% to make sure to get rid of zombies
     %%
     %% TODO monitor streams and virtual hosts as well
+    rabbit_log:debug("New consumer ~p ~p in group ~p, partition index "
+                     "is ~p",
+                     [ConnectionPid,
+                      SubscriptionId,
+                      {VirtualHost, Stream, ConsumerName},
+                      PartitionIndex]),
     StreamGroups1 =
         maybe_create_group(VirtualHost,
                            Stream,
@@ -145,6 +151,8 @@ handle_call({register_consumer,
                            StreamGroups0),
     Group0 =
         lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups1),
+
+    rabbit_log:debug("Group: ~p", [Group0]),
     FormerActive =
         case lookup_active_consumer(Group0) of
             {value, FA} ->
@@ -158,6 +166,7 @@ handle_call({register_consumer,
                   active = false},
     Group1 = add_to_group(Consumer0, Group0),
     Group2 = compute_active_consumer(Group1),
+    rabbit_log:debug("Consumers in group: ~p", [Group2]),
     StreamGroups2 =
         update_groups(VirtualHost,
                       Stream,
@@ -197,7 +206,7 @@ handle_call({unregister_consumer,
                                     false ->
                                         undefined
                                 end,
-                            notify_consumers(Consumer, NewActive, G2),
+                            notify_consumers(undefined, NewActive, G2),
                             G2;
                         false ->
                             rabbit_log:debug("Could not find consumer ~p ~p in group ~p ~p ~p",
@@ -244,7 +253,7 @@ remove_from_group(Consumer, #group{consumers = Consumers} = Group) ->
 
 compute_active_consumer(#group{consumers = []} = Group) ->
     Group;
-compute_active_consumer(#group{partition_index = -1,
+compute_active_consumer(#group{partition_index = _,
                                consumers = [Consumer0]} =
                             Group0) ->
     Consumer1 = Consumer0#consumer{active = true},
@@ -254,7 +263,21 @@ compute_active_consumer(#group{partition_index = -1,
                             Group0) ->
     Consumer1 = Consumer0#consumer{active = true},
     Consumers = lists:map(fun(C) -> C#consumer{active = false} end, T),
-    Group0#group{consumers = [Consumer1] ++ Consumers}.
+    Group0#group{consumers = [Consumer1] ++ Consumers};
+compute_active_consumer(#group{partition_index = PartitionIndex,
+                               consumers = Consumers0} =
+                            Group) ->
+    ActiveConsumerIndex = PartitionIndex rem length(Consumers0),
+    {_, Consumers1} =
+        lists:foldr(fun (C0, {Index, Cs}) when Index == ActiveConsumerIndex ->
+                            C1 = C0#consumer{active = true},
+                            {Index + 1, [C1 | Cs]};
+                        (C0, {Index, Cs}) ->
+                            C1 = C0#consumer{active = false},
+                            {Index + 1, [C1 | Cs]}
+                    end,
+                    {0, []}, Consumers0),
+    Group#group{consumers = Consumers1}.
 
 lookup_consumer(ConnectionPid, SubscriptionId,
                 #group{consumers = Consumers}) ->
@@ -294,7 +317,27 @@ notify_consumers(_FormerActive,
     ConnectionPid
     ! {sac,
        {{subscription_id, SubscriptionId}, {active, false},
-        {side_effects, []}}}.
+        {side_effects, []}}};
+notify_consumers(undefined = _FormerActive,
+                 #consumer{pid = ConnectionPid,
+                           subscription_id = SubscriptionId},
+                 _Group) ->
+    ConnectionPid
+    ! {sac,
+       {{subscription_id, SubscriptionId}, {active, true},
+        {side_effects, []}}};
+notify_consumers(#consumer{pid = FormerConnPid,
+                           subscription_id = FormerSubId},
+                 #consumer{pid = NewConnPid, subscription_id = NewSubId},
+                 _Group) ->
+    FormerConnPid
+    ! {sac,
+       {{subscription_id, FormerSubId}, {active, false},
+        {side_effects,
+         [{message, NewConnPid,
+           {sac,
+            {{subscription_id, NewSubId}, {active, true},
+             {side_effects, []}}}}]}}}.
 
 update_groups(VirtualHost,
               Stream,
