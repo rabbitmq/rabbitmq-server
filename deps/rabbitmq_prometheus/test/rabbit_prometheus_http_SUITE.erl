@@ -54,7 +54,10 @@ groups() ->
                                      queue_consumer_count_all_vhosts_per_object_test,
                                      queue_coarse_metrics_per_object_test,
                                      queue_metrics_per_object_test,
-                                     queue_consumer_count_and_queue_metrics_mutually_exclusive_test
+                                     queue_consumer_count_and_queue_metrics_mutually_exclusive_test,
+                                     vhost_status_metric,
+                                     exchange_bindings_metric,
+                                     exchange_names_metric
         ]}
     ].
 
@@ -120,6 +123,14 @@ init_per_group(detailed_metrics, Config0) ->
                                      amqp_channel:cast(Ch,
                                                        #'basic.publish'{routing_key = QName},
                                                        #amqp_msg{payload = <<"msg">>})
+                             end, lists:seq(1, MsgNum) ),
+              ExDirect = <<QName/binary, "-direct-exchange">>,
+              #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = ExDirect}),
+              ExTopic = <<QName/binary, "-topic-exchange">>,
+              #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = ExTopic, type = <<"topic">>}),
+              #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = QName, exchange = ExDirect, routing_key = QName}),
+              lists:foreach( fun (Idx) ->
+                                     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = QName, exchange = ExTopic, routing_key = integer_to_binary(Idx)})
                              end, lists:seq(1, MsgNum) )
       end)()
      || {VHost, Ch, MsgNum} <- [{<<"/">>, DefaultCh, 3}, {<<"vhost-1">>, VHost1Ch, 7}, {<<"vhost-2">>, VHost2Ch, 11}],
@@ -487,6 +498,51 @@ detailed_metrics_no_families_enabled_by_default(Config) ->
     {_, Body} = http_get_with_pal(Config, "/metrics/detailed", [], 200),
     ?assertEqual(#{}, parse_response(Body)),
     ok.
+
+vhost_status_metric(Config) ->
+    {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=vhost_status", [], 200),
+    Expected = #{rabbitmq_cluster_vhost_status =>
+                     #{#{vhost => "vhost-1"} => [1],
+                       #{vhost => "vhost-2"} => [1],
+                       #{vhost => "/"} => [1]}},
+    ?assertEqual(Expected, parse_response(Body1)),
+    ok.
+
+exchange_bindings_metric(Config) ->
+    {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=exchange_bindings", [], 200),
+
+    Bindings = map_get(rabbitmq_cluster_exchange_bindings, parse_response(Body1)),
+    ?assertEqual([11], map_get(#{vhost=>"vhost-2",exchange=>"vhost-2-queue-with-messages-topic-exchange",type=>"topic"}, Bindings)),
+    ?assertEqual([1],  map_get(#{vhost=>"vhost-2",exchange=>"vhost-2-queue-with-messages-direct-exchange",type=>"direct"}, Bindings)),
+    ok.
+
+exchange_names_metric(Config) ->
+    {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=exchange_names", [], 200),
+
+    Names = maps:filter(
+              fun
+                  (#{exchange := [$a, $m, $q|_]}, _) ->
+                      false;
+                  (_, _) ->
+                      true
+              end,
+              map_get(rabbitmq_cluster_exchange_name, parse_response(Body1))),
+
+    ?assertEqual(#{ #{vhost=>"vhost-2",exchange=>"vhost-2-queue-with-messages-topic-exchange",type=>"topic"} => [1],
+                    #{vhost=>"vhost-2",exchange=>"vhost-2-queue-with-messages-direct-exchange",type=>"direct"} => [1],
+                    #{vhost=>"vhost-1",exchange=>"vhost-1-queue-with-messages-topic-exchange",type=>"topic"} => [1],
+                    #{vhost=>"vhost-1",exchange=>"vhost-1-queue-with-messages-direct-exchange",type=>"direct"} => [1],
+                    #{vhost=>"/",exchange=>"default-queue-with-messages-topic-exchange",type=>"topic"} => [1],
+                    #{vhost=>"/",exchange=>"default-queue-with-messages-direct-exchange",type=>"direct"} => [1],
+                    #{vhost=>"vhost-2",exchange=>"vhost-2-queue-with-consumer-topic-exchange",type=>"topic"} => [1],
+                    #{vhost=>"vhost-2",exchange=>"vhost-2-queue-with-consumer-direct-exchange",type=>"direct"} => [1],
+                    #{vhost=>"vhost-1",exchange=>"vhost-1-queue-with-consumer-topic-exchange",type=>"topic"} => [1],
+                    #{vhost=>"vhost-1",exchange=>"vhost-1-queue-with-consumer-direct-exchange",type=>"direct"} => [1],
+                    #{vhost=>"/",exchange=>"default-queue-with-consumer-topic-exchange",type=>"topic"} => [1],
+                    #{vhost=>"/",exchange=>"default-queue-with-consumer-direct-exchange",type=>"direct"} => [1]
+                  }, Names),
+    ok.
+
 
 http_get(Config, ReqHeaders, CodeExp) ->
     Path = proplists:get_value(prometheus_path, Config, "/metrics"),

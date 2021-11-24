@@ -29,6 +29,7 @@
 
 %% Used by `/metrics/detailed` endpoint
 -define(DETAILED_METRIC_NAME_PREFIX, <<"rabbitmq_detailed_">>).
+-define(CLUSTER_METRIC_NAME_PREFIX, <<"rabbitmq_cluster_">>).
 
 %% ==The source of these metrics can be found in the rabbit_core_metrics module==
 %% The relevant files are:
@@ -214,6 +215,19 @@
     ]}
 ]).
 
+%% Metrics that can be only requested through `/metrics/detailed`
+-define(METRICS_CLUSTER,[
+    {vhost_status, [
+        {2, undefined, vhost_status, gauge, "Whether a given vhost is running"}
+    ]},
+    {exchange_bindings, [
+        {2, undefined, exchange_bindings, gauge, "Number of bindings for an exchange. This value is cluster-wide."}
+    ]},
+    {exchange_names, [
+        {2, undefined, exchange_name, gauge, "Enumerates exchanges without any additional info. This value is cluster-wide. A cheaper alternative to `exchange_bindings`"}
+    ]}
+]).
+
 -define(TOTALS, [
     %% ordering differs from metrics above, refer to list comprehension
     {connection_created, connections, gauge, "Connections currently open"},
@@ -232,7 +246,8 @@ register() ->
 deregister_cleanup(_) -> ok.
 
 collect_mf('detailed', Callback) ->
-    collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), queues_filter_from_pdict(), enabled_mfs_from_pdict(), Callback),
+    collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), queues_filter_from_pdict(), enabled_mfs_from_pdict(?METRICS_RAW), Callback),
+    collect(true, ?CLUSTER_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), queues_filter_from_pdict(),  enabled_mfs_from_pdict(?METRICS_CLUSTER), Callback),
     %% identity is here to enable filtering on a cluster name (as already happens in existing dashboards)
     emit_identity_info(Callback),
     ok;
@@ -383,6 +398,14 @@ collect_metrics(_, {Type, Fun, Items}) ->
 labels(Item) ->
     label(element(1, Item)).
 
+label(L) when is_binary(L) ->
+    L;
+label(M) when is_map(M) ->
+    maps:fold(fun (K, V, Acc = <<>>) ->
+                      <<Acc/binary, K/binary, "=\"", V/binary, "\"">>;
+                  (K, V, Acc) ->
+                      <<Acc/binary, ",", K/binary, "=\"", V/binary, "\"">>
+              end, <<>>, M);
 label(#resource{virtual_host = VHost, kind = exchange, name = Name}) ->
     <<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\"">>;
 label(#resource{virtual_host = VHost, kind = queue, name = Name}) ->
@@ -589,6 +612,46 @@ get_data(MF, true, VHostsFilter, _) when is_map(VHostsFilter), MF == queue_metri
               end, [], Table);
 get_data(queue_consumer_count, true, _, _) ->
     ets:tab2list(queue_metrics);
+get_data(vhost_status, _, _, _) ->
+    [ { #{<<"vhost">> => VHost},
+        case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
+            true -> 1;
+            false -> 0
+        end}
+      || VHost <- rabbit_vhost:list()  ];
+get_data(exchange_bindings, _, _, _) ->
+    Exchanges = lists:foldl(fun
+                                (#exchange{internal = true}, Acc) ->
+                                    Acc;
+                                (#exchange{name = #resource{name = <<>>}}, Acc) ->
+                                    Acc;
+                                (#exchange{name = EName, type = EType}, Acc) ->
+                                    maps:put(EName, #{type => atom_to_binary(EType), binding_count => 0}, Acc)
+                            end, #{}, rabbit_exchange:list()),
+    WithCount = ets:foldl(
+                  fun (#route{binding = #binding{source = EName}}, Acc) ->
+                          case maps:is_key(EName, Acc) of
+                              false -> Acc;
+                              true ->
+                                  maps:update_with(EName, fun (R = #{binding_count := Cnt}) ->
+                                                                  R#{binding_count => Cnt + 1}
+                                                          end, Acc)
+                          end
+                  end, Exchanges, rabbit_route),
+    maps:fold(fun(#resource{virtual_host = VHost, name = Name}, #{type := Type, binding_count := Bindings}, Acc) ->
+                      [{<<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\",type=\"", Type/binary, "\"">>,
+                        Bindings}|Acc]
+              end, [], WithCount);
+get_data(exchange_names, _, _, _) ->
+    lists:foldl(fun
+                    (#exchange{internal = true}, Acc) ->
+                        Acc;
+                    (#exchange{name = #resource{name = <<>>}}, Acc) ->
+                        Acc;
+                    (#exchange{name = #resource{virtual_host = VHost, name = Name}, type = EType}, Acc) ->
+                        Label = <<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\",type=\"", (atom_to_binary(EType))/binary, "\"">>,
+                        [{Label, 1}|Acc]
+                end, [], rabbit_exchange:list());
 get_data(Table, _, _, _) ->
     ets:tab2list(Table).
 
@@ -642,13 +705,13 @@ sum('', B) ->
 sum(A, B) ->
     A + B.
 
-enabled_mfs_from_pdict() ->
+enabled_mfs_from_pdict(AllMFs) ->
     case get(prometheus_mf_filter) of
         undefined ->
             [];
         MFNames ->
             MFNameSet = sets:from_list(MFNames),
-            [ MF || MF = {Table, _} <- ?METRICS_RAW, sets:is_element(Table, MFNameSet) ]
+            [ MF || MF = {Table, _} <- AllMFs, sets:is_element(Table, MFNameSet) ]
     end.
 
 vhosts_filter_from_pdict() ->
