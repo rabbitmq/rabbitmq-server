@@ -252,6 +252,7 @@ maybe_mark_unconfirmed(_, _, State) ->
 sync(State = #qs{ confirms = Confirms,
                   on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State]),
+    flush_write_fd(State),
     case gb_sets:is_empty(Confirms) of
         true ->
             State;
@@ -330,8 +331,14 @@ get_read_fd(Segment, State = #qs{ read_fd = OldFd }) ->
             {{error, no_file}, State}
     end.
 
-maybe_flush_write_fd(Segment, #qs{ write_segment = Segment,
-                                   write_fd = Fd }) ->
+maybe_flush_write_fd(Segment, State = #qs{ write_segment = Segment }) ->
+    flush_write_fd(State);
+maybe_flush_write_fd(_, _) ->
+    ok.
+
+flush_write_fd(#qs{ write_fd = undefined }) ->
+    ok;
+flush_write_fd(#qs{ write_fd = Fd }) ->
     %% We tell the pid handling delayed writes to flush to disk
     %% without issuing a separate command to the fd. We need
     %% to do this in order to read from a separate fd that
@@ -340,9 +347,7 @@ maybe_flush_write_fd(Segment, #qs{ write_segment = Segment,
         module = raw_file_io_delayed, %% assert
         data = #{ pid := Pid }
     } = Fd,
-    gen_statem:call(Pid, '$synchronous_flush');
-maybe_flush_write_fd(_, _) ->
-    ok.
+    gen_statem:call(Pid, '$synchronous_flush').
 
 -spec check_msg_on_disk(rabbit_variable_queue:seq_id(), msg_location(), State)
         -> {ok | {error, any()}, State} when State::state().
