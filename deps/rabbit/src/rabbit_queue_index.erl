@@ -653,6 +653,10 @@ init_clean(RecoveredCounts, State) ->
     %% wrong thing to return
     {undefined, undefined, State1 # qistate { segments = Segments1 }}.
 
+-define(RECOVER_COUNT, 1).
+-define(RECOVER_BYTES, 2).
+-define(RECOVER_COUNTER_SIZE, 2).
+
 init_dirty(CleanShutdown, ContainsCheckFun, State, Context) ->
     %% Recover the journal completely. This will also load segments
     %% which have entries in the journal and remove duplicates. The
@@ -681,48 +685,75 @@ init_dirty(CleanShutdown, ContainsCheckFun, State, Context) ->
           end, {Segments, 0, 0, 0}, all_segment_nums(State1)),
     State2 = maybe_flush_journal(State1 #qistate { segments = Segments1,
                                                    dirty_count = DirtyCount }),
-    {ConvertCount, ConvertBytes, State3} = case Context of
+    case Context of
         convert ->
-            {0, 0, State2};
+            {Count, Bytes, State2};
         main ->
             %% We try to see if there are segment files from the v2 index.
             case rabbit_file:wildcard(".*\\.qi", Dir) of
                 %% We are recovering a dirty queue that was using the v2 index or in
                 %% the process of converting from v2 to v1.
                 [_|_] ->
-                    recover_index_v2_dirty(State2, ContainsCheckFun);
+                    #resource{virtual_host = VHost, name = QName} = State2#qistate.queue_name,
+                    rabbit_log:info("Queue ~s in vhost ~s recovered ~b total messages before resuming convert",
+                                    [QName, VHost, Count]),
+                    CountersRef = counters:new(?RECOVER_COUNTER_SIZE, []),
+                    State3 = recover_index_v2_dirty(State2, ContainsCheckFun, CountersRef),
+                    {Count + counters:get(CountersRef, ?RECOVER_COUNT),
+                     Bytes + counters:get(CountersRef, ?RECOVER_BYTES),
+                     State3};
                 %% Otherwise keep default values.
                 [] ->
-                    {0, 0, State2}
+                    {Count, Bytes, State2}
             end
-    end,
-    {Count + ConvertCount, Bytes + ConvertBytes, State3}.
+    end.
 
 recover_index_v2_dirty(State0 = #qistate { queue_name = Name,
                                            on_sync = OnSyncFun,
                                            on_sync_msg = OnSyncMsgFun },
-                       ContainsCheckFun) ->
+                       ContainsCheckFun, CountersRef) ->
     #resource{virtual_host = VHost, name = QName} = Name,
     rabbit_log:info("Converting dirty queue ~s in vhost ~s from v2 to v1", [QName, VHost]),
-    {Count, Bytes, V2State} = rabbit_classic_queue_index_v2:recover(Name, non_clean_shutdown, true,
-                                                                    ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
-                                                                    convert),
-    State = recover_index_v2_common(State0, V2State),
+    %% We cannot use the counts/bytes because some messages may be in both
+    %% the v1 and v2 indexes after a crash.
+    {_, _, V2State} = rabbit_classic_queue_index_v2:recover(Name, non_clean_shutdown, true,
+                                                            ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
+                                                            convert),
+    State = recover_index_v2_common(State0, V2State, CountersRef),
     rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v2 to v1",
-                    [QName, VHost, Count]),
-    {Count, Bytes, State}.
+                    [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
+    State.
 
 %% At this point all messages are persistent because transient messages
 %% were dropped during the v2 index recovery.
 recover_index_v2_common(State0 = #qistate { queue_name = Name, dir = Dir },
-                        V2State) ->
+                        V2State, CountersRef) ->
     %% Use a temporary per-queue store state to read embedded messages.
     StoreState0 = rabbit_classic_queue_store_v2:init(Name, fun(_, _) -> ok end),
     %% Go through the v2 index and publish messages to v1 index.
     {LoSeqId, HiSeqId, _} = rabbit_classic_queue_index_v2:bounds(V2State),
+    %% When resuming after a crash we need to double check the messages that are both
+    %% in the v1 and v2 index (effectively the messages below the upper bound of the
+    %% v1 index that are about to be written to it).
+    {_, V1HiSeqId, _} = bounds(State0),
+    SkipFun = fun
+        (SeqId, FunState0) when SeqId < V1HiSeqId ->
+            case rabbit_queue_index:read(SeqId, SeqId + 1, FunState0) of
+                %% Message already exists, skip.
+                {[_], FunState} ->
+                    {skip, FunState};
+                %% Message doesn't exist, write.
+                {[], FunState} ->
+                    {write, FunState}
+            end;
+        %% Message is out of bounds of the v1 index.
+        (_, FunState) ->
+            {write, FunState}
+    end,
     %% We use a common function also used with conversion on policy change.
     {State1, _StoreState} = rabbit_variable_queue:convert_from_v2_to_v1_loop(Name, State0, V2State, StoreState0,
-                                                                            LoSeqId, HiSeqId),
+                                                                            {CountersRef, ?RECOVER_COUNT, ?RECOVER_BYTES},
+                                                                            LoSeqId, HiSeqId, SkipFun),
     %% Delete any remaining v2 index files.
     OldFiles = rabbit_file:wildcard(".*\\.qi", Dir)
             ++ rabbit_file:wildcard(".*\\.qs", Dir),
