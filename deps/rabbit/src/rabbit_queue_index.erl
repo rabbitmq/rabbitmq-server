@@ -738,7 +738,7 @@ recover_index_v2_common(State0 = #qistate { queue_name = Name, dir = Dir },
     {_, V1HiSeqId, _} = bounds(State0),
     SkipFun = fun
         (SeqId, FunState0) when SeqId < V1HiSeqId ->
-            case rabbit_queue_index:read(SeqId, SeqId + 1, FunState0) of
+            case read(SeqId, SeqId + 1, FunState0) of
                 %% Message already exists, skip.
                 {[_], FunState} ->
                     {skip, FunState};
