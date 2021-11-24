@@ -145,25 +145,30 @@ handle_call({register_consumer,
                            StreamGroups0),
     Group0 =
         lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups1),
-    Consumer =
+    FormerActive =
+        case lookup_active_consumer(Group0) of
+            {value, FA} ->
+                FA;
+            false ->
+                undefined
+        end,
+    Consumer0 =
         #consumer{pid = ConnectionPid,
                   subscription_id = SubscriptionId,
                   active = false},
-    Group1 = add_to_group(Consumer, Group0),
-    Active = compute_active_flag(Consumer, Group1),
-    #group{consumers = Consumers0} = Group1,
-    Consumers1 = update_active_flag(Consumer, Active, Consumers0),
+    Group1 = add_to_group(Consumer0, Group0),
+    Group2 = compute_active_consumer(Group1),
     StreamGroups2 =
         update_groups(VirtualHost,
                       Stream,
                       ConsumerName,
-                      Group1#group{consumers = Consumers1},
+                      Group2,
                       StreamGroups1),
-    ConnectionPid
-    ! {sac,
-       {{subscription_id, SubscriptionId}, {active, Active},
-        {side_effects, []}}},
 
+    {value, Consumer1} =
+        lookup_consumer(ConnectionPid, SubscriptionId, Group2),
+    notify_consumers(FormerActive, Consumer1, Group2),
+    #consumer{active = Active} = Consumer1,
     {reply, {ok, Active}, State#state{groups = StreamGroups2}};
 handle_call({unregister_consumer,
              VirtualHost,
@@ -177,62 +182,36 @@ handle_call({unregister_consumer,
             error ->
                 State0;
             Group0 ->
-                #group{consumers = Consumers0} = Group0,
-                Consumers1 =
-                    case lists:search(fun(#consumer{pid = ConnPid,
-                                                    subscription_id = SubId}) ->
-                                         ConnPid == ConnectionPid
-                                         andalso SubId == SubscriptionId
-                                      end,
-                                      Consumers0)
+                Group1 =
+                    case lookup_consumer(ConnectionPid, SubscriptionId, Group0)
                     of
                         {value, Consumer} ->
                             rabbit_log:debug("Unregistering consumer ~p from group",
                                              [Consumer]),
-                            case Consumer of
-                                #consumer{active = true} ->
-                                    rabbit_log:debug("Unregistering the active consumer"),
-                                    %% this is active one, remove it and notify the new active one if group not empty
-                                    Cs = lists:delete(Consumer, Consumers0),
-                                    case Cs of
-                                        [] ->
-                                            %% group is empty now
-                                            rabbit_log:debug("Group is now empty"),
-                                            Cs;
-                                        _ ->
-                                            %% get new active one (the first) and notify it
-                                            NewActive = lists:nth(1, Cs),
-                                            #consumer{pid = Pid,
-                                                      subscription_id = SubId} =
-                                                NewActive,
-                                            rabbit_log:debug("New active consumer is ~p ~p",
-                                                             [Pid, SubId]),
-                                            Pid
-                                            ! {sac,
-                                               {{subscription_id, SubId},
-                                                {active, true},
-                                                {side_effects, []}}},
-                                            update_active_flag(NewActive, true,
-                                                               Cs)
-                                    end;
-                                _ActiveConsumer ->
-                                    rabbit_log:debug("Not the active consumer, just removing it from "
-                                                     "the group"),
-                                    lists:delete(Consumer, Consumers0)
-                            end;
-                        error ->
+                            G1 = remove_from_group(Consumer, Group0),
+                            G2 = compute_active_consumer(G1),
+                            NewActive =
+                                case lookup_active_consumer(G2) of
+                                    {value, AC} ->
+                                        AC;
+                                    false ->
+                                        undefined
+                                end,
+                            notify_consumers(Consumer, NewActive, G2),
+                            G2;
+                        false ->
                             rabbit_log:debug("Could not find consumer ~p ~p in group ~p ~p ~p",
                                              [ConnectionPid,
                                               SubscriptionId,
                                               VirtualHost,
                                               Stream,
                                               ConsumerName]),
-                            Consumers0
+                            Group0
                     end,
                 SGS = update_groups(VirtualHost,
                                     Stream,
                                     ConsumerName,
-                                    Group0#group{consumers = Consumers1},
+                                    Group1,
                                     StreamGroups0),
                 State0#state{groups = SGS}
         end,
@@ -260,14 +239,62 @@ lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups) ->
 add_to_group(Consumer, #group{consumers = Consumers} = Group) ->
     Group#group{consumers = Consumers ++ [Consumer]}.
 
-compute_active_flag(Consumer,
-                    #group{partition_index = -1, consumers = [Consumer]}) ->
-    true;
-compute_active_flag(Consumer,
-                    #group{partition_index = -1, consumers = [Consumer | _]}) ->
-    true;
-compute_active_flag(_, _) ->
-    false.
+remove_from_group(Consumer, #group{consumers = Consumers} = Group) ->
+    Group#group{consumers = lists:delete(Consumer, Consumers)}.
+
+compute_active_consumer(#group{consumers = []} = Group) ->
+    Group;
+compute_active_consumer(#group{partition_index = -1,
+                               consumers = [Consumer0]} =
+                            Group0) ->
+    Consumer1 = Consumer0#consumer{active = true},
+    Group0#group{consumers = [Consumer1]};
+compute_active_consumer(#group{partition_index = -1,
+                               consumers = [Consumer0 | T]} =
+                            Group0) ->
+    Consumer1 = Consumer0#consumer{active = true},
+    Consumers = lists:map(fun(C) -> C#consumer{active = false} end, T),
+    Group0#group{consumers = [Consumer1] ++ Consumers}.
+
+lookup_consumer(ConnectionPid, SubscriptionId,
+                #group{consumers = Consumers}) ->
+    lists:search(fun(#consumer{pid = ConnPid, subscription_id = SubId}) ->
+                    ConnPid == ConnectionPid andalso SubId == SubscriptionId
+                 end,
+                 Consumers).
+
+lookup_active_consumer(#group{consumers = Consumers}) ->
+    lists:search(fun(#consumer{active = Active}) -> Active end,
+                 Consumers).
+
+notify_consumers(_, _, #group{consumers = []}) ->
+    ok;
+notify_consumers(_FormerActive,
+                 #consumer{pid = ConnectionPid,
+                           subscription_id = SubscriptionId} =
+                     NewConsumer,
+                 #group{partition_index = -1, consumers = [NewConsumer]}) ->
+    ConnectionPid
+    ! {sac,
+       {{subscription_id, SubscriptionId}, {active, true},
+        {side_effects, []}}};
+notify_consumers(_FormerActive,
+                 #consumer{pid = ConnectionPid,
+                           subscription_id = SubscriptionId} =
+                     NewConsumer,
+                 #group{partition_index = -1, consumers = [NewConsumer | _]}) ->
+    ConnectionPid
+    ! {sac,
+       {{subscription_id, SubscriptionId}, {active, true},
+        {side_effects, []}}};
+notify_consumers(_FormerActive,
+                 #consumer{pid = ConnectionPid,
+                           subscription_id = SubscriptionId},
+                 #group{partition_index = -1, consumers = _}) ->
+    ConnectionPid
+    ! {sac,
+       {{subscription_id, SubscriptionId}, {active, false},
+        {side_effects, []}}}.
 
 update_active_flag(Consumer, Active, Consumers) ->
     lists:foldl(fun (C, Acc) when C == Consumer ->
