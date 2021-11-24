@@ -239,11 +239,10 @@ Group `channel_queue_exchange_metrics`:
 
 ### Virtual hosts and exchange metrics
 
-These can make sense in some scenarios, e.g. when vhost/exchanges are
-created using self-service automation. They are also a bit different
-from the rest of the metrics, as they not exactly per-node metrics,
-but cluster wide. So any aggregations of these values accross multiple
-nodes make no sense.
+These additional metrics can be useful when virtual hosts or exchanges are
+created on a shared cluster in a self-service way. They are different
+from the rest of the metrics: they are cluster-wide and not node-local.
+These metrics **must not** be aggregated across cluster nodes.
 
 Group `vhost_status`:
 
