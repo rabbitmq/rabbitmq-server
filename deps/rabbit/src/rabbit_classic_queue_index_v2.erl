@@ -471,10 +471,28 @@ recover_index_v1_common(State0 = #qi{ queue_name = Name, dir = Dir },
     StoreState0 = rabbit_classic_queue_store_v2:init(Name, fun(_, _) -> ok end),
     %% Go through the v1 index and publish messages to the v2 index.
     {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1State),
+    %% When resuming after a crash we need to double check the messages that are both
+    %% in the v1 and v2 index (effectively the messages below the upper bound of the
+    %% v1 index that are about to be written to it).
+    {_, V2HiSeqId, _} = bounds(State0),
+    SkipFun = fun
+        (SeqId, FunState0) when SeqId < V2HiSeqId ->
+            case read(SeqId, SeqId + 1, FunState0) of
+                %% Message already exists, skip.
+                {[_], FunState} ->
+                    {skip, FunState};
+                %% Message doesn't exist, write.
+                {[], FunState} ->
+                    {write, FunState}
+            end;
+        %% Message is out of bounds of the v1 index.
+        (_, FunState) ->
+            {write, FunState}
+    end,
     %% We use a common function also used with conversion on policy change.
     {State1, StoreState} = rabbit_variable_queue:convert_from_v1_to_v2_loop(Name, V1State, State0, StoreState0,
                                                                             {CountersRef, ?RECOVER_COUNT, ?RECOVER_BYTES},
-                                                                            LoSeqId, HiSeqId),
+                                                                            LoSeqId, HiSeqId, SkipFun),
     %% Terminate the v2 store client.
     _ = rabbit_classic_queue_store_v2:terminate(StoreState),
     %% Close the v1 index journal handle if any.
