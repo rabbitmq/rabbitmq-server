@@ -246,21 +246,21 @@ These metrics **must not** be aggregated across cluster nodes.
 
 Group `vhost_status`:
 
-| Metric                         | Description                      |
-|--------------------------------|----------------------------------|
-| rabbitmq_detailed_vhost_status | Whether a given vhost is running |
+| Metric                        | Description                      |
+|-------------------------------|----------------------------------|
+| rabbitmq_cluster_vhost_status | Whether a given vhost is running |
 
 Group `exchange_names`:
 
-| Metric                          | Description                                                                                              |
-|---------------------------------|----------------------------------------------------------------------------------------------------------|
-| rabbitmq_detailed_exchange_name | Enumerates exchanges without any additional info. This value is cluster-wide. A cheaper alternative to `exchange_bindings` |
+| Metric                         | Description                                                                                                                |
+|--------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| rabbitmq_cluster_exchange_name | Enumerates exchanges without any additional info. This value is cluster-wide. A cheaper alternative to `exchange_bindings` |
 
 Group `exchange_bindings`:
 
-| Metric                              | Description                                                            |
-|-------------------------------------|------------------------------------------------------------------------|
-| rabbitmq_detailed_exchange_bindings | Number of bindings for an exchange. This value is cluster-wide. |
+| Metric                             | Description                                                     |
+|------------------------------------|-----------------------------------------------------------------|
+| rabbitmq_cluster_exchange_bindings | Number of bindings for an exchange. This value is cluster-wide. |
 
 
 

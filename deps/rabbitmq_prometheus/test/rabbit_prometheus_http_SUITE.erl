@@ -501,7 +501,7 @@ detailed_metrics_no_families_enabled_by_default(Config) ->
 
 vhost_status_metric(Config) ->
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=vhost_status", [], 200),
-    Expected = #{rabbitmq_detailed_vhost_status =>
+    Expected = #{rabbitmq_cluster_vhost_status =>
                      #{#{vhost => "vhost-1"} => [1],
                        #{vhost => "vhost-2"} => [1],
                        #{vhost => "/"} => [1]}},
@@ -511,7 +511,7 @@ vhost_status_metric(Config) ->
 exchange_bindings_metric(Config) ->
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=exchange_bindings", [], 200),
 
-    Bindings = map_get(rabbitmq_detailed_exchange_bindings, parse_response(Body1)),
+    Bindings = map_get(rabbitmq_cluster_exchange_bindings, parse_response(Body1)),
     ?assertEqual([11], map_get(#{vhost=>"vhost-2",exchange=>"vhost-2-queue-with-messages-topic-exchange",type=>"topic"}, Bindings)),
     ?assertEqual([1],  map_get(#{vhost=>"vhost-2",exchange=>"vhost-2-queue-with-messages-direct-exchange",type=>"direct"}, Bindings)),
     ok.
@@ -526,7 +526,7 @@ exchange_names_metric(Config) ->
                   (_, _) ->
                       true
               end,
-              map_get(rabbitmq_detailed_exchange_name, parse_response(Body1))),
+              map_get(rabbitmq_cluster_exchange_name, parse_response(Body1))),
 
     ?assertEqual(#{ #{vhost=>"vhost-2",exchange=>"vhost-2-queue-with-messages-topic-exchange",type=>"topic"} => [1],
                     #{vhost=>"vhost-2",exchange=>"vhost-2-queue-with-messages-direct-exchange",type=>"direct"} => [1],
