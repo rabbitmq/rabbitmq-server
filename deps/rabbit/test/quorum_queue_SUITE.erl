@@ -1973,7 +1973,7 @@ subscribe_redelivery_limit(Config) ->
     receive
         {#'basic.deliver'{redelivered  = true}, #amqp_msg{}} ->
             throw(unexpected_redelivery)
-    after 2000 ->
+    after 5000 ->
             ok
     end.
 
@@ -2019,7 +2019,7 @@ subscribe_redelivery_policy(Config) ->
     receive
         {#'basic.deliver'{redelivered  = true}, #amqp_msg{}} ->
             throw(unexpected_redelivery)
-    after 2000 ->
+    after 5000 ->
             ok
     end,
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"delivery-limit">>).
@@ -2778,7 +2778,7 @@ cancel_consumer_gh_3729(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
             R = #'basic.reject'{delivery_tag = DeliveryTag, requeue = true},
             ok = amqp_channel:cast(Ch, R)
-    after 1000 ->
+    after 5000 ->
         flush(100),
         ct:fail("basic.deliver timeout")
     end,
@@ -2790,7 +2790,7 @@ cancel_consumer_gh_3729(Config) ->
 
     receive
         #'basic.cancel_ok'{consumer_tag = <<"ctag">>} -> ok
-    after 1000 ->
+    after 5000 ->
         flush(100),
         ct:fail("basic.cancel_ok timeout")
     end,
@@ -2956,7 +2956,7 @@ validate_queue(Ch, Queue, ExpectedMsgs) ->
               #amqp_msg{payload = M}} ->
                  amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
                                                     multiple = false})
-         after 2000 ->
+         after 5000 ->
                    flush(10),
                    exit({validate_queue_timeout, M})
          end
