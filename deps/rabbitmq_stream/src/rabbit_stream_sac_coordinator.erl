@@ -296,14 +296,6 @@ notify_consumers(_FormerActive,
        {{subscription_id, SubscriptionId}, {active, false},
         {side_effects, []}}}.
 
-update_active_flag(Consumer, Active, Consumers) ->
-    lists:foldl(fun (C, Acc) when C == Consumer ->
-                        Acc ++ [Consumer#consumer{active = Active}];
-                    (C, Acc) ->
-                        Acc ++ [C]
-                end,
-                [], Consumers).
-
 update_groups(VirtualHost,
               Stream,
               ConsumerName,
