@@ -2809,7 +2809,6 @@ cancel_consumer_gh_3729(Config) ->
             #'queue.declare_ok'{queue = QQ,
                                 message_count = MC,
                                 consumer_count = CC} = amqp_channel:call(Ch, D),
-            ct:pal("MC ~w CC ~w", [MC, CC]),
             MC =:= 1 andalso CC =:= 0
         end,
     wait_until(F),
