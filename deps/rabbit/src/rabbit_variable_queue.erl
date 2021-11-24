@@ -23,7 +23,7 @@
 -export([start/2, stop/1]).
 
 %% Used during dirty recovery to resume conversion between versions.
--export([convert_from_v1_to_v2_loop/7]).
+-export([convert_from_v1_to_v2_loop/8]).
 -export([convert_from_v2_to_v1_loop/8]).
 
 %% exported for testing only
@@ -1153,7 +1153,9 @@ convert_from_v1_to_v2(State0 = #vqstate{ index_mod   = rabbit_queue_index,
     CountersRef = counters:new(?CONVERT_COUNTER_SIZE, []),
     {V2Index, V2Store} = convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index0, V2Store0,
                                                     {CountersRef, ?CONVERT_COUNT, ?CONVERT_BYTES},
-                                                    LoSeqId, HiSeqId),
+                                                    LoSeqId, HiSeqId,
+                                                    %% Write all messages.
+                                                    fun (_, FunState) -> {write, FunState} end),
     %% We have already deleted segments files but not the journal.
     rabbit_queue_index:delete_journal(V1Index),
     rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v1 to v2",
@@ -1188,34 +1190,42 @@ convert_from_v1_to_v2_queue(Q) ->
     end, List0),
     ?QUEUE:from_list(List).
 
-convert_from_v1_to_v2_loop(_, _, V2Index, V2Store, _, HiSeqId, HiSeqId) ->
+convert_from_v1_to_v2_loop(_, _, V2Index, V2Store, _, HiSeqId, HiSeqId, _) ->
     {V2Index, V2Store};
 convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0,
                            Counters = {CountersRef, CountIx, BytesIx},
-                           LoSeqId, HiSeqId) ->
+                           LoSeqId, HiSeqId, SkipFun) ->
     UpSeqId = lists:min([rabbit_queue_index:next_segment_boundary(LoSeqId),
                          HiSeqId]),
     {Messages, V1Index} = rabbit_queue_index:read(LoSeqId, UpSeqId, V1Index0),
     %% We do a garbage collect immediately after the old index read
     %% because that may have created a lot of garbage.
     garbage_collect(),
-    MessagesCount = length(Messages),
-    counters:add(CountersRef, CountIx, MessagesCount),
     {V2Index3, V2Store3} = lists:foldl(fun
         %% Move embedded messages to the per-queue store.
         ({Msg = #basic_message{id = MsgId}, SeqId, rabbit_queue_index, Props, IsPersistent},
          {V2Index1, V2Store1}) ->
             {MsgLocation, V2Store2} = rabbit_classic_queue_store_v2:write(SeqId, Msg, Props, V2Store1),
-            V2Index2 = rabbit_classic_queue_index_v2:publish(MsgId, SeqId, MsgLocation, Props, IsPersistent, infinity, V2Index1),
-            MsgSize = Props#message_properties.size,
-            counters:add(CountersRef, BytesIx, MsgSize),
+            V2Index2 = case SkipFun(SeqId, V2Index1) of
+                {skip, V2Index1a} ->
+                    V2Index1a;
+                {write, V2Index1a} ->
+                    counters:add(CountersRef, CountIx, 1),
+                    counters:add(CountersRef, BytesIx, Props#message_properties.size),
+                    rabbit_classic_queue_index_v2:publish(MsgId, SeqId, MsgLocation, Props, IsPersistent, infinity, V2Index1a)
+            end,
             {V2Index2, V2Store2};
         %% Keep messages in the per-vhost store where they are.
         ({MsgId, SeqId, rabbit_msg_store, Props, IsPersistent},
          {V2Index1, V2Store1}) ->
-            V2Index2 = rabbit_classic_queue_index_v2:publish(MsgId, SeqId, rabbit_msg_store, Props, IsPersistent, infinity, V2Index1),
-            MsgSize = Props#message_properties.size,
-            counters:add(CountersRef, BytesIx, MsgSize),
+            V2Index2 = case SkipFun(SeqId, V2Index1) of
+                {skip, V2Index1a} ->
+                    V2Index1a;
+                {write, V2Index1a} ->
+                    counters:add(CountersRef, CountIx, 1),
+                    counters:add(CountersRef, BytesIx, Props#message_properties.size),
+                    rabbit_classic_queue_index_v2:publish(MsgId, SeqId, rabbit_msg_store, Props, IsPersistent, infinity, V2Index1a)
+            end,
             {V2Index2, V2Store1}
     end, {V2Index0, V2Store0}, Messages),
     %% Flush to disk to avoid keeping too much in memory between segments.
@@ -1228,8 +1238,8 @@ convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0,
     %% embedded messages can take quite some time.
     #resource{virtual_host = VHost, name = Name} = QueueName,
     rabbit_log:info("Queue ~s in vhost ~s converted ~b messages from v1 to v2",
-                    [Name, VHost, MessagesCount]),
-    convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index, V2Store, Counters, UpSeqId, HiSeqId).
+                    [Name, VHost, length(Messages)]),
+    convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index, V2Store, Counters, UpSeqId, HiSeqId, SkipFun).
 
 %% We move messages from the v1 index to the v2 index. The message payload
 %% is moved to the v2 store if it was embedded, and left in the per-vhost
