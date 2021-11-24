@@ -24,7 +24,7 @@
 
 %% Used during dirty recovery to resume conversion between versions.
 -export([convert_from_v1_to_v2_loop/7]).
--export([convert_from_v2_to_v1_loop/6]).
+-export([convert_from_v2_to_v1_loop/8]).
 
 %% exported for testing only
 -export([start_msg_store/3, stop_msg_store/1, init/6]).
@@ -1237,11 +1237,20 @@ convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0,
 convert_from_v2_to_v1(State0 = #vqstate{ index_mod   = rabbit_classic_queue_index_v2,
                                          index_state = V2Index,
                                          store_state = V2Store0 }) ->
-    State = convert_from_v2_to_v1_in_memory(State0),
     {QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun} = rabbit_classic_queue_index_v2:init_args(V2Index),
+    #resource{virtual_host = VHost, name = QName} = QueueName,
+    rabbit_log:info("Converting running queue ~s in vhost ~s from v1 to v2", [QName, VHost]),
+    State = convert_from_v2_to_v1_in_memory(State0),
     V1Index0 = rabbit_queue_index:init_for_conversion(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     {LoSeqId, HiSeqId, _} = rabbit_classic_queue_index_v2:bounds(V2Index),
-    {V1Index, V2Store} = convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index, V2Store0, LoSeqId, HiSeqId),
+    CountersRef = counters:new(?CONVERT_COUNTER_SIZE, []),
+    {V1Index, V2Store} = convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index, V2Store0,
+                                                    {CountersRef, ?CONVERT_COUNT, ?CONVERT_BYTES},
+                                                    LoSeqId, HiSeqId,
+                                                    %% Write all messages.
+                                                    fun (_, FunState) -> {write, FunState} end),
+    rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v1 to v2",
+                    [QName, VHost, counters:get(CountersRef, ?CONVERT_COUNT)]),
     %% We have already closed the v2 index/store FDs when deleting the files.
     State#vqstate{ index_mod   = rabbit_queue_index,
                    index_state = V1Index,
@@ -1284,9 +1293,11 @@ convert_from_v2_to_v1_queue(Q, State0) ->
     end, State0, List0),
     {?QUEUE:from_list(List), State}.
 
-convert_from_v2_to_v1_loop(_, V1Index, _, V2Store, HiSeqId, HiSeqId) ->
+convert_from_v2_to_v1_loop(_, V1Index, _, V2Store, _, HiSeqId, HiSeqId, _) ->
     {V1Index, V2Store};
-convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0, LoSeqId, HiSeqId) ->
+convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0,
+                           Counters = {CountersRef, CountIx, BytesIx},
+                           LoSeqId, HiSeqId, SkipFun) ->
     UpSeqId = lists:min([rabbit_classic_queue_index_v2:next_segment_boundary(LoSeqId),
                          HiSeqId]),
     {Messages, V2Index1} = rabbit_classic_queue_index_v2:read(LoSeqId, UpSeqId, V2Index0),
@@ -1295,15 +1306,34 @@ convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0, LoSeqId, HiS
         ({_MsgId, SeqId, Location = {rabbit_classic_queue_store_v2, _, _}, Props, IsPersistent},
          {V1Index1, V2Store1}) ->
             {Msg, V2Store2} = rabbit_classic_queue_store_v2:read(SeqId, Location, V2Store1),
-            V1Index2 = rabbit_queue_index:publish(Msg, SeqId, rabbit_queue_index, Props, IsPersistent, infinity, V1Index1),
-            V1Index2b = rabbit_queue_index:deliver([SeqId], V1Index2),
-            {V1Index2b, V2Store2};
+            %% When we are resuming the conversion the messages may have already been written to disk.
+            %% We do NOT want them written again: this is an error that leads to a corrupted index
+            %% (because it uses a journal it cannot know whether there's been a double write).
+            %% We therefore check first if the entry exists and if we need to write it.
+            V1Index2 = case SkipFun(SeqId, V1Index1) of
+                {skip, V1Index1a} ->
+                    V1Index1a;
+                {write, V1Index1a} ->
+                    counters:add(CountersRef, CountIx, 1),
+                    counters:add(CountersRef, BytesIx, Props#message_properties.size),
+                    V1Index1b = rabbit_queue_index:publish(Msg, SeqId, rabbit_queue_index, Props, IsPersistent, infinity, V1Index1a),
+                    rabbit_queue_index:deliver([SeqId], V1Index1b)
+            end,
+            {V1Index2, V2Store2};
         %% Keep messages in the per-vhost store where they are.
         ({MsgId, SeqId, rabbit_msg_store, Props, IsPersistent},
          {V1Index1, V2Store1}) ->
-            V1Index2 = rabbit_queue_index:publish(MsgId, SeqId, rabbit_msg_store, Props, IsPersistent, infinity, V1Index1),
-            V1Index2b = rabbit_queue_index:deliver([SeqId], V1Index2),
-            {V1Index2b, V2Store1}
+            %% See comment in previous clause.
+            V1Index2 = case SkipFun(SeqId, V1Index1) of
+                {skip, V1Index1a} ->
+                    V1Index1a;
+                {write, V1Index1a} ->
+                    counters:add(CountersRef, CountIx, 1),
+                    counters:add(CountersRef, BytesIx, Props#message_properties.size),
+                    V1Index1b = rabbit_queue_index:publish(MsgId, SeqId, rabbit_msg_store, Props, IsPersistent, infinity, V1Index1a),
+                    rabbit_queue_index:deliver([SeqId], V1Index1b)
+            end,
+            {V1Index2, V2Store1}
     end, {V1Index0, V2Store0}, Messages),
     %% Flush to disk to avoid keeping too much in memory between segments.
     V1Index = rabbit_queue_index:flush(V1Index3),
@@ -1318,7 +1348,7 @@ convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0, LoSeqId, HiS
     #resource{virtual_host = VHost, name = Name} = QueueName,
     rabbit_log:info("Queue ~s in vhost ~s converted ~b messages from v2 to v1",
                     [Name, VHost, length(Messages)]),
-    convert_from_v2_to_v1_loop(QueueName, V1Index, V2Index, V2Store, UpSeqId, HiSeqId).
+    convert_from_v2_to_v1_loop(QueueName, V1Index, V2Index, V2Store, Counters, UpSeqId, HiSeqId, SkipFun).
 
 %% Get the Timestamp property of the first msg, if present. This is
 %% the one with the oldest timestamp among the heads of the pending
