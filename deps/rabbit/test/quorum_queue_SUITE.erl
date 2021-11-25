@@ -137,7 +137,8 @@ all_tests() ->
      delete_if_unused,
      queue_ttl,
      peek,
-     consumer_priorities
+     consumer_priorities,
+     cancel_consumer_gh_3729
     ].
 
 memory_tests() ->
@@ -1972,7 +1973,7 @@ subscribe_redelivery_limit(Config) ->
     receive
         {#'basic.deliver'{redelivered  = true}, #amqp_msg{}} ->
             throw(unexpected_redelivery)
-    after 2000 ->
+    after 5000 ->
             ok
     end.
 
@@ -2018,7 +2019,7 @@ subscribe_redelivery_policy(Config) ->
     receive
         {#'basic.deliver'{redelivered  = true}, #amqp_msg{}} ->
             throw(unexpected_redelivery)
-    after 2000 ->
+    after 5000 ->
             ok
     end,
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"delivery-limit">>).
@@ -2756,6 +2757,54 @@ consumer_priorities(Config) ->
 
     ok.
 
+cancel_consumer_gh_3729(Config) ->
+    %% Test the scenario where a message is published to a quorum queue
+    %% but the consumer has been cancelled
+    %% https://github.com/rabbitmq/rabbitmq-server/pull/3746
+    QQ = ?config(queue_name, Config),
+
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+
+    ExpectedDeclareRslt0 = #'queue.declare_ok'{queue = QQ, message_count = 0, consumer_count = 0},
+    DeclareRslt0 = declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    ?assertMatch(ExpectedDeclareRslt0, DeclareRslt0),
+
+    ok = publish(Ch, QQ),
+
+    ok = subscribe(Ch, QQ, false),
+
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
+            R = #'basic.reject'{delivery_tag = DeliveryTag, requeue = true},
+            ok = amqp_channel:cast(Ch, R)
+    after 5000 ->
+        flush(100),
+        ct:fail("basic.deliver timeout")
+    end,
+
+    ok = cancel(Ch),
+
+    D = #'queue.declare'{queue = QQ, passive = true, arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+    #'queue.declare_ok'{queue = QQ, message_count = 0, consumer_count = 1} = amqp_channel:call(Ch, D),
+
+    receive
+        #'basic.cancel_ok'{consumer_tag = <<"ctag">>} -> ok
+    after 5000 ->
+        flush(100),
+        ct:fail("basic.cancel_ok timeout")
+    end,
+
+    F = fun() ->
+            #'queue.declare_ok'{queue = QQ,
+                                message_count = MC,
+                                consumer_count = CC} = amqp_channel:call(Ch, D),
+            MC =:= 1 andalso CC =:= 0
+        end,
+    wait_until(F),
+
+    ok = rabbit_ct_client_helpers:close_channel(Ch).
+
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->
@@ -2813,6 +2862,10 @@ qos(Ch, Prefetch, Global) ->
     ?assertMatch(#'basic.qos_ok'{},
                  amqp_channel:call(Ch, #'basic.qos'{global = Global,
                                                     prefetch_count = Prefetch})).
+
+cancel(Ch) ->
+    ?assertMatch(#'basic.cancel_ok'{consumer_tag = <<"ctag">>},
+                 amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>})).
 
 receive_basic_deliver(Redelivered) ->
     receive
@@ -2903,7 +2956,7 @@ validate_queue(Ch, Queue, ExpectedMsgs) ->
               #amqp_msg{payload = M}} ->
                  amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
                                                     multiple = false})
-         after 2000 ->
+         after 5000 ->
                    flush(10),
                    exit({validate_queue_timeout, M})
          end
