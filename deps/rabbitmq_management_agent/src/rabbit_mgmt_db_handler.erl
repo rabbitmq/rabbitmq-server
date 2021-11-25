@@ -93,7 +93,15 @@ handle_info(_Info, State) ->
     {ok, State}.
 
 terminate(_Arg, _State) ->
+    ensure_statistics_disabled(),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+ensure_statistics_disabled() ->
+    %% Reset the default values, see Makefile
+    _ = rabbit_log:info("Management plugin: to stop collect_statistics."),
+    application:set_env(rabbit, collect_statistics, none),
+    application:set_env(rabbit, collect_statistics_interval, 5000),
+    ok = rabbit:force_event_refresh(erlang:make_ref()).
