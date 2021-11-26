@@ -199,6 +199,8 @@ handle_call({unregister_consumer,
                         {value, Consumer} ->
                             rabbit_log:debug("Unregistering consumer ~p from group",
                                              [Consumer]),
+                            {value, ActiveInPreviousGroupInstance} =
+                                lookup_active_consumer(Group0),
                             G1 = remove_from_group(Consumer, Group0),
                             rabbit_log:debug("Consumer removed from group: ~p",
                                              [G1]),
@@ -212,7 +214,14 @@ handle_call({unregister_consumer,
                                     false ->
                                         undefined
                                 end,
-                            notify_consumers(undefined, NewActive, G2),
+                            AIPGI =
+                                case ActiveInPreviousGroupInstance of
+                                    Consumer ->
+                                        undefined;
+                                    _ ->
+                                        ActiveInPreviousGroupInstance
+                                end,
+                            notify_consumers(AIPGI, NewActive, G2),
                             G2;
                         false ->
                             rabbit_log:debug("Could not find consumer ~p ~p in group ~p ~p ~p",
@@ -334,6 +343,10 @@ notify_consumers(undefined,
     ! {sac,
        {{subscription_id, SubscriptionId}, {active, true},
         {side_effects, []}}};
+notify_consumers(ActiveInPreviousGroupInstance, NewActive, _Group)
+    when ActiveInPreviousGroupInstance == NewActive ->
+    %% no changes (e.g. on unsubscription), nothing to do.
+    ok;
 notify_consumers(#consumer{pid = FormerConnPid,
                            subscription_id = FormerSubId},
                  #consumer{pid = NewConnPid,
