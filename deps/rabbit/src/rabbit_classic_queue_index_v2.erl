@@ -1110,11 +1110,12 @@ queue_index_walker_reader(#resource{ virtual_host = VHost } = Name, Gatherer) ->
     %% the v1 index walker function as well.
     case rabbit_file:wildcard(".*\\.idx", Dir) of
         [_|_] ->
+            %% This function will call gatherer:finish/1, we do not
+            %% need to call it here.
             rabbit_queue_index:queue_index_walker_reader(Name, Gatherer);
         [] ->
-            ok
-    end,
-    ok = gatherer:finish(Gatherer).
+            ok = gatherer:finish(Gatherer)
+    end.
 
 queue_index_walker_segment(F, Gatherer) ->
     ?DEBUG("~0p ~0p", [F, Gatherer]),
