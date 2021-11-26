@@ -319,24 +319,35 @@ recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, [Segment|Ta
     SegmentEntryCount = segment_entry_count(),
     SegmentFile = segment_file(Segment, State0),
     {ok, Fd} = file:open(SegmentFile, [read, read_ahead, write, raw, binary]),
-    {ok, <<?MAGIC:32,?VERSION:8,
-           _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,
-           _/bits>>} = file:read(Fd, ?HEADER_SIZE),
-    %% Double check the file size before attempting to parse it.
-    SegmentFileSize = ?HEADER_SIZE + SegmentEntryCount * ?ENTRY_SIZE,
-    {ok, #file_info{size = SegmentFileSize}} = file:read_file_info(Fd),
-    {Action, State, StoreState1} = recover_segment(State0, ContainsCheckFun, StoreState0, CountersRef, Fd,
-                                                  Segment, 0, SegmentEntryCount,
-                                                  SegmentEntryCount, []),
-    ok = file:close(Fd),
-    StoreState = case Action of
-        keep ->
-            StoreState1;
-        delete ->
-            file:delete(SegmentFile),
-            rabbit_classic_queue_store_v2:delete_segments([Segment], StoreState1)
-    end,
-    recover_segments(State, ContainsCheckFun, StoreState, CountersRef, Tail).
+    case file:read(Fd, ?HEADER_SIZE) of
+        {ok, <<?MAGIC:32,?VERSION:8,
+               _FromSeqId:64/unsigned,_ToSeqId:64/unsigned,
+               _/bits>>} ->
+            %% Double check the file size before attempting to parse it.
+            SegmentFileSize = ?HEADER_SIZE + SegmentEntryCount * ?ENTRY_SIZE,
+            {ok, #file_info{size = SegmentFileSize}} = file:read_file_info(Fd),
+            {Action, State, StoreState1} = recover_segment(State0, ContainsCheckFun, StoreState0, CountersRef, Fd,
+                                                          Segment, 0, SegmentEntryCount,
+                                                          SegmentEntryCount, []),
+            ok = file:close(Fd),
+            StoreState = case Action of
+                keep ->
+                    StoreState1;
+                delete ->
+                    _ = file:delete(SegmentFile),
+                    rabbit_classic_queue_store_v2:delete_segments([Segment], StoreState1)
+            end,
+            recover_segments(State, ContainsCheckFun, StoreState, CountersRef, Tail);
+        %% File was either empty or the header was invalid.
+        %% We cannot recover this file.
+        _ ->
+            rabbit_log:warning("Deleting invalid v2 segment file ~s (file has invalid header)",
+                               [SegmentFile]),
+            ok = file:close(Fd),
+            _ = file:delete(SegmentFile),
+            StoreState = rabbit_classic_queue_store_v2:delete_segments([Segment], StoreState0),
+            recover_segments(State0, ContainsCheckFun, StoreState, CountersRef, Tail)
+    end.
 
 recover_segment(State = #qi{ segments = Segments }, _, StoreState, _, Fd,
                 Segment, ThisEntry, SegmentEntryCount,
