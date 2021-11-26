@@ -1251,8 +1251,21 @@ load_segment(KeepAcked, #segment { path = Path }) ->
                  {ok, 0} = file_handle_cache:position(Hdl, bof),
                  {ok, SegBin} = file_handle_cache:read(Hdl, Size),
                  ok = file_handle_cache:close(Hdl),
-                 Res = parse_segment_entries(SegBin, KeepAcked, Empty),
-                 Res
+                 %% We check if the file is full of 0s. I do not know why this can happen
+                 %% but this happens AT LEAST during v2->v1 conversion when resuming after
+                 %% a crash has happened. Since the file is invalid, we delete it and
+                 %% return no entries instead of just crashing (just like if the file
+                 %% was missing above). We also log some information.
+                 case SegBin of
+                     <<0:Size/unit:8>> ->
+                         rabbit_log:warning("Deleting invalid v1 segment file ~s (file only contains NUL bytes)",
+                                            [Path]),
+                         _ = rabbit_file:delete(Path),
+                         Empty;
+                     _ ->
+                         Res = parse_segment_entries(SegBin, KeepAcked, Empty),
+                         Res
+                 end
     end.
 
 parse_segment_entries(<<?PUB_PREFIX:?PUB_PREFIX_BITS,
