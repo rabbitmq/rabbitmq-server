@@ -1639,6 +1639,6 @@ clean_delivery(#delivery{message =
                                        properties_bin = Proto:encode_properties(Props)}
               end,
 
-    %% TODO: we could also consider clearing out he message id here
+    %% TODO: we could also consider clearing out the message id here
     Delivery#delivery{message = Msg#basic_message{content = Content}}.
 
