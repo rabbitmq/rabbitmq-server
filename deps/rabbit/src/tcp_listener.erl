@@ -114,5 +114,10 @@ deobfuscate_state(#state{on_startup = OnStartup, on_shutdown = OnShutdown} = Sta
 
 ensure_credential_obfuscation_secret() ->
     ok = credentials_obfuscation:refresh_config(),
-    CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
-    ok = credentials_obfuscation:set_secret(CookieBin).
+    case credentials_obfuscation:secret() of
+        '$pending-secret' ->
+            CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
+            ok = credentials_obfuscation:set_secret(CookieBin);
+        _Other ->
+            ok
+    end.
