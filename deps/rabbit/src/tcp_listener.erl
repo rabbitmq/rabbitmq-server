@@ -44,7 +44,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {on_startup, on_shutdown, label, ip, port}).
+-record(state, {on_shutdown, label, ip, port}).
 
 %%----------------------------------------------------------------------------
 
@@ -63,14 +63,11 @@ start_link(IPAddress, Port,
 
 %%--------------------------------------------------------------------
 
-init({IPAddress, Port, {M, F, A} = OnStartup, OnShutdown, Label}) ->
-    ensure_credential_obfuscation_secret(),
-
+init({IPAddress, Port, {M, F, A}, OnShutdown, Label}) ->
     process_flag(trap_exit, true),
     logger:info("started ~s on ~s:~p", [Label, rabbit_misc:ntoab(IPAddress), Port]),
     apply(M, F, A ++ [IPAddress, Port]),
     State0 = #state{
-        on_startup = OnStartup,
         on_shutdown = OnShutdown,
         label = Label,
         ip = IPAddress,
@@ -87,11 +84,10 @@ handle_cast(_Msg, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, #state{label = Label, ip = IPAddress, port = Port} = State0) ->
-    #state{on_shutdown = {M, F, A}} = deobfuscate_state(State0),
+terminate(_Reason, #state{on_shutdown = OnShutdown, label = Label, ip = IPAddress, port = Port}) ->
     logger:info("stopped ~s on ~s:~p", [Label, rabbit_misc:ntoab(IPAddress), Port]),
     try
-        apply(M, F, A ++ [IPAddress, Port])
+        OnShutdown(IPAddress, Port)
     catch _:Error ->
         logger:error("Failed to stop listener ~s on ~s:~p: ~p",
                      [Label, rabbit_misc:ntoab(IPAddress), Port, Error])
@@ -100,24 +96,11 @@ terminate(_Reason, #state{label = Label, ip = IPAddress, port = Port} = State0) 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-obfuscate_state(#state{on_startup = OnStartup, on_shutdown = OnShutdown} = State) ->
+obfuscate_state(#state{on_shutdown = OnShutdown} = State) ->
+    {M, F, A} = OnShutdown,
     State#state{
-        on_startup  = credentials_obfuscation:encrypt(term_to_binary(OnStartup)),
-        on_shutdown = credentials_obfuscation:encrypt(term_to_binary(OnShutdown))
+        %% avoids arguments from being logged in case of an exception
+        on_shutdown = fun(IPAddress, Port) ->
+          apply(M, F, A ++ [IPAddress, Port])
+        end
     }.
-
-deobfuscate_state(#state{on_startup = OnStartup, on_shutdown = OnShutdown} = State) ->
-    State#state{
-        on_startup  = binary_to_term(credentials_obfuscation:decrypt(OnStartup)),
-        on_shutdown = binary_to_term(credentials_obfuscation:decrypt(OnShutdown))
-    }.
-
-ensure_credential_obfuscation_secret() ->
-    ok = credentials_obfuscation:refresh_config(),
-    case credentials_obfuscation:secret() of
-        '$pending-secret' ->
-            CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
-            ok = credentials_obfuscation:set_secret(CookieBin);
-        _Other ->
-            ok
-    end.
