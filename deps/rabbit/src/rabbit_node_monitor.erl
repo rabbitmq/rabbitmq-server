@@ -769,7 +769,13 @@ do_run_outside_app_fun(Fun) ->
 wait_for_cluster_recovery(Condition) ->
     ping_all(),
     case Condition() of
-        true  -> rabbit:start();
+        true  -> 
+            rabbit_log:info("to start after cluster recovery"),
+            try
+                rabbit:start()
+            catch _:_ ->
+                rabbit_misc:quit(0)
+            end;          
         false -> timer:sleep(?RABBIT_DOWN_PING_INTERVAL),
                  wait_for_cluster_recovery(Condition)
     end.
