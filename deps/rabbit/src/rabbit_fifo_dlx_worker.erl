@@ -16,7 +16,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--behaviour(gen_server2).
+-behaviour(gen_server).
 
 -export([start_link/2]).
 %% gen_server2 callbacks
@@ -70,8 +70,8 @@
           exchange_ref,
           %% configured (x-)dead-letter-routing-key of source queue
           routing_key,
-          dlx_client_state :: rabbit_fifo_dlx_client:state(),
-          queue_type_state :: rabbit_queue_type:state(),
+          dlx_client_state :: undefined | rabbit_fifo_dlx_client:state(),
+          queue_type_state :: undefined | rabbit_queue_type:state(),
           %% Consumed messages for which we have not received all publisher confirms yet.
           %% Therefore, they have not been ACKed yet to the consumer queue.
           %% This buffer contains at most PREFETCH pending messages at any given point in time.
@@ -98,7 +98,8 @@ start_link(QRef, RegName) ->
                           ?MODULE, {QRef, RegName},
                           [{hibernate_after, ?HIBERNATE_AFTER}]).
 
--spec init({rabbit_amqqueue:name(), atom()}) -> {ok, undefined, {continue, {rabbit_amqqueue:name(), atom()}}}.
+% -spec init({rabbit_amqqueue:name(), atom()}) ->
+%     {ok, undefined, {continue, {rabbit_amqqueue:name(), atom()}}}.
 init(Arg) ->
     {ok, undefined, {continue, Arg}}.
 
@@ -109,17 +110,17 @@ handle_continue({QRef, RegName}, undefined) ->
     SettleTimeout = application:get_env(rabbit,
                                         dead_letter_worker_publisher_confirm_timeout_ms,
                                         ?DEFAULT_SETTLE_TIMEOUT),
-    State = lookup_topology(#state{queue_ref = QRef}),
+    State = lookup_topology(#state{queue_ref = QRef,
+                                   registered_name = RegName,
+                                   queue_type_state = rabbit_queue_type:init(),
+                                   settle_timeout = SettleTimeout}),
     {ok, Q} = rabbit_amqqueue:lookup(QRef),
     {ClusterName, _MaybeOldLeaderNode} = amqqueue:get_pid(Q),
     {ok, ConsumerState} = rabbit_fifo_dlx_client:checkout(RegName,
                                                           QRef,
                                                           {ClusterName, node()},
                                                           Prefetch),
-    {noreply, State#state{registered_name = RegName,
-                          dlx_client_state = ConsumerState,
-                          queue_type_state = rabbit_queue_type:init(),
-                          settle_timeout = SettleTimeout}}.
+    {noreply, State#state{dlx_client_state = ConsumerState}}.
 
 terminate(_Reason, _State) ->
     %%TODO cancel timer?

@@ -131,8 +131,7 @@
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
          unused,
-         status = up :: up |
-                        suspected_down,
+         status = up :: up | suspected_down,
          %% it is useful to have a record of when this was blocked
          %% so that we can retry sending the block effect if
          %% the publisher did not receive the initial one
