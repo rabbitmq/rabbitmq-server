@@ -1,0 +1,5 @@
+load(":erlang_ls.bzl", "erlang_ls_config")
+
+erlang_ls_config(
+    name = "erlang_ls.config",
+)
