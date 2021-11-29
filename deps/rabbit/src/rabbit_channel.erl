@@ -2170,7 +2170,7 @@ deliver_to_queues({Delivery = #delivery{message    = MessageContainer,
     Qs = rabbit_amqqueue:lookup(AllNames),
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
-            rabbit_global_counters:messages_routed(amqp091, length(Qs)),
+            rabbit_global_counters:messages_routed(amqp091, erlang:min(1, length(Qs))),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
             ok = process_routing_mandatory(Mandatory, Qs, MessageContainer, State0),

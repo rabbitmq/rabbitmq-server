@@ -1,9 +1,12 @@
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@bazel-erlang//:dialyze.bzl", "plt")
 load("@bazel-erlang//:shell.bzl", "shell")
 load("elixir_home.bzl", "elixir_home")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
+load(":rabbitmq.bzl", "ALL_PLUGINS", "APP_VERSION")
+load(":dist.bzl", "collect_licenses", "versioned_rabbitmq_home")
 
 exports_files([
     "scripts/bazel/rabbitmq-run.sh",
@@ -36,42 +39,6 @@ plt(
     name = "base_plt",
     visibility = ["//visibility:public"],
 )
-
-ALL_PLUGINS = [
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
-    "//deps/rabbitmq_auth_backend_cache:bazel_erlang_lib",
-    "//deps/rabbitmq_auth_backend_http:bazel_erlang_lib",
-    "//deps/rabbitmq_auth_backend_ldap:bazel_erlang_lib",
-    "//deps/rabbitmq_auth_backend_oauth2:bazel_erlang_lib",
-    "//deps/rabbitmq_auth_mechanism_ssl:bazel_erlang_lib",
-    "//deps/rabbitmq_consistent_hash_exchange:bazel_erlang_lib",
-    "//deps/rabbitmq_event_exchange:bazel_erlang_lib",
-    "//deps/rabbitmq_federation:bazel_erlang_lib",
-    "//deps/rabbitmq_federation_management:bazel_erlang_lib",
-    "//deps/rabbitmq_jms_topic_exchange:bazel_erlang_lib",
-    "//deps/rabbitmq_management:bazel_erlang_lib",
-    "//deps/rabbitmq_mqtt:bazel_erlang_lib",
-    "//deps/rabbitmq_peer_discovery_aws:bazel_erlang_lib",
-    "//deps/rabbitmq_peer_discovery_consul:bazel_erlang_lib",
-    "//deps/rabbitmq_peer_discovery_etcd:bazel_erlang_lib",
-    "//deps/rabbitmq_peer_discovery_k8s:bazel_erlang_lib",
-    "//deps/rabbitmq_prometheus:bazel_erlang_lib",
-    "//deps/rabbitmq_random_exchange:bazel_erlang_lib",
-    "//deps/rabbitmq_recent_history_exchange:bazel_erlang_lib",
-    "//deps/rabbitmq_sharding:bazel_erlang_lib",
-    "//deps/rabbitmq_shovel:bazel_erlang_lib",
-    "//deps/rabbitmq_shovel_management:bazel_erlang_lib",
-    "//deps/rabbitmq_stomp:bazel_erlang_lib",
-    "//deps/rabbitmq_stream:bazel_erlang_lib",
-    "//deps/rabbitmq_stream_management:bazel_erlang_lib",
-    "//deps/rabbitmq_top:bazel_erlang_lib",
-    "//deps/rabbitmq_tracing:bazel_erlang_lib",
-    "//deps/rabbitmq_trust_store:bazel_erlang_lib",
-    "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
-    "//deps/rabbitmq_web_mqtt:bazel_erlang_lib",
-    "//deps/rabbitmq_web_stomp:bazel_erlang_lib",
-]
 
 rabbitmq_home(
     name = "broker-home",
@@ -131,4 +98,69 @@ rabbitmqctl(
 shell(
     name = "repl",
     deps = ALL_PLUGINS,
+)
+
+collect_licenses(
+    name = "licenses",
+    srcs = glob(
+        ["LICENSE*"],
+        exclude = [
+            "LICENSE.md",
+            "LICENSE.txt",
+        ],
+    ),
+    deps = ALL_PLUGINS,
+)
+
+versioned_rabbitmq_home(
+    name = "dist-home",
+    plugins = ALL_PLUGINS,
+)
+
+pkg_tar(
+    name = "license-files",
+    srcs = [
+        ":licenses",
+        "//deps/rabbit:INSTALL",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "scripts",
+    srcs = [
+        "scripts/bash_autocomplete.sh",
+        "scripts/rabbitmq-script-wrapper",
+        "scripts/rabbitmqctl-autocomplete.sh",
+        "scripts/zsh_autocomplete.sh",
+    ],
+    package_dir = "scripts",
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "release-notes",
+    srcs = glob([
+        "release-notes/*.md",
+        "release-notes/*.txt",
+    ]),
+    package_dir = "release-notes",
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "package-generic-unix",
+    srcs = [
+        ":dist-home",
+    ],
+    extension = "tar.xz",
+    package_dir = "rabbitmq_server-{}".format(APP_VERSION),
+    strip_prefix = "dist-home",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":license-files",
+        ":release-notes",
+        ":scripts",
+        "//deps/rabbit:manpages-dir",
+    ],
 )

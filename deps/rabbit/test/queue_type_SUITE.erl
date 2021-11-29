@@ -163,7 +163,7 @@ smoke(Config) ->
     %% get and ack
     basic_ack(Ch, basic_get(Ch, QName)),
     %% global counters
-    publish_and_confirm(Ch, <<"inexistent_queue">>, <<"msg4">>),
+    publish_and_confirm(Ch, <<"non-existent_queue">>, <<"msg4">>),
     ConsumerTag3 = <<"ctag3">>,
     ok = subscribe(Ch, QName, ConsumerTag3),
     ProtocolCounters = maps:get([{protocol, amqp091}], get_global_counters(Config)),

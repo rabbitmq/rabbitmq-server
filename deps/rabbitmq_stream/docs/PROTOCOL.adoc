@@ -322,6 +322,9 @@ Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification
   Value => string
 ```
 
+NB: Timestamp is https://www.erlang.org/doc/apps/erts/time_correction.html#Erlang_System_Time[Erlang system time],
+milliseconds from epoch
+
 === Deliver
 
 ```
@@ -334,7 +337,7 @@ Deliver => Key Version SubscriptionId OsirisChunk
   ChunkType => int8 // 0: user, 1: tracking delta, 2: tracking snapshot
   NumEntries => uint16
   NumRecords => uint32
-  Timestamp => int64 // in milliseconds, since epoch
+  Timestamp => int64 // erlang system time in milliseconds, since epoch
   Epoch => uint64
   ChunkFirstOffset => uint64
   ChunkCrc => int32
@@ -346,7 +349,7 @@ Deliver => Key Version SubscriptionId OsirisChunk
   Data => bytes
 ```
 
-NB: See the https://github.com/rabbitmq/osiris/blob/348db0528986d6025b823bcf1ae0570aa63f5e25/src/osiris_log.erl#L49-L81[Osiris project]
+NB: See the https://github.com/rabbitmq/osiris/blob/f32df7563a036b1687c0208a3cb5f9e8f5cee937/src/osiris_log.erl#L101[Osiris project]
 for details on the structure of messages.
 
 === Credit

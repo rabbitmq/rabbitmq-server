@@ -504,7 +504,7 @@ snapshots(_Config) ->
                                   collect({log_size, length(O)},
                                           snapshots_prop(Config, O)))
                       end)
-      end, [], 2500).
+      end, [], 1000).
 
 single_active(_Config) ->
     Size = 2000,
@@ -1046,7 +1046,7 @@ handle_op({input_event, requeue}, #t{effects = Effs} = T) ->
 handle_op({input_event, Settlement}, #t{effects = Effs,
                                         down = Down} = T) ->
     case queue:out(Effs) of
-        {{value, {settle, MsgIds, CId}}, Q} ->
+        {{value, {settle, CId, MsgIds}}, Q} ->
             Cmd = case Settlement of
                       settle -> rabbit_fifo:make_settle(CId, MsgIds);
                       return -> rabbit_fifo:make_return(CId, MsgIds);
@@ -1097,7 +1097,7 @@ do_apply(Cmd, #t{effects = Effs,
     end.
 
 enq_effs([], Q) -> Q;
-enq_effs([{send_msg, P, {delivery, CTag, Msgs}, ra_event} | Rem], Q) ->
+enq_effs([{send_msg, P, {delivery, CTag, Msgs}, _Opts} | Rem], Q) ->
     MsgIds = [I || {I, _} <- Msgs],
     %% always make settle commands by default
     %% they can be changed depending on the input event later

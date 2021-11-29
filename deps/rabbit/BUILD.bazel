@@ -23,6 +23,7 @@ exports_files([
     "scripts/rabbitmq-queues",
     "scripts/rabbitmq-server",
     "scripts/rabbitmqctl",
+    "INSTALL",
 ])
 
 _APP_ENV = """[
@@ -996,4 +997,73 @@ suites = [
 assert_suites(
     suites,
     glob(["test/**/*_SUITE.erl"]),
+)
+
+filegroup(
+    name = "manpages",
+    srcs = glob([
+        "docs/*.1",
+        "docs/*.2",
+        "docs/*.3",
+        "docs/*.4",
+        "docs/*.5",
+        "docs/*.6",
+        "docs/*.7",
+        "docs/*.8",
+        "docs/*.9",
+    ]),
+)
+
+genrule(
+    name = "manpages-dir",
+    srcs = [":manpages"],
+    outs = ["manpages.tar"],
+    cmd = """set -euo pipefail
+
+DESTDIR=manpages-tmp/share/man
+mkdir -p $${DESTDIR}
+for mp in $(SRCS); do
+    section=$${mp##*.}
+    mkdir -p $${DESTDIR}/man$$section
+    gzip < $$mp \\
+        > $${DESTDIR}/man$$section/$$(basename $$mp).gz
+done
+tar --strip-components 1 -cf $@ manpages-tmp/*
+rm -dr manpages-tmp
+""",
+    visibility = ["//visibility:public"],
+)
+
+genrule(
+    name = "web-manpages",
+    srcs = [":manpages"],
+    outs = ["web-manpages.tar"],
+    cmd = """set -euo pipefail
+
+mkdir web-manpages-tmp
+for mp in $(SRCS); do
+    d=web-manpages-tmp/$$(basename $${mp}).html
+    echo "Converting $$mp to $$d..."
+    mandoc -T html -O 'fragment,man=%N.%S.html' "$$mp" | \\
+        awk '\\
+        /^<table class="head">$$/ { remove_table=1; next; } \\
+        /^<table class="foot">$$/ { remove_table=1; next; } \\
+        /^<\\/table>$$/ { if (remove_table) { remove_table=0; next; } } \\
+        { if (!remove_table) { \\
+            line=$$0; \\
+            gsub(/<h2/, "<h3", line); \\
+            gsub(/<\\/h2>/, "</h3>", line); \\
+            gsub(/<h1/, "<h2", line); \\
+            gsub(/<\\/h1>/, "</h2>", line); \\
+            gsub(/class="D1"/, "class=\"D1 lang-bash\"", line); \\
+            gsub(/class="Bd Bd-indent"/, "class=\"Bd Bd-indent lang-bash\"", line); \\
+            gsub(/&#[xX]201[cCdD];/, "\\&quot;", line); \\
+            print line; \\
+        } } \\
+        ' > "$$d"
+done
+tar --strip-components 1 -cf $@ web-manpages-tmp/*
+rm -dr web-manpages-tmp
+""",
+    visibility = ["//visibility:public"],
 )

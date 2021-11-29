@@ -29,7 +29,7 @@ jobs:
       with:
         path: rbe-erlang-platform
         repository: rabbitmq/rbe-erlang-platform
-        branch: linux-erlang-${{ matrix.erlang_version }}
+        ref: linux-erlang-${{ matrix.erlang_version }}
     - name: DETERMINE LATEST COMMIT
       id: find-commit
       working-directory: rbe-erlang-platform

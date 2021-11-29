@@ -42,7 +42,6 @@
 -define(COMMAND_TIMEOUT, 30000).
 
 -type seq() :: non_neg_integer().
-%% last_applied is initialised to -1
 -type maybe_seq() :: integer().
 -type action() :: {send_credit_reply, Available :: non_neg_integer()} |
                   {send_drained, CTagCredit ::
@@ -300,7 +299,7 @@ settle(ConsumerTag, [_|_] = MsgIds,
 %% from {@link rabbit_fifo:delivery/0.}
 %% @param State the {@module} state
 %% @returns
-%% `{ok | slow, State}' if the command was successfully sent. If the return
+%% `{State, list()}' if the command was successfully sent. If the return
 %% tag is `slow' it means the limit is approaching and it is time to slow down
 %% the sending rate.
 %%
@@ -310,10 +309,8 @@ return(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_server(State0),
     % TODO: make rabbit_fifo return support lists of message ids
     Cmd = rabbit_fifo:make_return(consumer_id(ConsumerTag), MsgIds),
-    case send_command(Node, undefined, Cmd, normal, State0) of
-        {_, S} ->
-            {S, []}
-    end;
+    {_Tag, State1} = send_command(Node, undefined, Cmd, normal, State0),
+    {State1, []};
 return(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -323,7 +320,8 @@ return(ConsumerTag, [_|_] = MsgIds,
                               fun ({Settles, Returns, Discards}) ->
                                       {Settles, Returns ++ MsgIds, Discards}
                               end, {[], MsgIds, []}, Unsent0),
-    {State0#state{unsent_commands = Unsent}, []}.
+    State1 = State0#state{unsent_commands = Unsent},
+    {State1, []}.
 
 %% @doc Discards a checked out message.
 %% If the queue has a dead_letter_handler configured this will be called.
@@ -732,10 +730,10 @@ maybe_auto_ack(false, {deliver, Tag, _Ack, Msgs} = Deliver, State0) ->
     {State, Actions} = settle(Tag, MsgIds, State0),
     {ok, State, [Deliver] ++ Actions}.
 
-
 handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
                 #state{cfg = #cfg{cluster_name = QName},
-                       consumer_deliveries = CDels0} = State0) ->
+                       consumer_deliveries = CDels0} = State0)
+  when is_map_key(Tag, CDels0) ->
     QRef = qref(Leader),
     {LastId, _} = lists:last(IdMsgs),
     Consumer = #consumer{ack = Ack} = maps:get(Tag, CDels0),
@@ -787,7 +785,17 @@ handle_delivery(Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
                                                         length(IdMsgs),
                                                         C#consumer{last_msg_id = LastId},
                                                         CDels0)})
-    end.
+    end;
+handle_delivery(_Leader, {delivery, Tag, [_ | _] = IdMsgs},
+                #state{consumer_deliveries = CDels0} = State0)
+  when not is_map_key(Tag, CDels0) ->
+    %% Note:
+    %% https://github.com/rabbitmq/rabbitmq-server/issues/3729
+    %% If the consumer is no longer in the deliveries map,
+    %% we should return all messages.
+    MsgIntIds = [Id || {Id, _} <- IdMsgs],
+    {State1, Deliveries} = return(Tag, MsgIntIds, State0),
+    {ok, State1, Deliveries}.
 
 transform_msgs(QName, QRef, Msgs) ->
     lists:map(

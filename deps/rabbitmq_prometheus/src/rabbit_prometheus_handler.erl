@@ -163,6 +163,12 @@ put_filtering_options_into_process_dictionary(Request) ->
             put(prometheus_mf_filter, Fs);
         _ -> ok
     end,
+    case application:get_env(rabbitmq_prometheus, filter_aggregated_queue_metrics_pattern, undefined) of
+        undefined -> ok;
+        Pattern ->
+            {ok, CompiledPattern} = re:compile(Pattern),
+            put(prometheus_queue_filter, CompiledPattern)
+    end,
     ok.
 
 parse_vhosts(N) when is_binary(N) ->
