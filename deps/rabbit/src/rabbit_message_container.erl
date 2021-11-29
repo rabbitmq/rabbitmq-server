@@ -11,21 +11,46 @@
 
 -type(message_container() ::
         #message_container{protocol :: atom(),
-                           data :: any(),
-                           parsed :: boolean(),
-                           annotations :: map()}).
+                           data :: any(), %% should be the binaries only #content.payload_fragments_rev
+                           decoded :: boolean(),
+                           properties :: map(),
+                           headers :: map(),
+                           annotations :: map()
+                          }).
+
+%% Annotations contain:
+%%% routing_keys
+%%% exchange
+%%% msg_id
+%%% flags like persistent
+
+%% Properties are everything that goes on 'P_basic' for amqp091, many map to AMQP 1.0
+%% I think all AMQP 1.0 properties go here, even though they are later split in properties and
+%% application properties
+
+%% Things like headers, routing keys, exchange or id are only changed by dead-lettering
+
+%% Ops
+%%% get/set for all fields
+%%% prepare_to_store to strip down encoded/decoded data for disk storage
+%%% serialize (which should probably do the format conversion)
+%%% msg_size
+
+%% Headers handling
+%% Probably the ugliest part, dlx adds but also deletes some headers.
+%% I think they should be handled like an special case for annotations
 
 -export([new/3, new/4, get_data/1, get_internal/2, set_internal/3,
          prepare_to_store/1, serialize/1, msg_size/1]).
 
 -spec new(atom(), any(), boolean()) -> message_container().
-new(Protocol, Data, Parsed) ->
-    new(Protocol, Data, Parsed, #{}).
+new(Protocol, Data, Decoded) ->
+    new(Protocol, Data, Decoded, #{}).
 
-new(Protocol, Data, Parsed, Annotations) ->
+new(Protocol, Data, Decoded, Annotations) ->
     #message_container{protocol = Protocol,
                        data = Data,
-                       parsed = Parsed,
+                       decoded = Decoded,
                        annotations = Annotations}.
 
 get_data(#message_container{data = Data}) ->
