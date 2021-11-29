@@ -89,7 +89,7 @@ terminate(_Reason, #state{on_shutdown = OnShutdown, label = Label, ip = IPAddres
     try
         OnShutdown(IPAddress, Port)
     catch _:Error ->
-        logger:error("Failed to stop listener ~s on ~s:~p: ~p",
+        logger:error("Failed to stop ~s on ~s:~p: ~p",
                      [Label, rabbit_misc:ntoab(IPAddress), Port, Error])
     end.
 
