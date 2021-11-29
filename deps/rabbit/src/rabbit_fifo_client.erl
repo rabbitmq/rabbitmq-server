@@ -42,7 +42,6 @@
 -define(COMMAND_TIMEOUT, 30000).
 
 -type seq() :: non_neg_integer().
--type maybe_seq() :: integer().
 -type action() :: {send_credit_reply, Available :: non_neg_integer()} |
                   {send_drained, CTagCredit ::
                    {rabbit_fifo:consumer_tag(), non_neg_integer()}}.
@@ -66,10 +65,6 @@
                 leader :: undefined | ra:server_id(),
                 queue_status  :: undefined | go | reject_publish,
                 next_seq = 0 :: seq(),
-                %% Last applied is initialise to -1 to note that no command has yet been
-                %% applied, but allowing to resend messages if the first ones on the sequence
-                %% are lost (messages are sent from last_applied + 1)
-                last_applied = -1 :: maybe_seq(),
                 next_enqueue_seq = 1 :: seq(),
                 %% indicates that we've exceeded the soft limit
                 slow = false :: boolean(),
@@ -605,18 +600,26 @@ handle_ra_event(Leader, {machine, leader_change},
                 #state{leader = Leader} = State) ->
     %% leader already known
     {ok, State, []};
-handle_ra_event(Leader, {machine, leader_change}, State0) ->
+handle_ra_event(Leader, {machine, leader_change},
+                #state{leader = OldLeader} = State0) ->
     %% we need to update leader
     %% and resend any pending commands
+    rabbit_log:debug("~s: Detected QQ leader change from ~w to ~w",
+                     [?MODULE, OldLeader, Leader]),
+    State = resend_all_pending(State0#state{leader = Leader}),
+    {ok, State, []};
+handle_ra_event(_From, {rejected, {not_leader, Leader, _Seq}},
+                #state{leader = Leader} = State) ->
+    {ok, State, []};
+handle_ra_event(_From, {rejected, {not_leader, Leader, _Seq}},
+                #state{leader = OldLeader} = State0) ->
+    rabbit_log:debug("~s: Detected QQ leader change (rejection) from ~w to ~w",
+                     [?MODULE, OldLeader, Leader]),
     State = resend_all_pending(State0#state{leader = Leader}),
     {ok, cancel_timer(State), []};
-handle_ra_event(_From, {rejected, {not_leader, undefined, _Seq}}, State0) ->
+handle_ra_event(_From, {rejected, {not_leader, _UndefinedMaybe, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
     {ok, State0, []};
-handle_ra_event(_From, {rejected, {not_leader, Leader, Seq}}, State0) ->
-    State1 = State0#state{leader = Leader},
-    State = resend(Seq, State1),
-    {ok, State, []};
 handle_ra_event(_, timeout, #state{cfg = #cfg{servers = Servers}} = State0) ->
     case find_leader(Servers) of
         undefined ->
@@ -663,28 +666,26 @@ try_process_command([Server | Rem], Cmd,
             try_process_command(Rem, Cmd, State)
     end.
 
-seq_applied({Seq, MaybeAction},
-            {Corrs, Actions0, #state{last_applied = Last} = State0})
-  when Seq > Last ->
-    State1 = do_resends(Last+1, Seq-1, State0),
-    {Actions, State} = maybe_add_action(MaybeAction, Actions0, State1),
+seq_applied({Seq, Response},
+            {Corrs, Actions0, #state{} = State0}) ->
+    %% sequences aren't guaranteed to be applied in order as enqueues are
+    %% low priority commands and may be overtaken by others with a normal priority.
+    {Actions, State} = maybe_add_action(Response, Actions0, State0),
     case maps:take(Seq, State#state.pending) of
         {{undefined, _}, Pending} ->
-            {Corrs, Actions, State#state{pending = Pending,
-                                         last_applied = Seq}};
-        {{Corr, _}, Pending} ->
-            {[Corr | Corrs], Actions, State#state{pending = Pending,
-                                                  last_applied = Seq}};
-        error ->
-            % must have already been resent or removed for some other reason
-            % still need to update last_applied or we may inadvertently resend
-            % stuff later
-            {Corrs, Actions, State#state{last_applied = Seq}}
+            {Corrs, Actions, State#state{pending = Pending}};
+        {{Corr, _}, Pending}
+          when Response /= not_enqueued ->
+            {[Corr | Corrs], Actions, State#state{pending = Pending}};
+        _ ->
+            {Corrs, Actions, State#state{}}
     end;
 seq_applied(_Seq, Acc) ->
     Acc.
 
 maybe_add_action(ok, Acc, State) ->
+    {Acc, State};
+maybe_add_action(not_enqueued, Acc, State) ->
     {Acc, State};
 maybe_add_action({multi, Actions}, Acc0, State0) ->
     lists:foldl(fun (Act, {Acc, State}) ->
@@ -702,10 +703,10 @@ maybe_add_action(Action, Acc, State) ->
     %% anything else is assumed to be an action
     {[Action | Acc], State}.
 
-do_resends(From, To, State) when From =< To ->
-    lists:foldl(fun resend/2, State, lists:seq(From, To));
-do_resends(_, _, State) ->
-    State.
+% do_resends(From, To, State) when From =< To ->
+%     lists:foldl(fun resend/2, State, lists:seq(From, To));
+% do_resends(_, _, State) ->
+%     State.
 
 % resends a command with a new sequence number
 resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->

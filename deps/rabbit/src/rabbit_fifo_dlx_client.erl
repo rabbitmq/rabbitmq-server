@@ -4,11 +4,11 @@
          overview/1]).
 
 -record(state,{
-          queue_resource :: rabbit_tyes:r(queue),
+          queue_resource :: rabbit_types:r(queue),
           leader :: ra:server_id(),
-          last_msg_id :: non_neg_integer | -1
+          last_msg_id :: non_neg_integer() | -1
          }).
--opaque state() :: #state{}.
+-type state() :: #state{}.
 -export_type([state/0]).
 
 checkout(RegName, QResource, Leader, NumUnsettled) ->
