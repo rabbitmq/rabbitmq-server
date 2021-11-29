@@ -1418,18 +1418,14 @@ messages_total_prop(Conf0, Commands) ->
 messages_total_invariant() ->
     fun(#rabbit_fifo{messages = M,
                      consumers = C,
-                     enqueuers = E,
                      prefix_msgs = {PTot, _, RTot, _},
                      returns = R,
                      dlx = #rabbit_fifo_dlx{discards = D,
                                             consumer = DlxCon}} = S) ->
             Base = lqueue:len(M) + lqueue:len(R) + PTot + RTot,
-            CTot = maps:fold(fun (_, #consumer{checked_out = Ch}, Acc) ->
+            Tot0 = maps:fold(fun (_, #consumer{checked_out = Ch}, Acc) ->
                                      Acc + map_size(Ch)
-                             end, Base, C),
-            Tot0 = maps:fold(fun (_, #enqueuer{pending = P}, Acc) ->
-                                    Acc + length(P)
-                            end, CTot, E),
+                            end, Base, C),
             Tot1 = Tot0 + lqueue:len(D),
             Tot = case DlxCon of
                       undefined ->
@@ -1644,10 +1640,10 @@ nodeup_gen(Nodes) ->
 enqueue_gen(Pid) ->
     enqueue_gen(Pid, 10, 1).
 
-enqueue_gen(Pid, Enq, Del) ->
-    ?LET(E, {enqueue, Pid,
-             frequency([{Enq, enqueue},
-                        {Del, delay}]),
+enqueue_gen(Pid, _Enq, _Del) ->
+    ?LET(E, {enqueue, Pid, enqueue,
+             % frequency([{Enq, enqueue},
+             %            {Del, delay}]),
              msg_gen()}, E).
 
 %% It's fair to assume that every message enqueued is a #basic_message.

@@ -2,16 +2,26 @@
 
 -include("rabbit_fifo_dlx.hrl").
 -include("rabbit_fifo.hrl").
+-compile({no_auto_import, [apply/3]}).
 
 % client API, e.g. for rabbit_fifo_dlx_client
 -export([make_checkout/2,
          make_settle/1]).
 
 % called by rabbit_fifo delegating DLX handling to this module
--export([init/0, apply/2, discard/3, overview/1,
-         checkout/1, state_enter/4,
-         start_worker/2, terminate_worker/1, cleanup/1, purge/1,
-         consumer_pid/1, dehydrate/1, normalize/1,
+-export([init/0,
+         apply/2,
+         discard/3,
+         overview/1,
+         checkout/1,
+         state_enter/4,
+         start_worker/2,
+         terminate_worker/1,
+         cleanup/1,
+         purge/1,
+         consumer_pid/1,
+         dehydrate/1,
+         normalize/1,
          stat/1]).
 
 %% This module handles the dead letter (DLX) part of the rabbit_fifo state machine.
@@ -29,10 +39,14 @@
           prefetch :: non_neg_integer()
          }).
 -record(settle, {msg_ids :: [msg_id()]}).
--opaque protocol() :: {dlx, #checkout{} | #settle{}}.
--opaque state() :: #?MODULE{}.
--export_type([state/0, protocol/0, reason/0]).
+-type command() :: #checkout{} | #settle{}.
+-type protocol() :: {dlx, command()}.
+-type state() :: #?MODULE{}.
+-export_type([state/0,
+              protocol/0,
+              reason/0]).
 
+-spec init() -> state().
 init() ->
     #?MODULE{}.
 
@@ -61,6 +75,8 @@ overview0(Discards, Checked, MsgBytes, MsgBytesCheckout) ->
       discard_message_bytes => MsgBytes,
       discard_checkout_message_bytes => MsgBytesCheckout}.
 
+-spec stat(state()) ->
+    {non_neg_integer(), non_neg_integer()}.
 stat(#?MODULE{consumer = Con,
               discards = Discards,
               msg_bytes = MsgBytes,
@@ -75,6 +91,8 @@ stat(#?MODULE{consumer = Con,
     Bytes = MsgBytes + MsgBytesCheckout,
     {Num, Bytes}.
 
+-spec apply(command(), state()) ->
+    {state(), ok | list()}. % TODO: refine return type
 apply(#checkout{consumer = RegName,
                 prefetch = Prefetch},
       #?MODULE{consumer = undefined} = State0) ->
@@ -119,6 +137,8 @@ apply(#settle{msg_ids = MsgIds},
 
 %%TODO delete delivery_count header to save space?
 %% It's not needed anymore.
+-spec discard(term(), term(), state()) ->
+    state().
 discard(Msg, Reason, #?MODULE{discards = Discards0,
                               msg_bytes = MsgBytes0} = State) ->
     Discards = lqueue:in({Reason, Msg}, Discards0),
@@ -126,6 +146,8 @@ discard(Msg, Reason, #?MODULE{discards = Discards0,
     State#?MODULE{discards = Discards,
                   msg_bytes = MsgBytes}.
 
+-spec checkout(state()) ->
+    {state(), list()}.
 checkout(#?MODULE{consumer = undefined,
                   discards = Discards} = State) ->
     case lqueue:is_empty(Discards) of

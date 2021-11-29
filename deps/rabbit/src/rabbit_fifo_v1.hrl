@@ -76,6 +76,7 @@
 
 -define(MB, 1048576).
 -define(LOW_LIMIT, 0.8).
+-define(STATE, rabbit_fifo).
 
 -record(consumer,
         {meta = #{} :: consumer_meta(),
@@ -142,7 +143,7 @@
                        {non_neg_integer(), list(),
                         non_neg_integer(), list()}.
 
--record(rabbit_fifo_v1,
+-record(?STATE,
         {cfg :: #cfg{},
          % unassigned messages
          messages = lqueue:new() :: lqueue:lqueue({msg_in_id(), indexed_msg()}),
@@ -164,7 +165,7 @@
          % for normal appending operations as it's backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
          release_cursors = lqueue:new() :: lqueue:lqueue({release_cursor,
-                                                          ra:index(), #rabbit_fifo_v1{}}),
+                                                          ra:index(), #?STATE{}}),
          % consumers need to reflect consumer state at time of snapshot
          % needs to be part of snapshot
          consumers = #{} :: #{consumer_id() => #consumer{}},
