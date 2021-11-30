@@ -158,7 +158,6 @@ policy_changed(Q) ->
     ok.
 
 stat(Q) ->
-    QName = amqqueue:get_name(Q),
     Conf = amqqueue:get_type_state(Q),
     case maps:get(leader_node, Conf) of
         Node when Node =/= node() ->
