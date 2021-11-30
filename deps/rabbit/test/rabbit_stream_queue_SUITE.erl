@@ -11,6 +11,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(nowarn_export_all).
 -compile(export_all).
@@ -48,7 +49,8 @@ groups() ->
            leader_failover_dedupe,
            add_replicas,
            publish_coordinator_unavailable,
-           leader_locator_policy]},
+           leader_locator_policy,
+           queue_size_on_declare]},
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
      {cluster_size_3_2, [], [recover,
                              declare_with_node_down]},
@@ -1794,6 +1796,34 @@ leader_locator_policy(Config) ->
       end, 10),
 
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"leader-locator">>),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+queue_size_on_declare(Config) ->
+    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    publish_confirm(Ch1, Q, [<<"msg1">> || _ <- lists:seq(1, 100)]),
+
+    %% Metrics update is not synchronous, wait until metrics are updated on the leader node.
+    %% Afterwards, all replicas will get the right size as they have to query the writer node
+    ?awaitMatch({'queue.declare_ok', Q, 100, 0},
+                declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
+                60000),
+    amqp_channel:close(Ch1),
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    ?assertEqual({'queue.declare_ok', Q, 100, 0},
+                 declare(Ch2, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    amqp_channel:close(Ch2),
+
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server3),
+    ?assertEqual({'queue.declare_ok', Q, 100, 0},
+                 declare(Ch3, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    amqp_channel:close(Ch3),
+
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 repeat_until(_, 0) ->
