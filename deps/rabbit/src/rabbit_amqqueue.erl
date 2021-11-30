@@ -64,6 +64,8 @@
 -export([check_max_age/1]).
 -export([get_queue_type/1, get_resource_vhost_name/1, get_resource_name/1]).
 
+-export([deactivate_limit_all/2]).
+
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2,
@@ -1617,6 +1619,13 @@ activate_limit_all(QRefs, ChPid) ->
     QPids = [P || P <- QRefs, ?IS_CLASSIC(P)],
     delegate:invoke_no_result(QPids, {gen_server2, cast,
                                       [{activate_limit, ChPid}]}).
+
+-spec deactivate_limit_all(qpids(), pid()) -> ok.
+
+deactivate_limit_all(QRefs, ChPid) ->
+    QPids = [P || P <- QRefs, ?IS_CLASSIC(P)],
+    delegate:invoke_no_result(QPids, {gen_server2, cast,
+                                      [{deactivate_limit, ChPid}]}).									  
 
 -spec credit(amqqueue:amqqueue(),
              rabbit_types:ctag(),

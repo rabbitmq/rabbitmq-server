@@ -15,6 +15,8 @@
          credit/6, utilisation/1, capacity/1, is_same/3, get_consumer/1, get/3,
          consumer_tag/1, get_infos/1]).
 
+-export([deactivate_limit_fun/0]).
+
 %%----------------------------------------------------------------------------
 
 -define(QUEUE, lqueue).
@@ -383,6 +385,13 @@ notify_sent_fun(Credit) ->
 activate_limit_fun() ->
     fun (C = #cr{limiter = Limiter}) ->
             C#cr{limiter = rabbit_limiter:activate(Limiter)}
+    end.
+
+-spec deactivate_limit_fun()               -> cr_fun().
+
+deactivate_limit_fun() ->
+    fun (C = #cr{limiter = Limiter}) ->
+            C#cr{limiter = rabbit_limiter:deactivate(Limiter)}
     end.
 
 -spec credit(boolean(), integer(), boolean(), ch(), rabbit_types:ctag(),
