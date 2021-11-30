@@ -773,7 +773,10 @@ wait_for_cluster_recovery(Condition) ->
             rabbit_log:info("to start after cluster recovery"),
             try
                 rabbit:start()
-            catch _:_ ->
+            catch _:E:Stacktrace ->
+                _ = rabbit_log:error(
+                  "wait_for_cluster_recovery:~n~p~n~p",
+                  [E, Stacktrace]),
                 rabbit_misc:quit(0)
             end;          
         false -> timer:sleep(?RABBIT_DOWN_PING_INTERVAL),
