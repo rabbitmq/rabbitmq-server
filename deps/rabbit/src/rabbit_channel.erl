@@ -1546,6 +1546,11 @@ handle_method(#'basic.qos'{global         = false,
                              limiter = Limiter}) ->
     %% Ensures that if default was set, it's overridden
     Limiter1 = rabbit_limiter:unlimit_prefetch(Limiter),
+    case rabbit_limiter:is_active(Limiter) of
+        true  -> rabbit_amqqueue:deactivate_limit_all(
+                   classic_consumer_queue_pids(State#ch.consumer_mapping), self());
+        false -> ok
+    end,
     {reply, #'basic.qos_ok'{}, State#ch{cfg = Cfg#conf{consumer_prefetch = PrefetchCount},
                                         limiter = Limiter1}};
 
@@ -1553,6 +1558,11 @@ handle_method(#'basic.qos'{global         = true,
                            prefetch_count = 0},
               _, State = #ch{limiter = Limiter}) ->
     Limiter1 = rabbit_limiter:unlimit_prefetch(Limiter),
+    case rabbit_limiter:is_active(Limiter) of
+        true  -> rabbit_amqqueue:deactivate_limit_all(
+                   classic_consumer_queue_pids(State#ch.consumer_mapping), self());
+        false -> ok
+    end,
     {reply, #'basic.qos_ok'{}, State#ch{limiter = Limiter1}};
 
 handle_method(#'basic.qos'{global         = true,
