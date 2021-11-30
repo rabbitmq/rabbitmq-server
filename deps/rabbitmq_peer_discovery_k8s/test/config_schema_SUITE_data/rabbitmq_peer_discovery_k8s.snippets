@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 [
@@ -19,7 +19,7 @@
           ]}
       ], [rabbitmq_peer_discovery_k8s]
   },
-  
+
   {k8s_discovery_mechanism_as_alias1,
       "cluster_formation.peer_discovery_backend = k8s
        cluster_formation.k8s.host = k8s.eng.megacorp.local", [
@@ -33,7 +33,7 @@
           ]}
       ], [rabbitmq_peer_discovery_k8s]
   },
-  
+
   {k8s_discovery_mechanism_as_alias2,
       "cluster_formation.peer_discovery_backend = kubernetes
        cluster_formation.k8s.host = k8s.eng.megacorp.local", [
@@ -47,7 +47,7 @@
           ]}
       ], [rabbitmq_peer_discovery_k8s]
   },
-  
+
   {k8s_host, "cluster_formation.k8s.host = k8s.eng.megacorp.local", [
           {rabbit, [
               {cluster_formation, [
