@@ -158,7 +158,18 @@ policy_changed(Q) ->
     ok.
 
 stat(Q) ->
-    {ok, i(messages, Q), 0}.
+    Conf = amqqueue:get_type_state(Q),
+    case maps:get(leader_node, Conf) of
+        Node when Node =/= node() ->
+            case rpc:call(Node, ?MODULE, info, [Q, [messages]]) of
+                {badrpc, _} ->
+                    {ok, 0, 0};
+                [{messages, Messages}] ->
+                    {ok, Messages, 0}
+            end;
+        _ ->
+            {ok, i(messages, Q), 0}
+    end.
 
 consume(Q, #{prefetch_count := 0}, _)
   when ?amqqueue_is_stream(Q) ->
