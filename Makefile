@@ -419,7 +419,8 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-diagnostics \
 	  rabbitmq-queues \
 	  rabbitmq-upgrade \
-	  rabbitmq-streams
+	  rabbitmq-streams \
+		rabbitmq-tanzu
 
 AUTOCOMPLETE_SCRIPTS = bash_autocomplete.sh zsh_autocomplete.sh
 
@@ -433,6 +434,7 @@ WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-service.bat \
 		  rabbitmq-upgrade.bat \
 		  rabbitmq-streams.bat \
+			rabbitmq-tanzu.bat \
 		  rabbitmqctl.bat
 
 UNIX_TO_DOS ?= todos

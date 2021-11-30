@@ -168,6 +168,7 @@ def _versioned_rabbitmq_home_impl(ctx):
         "rabbitmq-plugins",
         "rabbitmq-queues",
         "rabbitmq-streams",
+        "rabbitmq-tanzu",
         "rabbitmq-upgrade",
         "rabbitmqctl",
     ]

@@ -1,0 +1,23 @@
+#!/bin/sh
+##  This Source Code Form is subject to the terms of the Mozilla Public
+##  License, v. 2.0. If a copy of the MPL was not distributed with this
+##  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+##
+##  Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+##
+
+# Exit immediately if a pipeline, which may consist of a single simple command,
+# a list, or a compound command returns a non-zero status
+set -e
+
+# Each variable or function that is created or modified is given the export
+# attribute and marked for export to the environment of subsequent commands.
+set -a
+
+# shellcheck source=/dev/null
+#
+# TODO: when shellcheck adds support for relative paths, change to
+# shellcheck source=./rabbitmq-env
+. "${0%/*}"/rabbitmq-env
+
+run_escript rabbitmqctl_escript "${ESCRIPT_DIR:?must be defined}"/rabbitmq-tanzu "$@"

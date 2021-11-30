@@ -95,6 +95,7 @@ def _impl(ctx):
         "rabbitmq-plugins",
         "rabbitmq-queues",
         "rabbitmq-streams",
+        "rabbitmq-tanzu",
         "rabbitmq-upgrade",
         "rabbitmqctl",
     ]
