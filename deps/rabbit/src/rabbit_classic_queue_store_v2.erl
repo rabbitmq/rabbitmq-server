@@ -154,6 +154,7 @@ terminate(State = #qs{ write_fd = WriteFd,
     maybe_close_fd(ReadFd),
     State#qs{ write_segment = undefined,
               write_fd = undefined,
+              write_offset = ?HEADER_SIZE,
               read_segment = undefined,
               read_fd = undefined }.
 
@@ -431,12 +432,14 @@ delete_segments(Segments, State0 = #qs{ write_segment = WriteSegment,
             ok = file:close(ReadFd),
             State0#qs{ write_segment = undefined,
                        write_fd = undefined,
+                       write_offset = ?HEADER_SIZE,
                        read_segment = undefined,
                        read_fd = undefined };
         CloseWrite ->
             ok = file:close(WriteFd),
             State0#qs{ write_segment = undefined,
-                       write_fd = undefined };
+                       write_fd = undefined,
+                       write_offset = ?HEADER_SIZE };
         CloseRead ->
             ok = file:close(ReadFd),
             State0#qs{ read_segment = undefined,
