@@ -81,6 +81,7 @@ used to make the difference between a request (0) and a response (1). Example fo
 |Access refused|0x10
 |Precondition failed|0x11
 |Publisher does not exist|0x12
+|No offset|0x13
 
 |===
 

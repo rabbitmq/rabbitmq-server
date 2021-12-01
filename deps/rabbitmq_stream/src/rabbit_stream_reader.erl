@@ -1991,14 +1991,14 @@ handle_frame_post_auth(Transport,
                                                                          1),
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0, Connection0};
                     {LeaderPid, C} ->
-                        {?RESPONSE_CODE_OK,
-                         case osiris:read_tracking(LeaderPid, Reference) of
-                             undefined ->
-                                 0;
-                             {offset, Offt} ->
-                                 Offt
-                         end,
-                         C}
+                        {RC, O} =
+                            case osiris:read_tracking(LeaderPid, Reference) of
+                                undefined ->
+                                    {?RESPONSE_CODE_NO_OFFSET, 0};
+                                {offset, Offt} ->
+                                    {?RESPONSE_CODE_OK, Offt}
+                            end,
+                        {RC, O, C}
                 end;
             error ->
                 rabbit_global_counters:increase_protocol_counter(stream,
