@@ -2785,15 +2785,14 @@ cancel_consumer_gh_3729(Config) ->
 
     ok = cancel(Ch),
 
-    D = #'queue.declare'{queue = QQ, passive = true, arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
-    #'queue.declare_ok'{queue = QQ, message_count = 0, consumer_count = 1} = amqp_channel:call(Ch, D),
-
     receive
         #'basic.cancel_ok'{consumer_tag = <<"ctag">>} -> ok
     after 5000 ->
         flush(100),
         ct:fail("basic.cancel_ok timeout")
     end,
+
+    D = #'queue.declare'{queue = QQ, passive = true, arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
 
     F = fun() ->
             #'queue.declare_ok'{queue = QQ,
