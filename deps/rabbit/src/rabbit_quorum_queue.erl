@@ -839,7 +839,8 @@ deliver(true, Delivery, QState0) ->
     rabbit_fifo_client:enqueue(Delivery#delivery.msg_seq_no,
                                Delivery#delivery.message, QState0).
 
-deliver(QSs, #delivery{confirm = Confirm} = Delivery) ->
+deliver(QSs, #delivery{confirm = Confirm} = Delivery0) ->
+    Delivery = clean_delivery(Delivery0),
     lists:foldl(
       fun({Q, stateless}, {Qs, Actions}) ->
               QRef = amqqueue:get_pid(Q),
@@ -1623,3 +1624,21 @@ notify_decorators(QName, F, A) ->
         {error, not_found} ->
             ok
     end.
+
+%% remove any data that a quorum queue doesn't need
+clean_delivery(#delivery{message =
+                         #basic_message{content = Content0} = Msg} = Delivery) ->
+    Content = case Content0 of
+                  #content{properties = none} ->
+                      Content0;
+                  #content{protocol = none} ->
+                      Content0;
+                  #content{properties = Props,
+                           protocol = Proto} ->
+                      Content0#content{properties = none,
+                                       properties_bin = Proto:encode_properties(Props)}
+              end,
+
+    %% TODO: we could also consider clearing out the message id here
+    Delivery#delivery{message = Msg#basic_message{content = Content}}.
+
