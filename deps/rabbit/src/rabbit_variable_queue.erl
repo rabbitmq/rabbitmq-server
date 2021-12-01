@@ -1280,7 +1280,7 @@ convert_from_v2_to_v1(State0 = #vqstate{ index_mod   = rabbit_classic_queue_inde
                                          store_state = V2Store0 }) ->
     {QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun} = rabbit_classic_queue_index_v2:init_args(V2Index),
     #resource{virtual_host = VHost, name = QName} = QueueName,
-    rabbit_log:info("Converting running queue ~s in vhost ~s from v1 to v2", [QName, VHost]),
+    rabbit_log:info("Converting running queue ~s in vhost ~s from v2 to v1", [QName, VHost]),
     State = convert_from_v2_to_v1_in_memory(State0),
     V1Index0 = rabbit_queue_index:init_for_conversion(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     {LoSeqId, HiSeqId, _} = rabbit_classic_queue_index_v2:bounds(V2Index),
@@ -1290,7 +1290,7 @@ convert_from_v2_to_v1(State0 = #vqstate{ index_mod   = rabbit_classic_queue_inde
                                                     LoSeqId, HiSeqId,
                                                     %% Write all messages.
                                                     fun (_, FunState) -> {write, FunState} end),
-    rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v1 to v2",
+    rabbit_log:info("Queue ~s in vhost ~s converted ~b total messages from v2 to v1",
                     [QName, VHost, counters:get(CountersRef, ?CONVERT_COUNT)]),
     %% We have already closed the v2 index/store FDs when deleting the files.
     State#vqstate{ index_mod   = rabbit_queue_index,
