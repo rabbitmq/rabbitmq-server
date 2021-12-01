@@ -464,7 +464,7 @@ delete_segments(Segments, State0 = #qs{ write_segment = WriteSegment,
         (S, SAcc) when S > SAcc -> S;
         (_, SAcc) -> SAcc
     end, -1, Segments),
-    HighestSeqId = HighestSegment * segment_entry_count(),
+    HighestSeqId = (1 + HighestSegment) * segment_entry_count(),
     {Cache, CacheSize} = maps:fold(fun
         (SeqId, {MsgSize, _}, {CacheAcc, CacheSize1}) when SeqId =< HighestSeqId ->
             {CacheAcc, CacheSize1 - MsgSize};
