@@ -14,7 +14,6 @@
     check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
     wait_for_replicated/0, exists/1]).
 
-%% for testing purposes
 -export([definitions/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -318,10 +317,7 @@ definitions(ram) ->
         {Tab, TabDef} <- definitions()].
 
 definitions() ->
-    PreKhepriDefs = case rabbit_khepri:is_enabled(non_blocking) of
-                        true  -> [];
-                        false -> pre_khepri_definitions()
-                    end,
+    PreKhepriDefs = pre_khepri_definitions(),
     [{rabbit_listener,
       [{record_name, listener},
        {attributes, record_info(fields, listener)},

@@ -242,27 +242,27 @@ user_limits_migration(_FeatureName, _FeatureProps, post_enabled_locally) ->
 
 %% This table order is important. For instance, user permissions depend on
 %% both vhosts and users to exist in the metadata store.
--define(mds_phase1_tables, [rabbit_vhost,
+-define(MDS_PHASE1_TABLES, [rabbit_vhost,
                             rabbit_user,
                             rabbit_user_permission,
                             rabbit_topic_permission]).
 
-mds_phase1_migration(FeatureName, _FeatureProps, is_enabled) ->
-    %% Migrated tables do not exist anymore.
-    lists:all(
-      fun(Table) ->
-              case does_table_exist(Table) of
-                  true ->
-                      ?LOG_DEBUG(
-                         "Feature flag `~s`:   table ~s exists, feature flag "
-                         "disabled",
-                         [FeatureName, Table]),
-                      false;
-                  false ->
-                      true
-              end
-      end, ?mds_phase1_tables);
+mds_phase1_migration(_FeatureName, _FeatureProps, is_enabled) ->
+    %Tables = ?MDS_PHASE1_TABLES,
+    %is_mds_migration_done(Tables);
+    undefined;
 mds_phase1_migration(FeatureName, _FeatureProps, enable) ->
+    Tables = ?MDS_PHASE1_TABLES,
+    case is_mds_migration_done(Tables) of
+        false -> run_mds_phase1_migration(FeatureName, Tables);
+        true  -> ok
+    end;
+mds_phase1_migration(FeatureName, _FeatureProps, post_enabled_locally) ->
+    ?assert(rabbit_khepri:is_enabled(non_blocking)),
+    Tables = ?MDS_PHASE1_TABLES,
+    empty_unused_mnesia_tables(FeatureName, Tables).
+
+run_mds_phase1_migration(FeatureName, Tables) ->
     %% Initialize Khepri cluster based on Mnesia running nodes. Verify that
     %% all Mnesia nodes are running (all == running). It would be more
     %% difficult to add them later to the node when they start.
@@ -293,19 +293,8 @@ mds_phase1_migration(FeatureName, _FeatureProps, enable) ->
                [FeatureName, OtherMnesiaNodes]),
             case expand_khepri_cluster(OtherMnesiaNodes) of
                 ok ->
-                    Tables = ?mds_phase1_tables,
                     rabbit_table:wait(Tables, _Retry = true),
-                    ?LOG_NOTICE(
-                       "Feature flag `~s`:   starting migration from Mnesia "
-                       "to Khepri; expect decrease in performance and "
-                       "increase in memory footprint",
-                       [FeatureName]),
-                    Ret = migrate_tables_to_khepri(FeatureName, Tables),
-                    ?LOG_NOTICE(
-                       "Feature flag `~s`:   migration from Mnesia to Khepri "
-                       "finished",
-                       [FeatureName]),
-                    Ret;
+                    migrate_tables_to_khepri(FeatureName, Tables);
                 Error ->
                     ?LOG_ERROR(
                        "Feature flag `~s`:   failed to migrate from Mnesia "
@@ -320,10 +309,7 @@ mds_phase1_migration(FeatureName, _FeatureProps, enable) ->
                "~p",
                [FeatureName, MissingMnesiaNodes]),
             {error, all_mnesia_nodes_must_run}
-    end;
-mds_phase1_migration(FeatureName, _FeatureProps, post_enabled_locally) ->
-    ?assert(rabbit_khepri:is_enabled(non_blocking)),
-    drop_unused_mnesia_tables(FeatureName, ?mds_phase1_tables).
+    end.
 
 expand_khepri_cluster([MnesiaNode | Rest]) ->
     case rabbit_khepri:add_member(MnesiaNode) of
@@ -333,21 +319,23 @@ expand_khepri_cluster([MnesiaNode | Rest]) ->
 expand_khepri_cluster([]) ->
     ok.
 
-does_table_exist(Table) ->
-    try
-        _ = mnesia:table_info(Table, type),
-        true
-    catch
-        exit:{aborted, {no_exists, Table, type}} ->
-            false
-    end.
-
 migrate_tables_to_khepri(FeatureName, Tables) ->
+    ?LOG_NOTICE(
+       "Feature flag `~s`:   starting migration from Mnesia "
+       "to Khepri; expect decrease in performance and "
+       "increase in memory footprint",
+       [FeatureName]),
     Pid = spawn(
-            fun() -> migrate_tables_to_khepri_run(FeatureName, Tables) end),
+            fun() ->
+                    migrate_tables_to_khepri_run(FeatureName, Tables)
+            end),
     MonitorRef = erlang:monitor(process, Pid),
     receive
         {'DOWN', MonitorRef, process, Pid, normal} ->
+            ?LOG_NOTICE(
+               "Feature flag `~s`:   migration from Mnesia to Khepri "
+               "finished",
+               [FeatureName]),
             ok;
         {'DOWN', MonitorRef, process, Pid, Info} ->
             ?LOG_ERROR(
@@ -385,7 +373,14 @@ migrate_tables_to_khepri_run(FeatureName, Tables) ->
     ?LOG_DEBUG(
        "Feature flag `~s`:   final sync and Mnesia table removal",
        [FeatureName]),
-    ok = final_sync_from_mnesia_to_khepri(FeatureName, Tables).
+    ok = final_sync_from_mnesia_to_khepri(FeatureName, Tables),
+
+    %% Unsubscribe to Mnesia events. All Mnesia tables are synchronized and
+    %% read-only at this point.
+    ?LOG_DEBUG(
+       "Feature flag `~s`:   subscribe to Mnesia writes",
+       [FeatureName]),
+    ok = unsubscribe_to_mnesia_changes(FeatureName, Tables).
 
 clear_data_from_previous_attempt(
   FeatureName, [rabbit_vhost | Rest]) ->
@@ -413,6 +408,17 @@ subscribe_to_mnesia_changes(FeatureName, [Table | Rest]) ->
         Error   -> Error
     end;
 subscribe_to_mnesia_changes(_, []) ->
+    ok.
+
+unsubscribe_to_mnesia_changes(FeatureName, [Table | Rest]) ->
+    ?LOG_DEBUG(
+       "Feature flag `~s`:     subscribe to writes to ~s",
+       [FeatureName, Table]),
+    case mnesia:unsubscribe({table, Table, simple}) of
+        {ok, _} -> unsubscribe_to_mnesia_changes(FeatureName, Rest);
+        Error   -> Error
+    end;
+unsubscribe_to_mnesia_changes(_, []) ->
     ok.
 
 copy_from_mnesia_to_khepri(
@@ -562,27 +568,94 @@ handle_mnesia_delete(rabbit_user_permission, UserVHost) ->
 handle_mnesia_delete(rabbit_topic_permission, TopicPermissionKey) ->
     rabbit_auth_backend_internal:mnesia_delete_to_khepri(TopicPermissionKey).
 
-drop_unused_mnesia_tables(FeatureName, [Table | Rest]) ->
+%% We can't remove unused tables at this point yet. The reason is that tables
+%% are synchronized before feature flags in `rabbit_mnesia`. So if a node is
+%% already using Khepri and another node wants to join him, but is using Mnesia
+%% only, it will hang while trying to sync the dropped tables.
+%%
+%% We can't simply reverse the two steps (i.e. synchronize feature flags before
+%% tables) because some feature flags like `quorum_queue` need tables to modify
+%% their schema.
+%%
+%% Another solution would be to have two groups of feature flags, depending on
+%% whether a feature flag should be synchronized before or after Mnesia
+%% tables.
+%%
+%% But for now, let's just empty the tables, add a forged record to mark them
+%% as migrated and leave them around.
+
+empty_unused_mnesia_tables(FeatureName, [Table | Rest]) ->
     %% The feature flag is enabled at this point. It means there should be no
     %% code trying to read or write the Mnesia tables.
-    ?LOG_DEBUG(
-       "Feature flag `~s`:   dropping unused Mnesia table ~s",
-       [FeatureName, Table]),
     case mnesia:change_table_access_mode(Table, read_write) of
         {atomic, ok} ->
-            case mnesia:delete_table(Table) of
-                {atomic, ok}                       -> ok;
-                {aborted, {no_exists, {Table, _}}} -> ok
-            end;
-        {aborted, {already_exists, Table, read_write}} ->
-            case mnesia:delete_table(Table) of
-                {atomic, ok}                       -> ok;
-                {aborted, {no_exists, {Table, _}}} -> ok
-            end;
-        {aborted, {no_exists, {Table, _}}} ->
-            %% Another node already took care of this table.
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   dropping content from unused Mnesia "
+               "table ~s",
+               [FeatureName, Table]),
+            ok = empty_unused_mnesia_table(Table),
+            ok = write_migrated_mark_to_mnesia(FeatureName, Table),
+            ?assert(is_table_migrated(Table));
+        {aborted, {already_exists, Table, _}} ->
+            %% Another node is already taking care of this table.
             ok
     end,
-    drop_unused_mnesia_tables(FeatureName, Rest);
-drop_unused_mnesia_tables(_, []) ->
+    empty_unused_mnesia_tables(FeatureName, Rest);
+empty_unused_mnesia_tables(_, []) ->
             ok.
+
+empty_unused_mnesia_table(Table) ->
+    FirstKey = mnesia:dirty_first(Table),
+    empty_unused_mnesia_table(Table, FirstKey).
+
+empty_unused_mnesia_table(_Table, '$end_of_table') ->
+    ok;
+empty_unused_mnesia_table(Table, Key) ->
+    NextKey = mnesia:dirty_next(Table, Key),
+    ok = mnesia:dirty_delete(Table, Key),
+    empty_unused_mnesia_table(Table, NextKey).
+
+-define(MDS_MIGRATION_MARK_KEY, '$migrated_to_khepri').
+
+write_migrated_mark_to_mnesia(FeatureName, Table) ->
+    TableDefs = rabbit_table:definitions(),
+    TableDef = proplists:get_value(Table, TableDefs),
+    Match = proplists:get_value(match, TableDef),
+    ForgedRecord = create_migrated_marker(Match),
+    ?LOG_DEBUG(
+       "Feature flag `~s`:   write a forged record to Mnesia table ~s to "
+       "mark it as migrated",
+       [FeatureName, Table]),
+    mnesia:dirty_write(Table, ForgedRecord).
+
+create_migrated_marker(Record) ->
+    insert_migrated_marker(Record).
+
+insert_migrated_marker('_') ->
+    ?MDS_MIGRATION_MARK_KEY;
+insert_migrated_marker(Atom) when is_atom(Atom) ->
+    Atom;
+insert_migrated_marker(Tuple) when is_tuple(Tuple) ->
+    Fields = tuple_to_list(Tuple),
+    Fields1 = [insert_migrated_marker(Field) || Field <- Fields],
+    list_to_tuple(Fields1).
+
+is_mds_migration_done(Tables) ->
+    lists:all(fun is_table_migrated/1, Tables).
+
+is_table_migrated(Table) ->
+    case mnesia:table_info(Table, size) of
+        1 ->
+            Key = mnesia:dirty_first(Table),
+            is_migration_marker(Key);
+        _ ->
+            false
+    end.
+
+is_migration_marker(?MDS_MIGRATION_MARK_KEY) ->
+    true;
+is_migration_marker(Tuple) when is_tuple(Tuple) ->
+    Fields = tuple_to_list(Tuple),
+    lists:any(fun is_migration_marker/1, Fields);
+is_migration_marker(_) ->
+    false.

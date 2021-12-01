@@ -237,11 +237,11 @@ remove_member(NodeToRemove) when NodeToRemove =/= node() ->
 
 priv_reset() ->
     ok = rabbit:stop(),
-    {ok, _} = application:ensure_all_started(khepri),
     ok = ensure_ra_system_started(),
     ok = khepri:reset(?RA_SYSTEM, ?RA_CLUSTER_NAME).
 
 ensure_ra_system_started() ->
+    {ok, _} = application:ensure_all_started(khepri),
     ok = rabbit_ra_systems:ensure_ra_system_started(?RA_SYSTEM).
 
 members() ->
