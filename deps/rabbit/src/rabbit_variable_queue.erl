@@ -1167,28 +1167,59 @@ convert_from_v1_to_v2(State0 = #vqstate{ index_mod   = rabbit_queue_index,
 convert_from_v1_to_v2_in_memory(State = #vqstate{ q1 = Q1b,
                                                   q2 = Q2b,
                                                   q3 = Q3b,
-                                                  q4 = Q4b }) ->
+                                                  q4 = Q4b,
+                                                  ram_pending_ack  = RPAb,
+                                                  disk_pending_ack = DPAb,
+                                                  qi_pending_ack   = QPAb }) ->
     Q1 = convert_from_v1_to_v2_queue(Q1b),
     Q2 = convert_from_v1_to_v2_queue(Q2b),
     Q3 = convert_from_v1_to_v2_queue(Q3b),
     Q4 = convert_from_v1_to_v2_queue(Q4b),
+    %% We also must convert the #msg_status entries in the pending_ack fields.
+    %% Because v2 does not embed messages we must move the entries from
+    %% qi_pending_ack to ram_pending_ack where they are expected.
+    RPAc = convert_from_v1_to_v2_tree(RPAb),
+    DPA  = convert_from_v1_to_v2_tree(DPAb),
+    RPA  = convert_from_v1_to_v2_merge_tree(RPAc, QPAb),
     State#vqstate{ q1 = Q1,
                    q2 = Q2,
                    q3 = Q3,
-                   q4 = Q4 }.
+                   q4 = Q4,
+                   ram_pending_ack  = RPA,
+                   disk_pending_ack = DPA,
+                   qi_pending_ack   = gb_trees:empty() }.
 
 %% We change where the message is expected to be persisted to.
 %% We do not need to worry about the message location because
 %% it will only be in memory or in the per-vhost store.
 convert_from_v1_to_v2_queue(Q) ->
     List0 = ?QUEUE:to_list(Q),
-    List = lists:map(fun
-        (MsgStatus = #msg_status{ persist_to = queue_index }) ->
-            MsgStatus#msg_status{ persist_to = queue_store };
-        (MsgStatus) ->
-            MsgStatus
-    end, List0),
+    List = lists:map(fun (MsgStatus) -> convert_from_v1_to_v2_msg_status(MsgStatus) end, List0),
     ?QUEUE:from_list(List).
+
+convert_from_v1_to_v2_tree(T) ->
+    gb_trees:map(fun (_, MsgStatus) -> convert_from_v1_to_v2_msg_status(MsgStatus) end, T).
+
+%% This function converts QPA and merges it into RPA.
+convert_from_v1_to_v2_merge_tree(RPA, QPA) ->
+    convert_from_v1_to_v2_merge_tree_loop(RPA, gb_trees:iterator(QPA)).
+
+convert_from_v1_to_v2_merge_tree_loop(T, Iterator0) ->
+    case gb_trees:next(Iterator0) of
+        none ->
+            T;
+        {Key, Value0, Iterator} ->
+            Value = convert_from_v1_to_v2_msg_status(Value0),
+            convert_from_v1_to_v2_merge_tree_loop(gb_trees:insert(Key, Value, T), Iterator)
+    end.
+
+convert_from_v1_to_v2_msg_status(MsgStatus) ->
+    case MsgStatus of
+        #msg_status{ persist_to = queue_index } ->
+            MsgStatus#msg_status{ persist_to = queue_store };
+        _ ->
+            MsgStatus
+    end.
 
 convert_from_v1_to_v2_loop(_, _, V2Index, V2Store, _, HiSeqId, HiSeqId, _) ->
     {V2Index, V2Store};
@@ -1269,39 +1300,87 @@ convert_from_v2_to_v1(State0 = #vqstate{ index_mod   = rabbit_classic_queue_inde
 convert_from_v2_to_v1_in_memory(State0 = #vqstate{ q1 = Q1b,
                                                    q2 = Q2b,
                                                    q3 = Q3b,
-                                                   q4 = Q4b }) ->
+                                                   q4 = Q4b,
+                                                   ram_pending_ack  = RPAb,
+                                                   disk_pending_ack = DPAb,
+                                                   qi_pending_ack   = QPAb }) ->
     {Q1, State1} = convert_from_v2_to_v1_queue(Q1b, State0),
     {Q2, State2} = convert_from_v2_to_v1_queue(Q2b, State1),
     {Q3, State3} = convert_from_v2_to_v1_queue(Q3b, State2),
     {Q4, State4} = convert_from_v2_to_v1_queue(Q4b, State3),
-    State4#vqstate{ q1 = Q1,
+    %% We also must convert the #msg_status entries in the pending_ack fields.
+    %% We must separate entries in the queue index from other entries as
+    %% that is what is expected from the v1 index.
+    true               = gb_trees:is_empty(QPAb), %% assert
+    {RPA, QPA, State5} = convert_from_v2_to_v1_split_tree(RPAb, State4),
+    {DPA, State6}      = convert_from_v2_to_v1_tree(DPAb, State5),
+    State6#vqstate{ q1 = Q1,
                     q2 = Q2,
                     q3 = Q3,
-                    q4 = Q4 }.
+                    q4 = Q4,
+                    ram_pending_ack  = RPA,
+                    disk_pending_ack = DPA,
+                    qi_pending_ack   = QPA }.
 
 %% We fetch the message from the per-queue store if necessary
 %% and mark all messages as delivered to make the v1 index happy.
 convert_from_v2_to_v1_queue(Q, State0) ->
     List0 = ?QUEUE:to_list(Q),
-    {List, State} = lists:mapfoldl(fun (MsgStatus0, State1 = #vqstate{ store_state = StoreState0 }) ->
-        case MsgStatus0 of
-            #msg_status{ seq_id = SeqId,
-                         msg_location = MsgLocation = {rabbit_classic_queue_store_v2, _, _} } ->
-                {Msg, StoreState} = rabbit_classic_queue_store_v2:read(SeqId, MsgLocation, StoreState0),
-                MsgStatus = MsgStatus0#msg_status{ msg = Msg,
-                                                   msg_location = memory,
-                                                   is_delivered = true,
-                                                   persist_to   = queue_index },
-                State2 = stats(ready0, {MsgStatus0, MsgStatus}, 0, State1),
-                {MsgStatus, State2#vqstate{ store_state = StoreState }};
-            #msg_status{ persist_to = queue_store } ->
-                {MsgStatus0#msg_status{ is_delivered = true,
-                                        persist_to   = queue_index }, State1};
-            _ ->
-                {MsgStatus0#msg_status{ is_delivered = true }, State1}
-        end
+    {List, State} = lists:mapfoldl(fun (MsgStatus, State1) ->
+        convert_from_v2_to_v1_msg_status(MsgStatus, State1, true)
     end, State0, List0),
     {?QUEUE:from_list(List), State}.
+
+convert_from_v2_to_v1_tree(T, State) ->
+    convert_from_v2_to_v1_tree_loop(gb_trees:iterator(T), gb_trees:empty(), State).
+
+convert_from_v2_to_v1_tree_loop(Iterator0, Acc, State0) ->
+    case gb_trees:next(Iterator0) of
+        none ->
+            {Acc, State0};
+        {Key, Value0, Iterator} ->
+            {Value, State} = convert_from_v2_to_v1_msg_status(Value0, State0, false),
+            convert_from_v2_to_v1_tree_loop(Iterator, gb_trees:insert(Key, Value, Acc), State)
+    end.
+
+convert_from_v2_to_v1_split_tree(T, State) ->
+    convert_from_v2_to_v1_split_tree_loop(gb_trees:iterator(T), gb_trees:empty(), gb_trees:empty(), State).
+
+convert_from_v2_to_v1_split_tree_loop(Iterator0, RPAAcc, QPAAcc, State0) ->
+    case gb_trees:next(Iterator0) of
+        none ->
+            {RPAAcc, QPAAcc, State0};
+        {Key, Value0, Iterator} ->
+            {Value, State} = convert_from_v2_to_v1_msg_status(Value0, State0, false),
+            case Value of
+                #msg_status{ persist_to = queue_index } ->
+                    convert_from_v2_to_v1_split_tree_loop(Iterator, RPAAcc, gb_trees:insert(Key, Value, QPAAcc), State);
+                _ ->
+                    convert_from_v2_to_v1_split_tree_loop(Iterator, gb_trees:insert(Key, Value, RPAAcc), QPAAcc, State)
+            end
+    end.
+
+convert_from_v2_to_v1_msg_status(MsgStatus0, State1 = #vqstate{ store_state = StoreState0 }, Ready) ->
+    case MsgStatus0 of
+        #msg_status{ seq_id = SeqId,
+                     msg_location = MsgLocation = {rabbit_classic_queue_store_v2, _, _} } ->
+            {Msg, StoreState} = rabbit_classic_queue_store_v2:read(SeqId, MsgLocation, StoreState0),
+            MsgStatus = MsgStatus0#msg_status{ msg = Msg,
+                                               msg_location = memory,
+                                               is_delivered = true,
+                                               persist_to   = queue_index },
+            %% We have read the message into memory. We must update the stats.
+            State2 = case Ready of
+                true  -> stats(ready0, {MsgStatus0, MsgStatus}, 0, State1);
+                false -> stats({0, 0}, {MsgStatus0, MsgStatus}, 0, State1)
+            end,
+            {MsgStatus, State2#vqstate{ store_state = StoreState }};
+        #msg_status{ persist_to = queue_store } ->
+            {MsgStatus0#msg_status{ is_delivered = true,
+                                    persist_to   = queue_index }, State1};
+        _ ->
+            {MsgStatus0#msg_status{ is_delivered = true }, State1}
+    end.
 
 convert_from_v2_to_v1_loop(_, V1Index, _, V2Store, _, HiSeqId, HiSeqId, _) ->
     {V1Index, V2Store};
@@ -2485,6 +2564,9 @@ record_pending_ack(#msg_status { seq_id = SeqId } = MsgStatus,
         case {msg_in_ram(MsgStatus), persist_to(MsgStatus)} of
             {false, _}           -> {RPA, Insert(DPA), QPA};
             {_,     queue_index} -> {RPA, DPA, Insert(QPA)};
+            %% The per-queue store behaves more like the per-vhost store
+            %% than the v1 index embedding. We can page out to disk the
+            %% pending per-queue store messages.
             {_,     queue_store} -> {Insert(RPA), DPA, QPA};
             {_,     msg_store}   -> {Insert(RPA), DPA, QPA}
         end,
