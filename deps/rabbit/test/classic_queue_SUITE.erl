@@ -178,9 +178,8 @@ command(St) ->
             {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), boolean()]}},
 %           %% channel enable confirm mode
 %            {300, {call, ?MODULE, cmd_channel_await_publisher_confirms, [channel(St)]}},
-            {900, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}}
-            %% channel get
-            %% channel consume
+            {900, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
+            {900, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}}
             %% channel ack
             %% channel reject
             %% channel cancel
@@ -221,12 +220,13 @@ next_state(St, _, {call, _, cmd_set_mode_version, [Mode, Version]}) ->
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_publish_msg, _}) ->
     IntQ = maps:get(internal, Q, queue:new()),
     St#cq{q=Q#{internal => queue:in(Msg, IntQ)}};
+%% @todo Special case 'empty' as an optimisation?
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_basic_get_msg, _}) ->
     St#cq{q=queue_out(Q, Msg)};
 next_state(St, _, {call, _, cmd_purge, _}) ->
     St#cq{q=#{}};
 next_state(St=#cq{channels=Channels}, Ch, {call, _, cmd_channel_open, _}) ->
-    St#cq{channels=Channels#{Ch => true}}; %% @todo A record instead of 'true'?
+    St#cq{channels=Channels#{Ch => idle}}; %% @todo A record instead of 'idle' | {'consume', Tag}?
 next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_close, [Ch]}) ->
     %% @todo What about publisher confirms?
     %% @todo What about messages we are currently in the process of receiving?
@@ -237,7 +237,9 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_publish, [_, Ch|_]}) ->
     ChQ = maps:get(Ch, Q, queue:new()),
     St#cq{q=Q#{Ch => queue:in(Msg, ChQ)}};
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_basic_get, _}) ->
-    St#cq{q=queue_out(Q, Msg)}.
+    St#cq{q=queue_out(Q, Msg)};
+next_state(St=#cq{channels=Channels}, Tag, {call, _, cmd_channel_consume, [_, Ch]}) ->
+    St#cq{channels=Channels#{Ch => {consume, Tag}}}.
 
 %% @todo This function is not working in a symbolic context.
 %%       We cannot rely on Q for driving preconditions as a result.
@@ -269,8 +271,22 @@ precondition(St, {call, _, cmd_channel_close, _}) ->
     has_channels(St);
 precondition(St, {call, _, cmd_channel_publish, _}) ->
     has_channels(St);
-precondition(St, {call, _, cmd_channel_basic_get, _}) ->
-    has_channels(St);
+precondition(St=#cq{channels=Channels}, {call, _, cmd_channel_basic_get, [_, Ch]}) ->
+    case has_channels(St) of
+        false ->
+            false;
+        true ->
+            %% Using both consume and basic_get is non-deterministic.
+            maps:get(Ch, Channels) =:= idle
+    end;
+precondition(St=#cq{channels=Channels}, {call, _, cmd_channel_consume, [_, Ch]}) ->
+    case has_channels(St) of
+        false ->
+            false;
+        true ->
+            %% Don't consume if we are already consuming on this channel.
+            maps:get(Ch, Channels) =:= idle
+    end;
 precondition(_, _) ->
     true.
 
@@ -288,7 +304,10 @@ postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode_version, [Mode, Version]}, _)
     (do_check_queue_version(AMQ, Version) =:= ok);
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) ->
     is_record(Msg, amqp_msg);
-postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, empty) ->
+postcondition(St=#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, empty) ->
+    %% We may get 'empty' if there are consumers and the messages are
+    %% in transit.
+    has_consumers(St) orelse
     %% Due to the asynchronous nature of publishing it may be
     %% possible to have published a message but an immediate basic.get
     %% on a separate channel cannot retrieve it. In that case we accept
@@ -309,7 +328,10 @@ postcondition(_, {call, _, cmd_channel_close, _}, Res) ->
     Res =:= ok;
 postcondition(_, {call, _, cmd_channel_publish, _}, Msg) ->
     is_record(Msg, amqp_msg);
-postcondition(#cq{q=Q}, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
+postcondition(St=#cq{q=Q}, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
+    %% We may get 'empty' if there are consumers and the messages are
+    %% in transit.
+    has_consumers(St) orelse
     %% Due to the asynchronous nature of publishing it may be
     %% possible to have published a message but an immediate basic.get
     %% on a separate channel cannot retrieve it. In that case we accept
@@ -317,7 +339,15 @@ postcondition(#cq{q=Q}, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
     %% basic.get on has no messages published and not consumed.
     not maps:is_key(Ch, Q);
 postcondition(#cq{q=Q}, {call, _, cmd_channel_basic_get, _}, Msg) ->
-    queue_peek_has_msg(Q, Msg).
+    queue_peek_has_msg(Q, Msg);
+postcondition(_, {call, _, cmd_channel_consume, _}, _) ->
+    true.
+
+has_consumers(#cq{channels=Channels}) ->
+    maps:fold(fun
+        (_, {consume, _}, _) -> true;
+        (_, _, Acc) -> Acc
+    end, false, Channels).
 
 %% We want to confirm at least one of this exact message
 %% was published. There might be multiple if the randomly
@@ -426,7 +456,7 @@ cmd_basic_get_msg(#cq{amq=AMQ}) ->
     case Res of
         {empty, _} ->
             empty;
-        {ok, _CountMinusOne, {_QName, _QPid, _AckTag, false, Msg}, _} ->
+        {ok, _CountMinusOne, {_QName, _QPid, _AckTag, _IsDelivered, Msg}, _} ->
             {MsgProps, MsgPayload} = rabbit_basic_common:from_content(Msg#basic_message.content),
             #amqp_msg{props=MsgProps, payload=MsgPayload}
     end.
@@ -466,6 +496,14 @@ cmd_channel_basic_get(#cq{name=Name}, Ch) ->
         {_GetOk = #'basic.get_ok'{}, Msg} ->
             Msg
     end.
+
+cmd_channel_consume(#cq{name=Name}, Ch) ->
+    Tag = integer_to_binary(erlang:unique_integer([positive])),
+    #'basic.consume_ok'{} =
+        amqp_channel:call(Ch,
+                          #'basic.consume'{queue = atom_to_binary(Name, utf8), consumer_tag = Tag}),
+    receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
+    Tag.
 
 do_rand_payload(PayloadSize) ->
     case erlang:function_exported(rand, bytes, 1) of
