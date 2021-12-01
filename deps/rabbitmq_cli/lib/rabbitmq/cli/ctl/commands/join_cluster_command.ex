@@ -42,32 +42,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
     long_or_short_names = Config.get_option(:longnames, opts)
     target_node_normalised = Helpers.normalise_node(target_node, long_or_short_names)
 
-    ret1 = :rabbit_misc.rpc_call(
+    :rabbit_misc.rpc_call(
       node_name,
       :rabbit_mnesia,
       :join_cluster,
       [target_node_normalised, node_type]
     )
-
-    case ret1 do
-      :ok ->
-        ret2 = :rabbit_misc.rpc_call(
-          target_node_normalised,
-          :rabbit_khepri,
-          :add_member,
-          [node_name]
-        )
-
-        # TODO: Handle errors.
-        case ret2 do
-          {:undef, [{:rabbit_khepri, :add_member, _, []}]} ->
-            ret1
-          _ ->
-            ret2
-        end
-      _ ->
-        ret1
-    end
   end
 
   def output({:ok, :already_member}, _) do

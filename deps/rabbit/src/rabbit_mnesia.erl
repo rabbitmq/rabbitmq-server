@@ -212,9 +212,15 @@ join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterva
 %% we cluster to its cluster.
 
 -spec join_cluster(node(), node_type())
-                        -> ok | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
+                        -> ok | {ok, already_member} | {error, {inconsistent_cluster, string()}} | {badrpc, term()}.
 
 join_cluster(DiscoveryNode, NodeType) ->
+    case join_mnesia_cluster(DiscoveryNode, NodeType) of
+        ok    -> join_khepri_cluster(DiscoveryNode);
+        Other -> Other
+    end.
+
+join_mnesia_cluster(DiscoveryNode, NodeType) ->
     ensure_mnesia_not_running(),
     ensure_mnesia_dir(),
     case is_only_clustered_disc_node() of
@@ -256,6 +262,18 @@ join_cluster(DiscoveryNode, NodeType) ->
                     rabbit_log:error(Msg),
                     {error, {inconsistent_cluster, Msg}}
             end
+    end.
+
+join_khepri_cluster(DiscoveryNode) ->
+    case rabbit_khepri:join_cluster(DiscoveryNode) of
+        {badrpc, {'EXIT', {undef, [{rabbit_khepri, add_member, _, _}]}}} ->
+            rabbit_log:debug(
+              "Skip Khepri cluster expansion; Khepri is unavailable on "
+              "remote node ~p",
+              [DiscoveryNode]),
+            ok;
+        Other ->
+            Other
     end.
 
 %% return node to its virgin state, where it is not member of any

@@ -75,7 +75,9 @@
     #{desc          => "Use the new Raft-based metadata store [phase 1]",
       doc_url       => "", %% TODO
       stability     => experimental,
-      depends_on    => [virtual_host_metadata, user_limits],
+      depends_on    => [maintenance_mode_status,
+                        user_limits,
+                        virtual_host_metadata],
       migration_fun => {?MODULE, mds_phase1_migration}
      }}).
 
@@ -248,21 +250,27 @@ user_limits_migration(_FeatureName, _FeatureProps, post_enabled_locally) ->
                             rabbit_topic_permission]).
 
 mds_phase1_migration(_FeatureName, _FeatureProps, is_enabled) ->
-    %Tables = ?MDS_PHASE1_TABLES,
-    %is_mds_migration_done(Tables);
+    %% We don't check if the migration was done already because we also need
+    %% to make sure the cluster membership of Khepri matches the Mnesia
+    %% cluster.
     undefined;
 mds_phase1_migration(FeatureName, _FeatureProps, enable) ->
-    Tables = ?MDS_PHASE1_TABLES,
-    case is_mds_migration_done(Tables) of
-        false -> run_mds_phase1_migration(FeatureName, Tables);
-        true  -> ok
+    case ensure_khepri_cluster_matches_mnesia(FeatureName) of
+        ok ->
+            Tables = ?MDS_PHASE1_TABLES,
+            case is_mds_migration_done(Tables) of
+                false -> migrate_tables_to_khepri(FeatureName, Tables);
+                true  -> ok
+            end;
+        Error ->
+            Error
     end;
 mds_phase1_migration(FeatureName, _FeatureProps, post_enabled_locally) ->
     ?assert(rabbit_khepri:is_enabled(non_blocking)),
     Tables = ?MDS_PHASE1_TABLES,
     empty_unused_mnesia_tables(FeatureName, Tables).
 
-run_mds_phase1_migration(FeatureName, Tables) ->
+ensure_khepri_cluster_matches_mnesia(FeatureName) ->
     %% Initialize Khepri cluster based on Mnesia running nodes. Verify that
     %% all Mnesia nodes are running (all == running). It would be more
     %% difficult to add them later to the node when they start.
@@ -281,20 +289,13 @@ run_mds_phase1_migration(FeatureName, Tables) ->
             %% This is the first time Khepri will be used for real. Therefore
             %% we need to make sure the Khepri cluster matches the Mnesia
             %% cluster.
-            %%
-            %% Even if some nodes are already part of the Khepri cluster, we
-            %% reset every nodes (except the one running this function) and
-            %% add them to this node's Khepri cluster.
-            KhepriNodes = lists:sort(rabbit_khepri:nodes()),
-            OtherMnesiaNodes = AllMnesiaNodes -- KhepriNodes,
             ?LOG_DEBUG(
-               "Feature flag `~s`:   updating the Khepri cluster to match the "
-               "Mnesia cluster by adding the following nodes: ~p",
-               [FeatureName, OtherMnesiaNodes]),
-            case expand_khepri_cluster(OtherMnesiaNodes) of
+               "Feature flag `~s`:   updating the Khepri cluster to match "
+               "the Mnesia cluster",
+               [FeatureName]),
+            case expand_khepri_cluster(FeatureName) of
                 ok ->
-                    rabbit_table:wait(Tables, _Retry = true),
-                    migrate_tables_to_khepri(FeatureName, Tables);
+                    ok;
                 Error ->
                     ?LOG_ERROR(
                        "Feature flag `~s`:   failed to migrate from Mnesia "
@@ -311,15 +312,96 @@ run_mds_phase1_migration(FeatureName, Tables) ->
             {error, all_mnesia_nodes_must_run}
     end.
 
-expand_khepri_cluster([MnesiaNode | Rest]) ->
-    case rabbit_khepri:add_member(MnesiaNode) of
-        ok    -> expand_khepri_cluster(Rest);
-        Error -> Error
-    end;
-expand_khepri_cluster([]) ->
-    ok.
+expand_khepri_cluster(FeatureName) ->
+    %% All Mnesia nodes are running (this is a requirement to enable this
+    %% feature flag). We use this unique list of nodes to find the largest
+    %% Khepri clusters among all of them.
+    %%
+    %% The idea is that at the beginning, each Mnesia Node will also be an
+    %% unclustered Khepri node. Therefore, the first node in the sorted list
+    %% of Mnesia nodes will be picked (a "cluster" with 1 member, but the
+    %% largest at the beginning).
+    %%
+    %% After the first nodes join that single node, its cluster will grow and
+    %% will continue to be the largest.
+    %%
+    %% This function is executed on every nodes. Therefore it will add this
+    %% node to a cluster (except if it would join itself). Other nodes will
+    %% execute this function to add themselves.
+    %%
+    %% This should avoid the situation where a large established cluster is
+    %% reset and joins a single new/empty node.
+    %%
+    %% Also, we only consider Khepri clusters which are in use (the feature
+    %% flag is enabled). Here is an example:
+    %%     - Node2 is the only node in the Mnesia cluster at the time the
+    %%       feature flag is enabled. It joins no other node and runs its own
+    %%       one-node Khepri cluster.
+    %%     - Node1 joins the Mnesia cluster which is now Node1 + Node2. Given
+    %%       the sorting, Khepri cluster will be [[Node1], [Node2]] when
+    %%       sorted by name and size. With this order, Node1 should "join"
+    %%       itself. But the feature is not enabled yet on this node,
+    %%       therefore, we skip this cluster to consider the following one,
+    %%       [Node2].
+    ThisNode = node(),
+    KhepriCluster = find_largest_khepri_cluster(FeatureName),
+    case lists:member(ThisNode, KhepriCluster) of
+        true ->
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   this node (~s) is already a member of "
+               "the largest cluster: ~p",
+               [FeatureName, ThisNode, KhepriCluster]),
+            ok;
+        false ->
+            [KhepriNode | _] = KhepriCluster,
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   adding this node (~s) to the largest "
+               "Khepri cluster found among Mnesia nodes: ~p",
+               [FeatureName, ThisNode, KhepriCluster]),
+            rabbit_khepri:join_cluster(KhepriNode)
+    end.
+
+find_largest_khepri_cluster(FeatureName) ->
+    case list_all_khepri_clusters(FeatureName) of
+        [] ->
+            [node()];
+        KhepriClusters ->
+            KhepriClustersBySize = sort_khepri_clusters_by_size(
+                                     KhepriClusters),
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   existing Khepri clusters (sorted by "
+               "size): ~p",
+               [FeatureName, KhepriClustersBySize]),
+            LargestKhepriCluster = hd(KhepriClustersBySize),
+            LargestKhepriCluster
+    end.
+
+list_all_khepri_clusters(FeatureName) ->
+    MnesiaNodes = lists:sort(rabbit_mnesia:cluster_nodes(all)),
+    ?LOG_DEBUG(
+       "Feature flag `~s`:   querying the following Mnesia nodes to learn "
+       "their Khepri cluster membership: ~p",
+       [FeatureName, MnesiaNodes]),
+    KhepriClusters = lists:foldl(
+                       fun(MnesiaNode, Acc) ->
+                               case khepri_cluster_on_node(MnesiaNode) of
+                                   []        -> Acc;
+                                   Cluster   -> Acc#{Cluster => true}
+                               end
+                       end, #{}, MnesiaNodes),
+    lists:sort(maps:keys(KhepriClusters)).
+
+sort_khepri_clusters_by_size(KhepriCluster) ->
+    lists:sort(
+      fun(A, B) -> length(A) >= length(B) end,
+      KhepriCluster).
+
+khepri_cluster_on_node(Node) ->
+    lists:sort(
+      rabbit_misc:rpc_call(Node, rabbit_khepri, nodes_if_khepri_enabled, [])).
 
 migrate_tables_to_khepri(FeatureName, Tables) ->
+    rabbit_table:wait(Tables, _Retry = true),
     ?LOG_NOTICE(
        "Feature flag `~s`:   starting migration from Mnesia "
        "to Khepri; expect decrease in performance and "
