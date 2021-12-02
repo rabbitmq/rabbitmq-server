@@ -637,9 +637,6 @@ parse_date_spec([$$, $M, M | Rest], Acc0) when M >= $0, M =< $6 ->
 %% all other inputs
 parse_date_spec(Input, _Acc) ->
     io:format(standard_error, "Failed to parse rotation date spec: ~p (error)~n", [Input]),
-    error;
-parse_date_spec(Input, error) ->
-    io:format(standard_error, "Failed to parse rotation date spec: ~p (error)~n", [Input]),
     error.
 
 parse_minute("", Acc) ->
