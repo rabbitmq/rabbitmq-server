@@ -58,7 +58,7 @@ update_jwks_signing_keys() ->
         undefined ->
             {error, no_jwks_url};
         JwksUrl ->
-            case httpc:request(JwksUrl) of
+            case fetch_keys(JwksUrl) of
                 {ok, {_, _, JwksBody}} ->
                     KeyList = maps:get(<<"keys">>, jose:decode(erlang:iolist_to_binary(JwksBody)), []),
                     Keys = maps:from_list(lists:map(fun(Key) -> {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
@@ -66,6 +66,18 @@ update_jwks_signing_keys() ->
                 {error, _} = Err ->
                     Err
             end
+    end.
+
+-spec fetch_keys(binary() | list()) -> {ok, term()} | {error, term()}.
+fetch_keys(JwksUrl) ->
+    UaaEnv = application:get_env(?APP, key_config, []),
+    case proplists:get_value(strict, UaaEnv, true) of
+        false ->
+            httpc:request(JwksUrl);
+        true ->
+            CaCertFile = proplists:get_value(cacertfile, UaaEnv),
+            SslOpts = [{verify, verify_peer}, {cacertfile, CaCertFile}, {fail_if_no_peer_cert, true}],
+            httpc:request(get, {JwksUrl, []}, [{ssl, SslOpts}], [])
     end.
 
 -spec decode_and_verify(binary()) -> {boolean(), map()} | {error, term()}.
