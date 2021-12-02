@@ -77,3 +77,32 @@
                   end, Settings),
     maps:from_list(SigningKeys)
  end}.
+
+{mapping,
+ "auth_oauth2.jwks_url",
+ "rabbitmq_auth_backend_oauth2.key_config.jwks_url",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
+
+{mapping,
+ "auth_oauth2.strict",
+ "rabbitmq_auth_backend_oauth2.key_config.strict",
+ [{datatype, {enum, [true, false]}}]}.
+
+{mapping,
+ "auth_oauth2.cacertfile",
+ "rabbitmq_auth_backend_oauth2.key_config.cacertfile",
+ [{datatype, file}, {validators, ["file_accessible"]}]}.
+
+{validator, "https_uri", "invalid https uri",
+ fun(Uri) -> string:nth_lexeme(Uri, 1, "://") == "https" end}.
+
+{mapping,
+ "auth_oauth2.algorithms.$algorithm",
+ "rabbitmq_auth_backend_oauth2.key_config.algorithms",
+ [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_oauth2.key_config.algorithms",
+ fun(Conf) ->
+     Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.algorithms", Conf),
+     [list_to_binary(V) || {_, V} <- Settings]
+ end}.
