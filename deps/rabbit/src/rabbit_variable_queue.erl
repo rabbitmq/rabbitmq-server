@@ -813,6 +813,7 @@ ack(AckTags, State) ->
           end, {accumulate_ack_init(), State}, AckTags),
     {DeletedSegments, IndexState1} = IndexMod:ack(IndexOnDiskSeqIds, IndexState),
     StoreState1 = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState0),
+    %% @todo This is probably not needed considering we remove from the cache on delete_segments.
     StoreState = lists:foldl(fun rabbit_classic_queue_store_v2:remove/2, StoreState1, SeqIdsInStore),
     remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
     {lists:reverse(AllMsgIds),
@@ -1276,12 +1277,13 @@ convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0,
 %% is moved to the v2 store if it was embedded, and left in the per-vhost
 %% store otherwise.
 convert_from_v2_to_v1(State0 = #vqstate{ index_mod   = rabbit_classic_queue_index_v2,
-                                         index_state = V2Index,
-                                         store_state = V2Store0 }) ->
+                                         index_state = V2Index }) ->
     {QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun} = rabbit_classic_queue_index_v2:init_args(V2Index),
     #resource{virtual_host = VHost, name = QName} = QueueName,
     rabbit_log:info("Converting running queue ~s in vhost ~s from v2 to v1", [QName, VHost]),
     State = convert_from_v2_to_v1_in_memory(State0),
+    %% We may have read from the per-queue store state and opened FDs.
+    #vqstate{ store_state = V2Store0 } = State,
     V1Index0 = rabbit_queue_index:init_for_conversion(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
     {LoSeqId, HiSeqId, _} = rabbit_classic_queue_index_v2:bounds(V2Index),
     CountersRef = counters:new(?CONVERT_COUNTER_SIZE, []),
