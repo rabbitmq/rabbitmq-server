@@ -21,7 +21,8 @@ groups() ->
          parse_date_spec_case2,
          parse_date_spec_case3,
          parse_date_spec_case4,
-         parse_date_spec_case5
+         parse_date_spec_case5,
+         parse_date_spec_case6
      ]}
     ].
 
@@ -250,3 +251,14 @@ parse_date_spec_case5(_) ->
       ?assertEqual(
           error,
           rabbit_logger_std_h:parse_date_spec("$D99")).
+
+parse_date_spec_case6(_) ->
+      ?assertEqual(
+          #{every => day, hour => 0, minute => 30},
+          rabbit_logger_std_h:parse_date_spec("$H30")),
+      ?assertEqual(
+          #{every => day, hour => 0, minute => 3},
+          rabbit_logger_std_h:parse_date_spec("$H3")),
+      ?assertEqual(
+          #{day_of_week => 0,every => week,hour => 0, minute => 30},
+          rabbit_logger_std_h:parse_date_spec("$W0H30")).

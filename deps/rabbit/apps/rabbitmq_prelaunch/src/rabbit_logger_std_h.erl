@@ -29,7 +29,7 @@
                                         io:put_chars(DEVICE, DATA)
                                     end).
 
--export([parse_date_spec/1, parse_day_of_week/2, parse_day_of_month/2, parse_hour/2]).
+-export([parse_date_spec/1, parse_day_of_week/2, parse_day_of_month/2, parse_hour/2, parse_minute/2]).
 -else.
 -define(io_put_chars(DEVICE, DATA), io:put_chars(DEVICE, DATA)).
 -endif.
@@ -610,6 +610,22 @@ parse_date_spec([$$, $D, D1 | Rest], Acc0) when D1 >= $0, D1 =< $9 ->
 parse_date_spec([$D, D1 | Rest], Acc0) when D1 >= $0, D1 =< $9 ->
     Acc = parse_hour([D1], Acc0#{hour => 0}),
     parse_date_spec(Rest, Acc);
+%% $H23
+parse_date_spec([$$, $H, H1, H2 | Rest], Acc0) when H1 >= $0, H1 =< $9, H2 >= $0, H2 =< $9 ->
+    Acc = parse_minute([H1, H2], Acc0#{every => day, hour => 0}),
+    parse_date_spec(Rest, Acc);
+%% H23
+parse_date_spec([$H, H1, H2 | Rest], Acc0) when H1 >= $0, H1 =< $9, H2 >= $0, H2 =< $9 ->
+    Acc = parse_minute([H1, H2], Acc0#{hour => 0}),
+    parse_date_spec(Rest, Acc);
+%% $H0
+parse_date_spec([$$, $H, H1 | Rest], Acc0) when H1 >= $0, H1 =< $9 ->
+    Acc = parse_minute([H1], Acc0#{every => day, hour => 0}),
+    parse_date_spec(Rest, Acc);
+%% H0
+parse_date_spec([$H, H1 | Rest], Acc0) when H1 >= $0, H1 =< $9 ->
+    Acc = parse_minute([H1], Acc0#{hour => 0}),
+    parse_date_spec(Rest, Acc);
 %% $W0
 parse_date_spec([$$, $W, W | Rest], Acc0) when W >= $0, W =< $6 ->
     Acc = parse_day_of_week([W], Acc0#{every => week, hour => 0}),
@@ -625,6 +641,14 @@ parse_date_spec(Input, _Acc) ->
 parse_date_spec(Input, error) ->
     io:format(standard_error, "Failed to parse rotation date spec: ~p (error)~n", [Input]),
     error.
+
+parse_minute("", Acc) ->
+    Acc;
+parse_minute(Input, Acc) ->
+    case string_to_int_within_range(Input, 0, 59) of
+        {Val, _Rest} -> Acc#{minute => Val};
+        error       ->  error
+    end.
 
 parse_hour("", Acc) ->
     Acc;
