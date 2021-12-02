@@ -2504,8 +2504,16 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus, State) ->
     {MsgStatus1, State1} = maybe_write_msg_to_disk(ForceMsg, MsgStatus, State),
     maybe_write_index_to_disk(ForceIndex, MsgStatus1, State1).
 
-maybe_prepare_write_to_disk(ForceMsg, ForceIndex, MsgStatus, State) ->
+maybe_prepare_write_to_disk(ForceMsg, ForceIndex0, MsgStatus, State = #vqstate{ version = Version }) ->
     {MsgStatus1, State1} = maybe_write_msg_to_disk(ForceMsg, MsgStatus, State),
+    %% We want messages written to the v2 per-queue store to also
+    %% be written to the index for proper accounting. The situation
+    %% where a message can be in the store but not in the index can
+    %% only occur when going through this function (not via maybe_write_to_disk).
+    ForceIndex = case {Version, persist_to(MsgStatus)} of
+        {2, queue_store} -> true;
+        _ -> ForceIndex0
+    end,
     maybe_batch_write_index_to_disk(ForceIndex, MsgStatus1, State1).
 
 determine_persist_to(Version,
