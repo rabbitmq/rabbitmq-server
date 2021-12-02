@@ -3,19 +3,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([all/0,
-         groups/0,
-         init_per_suite/2,
-         end_per_suite/2,
-         init_per_group/2,
-         end_per_group/2,
-         init_per_testcase/2,
-         end_per_testcase/2,
-
-         every_day_rotation_is_detected/1,
-         every_week_rotation_is_detected/1,
-         every_month_rotation_is_detected/1
-        ]).
+-compile(export_all).
 
 all() ->
     [
@@ -24,9 +12,17 @@ all() ->
 
 groups() ->
     [
-     {parallel_tests, [parallel], [every_day_rotation_is_detected,
-                                   every_week_rotation_is_detected,
-                                   every_month_rotation_is_detected]}
+     {parallel_tests, [parallel], [
+         every_day_rotation_is_detected,
+         every_week_rotation_is_detected,
+         every_month_rotation_is_detected,
+
+         parse_date_spec_case1,
+         parse_date_spec_case2,
+         parse_date_spec_case3,
+         parse_date_spec_case4,
+         parse_date_spec_case5
+     ]}
     ].
 
 init_per_suite(_, Config) -> Config.
@@ -210,3 +206,47 @@ every_month_rotation_is_detected(_) ->
         #{every => month, day_of_month => last, hour => 12},
         {{2021, 01, 30}, {12, 00, 00}},
         {{2021, 02, 01}, {12, 00, 00}})).
+
+parse_date_spec_case1(_) ->
+      ?assertEqual(false, rabbit_logger_std_h:parse_date_spec("")).
+
+parse_date_spec_case2(_) ->
+      ?assertEqual(#{every => day, hour => 0},
+          rabbit_logger_std_h:parse_date_spec("$D0")),
+      ?assertEqual(#{every => day, hour => 16},
+          rabbit_logger_std_h:parse_date_spec("$D16")),
+      ?assertEqual(#{every => day, hour => 23},
+          rabbit_logger_std_h:parse_date_spec("$D23")).
+
+parse_date_spec_case3(_) ->
+      ?assertEqual(
+          #{every => week, day_of_week => 0, hour => 0},
+          rabbit_logger_std_h:parse_date_spec("$W0")),
+      ?assertEqual(
+          #{every => week, day_of_week => 0, hour => 23},
+          rabbit_logger_std_h:parse_date_spec("$W0D23")),
+      ?assertEqual(
+          #{every => week, day_of_week => 5, hour => 16},
+          rabbit_logger_std_h:parse_date_spec("$W5D16")).
+
+parse_date_spec_case4(_) ->
+      ?assertEqual(
+          #{every => month, day_of_month => 1, hour => 0},
+          rabbit_logger_std_h:parse_date_spec("$M1D0")),
+      ?assertEqual(
+          #{every => month, day_of_month => 5, hour => 6},
+          rabbit_logger_std_h:parse_date_spec("$M5D6")).
+
+parse_date_spec_case5(_) ->
+      ?assertEqual(
+          error,
+          rabbit_logger_std_h:parse_date_spec("INVALID")),
+      ?assertEqual(
+          error,
+          rabbit_logger_std_h:parse_date_spec("in$valid")),
+      ?assertEqual(
+          error,
+          rabbit_logger_std_h:parse_date_spec("$$D0")),
+      ?assertEqual(
+          error,
+          rabbit_logger_std_h:parse_date_spec("$D99")).
