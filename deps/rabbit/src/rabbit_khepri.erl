@@ -35,7 +35,7 @@
          match_and_get_data/1,
          tx_match_and_get_data/1,
          exists/1,
-         find/1,
+         find/2,
          list/1,
          list_child_nodes/1,
          list_child_data/1,
@@ -366,7 +366,7 @@ tx_match_and_get_data(Path) ->
     keep_data_only_in_result(Ret).
 
 exists(Path) -> ?wait(khepri:exists(?STORE_ID, Path)).
-find(Path) -> ?wait(khepri:find(?STORE_ID, Path)).
+find(Path, Condition) -> ?wait(khepri:find(?STORE_ID, Path, Condition)).
 
 list(Path) -> ?wait(khepri:list(?STORE_ID, Path)).
 
