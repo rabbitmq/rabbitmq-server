@@ -1802,25 +1802,20 @@ handle_frame_post_auth(Transport,
                                               osiris_log:next_offset(Log)]),
                             ConsumerCounters =
                                 atomics:new(2, [{signed, false}]),
+                            ConsumerConfiguration =
+                                #consumer_configuration{member_pid =
+                                                            LocalMemberPid,
+                                                        subscription_id =
+                                                            SubscriptionId,
+                                                        socket = Socket,
+                                                        stream = Stream,
+                                                        offset = OffsetSpec,
+                                                        counters =
+                                                            ConsumerCounters,
+                                                        properties =
+                                                            Properties},
                             ConsumerState =
-                                #consumer{configuration =
-                                              #consumer_configuration{member_pid
-                                                                          =
-                                                                          LocalMemberPid,
-                                                                      subscription_id
-                                                                          =
-                                                                          SubscriptionId,
-                                                                      socket =
-                                                                          Socket,
-                                                                      stream =
-                                                                          Stream,
-                                                                      offset =
-                                                                          OffsetSpec,
-                                                                      counters =
-                                                                          ConsumerCounters,
-                                                                      properties
-                                                                          =
-                                                                          Properties},
+                                #consumer{configuration = ConsumerConfiguration,
                                           log = Log,
                                           credit = Credit},
 
