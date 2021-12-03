@@ -1700,6 +1700,10 @@ end}.
 {mapping, "log.file.rotation.date", "rabbit.log.file.date", [
     {datatype, string}
 ]}.
+{mapping, "log.file.rotation.compress", "rabbit.log.file.compress", [
+    {default, false},
+    {datatype, {enum, [true, false]}}
+]}.
 {mapping, "log.file.rotation.size", "rabbit.log.file.size", [
     {datatype, integer}
 ]}.
