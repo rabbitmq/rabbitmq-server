@@ -698,6 +698,11 @@ normalize_main_file_output1(
     Output1 = Output#{config => Config#{rotate_on_date => DateSpec}},
     normalize_main_file_output1(Rest, Output1, Outputs);
 normalize_main_file_output1(
+  [{compress, Compress} | Rest],
+  #{config := Config} = Output, Outputs) ->
+    Output1 = Output#{config => Config#{compress_on_rotate => Compress}},
+    normalize_main_file_output1(Rest, Output1, Outputs);
+normalize_main_file_output1(
   [{size, Size} | Rest],
   #{config := Config} = Output, Outputs) ->
     Output1 = Output#{config => Config#{max_no_bytes => Size}},
