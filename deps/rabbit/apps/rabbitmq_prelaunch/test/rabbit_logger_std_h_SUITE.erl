@@ -254,10 +254,10 @@ parse_date_spec_case5(_) ->
 
 parse_date_spec_case6(_) ->
       ?assertEqual(
-          #{every => day, hour => 0, minute => 30},
+          #{every => hour, minute => 30},
           rabbit_logger_std_h:parse_date_spec("$H30")),
       ?assertEqual(
-          #{every => day, hour => 0, minute => 3},
+          #{every => hour, minute => 3},
           rabbit_logger_std_h:parse_date_spec("$H3")),
       ?assertEqual(
           #{day_of_week => 0,every => week,hour => 0, minute => 30},
