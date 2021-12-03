@@ -30,9 +30,7 @@
 -define(WAIT, 5000).
 
 all() ->
-    [{group, single_node},
-     {group, single_node_1},
-     {group, cluster}].
+    [{group, single_node}, {group, single_node_1}, {group, cluster}].
 
 groups() ->
     [{single_node, [],
@@ -64,7 +62,8 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(Group, Config) when Group == single_node orelse Group == single_node_1 ->
+init_per_group(Group, Config)
+    when Group == single_node orelse Group == single_node_1 ->
     Config1 =
         rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]),
     Config2 =
