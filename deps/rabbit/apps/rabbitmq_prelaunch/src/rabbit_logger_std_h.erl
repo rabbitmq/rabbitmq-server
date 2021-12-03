@@ -612,19 +612,19 @@ parse_date_spec([$D, D1 | Rest], Acc0) when D1 >= $0, D1 =< $9 ->
     parse_date_spec(Rest, Acc);
 %% $H23
 parse_date_spec([$$, $H, H1, H2 | Rest], Acc0) when H1 >= $0, H1 =< $9, H2 >= $0, H2 =< $9 ->
-    Acc = parse_minute([H1, H2], Acc0#{every => day, hour => 0}),
+    Acc = parse_minute([H1, H2], Acc0#{every => hour}),
     parse_date_spec(Rest, Acc);
 %% H23
 parse_date_spec([$H, H1, H2 | Rest], Acc0) when H1 >= $0, H1 =< $9, H2 >= $0, H2 =< $9 ->
-    Acc = parse_minute([H1, H2], Acc0#{hour => 0}),
+    Acc = parse_minute([H1, H2], Acc0),
     parse_date_spec(Rest, Acc);
 %% $H0
 parse_date_spec([$$, $H, H1 | Rest], Acc0) when H1 >= $0, H1 =< $9 ->
-    Acc = parse_minute([H1], Acc0#{every => day, hour => 0}),
+    Acc = parse_minute([H1], Acc0#{every => hour}),
     parse_date_spec(Rest, Acc);
 %% H0
 parse_date_spec([$H, H1 | Rest], Acc0) when H1 >= $0, H1 =< $9 ->
-    Acc = parse_minute([H1], Acc0#{hour => 0}),
+    Acc = parse_minute([H1], Acc0),
     parse_date_spec(Rest, Acc);
 %% $W0
 parse_date_spec([$$, $W, W | Rest], Acc0) when W >= $0, W =< $6 ->
