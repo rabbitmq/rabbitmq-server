@@ -179,10 +179,10 @@ command(St) ->
 %           %% channel enable confirm mode
 %            {300, {call, ?MODULE, cmd_channel_await_publisher_confirms, [channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
-            {900, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}}
+            {900, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
             %% channel ack
             %% channel reject
-            %% channel cancel
+            {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}}
         ]
     end,
     weighted_union([
@@ -239,7 +239,9 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_publish, [_, Ch|_]}) ->
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_basic_get, _}) ->
     St#cq{q=queue_out(Q, Msg)};
 next_state(St=#cq{channels=Channels}, Tag, {call, _, cmd_channel_consume, [_, Ch]}) ->
-    St#cq{channels=Channels#{Ch => {consume, Tag}}}.
+    St#cq{channels=Channels#{Ch => {consume, Tag}}};
+next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_cancel, [_, Ch]}) ->
+    St#cq{channels=Channels#{Ch => idle}}.
 
 %% @todo This function is not working in a symbolic context.
 %%       We cannot rely on Q for driving preconditions as a result.
@@ -279,14 +281,12 @@ precondition(St=#cq{channels=Channels}, {call, _, cmd_channel_basic_get, [_, Ch]
             %% Using both consume and basic_get is non-deterministic.
             maps:get(Ch, Channels) =:= idle
     end;
-precondition(St=#cq{channels=Channels}, {call, _, cmd_channel_consume, [_, Ch]}) ->
-    case has_channels(St) of
-        false ->
-            false;
-        true ->
-            %% Don't consume if we are already consuming on this channel.
-            maps:get(Ch, Channels) =:= idle
-    end;
+precondition(#cq{channels=Channels}, {call, _, cmd_channel_consume, [_, Ch]}) ->
+    %% Don't consume if we are already consuming on this channel.
+    maps:get(Ch, Channels) =:= idle;
+precondition(#cq{channels=Channels}, {call, _, cmd_channel_cancel, [_, Ch]}) ->
+    %% Only cancel the consume when we are already consuming on this channel.
+    maps:get(Ch, Channels) =/= idle;
 precondition(_, _) ->
     true.
 
@@ -341,6 +341,8 @@ postcondition(St=#cq{q=Q}, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
 postcondition(#cq{q=Q}, {call, _, cmd_channel_basic_get, _}, Msg) ->
     queue_peek_has_msg(Q, Msg);
 postcondition(_, {call, _, cmd_channel_consume, _}, _) ->
+    true;
+postcondition(_, {call, _, cmd_channel_cancel, _}, _) ->
     true.
 
 has_consumers(#cq{channels=Channels}) ->
@@ -504,6 +506,24 @@ cmd_channel_consume(#cq{name=Name}, Ch) ->
                           #'basic.consume'{queue = atom_to_binary(Name, utf8), consumer_tag = Tag}),
     receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
     Tag.
+
+cmd_channel_cancel(#cq{channels=Channels}, Ch) ->
+    {consume, Tag} = maps:get(Ch, Channels),
+    #'basic.cancel_ok'{} =
+        amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = Tag}),
+    receive #'basic.cancel_ok'{consumer_tag = Tag} -> ok end,
+    %% We have to reject the messages in transit to preserve ordering.
+    do_receive_reject_all(Ch, Tag).
+
+do_receive_reject_all(Ch, Tag) ->
+    receive
+        {#'basic.deliver'{consumer_tag = Tag,
+                          delivery_tag = DeliveryTag}, _Msg} ->
+            amqp_channel:call(Ch, #'basic.reject'{delivery_tag = DeliveryTag}),
+            do_receive_reject_all(Ch, Tag)
+    after 0 ->
+        ok
+    end.
 
 do_rand_payload(PayloadSize) ->
     case erlang:function_exported(rand, bytes, 1) of
