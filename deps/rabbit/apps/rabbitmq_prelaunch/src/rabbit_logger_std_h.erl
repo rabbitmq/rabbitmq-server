@@ -19,9 +19,6 @@
 %%
 -module(rabbit_logger_std_h).
 
-%-include("logger.hrl").
-%-include("logger_internal.hrl").
-%-include("logger_h_common.hrl").
 -ifdef(TEST).
 -define(io_put_chars(DEVICE, DATA), begin
                                         %% We log to Common Test log as well.
@@ -31,6 +28,8 @@
                                         ct:log("~ts", [DATA]),
                                         io:put_chars(DEVICE, DATA)
                                     end).
+
+-export([parse_date_spec/1, parse_day_of_week/2, parse_day_of_month/2, parse_hour/2, parse_minute/2]).
 -else.
 -define(io_put_chars(DEVICE, DATA), io:put_chars(DEVICE, DATA)).
 -endif.
@@ -571,54 +570,121 @@ update_rotation({Size,DateSpec,Count,Compress},#{file_name:=FileName}=State) ->
     maybe_update_compress(0,State1),
     maybe_rotate_file(0,State1).
 
+%%
+%% Date spec parser
+%%
+
+%% Some examples from Lager docs:
+%%
+%% $D0     rotate every night at midnight
+%% $D23    rotate every day at 23:00 hr
+%% $W0D23  rotate every week on Sunday at 23:00 hr
+%% $W5D16  rotate every week on Friday at 16:00 hr
+%% $M1D0   rotate on the first day of every month at
+%%         midnight (i.e., the start of the day)
+%% $M5D6   rotate on every 5th day of the month at
+%%         6:00 hr
+
 parse_date_spec(false) ->
     false;
 parse_date_spec("") ->
     false;
-parse_date_spec([$$,$D | DateSpec]) ->
-    io:format(standard_error, "parse_date_spec: ~p (hour)~n", [DateSpec]),
-    parse_hour(DateSpec, #{every=>day,
-                           hour=>0});
-parse_date_spec([$$,$W | DateSpec]) ->
-    io:format(standard_error, "parse_date_spec: ~p (week)~n", [DateSpec]),
-    parse_day_of_week(DateSpec, #{every=>week,
-                                  hour=>0});
-parse_date_spec([$$,$M | DateSpec]) ->
-    io:format(standard_error, "parse_date_spec: ~p (month)~n", [DateSpec]),
-    parse_day_of_month(DateSpec, #{every=>month,
-                                   hour=>0});
-parse_date_spec(DateSpec) ->
-    io:format(standard_error, "parse_date_spec: ~p (error)~n", [DateSpec]),
+parse_date_spec(Input) ->
+    parse_date_spec(Input, #{}).
+
+parse_date_spec("", Acc) ->
+    Acc;
+%% $D23
+parse_date_spec([$$, $D, D1, D2 | Rest], Acc0) when D1 >= $0, D1 =< $9, D2 >= $0, D2 =< $9 ->
+    Acc = parse_hour([D1, D2], Acc0#{every => day, hour => 0}),
+    parse_date_spec(Rest, Acc);
+%% D23
+parse_date_spec([$D, D1, D2 | Rest], Acc0) when D1 >= $0, D1 =< $9, D2 >= $0, D2 =< $9 ->
+    Acc = parse_hour([D1, D2], Acc0#{hour => 0}),
+    parse_date_spec(Rest, Acc);
+%% $D0
+parse_date_spec([$$, $D, D1 | Rest], Acc0) when D1 >= $0, D1 =< $9 ->
+    Acc = parse_hour([D1], Acc0#{every => day, hour => 0}),
+    parse_date_spec(Rest, Acc);
+%% D0
+parse_date_spec([$D, D1 | Rest], Acc0) when D1 >= $0, D1 =< $9 ->
+    Acc = parse_hour([D1], Acc0#{hour => 0}),
+    parse_date_spec(Rest, Acc);
+%% $H23
+parse_date_spec([$$, $H, H1, H2 | Rest], Acc0) when H1 >= $0, H1 =< $9, H2 >= $0, H2 =< $9 ->
+    Acc = parse_minute([H1, H2], Acc0#{every => hour}),
+    parse_date_spec(Rest, Acc);
+%% H23
+parse_date_spec([$H, H1, H2 | Rest], Acc0) when H1 >= $0, H1 =< $9, H2 >= $0, H2 =< $9 ->
+    Acc = parse_minute([H1, H2], Acc0),
+    parse_date_spec(Rest, Acc);
+%% $H0
+parse_date_spec([$$, $H, H1 | Rest], Acc0) when H1 >= $0, H1 =< $9 ->
+    Acc = parse_minute([H1], Acc0#{every => hour}),
+    parse_date_spec(Rest, Acc);
+%% H0
+parse_date_spec([$H, H1 | Rest], Acc0) when H1 >= $0, H1 =< $9 ->
+    Acc = parse_minute([H1], Acc0),
+    parse_date_spec(Rest, Acc);
+%% $W0
+parse_date_spec([$$, $W, W | Rest], Acc0) when W >= $0, W =< $6 ->
+    Acc = parse_day_of_week([W], Acc0#{every => week, hour => 0}),
+    parse_date_spec(Rest, Acc);
+%% $M0
+parse_date_spec([$$, $M, M | Rest], Acc0) when M >= $0, M =< $6 ->
+    Acc = parse_day_of_month([M], Acc0#{every => month, hour => 0}),
+    parse_date_spec(Rest, Acc);
+%% all other inputs
+parse_date_spec(Input, _Acc) ->
+    io:format(standard_error, "Failed to parse rotation date spec: ~p (error)~n", [Input]),
     error.
 
-parse_hour(Rest,Result) ->
-    case date_string_to_int(Rest,0,23) of
-        {Hour,""} -> Result#{hour=>Hour};
-        error -> error
+parse_minute("", Acc) ->
+    Acc;
+parse_minute(Input, Acc) ->
+    case string_to_int_within_range(Input, 0, 59) of
+        {Val, _Rest} -> Acc#{minute => Val};
+        error       ->  error
     end.
 
-parse_day_of_week(Rest,Result) ->
-    case date_string_to_int(Rest,0,6) of
-        {DayOfWeek,Rest} -> parse_hour(Rest,Result#{day_of_week=>DayOfWeek});
-        error -> error
+parse_hour("", Acc) ->
+    Acc;
+parse_hour(Input, Acc) ->
+    case string_to_int_within_range(Input, 0, 23) of
+        {Val, _Rest} -> Acc#{hour => Val};
+        error       ->  error
     end.
 
-parse_day_of_month([Last | Rest],Result)
+parse_day_of_week("", Acc) ->
+    Acc;
+parse_day_of_week(Input, Acc) ->
+    case string_to_int_within_range(Input, 0, 6) of
+        {DayOfWeek, _Rest} -> Acc#{day_of_week => DayOfWeek};
+        error              -> error
+    end.
+
+parse_day_of_month("", Acc) ->
+    Acc;
+parse_day_of_month([Last | _Rest], Acc)
   when Last=:=$l orelse Last=:=$L ->
-    parse_hour(Rest,Result#{day_of_month=>last});
-parse_day_of_month(Rest,Result) ->
-    case date_string_to_int(Rest,1,31) of
-        {DayOfMonth,Rest} -> parse_hour(Rest,Result#{day_of_month=>DayOfMonth});
-        error -> error
+    Acc#{day_of_month => last};
+parse_day_of_month(Input, Acc) ->
+    case string_to_int_within_range(Input, 1, 31) of
+        {DayOfMonth, _Rest} -> Acc#{day_of_month => DayOfMonth};
+        error               -> error
     end.
 
-date_string_to_int(String,Min,Max) ->
+string_to_int_within_range(String, Min, Max) ->
     case string:to_integer(String) of
-        {Int,Rest} when is_integer(Int) andalso Int>=Min andalso Int=<Max ->
-            {Int,Rest};
+        {Int, Rest} when is_integer(Int) andalso Int >= Min andalso Int =< Max ->
+            {Int, Rest};
         _ ->
             error
     end.
+
+%%
+%% End of Date spec parser
+%%
 
 maybe_remove_archives(Count,#{file_name:=FileName}=State) ->
     Archive = rot_file_name(FileName,Count,false),
@@ -713,7 +779,6 @@ is_date_based_rotation_needed(#{every:=month,day_of_month:=last,hour:=Hour},
                          DateA
                  end,
     TargetDateTime = {TargetDate,{Hour,0,0}},
-    io:format(standard_error, "TargetDateTime=~p~n", [TargetDateTime]),
     DateTime1<TargetDateTime andalso DateTime2>=TargetDateTime;
 is_date_based_rotation_needed(#{every:=month,day_of_month:=DoM,hour:=Hour},
                               DateTime1,{{Year2,Month2,_}=Date2,_}=DateTime2) ->
@@ -731,7 +796,6 @@ is_date_based_rotation_needed(#{every:=month,day_of_month:=DoM,hour:=Hour},
                          DateA
                  end,
     TargetDateTime = {TargetDate,{Hour,0,0}},
-    io:format(standard_error, "TargetDateTime=~p~n", [TargetDateTime]),
     DateTime1<TargetDateTime andalso DateTime2>=TargetDateTime;
 is_date_based_rotation_needed(_,_,_) ->
     false.
