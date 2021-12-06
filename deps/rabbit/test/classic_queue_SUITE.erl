@@ -181,9 +181,9 @@ command(St) ->
             {900, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}},
-            {900, {call, ?MODULE, cmd_channel_receive_and_ack, [St, channel(St)]}}
+            {900, {call, ?MODULE, cmd_channel_receive_and_ack, [St, channel(St)]}},
+            {900, {call, ?MODULE, cmd_channel_receive_and_reject, [St, channel(St)]}}
             %% channel ack out of order?
-            %% channel reject
         ]
     end,
     weighted_union([
@@ -266,7 +266,9 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_receive_and_ack, _}) ->
     %% be the case also when we had two consumers and one was
     %% cancelled. So we do not verify the order of messages
     %% when using consume.
-    St#cq{q=queue_delete(Q, Msg)}.
+    St#cq{q=queue_delete(Q, Msg)};
+next_state(St, _, {call, _, cmd_channel_receive_and_reject, _}) ->
+    St.
 
 %% @todo This function is not working in a symbolic context.
 %%       We cannot rely on Q for driving preconditions as a result.
@@ -330,6 +332,9 @@ precondition(#cq{channels=Channels}, {call, _, cmd_channel_cancel, [_, Ch]}) ->
     maps:get(Ch, Channels) =/= idle;
 precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_ack, [_, Ch]}) ->
     %% Only receive and ack when we are already consuming on this channel.
+    maps:get(Ch, Channels) =/= idle;
+precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_reject, [_, Ch]}) ->
+    %% Only receive and reject when we are already consuming on this channel.
     maps:get(Ch, Channels) =/= idle;
 precondition(_, _) ->
     true.
@@ -405,6 +410,18 @@ postcondition(_, {call, _, cmd_channel_cancel, _}, _) ->
 postcondition(_, {call, _, cmd_channel_receive_and_ack, _}, none) ->
     true;
 postcondition(#cq{q=Q}, {call, _, cmd_channel_receive_and_ack, _}, Msg) ->
+    %% When there are multiple active consumers we may receive
+    %% messages out of order because the commands are not running
+    %% in the same order as the messages sent to channels.
+    %%
+    %% But because messages can be pending in the mailbox this can
+    %% be the case also when we had two consumers and one was
+    %% cancelled. So we do not verify the order of messages
+    %% when using consume.
+    queue_has_msg(Q, Msg);
+postcondition(_, {call, _, cmd_channel_receive_and_reject, _}, none) ->
+    true;
+postcondition(#cq{q=Q}, {call, _, cmd_channel_receive_and_reject, _}, Msg) ->
     %% When there are multiple active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
@@ -607,6 +624,17 @@ cmd_channel_receive_and_ack(#cq{channels=Channels}, Ch) ->
         {#'basic.deliver'{consumer_tag = Tag,
                           delivery_tag = DeliveryTag}, Msg} ->
             amqp_channel:call(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
+            Msg
+    after 0 ->
+        none
+    end.
+
+cmd_channel_receive_and_reject(#cq{channels=Channels}, Ch) ->
+    {consume, Tag} = maps:get(Ch, Channels),
+    receive
+        {#'basic.deliver'{consumer_tag = Tag,
+                          delivery_tag = DeliveryTag}, Msg} ->
+            amqp_channel:call(Ch, #'basic.reject'{delivery_tag = DeliveryTag}),
             Msg
     after 0 ->
         none
