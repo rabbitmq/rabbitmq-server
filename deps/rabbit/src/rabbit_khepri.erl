@@ -150,7 +150,9 @@ join_cluster(RemoteNode) when RemoteNode =/= node() ->
               [ThisNode, RemoteNode, Error],
               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             Error
-    end.
+    end;
+join_cluster(ThisNode) when ThisNode =:= node() ->
+    ok.
 
 add_member(NewNode) when NewNode =/= node() ->
     ?LOG_DEBUG(
