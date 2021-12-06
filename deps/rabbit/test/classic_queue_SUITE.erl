@@ -179,10 +179,11 @@ command(St) ->
 %           %% channel enable confirm mode
 %            {300, {call, ?MODULE, cmd_channel_await_publisher_confirms, [channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
-            {900, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
-            %% channel ack
+            {300, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
+            {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}},
+            {900, {call, ?MODULE, cmd_channel_receive_and_ack, [St, channel(St)]}}
+            %% channel ack out of order?
             %% channel reject
-            {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}}
         ]
     end,
     weighted_union([
@@ -222,7 +223,13 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_publish_msg, _}) ->
     St#cq{q=Q#{internal => queue:in(Msg, IntQ)}};
 %% @todo Special case 'empty' as an optimisation?
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_basic_get_msg, _}) ->
-    St#cq{q=queue_out(Q, Msg)};
+    %% When there are multiple active consumers we may receive
+    %% messages out of order because the commands are not running
+    %% in the same order as the messages sent to channels.
+    case has_multiple_consumers(St) of
+        true -> St#cq{q=queue_delete(Q, Msg)};
+        false -> St#cq{q=queue_out(Q, Msg)}
+    end;
 next_state(St, _, {call, _, cmd_purge, _}) ->
     St#cq{q=#{}};
 next_state(St=#cq{channels=Channels}, Ch, {call, _, cmd_channel_open, _}) ->
@@ -237,16 +244,34 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_publish, [_, Ch|_]}) ->
     ChQ = maps:get(Ch, Q, queue:new()),
     St#cq{q=Q#{Ch => queue:in(Msg, ChQ)}};
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_basic_get, _}) ->
-    St#cq{q=queue_out(Q, Msg)};
+    %% When there are multiple active consumers we may receive
+    %% messages out of order because the commands are not running
+    %% in the same order as the messages sent to channels.
+    case has_multiple_consumers(St) of
+        true -> St#cq{q=queue_delete(Q, Msg)};
+        false -> St#cq{q=queue_out(Q, Msg)}
+    end;
 next_state(St=#cq{channels=Channels}, Tag, {call, _, cmd_channel_consume, [_, Ch]}) ->
     St#cq{channels=Channels#{Ch => {consume, Tag}}};
 next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_cancel, [_, Ch]}) ->
-    St#cq{channels=Channels#{Ch => idle}}.
+    St#cq{channels=Channels#{Ch => idle}};
+next_state(St, none, {call, _, cmd_channel_receive_and_ack, _}) ->
+    St;
+next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_receive_and_ack, _}) ->
+    %% When there are multiple active consumers we may receive
+    %% messages out of order because the commands are not running
+    %% in the same order as the messages sent to channels.
+    %%
+    %% But because messages can be pending in the mailbox this can
+    %% be the case also when we had two consumers and one was
+    %% cancelled. So we do not verify the order of messages
+    %% when using consume.
+    St#cq{q=queue_delete(Q, Msg)}.
 
 %% @todo This function is not working in a symbolic context.
 %%       We cannot rely on Q for driving preconditions as a result.
 %%
-%% We remove at most one message.
+%% We remove at most one message at the head of queues.
 queue_out(Qs0, Msg) ->
     {Qs, _} = maps:fold(fun
         (Ch, ChQ, {Qs1, true}) ->
@@ -267,25 +292,44 @@ queue_out(Qs0, Msg) ->
     end, {#{}, false}, Qs0),
     Qs.
 
+%% We remove at most one message anywhere in the queue.
+queue_delete(Qs0, Msg) ->
+    {Qs, _} = maps:fold(fun
+        (Ch, ChQ, {Qs1, true}) ->
+            {Qs1#{Ch => ChQ}, true};
+        (Ch, ChQ, {Qs1, false}) ->
+            case queue:member(Msg, ChQ) of
+                true ->
+                    case queue:len(ChQ) of
+                        1 ->
+                            {Qs1, true};
+                        _ ->
+                            ChQOut = queue:delete(Msg, ChQ),
+                            {Qs1#{Ch => ChQOut}, true}
+                    end;
+                false ->
+                    {Qs1#{Ch => ChQ}, false}
+            end
+    end, {#{}, false}, Qs0),
+    Qs.
+
 %% Preconditions.
 
 precondition(St, {call, _, cmd_channel_close, _}) ->
     has_channels(St);
 precondition(St, {call, _, cmd_channel_publish, _}) ->
     has_channels(St);
-precondition(St=#cq{channels=Channels}, {call, _, cmd_channel_basic_get, [_, Ch]}) ->
-    case has_channels(St) of
-        false ->
-            false;
-        true ->
-            %% Using both consume and basic_get is non-deterministic.
-            maps:get(Ch, Channels) =:= idle
-    end;
+precondition(#cq{channels=Channels}, {call, _, cmd_channel_basic_get, [_, Ch]}) ->
+    %% Using both consume and basic_get is non-deterministic.
+    maps:get(Ch, Channels) =:= idle;
 precondition(#cq{channels=Channels}, {call, _, cmd_channel_consume, [_, Ch]}) ->
     %% Don't consume if we are already consuming on this channel.
     maps:get(Ch, Channels) =:= idle;
 precondition(#cq{channels=Channels}, {call, _, cmd_channel_cancel, [_, Ch]}) ->
     %% Only cancel the consume when we are already consuming on this channel.
+    maps:get(Ch, Channels) =/= idle;
+precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_ack, [_, Ch]}) ->
+    %% Only receive and ack when we are already consuming on this channel.
     maps:get(Ch, Channels) =/= idle;
 precondition(_, _) ->
     true.
@@ -305,17 +349,25 @@ postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode_version, [Mode, Version]}, _)
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) ->
     is_record(Msg, amqp_msg);
 postcondition(St=#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, empty) ->
-    %% We may get 'empty' if there are consumers and the messages are
-    %% in transit.
-    has_consumers(St) orelse
+    %% We may get 'empty' if there are/were consumers and the messages are
+    %% in transit. We only check whether there are channels as a result,
+    %% because messages may be in the process of being rejected following
+    %% a consumer cancel.
+    has_channels(St) orelse
     %% Due to the asynchronous nature of publishing it may be
     %% possible to have published a message but an immediate basic.get
     %% on a separate channel cannot retrieve it. In that case we accept
     %% an empty return value only if the channel we are calling
     %% basic.get on has no messages published and not consumed.
     not maps:is_key(internal, Q);
-postcondition(#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
-    queue_peek_has_msg(Q, Msg);
+postcondition(St=#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
+    %% When there are active consumers we may receive
+    %% messages out of order because the commands are not running
+    %% in the same order as the messages sent to channels.
+    case has_consumers(St) of
+        true -> queue_has_msg(Q, Msg);
+        false -> queue_peek_has_msg(Q, Msg)
+    end;
 postcondition(_, {call, _, cmd_purge, _}, {ok, _}) ->
     true;
 postcondition(_, {call, _, cmd_channel_open, _}, _) ->
@@ -338,12 +390,30 @@ postcondition(St=#cq{q=Q}, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
     %% an empty return value only if the channel we are calling
     %% basic.get on has no messages published and not consumed.
     not maps:is_key(Ch, Q);
-postcondition(#cq{q=Q}, {call, _, cmd_channel_basic_get, _}, Msg) ->
-    queue_peek_has_msg(Q, Msg);
+postcondition(St=#cq{q=Q}, {call, _, cmd_channel_basic_get, _}, Msg) ->
+    %% When there are active consumers we may receive
+    %% messages out of order because the commands are not running
+    %% in the same order as the messages sent to channels.
+    case has_consumers(St) of
+        true -> queue_has_msg(Q, Msg);
+        false -> queue_peek_has_msg(Q, Msg)
+    end;
 postcondition(_, {call, _, cmd_channel_consume, _}, _) ->
     true;
 postcondition(_, {call, _, cmd_channel_cancel, _}, _) ->
-    true.
+    true;
+postcondition(_, {call, _, cmd_channel_receive_and_ack, _}, none) ->
+    true;
+postcondition(#cq{q=Q}, {call, _, cmd_channel_receive_and_ack, _}, Msg) ->
+    %% When there are multiple active consumers we may receive
+    %% messages out of order because the commands are not running
+    %% in the same order as the messages sent to channels.
+    %%
+    %% But because messages can be pending in the mailbox this can
+    %% be the case also when we had two consumers and one was
+    %% cancelled. So we do not verify the order of messages
+    %% when using consume.
+    queue_has_msg(Q, Msg).
 
 has_consumers(#cq{channels=Channels}) ->
     maps:fold(fun
@@ -351,20 +421,28 @@ has_consumers(#cq{channels=Channels}) ->
         (_, _, Acc) -> Acc
     end, false, Channels).
 
-%% We want to confirm at least one of this exact message
-%% was published. There might be multiple if the randomly
-%% generated payload got two identical values.
+has_multiple_consumers(#cq{channels=Channels}) ->
+    Count = maps:fold(fun
+        (_, {consume, _}, Acc) -> Acc + 1;
+        (_, _, Acc) -> Acc
+    end, 0, Channels),
+    Count > 1.
+
 queue_peek_has_msg(Qs, Msg) ->
-    NumFound = maps:fold(fun
-        (_, ChQ, NumFound1) ->
-            case queue:peek(ChQ) of
-                {value, Msg} ->
-                    NumFound1 + 1;
-                _ ->
-                    NumFound1
-            end
-    end, 0, Qs),
-    NumFound >= 1.
+    maps:fold(fun
+        (_, _, true) ->
+            true;
+        (_, ChQ, _) ->
+            queue:peek(ChQ) =:= {value, Msg}
+    end, false, Qs).
+
+queue_has_msg(Qs, Msg) ->
+    maps:fold(fun
+        (_, _, true) ->
+            true;
+        (_, ChQ, _) ->
+            queue:member(Msg, ChQ)
+    end, false, Qs).
 
 %% Helpers.
 
@@ -379,7 +457,8 @@ cmd_setup_queue(#cq{name=Name, mode=Mode, version=Version}) ->
 %        {<<"x-queue-mode">>, longstr, atom_to_binary(Mode, utf8)},
 %        {<<"x-queue-version">>, long, Version}
     ],
-    QName = rabbit_misc:r(<<"/">>, queue, atom_to_binary(Name, utf8)),
+    QName = rabbit_misc:r(<<"/">>, queue, iolist_to_binary([atom_to_binary(Name, utf8), $_,
+                                                            integer_to_binary(erlang:unique_integer([positive]))])),
     {new, AMQ} = rabbit_amqqueue:declare(QName, IsDurable, IsAutoDelete, Args, none, <<"acting-user">>),
     %% We check that the queue was creating with the right mode/version.
     ok = do_check_queue_mode(AMQ, Mode),
@@ -388,7 +467,11 @@ cmd_setup_queue(#cq{name=Name, mode=Mode, version=Version}) ->
 
 cmd_teardown_queue(#cq{amq=undefined}) ->
     ok;
-cmd_teardown_queue(#cq{amq=AMQ}) ->
+cmd_teardown_queue(#cq{amq=AMQ, channels=Channels}) ->
+    %% We must close all channels since we will not be using them anymore.
+    %% Otherwise we end up wasting resources and may hit per-(direct)-connection limits.
+    _ = [cmd_channel_close(Ch) || Ch <- maps:keys(Channels)],
+    %% Then we can delete the queue.
     rabbit_amqqueue:delete(AMQ, false, false, <<"acting-user">>),
     rabbit_policy:delete(<<"/">>, <<"queue-mode-version-policy">>, <<"acting-user">>),
     ok.
@@ -482,28 +565,31 @@ cmd_channel_close(Ch) ->
     %% So instead we close directly.
     amqp_channel:close(Ch).
 
-cmd_channel_publish(#cq{name=Name}, Ch, PayloadSize, _Mandatory) ->
+cmd_channel_publish(#cq{amq=AMQ}, Ch, PayloadSize, _Mandatory) ->
+    #resource{name = Name} = amqqueue:get_name(AMQ),
     Payload = do_rand_payload(PayloadSize),
     Msg = #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                     payload = Payload},
     ok = amqp_channel:call(Ch,
-                           #'basic.publish'{routing_key = atom_to_binary(Name, utf8)},
+                           #'basic.publish'{routing_key = Name},
                            Msg),
     Msg.
 
-cmd_channel_basic_get(#cq{name=Name}, Ch) ->
-    case amqp_channel:call(Ch, #'basic.get'{queue = atom_to_binary(Name, utf8), no_ack = true}) of
+cmd_channel_basic_get(#cq{amq=AMQ}, Ch) ->
+    #resource{name = Name} = amqqueue:get_name(AMQ),
+    case amqp_channel:call(Ch, #'basic.get'{queue = Name, no_ack = true}) of
         #'basic.get_empty'{} ->
             empty;
         {_GetOk = #'basic.get_ok'{}, Msg} ->
             Msg
     end.
 
-cmd_channel_consume(#cq{name=Name}, Ch) ->
+cmd_channel_consume(#cq{amq=AMQ}, Ch) ->
+    #resource{name = Name} = amqqueue:get_name(AMQ),
     Tag = integer_to_binary(erlang:unique_integer([positive])),
     #'basic.consume_ok'{} =
         amqp_channel:call(Ch,
-                          #'basic.consume'{queue = atom_to_binary(Name, utf8), consumer_tag = Tag}),
+                          #'basic.consume'{queue = Name, consumer_tag = Tag}),
     receive #'basic.consume_ok'{consumer_tag = Tag} -> ok end,
     Tag.
 
@@ -514,6 +600,17 @@ cmd_channel_cancel(#cq{channels=Channels}, Ch) ->
     receive #'basic.cancel_ok'{consumer_tag = Tag} -> ok end,
     %% We have to reject the messages in transit to preserve ordering.
     do_receive_reject_all(Ch, Tag).
+
+cmd_channel_receive_and_ack(#cq{channels=Channels}, Ch) ->
+    {consume, Tag} = maps:get(Ch, Channels),
+    receive
+        {#'basic.deliver'{consumer_tag = Tag,
+                          delivery_tag = DeliveryTag}, Msg} ->
+            amqp_channel:call(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
+            Msg
+    after 0 ->
+        none
+    end.
 
 do_receive_reject_all(Ch, Tag) ->
     receive
@@ -526,8 +623,9 @@ do_receive_reject_all(Ch, Tag) ->
     end.
 
 do_rand_payload(PayloadSize) ->
+    Prefix = integer_to_binary(erlang:unique_integer([positive])),
     case erlang:function_exported(rand, bytes, 1) of
-        true -> rand:bytes(PayloadSize);
+        true -> iolist_to_binary([Prefix, rand:bytes(PayloadSize)]);
         %% Slower failover for OTP < 24.0.
-        false -> crypto:strong_rand_bytes(PayloadSize)
+        false -> iolist_to_binary([Prefix, crypto:strong_rand_bytes(PayloadSize)])
     end.
