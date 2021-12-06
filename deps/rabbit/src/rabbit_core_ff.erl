@@ -293,7 +293,7 @@ ensure_khepri_cluster_matches_mnesia(FeatureName) ->
                "Feature flag `~s`:   updating the Khepri cluster to match "
                "the Mnesia cluster",
                [FeatureName]),
-            case expand_khepri_cluster(FeatureName) of
+            case expand_khepri_cluster(FeatureName, AllMnesiaNodes) of
                 ok ->
                     ok;
                 Error ->
@@ -312,53 +312,61 @@ ensure_khepri_cluster_matches_mnesia(FeatureName) ->
             {error, all_mnesia_nodes_must_run}
     end.
 
-expand_khepri_cluster(FeatureName) ->
+expand_khepri_cluster(FeatureName, AllMnesiaNodes) ->
     %% All Mnesia nodes are running (this is a requirement to enable this
     %% feature flag). We use this unique list of nodes to find the largest
     %% Khepri clusters among all of them.
     %%
-    %% The idea is that at the beginning, each Mnesia Node will also be an
+    %% The idea is that at the beginning, each Mnesia node will also be an
     %% unclustered Khepri node. Therefore, the first node in the sorted list
     %% of Mnesia nodes will be picked (a "cluster" with 1 member, but the
-    %% largest at the beginning).
+    %% "largest" at the beginning).
     %%
     %% After the first nodes join that single node, its cluster will grow and
     %% will continue to be the largest.
     %%
-    %% This function is executed on every nodes. Therefore it will add this
-    %% node to a cluster (except if it would join itself). Other nodes will
-    %% execute this function to add themselves.
+    %% This function is executed on the node enabling the feature flag. It will
+    %% take care of adding all nodes in the Mnesia cluster to a Khepri cluster
+    %% (except those which are already part of it).
     %%
     %% This should avoid the situation where a large established cluster is
     %% reset and joins a single new/empty node.
     %%
-    %% Also, we only consider Khepri clusters which are in use (the feature
-    %% flag is enabled). Here is an example:
+    %% Also, we only consider Khepri clusters which are in use (i.e. the
+    %% feature flag is enabled). Here is an example:
     %%     - Node2 is the only node in the Mnesia cluster at the time the
     %%       feature flag is enabled. It joins no other node and runs its own
     %%       one-node Khepri cluster.
     %%     - Node1 joins the Mnesia cluster which is now Node1 + Node2. Given
-    %%       the sorting, Khepri cluster will be [[Node1], [Node2]] when
+    %%       the sorting, Khepri clusters will be [[Node1], [Node2]] when
     %%       sorted by name and size. With this order, Node1 should "join"
     %%       itself. But the feature is not enabled yet on this node,
     %%       therefore, we skip this cluster to consider the following one,
     %%       [Node2].
-    ThisNode = node(),
     KhepriCluster = find_largest_khepri_cluster(FeatureName),
-    case lists:member(ThisNode, KhepriCluster) of
+    add_nodes_to_khepri_cluster(FeatureName, KhepriCluster, AllMnesiaNodes).
+
+add_nodes_to_khepri_cluster(FeatureName, KhepriCluster, [Node | Rest]) ->
+    add_node_to_khepri_cluster(FeatureName, KhepriCluster, Node),
+    add_nodes_to_khepri_cluster(FeatureName, KhepriCluster, Rest);
+add_nodes_to_khepri_cluster(_FeatureName, _KhepriCluster, []) ->
+    ok.
+
+add_node_to_khepri_cluster(FeatureName, KhepriCluster, Node) ->
+    case lists:member(Node, KhepriCluster) of
         true ->
             ?LOG_DEBUG(
                "Feature flag `~s`:   this node (~s) is already a member of "
                "the largest cluster: ~p",
-               [FeatureName, ThisNode, KhepriCluster]),
+               [FeatureName, Node, KhepriCluster]),
             ok;
         false ->
             [KhepriNode | _] = KhepriCluster,
             ?LOG_DEBUG(
                "Feature flag `~s`:   adding this node (~s) to the largest "
                "Khepri cluster found among Mnesia nodes: ~p",
-               [FeatureName, ThisNode, KhepriCluster]),
-            rabbit_khepri:join_cluster(KhepriNode)
+               [FeatureName, Node, KhepriCluster]),
+            ok = rabbit_khepri:join_cluster(KhepriNode)
     end.
 
 find_largest_khepri_cluster(FeatureName) ->
@@ -680,10 +688,16 @@ empty_unused_mnesia_tables(FeatureName, [Table | Rest]) ->
             ?assert(is_table_migrated(Table));
         {aborted, {already_exists, Table, _}} ->
             %% Another node is already taking care of this table.
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   Mnesia table ~s already emptied",
+               [FeatureName, Table]),
             ok
     end,
     empty_unused_mnesia_tables(FeatureName, Rest);
-empty_unused_mnesia_tables(_, []) ->
+empty_unused_mnesia_tables(FeatureName, []) ->
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   done with emptying unused Mnesia tables",
+               [FeatureName]),
             ok.
 
 empty_unused_mnesia_table(Table) ->
