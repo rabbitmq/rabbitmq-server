@@ -178,7 +178,7 @@ command(St) ->
             {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), boolean()]}},
 %           %% channel enable confirm mode
 %            {300, {call, ?MODULE, cmd_channel_await_publisher_confirms, [channel(St)]}},
-            {900, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
+            {300, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_receive_and_ack, [St, channel(St)]}},
@@ -194,11 +194,11 @@ command(St) ->
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
         %% These are direct publish/basic_get(autoack)/purge.
-        {900, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean()]}},
-        {900, {call, ?MODULE, cmd_basic_get_msg, [St]}},
+        {100, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean()]}},
+        {100, {call, ?MODULE, cmd_basic_get_msg, [St]}},
 %        {100, {call, ?MODULE, cmd_purge, [St]}},
         %% These are channel-based operations.
-        {100, {call, ?MODULE, cmd_channel_open, [St]}}
+        {300, {call, ?MODULE, cmd_channel_open, [St]}}
         |ChannelCmds
     ]).
 
