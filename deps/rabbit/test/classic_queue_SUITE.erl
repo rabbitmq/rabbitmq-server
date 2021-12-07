@@ -582,13 +582,14 @@ cmd_channel_close(Ch) ->
     %% So instead we close directly.
     amqp_channel:close(Ch).
 
-cmd_channel_publish(#cq{amq=AMQ}, Ch, PayloadSize, _Mandatory) ->
+cmd_channel_publish(#cq{amq=AMQ}, Ch, PayloadSize, Mandatory) ->
     #resource{name = Name} = amqqueue:get_name(AMQ),
     Payload = do_rand_payload(PayloadSize),
     Msg = #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
                     payload = Payload},
     ok = amqp_channel:call(Ch,
-                           #'basic.publish'{routing_key = Name},
+                           #'basic.publish'{routing_key = Name,
+                                            mandatory = Mandatory},
                            Msg),
     Msg.
 
