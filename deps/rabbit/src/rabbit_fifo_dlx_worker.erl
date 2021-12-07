@@ -24,14 +24,10 @@
          handle_cast/2, handle_call/3, handle_info/2,
          code_change/3, format_status/2]).
 
-%%TODO make configurable or leave at 0 which means 2000 as in
-%% https://github.com/rabbitmq/rabbitmq-server/blob/1e7df8c436174735b1d167673afd3f1642da5cdc/deps/rabbit/src/rabbit_quorum_queue.erl#L726-L729
--define(CONSUMER_PREFETCH_COUNT, 100).
+%%TODO make configurable via cuttlefish?
+-define(DEFAULT_PREFETCH, 100).
+-define(DEFAULT_SETTLE_TIMEOUT, 120_000).
 -define(HIBERNATE_AFTER, 180_000).
-%% If no publisher confirm was received for at least SETTLE_TIMEOUT, message will be redelivered.
-%% To prevent duplicates in the target queue and to ensure message will eventually be acked to the source queue,
-%% set this value higher than the maximum time it takes for a queue to settle a message.
--define(SETTLE_TIMEOUT, 120_000).
 
 -record(pending, {
           %% consumed_msg_id is not to be confused with consumer delivery tag.
@@ -78,11 +74,15 @@
           queue_type_state :: rabbit_queue_type:state(),
           %% Consumed messages for which we have not received all publisher confirms yet.
           %% Therefore, they have not been ACKed yet to the consumer queue.
-          %% This buffer contains at most CONSUMER_PREFETCH_COUNT pending messages at any given point in time.
+          %% This buffer contains at most PREFETCH pending messages at any given point in time.
           pendings = #{} :: #{OutSeq :: non_neg_integer() => #pending{}},
           %% next publisher confirm delivery tag sequence number
           next_out_seq = 1,
-          %% Timer firing every SETTLE_TIMEOUT milliseconds
+          %% If no publisher confirm was received for at least settle_timeout milliseconds, message will be redelivered.
+          %% To prevent duplicates in the target queue and to ensure message will eventually be acked to the source queue,
+          %% set this value higher than the maximum time it takes for a queue to settle a message.
+          settle_timeout :: non_neg_integer(),
+          %% Timer firing every settle_timeout milliseconds
           %% redelivering messages for which not all publisher confirms were received.
           %% If there are no pending messages, this timer will eventually be cancelled to allow
           %% this worker to hibernate.
@@ -103,16 +103,23 @@ init(Arg) ->
     {ok, undefined, {continue, Arg}}.
 
 handle_continue({QRef, RegName}, undefined) ->
+    Prefetch = application:get_env(rabbit,
+                                   dead_letter_worker_consumer_prefetch,
+                                   ?DEFAULT_PREFETCH),
+    SettleTimeout = application:get_env(rabbit,
+                                        dead_letter_worker_publisher_confirm_timeout_ms,
+                                        ?DEFAULT_SETTLE_TIMEOUT),
     State = lookup_topology(#state{queue_ref = QRef}),
     {ok, Q} = rabbit_amqqueue:lookup(QRef),
     {ClusterName, _MaybeOldLeaderNode} = amqqueue:get_pid(Q),
     {ok, ConsumerState} = rabbit_fifo_dlx_client:checkout(RegName,
                                                           QRef,
                                                           {ClusterName, node()},
-                                                          ?CONSUMER_PREFETCH_COUNT),
+                                                          Prefetch),
     {noreply, State#state{registered_name = RegName,
                           dlx_client_state = ConsumerState,
-                          queue_type_state = rabbit_queue_type:init()}}.
+                          queue_type_state = rabbit_queue_type:init(),
+                          settle_timeout = SettleTimeout}}.
 
 terminate(_Reason, _State) ->
     %%TODO cancel timer?
@@ -303,7 +310,7 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
         [] ->
             %% We can't deliver this message since there is no target queue we can route to.
             %% Under no circumstances should we drop a message with dead-letter-strategy at-least-once.
-            %% We buffer this message and retry to send every SETTLE_TIMEOUT milliseonds
+            %% We buffer this message and retry to send every settle_timeout milliseonds
             %% (until the user has fixed the dead-letter routing topology).
             State1#state{pendings = maps:put(OutSeq, Pend0, Pendings)};
         _ ->
@@ -320,13 +327,14 @@ deliver_to_queues(Delivery, RouteToQNames, #state{queue_type_state = QTypeState0
     State = State0#state{queue_type_state = QTypeState1},
     handle_queue_actions(Actions, State).
 
-handle_settled(QRef, MsgSeqs, #state{pendings = Pendings0} = State) ->
+handle_settled(QRef, MsgSeqs, #state{pendings = Pendings0,
+                                     settle_timeout = SettleTimeout} = State) ->
     Pendings = lists:foldl(fun (MsgSeq, P0) ->
-                                    handle_settled0(QRef, MsgSeq, P0)
-                            end, Pendings0, MsgSeqs),
+                                   handle_settled0(QRef, MsgSeq, SettleTimeout, P0)
+                           end, Pendings0, MsgSeqs),
     State#state{pendings = Pendings}.
 
-handle_settled0(QRef, MsgSeq, Pendings) ->
+handle_settled0(QRef, MsgSeq, SettleTimeout, Pendings) ->
     case maps:find(MsgSeq, Pendings) of
         {ok, #pending{unsettled = Unset0, settled = Set0} = Pend0} ->
             Unset = lists:delete(QRef, Unset0),
@@ -337,7 +345,7 @@ handle_settled0(QRef, MsgSeq, Pendings) ->
             rabbit_log:warning("Ignoring publisher confirm for sequence number ~b "
                                "from target dead letter ~s after settle timeout of ~bms. "
                                "Troubleshoot why that queue confirms so slowly.",
-                               [MsgSeq, rabbit_misc:rs(QRef), ?SETTLE_TIMEOUT]),
+                               [MsgSeq, rabbit_misc:rs(QRef), SettleTimeout]),
             Pendings
     end.
 
@@ -371,7 +379,8 @@ maybe_ack(#state{pendings = Pendings0,
 
 %% Re-deliver messages that timed out waiting on publisher confirm and
 %% messages that got never sent due to routing topology misconfiguration.
-redeliver_messsages(#state{pendings = Pendings} = State) ->
+redeliver_messsages(#state{pendings = Pendings,
+                           settle_timeout = SettleTimeout} = State) ->
     case lookup_dlx(State) of
         not_found ->
             %% Configured dead-letter-exchange does (still) not exist.
@@ -381,7 +390,7 @@ redeliver_messsages(#state{pendings = Pendings} = State) ->
         DLX ->
             Now = os:system_time(millisecond),
             maps:fold(fun(OutSeq, #pending{last_published_at = LastPub} = Pend, S0)
-                            when LastPub + ?SETTLE_TIMEOUT =< Now ->
+                            when LastPub + SettleTimeout =< Now ->
                               %% Publisher confirm timed out.
                               redeliver(Pend, DLX, OutSeq, S0);
                          (OutSeq, #pending{last_published_at = undefined} = Pend, S0) ->
@@ -418,14 +427,14 @@ redeliver(Pend, DLX, OldOutSeq, #state{routing_key = DLRKey} = State) ->
 %% Therefore, to keep things simple, create a brand new delivery, store it in our state and forget about the old delivery and
 %% sequence number.
 %%
-%% If a sequene number gets settled after SETTLE_TIMEOUT, we can't map it anymore to the #pending{}. Hence, we ignore it.
+%% If a sequene number gets settled after settle_timeout, we can't map it anymore to the #pending{}. Hence, we ignore it.
 %%
-%% This can lead to issues when SETTLE_TIMEOUT is too low and time to settle takes too long.
-%% For example, if SETTLE_TIMEOUT is set to only 10 seconds, but settling a message takes always longer than 10 seconds
+%% This can lead to issues when settle_timeout is too low and time to settle takes too long.
+%% For example, if settle_timeout is set to only 10 seconds, but settling a message takes always longer than 10 seconds
 %% (e.g. due to extremly slow hypervisor disks that ran out of credit), we will re-deliver the same message all over again
 %% leading to many duplicates in the target queue without ever acking the message back to the source discards queue.
 %%
-%% Therefore, set SETTLE_TIMEOUT reasonably high (e.g. 2 minutes).
+%% Therefore, set settle_timeout reasonably high (e.g. 2 minutes).
 %%
 %% TODO do not log per message?
 redeliver0(#pending{consumed_msg_id = ConsumedMsgId,
@@ -438,7 +447,8 @@ redeliver0(#pending{consumed_msg_id = ConsumedMsgId,
            #state{next_out_seq = OutSeq,
                   queue_ref = QRef,
                   pendings = Pendings0,
-                  exchange_ref = DLXRef} = State0) when is_list(DLRKeys) ->
+                  exchange_ref = DLXRef,
+                  settle_timeout = SettleTimeout} = State0) when is_list(DLRKeys) ->
     BasicMsg = #basic_message{exchange_name = DLXRef,
                               routing_keys  = DLRKeys,
                               %% BCC Header was already stripped previously
@@ -459,7 +469,7 @@ redeliver0(#pending{consumed_msg_id = ConsumedMsgId,
                            "message_sequence_number=~b "
                            "consumed_message_sequence_number=~b "
                            "publish_count=~b.",
-                           [strings(Settled), strings(Unsettled), ?SETTLE_TIMEOUT,
+                           [strings(Settled), strings(Unsettled), SettleTimeout,
                             OldOutSeq, ConsumedMsgId, PublishCount]),
     case {RouteToQs, Cycles, Settled} of
         {[], [], []} ->
@@ -514,8 +524,9 @@ maybe_set_timer(#state{timer = TRef} = State) when is_reference(TRef) ->
 maybe_set_timer(#state{timer = undefined,
                        pendings = Pendings} = State) when map_size(Pendings) =:= 0 ->
     State;
-maybe_set_timer(#state{timer = undefined} = State) ->
-    TRef = erlang:send_after(?SETTLE_TIMEOUT, self(), {'$gen_cast', settle_timeout}),
+maybe_set_timer(#state{timer = undefined,
+                       settle_timeout = SettleTimeout} = State) ->
+    TRef = erlang:send_after(SettleTimeout, self(), {'$gen_cast', settle_timeout}),
     % rabbit_log:debug("set timer"),
     State#state{timer = TRef}.
 
