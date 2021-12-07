@@ -353,20 +353,23 @@ add_nodes_to_khepri_cluster(_FeatureName, _KhepriCluster, []) ->
     ok.
 
 add_node_to_khepri_cluster(FeatureName, KhepriCluster, Node) ->
+    ?assertNotEqual([], KhepriCluster),
     case lists:member(Node, KhepriCluster) of
         true ->
             ?LOG_DEBUG(
-               "Feature flag `~s`:   this node (~s) is already a member of "
+               "Feature flag `~s`:   node ~p is already a member of "
                "the largest cluster: ~p",
                [FeatureName, Node, KhepriCluster]),
             ok;
         false ->
-            [KhepriNode | _] = KhepriCluster,
             ?LOG_DEBUG(
-               "Feature flag `~s`:   adding this node (~s) to the largest "
+               "Feature flag `~s`:   adding node ~p to the largest "
                "Khepri cluster found among Mnesia nodes: ~p",
                [FeatureName, Node, KhepriCluster]),
-            ok = rabbit_khepri:join_cluster(KhepriNode)
+            case rabbit_khepri:add_member(Node, KhepriCluster) of
+                ok                   -> ok;
+                {ok, already_member} -> ok
+            end
     end.
 
 find_largest_khepri_cluster(FeatureName) ->

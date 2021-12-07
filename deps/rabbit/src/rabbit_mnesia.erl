@@ -216,8 +216,9 @@ join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterva
 
 join_cluster(DiscoveryNode, NodeType) ->
     case join_mnesia_cluster(DiscoveryNode, NodeType) of
-        ok    -> join_khepri_cluster(DiscoveryNode);
-        Other -> Other
+        ok                   -> join_khepri_cluster(DiscoveryNode);
+        {ok, already_member} -> join_khepri_cluster(DiscoveryNode);
+        Other                -> Other
     end.
 
 join_mnesia_cluster(DiscoveryNode, NodeType) ->
@@ -265,16 +266,8 @@ join_mnesia_cluster(DiscoveryNode, NodeType) ->
     end.
 
 join_khepri_cluster(DiscoveryNode) ->
-    case rabbit_khepri:join_cluster(DiscoveryNode) of
-        {badrpc, {'EXIT', {undef, [{rabbit_khepri, add_member, _, _}]}}} ->
-            rabbit_log:debug(
-              "Skip Khepri cluster expansion; Khepri is unavailable on "
-              "remote node ~p",
-              [DiscoveryNode]),
-            ok;
-        Other ->
-            Other
-    end.
+    ThisNode = node(),
+    rabbit_khepri:add_member(ThisNode, [DiscoveryNode]).
 
 %% return node to its virgin state, where it is not member of any
 %% cluster, has no cluster configuration, no local database, and no
@@ -928,7 +921,17 @@ stop_mnesia() ->
     stopped = mnesia:stop(),
     ensure_mnesia_not_running().
 
-change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
+change_extra_db_nodes(ClusterNodes, CheckOtherNodes) ->
+    Nodes = change_extra_mnesia_nodes(ClusterNodes, CheckOtherNodes),
+    %% FIXME: Need to cluster Khepri at this point? I don't think so... I keep
+    %% the code but it does nothing (`false' condition).
+    case false andalso rabbit_khepri:is_enabled() of
+        true  -> _ = change_extra_khepri_nodes(ClusterNodes, CheckOtherNodes);
+        false -> ok
+    end,
+    Nodes.
+
+change_extra_mnesia_nodes(ClusterNodes0, CheckOtherNodes) ->
     ClusterNodes = nodes_excl_me(ClusterNodes0),
     case {mnesia:change_config(extra_db_nodes, ClusterNodes), ClusterNodes} of
         {{ok, []}, [_|_]} when CheckOtherNodes ->
@@ -936,6 +939,26 @@ change_extra_db_nodes(ClusterNodes0, CheckOtherNodes) ->
                            "Mnesia could not connect to any nodes."}});
         {{ok, Nodes}, _} ->
             Nodes
+    end.
+
+change_extra_khepri_nodes(ClusterNodes, CheckOtherNodes) ->
+    ThisNode = node(),
+    _ = rabbit_khepri:add_member(ThisNode, ClusterNodes),
+    ActualNodes = rabbit_khepri:locally_known_nodes(),
+    case CheckOtherNodes of
+        true ->
+            UnclusteredNodes = ClusterNodes -- ActualNodes,
+            case UnclusteredNodes of
+                [] ->
+                    ActualNodes;
+                _ ->
+                    rabbit_log:error("UnclusteredNodes = ~p~n", [UnclusteredNodes]),
+                    throw({error,
+                           {failed_to_cluster_with, ClusterNodes,
+                            "Khepri could not connect to any nodes."}})
+            end;
+        false ->
+            ActualNodes
     end.
 
 check_consistency(Node, OTP, Rabbit, ProtocolVersion) ->
