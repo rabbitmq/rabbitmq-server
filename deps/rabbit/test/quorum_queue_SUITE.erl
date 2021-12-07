@@ -20,7 +20,6 @@
                              ra_name/1]).
 
 -compile([nowarn_export_all, export_all]).
--compile(export_all).
 
 -define(DEFAULT_AWAIT, 10000).
 
