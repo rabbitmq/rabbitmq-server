@@ -10,6 +10,7 @@ def _impl(ctx):
         content = """otp_path: {erlang_home}
 apps_dirs:
   - deps/*
+  - deps/rabbit/apps/*
 deps_dirs:
   - bazel-bin/external/*
 include_dirs:
