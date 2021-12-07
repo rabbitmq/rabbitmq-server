@@ -175,7 +175,7 @@ command(St) ->
         false -> [];
         true -> [
             {100, {call, ?MODULE, cmd_channel_close, [channel(St)]}},
-            {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), boolean()]}},
+            {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), boolean(), expiration()]}},
 %           %% channel enable confirm mode
 %            {300, {call, ?MODULE, cmd_channel_await_publisher_confirms, [channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
@@ -194,12 +194,18 @@ command(St) ->
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
         %% These are direct publish/basic_get(autoack)/purge.
-        {100, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean()]}},
+        {100, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean(), expiration()]}},
         {100, {call, ?MODULE, cmd_basic_get_msg, [St]}},
 %        {100, {call, ?MODULE, cmd_purge, [St]}},
         %% These are channel-based operations.
         {300, {call, ?MODULE, cmd_channel_open, [St]}}
         |ChannelCmds
+    ]).
+
+expiration() ->
+    oneof([
+        undefined,
+        integer(0, 100) %% Up to 0.1s to make it more likely to trigger dropping messages.
     ]).
 
 has_channels(#cq{channels=Channels}) ->
@@ -226,10 +232,15 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_basic_get_msg, _}) ->
     %% When there are multiple active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
-    case has_multiple_consumers(St) of
-        true -> St#cq{q=queue_delete(Q, Msg)};
-        false -> St#cq{q=queue_out(Q, Msg)}
-    end;
+    %%
+    %% When there are messages expired they cannot be removed
+    %% (because of potential race conditions if messages expired
+    %% during transit, vs in the queue) so we may receive messages
+    %% seemingly out of order.
+    %%
+    %% For all these reasons we remove messages regardless of where
+    %% they are in the queue.
+    St#cq{q=queue_delete(Q, Msg)};
 next_state(St, _, {call, _, cmd_purge, _}) ->
     St#cq{q=#{}};
 next_state(St=#cq{channels=Channels}, Ch, {call, _, cmd_channel_open, _}) ->
@@ -243,14 +254,20 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_publish, [_, Ch|_]}) ->
     %% Otherwise just queue the message as normal.
     ChQ = maps:get(Ch, Q, queue:new()),
     St#cq{q=Q#{Ch => queue:in(Msg, ChQ)}};
+%% @todo Special case 'empty' as an optimisation?
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_basic_get, _}) ->
     %% When there are multiple active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
-    case has_multiple_consumers(St) of
-        true -> St#cq{q=queue_delete(Q, Msg)};
-        false -> St#cq{q=queue_out(Q, Msg)}
-    end;
+    %%
+    %% When there are messages expired they cannot be removed
+    %% (because of potential race conditions if messages expired
+    %% during transit, vs in the queue) so we may receive messages
+    %% seemingly out of order.
+    %%
+    %% For all these reasons we remove messages regardless of where
+    %% they are in the queue.
+    St#cq{q=queue_delete(Q, Msg)};
 next_state(St=#cq{channels=Channels}, Tag, {call, _, cmd_channel_consume, [_, Ch]}) ->
     St#cq{channels=Channels#{Ch => {consume, Tag}}};
 next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_cancel, [_, Ch]}) ->
@@ -273,27 +290,6 @@ next_state(St, _, {call, _, cmd_channel_receive_and_reject, _}) ->
 %% @todo This function is not working in a symbolic context.
 %%       We cannot rely on Q for driving preconditions as a result.
 %%
-%% We remove at most one message at the head of queues.
-queue_out(Qs0, Msg) ->
-    {Qs, _} = maps:fold(fun
-        (Ch, ChQ, {Qs1, true}) ->
-            {Qs1#{Ch => ChQ}, true};
-        (Ch, ChQ, {Qs1, false}) ->
-            case queue:peek(ChQ) of
-                {value, Msg} ->
-                    case queue:len(ChQ) of
-                        1 ->
-                            {Qs1, true};
-                        _ ->
-                            {_, ChQOut} = queue:out(ChQ),
-                            {Qs1#{Ch => ChQOut}, true}
-                    end;
-                _ ->
-                    {Qs1#{Ch => ChQ}, false}
-            end
-    end, {#{}, false}, Qs0),
-    Qs.
-
 %% We remove at most one message anywhere in the queue.
 queue_delete(Qs0, Msg) ->
     {Qs, _} = maps:fold(fun
@@ -364,24 +360,26 @@ postcondition(St=#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, empty) ->
     %% on a separate channel cannot retrieve it. In that case we accept
     %% an empty return value only if the channel we are calling
     %% basic.get on has no messages published and not consumed.
-    not maps:is_key(internal, Q);
+    not maps:is_key(internal, Q) orelse
+    %% When messages can expire they will never be removed from the
+    %% property state because we cannot know whether the message
+    %% will be received later on (it was in transit when it expired).
+    %% Therefore we accept an empty response if all messages
+    %% sent via this particular channel have an expiration.
+    queue_part_all_expired(Q, internal);
 postcondition(St=#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
     %% When there are active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
     case has_consumers(St) of
         true -> queue_has_msg(Q, Msg);
-        false -> queue_peek_has_msg(Q, Msg)
+        false -> queue_head_has_msg(Q, Msg)
     end;
 postcondition(_, {call, _, cmd_purge, _}, {ok, _}) ->
     true;
 postcondition(_, {call, _, cmd_channel_open, _}, _) ->
     true;
 postcondition(_, {call, _, cmd_channel_close, _}, Res) ->
-    case Res of
-        ok -> ok;
-        _ -> logger:error("CLOSE ERROR ~p", [Res])
-    end,
     Res =:= ok;
 postcondition(_, {call, _, cmd_channel_publish, _}, Msg) ->
     is_record(Msg, amqp_msg);
@@ -394,14 +392,20 @@ postcondition(St=#cq{q=Q}, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
     %% on a separate channel cannot retrieve it. In that case we accept
     %% an empty return value only if the channel we are calling
     %% basic.get on has no messages published and not consumed.
-    not maps:is_key(Ch, Q);
+    not maps:is_key(Ch, Q) orelse
+    %% When messages can expire they will never be removed from the
+    %% property state because we cannot know whether the message
+    %% will be received later on (it was in transit when it expired).
+    %% Therefore we accept an empty response if all messages
+    %% sent via this particular channel have an expiration.
+    queue_part_all_expired(Q, Ch);
 postcondition(St=#cq{q=Q}, {call, _, cmd_channel_basic_get, _}, Msg) ->
     %% When there are active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
     case has_consumers(St) of
         true -> queue_has_msg(Q, Msg);
-        false -> queue_peek_has_msg(Q, Msg)
+        false -> queue_head_has_msg(Q, Msg)
     end;
 postcondition(_, {call, _, cmd_channel_consume, _}, _) ->
     true;
@@ -438,19 +442,27 @@ has_consumers(#cq{channels=Channels}) ->
         (_, _, Acc) -> Acc
     end, false, Channels).
 
-has_multiple_consumers(#cq{channels=Channels}) ->
-    Count = maps:fold(fun
-        (_, {consume, _}, Acc) -> Acc + 1;
-        (_, _, Acc) -> Acc
-    end, 0, Channels),
-    Count > 1.
-
-queue_peek_has_msg(Qs, Msg) ->
+queue_head_has_msg(Qs, Msg) ->
     maps:fold(fun
         (_, _, true) ->
             true;
         (_, ChQ, _) ->
-            queue:peek(ChQ) =:= {value, Msg}
+            Res = queue:fold(fun
+                (MsgInQ, false) when MsgInQ =:= Msg ->
+                    true;
+                (MsgInQ, false) ->
+                    case MsgInQ of
+                        %% We stop looking at the first message that doesn't have an expiration
+                        %% as this is no longer the head of the queue.
+                        #amqp_msg{props=#'P_basic'{expiration=undefined}} ->
+                            end_of_head;
+                        _ ->
+                            false
+                    end;
+                (_, Res0) ->
+                    Res0
+            end, false, ChQ),
+            Res =:= true
     end, false, Qs).
 
 queue_has_msg(Qs, Msg) ->
@@ -460,6 +472,11 @@ queue_has_msg(Qs, Msg) ->
         (_, ChQ, _) ->
             queue:member(Msg, ChQ)
     end, false, Qs).
+
+queue_part_all_expired(Qs, Key) ->
+    queue:all(fun(#amqp_msg{props=#'P_basic'{expiration=Expiration}}) ->
+        Expiration =/= undefined
+    end, maps:get(Key, Qs)).
 
 %% Helpers.
 
@@ -536,12 +553,14 @@ do_set_policy(Mode, Version) ->
          {<<"queue-version">>, Version}],
         0, <<"queues">>, <<"acting-user">>).
 
-cmd_publish_msg(#cq{amq=AMQ}, PayloadSize, Confirm, Mandatory) ->
+cmd_publish_msg(#cq{amq=AMQ}, PayloadSize, Confirm, Mandatory, Expiration) ->
     Payload = do_rand_payload(PayloadSize),
     Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
-                               <<>>, #'P_basic'{delivery_mode = 2}, %% @todo expiration ; @todo different delivery_mode? more?
+                               <<>>, #'P_basic'{delivery_mode = 2,
+                                                expiration = do_encode_expiration(Expiration)}, %% @todo different delivery_mode? more?
                                Payload),
     Delivery = #delivery{mandatory = Mandatory, sender = self(),
+                         %% @todo Probably need to do something about Confirm?
                          confirm = Confirm, message = Msg,% msg_seq_no = Seq,
                          flow = noflow},
     ok = rabbit_amqqueue:deliver([AMQ], Delivery),
@@ -582,10 +601,11 @@ cmd_channel_close(Ch) ->
     %% So instead we close directly.
     amqp_channel:close(Ch).
 
-cmd_channel_publish(#cq{amq=AMQ}, Ch, PayloadSize, Mandatory) ->
+cmd_channel_publish(#cq{amq=AMQ}, Ch, PayloadSize, Mandatory, Expiration) ->
     #resource{name = Name} = amqqueue:get_name(AMQ),
     Payload = do_rand_payload(PayloadSize),
-    Msg = #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
+    Msg = #amqp_msg{props   = #'P_basic'{delivery_mode = 2,
+                                         expiration = do_encode_expiration(Expiration)},
                     payload = Payload},
     ok = amqp_channel:call(Ch,
                            #'basic.publish'{routing_key = Name,
@@ -650,6 +670,9 @@ do_receive_reject_all(Ch, Tag) ->
     after 0 ->
         ok
     end.
+
+do_encode_expiration(undefined) -> undefined;
+do_encode_expiration(Expiration) -> integer_to_binary(Expiration).
 
 do_rand_payload(PayloadSize) ->
     Prefix = integer_to_binary(erlang:unique_integer([positive])),
