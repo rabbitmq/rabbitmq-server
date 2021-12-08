@@ -2,13 +2,15 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
 
 all() ->
   [
     maybe_master_batch_send,
-    get_time_diff
+    get_time_diff,
+    append_to_acc
   ].
 
 maybe_master_batch_send(_Config) ->
@@ -54,4 +56,31 @@ get_time_diff(_Config) ->
   ?assertEqual( %% Used throughput = 100 / 1000 * 1000 = 100 bytes/s; greater than max throughput
     1000, %% => pause queue sync for 1000 ms
     rabbit_mirror_queue_sync:get_time_diff(TotalBytes2, Interval2, MaxSyncThroughput2)),
+  ok.
+
+append_to_acc(_Config) ->
+  Msg = #basic_message{
+    id = 1,
+    content = #content{
+      properties = #'P_basic'{
+        priority = 2
+      },
+      payload_fragments_rev = [[<<"1234567890">>]]  %% 10 bytes
+    },
+    is_persistent = true
+  },
+  BQDepth = 10,
+  SyncThroughput_0 = 0,
+  FoldAcc1 = {[], 0, {0, erlang:monotonic_time(), SyncThroughput_0}, {0, BQDepth}, erlang:monotonic_time()},
+  {_, _, {TotalBytes1, _, _}, _, _} = rabbit_mirror_queue_sync:append_to_acc(Msg, {}, false, FoldAcc1),
+  ?assertEqual(-1, TotalBytes1),  %% Skipping calculating TotalBytes for the pending batch as SyncThroughput is 0.
+
+  SyncThroughput = 100,
+  FoldAcc2 = {[], 0, {0, erlang:monotonic_time(), SyncThroughput}, {0, BQDepth}, erlang:monotonic_time()},
+  {_, _, {TotalBytes2, _, _}, _, _} = rabbit_mirror_queue_sync:append_to_acc(Msg, {}, false, FoldAcc2),
+  ?assertEqual(10, TotalBytes2),  %% Message size is added to existing TotalBytes
+
+  FoldAcc3 = {[], 0, {TotalBytes2, erlang:monotonic_time(), SyncThroughput}, {0, BQDepth}, erlang:monotonic_time()},
+  {_, _, {TotalBytes3, _, _}, _, _} = rabbit_mirror_queue_sync:append_to_acc(Msg, {}, false, FoldAcc3),
+  ?assertEqual(TotalBytes2 + 10, TotalBytes3),    %% Message size is added to existing TotalBytes
   ok.

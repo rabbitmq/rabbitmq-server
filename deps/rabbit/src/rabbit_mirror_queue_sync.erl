@@ -12,7 +12,7 @@
 -export([master_prepare/4, master_go/9, slave/7, conserve_resources/3]).
 
 %% Export for UTs
--export([maybe_master_batch_send/2, get_time_diff/3]).
+-export([maybe_master_batch_send/2, get_time_diff/3, append_to_acc/4]).
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
 
@@ -130,6 +130,8 @@ bq_fold(FoldFun, FoldAcc, Args, BQ, BQS) ->
         {_,                   BQS1} -> master_done(Args, BQS1)
     end.
 
+append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {_, _, 0}, {Curr, Len}, T}) ->
+    {[{Msg, MsgProps, Unacked} | Batch], I, {-1, 0, 0}, {Curr + 1, Len}, T};
 append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {TotalBytes, LastCheck, SyncThroughput}, {Curr, Len}, T}) ->
     {[{Msg, MsgProps, Unacked} | Batch], I, {TotalBytes + rabbit_basic:msg_size(Msg), LastCheck, SyncThroughput}, {Curr + 1, Len}, T}.
 
