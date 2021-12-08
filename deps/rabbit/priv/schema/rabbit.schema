@@ -1021,6 +1021,23 @@ end}.
 {mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size",
     [{datatype, bytesize}, {validators, ["mirroring_sync_batch_size"]}]}.
 
+%% Mirror sync max throughput (in bytes) per second.
+%% Supported unit symbols:
+%% k, kiB: kibibytes (2^10 - 1,024 bytes)
+%% M, MiB: mebibytes (2^20 - 1,048,576 bytes)
+%% G, GiB: gibibytes (2^30 - 1,073,741,824 bytes)
+%% kB: kilobytes (10^3 - 1,000 bytes)
+%% MB: megabytes (10^6 - 1,000,000 bytes)
+%% GB: gigabytes (10^9 - 1,000,000,000 bytes)
+%%
+%% 0 means "no limit".
+%%
+%% {mirroring_sync_max_throughput, 0},
+
+{mapping, "mirroring_sync_max_throughput", "rabbit.mirroring_sync_max_throughput", [
+    {datatype, [integer, string]}
+]}.
+
 %% Peer discovery backend used by cluster formation.
 %%
 

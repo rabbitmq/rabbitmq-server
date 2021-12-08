@@ -156,13 +156,14 @@ sync_mirrors(HandleInfo, EmitStats,
     {ok, Q} = rabbit_amqqueue:lookup(QName),
     SPids = amqqueue:get_slave_pids(Q),
     SyncBatchSize = rabbit_mirror_queue_misc:sync_batch_size(Q),
-    Log("batch size: ~p", [SyncBatchSize]),
+    SyncThroughput = rabbit_mirror_queue_misc:default_max_sync_throughput(),
+    log_mirror_sync_config(Log, SyncBatchSize, SyncThroughput),
     Ref = make_ref(),
     Syncer = rabbit_mirror_queue_sync:master_prepare(Ref, QName, Log, SPids),
     gm:broadcast(GM, {sync_start, Ref, Syncer, SPids}),
     S = fun(BQSN) -> State#state{backing_queue_state = BQSN} end,
     case rabbit_mirror_queue_sync:master_go(
-           Syncer, Ref, Log, HandleInfo, EmitStats, SyncBatchSize, BQ, BQS) of
+           Syncer, Ref, Log, HandleInfo, EmitStats, SyncBatchSize, SyncThroughput, BQ, BQS) of
         {cancelled, BQS1}      -> Log(" synchronisation cancelled ", []),
                                   {ok, S(BQS1)};
         {shutdown,  R, BQS1}   -> {stop, R, S(BQS1)};
@@ -172,6 +173,11 @@ sync_mirrors(HandleInfo, EmitStats,
         {ok, BQS1}             -> Log("complete", []),
                                   {ok, S(BQS1)}
     end.
+
+log_mirror_sync_config(Log, SyncBatchSize, 0) ->
+  Log("batch size: ~p", [SyncBatchSize]);
+log_mirror_sync_config(Log, SyncBatchSize, SyncThroughput) ->
+  Log("max batch size: ~p; max sync throughput: ~p bytes/s", [SyncBatchSize, SyncThroughput]).
 
 terminate({shutdown, dropped} = Reason,
           State = #state { backing_queue       = BQ,
