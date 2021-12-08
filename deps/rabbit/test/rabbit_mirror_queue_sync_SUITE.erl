@@ -73,7 +73,7 @@ append_to_acc(_Config) ->
   SyncThroughput_0 = 0,
   FoldAcc1 = {[], 0, {0, erlang:monotonic_time(), SyncThroughput_0}, {0, BQDepth}, erlang:monotonic_time()},
   {_, _, {TotalBytes1, _, _}, _, _} = rabbit_mirror_queue_sync:append_to_acc(Msg, {}, false, FoldAcc1),
-  ?assertEqual(-1, TotalBytes1),  %% Skipping calculating TotalBytes for the pending batch as SyncThroughput is 0.
+  ?assertEqual(0, TotalBytes1),  %% Skipping calculating TotalBytes for the pending batch as SyncThroughput is 0.
 
   SyncThroughput = 100,
   FoldAcc2 = {[], 0, {0, erlang:monotonic_time(), SyncThroughput}, {0, BQDepth}, erlang:monotonic_time()},

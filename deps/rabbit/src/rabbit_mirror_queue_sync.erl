@@ -118,7 +118,7 @@ maybe_master_batch_send({_, _, _, {Curr, _Len}, _}, BatchSize)
     when Curr rem BatchSize =:= 0 ->
     true;
 maybe_master_batch_send({_, _, {TotalBytes, _, SyncThroughput}, {_Curr, _Len}, _}, _BatchSize)
-    when TotalBytes >= SyncThroughput ->
+    when TotalBytes > SyncThroughput ->
     true;
 maybe_master_batch_send(_Acc, _BatchSize) ->
     false.
@@ -131,7 +131,7 @@ bq_fold(FoldFun, FoldAcc, Args, BQ, BQS) ->
     end.
 
 append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {_, _, 0}, {Curr, Len}, T}) ->
-    {[{Msg, MsgProps, Unacked} | Batch], I, {-1, 0, 0}, {Curr + 1, Len}, T};
+    {[{Msg, MsgProps, Unacked} | Batch], I, {0, 0, 0}, {Curr + 1, Len}, T};
 append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {TotalBytes, LastCheck, SyncThroughput}, {Curr, Len}, T}) ->
     {[{Msg, MsgProps, Unacked} | Batch], I, {TotalBytes + rabbit_basic:msg_size(Msg), LastCheck, SyncThroughput}, {Curr + 1, Len}, T}.
 
