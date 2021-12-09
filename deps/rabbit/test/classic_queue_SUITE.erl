@@ -31,7 +31,7 @@
     config = no_config :: list(),
 
     %% Channels.
-    channels = #{} %% #{Ch => #{more info}}
+    channels = #{} :: #{pid() => #{consumer := none | binary(), confirms := boolean()}}
 }).
 
 %% Common Test.
@@ -163,19 +163,6 @@ minimal_config(Config) ->
 
 %% Commands.
 
-%commands:
-%   kill
-%   terminate
-%   recover
-%   ack
-%   reject
-%   consume
-%   cancel
-%   delete
-%   requeue
-%   ttl behavior: how to test this?
-%   change CRC configuration
-
 command(St = #cq{amq=undefined}) ->
     {call, ?MODULE, cmd_setup_queue, [St]};
 command(St) ->
@@ -190,14 +177,15 @@ command(St) ->
             {300, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_receive_and_ack, [St, channel(St)]}},
-            {900, {call, ?MODULE, cmd_channel_receive_and_reject, [St, channel(St)]}}
+            {900, {call, ?MODULE, cmd_channel_receive_and_reject, [St, channel(St)]}} %% @todo reject/discard variants?
             %% channel ack out of order?
         ]
     end,
     weighted_union([
-        %% delete/recreate queue
+        %% delete/recreate queue?
         %% dirty_restart
         %% clean_restart: will have to account for channels being open!
+        %% change CRC configuration
         {100, {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]}},
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
@@ -235,7 +223,8 @@ next_state(St, _, {call, _, cmd_set_mode_version, [Mode, Version]}) ->
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_publish_msg, _}) ->
     IntQ = maps:get(internal, Q, queue:new()),
     St#cq{q=Q#{internal => queue:in(Msg, IntQ)}};
-%% @todo Special case 'empty' as an optimisation?
+next_state(St, empty, {call, _, cmd_basic_get_msg, _}) ->
+    St;
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_basic_get_msg, _}) ->
     %% When there are multiple active consumers we may receive
     %% messages out of order because the commands are not running
@@ -254,20 +243,17 @@ next_state(St, _, {call, _, cmd_purge, _}) ->
 next_state(St=#cq{channels=Channels}, Ch, {call, _, cmd_channel_open, _}) ->
     St#cq{channels=Channels#{Ch => #{consumer => none, confirms => false}}};
 next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_close, [Ch]}) ->
-    %% @todo What about publisher confirms?
-    %% @todo What about messages we are currently in the process of receiving?
     St#cq{channels=maps:remove(Ch, Channels)};
 next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_confirm_mode, [Ch]}) ->
     ChInfo = maps:get(Ch, Channels),
     St#cq{channels=Channels#{Ch => ChInfo#{confirms => true}}};
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_publish, [_, Ch|_]}) ->
-    %% @todo If in confirms mode, we need to keep track of things.
-    %% Otherwise just queue the message as normal.
     ChQ = maps:get(Ch, Q, queue:new()),
     St#cq{q=Q#{Ch => queue:in(Msg, ChQ)}};
 next_state(St, _, {call, _, cmd_channel_wait_for_confirms, _}) ->
     St;
-%% @todo Special case 'empty' as an optimisation?
+next_state(St, empty, {call, _, cmd_channel_basic_get, _}) ->
+    St;
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_basic_get, _}) ->
     %% When there are multiple active consumers we may receive
     %% messages out of order because the commands are not running
@@ -302,9 +288,6 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_receive_and_ack, _}) ->
 next_state(St, _, {call, _, cmd_channel_receive_and_reject, _}) ->
     St.
 
-%% @todo This function is not working in a symbolic context.
-%%       We cannot rely on Q for driving preconditions as a result.
-%%
 %% We remove at most one message anywhere in the queue.
 delete_message(Qs0, Msg) ->
     {Qs, _} = maps:fold(fun
@@ -327,6 +310,10 @@ delete_message(Qs0, Msg) ->
     Qs.
 
 %% Preconditions.
+%%
+%% We cannot rely on the data found in #cq.q here because when we are
+%% in a symbolic context we cannot remove the messages from #cq.q
+%% (since we are always getting a new {var,integer()}).
 
 precondition(#cq{channels=Channels}, {call, _, cmd_channel_confirm_mode, [Ch]}) ->
     %% Only enabled confirms if they were not already enabled.
@@ -509,7 +496,6 @@ cmd_setup_queue(#cq{name=Name, mode=Mode, version=Version}) ->
     %% We cannot use args to set mode/version as the arguments override
     %% the policies and we also want to test policy changes.
     cmd_set_mode_version(Mode, Version),
-    %% @todo Maybe have both in-args and in-policies tested.
     Args = [
 %        {<<"x-queue-mode">>, longstr, atom_to_binary(Mode, utf8)},
 %        {<<"x-queue-version">>, long, Version}
@@ -579,8 +565,8 @@ do_set_policy(Mode, Version) ->
 cmd_publish_msg(#cq{amq=AMQ}, PayloadSize, Confirm, Mandatory, Expiration) ->
     Payload = do_rand_payload(PayloadSize),
     Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
-                               <<>>, #'P_basic'{delivery_mode = 2,
-                                                expiration = do_encode_expiration(Expiration)}, %% @todo different delivery_mode? more?
+                               <<>>, #'P_basic'{delivery_mode = 2, %% @todo different delivery_mode? more?
+                                                expiration = do_encode_expiration(Expiration)},
                                Payload),
     Delivery = #delivery{mandatory = Mandatory, sender = self(),
                          %% @todo Probably need to do something about Confirm?
@@ -631,7 +617,7 @@ cmd_channel_close(Ch) ->
 cmd_channel_publish(#cq{amq=AMQ}, Ch, PayloadSize, Mandatory, Expiration) ->
     #resource{name = Name} = amqqueue:get_name(AMQ),
     Payload = do_rand_payload(PayloadSize),
-    Msg = #amqp_msg{props   = #'P_basic'{delivery_mode = 2,
+    Msg = #amqp_msg{props   = #'P_basic'{delivery_mode = 2, %% @todo different delivery_mode? more?
                                          expiration = do_encode_expiration(Expiration)},
                     payload = Payload},
     ok = amqp_channel:call(Ch,
