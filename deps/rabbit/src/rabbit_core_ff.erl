@@ -258,7 +258,7 @@ mds_phase1_migration(FeatureName, _FeatureProps, enable) ->
     case ensure_khepri_cluster_matches_mnesia(FeatureName) of
         ok ->
             Tables = ?MDS_PHASE1_TABLES,
-            case is_mds_migration_done(Tables) of
+            case is_mds_migration_done(FeatureName) of
                 false -> migrate_tables_to_khepri(FeatureName, Tables);
                 true  -> ok
             end;
@@ -686,9 +686,7 @@ empty_unused_mnesia_tables(FeatureName, [Table | Rest]) ->
                "Feature flag `~s`:   dropping content from unused Mnesia "
                "table ~s",
                [FeatureName, Table]),
-            ok = empty_unused_mnesia_table(Table),
-            ok = write_migrated_mark_to_mnesia(FeatureName, Table),
-            ?assert(is_table_migrated(Table));
+            ok = empty_unused_mnesia_table(Table);
         {aborted, {already_exists, Table, _}} ->
             %% Another node is already taking care of this table.
             ?LOG_DEBUG(
@@ -714,47 +712,62 @@ empty_unused_mnesia_table(Table, Key) ->
     ok = mnesia:dirty_delete(Table, Key),
     empty_unused_mnesia_table(Table, NextKey).
 
--define(MDS_MIGRATION_MARK_KEY, '$migrated_to_khepri').
+is_mds_migration_done(FeatureName) ->
+    %% To determine if the migration to Khepri was finished, we look at the
+    %% state of the feature flag on another node, if any.
+    ThisNode = node(),
+    KhepriNodes = rabbit_khepri:nodes(),
+    case KhepriNodes -- [ThisNode] of
+        [] ->
+            %% There are no other nodes. It means the node is unclustered
+            %% and the migration function is called for the first time. This
+            %% function returns `false'.
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   migration done? false, the node is "
+               "unclustered",
+               [FeatureName]),
+            false;
+        [RemoteKhepriNode | _] ->
+            %% This node is clustered already, either because of peer discovery
+            %% or because of the `expand_khepri_cluster()' function.
+            %%
+            %% We need to distinguish two situations:
+            %%
+            %% - The first time the feature flag is enabled in a cluster, we
+            %%   want to migrate records from Mnesia to Khepri. In this case,
+            %%   the state of the feature flag will be `state_changing' on all
+            %%   nodes in the cluster. That's why we can pick any node to query
+            %%   its state.
+            %%
+            %% - When a new node is joining an existing cluster which is
+            %%   already using Khepri, we DO NOT want to migrate anything
+            %%   (Mnesia tables are empty, or about to be if the
+            %%   `post_enabled_locally' code is still running). To determine
+            %%   this, we query a remote node (but not this local node) to see
+            %%   the feature flag state. If it's `true' (enabled), it means the
+            %%   migration is either in progress or done. Otherwise, we are in
+            %%   the first situation described above.
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   migration done? unknown, querying node ~p",
+               [FeatureName, RemoteKhepriNode]),
+            IsEnabledRemotely = rabbit_misc:rpc_call(
+                                  RemoteKhepriNode,
+                                  rabbit_feature_flags,
+                                  is_enabled,
+                                  [FeatureName, non_blocking]),
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   feature flag state on node ~p: ~p",
+               [FeatureName, RemoteKhepriNode, IsEnabledRemotely]),
 
-write_migrated_mark_to_mnesia(FeatureName, Table) ->
-    TableDefs = rabbit_table:definitions(),
-    TableDef = proplists:get_value(Table, TableDefs),
-    Match = proplists:get_value(match, TableDef),
-    ForgedRecord = create_migrated_marker(Match),
-    ?LOG_DEBUG(
-       "Feature flag `~s`:   write a forged record to Mnesia table ~s to "
-       "mark it as migrated",
-       [FeatureName, Table]),
-    mnesia:dirty_write(Table, ForgedRecord).
-
-create_migrated_marker(Record) ->
-    insert_migrated_marker(Record).
-
-insert_migrated_marker('_') ->
-    ?MDS_MIGRATION_MARK_KEY;
-insert_migrated_marker(Atom) when is_atom(Atom) ->
-    Atom;
-insert_migrated_marker(Tuple) when is_tuple(Tuple) ->
-    Fields = tuple_to_list(Tuple),
-    Fields1 = [insert_migrated_marker(Field) || Field <- Fields],
-    list_to_tuple(Fields1).
-
-is_mds_migration_done(Tables) ->
-    lists:all(fun is_table_migrated/1, Tables).
-
-is_table_migrated(Table) ->
-    case mnesia:table_info(Table, size) of
-        1 ->
-            Key = mnesia:dirty_first(Table),
-            is_migration_marker(Key);
-        _ ->
-            false
+            %% If the RPC call fails (i.e. returns `{badrpc, ...}'), we throw
+            %% an exception because we want the migration function to abort.
+            Ret = case IsEnabledRemotely of
+                      true            -> true;
+                      state_changing  -> false;
+                      {badrpc, Error} -> throw(Error)
+                  end,
+            ?LOG_DEBUG(
+               "Feature flag `~s`:   migration done? ~s",
+               [FeatureName, Ret]),
+            Ret
     end.
-
-is_migration_marker(?MDS_MIGRATION_MARK_KEY) ->
-    true;
-is_migration_marker(Tuple) when is_tuple(Tuple) ->
-    Fields = tuple_to_list(Tuple),
-    lists:any(fun is_migration_marker/1, Fields);
-is_migration_marker(_) ->
-    false.
