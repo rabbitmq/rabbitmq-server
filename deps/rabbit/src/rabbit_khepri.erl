@@ -445,10 +445,12 @@ delete_or_fail(Path) ->
     end.
 
 put(PathPattern, Data) ->
-    khepri_machine:put(?STORE_ID, PathPattern, ?DATA_PAYLOAD(Data)).
+    khepri_machine:put(
+      ?STORE_ID, PathPattern, #kpayload_data{data = Data}).
 
 put(PathPattern, Data, Extra) ->
-    khepri_machine:put(?STORE_ID, PathPattern, ?DATA_PAYLOAD(Data), Extra).
+    khepri_machine:put(
+      ?STORE_ID, PathPattern, #kpayload_data{data = Data}, Extra).
 
 transaction(Fun) ->
     transaction(Fun, auto).

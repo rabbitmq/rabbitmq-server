@@ -709,7 +709,7 @@ delete_non_existing_vhost(_) ->
                %% rabbit_vhost:with() to verify the vhost exists again.
                %%
                %% In the case of Khepri, that association is handled by a
-               %% keep_until condition. Therefore the existence of the vhost
+               %% keep_while condition. Therefore the existence of the vhost
                %% is not checked.
                %%
                %% In practice, that's ok: rabbit_vhost:internal_delete() is
