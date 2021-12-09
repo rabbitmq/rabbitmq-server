@@ -198,6 +198,7 @@ start_jwks_server(Config) ->
     CertsDir = ?config(rmq_certsdir, Config),
     ok = jwks_http_app:start(JwksServerPort, CertsDir),
     KeyConfig = [{jwks_url, StrictJwksUrl},
+                 {peer_verification, verify_peer},
                  {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])}],
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                       [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
