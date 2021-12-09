@@ -669,79 +669,27 @@ apply(_Meta, {machine_version, FromVersion, ToVersion}, V0State) ->
 apply(#{index := IncomingRaftIdx} = Meta, {dlx, Cmd},
       #?MODULE{dlx = DlxState0,
                messages_total = Total0,
-               ra_indexes = Indexes0} = State0) when element(1, Cmd) =:= settle ->
-    {DlxState, AckedMsgs} = rabbit_fifo_dlx:apply(Cmd, DlxState0),
-    Indexes = delete_indexes(AckedMsgs, Indexes0),
-    Total = Total0 - length(AckedMsgs),
-    State1 = subtract_in_memory(AckedMsgs, State0),
-    State2 = State1#?MODULE{dlx = DlxState,
-                            messages_total = Total,
-                            ra_indexes = Indexes},
-    {State, ok, Effects} = checkout(Meta, State0, State2, [], false),
-    update_smallest_raft_index(IncomingRaftIdx, State, Effects);
-apply(Meta, {dlx, Cmd},
-      #?MODULE{dlx = DlxState0} = State0) ->
-    {DlxState, ok} = rabbit_fifo_dlx:apply(Cmd, DlxState0),
-    State1 = State0#?MODULE{dlx = DlxState},
-    %% Run a checkout so that a new DLX consumer will be delivered discarded messages
-    %% directly after it subscribes.
-    checkout(Meta, State0, State1, [], false);
+               ra_indexes = Indexes0} = State0) ->
+    case rabbit_fifo_dlx:apply(Cmd, DlxState0) of
+        {DlxState, ok} ->
+            State1 = State0#?MODULE{dlx = DlxState},
+            %% Run a checkout so that a new DLX consumer will be delivered discarded messages
+            %% directly after it subscribes.
+            checkout(Meta, State0, State1, [], false);
+        {DlxState, AckedMsgs} ->
+            Indexes = delete_indexes(AckedMsgs, Indexes0),
+            Total = Total0 - length(AckedMsgs),
+            State1 = subtract_in_memory(AckedMsgs, State0),
+            State2 = State1#?MODULE{dlx = DlxState,
+                                    messages_total = Total,
+                                    ra_indexes = Indexes},
+            {State, ok, Effects} = checkout(Meta, State0, State2, [], false),
+            update_smallest_raft_index(IncomingRaftIdx, State, Effects)
+    end;
 apply(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
     rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
-
-% convert_v0_to_v1(V0State0) ->
-%     V0State = rabbit_fifo_v0:normalize_for_v1(V0State0),
-%     V0Msgs = rabbit_fifo_v0:get_field(messages, V0State),
-%     V1Msgs = lqueue:from_list(lists:sort(maps:to_list(V0Msgs))),
-%     V0Enqs = rabbit_fifo_v0:get_field(enqueuers, V0State),
-%     V1Enqs = maps:map(
-%                fun (_EPid, E) ->
-%                        #enqueuer{next_seqno = element(2, E),
-%                                  pending = element(3, E),
-%                                  status = element(4, E)}
-%                end, V0Enqs),
-%     V0Cons = rabbit_fifo_v0:get_field(consumers, V0State),
-%     V1Cons = maps:map(
-%                fun (_CId, C0) ->
-%                        %% add the priority field
-%                        list_to_tuple(tuple_to_list(C0) ++ [0])
-%                end, V0Cons),
-%     V0SQ = rabbit_fifo_v0:get_field(service_queue, V0State),
-%     V1SQ = priority_queue:from_list([{0, C} || C <- queue:to_list(V0SQ)]),
-%     Cfg = #cfg{name = rabbit_fifo_v0:get_cfg_field(name, V0State),
-%                resource = rabbit_fifo_v0:get_cfg_field(resource, V0State),
-%                release_cursor_interval = rabbit_fifo_v0:get_cfg_field(release_cursor_interval, V0State),
-%                dead_letter_handler = rabbit_fifo_v0:get_cfg_field(dead_letter_handler, V0State),
-%                become_leader_handler = rabbit_fifo_v0:get_cfg_field(become_leader_handler, V0State),
-%                %% TODO: what if policy enabling reject_publish was applied before conversion?
-%                overflow_strategy = drop_head,
-%                max_length = rabbit_fifo_v0:get_cfg_field(max_length, V0State),
-%                max_bytes = rabbit_fifo_v0:get_cfg_field(max_bytes, V0State),
-%                consumer_strategy = rabbit_fifo_v0:get_cfg_field(consumer_strategy, V0State),
-%                delivery_limit = rabbit_fifo_v0:get_cfg_field(delivery_limit, V0State),
-%                max_in_memory_length = rabbit_fifo_v0:get_cfg_field(max_in_memory_length, V0State),
-%                max_in_memory_bytes = rabbit_fifo_v0:get_cfg_field(max_in_memory_bytes, V0State)
-%               },
-
-%     #?MODULE{cfg = Cfg,
-%              messages = V1Msgs,
-%              next_msg_num = rabbit_fifo_v0:get_field(next_msg_num, V0State),
-%              returns = rabbit_fifo_v0:get_field(returns, V0State),
-%              enqueue_count = rabbit_fifo_v0:get_field(enqueue_count, V0State),
-%              enqueuers = V1Enqs,
-%              ra_indexes = rabbit_fifo_v0:get_field(ra_indexes, V0State),
-%              release_cursors = rabbit_fifo_v0:get_field(release_cursors, V0State),
-%              consumers = V1Cons,
-%              service_queue = V1SQ,
-%              prefix_msgs = rabbit_fifo_v0:get_field(prefix_msgs, V0State),
-%              msg_bytes_enqueue = rabbit_fifo_v0:get_field(msg_bytes_enqueue, V0State),
-%              msg_bytes_checkout = rabbit_fifo_v0:get_field(msg_bytes_checkout, V0State),
-%              waiting_consumers = rabbit_fifo_v0:get_field(waiting_consumers, V0State),
-%              msg_bytes_in_memory = rabbit_fifo_v0:get_field(msg_bytes_in_memory, V0State),
-%              msgs_ready_in_memory = rabbit_fifo_v0:get_field(msgs_ready_in_memory, V0State)
-%             }.
 
 convert_msg({RaftIdx, {Header, empty}}) ->
     ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header));
@@ -751,7 +699,6 @@ convert_msg({'$empty_msg', Header}) ->
     ?DISK_MSG(Header);
 convert_msg({'$prefix_msg', Header}) ->
     ?PREFIX_MEM_MSG(Header).
-
 
 convert_v1_to_v2(V1State) ->
     IndexesV1 = rabbit_fifo_v1:get_field(ra_indexes, V1State),
