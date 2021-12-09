@@ -266,7 +266,7 @@ recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
                                      ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                                      CountersRef, Context),
             rabbit_log:warning("Queue ~s in vhost ~s dropped ~b/~b/~b persistent messages "
-                               "and ~b transient messages during dirty recovery",
+                               "and ~b transient messages after unclean shutdown",
                                [QueueName, VHost,
                                 counters:get(CountersRef, ?RECOVER_DROPPED_PERSISTENT_PER_VHOST),
                                 counters:get(CountersRef, ?RECOVER_DROPPED_PERSISTENT_PER_QUEUE),
@@ -459,7 +459,7 @@ recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                        CountersRef) ->
     #resource{virtual_host = VHost, name = QName} = Name,
-    rabbit_log:info("Converting dirty queue ~s in vhost ~s from v1 to v2", [QName, VHost]),
+    rabbit_log:info("Converting queue ~s in vhost ~s from v1 to v2 after unclean shutdown", [QName, VHost]),
     %% We ignore the count and bytes returned here because we cannot trust
     %% rabbit_queue_index: it has a bug that may lead to more bytes being
     %% returned than it really has.

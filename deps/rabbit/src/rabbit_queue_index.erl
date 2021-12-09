@@ -713,7 +713,7 @@ recover_index_v2_dirty(State0 = #qistate { queue_name = Name,
                                            on_sync_msg = OnSyncMsgFun },
                        ContainsCheckFun, CountersRef) ->
     #resource{virtual_host = VHost, name = QName} = Name,
-    rabbit_log:info("Converting dirty queue ~s in vhost ~s from v2 to v1", [QName, VHost]),
+    rabbit_log:info("Converting queue ~s in vhost ~s from v2 to v1 after unclean shutdown", [QName, VHost]),
     %% We cannot use the counts/bytes because some messages may be in both
     %% the v1 and v2 indexes after a crash.
     {_, _, V2State} = rabbit_classic_queue_index_v2:recover(Name, non_clean_shutdown, true,
