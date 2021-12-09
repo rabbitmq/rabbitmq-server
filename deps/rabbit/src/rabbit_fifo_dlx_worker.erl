@@ -324,8 +324,19 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
 
 deliver_to_queues(Delivery, RouteToQNames, #state{queue_type_state = QTypeState0} = State0) ->
     Qs = rabbit_amqqueue:lookup(RouteToQNames),
-    {ok, QTypeState1, Actions} = rabbit_queue_type:deliver(Qs, Delivery, QTypeState0),
-    State = State0#state{queue_type_state = QTypeState1},
+    {QTypeState2, Actions} = case rabbit_queue_type:deliver(Qs, Delivery, QTypeState0) of
+                                 {ok, QTypeState1, Actions0} ->
+                                     {QTypeState1, Actions0};
+                                 {error, {coordinator_unavailable, Resource}} ->
+                                     rabbit_log:warning("Cannot deliver message because stream coordinator unavailable for ~s",
+                                                        [rabbit_misc:rs(Resource)]),
+                                     {QTypeState0, []};
+                                 {error, {stream_not_found, Resource}} ->
+                                     rabbit_log:warning("Cannot deliver message because stream not found for ~s",
+                                                        [rabbit_misc:rs(Resource)]),
+                                     {QTypeState0, []}
+                             end,
+    State = State0#state{queue_type_state = QTypeState2},
     handle_queue_actions(Actions, State).
 
 handle_settled(QRef, MsgSeqs, #state{pendings = Pendings0,
@@ -344,8 +355,7 @@ handle_settled0(QRef, MsgSeq, SettleTimeout, Pendings) ->
             maps:update(MsgSeq, Pend, Pendings);
         error ->
             rabbit_log:warning("Ignoring publisher confirm for sequence number ~b "
-                               "from target dead letter ~s after settle timeout of ~bms. "
-                               "Troubleshoot why that queue confirms so slowly.",
+                               "from target dead letter ~s after settle timeout of ~bms.",
                                [MsgSeq, rabbit_misc:rs(QRef), SettleTimeout]),
             Pendings
     end.
