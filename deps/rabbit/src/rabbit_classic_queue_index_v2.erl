@@ -442,7 +442,7 @@ recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
 recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
     #resource{virtual_host = VHost, name = QName} = Name,
-    rabbit_log:info("Converting clean queue ~s in vhost ~s from v1 to v2", [QName, VHost]),
+    rabbit_log:info("Converting queue ~s in vhost ~s from v1 to v2 after clean shutdown", [QName, VHost]),
     {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
                                                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                                                  convert),
