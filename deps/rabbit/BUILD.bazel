@@ -337,7 +337,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "classic_queue_SUITE",
-        size = "medium",
+        size = "large",
         deps = [
             "@proper//:bazel_erlang_lib",
         ],
