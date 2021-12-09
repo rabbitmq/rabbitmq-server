@@ -79,14 +79,9 @@ init([]) ->
           type => worker,
           start => {rabbit_stream_metrics_gc, start_link, []}},
 
-    SacCoordinator =
-        #{id => rabbit_stream_sac_coordinator,
-          type => worker,
-          start => {rabbit_stream_sac_coordinator, start_link, []}},
-
     {ok,
      {{one_for_all, 10, 10},
-      [StreamManager, MetricsGc, SacCoordinator]
+      [StreamManager, MetricsGc]
       ++ listener_specs(fun tcp_listener_spec/1,
                         [SocketOpts, ServerConfiguration, NumTcpAcceptors],
                         Listeners)

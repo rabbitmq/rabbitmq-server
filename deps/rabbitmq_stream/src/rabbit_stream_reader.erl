@@ -2681,12 +2681,12 @@ maybe_register_consumer(VirtualHost,
                         true) ->
     PartitionIndex = partition_index(VirtualHost, Stream, Properties),
     {ok, Active} =
-        rabbit_stream_sac_coordinator:register_consumer(VirtualHost,
-                                                        Stream,
-                                                        PartitionIndex,
-                                                        ConsumerName,
-                                                        self(),
-                                                        SubscriptionId),
+        rabbit_stream_coordinator:register_consumer(VirtualHost,
+                                                    Stream,
+                                                    PartitionIndex,
+                                                    ConsumerName,
+                                                    self(),
+                                                    SubscriptionId),
     Active.
 
 maybe_notify_consumer(_, Connection, _, _, _, false = _Sac) ->
@@ -2728,11 +2728,11 @@ maybe_unregister_consumer(VirtualHost,
                                                                     SubscriptionId}},
                           true = _Sac) ->
     ConsumerName = consumer_name(Properties),
-    rabbit_stream_sac_coordinator:unregister_consumer(VirtualHost,
-                                                      Stream,
-                                                      ConsumerName,
-                                                      self(),
-                                                      SubscriptionId).
+    rabbit_stream_coordinator:unregister_consumer(VirtualHost,
+                                                  Stream,
+                                                  ConsumerName,
+                                                  self(),
+                                                  SubscriptionId).
 
 partition_index(VirtualHost, Stream, Properties) ->
     case Properties of

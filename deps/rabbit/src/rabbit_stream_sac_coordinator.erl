@@ -16,120 +16,43 @@
 
 -module(rabbit_stream_sac_coordinator).
 
--behaviour(gen_server).
-
-%% API functions
--export([start_link/0]).
-%% gen_server callbacks
--export([init/1,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2,
-         terminate/2,
-         code_change/3]).
--export([register_consumer/6,
-         unregister_consumer/5]).
-
 -type vhost() :: binary().
 -type stream() :: binary().
 -type consumer_name() :: binary().
 -type subscription_id() :: byte().
+
+-opaque command() ::
+    {register_consumer, vhost()} | {unregister_consumer, vhost()}.
 
 -record(consumer,
         {pid :: pid(), subscription_id :: subscription_id(),
          active :: boolean()}).
 -record(group,
         {consumers :: [#consumer{}], partition_index :: integer()}).
--record(state,
+-record(?MODULE,
         {groups :: #{{vhost(), stream(), consumer_name()} => #group{}}}).
 
-register_consumer(VirtualHost,
-                  Stream,
-                  PartitionIndex,
-                  ConsumerName,
-                  ConnectionPid,
-                  SubscriptionId) ->
-    call({register_consumer,
-          VirtualHost,
-          Stream,
-          PartitionIndex,
-          ConsumerName,
-          ConnectionPid,
-          SubscriptionId}).
+-opaque state() :: #?MODULE{}.
 
-unregister_consumer(VirtualHost,
-                    Stream,
-                    ConsumerName,
-                    ConnectionPid,
-                    SubscriptionId) ->
-    call({unregister_consumer,
-          VirtualHost,
-          Stream,
-          ConsumerName,
-          ConnectionPid,
-          SubscriptionId}).
+-export_type([state/0,
+              command/0]).
 
-call(Request) ->
-    gen_server:call({global, ?MODULE},
-                    Request).%%%===================================================================
-                             %%% API functions
-                             %%%===================================================================
+-export([apply/2,
+         init_state/0]).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
-%%--------------------------------------------------------------------
-start_link() ->
-    case gen_server:start_link({global, ?MODULE}, ?MODULE, [], []) of
-        {error, {already_started, _Pid}} ->
-            ignore;
-        R ->
-            R
-    end.
+-spec init_state() -> state().
+init_state() ->
+    #?MODULE{groups = #{}}.
 
-%%%===================================================================
-%%% gen_server callbacks
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
-%% @end
-%%--------------------------------------------------------------------
-init([]) ->
-    {ok, #state{groups = #{}}}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%%
-%% @spec handle_call(Request, From, State) ->
-%%                                   {reply, Reply, State} |
-%%                                   {reply, Reply, State, Timeout} |
-%%                                   {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, Reply, State} |
-%%                                   {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
-handle_call({register_consumer,
-             VirtualHost,
-             Stream,
-             PartitionIndex,
-             ConsumerName,
-             ConnectionPid,
-             SubscriptionId},
-            _From, #state{groups = StreamGroups0} = State) ->
+-spec apply(command(), state()) -> {state(), term()}.
+apply({register_consumer,
+       VirtualHost,
+       Stream,
+       PartitionIndex,
+       ConsumerName,
+       ConnectionPid,
+       SubscriptionId},
+      #?MODULE{groups = StreamGroups0} = State) ->
     %% TODO monitor connection PID to remove consumers when their connection dies
     %% this could require some index to avoid crawling the whole data structure
     %% this is necessary to fail over to another consumer when one dies abruptly
@@ -180,14 +103,14 @@ handle_call({register_consumer,
         lookup_consumer(ConnectionPid, SubscriptionId, Group2),
     notify_consumers(FormerActive, Consumer1, Group2),
     #consumer{active = Active} = Consumer1,
-    {reply, {ok, Active}, State#state{groups = StreamGroups2}};
-handle_call({unregister_consumer,
-             VirtualHost,
-             Stream,
-             ConsumerName,
-             ConnectionPid,
-             SubscriptionId},
-            _From, #state{groups = StreamGroups0} = State0) ->
+    {State#?MODULE{groups = StreamGroups2}, {ok, Active}};
+apply({unregister_consumer,
+       VirtualHost,
+       Stream,
+       ConsumerName,
+       ConnectionPid,
+       SubscriptionId},
+      #?MODULE{groups = StreamGroups0} = State0) ->
     State1 =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             error ->
@@ -237,11 +160,9 @@ handle_call({unregister_consumer,
                                     ConsumerName,
                                     Group1,
                                     StreamGroups0),
-                State0#state{groups = SGS}
+                State0#?MODULE{groups = SGS}
         end,
-    {reply, ok, State1};
-handle_call(which_children, _From, State) ->
-    {reply, [], State}.
+    {State1, ok}.
 
 maybe_create_group(VirtualHost,
                    Stream,
@@ -384,59 +305,3 @@ update_groups(VirtualHost,
               Group,
               StreamGroups) ->
     maps:put({VirtualHost, Stream, ConsumerName}, Group, StreamGroups).
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%%
-%% @spec handle_info(Info, State) -> {noreply, State} |
-%%                                   {noreply, State, Timeout} |
-%%                                   {stop, Reason, State}
-%% @end
-%%--------------------------------------------------------------------
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%%
-%% @spec terminate(Reason, State) -> void()
-%% @end
-%%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
-    ok.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
-%% @end
-%%--------------------------------------------------------------------
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================

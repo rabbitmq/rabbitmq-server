@@ -44,6 +44,9 @@
 -export([eval_listeners/3,
          state/0]).
 
+%% Single Active Consumer API
+-export([register_consumer/6, unregister_consumer/5]).
+
 -rabbit_boot_step({?MODULE,
                    [{description, "Restart stream coordinator"},
                     {mfa,         {?MODULE, recover, []}},
@@ -88,6 +91,7 @@
                    {member_stopped, stream_id(), args()} |
                    {retention_updated, stream_id(), args()} |
                    {mnesia_updated, stream_id(), args()} |
+                   {sac, rabbit_stream_sac_coordinator:command()} |
                    ra_machine:effect().
 
 -export_type([command/0]).
@@ -273,6 +277,28 @@ register_local_member_listener(Q) when ?is_amqqueue(Q) ->
                        stream_id => StreamId,
                        type => local_member}}).
 
+%% Single Active Consumer API
+-spec register_consumer(binary(), binary(), integer(), binary(), pid(), integer()) -> {ok, boolean()}.
+register_consumer(VirtualHost,
+                  Stream,
+                  PartitionIndex,
+                  ConsumerName,
+                  ConnectionPid,
+                  SubscriptionId) ->
+    {ok, Res, _} = process_command({sac,
+        {register_consumer, VirtualHost, Stream, PartitionIndex, ConsumerName, ConnectionPid, SubscriptionId}}),
+    Res.
+
+-spec unregister_consumer(binary(), binary(), binary(), pid(), integer()) -> ok.
+unregister_consumer(VirtualHost,
+                    Stream,
+                    ConsumerName,
+                    ConnectionPid,
+                    SubscriptionId) ->
+    {ok, Res, _} = process_command({sac, 
+        {unregister_consumer, VirtualHost, Stream, ConsumerName, ConnectionPid, SubscriptionId}}),
+    Res.
+
 process_command(Cmd) ->
     Servers = ensure_coordinator_started(),
     process_command(Servers, Cmd).
@@ -344,7 +370,7 @@ which_module(_) ->
     ?MODULE.
 
 init(_Conf) ->
-    #?MODULE{}.
+    #?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()}.
 
 -spec apply(map(), command(), state()) ->
     {state(), term(), ra_machine:effects()}.
@@ -380,6 +406,10 @@ apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
         Reply ->
             return(Meta, State0, Reply, [])
     end;
+
+apply(Meta, {sac, SacCommand}, #?MODULE{single_active_consumer = SacState0} = State0) ->
+    {SacState1, Reply} = rabbit_stream_sac_coordinator:apply(SacCommand, SacState0),
+    return(Meta, State0#?MODULE{single_active_consumer = SacState1}, Reply, []);
 apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
       #?MODULE{streams = Streams0,
                monitors = Monitors0,

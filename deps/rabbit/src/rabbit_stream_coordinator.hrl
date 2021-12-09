@@ -63,6 +63,6 @@
                                     %% not used as of v2
                                     listeners = #{} :: undefined | #{stream_id() =>
                                                                      #{pid() := queue_ref()}},
+                                    single_active_consumer :: undefined | rabbit_stream_sac_coordinator:state(),
                                     %% future extensibility
-                                    reserved_1,
                                     reserved_2}).
