@@ -84,12 +84,12 @@
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
 {mapping,
- "auth_oauth2.strict",
- "rabbitmq_auth_backend_oauth2.key_config.strict",
- [{datatype, {enum, [true, false]}}]}.
+ "auth_oauth2.https.peer_verification",
+ "rabbitmq_auth_backend_oauth2.key_config.peer_verification",
+ [{datatype, {enum, [verify_peer, verify_none]}}]}.
 
 {mapping,
- "auth_oauth2.cacertfile",
+ "auth_oauth2.https.cacertfile",
  "rabbitmq_auth_backend_oauth2.key_config.cacertfile",
  [{datatype, file}, {validators, ["file_accessible"]}]}.
 
