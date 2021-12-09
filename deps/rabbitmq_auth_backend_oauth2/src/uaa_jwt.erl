@@ -71,7 +71,7 @@ update_jwks_signing_keys() ->
 -spec fetch_keys(binary() | list()) -> {ok, term()} | {error, term()}.
 fetch_keys(JwksUrl) ->
     UaaEnv = application:get_env(?APP, key_config, []),
-    PeerVerification = proplists:get_value(peer_verification, UaaEnv, verify_peer),
+    PeerVerification = proplists:get_value(peer_verification, UaaEnv, verify_none),
     CaCertFile = proplists:get_value(cacertfile, UaaEnv),
     SslOpts = [{verify, PeerVerification}, {cacertfile, CaCertFile}],
     httpc:request(get, {JwksUrl, []}, [{ssl, SslOpts}], []).
