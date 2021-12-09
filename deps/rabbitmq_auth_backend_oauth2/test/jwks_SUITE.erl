@@ -23,7 +23,7 @@ all() ->
      {group, happy_path},
      {group, unhappy_path},
      {group, unvalidated_jwks_server},
-     {group, non_strict_mode}
+     {group, no_peer_verification}
     ].
 
 groups() ->
@@ -49,7 +49,7 @@ groups() ->
                          test_failed_token_refresh_case2
                         ]},
      {unvalidated_jwks_server, [], [test_failed_connection_with_unvalidated_jwks_server]},
-     {non_strict_mode, [], [{group, happy_path}, {group, unhappy_path}]}
+     {no_peer_verification, [], [{group, happy_path}, {group, unhappy_path}]}
     ].
 
 %%
@@ -75,9 +75,9 @@ end_per_suite(Config) ->
         fun stop_jwks_server/1
       ] ++ rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(non_strict_mode, Config) ->
+init_per_group(no_peer_verification, Config) ->
     add_vhosts(Config),
-    KeyConfig = rabbit_ct_helpers:set_config(?config(key_config, Config), [{jwks_url, ?config(non_strict_jwks_url, Config)}, {strict, false}]),
+    KeyConfig = rabbit_ct_helpers:set_config(?config(key_config, Config), [{jwks_url, ?config(non_strict_jwks_url, Config)}, {peer_verification, verify_none}]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
     rabbit_ct_helpers:set_config(Config, {key_config, KeyConfig});
 
@@ -85,9 +85,9 @@ init_per_group(_Group, Config) ->
     add_vhosts(Config),
     Config.
 
-end_per_group(non_strict_mode, Config) ->
+end_per_group(no_peer_verification, Config) ->
     delete_vhosts(Config),
-    KeyConfig = rabbit_ct_helpers:set_config(?config(key_config, Config), [{jwks_url, ?config(strict_jwks_url, Config)}, {strict, true}]),
+    KeyConfig = rabbit_ct_helpers:set_config(?config(key_config, Config), [{jwks_url, ?config(strict_jwks_url, Config)}, {peer_verification, verify_peer}]),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
     rabbit_ct_helpers:set_config(Config, {key_config, KeyConfig});
 

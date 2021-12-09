@@ -6,8 +6,8 @@
         auth_oauth2.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
         auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/cert.pem
         auth_oauth2.jwks_url = https://my-jwt-issuer/jwks.json
-        auth_oauth2.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-        auth_oauth2.strict = false
+        auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+        auth_oauth2.https.peer_verification = verify_none
         auth_oauth2.algorithms.1 = HS256
         auth_oauth2.algorithms.2 = RS256",
         [
@@ -24,7 +24,7 @@
             },
             {jwks_url, "https://my-jwt-issuer/jwks.json"},
             {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
-            {strict, false},
+            {peer_verification, verify_none},
             {algorithms, [<<"HS256">>, <<"RS256">>]}
             ]
             }
