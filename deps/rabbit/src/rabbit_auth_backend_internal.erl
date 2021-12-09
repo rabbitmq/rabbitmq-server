@@ -1321,7 +1321,7 @@ match_path_in_khepri(Path) ->
 
 list_topic_permissions() ->
     QueryThunk = match_user_vhost_topic_permission('_', '_'),
-    Path = khepri_topic_permission_path(?STAR, ?STAR, ?STAR),
+    Path = match_path_in_khepri(khepri_topic_permission_path(?STAR, ?STAR, ?STAR)),
     list_topic_permissions(topic_perms_info_keys(), QueryThunk, Path).
 
 list_user_topic_permissions(Username) ->
