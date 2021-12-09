@@ -59,15 +59,23 @@ init_per_group(Group = classic_queue_tests, Config) ->
         {rmq_nodename_suffix, Group},
         {rmq_nodes_count, 1}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
+    Config2 = rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+      rabbit_ct_client_helpers:setup_steps()),
+    %% We increase the number of entries in stacktraces
+    %% to ease debugging when there is a crash. The
+    %% default of 8 is a bit low. We need to increase
+    %% in both the CT node and the RabbitMQ node.
+    erlang:system_flag(backtrace_depth, 16),
+    rabbit_ct_broker_helpers:rpc(Config2, 0,
+        erlang, system_flag, [backtrace_depth, 16]),
+    Config2.
 
 end_per_group(classic_queue_tests, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
- 
+
 classic_queue_v1(Config) ->
     true = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, do_classic_queue_v1, [Config]).
