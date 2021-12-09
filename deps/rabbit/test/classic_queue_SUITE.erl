@@ -240,7 +240,7 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_basic_get_msg, _}) ->
     %%
     %% For all these reasons we remove messages regardless of where
     %% they are in the queue.
-    St#cq{q=queue_delete(Q, Msg)};
+    St#cq{q=delete_message(Q, Msg)};
 next_state(St, _, {call, _, cmd_purge, _}) ->
     St#cq{q=#{}};
 next_state(St=#cq{channels=Channels}, Ch, {call, _, cmd_channel_open, _}) ->
@@ -272,7 +272,7 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_basic_get, _}) ->
     %%
     %% For all these reasons we remove messages regardless of where
     %% they are in the queue.
-    St#cq{q=queue_delete(Q, Msg)};
+    St#cq{q=delete_message(Q, Msg)};
 next_state(St=#cq{channels=Channels}, Tag, {call, _, cmd_channel_consume, [_, Ch]}) ->
     ChInfo = maps:get(Ch, Channels),
     St#cq{channels=Channels#{Ch => ChInfo#{consumer => Tag}}};
@@ -290,7 +290,7 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_receive_and_ack, _}) ->
     %% be the case also when we had two consumers and one was
     %% cancelled. So we do not verify the order of messages
     %% when using consume.
-    St#cq{q=queue_delete(Q, Msg)};
+    St#cq{q=delete_message(Q, Msg)};
 next_state(St, _, {call, _, cmd_channel_receive_and_reject, _}) ->
     St.
 
@@ -298,7 +298,7 @@ next_state(St, _, {call, _, cmd_channel_receive_and_reject, _}) ->
 %%       We cannot rely on Q for driving preconditions as a result.
 %%
 %% We remove at most one message anywhere in the queue.
-queue_delete(Qs0, Msg) ->
+delete_message(Qs0, Msg) ->
     {Qs, _} = maps:fold(fun
         (Ch, ChQ, {Qs1, true}) ->
             {Qs1#{Ch => ChQ}, true};
@@ -309,7 +309,7 @@ queue_delete(Qs0, Msg) ->
                         1 ->
                             {Qs1, true};
                         _ ->
-                            ChQOut = queue:delete(Msg, ChQ),
+                            ChQOut = queue_delete(Msg, ChQ),
                             {Qs1#{Ch => ChQOut}, true}
                     end;
                 false ->
@@ -489,7 +489,7 @@ queue_has_msg(Qs, Msg) ->
     end, false, Qs).
 
 queue_part_all_expired(Qs, Key) ->
-    queue:all(fun(#amqp_msg{props=#'P_basic'{expiration=Expiration}}) ->
+    queue_all(fun(#amqp_msg{props=#'P_basic'{expiration=Expiration}}) ->
         Expiration =/= undefined
     end, maps:get(Key, Qs)).
 
@@ -703,6 +703,84 @@ do_rand_payload(PayloadSize) ->
         %% Slower failover for OTP < 24.0.
         false -> iolist_to_binary([Prefix, crypto:strong_rand_bytes(PayloadSize)])
     end.
+
+%% This function was copied from OTP 24 and should be replaced
+%% with queue:all/2 when support for OTP 23 is no longer needed.
+queue_all(Pred, {R, F}) when is_function(Pred, 1), is_list(R), is_list(F) ->
+    lists:all(Pred, F) andalso
+    lists:all(Pred, R);
+queue_all(Pred, Q) ->
+    erlang:error(badarg, [Pred, Q]).
+
+%% This function was copied from OTP 24 and should be replaced
+%% with queue:delete/2 when support for OTP 23 is no longer needed.
+%%
+%% The helper functions delete_front, delete_rear, r2f, f2r
+%% can be removed at the same time.
+queue_delete(Item, {R0, F0} = Q) when is_list(R0), is_list(F0) ->
+    case delete_front(Item, F0) of
+        false ->
+            case delete_rear(Item, R0) of
+                false ->
+                    Q;
+                [] ->
+                    f2r(F0);
+                R1 ->
+                    {R1, F0}
+            end;
+        [] ->
+            r2f(R0);
+        F1 ->
+            {R0, F1}
+    end;
+queue_delete(Item, Q) ->
+    erlang:error(badarg, [Item, Q]).
+
+delete_front(Item, [Item|Rest]) ->
+    Rest;
+delete_front(Item, [X|Rest]) ->
+    case delete_front(Item, Rest) of
+        false -> false;
+        F -> [X|F]
+    end;
+delete_front(_, []) ->
+    false.
+
+delete_rear(Item, [X|Rest]) ->
+    case delete_rear(Item, Rest) of
+        false when X=:=Item ->
+            Rest;
+        false ->
+            false;
+        R ->
+            [X|R]
+    end;
+delete_rear(_, []) ->
+    false.
+
+-compile({inline, [{r2f,1},{f2r,1}]}).
+
+%% Move half of elements from R to F, if there are at least three
+r2f([]) ->
+    {[],[]};
+r2f([_]=R) ->
+    {[],R};
+r2f([X,Y]) ->
+    {[X],[Y]};
+r2f(List) ->
+    {FF,RR} = lists:split(length(List) div 2 + 1, List),
+    {FF,lists:reverse(RR, [])}.
+
+%% Move half of elements from F to R, if there are enough
+f2r([]) ->
+    {[],[]};
+f2r([_]=F) ->
+    {F,[]};
+f2r([X,Y]) ->
+    {[Y],[X]};
+f2r(List) ->
+    {FF,RR} = lists:split(length(List) div 2 + 1, List),
+    {lists:reverse(RR, []),FF}.
 
 %% This function was copied from OTP 24 and should be replaced
 %% with queue:fold/3 when support for OTP 23 is no longer needed.
