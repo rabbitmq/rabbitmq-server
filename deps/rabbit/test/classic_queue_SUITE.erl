@@ -462,7 +462,7 @@ queue_head_has_msg(Qs, Msg) ->
         (_, _, true) ->
             true;
         (_, ChQ, _) ->
-            Res = queue:fold(fun
+            Res = queue_fold(fun
                 (MsgInQ, false) when MsgInQ =:= Msg ->
                     true;
                 (MsgInQ, false) ->
@@ -703,3 +703,11 @@ do_rand_payload(PayloadSize) ->
         %% Slower failover for OTP < 24.0.
         false -> iolist_to_binary([Prefix, crypto:strong_rand_bytes(PayloadSize)])
     end.
+
+%% This function was copied from OTP 24 and should be replaced
+%% with queue:fold/3 when support for OTP 23 is no longer needed.
+queue_fold(Fun, Acc0, {R, F}) when is_function(Fun, 2), is_list(R), is_list(F) ->
+    Acc1 = lists:foldl(Fun, Acc0, F),
+    lists:foldr(Fun, Acc1, R);
+queue_fold(Fun, Acc0, Q) ->
+    erlang:error(badarg, [Fun, Acc0, Q]).
