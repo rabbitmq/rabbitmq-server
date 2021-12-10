@@ -21,7 +21,8 @@ all() ->
 groups() ->
     [
       {parallel_tests, [parallel], [
-          merge_operator_policy_definitions
+          merge_operator_policy_definitions,
+          conflict_resolution_for_booleans
         ]}
     ].
 
@@ -102,6 +103,54 @@ merge_operator_policy_definitions(_Config) ->
                     [{definition, [
                       {<<"message-ttl">>, 3000}
                     ]}])
-    ),
+    ).
 
-    passed.
+
+  conflict_resolution_for_booleans(_Config) ->
+    ?assertEqual(
+      [
+        {<<"remote-dc-replicate">>, true}
+      ],
+      rabbit_policy:merge_operator_definitions(
+         #{definition => #{
+           <<"remote-dc-replicate">> => true
+         }},
+         [{definition, [
+           {<<"remote-dc-replicate">>, true}
+         ]}])),
+
+    ?assertEqual(
+      [
+        {<<"remote-dc-replicate">>, false}
+      ],
+      rabbit_policy:merge_operator_definitions(
+        #{definition => #{
+          <<"remote-dc-replicate">> => false
+        }},
+        [{definition, [
+          {<<"remote-dc-replicate">>, false}
+        ]}])),
+
+    ?assertEqual(
+      [
+        {<<"remote-dc-replicate">>, true}
+      ],
+      rabbit_policy:merge_operator_definitions(
+        #{definition => #{
+          <<"remote-dc-replicate">> => false
+        }},
+        [{definition, [
+          {<<"remote-dc-replicate">>, true}
+        ]}])),
+
+    ?assertEqual(
+      [
+        {<<"remote-dc-replicate">>, false}
+      ],
+      rabbit_policy:merge_operator_definitions(
+        #{definition => #{
+          <<"remote-dc-replicate">> => true
+        }},
+        [{definition, [
+          {<<"remote-dc-replicate">>, false}
+        ]}])).
