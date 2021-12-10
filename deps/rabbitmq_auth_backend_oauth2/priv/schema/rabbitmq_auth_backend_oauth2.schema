@@ -93,7 +93,12 @@
  "rabbitmq_auth_backend_oauth2.key_config.cacertfile",
  [{datatype, file}, {validators, ["file_accessible"]}]}.
 
-{validator, "https_uri", "invalid https uri",
+{mapping,
+ "auth_oauth2.https.depth",
+ "rabbitmq_auth_backend_oauth2.key_config.depth",
+ [{datatype, integer}]}.
+
+{validator, "https_uri", "According to the JWT Specification, Key Server URL must be https.",
  fun(Uri) -> string:nth_lexeme(Uri, 1, "://") == "https" end}.
 
 {mapping,
