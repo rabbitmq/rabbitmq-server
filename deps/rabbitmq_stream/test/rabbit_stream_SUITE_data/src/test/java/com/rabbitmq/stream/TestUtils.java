@@ -16,11 +16,13 @@
 
 package com.rabbitmq.stream;
 
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.ok;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import com.rabbitmq.stream.impl.Client;
+import com.rabbitmq.stream.impl.Client.Response;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import java.lang.reflect.Field;
@@ -30,6 +32,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
+import org.assertj.core.api.Condition;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.extension.*;
 
@@ -106,7 +109,7 @@ public class TestUtils {
                     .eventLoopGroup(eventLoopGroup(context))
                     .port(streamPortNode1()));
         Client.Response response = client.create(stream);
-        assertThat(response.isOk()).isTrue();
+        assertThat(response).is(ok());
         client.close();
         store(context).put("testMethodStream", stream);
       } catch (NoSuchFieldException e) {
@@ -136,7 +139,7 @@ public class TestUtils {
                     .eventLoopGroup(eventLoopGroup(context))
                     .port(streamPortNode1()));
         Client.Response response = client.delete(stream);
-        assertThat(response.isOk()).isTrue();
+        assertThat(response).is(ok());
         client.close();
         store(context).remove("testMethodStream");
       } catch (NoSuchFieldException e) {
@@ -195,6 +198,24 @@ public class TestUtils {
       for (Client c : clients) {
         c.close();
       }
+    }
+  }
+
+  static class ResponseConditions {
+
+    static Condition<Response> ok() {
+      return new Condition<>(Response::isOk, "Response should be OK");
+    }
+
+    static Condition<Response> ko() {
+      return new Condition<>(response -> !response.isOk(), "Response should be OK");
+    }
+
+    static Condition<Response> responseCode(short expectedResponse) {
+      return new Condition<>(
+          response -> response.getResponseCode() == expectedResponse,
+          "response code %d",
+          expectedResponse);
     }
   }
 }
