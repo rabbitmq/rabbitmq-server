@@ -965,14 +965,11 @@ invalid_policy(Config) ->
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, <<"ha">>, <<"invalid_policy.*">>, <<"queues">>,
            [{<<"ha-mode">>, <<"all">>}]),
-    ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"ttl">>, <<"invalid_policy.*">>, <<"queues">>,
-           [{<<"message-ttl">>, 5}]),
     Info = rpc:call(Server, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
     ?assertEqual('', proplists:get_value(policy, Info)),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ha">>),
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ttl">>).
+    ok.
 
 dead_letter_to_quorum_queue(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
