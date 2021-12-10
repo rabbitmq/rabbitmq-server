@@ -58,7 +58,7 @@ update_jwks_signing_keys() ->
         undefined ->
             {error, no_jwks_url};
         JwksUrl ->
-            case fetch_keys(JwksUrl) of
+            case httpc:request(get, {JwksUrl, []}, [{ssl, ssl_options()}], []) of
                 {ok, {_, _, JwksBody}} ->
                     KeyList = maps:get(<<"keys">>, jose:decode(erlang:iolist_to_binary(JwksBody)), []),
                     Keys = maps:from_list(lists:map(fun(Key) -> {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
@@ -68,14 +68,19 @@ update_jwks_signing_keys() ->
             end
     end.
 
--spec fetch_keys(binary() | list()) -> {ok, term()} | {error, term()}.
-fetch_keys(JwksUrl) ->
+-spec ssl_options() -> list().
+ssl_options() ->
     UaaEnv = application:get_env(?APP, key_config, []),
     PeerVerification = proplists:get_value(peer_verification, UaaEnv, verify_none),
     CaCertFile = proplists:get_value(cacertfile, UaaEnv),
     Depth = proplists:get_value(depth, UaaEnv, 10),
-    SslOpts = [{verify, PeerVerification}, {cacertfile, CaCertFile}, {depth, Depth}],
-    httpc:request(get, {JwksUrl, []}, [{ssl, SslOpts}], []).
+    SslOpts0 = [{verify, PeerVerification}, {cacertfile, CaCertFile}, {depth, Depth}],
+    case proplists:get_value(wildcard, UaaEnv, false) of
+        true ->
+            [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | SslOpts0];
+        false ->
+            SslOpts0
+    end.
 
 -spec decode_and_verify(binary()) -> {boolean(), map()} | {error, term()}.
 decode_and_verify(Token) ->

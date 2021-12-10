@@ -9,6 +9,7 @@
         auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
         auth_oauth2.https.peer_verification = verify_none
         auth_oauth2.https.depth = 5
+        auth_oauth2.https.wildcard = true
         auth_oauth2.algorithms.1 = HS256
         auth_oauth2.algorithms.2 = RS256",
         [
@@ -27,6 +28,7 @@
             {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
             {peer_verification, verify_none},
             {depth, 5},
+            {wildcard, true},
             {algorithms, [<<"HS256">>, <<"RS256">>]}
             ]
             }
