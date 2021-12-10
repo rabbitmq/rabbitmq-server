@@ -137,6 +137,8 @@ all_tests() ->
      delete_if_unused,
      queue_ttl,
      peek,
+     message_ttl,
+     per_message_ttl,
      consumer_priorities,
      cancel_consumer_gh_3729
     ].
@@ -2583,6 +2585,47 @@ peek(Config) ->
                                               peek, [3, QName])),
 
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+    ok.
+
+message_ttl(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-message-ttl">>, long, 2000}])),
+
+    Msg1 = <<"msg1">>,
+    Msg2 = <<"msg11">>,
+
+    publish(Ch, QQ, Msg1),
+    publish(Ch, QQ, Msg2),
+    wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+    timer:sleep(2000),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    ok.
+
+per_message_ttl(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-message-ttl">>, long, 2000}])),
+
+    Msg1 = <<"msg1">>,
+
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{props = #'P_basic'{delivery_mode = 2,
+                                                        expiration = <<"2000">>},
+                                     payload = Msg1}),
+
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    timer:sleep(2000),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
     ok.
 
 in_memory(Config) ->
