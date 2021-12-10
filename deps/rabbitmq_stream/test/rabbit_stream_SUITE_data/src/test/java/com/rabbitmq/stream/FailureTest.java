@@ -16,6 +16,8 @@
 
 package com.rabbitmq.stream;
 
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.ok;
+import static com.rabbitmq.stream.TestUtils.waitAtMost;
 import static com.rabbitmq.stream.TestUtils.waitUntil;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -110,7 +112,7 @@ public class FailureTest {
       assertThat(metadataLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
       // wait until there's a new leader
-      TestUtils.waitAtMost(
+      waitAtMost(
           Duration.ofSeconds(10),
           () -> {
             Client.StreamMetadata m = publisher.metadata(stream).get(stream);
@@ -136,7 +138,7 @@ public class FailureTest {
     }
 
     // wait until all the replicas are there
-    TestUtils.waitAtMost(
+    waitAtMost(
         Duration.ofSeconds(10),
         () -> {
           LOGGER.info("Getting metadata for {}", stream);
@@ -167,7 +169,7 @@ public class FailureTest {
                       consumeLatch.countDown();
                     }));
 
-    TestUtils.waitAtMost(
+    waitAtMost(
         Duration.ofSeconds(5),
         () -> {
           Client.Response response =
@@ -222,7 +224,7 @@ public class FailureTest {
                       cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode2()));
                   // wait until there's a new leader
                   try {
-                    TestUtils.waitAtMost(
+                    waitAtMost(
                         Duration.ofSeconds(5),
                         () -> {
                           Client.StreamMetadata m = locator.metadata(stream).get(stream);
@@ -317,7 +319,7 @@ public class FailureTest {
 
     Client metadataClient = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode2()));
     // wait until all the replicas are there
-    TestUtils.waitAtMost(
+    waitAtMost(
         Duration.ofSeconds(5),
         () -> {
           Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
@@ -353,7 +355,7 @@ public class FailureTest {
 
     Client.Response response =
         consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
-    assertThat(response.isOk()).isTrue();
+    assertThat(response).is(ok());
 
     assertThat(consumedLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(generations).hasSize(2).contains(0L, 1L);
@@ -499,7 +501,7 @@ public class FailureTest {
 
     Client.Response response =
         consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
-    assertThat(response.isOk()).isTrue();
+    assertThat(response).is(ok());
 
     // let's publish for a bit of time
     Thread.sleep(2000);
@@ -523,7 +525,7 @@ public class FailureTest {
     confirmedCount = confirmed.size();
 
     // wait until all the replicas are there
-    TestUtils.waitAtMost(
+    waitAtMost(
         Duration.ofSeconds(10),
         () -> {
           Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
@@ -539,7 +541,7 @@ public class FailureTest {
 
     assertThat(publishingLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    TestUtils.waitAtMost(Duration.ofSeconds(5), () -> consumed.size() >= confirmed.size());
+    waitAtMost(Duration.ofSeconds(5), () -> consumed.size() >= confirmed.size());
 
     assertThat(generations).hasSize(2).contains(0L, 1L);
     assertThat(consumed).hasSizeGreaterThanOrEqualTo(confirmed.size());
