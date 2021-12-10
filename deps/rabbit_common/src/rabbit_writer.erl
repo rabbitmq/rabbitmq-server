@@ -151,13 +151,15 @@ start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity) ->
 
 start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
       ReaderWantsStats) ->
+    GCThreshold = application:get_env(rabbit, writer_gc_threshold, ?DEFAULT_GC_THRESHOLD),     
     start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
-          ReaderWantsStats, ?DEFAULT_GC_THRESHOLD).
+          ReaderWantsStats, GCThreshold).
 
 start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
            ReaderWantsStats) ->
+    GCThreshold = application:get_env(rabbit, writer_gc_threshold, ?DEFAULT_GC_THRESHOLD),     
     start_link(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
-               ReaderWantsStats, ?DEFAULT_GC_THRESHOLD).
+               ReaderWantsStats, GCThreshold).
 
 start(Sock, Channel, FrameMax, Protocol, ReaderPid, Identity,
       ReaderWantsStats, GCThreshold) ->
