@@ -37,9 +37,9 @@
 %% same process
 
 -type msg_header() :: msg_size() |
-#{size := msg_size(),
-  delivery_count => non_neg_integer(),
-  expiry => milliseconds()}.
+                      #{size := msg_size(),
+                        delivery_count => non_neg_integer(),
+                        expiry => milliseconds()}.
 %% The message header:
 %% delivery_count: the number of unsuccessful delivery attempts.
 %%                 A non-zero value indicates a previous attempt.
