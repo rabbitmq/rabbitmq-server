@@ -73,7 +73,8 @@ fetch_keys(JwksUrl) ->
     UaaEnv = application:get_env(?APP, key_config, []),
     PeerVerification = proplists:get_value(peer_verification, UaaEnv, verify_none),
     CaCertFile = proplists:get_value(cacertfile, UaaEnv),
-    SslOpts = [{verify, PeerVerification}, {cacertfile, CaCertFile}],
+    Depth = proplists:get_value(depth, UaaEnv, 10),
+    SslOpts = [{verify, PeerVerification}, {cacertfile, CaCertFile}, {depth, Depth}],
     httpc:request(get, {JwksUrl, []}, [{ssl, SslOpts}], []).
 
 -spec decode_and_verify(binary()) -> {boolean(), map()} | {error, term()}.
