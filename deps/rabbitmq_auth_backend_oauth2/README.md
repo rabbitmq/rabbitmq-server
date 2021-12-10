@@ -151,6 +151,7 @@ NOTE: `jwks_url` takes precedence over `signing_keys` if both are provided.
 | `auth_oauth2.https.cacertfile`           | Path to a file containing PEM-encoded CA certificates. The CA certificates are used during key server authentication
 | `auth_oauth2.https.depth`                | Maximum number of non-self-issued intermediate certificates that can follow the peer certificate in a valid certification path. Default is 10. Please see: https://www.erlang.org/doc/man/ssl.html#type-allowed_cert_chain_length for more details
 | `auth_oauth2.https.peer_verification`    | Identify if the verification should be performed towards key server. Available values: `verify_none`, `verify_peer`. Default is `verify_none`. It is recommended to configure `verify_peer`
+| `auth_oauth2.https.wildcard`             | Enable wildcard-aware hostname verification for key server. Available values: `true`, `false`. Default is `false`.
 | `auth_oauth2.algorithms`                 | Restrict the usable algorithms
 
 For example:
@@ -172,6 +173,7 @@ auth_oauth2.jwks_url = https://my-jwt-issuer/jwks.json
 auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
 auth_oauth2.https.peer_verification = verify_peer
 auth_oauth2.https.depth = 5
+auth_oauth2.https.wildcard = true
 auth_oauth2.algorithms.1 = HS256
 auth_oauth2.algorithms.2 = RS256
 ```
