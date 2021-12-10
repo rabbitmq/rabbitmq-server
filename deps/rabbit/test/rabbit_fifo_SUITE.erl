@@ -255,36 +255,37 @@ checkout_enq_settle_test(_) ->
     % ?ASSERT_EFF({release_cursor, 2, _}, Effects),
     ok.
 
-out_of_order_enqueue_test(_) ->
-    Cid = {?FUNCTION_NAME, self()},
-    {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
-              {monitor, _, _} | _]} = check_n(Cid, 5, 5, test_init(test)),
-    {State2, Effects2} = enq(2, 1, first, State1),
-    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
-    % assert monitor was set up
-    ?ASSERT_EFF({monitor, _, _}, Effects2),
-    % enqueue seq num 3 and 4 before 2
-    {State3, Effects3} = enq(3, 3, third, State2),
-    ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects3),
-    {State4, Effects4} = enq(4, 4, fourth, State3),
-    % assert no further deliveries where made
-    ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects4),
-    {_State5, Effects5} = enq(5, 2, second, State4),
-    % assert two deliveries were now made
-    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, second}},
-                                               {_, {_, third}},
-                                               {_, {_, fourth}}]}, _},
-                Effects5),
-    ok.
+%% this should not be needed anymore as we don't hold pending messages
+% out_of_order_enqueue_test(_) ->
+%     Cid = {?FUNCTION_NAME, self()},
+%     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
+%               {monitor, _, _} | _]} = check_n(Cid, 5, 5, test_init(test)),
+%     {State2, Effects2} = enq(2, 1, first, State1),
+%     ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
+%     % assert monitor was set up
+%     ?ASSERT_EFF({monitor, _, _}, Effects2),
+%     % enqueue seq num 3 and 4 before 2
+%     {State3, Effects3} = enq(3, 3, third, State2),
+%     ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects3),
+%     {State4, Effects4} = enq(4, 4, fourth, State3),
+%     % assert no further deliveries where made
+%     ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects4),
+%     {_State5, Effects5} = enq(5, 2, second, State4),
+%     % assert two deliveries were now made
+%     ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, second}},
+%                                                {_, {_, third}},
+%                                                {_, {_, fourth}}]}, _},
+%                 Effects5),
+%     ok.
 
-out_of_order_first_enqueue_test(_) ->
-    Cid = {?FUNCTION_NAME, self()},
-    {State1, _} = check_n(Cid, 5, 5, test_init(test)),
-    {_State2, Effects2} = enq(2, 10, first, State1),
-    ?ASSERT_EFF({monitor, process, _}, Effects2),
-    ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}, _},
-                    Effects2),
-    ok.
+% out_of_order_first_enqueue_test(_) ->
+%     Cid = {?FUNCTION_NAME, self()},
+%     {State1, _} = check_n(Cid, 5, 5, test_init(test)),
+%     {_State2, Effects2} = enq(2, 10, first, State1),
+%     ?ASSERT_EFF({monitor, process, _}, Effects2),
+%     ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}, _},
+%                     Effects2),
+%     ok.
 
 duplicate_enqueue_test(_) ->
     Cid = {<<"duplicate_enqueue_test">>, self()},
@@ -509,7 +510,7 @@ discarded_message_with_dead_letter_handler_emits_log_effect_test(_) ->
     State00 = init(#{name => test,
                      queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
                      dead_letter_handler =>
-                     {somemod, somefun, [somearg]}}),
+                     {at_most_once, {somemod, somefun, [somearg]}}}),
     {State0, [_, _]} = enq(1, 1, first, State00),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
     ?ASSERT_EFF({send_msg, _,
@@ -526,7 +527,8 @@ mixed_send_msg_and_log_effects_are_correctly_ordered_test(_) ->
                      queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
                      max_in_memory_length =>1,
                      dead_letter_handler =>
-                     {somemod, somefun, [somearg]}}),
+                     {at_most_once,
+                      {somemod, somefun, [somearg]}}}),
     %% enqueue two messages
     {State0, _} = enq(1, 1, first, State00),
     {State1, _} = enq(2, 2, snd, State0),
@@ -552,7 +554,7 @@ tick_test(_) ->
 
     [{mod_call, rabbit_quorum_queue, handle_tick,
       [#resource{},
-       {?FUNCTION_NAME, 1, 1, 2, 1, 3, 3},
+       {?FUNCTION_NAME, 1, 1, 2, 1, 3, 3, 0},
        [_Node]
       ]}] = rabbit_fifo:tick(1, S4),
     ok.
@@ -574,15 +576,6 @@ delivery_query_returns_deliveries_test(_) ->
     % 3 deliveries are returned
     [{0, {_, one}}] = rabbit_fifo:get_checked_out(Cid, 0, 0, State),
     [_, _, _] = rabbit_fifo:get_checked_out(Cid, 1, 3, State),
-    ok.
-
-pending_enqueue_is_enqueued_on_down_test(_) ->
-    Cid = {<<"cid">>, self()},
-    Pid = self(),
-    {State0, _} = enq(1, 2, first, test_init(test)),
-    {State1, _, _} = apply(meta(2), {down, Pid, noproc}, State0),
-    {_State2, {dequeue, {0, {_, first}}, 0}, _} =
-        apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State1),
     ok.
 
 duplicate_delivery_test(_) ->
@@ -840,7 +833,7 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test(_) ->
     % adding some consumers
     AddConsumer = fun({CTag, ChannelId}, State) ->
         {NewState, _, _} = apply(
-            #{index => 1},
+            meta(1),
             make_checkout({CTag, ChannelId}, {once, 1, simple_prefetch}, #{}),
             State),
         NewState
@@ -891,7 +884,7 @@ single_active_returns_messages_on_noconnection_test(_) ->
                     queue_resource => R,
                     release_cursor_interval => 0,
                     single_active_consumer_on => true}),
-    Meta = #{index => 1},
+    Meta = meta(1),
     Nodes = [n1],
     ConsumerIds = [{_, DownPid}] =
         [begin
@@ -926,7 +919,7 @@ single_active_consumer_replaces_consumer_when_down_noconnection_test(_) ->
                     queue_resource => R,
                     release_cursor_interval => 0,
                     single_active_consumer_on => true}),
-    Meta = #{index => 1},
+    Meta = meta(1),
     Nodes = [n1, n2, node()],
     ConsumerIds = [C1 = {_, DownPid}, C2, _C3] =
     [begin
@@ -966,7 +959,7 @@ single_active_consumer_replaces_consumer_when_down_noconnection_test(_) ->
     ?assertEqual(2, length(State2#rabbit_fifo.waiting_consumers)),
 
     % simulate node comes back up
-    {State3, _, _} = apply(#{index => 2}, {nodeup, node(DownPid)}, State2),
+    {State3, _, _} = apply(meta(2), {nodeup, node(DownPid)}, State2),
 
     %% the consumer is still active and the same as before
     ?assertMatch([{C2, #consumer{status = up}}],
@@ -984,7 +977,7 @@ single_active_consumer_all_disconnected_test(_) ->
                     queue_resource => R,
                     release_cursor_interval => 0,
                     single_active_consumer_on => true}),
-    Meta = #{index => 1},
+    Meta = meta(1),
     Nodes = [n1, n2],
     ConsumerIds = [C1 = {_, C1Pid}, C2 = {_, C2Pid}] =
     [begin
@@ -1035,7 +1028,7 @@ single_active_consumer_state_enter_leader_include_waiting_consumers_test(_) ->
     Pid2 = spawn(DummyFunction),
     Pid3 = spawn(DummyFunction),
 
-    Meta = #{index => 1},
+    Meta = meta(1),
     % adding some consumers
     AddConsumer = fun({CTag, ChannelId}, State) ->
         {NewState, _, _} = apply(
@@ -1065,7 +1058,7 @@ single_active_consumer_state_enter_eol_include_waiting_consumers_test(_) ->
     Pid2 = spawn(DummyFunction),
     Pid3 = spawn(DummyFunction),
 
-    Meta = #{index => 1},
+    Meta = meta(1),
     % adding some consumers
     AddConsumer = fun({CTag, ChannelId}, State) ->
         {NewState, _, _} = apply(
@@ -1094,12 +1087,12 @@ query_consumers_test(_) ->
 
     % adding some consumers
     AddConsumer = fun(CTag, State) ->
-        {NewState, _, _} = apply(
-            #{index => 1},
-            make_checkout({CTag, self()},
-                          {once, 1, simple_prefetch}, #{}),
-            State),
-        NewState
+                          {NewState, _, _} = apply(
+                                               meta(1),
+                                               make_checkout({CTag, self()},
+                                                             {once, 1, simple_prefetch}, #{}),
+                                               State),
+                          NewState
                   end,
     State1 = lists:foldl(AddConsumer, State0, [<<"ctag1">>, <<"ctag2">>, <<"ctag3">>, <<"ctag4">>]),
     Consumers0 = State1#rabbit_fifo.consumers,
@@ -1129,7 +1122,7 @@ query_consumers_when_single_active_consumer_is_on_test(_) ->
                         atom_to_binary(?FUNCTION_NAME, utf8)),
                     release_cursor_interval => 0,
                     single_active_consumer_on => true}),
-    Meta = #{index => 1},
+    Meta = meta(1),
     % adding some consumers
     AddConsumer = fun(CTag, State) ->
                     {NewState, _, _} = apply(
@@ -1172,7 +1165,7 @@ active_flag_updated_when_consumer_suspected_unsuspected_test(_) ->
     AddConsumer = fun({CTag, ChannelId}, State) ->
                           {NewState, _, _} =
                           apply(
-                            #{index => 1},
+                            meta(1),
                             rabbit_fifo:make_checkout({CTag, ChannelId},
                                                       {once, 1, simple_prefetch},
                                                       #{}),
@@ -1182,12 +1175,12 @@ active_flag_updated_when_consumer_suspected_unsuspected_test(_) ->
     State1 = lists:foldl(AddConsumer, State0,
         [{<<"ctag1">>, Pid1}, {<<"ctag2">>, Pid2}, {<<"ctag3">>, Pid2}, {<<"ctag4">>, Pid3}]),
 
-    {State2, _, Effects2} = apply(#{index => 3,
-                                    system_time => 1500}, {down, Pid1, noconnection}, State1),
+    {State2, _, Effects2} = apply(meta(3),
+                                    {down, Pid1, noconnection}, State1),
     % 1 effect to update the metrics of each consumer (they belong to the same node), 1 more effect to monitor the node, 1 more decorators effect
     ?assertEqual(4 + 1 + 1, length(Effects2)),
 
-    {_, _, Effects3} = apply(#{index => 4}, {nodeup, node(self())}, State2),
+    {_, _, Effects3} = apply(meta(4), {nodeup, node(self())}, State2),
     % for each consumer: 1 effect to update the metrics, 1 effect to monitor the consumer PID, 1 more decorators effect
     ?assertEqual(4 + 4 + 1, length(Effects3)).
 
@@ -1206,7 +1199,7 @@ active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_co
     % adding some consumers
     AddConsumer = fun({CTag, ChannelId}, State) ->
                           {NewState, _, _} = apply(
-                                               #{index => 1},
+                                               meta(1),
                                                make_checkout({CTag, ChannelId},
                                                              {once, 1, simple_prefetch}, #{}),
             State),
@@ -1545,7 +1538,7 @@ machine_version_test(_) ->
     S0 = V0:init(#{name => ?FUNCTION_NAME,
                    queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
     Idx = 1,
-    {#rabbit_fifo{}, ok, []} = apply(meta(Idx), {machine_version, 0, 1}, S0),
+    {#rabbit_fifo{}, ok, _} = apply(meta(Idx), {machine_version, 0, 2}, S0),
 
     Cid = {atom_to_binary(?FUNCTION_NAME, utf8), self()},
     Entries = [
@@ -1558,8 +1551,9 @@ machine_version_test(_) ->
     {#rabbit_fifo{enqueuers = #{Self := #enqueuer{}},
                   consumers = #{Cid := #consumer{priority = 0}},
                   service_queue = S,
-                  messages = Msgs}, ok, []} = apply(meta(Idx),
-                                                    {machine_version, 0, 1}, S1),
+                  messages = Msgs}, ok,
+     [_|_]} = apply(meta(Idx),
+                    {machine_version, 0, 2}, S1),
     %% validate message conversion to lqueue
     ?assertEqual(1, lqueue:len(Msgs)),
     ?assert(priority_queue:is_queue(S)),
@@ -1570,7 +1564,7 @@ machine_version_waiting_consumer_test(_) ->
     S0 = V0:init(#{name => ?FUNCTION_NAME,
                    queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>)}),
     Idx = 1,
-    {#rabbit_fifo{}, ok, []} = apply(meta(Idx), {machine_version, 0, 1}, S0),
+    {#rabbit_fifo{}, ok, _} = apply(meta(Idx), {machine_version, 0, 2}, S0),
 
     Cid = {atom_to_binary(?FUNCTION_NAME, utf8), self()},
     Entries = [
@@ -1583,8 +1577,8 @@ machine_version_waiting_consumer_test(_) ->
     {#rabbit_fifo{enqueuers = #{Self := #enqueuer{}},
                   consumers = #{Cid := #consumer{priority = 0}},
                   service_queue = S,
-                  messages = Msgs}, ok, []} = apply(meta(Idx),
-                                                    {machine_version, 0, 1}, S1),
+                  messages = Msgs}, ok, _} = apply(meta(Idx),
+                                                    {machine_version, 0, 2}, S1),
     %% validate message conversion to lqueue
     ?assertEqual(0, lqueue:len(Msgs)),
     ?assert(priority_queue:is_queue(S)),

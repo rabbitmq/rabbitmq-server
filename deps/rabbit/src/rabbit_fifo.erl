@@ -113,7 +113,9 @@
     #update_config{} |
     #garbage_collection{}.
 
--type command() :: protocol() | rabbit_fifo_dlx:protocol() | ra_machine:builtin_command().
+-type command() :: protocol() |
+                   rabbit_fifo_dlx:protocol() |
+                   ra_machine:builtin_command().
 %% all the command types supported by ra fifo
 
 -type client_msg() :: delivery().
@@ -129,6 +131,7 @@
               consumer_meta/0,
               consumer_id/0,
               client_msg/0,
+              indexed_msg/0,
               msg/0,
               msg_id/0,
               msg_seqno/0,
@@ -229,14 +232,15 @@ apply(Meta, #discard{msg_ids = MsgIds, consumer_id = ConsumerId},
         #{ConsumerId := #consumer{checked_out = Checked} = Con} ->
             case DLH of
                 at_least_once ->
-                    DlxState = lists:foldl(fun(MsgId, S) ->
-                                                   case maps:find(MsgId, Checked) of
-                                                       {ok, Msg} ->
-                                                           rabbit_fifo_dlx:discard(Msg, rejected, S);
-                                                       error ->
-                                                           S
-                                                   end
-                                           end, DlxState0, MsgIds),
+                    DlxState = lists:foldl(
+                                 fun(MsgId, S) ->
+                                         case maps:find(MsgId, Checked) of
+                                             {ok, Msg} ->
+                                                 rabbit_fifo_dlx:discard(Msg, rejected, S);
+                                             error ->
+                                                 S
+                                         end
+                                 end, DlxState0, MsgIds),
                     complete_and_checkout(Meta, MsgIds, ConsumerId, Con,
                                           [], State#?MODULE{dlx = DlxState}, false);
                 _ ->
@@ -863,7 +867,8 @@ state_enter0(leader, #?MODULE{consumers = Cons,
                                         resource = Resource,
                                         become_leader_handler = BLH},
                              prefix_msgs = {0, [], 0, []}
-                            }) ->
+                            } = State) ->
+    TimerEffs = timer_effect(erlang:system_time(millisecond), State, []),
     % return effects to monitor all current consumers and enqueuers
     Pids = lists:usort(maps:keys(Enqs)
         ++ [P || {_, P} <- maps:keys(Cons)]
@@ -873,7 +878,7 @@ state_enter0(leader, #?MODULE{consumers = Cons,
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
     %% TODO reissue timer effect if head of message queue has expiry header set
     FHReservation = [{mod_call, rabbit_quorum_queue, file_handle_leader_reservation, [Resource]}],
-    Effects = Mons ++ Nots ++ NodeMons ++ FHReservation,
+    Effects = TimerEffs ++ Mons ++ Nots ++ NodeMons ++ FHReservation,
     case BLH of
         undefined ->
             Effects;
@@ -984,10 +989,17 @@ which_module(0) -> rabbit_fifo_v0;
 which_module(1) -> rabbit_fifo_v1;
 which_module(2) -> ?MODULE.
 
+-define(AUX, aux_v2).
+
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(aux, {name :: atom(),
               capacity :: term(),
               gc = #aux_gc{} :: #aux_gc{}}).
+-record(?AUX, {name :: atom(),
+               capacity :: term(),
+               gc = #aux_gc{} :: #aux_gc{},
+               unused,
+               unused2}).
 
 init_aux(Name) when is_atom(Name) ->
     %% TODO: catch specific exception throw if table already exists
@@ -995,13 +1007,21 @@ init_aux(Name) when is_atom(Name) ->
                                      [named_table, set, public,
                                       {write_concurrency, true}]),
     Now = erlang:monotonic_time(micro_seconds),
-    #aux{name = Name,
-         capacity = {inactive, Now, 1, 1.0}}.
+    #?AUX{name = Name,
+          capacity = {inactive, Now, 1, 1.0}}.
 
-handle_aux(leader, _, garbage_collection, State, Log, MacState) ->
-    {no_reply, force_eval_gc(Log, MacState, State), Log};
-handle_aux(follower, _, garbage_collection, State, Log, MacState) ->
-    {no_reply, force_eval_gc(Log, MacState, State), Log};
+handle_aux(RaftState, Tag, Cmd, #aux{name = Name,
+                                     capacity = Cap,
+                                     gc = Gc}, Log, MacState) ->
+    %% convert aux state to new version
+    Aux = #?AUX{name = Name,
+                capacity = Cap,
+                gc = Gc},
+    handle_aux(RaftState, Tag, Cmd, Aux, Log, MacState);
+handle_aux(leader, _, garbage_collection, Aux, Log, MacState) ->
+    {no_reply, force_eval_gc(Log, MacState, Aux), Log};
+handle_aux(follower, _, garbage_collection, Aux, Log, MacState) ->
+    {no_reply, force_eval_gc(Log, MacState, Aux), Log};
 handle_aux(leader, cast, {#return{msg_ids = MsgIds,
                                   consumer_id = ConsumerId}, Corr, Pid},
            Aux0, Log0, #?MODULE{cfg = #cfg{delivery_limit = undefined},
@@ -1041,34 +1061,42 @@ handle_aux(leader, cast, {#return{} = Ret, Corr, Pid},
            Aux0, Log, #?MODULE{}) ->
     %% for returns with a delivery limit set we can just return as before
     {no_reply, Aux0, Log, [{append, Ret, {notify, Corr, Pid}}]};
-handle_aux(_RaState, cast, eval, Aux0, Log, _MacState) ->
+handle_aux(leader, cast, eval, Aux0, Log, MacState) ->
+    %% this is called after each batch of commands have been applied
+    %% set timer for message expire
+    %% should really be the last applied index ts but this will have to do
+    Ts = erlang:system_time(millisecond),
+    Effects = timer_effect(Ts, MacState, []),
+    {no_reply, Aux0, Log, Effects};
+handle_aux(_RaftState, cast, eval, Aux0, Log, _MacState) ->
     {no_reply, Aux0, Log};
-handle_aux(_RaState, cast, Cmd, #aux{capacity = Use0} = Aux0,
+handle_aux(_RaState, cast, Cmd, #?AUX{capacity = Use0} = Aux0,
            Log, _MacState)
   when Cmd == active orelse Cmd == inactive ->
-    {no_reply, Aux0#aux{capacity = update_use(Use0, Cmd)}, Log};
-handle_aux(_RaState, cast, tick, #aux{name = Name,
-                                      capacity = Use0} = State0,
+    {no_reply, Aux0#?AUX{capacity = update_use(Use0, Cmd)}, Log};
+handle_aux(_RaState, cast, tick, #?AUX{name = Name,
+                                       capacity = Use0} = State0,
            Log, MacState) ->
     true = ets:insert(rabbit_fifo_usage,
                       {Name, capacity(Use0)}),
     Aux = eval_gc(Log, MacState, State0),
     {no_reply, Aux, Log};
-handle_aux(_RaState, cast, eol, #aux{name = Name} = Aux, Log, _) ->
+handle_aux(_RaState, cast, eol, #?AUX{name = Name} = Aux, Log, _) ->
     ets:delete(rabbit_fifo_usage, Name),
     {no_reply, Aux, Log};
 handle_aux(_RaState, {call, _From}, oldest_entry_timestamp, Aux,
-           Log, #?MODULE{ra_indexes = Indexes}) ->
-    Ts = case rabbit_fifo_index:smallest(Indexes) of
-        %% if there are no entries, we return current timestamp
-        %% so that any previously obtained entries are considered older than this
-        undefined ->
-            erlang:system_time(millisecond);
-        Idx when is_integer(Idx) ->
-            {{_, _, {_, Meta, _, _}}, _Log1} = ra_log:fetch(Idx, Log),
-            #{ts := Timestamp} = Meta,
-           Timestamp
-    end,
+           Log, #?MODULE{} = State) ->
+    Ts = case smallest_raft_index(State) of
+             %% if there are no entries, we return current timestamp
+             %% so that any previously obtained entries are considered older than this
+             {undefined, _} ->
+                 erlang:system_time(millisecond);
+             {Idx, _} when is_integer(Idx) ->
+                 %% TODO: make more defensive to avoid potential crash
+                 {{_, _, {_, Meta, _, _}}, _Log1} = ra_log:fetch(Idx, Log),
+                 #{ts := Timestamp} = Meta,
+                 Timestamp
+         end,
     {reply, {ok, Ts}, Aux, Log};
 handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            Log0, MacState) ->
@@ -1093,7 +1121,7 @@ handle_aux(_, _, start_dlx_worker, Aux, Log, _) ->
     {no_reply, Aux, Log}.
 
 eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}} = MacState,
-        #aux{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
+        #?AUX{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
     {Idx, _} = ra_log:last_index_term(Log),
     {memory, Mem} = erlang:process_info(self(), memory),
     case messages_total(MacState) of
@@ -1104,13 +1132,13 @@ eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}} = MacState,
             rabbit_log:debug("~s: full GC sweep complete. "
                             "Process memory changed from ~.2fMB to ~.2fMB.",
                             [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
-            AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};
+            AuxState#?AUX{gc = Gc#aux_gc{last_raft_idx = Idx}};
         _ ->
             AuxState
     end.
 
 force_eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}},
-              #aux{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
+              #?AUX{gc = #aux_gc{last_raft_idx = LastGcIdx} = Gc} = AuxState) ->
     {Idx, _} = ra_log:last_index_term(Log),
     {memory, Mem} = erlang:process_info(self(), memory),
     case Idx > LastGcIdx of
@@ -1120,7 +1148,7 @@ force_eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}},
             rabbit_log:debug("~s: full GC sweep complete. "
                             "Process memory changed from ~.2fMB to ~.2fMB.",
                              [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
-            AuxState#aux{gc = Gc#aux_gc{last_raft_idx = Idx}};
+            AuxState#?AUX{gc = Gc#aux_gc{last_raft_idx = Idx}};
         false ->
             AuxState
     end.
@@ -1519,7 +1547,10 @@ maybe_set_msg_ttl(#basic_message{content = #content{properties = Props}},
     %% We already check in the channel that expiration must be valid.
     {ok, PerMsgMsgTTL} = rabbit_basic:parse_expiration(Props),
     TTL = min(PerMsgMsgTTL, PerQueueMsgTTL),
-    update_expiry_header(RaCmdTs, TTL, Header).
+    update_expiry_header(RaCmdTs, TTL, Header);
+maybe_set_msg_ttl(_, _, Header,
+                  #?MODULE{cfg = #cfg{}}) ->
+    Header.
 
 update_expiry_header(_, undefined, Header) ->
     Header;
@@ -1873,7 +1904,8 @@ checkout(Meta, OldState, State, Effects) ->
 checkout(#{index := Index} = Meta,
          #?MODULE{cfg = #cfg{resource = QName}} = OldState,
          State0, Effects0, HandleConsumerChanges) ->
-    {#?MODULE{dlx = DlxState0} = State1, _Result, Effects1} = checkout0(Meta, checkout_one(Meta, State0, Effects0), #{}),
+    {#?MODULE{dlx = DlxState0} = State1, _Result, Effects1} =
+        checkout0(Meta, checkout_one(Meta, State0, Effects0), #{}),
     %%TODO For now we checkout the discards queue here. Move it to a better place
     {DlxState1, DlxDeliveryEffects} = rabbit_fifo_dlx:checkout(DlxState0),
     State2 = State1#?MODULE{dlx = DlxState1},
@@ -1882,7 +1914,8 @@ checkout(#{index := Index} = Meta,
         {State, true, Effects} ->
             case maybe_notify_decorators(State, HandleConsumerChanges) of
                 {true, {MaxActivePriority, IsEmpty}} ->
-                    NotifyEffect = notify_decorators_effect(QName, MaxActivePriority, IsEmpty),
+                    NotifyEffect = notify_decorators_effect(QName, MaxActivePriority,
+                                                            IsEmpty),
                     update_smallest_raft_index(Index, State, [NotifyEffect | Effects]);
                 false ->
                     update_smallest_raft_index(Index, State, Effects)
@@ -1890,7 +1923,8 @@ checkout(#{index := Index} = Meta,
         {State, false, Effects} ->
             case maybe_notify_decorators(State, HandleConsumerChanges) of
                 {true, {MaxActivePriority, IsEmpty}} ->
-                    NotifyEffect = notify_decorators_effect(QName, MaxActivePriority, IsEmpty),
+                    NotifyEffect = notify_decorators_effect(QName, MaxActivePriority,
+                                                            IsEmpty),
                     {State, ok, [NotifyEffect | Effects]};
                 false ->
                     {State, ok, Effects}
@@ -2060,7 +2094,7 @@ delivery_effect({CTag, CPid}, IdxMsgs, InMemMsgs) ->
                                         {MsgId, Header}) ->
                                            {MsgId, {Header, Msg}}
                                    end, Log, Data),
-             Msgs = case  InMemMsgs of
+             Msgs = case InMemMsgs of
                         [] ->
                             Msgs0;
                         _ ->
@@ -2082,7 +2116,8 @@ checkout_one(#{system_time := Ts} = Meta, InitState0, Effects0) ->
     %% first remove all expired messages from the head of the queue.
     {#?MODULE{service_queue = SQ0,
               messages = Messages0,
-              consumers = Cons0} = InitState, Effects1} = expire_msgs(Ts, InitState0, Effects0),
+              consumers = Cons0} = InitState, Effects1} =
+        expire_msgs(Ts, InitState0, Effects0),
     case priority_queue:out(SQ0) of
         {{value, ConsumerId}, SQ1}
           when is_map_key(ConsumerId, Cons0) ->
@@ -2134,12 +2169,12 @@ checkout_one(#{system_time := Ts} = Meta, InitState0, Effects0) ->
             %% consumer did not exist but was queued, recurse
             checkout_one(Meta, InitState#?MODULE{service_queue = SQ1}, Effects1);
         {empty, _} ->
-            Effects = timer_effect(Ts, InitState, Effects1),
+            % Effects = timer_effect(Ts, InitState, Effects1),
             case lqueue:len(Messages0) of
                 0 ->
-                    {nochange, InitState, Effects};
+                    {nochange, InitState, Effects1};
                 _ ->
-                    {inactive, InitState, Effects}
+                    {inactive, InitState, Effects1}
             end
     end.
 
@@ -2201,10 +2236,11 @@ expire_prefix_msg(Msg, Header, State0) ->
 
 timer_effect(RaCmdTs, State, Effects) ->
     T = case take_next_msg(State) of
-            {?INDEX_MSG(_, ?MSG(#{expiry := Expiry}, _)), _} when is_number(Expiry) ->
+            {?INDEX_MSG(_, ?MSG(#{expiry := Expiry}, _)), _}
+              when is_number(Expiry) ->
                 %% Next message contains 'expiry' header.
                 %% (Re)set timer so that mesage will be dropped or dead-lettered on time.
-                Expiry - RaCmdTs;
+                max(0, Expiry - RaCmdTs);
             _ ->
                 %% Next message does not contain 'expiry' header.
                 %% Therefore, do not set timer or cancel timer if it was set.

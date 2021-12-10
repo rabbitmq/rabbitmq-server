@@ -112,9 +112,10 @@ apply(#checkout{consumer = RegName,
     %% were discarded.
     Checked0 = maps:to_list(CheckedOutOldConsumer),
     Checked1 = lists:keysort(1, Checked0),
-    {Discards, BytesMoved} = lists:foldr(fun({_Id, {_Reason, IdxMsg} = Msg}, {D, B}) ->
-                                                 {lqueue:in_r(Msg, D), B + size_in_bytes(IdxMsg)}
-                                         end, {Discards0, 0}, Checked1),
+    {Discards, BytesMoved} = lists:foldr(
+                               fun({_Id, {_Reason, IdxMsg} = Msg}, {D, B}) ->
+                                       {lqueue:in_r(Msg, D), B + size_in_bytes(IdxMsg)}
+                               end, {Discards0, 0}, Checked1),
     State = State0#?MODULE{consumer = #dlx_consumer{registered_name = RegName,
                                                     prefetch = Prefetch},
                            discards = Discards,
@@ -137,8 +138,7 @@ apply(#settle{msg_ids = MsgIds},
 
 %%TODO delete delivery_count header to save space?
 %% It's not needed anymore.
--spec discard(term(), term(), state()) ->
-    state().
+-spec discard(rabbit_fifo:indexed_msg(), term(), state()) -> state().
 discard(Msg, Reason, #?MODULE{discards = Discards0,
                               msg_bytes = MsgBytes0} = State) ->
     Discards = lqueue:in({Reason, Msg}, Discards0),
@@ -147,7 +147,7 @@ discard(Msg, Reason, #?MODULE{discards = Discards0,
                   msg_bytes = MsgBytes}.
 
 -spec checkout(state()) ->
-    {state(), list()}.
+    {state(), {list(), list()}}.
 checkout(#?MODULE{consumer = undefined,
                   discards = Discards} = State) ->
     case lqueue:is_empty(Discards) of
@@ -160,11 +160,13 @@ checkout(#?MODULE{consumer = undefined,
 checkout(State) ->
     checkout0(checkout_one(State), {[],[]}).
 
-checkout0({success, MsgId, {Reason, ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header))}, State}, {InMemMsgs, LogMsgs}) when is_integer(RaftIdx) ->
+checkout0({success, MsgId, {Reason, ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header))}, State}, {InMemMsgs, LogMsgs})
+  when is_integer(RaftIdx) ->
     DelMsg = {RaftIdx, {Reason, MsgId, Header}},
     SendAcc = {InMemMsgs, [DelMsg|LogMsgs]},
     checkout0(checkout_one(State ), SendAcc);
-checkout0({success, MsgId, {Reason, ?INDEX_MSG(Idx, ?MSG(Header, Msg))}, State}, {InMemMsgs, LogMsgs}) when is_integer(Idx) ->
+checkout0({success, MsgId, {Reason, ?INDEX_MSG(Idx, ?MSG(Header, Msg))}, State}, {InMemMsgs, LogMsgs})
+  when is_integer(Idx) ->
     DelMsg = {MsgId, {Reason, Header, Msg}},
     SendAcc = {[DelMsg|InMemMsgs], LogMsgs},
     checkout0(checkout_one(State), SendAcc);
