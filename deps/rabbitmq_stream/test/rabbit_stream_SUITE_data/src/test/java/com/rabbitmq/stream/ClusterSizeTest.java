@@ -16,6 +16,9 @@
 
 package com.rabbitmq.stream;
 
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.ko;
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.ok;
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.responseCode;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.rabbitmq.stream.impl.Client;
@@ -40,8 +43,7 @@ public class ClusterSizeTest {
     String s = UUID.randomUUID().toString();
     Response response =
         client.create(s, Collections.singletonMap("initial-cluster-size", clusterSize));
-    assertThat(response.isOk()).isFalse();
-    assertThat(response.getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_PRECONDITION_FAILED);
+    assertThat(response).is(ko()).has(responseCode(Constants.RESPONSE_CODE_PRECONDITION_FAILED));
   }
 
   @ParameterizedTest
@@ -53,7 +55,7 @@ public class ClusterSizeTest {
     try {
       Response response =
           client.create(s, Collections.singletonMap("initial-cluster-size", requestedClusterSize));
-      assertThat(response.isOk()).isTrue();
+      assertThat(response).is(ok());
       StreamMetadata metadata = client.metadata(s).get(s);
       assertThat(metadata).isNotNull();
       assertThat(metadata.getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_OK);
