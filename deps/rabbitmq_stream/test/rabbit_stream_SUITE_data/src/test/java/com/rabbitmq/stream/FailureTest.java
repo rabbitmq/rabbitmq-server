@@ -16,11 +16,14 @@
 
 package com.rabbitmq.stream;
 
+import static com.rabbitmq.stream.TestUtils.waitUntil;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 import com.rabbitmq.stream.codec.WrapperMessageBuilder;
 import com.rabbitmq.stream.impl.Client;
+import com.rabbitmq.stream.impl.Client.ClientParameters;
+import com.rabbitmq.stream.impl.Client.Response;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
@@ -66,7 +69,7 @@ public class FailureTest {
     Client.StreamMetadata streamMetadata = metadata.get(stream);
     assertThat(streamMetadata).isNotNull();
 
-    TestUtils.waitUntil(() -> client.metadata(stream).get(stream).getReplicas().size() == 2);
+    waitUntil(() -> client.metadata(stream).get(stream).getReplicas().size() == 2);
 
     streamMetadata = client.metadata(stream).get(stream);
     assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
@@ -372,8 +375,7 @@ public class FailureTest {
     Client.StreamMetadata streamMetadata = metadata.get(stream);
     assertThat(streamMetadata).isNotNull();
 
-    TestUtils.waitUntil(
-        () -> metadataClient.metadata(stream).get(stream).getReplicas().size() == 2);
+    waitUntil(() -> metadataClient.metadata(stream).get(stream).getReplicas().size() == 2);
 
     metadata = metadataClient.metadata(stream);
     streamMetadata = metadata.get(stream);
@@ -550,5 +552,34 @@ public class FailureTest {
     assertThat(lastMessageId).isPositive().isLessThanOrEqualTo(sequence.get());
 
     confirmedIds.forEach(confirmedId -> assertThat(consumedIds).contains(confirmedId));
+  }
+
+  @Test
+  void declarePublisherShouldNotReturnStreamDoesNotExistOnRestart() throws Exception {
+    try {
+      Host.rabbitmqctl("stop_app");
+    } finally {
+      Host.rabbitmqctl("start_app");
+    }
+    AtomicReference<Client> client = new AtomicReference<>();
+    waitUntil(
+        () -> {
+          try {
+            client.set(cf.get(new ClientParameters().port(TestUtils.streamPortNode1())));
+          } catch (Exception e) {
+
+          }
+          return client.get() != null;
+        });
+    Set<Short> responseCodes = ConcurrentHashMap.newKeySet();
+
+    waitUntil(
+        () -> {
+          Response response = client.get().declarePublisher((byte) 0, null, stream);
+          responseCodes.add(response.getResponseCode());
+          return response.isOk();
+        });
+
+    assertThat(responseCodes).doesNotContain(Constants.RESPONSE_CODE_STREAM_DOES_NOT_EXIST);
   }
 }

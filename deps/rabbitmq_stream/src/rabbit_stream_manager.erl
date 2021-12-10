@@ -56,7 +56,41 @@ create(VirtualHost, Reference, Arguments, Username) ->
 delete(VirtualHost, Reference, Username) ->
     gen_server:call(?MODULE, {delete, VirtualHost, Reference, Username}).
 
+<<<<<<< HEAD
 -spec lookup_leader(binary(), binary()) -> pid() | cluster_not_found.
+=======
+-spec create_super_stream(binary(),
+                          binary(),
+                          [binary()],
+                          #{binary() => binary()},
+                          [binary()],
+                          binary()) ->
+                             ok | {error, term()}.
+create_super_stream(VirtualHost,
+                    Name,
+                    Partitions,
+                    Arguments,
+                    RoutingKeys,
+                    Username) ->
+    gen_server:call(?MODULE,
+                    {create_super_stream,
+                     VirtualHost,
+                     Name,
+                     Partitions,
+                     Arguments,
+                     RoutingKeys,
+                     Username}).
+
+-spec delete_super_stream(binary(), binary(), binary()) ->
+                             ok | {error, term()}.
+delete_super_stream(VirtualHost, Name, Username) ->
+    gen_server:call(?MODULE,
+                    {delete_super_stream, VirtualHost, Name, Username}).
+
+-spec lookup_leader(binary(), binary()) ->
+                       {ok, pid()} | {error, not_available} |
+                       {error, not_found}.
+>>>>>>> bd4771addb (Return appropriate response when stream leader not available)
 lookup_leader(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {lookup_leader, VirtualHost, Stream}).
 
@@ -256,20 +290,25 @@ handle_call({lookup_leader, VirtualHost, Stream}, _From, State) ->
                           LeaderPid = amqqueue:get_pid(Q),
                           case process_alive(LeaderPid) of
                               true ->
-                                  LeaderPid;
+                                  {ok, LeaderPid};
                               false ->
                                   case leader_from_members(Q) of
                                       {ok, Pid} ->
-                                          Pid;
+                                          {ok, Pid};
                                       _ ->
-                                          cluster_not_found
+                                          {error, not_available}
                                   end
                           end;
                       _ ->
-                          cluster_not_found
+                          {error, not_found}
                   end;
-              _ ->
-                  cluster_not_found
+              {error, not_found} ->
+                  case rabbit_amqqueue:not_found_or_absent_dirty(Name) of
+                      not_found ->
+                          {error, not_found};
+                      _ ->
+                          {error, not_available}
+                  end
           end,
     {reply, Res, State};
 handle_call({lookup_local_member, VirtualHost, Stream}, _From,
