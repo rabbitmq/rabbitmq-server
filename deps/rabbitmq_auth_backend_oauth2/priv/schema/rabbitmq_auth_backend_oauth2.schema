@@ -98,6 +98,11 @@
  "rabbitmq_auth_backend_oauth2.key_config.depth",
  [{datatype, integer}]}.
 
+{mapping,
+ "auth_oauth2.https.wildcard",
+ "rabbitmq_auth_backend_oauth2.key_config.wildcard",
+ [{datatype, {enum, [true, false]}}]}.
+
 {validator, "https_uri", "According to the JWT Specification, Key Server URL must be https.",
  fun(Uri) -> string:nth_lexeme(Uri, 1, "://") == "https" end}.
 
