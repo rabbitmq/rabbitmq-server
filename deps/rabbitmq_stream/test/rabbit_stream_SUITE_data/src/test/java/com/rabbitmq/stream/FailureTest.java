@@ -539,9 +539,9 @@ public class FailureTest {
 
     keepPublishing.set(false);
 
-    assertThat(publishingLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(publishingLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
-    waitAtMost(Duration.ofSeconds(5), () -> consumed.size() >= confirmed.size());
+    waitAtMost(Duration.ofSeconds(10), () -> consumed.size() >= confirmed.size());
 
     assertThat(generations).hasSize(2).contains(0L, 1L);
     assertThat(consumed).hasSizeGreaterThanOrEqualTo(confirmed.size());
