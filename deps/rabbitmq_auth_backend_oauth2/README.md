@@ -176,7 +176,7 @@ auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
 auth_oauth2.https.peer_verification = verify_peer
 auth_oauth2.https.depth = 5
 auth_oauth2.https.fail_if_no_peer_cert = true
-auth_oauth2.https.wildcard = true
+auth_oauth2.https.hostname_verification = wildcard
 auth_oauth2.algorithms.1 = HS256
 auth_oauth2.algorithms.2 = RS256
 ```
