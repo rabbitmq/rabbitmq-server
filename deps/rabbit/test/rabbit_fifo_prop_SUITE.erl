@@ -604,6 +604,8 @@ scenario31(_Config) ->
                 %    #{ack => true,args => [],prefetch => 1,username => <<"user">>}}},
                 %  {4,{purge}}]
                 make_enqueue(E1,1,msg(<<>>)), %% 1
+                make_enqueue(E1,0,msg(<<>>)), %% 1
+                make_enqueue(E1,1,msg(<<>>)), %% 1
                 make_enqueue(E2,2,msg(<<1>>)), %% 2
                 make_checkout(C1, {auto,1,simple_prefetch}), %% 3
                 {purge} %% 4
@@ -623,7 +625,8 @@ scenario32(_Config) ->
                 make_enqueue(E1,1,msg(<<0>>)), %% 1
                 make_enqueue(E1,2,msg(<<0,0>>)), %% 2
                 make_enqueue(E1,4,msg(<<0,0,0,0>>)), %% 3
-                make_enqueue(E1,3,msg(<<0,0,0>>)) %% 4
+                make_enqueue(E1,3,msg(<<0,0,0>>)), %% 4
+                make_enqueue(E1,4,msg(<<0,0,0,0>>)) %% 3
                ],
     run_snapshot_test(#{name => ?FUNCTION_NAME,
                         release_cursor_interval => 0,
@@ -1456,8 +1459,8 @@ upgrade_prop(Conf0, Commands) ->
                 end, InitState, PreEntries),
 
          %% perform conversion
-         V2 = element(1, rabbit_fifo:apply(meta(length(PreEntries) + 1),
-                                           {machine_version, 1, 2}, V1)),
+         #rabbit_fifo{} = V2 = element(1, rabbit_fifo:apply(meta(length(PreEntries) + 1),
+                                                            {machine_version, 1, 2}, V1)),
          %% assert invariants
          Fields = [num_messages,
                    num_ready_messages,
