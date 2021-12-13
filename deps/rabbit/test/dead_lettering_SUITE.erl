@@ -92,6 +92,7 @@ init_per_group(quorum_queue, Config) ->
             rabbit_ct_helpers:set_config(
               Config,
               [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                             {<<"x-delivery-limit">>, long, 100},
                              %%TODO add at-least-once tests
                              {<<"x-dead-letter-strategy">>, longstr, <<"at-most-once">>}]},
                {queue_durable, true}]);
