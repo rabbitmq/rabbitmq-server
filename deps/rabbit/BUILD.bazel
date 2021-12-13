@@ -716,6 +716,34 @@ suites = [
         ],
     ),
     rabbitmq_suite(
+        name = "rabbit_fifo_dlx_SUITE",
+        size = "small",
+        additional_hdrs = [
+            "src/rabbit_fifo.hrl",
+            "src/rabbit_fifo_dlx.hrl",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_fifo_dlx_integration_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":test_util",
+            ":quorum_queue_utils",
+            ":quorum_queue_SUITE_beam_files",
+        ],
+        additional_hdrs = [
+            "src/rabbit_fifo.hrl",
+            "src/rabbit_fifo_dlx.hrl",
+        ],
+        runtime_deps = [
+            "@ra//:bazel_erlang_lib",
+        ],
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
         name = "rabbit_fifo_SUITE",
         size = "medium",
         additional_beam = [
