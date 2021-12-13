@@ -3,7 +3,7 @@
 
 -spec get(string() | binary()) -> {ok, term()} | {error, term()}.
 get(JwksUrl) ->
-    httpc:request(get, {JwksUrl, []}, [{ssl, ssl_options()}], []).
+    httpc:request(get, {JwksUrl, []}, [{ssl, ssl_options()}, {timeout, 60000}], []).
 
 -spec ssl_options() -> list().
 ssl_options() ->
