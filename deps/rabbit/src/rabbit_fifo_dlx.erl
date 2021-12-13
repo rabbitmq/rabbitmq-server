@@ -16,7 +16,6 @@
          checkout/1,
          state_enter/4,
          start_worker/2,
-         terminate_worker/1,
          cleanup/1,
          purge/1,
          consumer_pid/1,

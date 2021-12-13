@@ -600,20 +600,35 @@ single_dlx_worker(Config) ->
         [_, {active, 0}, _, _],
         [_, {active, 0}, _, _]],
        rabbit_ct_broker_helpers:rpc_all(Config, supervisor, count_children, [rabbit_fifo_dlx_sup])),
+
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
     RaName = ra_name(SourceQ),
-    {ok, _, {_, Leader}} = ra:members({RaName, Server2}),
-    ?assertNotEqual(Server1, Leader),
-    [Follower] = Servers -- [Server1, Leader],
-    assert_active_dlx_workers(1, Config, Leader),
-    assert_active_dlx_workers(0, Config, Follower),
+    {ok, _, {_, Leader0}} = ra:members({RaName, Server2}),
+    ?assertNotEqual(Server1, Leader0),
+    [Follower0] = Servers -- [Server1, Leader0],
+    assert_active_dlx_workers(1, Config, Leader0),
+    assert_active_dlx_workers(0, Config, Follower0),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
-    assert_active_dlx_workers(0, Config, Server1).
+    consistently(
+      ?_assertMatch(
+         [_, {active, 0}, _, _],
+         rabbit_ct_broker_helpers:rpc(Config, Server1, supervisor, count_children, [rabbit_fifo_dlx_sup], 1000))),
+
+    Pid = rabbit_ct_broker_helpers:rpc(Config, Leader0, erlang, whereis, [RaName]),
+    true = rabbit_ct_broker_helpers:rpc(Config, Leader0, erlang, exit, [Pid, kill]),
+    {ok, _, {_, Leader1}} = ?awaitMatch({ok, _, _},
+                                        ra:members({RaName, Follower0}),
+                                        1000),
+    ?assertNotEqual(Leader0, Leader1),
+    [Follower1, Follower2] = Servers -- [Leader1],
+    assert_active_dlx_workers(0, Config, Follower1),
+    assert_active_dlx_workers(0, Config, Follower2),
+    assert_active_dlx_workers(1, Config, Leader1).
 
 assert_active_dlx_workers(N, Config, Server) ->
     ?assertMatch(
        [_, {active, N}, _, _],
-       rabbit_ct_broker_helpers:rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup])).
+       rabbit_ct_broker_helpers:rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup], 1000)).
 
 %%TODO move to rabbitmq_ct_helpers/include/rabbit_assert.hrl
 consistently(TestObj) ->

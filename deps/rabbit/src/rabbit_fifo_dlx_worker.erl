@@ -66,6 +66,8 @@
           %% There is one rabbit_fifo_dlx_worker per source quorum queue
           %% (if dead-letter-strategy at-least-once is used).
           queue_ref :: rabbit_amqqueue:name(),
+          %% monitors source queue
+          monitor_ref :: reference(),
           %% configured (x-)dead-letter-exchange of source queue
           exchange_ref,
           %% configured (x-)dead-letter-routing-key of source queue
@@ -120,7 +122,9 @@ handle_continue({QRef, RegName}, undefined) ->
                                                           QRef,
                                                           {ClusterName, node()},
                                                           Prefetch),
-    {noreply, State#state{dlx_client_state = ConsumerState}}.
+    MonitorRef = erlang:monitor(process, ClusterName),
+    {noreply, State#state{dlx_client_state = ConsumerState,
+                          monitor_ref = MonitorRef}}.
 
 terminate(_Reason, _State) ->
     %%TODO cancel timer?
@@ -173,8 +177,14 @@ redeliver_and_ack(State0) ->
     State = maybe_set_timer(State2),
     {noreply, State}.
 
-%%TODO monitor source quorum queue upon init / handle_continue and terminate ourself if source quorum queue is DOWN
-%% since new leader will re-create a worker
+handle_info({'DOWN', Ref, process, _, _},
+            #state{monitor_ref = Ref,
+                   queue_ref = QRef}) ->
+    %% Source quorum queue is down. Therefore, terminate ourself.
+    %% The new leader will re-create another dlx_worker.
+    rabbit_log:debug("~s terminating itself because leader of ~s is down...",
+                     [?MODULE, rabbit_misc:rs(QRef)]),
+    supervisor:terminate_child(rabbit_fifo_dlx_sup, self());
 handle_info({'DOWN', _MRef, process, QPid, Reason},
             #state{queue_type_state = QTypeState0} = State0) ->
     %% received from target classic queue
