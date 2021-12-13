@@ -1310,16 +1310,16 @@ messages_ready(#?MODULE{messages = M,
 messages_total(#?MODULE{messages = _M,
                         messages_total = Total,
                         ra_indexes = _Indexes,
-                        prefix_msgs = {_RCnt, _R, _PCnt, _P}}) ->
+                        prefix_msgs = _}) ->
     % lqueue:len(M) + rabbit_fifo_index:size(Indexes) + RCnt + PCnt.
     Total;
 %% release cursors might be old state (e.g. after recent upgrade)
-messages_total(State)
-  when element(1, State) =:= rabbit_fifo_v1 ->
-    rabbit_fifo_v1:query_messages_total(State);
-messages_total(State)
-  when element(1, State) =:= rabbit_fifo_v0 ->
-    rabbit_fifo_v0:query_messages_total(State).
+messages_total(State) ->
+    try
+        rabbit_fifo_v1:query_messages_total(State)
+    catch _:_ ->
+              rabbit_fifo_v0:query_messages_total(State)
+    end.
 
 update_use({inactive, _, _, _} = CUInfo, inactive) ->
     CUInfo;
@@ -1616,9 +1616,9 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
     case maps:get(From, Enqueuers0, undefined) of
         undefined ->
             State1 = State0#?MODULE{enqueuers = Enqueuers0#{From => #enqueuer{}}},
-            {ok, State, Effects} = maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo,
+            {Res, State, Effects} = maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo,
                                                  RawMsg, Effects0, State1),
-            {ok, State, [{monitor, process, From} | Effects]};
+            {Res, State, [{monitor, process, From} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
             State1 = enqueue(RaftIdx, Ts, RawMsg, State0),
