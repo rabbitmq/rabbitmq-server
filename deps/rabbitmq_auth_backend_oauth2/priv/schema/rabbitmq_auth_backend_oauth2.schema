@@ -99,8 +99,18 @@
  [{datatype, integer}]}.
 
 {mapping,
- "auth_oauth2.https.wildcard",
- "rabbitmq_auth_backend_oauth2.key_config.wildcard",
+ "auth_oauth2.https.hostname_verification",
+ "rabbitmq_auth_backend_oauth2.key_config.hostname_verification",
+ [{datatype, {enum, [wildcard, none]}}]}.
+
+{mapping,
+ "auth_oauth2.https.crl_check",
+ "rabbitmq_auth_backend_oauth2.key_config.crl_check",
+ [{datatype, {enum, [true, false, peer, best_effort]}}]}.
+
+{mapping,
+ "auth_oauth2.https.fail_if_no_peer_cert",
+ "rabbitmq_auth_backend_oauth2.key_config.fail_if_no_peer_cert",
  [{datatype, {enum, [true, false]}}]}.
 
 {validator, "https_uri", "According to the JWT Specification, Key Server URL must be https.",
