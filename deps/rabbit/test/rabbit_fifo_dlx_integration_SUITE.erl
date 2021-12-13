@@ -31,18 +31,15 @@ groups() ->
                         delivery_limit,
                         target_queue_not_bound,
                         dlx_missing,
-                        stats
+                        stats,
+                        drop_head_falls_back_to_at_most_once,
+                        switch_strategy
                        ]},
      {cluster_size_3, [], [
-                           many_target_queues
+                           many_target_queues,
+                           single_dlx_worker
                           ]}
     ].
-
-%% TODO add tests for:
-%% * dlx_worker resends in various topology misconfigurations
-%% * there is always single leader in 3 node cluster (check via supervisor:count_children and by killing one node)
-%% * fall back to at-most-once works
-%% * switching between at-most-once and at-least-once works including rabbit_fifo_dlx:cleanup
 
 init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
@@ -209,7 +206,7 @@ target_queue_not_bound(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     SourceQ = ?config(source_queue, Config),
     TargetQ = ?config(target_queue_1, Config),
-    DLX = <<"dead-ex">>,
+    DLX = ?config(dead_letter_exchange, Config),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
                                                      queue     = SourceQ,
                                                      durable   = true,
@@ -258,7 +255,7 @@ dlx_missing(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     SourceQ = ?config(source_queue, Config),
     TargetQ = ?config(target_queue_1, Config),
-    DLX = <<"dead-ex">>,
+    DLX = ?config(dead_letter_exchange, Config),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
                                                      queue     = SourceQ,
                                                      durable   = true,
@@ -305,7 +302,7 @@ stats(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     SourceQ = ?config(source_queue, Config),
     TargetQ = ?config(target_queue_1, Config),
-    DLX = <<"dead-ex">>,
+    DLX = ?config(dead_letter_exchange, Config),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
                                                      queue     = SourceQ,
                                                      durable   = true,
@@ -374,6 +371,79 @@ stats(Config) ->
     [?assertMatch({#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{expiration = undefined},
                                                 payload = Msg}},
                   amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})) || _ <- lists:seq(1, 10)].
+
+%% Test that configuring overflow (default) drop-head will fall back to
+%% dead-letter-strategy at-most-once despite configuring at-least-once.
+drop_head_falls_back_to_at_most_once(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SourceQ = ?config(source_queue, Config),
+    DLX = ?config(dead_letter_exchange, Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
+                                                     queue     = SourceQ,
+                                                     durable   = true,
+                                                     arguments = [
+                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                                                  {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                                                  {<<"x-overflow">>, longstr, <<"drop-head">>},
+                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
+                                                                 ]
+                                                    }),
+    consistently(
+      ?_assertMatch(
+         [_, {active, 0}, _, _],
+         rabbit_ct_broker_helpers:rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup]))).
+
+%% Test that dynamically switching dead-letter-strategy works.
+switch_strategy(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SourceQ = ?config(source_queue, Config),
+    RaName = ra_name(SourceQ),
+    DLX = ?config(dead_letter_exchange, Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
+                                                     queue     = SourceQ,
+                                                     durable   = true,
+                                                     arguments = [
+                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
+                                                                 ]
+                                                    }),
+    %% default strategy is at-most-once
+    assert_active_dlx_workers(0, Config, Server),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, <<"my-policy">>, SourceQ, <<"queues">>,
+                                             [{<<"dead-letter-strategy">>, <<"at-least-once">>}]),
+    assert_active_dlx_workers(1, Config, Server),
+    [ok = amqp_channel:cast(Ch,
+                            #'basic.publish'{routing_key = SourceQ},
+                            #amqp_msg{props   = #'P_basic'{expiration = <<"0">>},
+                                      payload = <<"m">>}) %% 1 byte per message
+     || _ <- lists:seq(1, 5)],
+    eventually(
+      ?_assertMatch(
+         [#{
+            %% 2 msgs (=Prefetch) should be checked out to dlx_worker
+            num_discard_checked_out := 2,
+            discard_checkout_message_bytes := 2,
+            %% 3 msgs (=5-2) should be in discards queue
+            num_discarded := 3,
+            discard_message_bytes := 3,
+            num_messages := 5
+           }],
+         dirty_query([Server], RaName, fun rabbit_fifo:overview/1))),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, <<"my-policy">>, SourceQ, <<"queues">>,
+                                             [{<<"dead-letter-strategy">>, <<"at-most-once">>}]),
+    assert_active_dlx_workers(0, Config, Server),
+    ?assertMatch(
+       [#{
+          num_discard_checked_out := 0,
+          discard_checkout_message_bytes := 0,
+          num_discarded := 0,
+          discard_message_bytes := 0,
+          num_messages := 0
+         }],
+       dirty_query([Server], RaName, fun rabbit_fifo:overview/1)).
 
 %% Test that
 %% 1. Message is only acked to source queue once publisher confirms got received from **all** target queues.
@@ -476,8 +546,8 @@ many_target_queues(Config) ->
     end,
     eventually(?_assertEqual([{0, 0}],
                              dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1))),
-    ok = rabbit_ct_broker_helpers:kill_node(Config, Server3),
-    ok = rabbit_ct_broker_helpers:kill_node(Config, Server2),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server3),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     Msg2 = <<"m2">>,
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = SourceQ},
@@ -494,6 +564,9 @@ many_target_queues(Config) ->
                  amqp_channel:call(Ch, #'basic.get'{queue = TargetQ1})),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server3),
+    %%TODO By end of this test, there will be many duplicate dead-letter messages in the target quorum queue and
+    %% target stream queue since both their queue clients and rabbit_fifo_dlx_worker re-try.
+    %% Possible solution is to have rabbit_fifo_dlx_worker only resend for classic target queues?
     eventually(?_assertEqual([{0, 0}],
                              dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 6),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
@@ -505,9 +578,42 @@ many_target_queues(Config) ->
     after 0 ->
               exit(deliver_timeout)
     end.
-    %%TODO By end of this test, there will be many duplicate dead-letter messages in the target quorum queue and
-    %% target stream queue since both their queue clients and rabbit_fifo_dlx_worker re-try.
-    %% Possible solution is to have rabbit_fifo_dlx_worker only resend for classic target queues?
+
+%% Test that there is a single active rabbit_fifo_dlx_worker that is co-located with the quorum queue leader.
+single_dlx_worker(Config) ->
+    [Server1, Server2, _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    SourceQ = ?config(source_queue, Config),
+    DLX = ?config(dead_letter_exchange, Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
+                                                     queue     = SourceQ,
+                                                     durable   = true,
+                                                     arguments = [
+                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                                                  {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
+                                                                 ]
+                                                    }),
+    ?assertMatch(
+       [[_, {active, 1}, _, _],
+        [_, {active, 0}, _, _],
+        [_, {active, 0}, _, _]],
+       rabbit_ct_broker_helpers:rpc_all(Config, supervisor, count_children, [rabbit_fifo_dlx_sup])),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Server1),
+    RaName = ra_name(SourceQ),
+    {ok, _, {_, Leader}} = ra:members({RaName, Server2}),
+    ?assertNotEqual(Server1, Leader),
+    [Follower] = Servers -- [Server1, Leader],
+    assert_active_dlx_workers(1, Config, Leader),
+    assert_active_dlx_workers(0, Config, Follower),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Server1),
+    assert_active_dlx_workers(0, Config, Server1).
+
+assert_active_dlx_workers(N, Config, Server) ->
+    ?assertMatch(
+       [_, {active, N}, _, _],
+       rabbit_ct_broker_helpers:rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup])).
 
 %%TODO move to rabbitmq_ct_helpers/include/rabbit_assert.hrl
 consistently(TestObj) ->
