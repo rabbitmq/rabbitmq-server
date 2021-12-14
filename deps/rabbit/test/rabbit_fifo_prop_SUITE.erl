@@ -821,6 +821,7 @@ snapshots(_Config) ->
       end, [], 1000).
 
 snapshots_dlx(_Config) ->
+    Size = 256,
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, SingleActiveConsumer,
@@ -843,11 +844,11 @@ snapshots_dlx(_Config) ->
                                           InMemoryBytes,
                                           reject_publish,
                                           at_least_once),
-                          ?FORALL(O, ?LET(Ops, log_gen_dlx(256), expand(Ops, Config)),
+                          ?FORALL(O, ?LET(Ops, log_gen_dlx(Size), expand(Ops, Config)),
                                   collect({log_size, length(O)},
                                           snapshots_prop(Config, O)))
                       end)
-      end, [], 500).
+      end, [], Size).
 
 single_active(_Config) ->
     Size = 300,
