@@ -38,13 +38,15 @@
               command/0]).
 
 -export([apply/2,
-         init_state/0]).
+         init_state/0,
+         send_message/2]).
 
 -spec init_state() -> state().
 init_state() ->
     #?MODULE{groups = #{}}.
 
--spec apply(command(), state()) -> {state(), term()}.
+-spec apply(command(), state()) ->
+               {state(), term(), ra_machine:effects()}.
 apply({register_consumer,
        VirtualHost,
        Stream,
@@ -101,9 +103,9 @@ apply({register_consumer,
 
     {value, Consumer1} =
         lookup_consumer(ConnectionPid, SubscriptionId, Group2),
-    notify_consumers(FormerActive, Consumer1, Group2),
+    Effects = notify_consumers(FormerActive, Consumer1, Group2),
     #consumer{active = Active} = Consumer1,
-    {State#?MODULE{groups = StreamGroups2}, {ok, Active}};
+    {State#?MODULE{groups = StreamGroups2}, {ok, Active}, Effects};
 apply({unregister_consumer,
        VirtualHost,
        Stream,
@@ -111,12 +113,12 @@ apply({unregister_consumer,
        ConnectionPid,
        SubscriptionId},
       #?MODULE{groups = StreamGroups0} = State0) ->
-    State1 =
+    {State1, Effects1} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             error ->
-                State0;
+                {State0, []};
             Group0 ->
-                Group1 =
+                {Group1, Effects} =
                     case lookup_consumer(ConnectionPid, SubscriptionId, Group0)
                     of
                         {value, Consumer} ->
@@ -144,8 +146,8 @@ apply({unregister_consumer,
                                     _ ->
                                         ActiveInPreviousGroupInstance
                                 end,
-                            notify_consumers(AIPGI, NewActive, G2),
-                            G2;
+                            Effs = notify_consumers(AIPGI, NewActive, G2),
+                            {G2, Effs};
                         false ->
                             rabbit_log:debug("Could not find consumer ~p ~p in group ~p ~p ~p",
                                              [ConnectionPid,
@@ -153,16 +155,16 @@ apply({unregister_consumer,
                                               VirtualHost,
                                               Stream,
                                               ConsumerName]),
-                            Group0
+                            {Group0, []}
                     end,
                 SGS = update_groups(VirtualHost,
                                     Stream,
                                     ConsumerName,
                                     Group1,
                                     StreamGroups0),
-                State0#?MODULE{groups = SGS}
+                {State0#?MODULE{groups = SGS}, Effects}
         end,
-    {State1, ok}.
+    {State1, ok, Effects1}.
 
 maybe_create_group(VirtualHost,
                    Stream,
@@ -229,67 +231,74 @@ lookup_active_consumer(#group{consumers = Consumers}) ->
                  Consumers).
 
 notify_consumers(_, _, #group{consumers = []}) ->
-    ok;
+    [];
 notify_consumers(_,
                  #consumer{pid = ConnectionPid,
                            subscription_id = SubscriptionId} =
                      NewConsumer,
                  #group{partition_index = -1, consumers = [NewConsumer]}) ->
-    ConnectionPid
-    ! {sac,
-       {{subscription_id, SubscriptionId}, {active, true},
-        {side_effects, []}}};
+    [mod_call_effect(ConnectionPid,
+                     {sac,
+                      {{subscription_id, SubscriptionId}, {active, true},
+                       {side_effects, []}}})];
 notify_consumers(_,
                  #consumer{pid = ConnectionPid,
                            subscription_id = SubscriptionId} =
                      NewConsumer,
                  #group{partition_index = -1, consumers = [NewConsumer | _]}) ->
-    ConnectionPid
-    ! {sac,
-       {{subscription_id, SubscriptionId}, {active, true},
-        {side_effects, []}}};
+    [mod_call_effect(ConnectionPid,
+                     {sac,
+                      {{subscription_id, SubscriptionId}, {active, true},
+                       {side_effects, []}}})];
 notify_consumers(_,
                  #consumer{pid = ConnectionPid,
                            subscription_id = SubscriptionId},
                  #group{partition_index = -1, consumers = _}) ->
-    ConnectionPid
-    ! {sac,
-       {{subscription_id, SubscriptionId}, {active, false},
-        {side_effects, []}}};
+    %% notifying a newcomer that it's inactive
+    %% FIXME is consumer update always necessary for inactive newcomers?
+    %% can't they assume they are inactive by default?
+    [mod_call_effect(ConnectionPid,
+                     {sac,
+                      {{subscription_id, SubscriptionId}, {active, false},
+                       {side_effects, []}}})];
 notify_consumers(undefined,
                  #consumer{pid = ConnectionPid,
                            subscription_id = SubscriptionId},
                  _Group) ->
-    ConnectionPid
-    ! {sac,
-       {{subscription_id, SubscriptionId}, {active, true},
-        {side_effects, []}}};
+    [mod_call_effect(ConnectionPid,
+                     {sac,
+                      {{subscription_id, SubscriptionId}, {active, true},
+                       {side_effects, []}}})];
 notify_consumers(ActiveInPreviousGroupInstance, NewActive, _Group)
     when ActiveInPreviousGroupInstance == NewActive ->
     %% no changes (e.g. on unsubscription), nothing to do.
-    ok;
+    [];
 notify_consumers(#consumer{pid = FormerConnPid,
                            subscription_id = FormerSubId},
                  #consumer{pid = NewConnPid,
                            subscription_id = NewSubId,
                            active = true},
                  _Group) ->
-    FormerConnPid
-    ! {sac,
-       {{subscription_id, FormerSubId}, {active, false},
-        {side_effects,
-         [{message, NewConnPid,
-           {sac,
-            {{subscription_id, NewSubId}, {active, true},
-             {side_effects, []}}}}]}}};
+    [mod_call_effect(FormerConnPid,
+                     {sac,
+                      {{subscription_id, FormerSubId}, {active, false},
+                       {side_effects,
+                        [{message, NewConnPid,
+                          {sac,
+                           {{subscription_id, NewSubId}, {active, true},
+                            {side_effects, []}}}}]}}})];
 notify_consumers(_StillActive,
                  #consumer{pid = NewConnPid,
                            subscription_id = NewSubId,
                            active = false},
                  _Group) ->
-    NewConnPid
-    ! {sac,
-       {{subscription_id, NewSubId}, {active, false}, {side_effects, []}}}.
+    %% notifying a newcomer that it's inactive
+    %% FIXME is consumer update always necessary for inactive newcomers?
+    %% can't they assume they are inactive by default?
+    [mod_call_effect(NewConnPid,
+                     {sac,
+                      {{subscription_id, NewSubId}, {active, false},
+                       {side_effects, []}}})].
 
 update_groups(VirtualHost,
               Stream,
@@ -305,3 +314,11 @@ update_groups(VirtualHost,
               Group,
               StreamGroups) ->
     maps:put({VirtualHost, Stream, ConsumerName}, Group, StreamGroups).
+
+mod_call_effect(Pid, Msg) ->
+    {mod_call, rabbit_stream_sac_coordinator, send_message, [Pid, Msg]}.
+
+-spec send_message(pid(), term()) -> ok.
+send_message(ConnectionPid, Msg) ->
+    ConnectionPid ! Msg,
+    ok.
