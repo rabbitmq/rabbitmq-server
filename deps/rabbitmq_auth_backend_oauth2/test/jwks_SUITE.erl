@@ -194,6 +194,7 @@ start_jwks_server(Config) ->
     StrictJwksUrl = "https://localhost:" ++ integer_to_list(JwksServerPort) ++ "/jwks",
 
     ok = application:set_env(jwks_http, keys, [Jwk]),
+    {ok, _} = application:ensure_all_started(ssl),
     {ok, _} = application:ensure_all_started(cowboy),
     CertsDir = ?config(rmq_certsdir, Config),
     ok = jwks_http_app:start(JwksServerPort, CertsDir),
