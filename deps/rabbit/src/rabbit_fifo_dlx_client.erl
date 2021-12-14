@@ -11,17 +11,18 @@
 -type state() :: #state{}.
 -export_type([state/0]).
 
+settle(MsgIds, #state{leader = Leader} = State)
+  when is_list(MsgIds) ->
+    Cmd = rabbit_fifo_dlx:make_settle(MsgIds),
+    ra:pipeline_command(Leader, Cmd),
+    {ok, State}.
+
 checkout(RegName, QResource, Leader, NumUnsettled) ->
     Cmd = rabbit_fifo_dlx:make_checkout(RegName, NumUnsettled),
     State = #state{queue_resource = QResource,
                    leader = Leader,
                    last_msg_id = -1},
     process_command(Cmd, State, 5).
-
-settle(MsgIds, State) when is_list(MsgIds) ->
-    Cmd = rabbit_fifo_dlx:make_settle(MsgIds),
-    %%TODO use pipeline_command without correlation ID, i.e. without notification
-    process_command(Cmd, State, 2).
 
 process_command(_Cmd, _State, 0) ->
     {error, ra_command_failed};
