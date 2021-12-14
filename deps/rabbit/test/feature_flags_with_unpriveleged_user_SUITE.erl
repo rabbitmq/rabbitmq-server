@@ -53,7 +53,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     feature_flags_SUITE:end_per_suite(Config).
 
-
 init_per_group(enabling_in_cluster, Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->

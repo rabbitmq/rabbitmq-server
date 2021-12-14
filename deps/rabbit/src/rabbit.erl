@@ -851,6 +851,12 @@ start(normal, []) ->
         log_motd(),
         {ok, SupPid} = rabbit_sup:start_link(),
 
+        %% When we load plugins later in this function, we refresh feature
+        %% flags. If `feature_flags_v2' is enabled, `rabbit_ff_controller'
+        %% will be used. We start it now because we can't wait for boot steps
+        %% to do this (feature flags are refreshed before boot steps run).
+        ok = rabbit_sup:start_child(rabbit_ff_controller),
+
         %% Compatibility with older RabbitMQ versions + required by
         %% rabbit_node_monitor:notify_node_up/0:
         %%

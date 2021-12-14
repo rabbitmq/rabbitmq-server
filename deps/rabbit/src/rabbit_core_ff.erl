@@ -87,6 +87,12 @@
       migration_fun => {?MODULE, direct_exchange_routing_v2_migration}
      }}).
 
+-rabbit_feature_flag(
+    {feature_flags_v2,
+     #{desc          => "Feature flags subsystem V2",
+       stability     => stable
+     }}).
+
 classic_mirrored_queue_version_migration(_FeatureName, _FeatureProps, _Enable) ->
     ok.
 

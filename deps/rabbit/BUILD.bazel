@@ -432,10 +432,15 @@ suites = [
         name = "feature_flags_SUITE",
         size = "large",
         flaky = True,
-        shard_count = 5,
+        shard_count = 9,
         runtime_deps = [
             "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:erlang_app",
         ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "feature_flags_v2_SUITE",
+        size = "large",
     ),
     rabbitmq_integration_suite(
         PACKAGE,

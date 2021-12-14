@@ -28,7 +28,8 @@ defmodule ListFeatureFlagsCommandTest do
         provided_by: :ListFeatureFlagsCommandTest,
         stability: :stable}}
     :ok = :rabbit_misc.rpc_call(
-      node, :rabbit_feature_flags, :initialize_registry, [new_feature_flags])
+      node, :rabbit_feature_flags, :inject_test_feature_flags,
+      [new_feature_flags])
     :ok = :rabbit_misc.rpc_call(
       node, :rabbit_feature_flags, :enable_all, [])
 
