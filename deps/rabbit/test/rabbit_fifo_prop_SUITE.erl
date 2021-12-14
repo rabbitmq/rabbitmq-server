@@ -847,7 +847,7 @@ snapshots_dlx(_Config) ->
                                   collect({log_size, length(O)},
                                           snapshots_prop(Config, O)))
                       end)
-      end, [], 1000).
+      end, [], 500).
 
 single_active(_Config) ->
     Size = 300,
