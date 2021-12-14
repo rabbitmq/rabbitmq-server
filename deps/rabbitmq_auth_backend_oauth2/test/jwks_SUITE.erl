@@ -362,7 +362,7 @@ test_successful_token_refresh(Config) ->
     Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
 
-    {_Algo, Token2} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
+    {_Algo2, Token2} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost1/*">>,
                                                     <<"rabbitmq.write:vhost1/*">>,
                                                     <<"rabbitmq.read:vhost1/*">>]),
     ?UTIL_MOD:wait_for_token_to_expire(timer:seconds(Duration)),
@@ -423,7 +423,7 @@ test_failed_token_refresh_case1(Config) ->
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
 
-    {_Algo, Token2} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
+    {_Algo2, Token2} = generate_expired_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
                                                       <<"rabbitmq.write:vhost4/*">>,
                                                       <<"rabbitmq.read:vhost4/*">>]),
     %% the error is communicated asynchronously via a connection-level error
