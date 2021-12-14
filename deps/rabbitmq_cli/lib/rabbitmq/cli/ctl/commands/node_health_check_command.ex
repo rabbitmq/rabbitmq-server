@@ -26,37 +26,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
   end
 
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
-  use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], %{node: node_name, timeout: timeout}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_health_check, :node, [node_name, timeout]) do
-      :ok ->
-        :ok
-
-      true ->
-        :ok
-
-      {:badrpc, _} = err ->
-        err
-
-      {:error_string, error_message} ->
-        {:healthcheck_failed, error_message}
-
-      {:node_is_ko, error_message, _exit_code} ->
-        {:healthcheck_failed, error_message}
-
-      other ->
-        other
-    end
+  def run([], _opts) do
+    :ok
   end
 
   def output(:ok, _) do
-    {:ok, "Health check passed"}
-  end
-
-  def output({:healthcheck_failed, message}, _) do
-    {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
-     "Error: health check failed. Message: #{message}"}
+    {:ok, "This command is a no-op. See https://www.rabbitmq.com/monitoring.html#health-checks for modern alternatives"}
   end
 
   use RabbitMQ.CLI.DefaultOutput
@@ -71,17 +47,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand do
 
   def help_section(), do: :deprecated
   def description() do
-    "DEPRECATED. Performs intrusive, opinionated health checks on a fully booted node. " <>
-    "See https://www.rabbitmq.com/monitoring.html#health-checks instead"
+    "DEPRECATED. Does not perform any checks (is a no-op). " <>
+    "See https://www.rabbitmq.com/monitoring.html#health-checks for modern alternatives"
   end
 
-  def banner(_, %{node: node_name, timeout: timeout}) do
+  def banner(_, _) do
     [
-      "This command is DEPRECATED and will be removed in a future version.",
-      "It performs intrusive, opinionated health checks and requires a fully booted node.",
-      "Use one of the options covered in https://www.rabbitmq.com/monitoring.html#health-checks instead.",
-      "Timeout: #{trunc(timeout / 1000)} seconds ...",
-      "Checking health of node #{node_name} ..."
+      "This command has been DEPRECATED since 2019 and no longer has any effect.",
+      "Use one of the options covered in https://www.rabbitmq.com/monitoring.html#health-checks instead."
     ]
   end
 end
