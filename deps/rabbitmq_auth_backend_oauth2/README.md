@@ -143,18 +143,17 @@ NOTE: `jwks_url` takes precedence over `signing_keys` if both are provided.
 
 | Key                                      | Documentation     
 |------------------------------------------|-----------
-| `auth_oauth2.resource_server_id`         | The Resource Server ID. Please see below for more details
-| `auth_oauth2.additional_scopes_key`      | Configure the plugin to also look in other fields (maps to `additional_rabbitmq_scopes` in the old format)
-| `auth_oauth2.default_key`                | ID of the default signing key
-| `auth_oauth2.signing_keys`               | Paths to signing key files
-| `auth_oauth2.jwks_url`                   | The URL of key server. According to the JWT Specification key server URL must be https.
-| `auth_oauth2.https.cacertfile`           | Path to a file containing PEM-encoded CA certificates. The CA certificates are used during key server authentication
-| `auth_oauth2.https.depth`                | Maximum number of non-self-issued intermediate certificates that can follow the peer certificate in a valid certification path. Default is 10. Please see: https://www.erlang.org/doc/man/ssl.html#type-allowed_cert_chain_length for more details
-| `auth_oauth2.https.peer_verification`    | Identify if the verification should be performed towards key server. Available values: `verify_none`, `verify_peer`. Default is `verify_none`. It is recommended to configure `verify_peer`
-| `auth_oauth2.https.fail_if_no_peer_cert` | Used together with `auth_oauth2.https.peer_verification = verify_peer`. If set to `true`, the server fails if the client does not have a certificate to send, that is, sends an empty certificate. If set to `false`, it fails only if the client sends an invalid certificate (an empty certificate is considered valid). Default is `false`.
+| `auth_oauth2.resource_server_id`         | [The Resource Server ID](#resource-server-id-and-scope-prefixes)
+| `auth_oauth2.additional_scopes_key`      | Configure the plugin to also look in other fields (maps to `additional_rabbitmq_scopes` in the old format).
+| `auth_oauth2.default_key`                | ID of the default signing key.
+| `auth_oauth2.signing_keys`               | Paths to signing key files.
+| `auth_oauth2.jwks_url`                   | The URL of key server. According to the [JWT Specification](https://datatracker.ietf.org/doc/html/rfc7515#section-4.1.2) key server URL must be https.
+| `auth_oauth2.https.cacertfile`           | Path to a file containing PEM-encoded CA certificates. The CA certificates are used during key server [peer verification](https://rabbitmq.com/ssl.html#peer-verification).
+| `auth_oauth2.https.depth`                | The maximum number of non-self-issued intermediate certificates that may follow the peer certificate in a valid [certification path](https://rabbitmq.com/ssl.html#peer-verification-depth). Default is 10.
+| `auth_oauth2.https.peer_verification`    | Should [peer verification](https://rabbitmq.com/ssl.html#peer-verification) be enabled. Available values: `verify_none`, `verify_peer`. Default is `verify_none`. It is recommended to configure `verify_peer`. Peer verification requires a certain amount of setup and is more secure.
+| `auth_oauth2.https.fail_if_no_peer_cert` | Used together with `auth_oauth2.https.peer_verification = verify_peer`. When set to `true`, TLS connection will be rejected if client fails to provide a certificate. Default is `false`.
 | `auth_oauth2.https.hostname_verification`| Enable wildcard-aware hostname verification for key server. Available values: `wildcard`, `none`. Default is `none`.
-| `auth_oauth2.https.crl_check`            | Enable certificate check against the CA’s Certificate Revocation List (CRL). Available values: `true`, `false`, `peer`, `best_effort`. Default is `false`. Please refer: https://www.erlang.org/doc/man/ssl.html#type-crl_check for more details
-| `auth_oauth2.algorithms`                 | Restrict the usable algorithms
+| `auth_oauth2.algorithms`                 | Restrict [the usable algorithms](https://github.com/potatosalad/erlang-jose#algorithm-support).
 
 For example:
 
