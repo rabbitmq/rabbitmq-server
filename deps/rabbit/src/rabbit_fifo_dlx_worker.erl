@@ -386,16 +386,11 @@ maybe_ack(#state{pendings = Pendings0,
             State;
         _ ->
             Ids = lists:map(fun(#pending{consumed_msg_id = Id}) -> Id end, maps:values(Settled)),
-            case rabbit_fifo_dlx_client:settle(Ids, DlxState0) of
-                {ok, DlxState} ->
-                    SettledOutSeqs = maps:keys(Settled),
-                    Pendings = maps:without(SettledOutSeqs, Pendings0),
-                    State#state{pendings = Pendings,
-                                dlx_client_state = DlxState};
-                {error, _Reason} ->
-                    %% Failed to ack. Ack will be retried in the next maybe_ack/1
-                    State
-            end
+            {ok, DlxState} = rabbit_fifo_dlx_client:settle(Ids, DlxState0),
+            SettledOutSeqs = maps:keys(Settled),
+            Pendings = maps:without(SettledOutSeqs, Pendings0),
+            State#state{pendings = Pendings,
+                        dlx_client_state = DlxState}
     end.
 
 %% Re-deliver messages that timed out waiting on publisher confirm and
