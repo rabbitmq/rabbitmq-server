@@ -11,20 +11,8 @@ defmodule NodeHealthCheckCommandTest do
 
   @command RabbitMQ.CLI.Ctl.Commands.NodeHealthCheckCommand
 
-  setup_all do
-    RabbitMQ.CLI.Core.Distribution.start()
-
-    reset_vm_memory_high_watermark()
-
-    on_exit([], fn ->
-      reset_vm_memory_high_watermark()
-    end)
-
-    :ok
-  end
-
   setup do
-    {:ok, opts: %{node: get_rabbit_hostname(), timeout: 20000}}
+    {:ok, opts: %{timeout: 20000}}
   end
 
   test "validate: with extra arguments returns an arg count error", context do
@@ -35,31 +23,7 @@ defmodule NodeHealthCheckCommandTest do
     assert @command.validate([], []) == :ok
   end
 
-  test "validate: with a named, active node argument succeeds", context do
-    assert @command.validate([], context[:opts]) == :ok
-  end
-
-  test "run: request to a named, active node succeeds", context do
-    assert @command.run([], context[:opts])
-  end
-
-  test "run: request to a named, active node with an alarm in effect fails", context do
-    set_vm_memory_high_watermark(0.0000000000001)
-    # give VM memory monitor check some time to kick in
-    :timer.sleep(1500)
-    {:healthcheck_failed, _message} = @command.run([], context[:opts])
-
-    reset_vm_memory_high_watermark()
-    :timer.sleep(1500)
-    assert @command.run([], context[:opts]) == :ok
-  end
-
-  test "run: request to a non-existent node returns a badrpc" do
-    assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, timeout: 200}))
-  end
-
   test "banner", context do
-    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/Checking health/
-    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/#{get_rabbit_hostname()}/
+    assert @command.banner([], context[:opts]) |> Enum.join("\n") =~ ~r/This command has been DEPRECATED since 2019 and no longer has any effect/
   end
 end
