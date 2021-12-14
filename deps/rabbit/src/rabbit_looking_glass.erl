@@ -9,6 +9,7 @@
 
 -ignore_xref([
     {lg, trace, 4},
+    {lg, stop, 0},
     {lg_callgrind, profile_many, 3}
 ]).
 -ignore_xref([{maps, from_list, 1}]).
