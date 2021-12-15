@@ -7,7 +7,8 @@
 
 -module(rabbit_data_coercion).
 
--export([to_binary/1, to_list/1, to_atom/1, to_integer/1, to_proplist/1, to_map/1]).
+-export([to_binary/1, to_list/1, to_atom/1, to_existing_atom/1, to_integer/1, 
+         to_proplist/1, to_map/1]).
 -export([to_atom/2, atomize_keys/1]).
 
 -spec to_binary(Val :: binary() | list() | atom() | integer()) -> binary().
@@ -32,6 +33,11 @@ to_atom(Val) when is_binary(Val) -> binary_to_atom(Val, utf8).
 to_atom(Val, _Encoding) when is_atom(Val)   -> Val;
 to_atom(Val, _Encoding) when is_list(Val)   -> list_to_atom(Val);
 to_atom(Val, Encoding)  when is_binary(Val) -> binary_to_atom(Val, Encoding).
+
+-spec to_existing_atom(Val :: atom() | list() | binary()) -> atom().
+to_existing_atom(Val) when is_atom(Val)   -> Val;
+to_existing_atom(Val) when is_list(Val)   -> list_to_existing_atom(Val);
+to_existing_atom(Val) when is_binary(Val) -> binary_to_existing_atom(Val, utf8).
 
 -spec to_integer(Val :: integer() | list() | binary()) -> integer().
 to_integer(Val) when is_integer(Val) -> Val;

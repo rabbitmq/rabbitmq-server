@@ -300,7 +300,7 @@ username_from(ClientProvidedUsername, DecodedToken) ->
 tags_from(DecodedToken) ->
     Scopes    = maps:get(<<"scope">>, DecodedToken, []),
     TagScopes = matching_scopes_without_prefix(Scopes, <<"tag:">>),
-    lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
+    lists:usort(lists:map(fun rabbit_data_coercion:to_existing_atom/1, TagScopes)).
 
 matching_scopes_without_prefix(Scopes, PrefixPattern) ->
     PatternLength = byte_size(PrefixPattern),
