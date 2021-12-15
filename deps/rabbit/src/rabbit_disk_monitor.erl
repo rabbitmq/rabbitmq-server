@@ -75,42 +75,42 @@
 -spec get_disk_free_limit() -> integer().
 
 get_disk_free_limit() ->
-    gen_server:call(?MODULE, get_disk_free_limit, infinity).
+    gen_server:call(?MODULE, get_disk_free_limit).
 
 -spec set_disk_free_limit(disk_free_limit()) -> 'ok'.
 
 set_disk_free_limit(Limit) ->
-    gen_server:call(?MODULE, {set_disk_free_limit, Limit}, infinity).
+    gen_server:call(?MODULE, {set_disk_free_limit, Limit}).
 
 -spec get_min_check_interval() -> integer().
 
 get_min_check_interval() ->
-    gen_server:call(?MODULE, get_min_check_interval, infinity).
+    gen_server:call(?MODULE, get_min_check_interval).
 
 -spec set_min_check_interval(integer()) -> 'ok'.
 
 set_min_check_interval(Interval) ->
-    gen_server:call(?MODULE, {set_min_check_interval, Interval}, infinity).
+    gen_server:call(?MODULE, {set_min_check_interval, Interval}).
 
 -spec get_max_check_interval() -> integer().
 
 get_max_check_interval() ->
-    gen_server:call(?MODULE, get_max_check_interval, infinity).
+    gen_server:call(?MODULE, get_max_check_interval).
 
 -spec set_max_check_interval(integer()) -> 'ok'.
 
 set_max_check_interval(Interval) ->
-    gen_server:call(?MODULE, {set_max_check_interval, Interval}, infinity).
+    gen_server:call(?MODULE, {set_max_check_interval, Interval}).
 
 -spec get_disk_free() -> (integer() | 'unknown').
 
 get_disk_free() ->
-    gen_server:call(?MODULE, get_disk_free, infinity).
+    gen_server:call(?MODULE, get_disk_free).
 
 -spec set_enabled(string()) -> 'ok'.
 
 set_enabled(Enabled) ->
-    gen_server:call(?MODULE, {set_enabled, Enabled}, infinity).
+    gen_server:call(?MODULE, {set_enabled, Enabled}).
 
 %%----------------------------------------------------------------------------
 %% gen_server callbacks
@@ -227,33 +227,19 @@ get_disk_free(Dir) ->
 get_disk_free(Dir, {unix, Sun})
   when Sun =:= sunos; Sun =:= sunos4; Sun =:= solaris ->
     Df = os:find_executable("df"),
-    parse_free_unix(rabbit_misc:os_cmd(Df ++ " -k " ++ Dir));
+    parse_free_unix(run_cmd(Df ++ " -k " ++ Dir));
 get_disk_free(Dir, {unix, _}) ->
     Df = os:find_executable("df"),
-    parse_free_unix(rabbit_misc:os_cmd(Df ++ " -kP " ++ Dir));
+    parse_free_unix(run_cmd(Df ++ " -kP " ++ Dir));
 get_disk_free(Dir, {win32, _}) ->
-    %% On Windows, the Win32 API enforces a limit of 260 characters
-    %% (MAX_PATH). If we call `dir` with a path longer than that, it
-    %% fails with "File not found". Starting with Windows 10 version
-    %% 1607, this limit was removed, but the administrator has to
-    %% configure that.
-    %%
-    %% NTFS supports paths up to 32767 characters. Therefore, paths
-    %% longer than 260 characters exist but they are "inaccessible" to
-    %% `dir`.
-    %%
-    %% A workaround is to tell the Win32 API to not parse a path and
-    %% just pass it raw to the underlying filesystem. To do this, the
-    %% path must be prepended with "\\?\". That's what we do here.
-    %%
-    %% However, the underlying filesystem may not support forward
-    %% slashes transparently, as the Win32 API does. Therefore, we
-    %% convert all forward slashes to backslashes.
-    %%
-    %% See the following page to learn more about this:
-    %% https://ss64.com/nt/syntax-filenames.html
-    RawDir = "\\\\?\\" ++ string:replace(Dir, "/", "\\", all),
-    parse_free_win32(rabbit_misc:os_cmd("dir /-C /W \"" ++ RawDir ++ "\"")).
+    case win32_get_disk_free_fsutil(Dir) of
+        {ok, Free0} -> Free0;
+        error ->
+            case win32_get_disk_free_pwsh(Dir) of
+                {ok, Free1} -> Free1;
+                _ -> exit(could_not_determine_disk_free)
+            end
+    end.
 
 parse_free_unix(Str) ->
     case string:tokens(Str, "\n") of
@@ -264,11 +250,46 @@ parse_free_unix(Str) ->
         _          -> exit({unparseable, Str})
     end.
 
-parse_free_win32(CommandResult) ->
-    LastLine = lists:last(string:tokens(CommandResult, "\r\n")),
-    {match, [Free]} = re:run(lists:reverse(LastLine), "(\\d+)",
-                             [{capture, all_but_first, list}]),
-    list_to_integer(lists:reverse(Free)).
+win32_get_disk_free_fsutil(Dir) ->
+    % Dir:
+    % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
+    Drive = string:slice(Dir, 0, 2),
+
+    % Drive: c:
+    FsutilCmd = "fsutil.exe volume diskfree " ++ Drive,
+
+    % C:\windows\system32>fsutil volume diskfree c:
+    % Total free bytes        :   812,733,878,272 (756.9 GB)
+    % Total bytes             : 1,013,310,287,872 (943.7 GB)
+    % Total quota free bytes  :   812,733,878,272 (756.9 GB)
+    case run_cmd(FsutilCmd) of
+        {error, timeout} ->
+            error;
+        FsutilResult ->
+            case string:slice(FsutilResult, 0, 5) of
+                "Error" ->
+                    error;
+                "Total" ->
+                    FirstLine = hd(string:tokens(FsutilResult, "\r\n")),
+                    {match, [FreeStr]} = re:run(FirstLine, "(\\d+,?)+", [{capture, first, list}]),
+                    {ok, list_to_integer(lists:flatten(string:tokens(FreeStr, ",")))}
+            end
+    end.
+
+
+win32_get_disk_free_pwsh(Dir) ->
+    % Dir:
+    % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
+    Drive = string:slice(Dir, 0, 1),
+    PoshCmd = "powershell.exe -NoLogo -NoProfile -NonInteractive -Command (Get-PSDrive " ++ Drive ++ ").Free",
+    case run_cmd(PoshCmd) of
+        {error, timeout} ->
+            error;
+        PoshResultStr ->
+            % Note: remove \r\n
+            PoshResult = string:slice(PoshResultStr, 0, length(PoshResultStr) - 2),
+            {ok, list_to_integer(PoshResult)}
+    end.
 
 interpret_limit({mem_relative, Relative})
     when is_number(Relative) ->
@@ -317,4 +338,21 @@ enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries}
                             [Err, Retries]),
             erlang:send_after(Interval, self(), try_enable),
             State#state{enabled = false}
+    end.
+
+run_cmd(Cmd) ->
+    Pid = self(),
+    Ref = make_ref(),
+    CmdFun = fun() ->
+        CmdResult = rabbit_misc:os_cmd(Cmd),
+        Pid ! {Pid, Ref, CmdResult}
+    end,
+    CmdPid = spawn(CmdFun),
+    receive
+        {Pid, Ref, CmdResult} ->
+            CmdResult
+    after 5000 ->
+        exit(CmdPid, kill),
+        rabbit_log:error("Command timed out: '~s'", [Cmd]),
+        {error, timeout}
     end.
