@@ -154,19 +154,20 @@ maybe_throttle_sync_throughput(_ , _, 0) ->
 maybe_throttle_sync_throughput(TotalBytes, LastCheck, SyncThroughput) ->
     Interval = erlang:convert_time_unit(erlang:monotonic_time() - LastCheck, native, milli_seconds),
     case Interval > ?SYNC_THROUGHPUT_EVAL_INTERVAL_MILLIS of
-        true  -> maybe_pause_sync(TotalBytes, Interval, SyncThroughput, LastCheck);
+        true  -> maybe_pause_sync(TotalBytes, Interval, SyncThroughput),
+                 {0, erlang:monotonic_time()}; %% reset TotalBytes counter and LastCheck.;
         false -> {TotalBytes, LastCheck}
     end.
 
-maybe_pause_sync(TotalBytes, Interval, SyncThroughput, LastCheck) ->
+maybe_pause_sync(TotalBytes, Interval, SyncThroughput) ->
     Delta = get_time_diff(TotalBytes, Interval, SyncThroughput),
-    pause_queue_sync(Delta, TotalBytes, LastCheck).
+    pause_queue_sync(Delta).
 
-pause_queue_sync(0, TotalBytes, LastCheck) ->
-    {TotalBytes, LastCheck};
-pause_queue_sync(Delta, _TotalBytes, _LastCheck) ->
-    timer:sleep(Delta),
-    {0, erlang:monotonic_time()}. %% reset TotalBytes counter and LastCheck.
+pause_queue_sync(0) ->
+    rabbit_log_mirroring:debug("Sync throughput is ok.");
+pause_queue_sync(Delta) ->
+    rabbit_log_mirroring:debug("Sync throughput exceeds threshold. Pause queue sync for ~p ms", [Delta]),
+    timer:sleep(Delta).
 
 %% Sync throughput computation:
 %% - Total bytes have been sent since last check: TotalBytes
@@ -177,6 +178,7 @@ pause_queue_sync(Delta, _TotalBytes, _LastCheck) ->
 %% and the elapsed time (Interval).
 get_time_diff(TotalBytes, Interval, SyncThroughput) ->
     UsedThroughput = round(TotalBytes * 1000 / Interval),
+    rabbit_log_mirroring:debug("Total ~p bytes has been sent over last ~p ms. Effective sync througput: ~p", [TotalBytes, Interval, UsedThroughput]),
     max(round(UsedThroughput/SyncThroughput * 1000 - Interval), 0).
 
 master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent}, BQS) ->
