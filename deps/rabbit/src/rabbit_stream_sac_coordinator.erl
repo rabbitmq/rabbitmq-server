@@ -149,11 +149,7 @@ apply({activate_consumer, VirtualHost, Stream, ConsumerName},
                     evaluate_active_consumer(Group),
                 Group1 =
                     update_consumer_state_in_group(Group, Pid, SubId, true),
-                {Group1,
-                 [mod_call_effect(Pid,
-                                  {sac,
-                                   {{subscription_id, SubId}, {active, true},
-                                    {extra, []}}})]}
+                {Group1, [notify_consumer_effect(Pid, SubId, true)]}
         end,
     StreamGroups1 =
         update_groups(VirtualHost, Stream, ConsumerName, G, StreamGroups0),
@@ -194,10 +190,7 @@ do_register_consumer(VirtualHost,
     Effects =
         case Consumer of
             #consumer{active = true} ->
-                [mod_call_effect(ConnectionPid,
-                                 {sac,
-                                  {{subscription_id, SubscriptionId},
-                                   {active, Active}, {extra, []}}})];
+                [notify_consumer_effect(ConnectionPid, SubscriptionId, Active)];
             _ ->
                 []
         end,
@@ -224,10 +217,7 @@ do_register_consumer(VirtualHost,
                               active = true},
                 G1 = add_to_group(Consumer0, Group0),
                 {G1,
-                 [mod_call_effect(ConnectionPid,
-                                  {sac,
-                                   {{subscription_id, SubscriptionId},
-                                    {active, true}, {extra, []}}})]};
+                 [notify_consumer_effect(ConnectionPid, SubscriptionId, true)]};
             _G ->
                 %% whatever the current state is, the newcomer will be passive
                 Consumer0 =
@@ -250,13 +240,10 @@ do_register_consumer(VirtualHost,
                                                                 ActPid,
                                                                 ActSubId,
                                                                 false),
-                                 [mod_call_effect(ActPid,
-                                                  {sac,
-                                                   {{subscription_id, ActSubId},
-                                                    {active, false},
-                                                    {extra,
-                                                     [{stepping_down,
-                                                       true}]}}})]}
+                                 [notify_consumer_effect(ActPid,
+                                                         ActSubId,
+                                                         false,
+                                                         true)]}
                         end;
                     undefined ->
                         %% no active consumer in the (non-empty) group, we are waiting for the reply of a former active
@@ -287,11 +274,7 @@ handle_consumer_removal(#group{partition_index = -1} = Group0,
                 {value, #consumer{pid = Pid, subscription_id = SubId} = C} ->
                     rabbit_log:debug("Creating side effect to notify new active consumer ~p",
                                      [C]),
-                    {Group1,
-                     [mod_call_effect(Pid,
-                                      {sac,
-                                       {{subscription_id, SubId},
-                                        {active, true}, {extra, []}}})]};
+                    {Group1, [notify_consumer_effect(Pid, SubId, true)]};
                 _ ->
                     rabbit_log:debug("No active consumer found in the group, nothing "
                                      "to do"),
@@ -316,11 +299,7 @@ handle_consumer_removal(Group0, Consumer) ->
                                                     ActPid,
                                                     ActSubId,
                                                     false),
-                     [mod_call_effect(ActPid,
-                                      {sac,
-                                       {{subscription_id, ActSubId},
-                                        {active, false},
-                                        {extra, [{stepping_down, true}]}}})]}
+                     [notify_consumer_effect(ActPid, ActSubId, false, true)]}
             end;
         false ->
             case Consumer#consumer.active of
@@ -329,15 +308,26 @@ handle_consumer_removal(Group0, Consumer) ->
                     #consumer{pid = P, subscription_id = SID} =
                         evaluate_active_consumer(Group0),
                     {update_consumer_state_in_group(Group0, P, SID, true),
-                     [mod_call_effect(P,
-                                      {sac,
-                                       {{subscription_id, SID}, {active, true},
-                                        {extra, []}}})]};
+                     [notify_consumer_effect(P, SID, true)]};
                 false ->
                     %% no active consumer in the (non-empty) group, we are waiting for the reply of a former active
                     {Group0, []}
             end
     end.
+
+notify_consumer_effect(Pid, SubId, Active) ->
+    notify_consumer_effect(Pid, SubId, Active, false).
+
+notify_consumer_effect(Pid, SubId, Active, false) ->
+    mod_call_effect(Pid,
+                    {sac,
+                     {{subscription_id, SubId}, {active, Active},
+                      {extra, []}}});
+notify_consumer_effect(Pid, SubId, Active, true) ->
+    mod_call_effect(Pid,
+                    {sac,
+                     {{subscription_id, SubId}, {active, Active},
+                      {extra, [{stepping_down, true}]}}}).
 
 maybe_create_group(VirtualHost,
                    Stream,
@@ -408,47 +398,6 @@ lookup_consumer(ConnectionPid, SubscriptionId,
 lookup_active_consumer(#group{consumers = Consumers}) ->
     lists:search(fun(#consumer{active = Active}) -> Active end,
                  Consumers).
-
-notify_consumers(_, _, #group{consumers = []}) ->
-    [];
-notify_consumers(undefined,
-                 #consumer{pid = ConnectionPid,
-                           subscription_id = SubscriptionId},
-                 _Group) ->
-    [mod_call_effect(ConnectionPid,
-                     {sac,
-                      {{subscription_id, SubscriptionId}, {active, true},
-                       {side_effects, []}}})];
-notify_consumers(ActiveInPreviousGroupInstance, NewActive, _Group)
-    when ActiveInPreviousGroupInstance == NewActive ->
-    %% no changes (e.g. on unsubscription), nothing to do.
-    [];
-notify_consumers(#consumer{pid = FormerConnPid,
-                           subscription_id = FormerSubId},
-                 #consumer{pid = NewConnPid,
-                           subscription_id = NewSubId,
-                           active = true},
-                 _Group) ->
-    [mod_call_effect(FormerConnPid,
-                     {sac,
-                      {{subscription_id, FormerSubId}, {active, false},
-                       {side_effects,
-                        [{message, NewConnPid,
-                          {sac,
-                           {{subscription_id, NewSubId}, {active, true},
-                            {side_effects, []}}}}]}}})];
-notify_consumers(_StillActive,
-                 #consumer{pid = NewConnPid,
-                           subscription_id = NewSubId,
-                           active = false},
-                 _Group) ->
-    %% notifying a newcomer that it's inactive
-    %% FIXME is consumer update always necessary for inactive newcomers?
-    %% can't they assume they are inactive by default?
-    [mod_call_effect(NewConnPid,
-                     {sac,
-                      {{subscription_id, NewSubId}, {active, false},
-                       {side_effects, []}}})].
 
 update_groups(VirtualHost,
               Stream,
