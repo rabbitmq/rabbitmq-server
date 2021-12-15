@@ -777,9 +777,7 @@ open(info, {OK, S, Data},
                                     connection_state = State2}}
     end;
 open(info,
-     {sac,
-      {{subscription_id, SubId}, {active, Active},
-       {side_effects, Effects}}},
+     {sac, {{subscription_id, SubId}, {active, Active}, {extra, Extra}}},
      #statem_data{transport = Transport,
                   connection = Connection0,
                   connection_state = ConnState0} =
@@ -817,7 +815,7 @@ open(info,
                                           SubId,
                                           Active,
                                           true,
-                                          Effects),
+                                          Extra),
                 {Conn1,
                  ConnState0#stream_connection_state{consumers =
                                                         Consumers0#{SubId =>
@@ -2434,8 +2432,7 @@ handle_frame_post_auth(Transport,
                          ResponseOffsetSpec}}) ->
     %% FIXME check response code? It's supposed to be OK all the time.
     case maps:take(CorrelationId, Requests0) of
-        {{{subscription_id, SubscriptionId}, {side_effects, SideEffects}},
-         Rs} ->
+        {{{subscription_id, SubscriptionId}, {extra, Extra}}, Rs} ->
             rabbit_log:debug("Received consumer update response for subscription ~p",
                              [SubscriptionId]),
             Consumers1 =
@@ -2513,16 +2510,28 @@ handle_frame_post_auth(Transport,
                         Consumers#{SubscriptionId => Consumer2};
                     #{SubscriptionId :=
                           #consumer{configuration =
-                                        #consumer_configuration{active =
-                                                                    false}}} ->
+                                        #consumer_configuration{active = false,
+                                                                stream = Stream,
+                                                                properties =
+                                                                    Properties}}} ->
                         rabbit_log:debug("Not an active consumer"),
+
+                        case Extra of
+                            [{stepping_down, true}] ->
+                                ConsumerName = consumer_name(Properties),
+                                rabbit_stream_coordinator:activate_consumer(VirtualHost,
+                                                                            Stream,
+                                                                            ConsumerName);
+                            _ ->
+                                ok
+                        end,
+
                         Consumers;
                     _ ->
                         rabbit_log:debug("No consumer found for subscription ~p",
                                          [SubscriptionId]),
                         Consumers
                 end,
-            apply_sac_side_effects(SideEffects),
 
             {Connection#stream_connection{outstanding_requests = Rs},
              State#stream_connection_state{consumers = Consumers1}};
@@ -2689,7 +2698,7 @@ maybe_register_consumer(VirtualHost,
                                                     SubscriptionId),
     Active.
 
-maybe_notify_consumer(_, Connection, _, _, _, false = _Sac) ->
+maybe_notify_consumer(_, Connection, _, _, false = _Sac, _) ->
     Connection;
 maybe_notify_consumer(Transport,
                       #stream_connection{socket = S,
@@ -2700,7 +2709,7 @@ maybe_notify_consumer(Transport,
                       SubscriptionId,
                       Active,
                       true = _Sac,
-                      SideEffects) ->
+                      Extra) ->
     rabbit_log:debug("SAC subscription ~p, active = ~p",
                      [SubscriptionId, Active]),
     Frame =
@@ -2709,8 +2718,7 @@ maybe_notify_consumer(Transport,
 
     OutstandingRequests1 =
         maps:put(CorrIdSeq,
-                 {{subscription_id, SubscriptionId},
-                  {side_effects, SideEffects}},
+                 {{subscription_id, SubscriptionId}, {extra, Extra}},
                  OutstandingRequests0),
     send(Transport, S, Frame),
     Connection#stream_connection{correlation_id_sequence = CorrIdSeq + 1,
@@ -2748,17 +2756,6 @@ partition_index(VirtualHost, Stream, Properties) ->
         _ ->
             -1
     end.
-
-apply_sac_side_effects([]) ->
-    ok;
-apply_sac_side_effects([Effect | T]) ->
-    apply_sac_side_effect(Effect),
-    apply_sac_side_effects(T).
-
-apply_sac_side_effect({message, Pid, Msg}) ->
-    Pid ! Msg;
-apply_sac_side_effect(Effect) ->
-    rabbit_log:warning("Unknown SAC side effect: ~p", [Effect]).
 
 notify_connection_closed(#statem_data{connection =
                                           #stream_connection{name = Name,

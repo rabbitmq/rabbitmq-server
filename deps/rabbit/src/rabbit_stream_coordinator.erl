@@ -45,7 +45,7 @@
          state/0]).
 
 %% Single Active Consumer API
--export([register_consumer/6, unregister_consumer/5]).
+-export([register_consumer/6, unregister_consumer/5, activate_consumer/3]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "Restart stream coordinator"},
@@ -297,6 +297,11 @@ unregister_consumer(VirtualHost,
                     SubscriptionId) ->
     {ok, Res, _} = process_command({sac, 
         {unregister_consumer, VirtualHost, Stream, ConsumerName, ConnectionPid, SubscriptionId}}),
+    Res.
+
+-spec activate_consumer(binary(), binary(), binary()) -> ok.
+activate_consumer(VirtualHost, Stream, ConsumerName) ->
+    {ok, Res, _} = process_command({sac, {activate_consumer, VirtualHost, Stream, ConsumerName}}),
     Res.
 
 process_command(Cmd) ->

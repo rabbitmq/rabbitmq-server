@@ -17,12 +17,27 @@
 -module(rabbit_stream_sac_coordinator).
 
 -type vhost() :: binary().
+-type partition_index() :: integer().
 -type stream() :: binary().
 -type consumer_name() :: binary().
+-type connection_pid() :: pid().
 -type subscription_id() :: byte().
 
 -opaque command() ::
-    {register_consumer, vhost()} | {unregister_consumer, vhost()}.
+    {register_consumer,
+     vhost(),
+     stream(),
+     partition_index(),
+     consumer_name(),
+     connection_pid(),
+     subscription_id()} |
+    {unregister_consumer,
+     vhost(),
+     stream(),
+     consumer_name(),
+     connection_pid(),
+     subscription_id() |
+     {activate_consumer, vhost(), stream(), consumer_name()}}.
 
 -record(consumer,
         {pid :: pid(), subscription_id :: subscription_id(),
@@ -74,38 +89,14 @@ apply({register_consumer,
                            PartitionIndex,
                            ConsumerName,
                            StreamGroups0),
-    Group0 =
-        lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups1),
 
-    rabbit_log:debug("Group: ~p", [Group0]),
-    FormerActive =
-        case lookup_active_consumer(Group0) of
-            {value, FA} ->
-                FA;
-            false ->
-                undefined
-        end,
-    Consumer0 =
-        #consumer{pid = ConnectionPid,
-                  subscription_id = SubscriptionId,
-                  active = false},
-    Group1 = add_to_group(Consumer0, Group0),
-    rabbit_log:debug("Consumer added to group: ~p", [Group1]),
-    Group2 = compute_active_consumer(Group1),
-    rabbit_log:debug("Consumers in group after active consumer computation: ~p",
-                     [Group2]),
-    StreamGroups2 =
-        update_groups(VirtualHost,
-                      Stream,
-                      ConsumerName,
-                      Group2,
-                      StreamGroups1),
-
-    {value, Consumer1} =
-        lookup_consumer(ConnectionPid, SubscriptionId, Group2),
-    Effects = notify_consumers(FormerActive, Consumer1, Group2),
-    #consumer{active = Active} = Consumer1,
-    {State#?MODULE{groups = StreamGroups2}, {ok, Active}, Effects};
+    do_register_consumer(VirtualHost,
+                         Stream,
+                         PartitionIndex,
+                         ConsumerName,
+                         ConnectionPid,
+                         SubscriptionId,
+                         State#?MODULE{groups = StreamGroups1});
 apply({unregister_consumer,
        VirtualHost,
        Stream,
@@ -124,30 +115,10 @@ apply({unregister_consumer,
                         {value, Consumer} ->
                             rabbit_log:debug("Unregistering consumer ~p from group",
                                              [Consumer]),
-                            {value, ActiveInPreviousGroupInstance} =
-                                lookup_active_consumer(Group0),
                             G1 = remove_from_group(Consumer, Group0),
                             rabbit_log:debug("Consumer removed from group: ~p",
                                              [G1]),
-                            G2 = compute_active_consumer(G1),
-                            rabbit_log:debug("Consumers in group after active consumer computation: ~p",
-                                             [G2]),
-                            NewActive =
-                                case lookup_active_consumer(G2) of
-                                    {value, AC} ->
-                                        AC;
-                                    false ->
-                                        undefined
-                                end,
-                            AIPGI =
-                                case ActiveInPreviousGroupInstance of
-                                    Consumer ->
-                                        undefined;
-                                    _ ->
-                                        ActiveInPreviousGroupInstance
-                                end,
-                            Effs = notify_consumers(AIPGI, NewActive, G2),
-                            {G2, Effs};
+                            handle_consumer_removal(G1, Consumer);
                         false ->
                             rabbit_log:debug("Could not find consumer ~p ~p in group ~p ~p ~p",
                                              [ConnectionPid,
@@ -164,7 +135,209 @@ apply({unregister_consumer,
                                     StreamGroups0),
                 {State0#?MODULE{groups = SGS}, Effects}
         end,
-    {State1, ok, Effects1}.
+    {State1, ok, Effects1};
+apply({activate_consumer, VirtualHost, Stream, ConsumerName},
+      #?MODULE{groups = StreamGroups0} = State0) ->
+    {G, Eff} =
+        case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
+            undefined ->
+                rabbit_log:warning("trying to activate consumer in group ~p, but "
+                                   "the group does not longer exist",
+                                   [{VirtualHost, Stream, ConsumerName}]);
+            Group ->
+                #consumer{pid = Pid, subscription_id = SubId} =
+                    evaluate_active_consumer(Group),
+                Group1 =
+                    update_consumer_state_in_group(Group, Pid, SubId, true),
+                {Group1,
+                 [mod_call_effect(Pid,
+                                  {sac,
+                                   {{subscription_id, SubId}, {active, true},
+                                    {extra, []}}})]}
+        end,
+    StreamGroups1 =
+        update_groups(VirtualHost, Stream, ConsumerName, G, StreamGroups0),
+    {State0#?MODULE{groups = StreamGroups1}, ok, Eff}.
+
+do_register_consumer(VirtualHost,
+                     Stream,
+                     -1,
+                     ConsumerName,
+                     ConnectionPid,
+                     SubscriptionId,
+                     #?MODULE{groups = StreamGroups0} = State) ->
+    Group0 =
+        lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
+
+    rabbit_log:debug("Group: ~p", [Group0]),
+    Consumer =
+        case lookup_active_consumer(Group0) of
+            {value, _} ->
+                #consumer{pid = ConnectionPid,
+                          subscription_id = SubscriptionId,
+                          active = false};
+            false ->
+                #consumer{pid = ConnectionPid,
+                          subscription_id = SubscriptionId,
+                          active = true}
+        end,
+    Group1 = add_to_group(Consumer, Group0),
+    rabbit_log:debug("Consumer added to group: ~p", [Group1]),
+    StreamGroups1 =
+        update_groups(VirtualHost,
+                      Stream,
+                      ConsumerName,
+                      Group1,
+                      StreamGroups0),
+
+    #consumer{active = Active} = Consumer,
+    Effects =
+        case Consumer of
+            #consumer{active = true} ->
+                [mod_call_effect(ConnectionPid,
+                                 {sac,
+                                  {{subscription_id, SubscriptionId},
+                                   {active, Active}, {extra, []}}})];
+            _ ->
+                []
+        end,
+
+    {State#?MODULE{groups = StreamGroups1}, {ok, Active}, Effects};
+do_register_consumer(VirtualHost,
+                     Stream,
+                     _,
+                     ConsumerName,
+                     ConnectionPid,
+                     SubscriptionId,
+                     #?MODULE{groups = StreamGroups0} = State) ->
+    Group0 =
+        lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
+
+    rabbit_log:debug("Group: ~p", [Group0]),
+    {Group1, Effects} =
+        case Group0 of
+            #group{consumers = []} ->
+                %% first consumer in the group, it's the active one
+                Consumer0 =
+                    #consumer{pid = ConnectionPid,
+                              subscription_id = SubscriptionId,
+                              active = true},
+                G1 = add_to_group(Consumer0, Group0),
+                {G1,
+                 [mod_call_effect(ConnectionPid,
+                                  {sac,
+                                   {{subscription_id, SubscriptionId},
+                                    {active, true}, {extra, []}}})]};
+            _G ->
+                %% whatever the current state is, the newcomer will be passive
+                Consumer0 =
+                    #consumer{pid = ConnectionPid,
+                              subscription_id = SubscriptionId,
+                              active = false},
+                G1 = add_to_group(Consumer0, Group0),
+
+                case lookup_active_consumer(G1) of
+                    {value,
+                     #consumer{pid = ActPid, subscription_id = ActSubId} =
+                         CurrentActive} ->
+                        case evaluate_active_consumer(G1) of
+                            CurrentActive ->
+                                %% the current active stays the same
+                                {G1, []};
+                            _ ->
+                                %% there's a change, telling the active it's not longer active
+                                {update_consumer_state_in_group(G1,
+                                                                ActPid,
+                                                                ActSubId,
+                                                                false),
+                                 [mod_call_effect(ActPid,
+                                                  {sac,
+                                                   {{subscription_id, ActSubId},
+                                                    {active, false},
+                                                    {extra,
+                                                     [{stepping_down,
+                                                       true}]}}})]}
+                        end;
+                    undefined ->
+                        %% no active consumer in the (non-empty) group, we are waiting for the reply of a former active
+                        {G1, []}
+                end
+        end,
+    StreamGroups1 =
+        update_groups(VirtualHost,
+                      Stream,
+                      ConsumerName,
+                      Group1,
+                      StreamGroups0),
+    {value, #consumer{active = Active}} =
+        lookup_consumer(ConnectionPid, SubscriptionId, Group1),
+    {State#?MODULE{groups = StreamGroups1}, {ok, Active}, Effects}.
+
+handle_consumer_removal(#group{consumers = []} = G, _) ->
+    {G, []};
+handle_consumer_removal(#group{partition_index = -1} = Group0,
+                        Consumer) ->
+    case Consumer of
+        #consumer{active = true} ->
+            Group1 = compute_active_consumer(Group0),
+            rabbit_log:debug("This is the active consumer, group after active "
+                             "consumer calculation: ~p",
+                             [Group1]),
+            case lookup_active_consumer(Group1) of
+                {value, #consumer{pid = Pid, subscription_id = SubId} = C} ->
+                    rabbit_log:debug("Creating side effect to notify new active consumer ~p",
+                                     [C]),
+                    {Group1,
+                     [mod_call_effect(Pid,
+                                      {sac,
+                                       {{subscription_id, SubId},
+                                        {active, true}, {extra, []}}})]};
+                _ ->
+                    rabbit_log:debug("No active consumer found in the group, nothing "
+                                     "to do"),
+                    {Group1, []}
+            end;
+        #consumer{active = false} ->
+            rabbit_log:debug("Not the active consumer, nothing to do."),
+            {Group0, []}
+    end;
+handle_consumer_removal(Group0, Consumer) ->
+    case lookup_active_consumer(Group0) of
+        {value,
+         #consumer{pid = ActPid, subscription_id = ActSubId} =
+             CurrentActive} ->
+            case evaluate_active_consumer(Group0) of
+                CurrentActive ->
+                    %% the current active stays the same
+                    {Group0, []};
+                _ ->
+                    %% there's a change, telling the active it's not longer active
+                    {update_consumer_state_in_group(Group0,
+                                                    ActPid,
+                                                    ActSubId,
+                                                    false),
+                     [mod_call_effect(ActPid,
+                                      {sac,
+                                       {{subscription_id, ActSubId},
+                                        {active, false},
+                                        {extra, [{stepping_down, true}]}}})]}
+            end;
+        false ->
+            case Consumer#consumer.active of
+                true ->
+                    %% the active one is going away, picking a new one
+                    #consumer{pid = P, subscription_id = SID} =
+                        evaluate_active_consumer(Group0),
+                    {update_consumer_state_in_group(Group0, P, SID, true),
+                     [mod_call_effect(P,
+                                      {sac,
+                                       {{subscription_id, SID}, {active, true},
+                                        {extra, []}}})]};
+                false ->
+                    %% no active consumer in the (non-empty) group, we are waiting for the reply of a former active
+                    {Group0, []}
+            end
+    end.
 
 maybe_create_group(VirtualHost,
                    Stream,
@@ -181,7 +354,8 @@ maybe_create_group(VirtualHost,
     end.
 
 lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups) ->
-    maps:get({VirtualHost, Stream, ConsumerName}, StreamGroups).
+    maps:get({VirtualHost, Stream, ConsumerName}, StreamGroups,
+             undefined).
 
 add_to_group(Consumer, #group{consumers = Consumers} = Group) ->
     Group#group{consumers = Consumers ++ [Consumer]}.
@@ -219,6 +393,11 @@ compute_active_consumer(#group{partition_index = PartitionIndex,
                     {length(Consumers0) - 1, []}, Consumers0),
     Group#group{consumers = Consumers1}.
 
+evaluate_active_consumer(#group{partition_index = PartitionIndex,
+                                consumers = Consumers}) ->
+    ActiveConsumerIndex = PartitionIndex rem length(Consumers),
+    lists:nth(ActiveConsumerIndex + 1, Consumers).
+
 lookup_consumer(ConnectionPid, SubscriptionId,
                 #group{consumers = Consumers}) ->
     lists:search(fun(#consumer{pid = ConnPid, subscription_id = SubId}) ->
@@ -232,35 +411,6 @@ lookup_active_consumer(#group{consumers = Consumers}) ->
 
 notify_consumers(_, _, #group{consumers = []}) ->
     [];
-notify_consumers(_,
-                 #consumer{pid = ConnectionPid,
-                           subscription_id = SubscriptionId} =
-                     NewConsumer,
-                 #group{partition_index = -1, consumers = [NewConsumer]}) ->
-    [mod_call_effect(ConnectionPid,
-                     {sac,
-                      {{subscription_id, SubscriptionId}, {active, true},
-                       {side_effects, []}}})];
-notify_consumers(_,
-                 #consumer{pid = ConnectionPid,
-                           subscription_id = SubscriptionId} =
-                     NewConsumer,
-                 #group{partition_index = -1, consumers = [NewConsumer | _]}) ->
-    [mod_call_effect(ConnectionPid,
-                     {sac,
-                      {{subscription_id, SubscriptionId}, {active, true},
-                       {side_effects, []}}})];
-notify_consumers(_,
-                 #consumer{pid = ConnectionPid,
-                           subscription_id = SubscriptionId},
-                 #group{partition_index = -1, consumers = _}) ->
-    %% notifying a newcomer that it's inactive
-    %% FIXME is consumer update always necessary for inactive newcomers?
-    %% can't they assume they are inactive by default?
-    [mod_call_effect(ConnectionPid,
-                     {sac,
-                      {{subscription_id, SubscriptionId}, {active, false},
-                       {side_effects, []}}})];
 notify_consumers(undefined,
                  #consumer{pid = ConnectionPid,
                            subscription_id = SubscriptionId},
@@ -314,6 +464,21 @@ update_groups(VirtualHost,
               Group,
               StreamGroups) ->
     maps:put({VirtualHost, Stream, ConsumerName}, Group, StreamGroups).
+
+update_consumer_state_in_group(#group{consumers = Consumers0} = G,
+                               Pid,
+                               SubId,
+                               NewState) ->
+    CS1 = lists:foldr(fun(C0, Acc) ->
+                         case C0 of
+                             #consumer{pid = Pid, subscription_id = SubId} ->
+                                 C1 = C0#consumer{active = NewState},
+                                 [C1 | Acc];
+                             C -> [C | Acc]
+                         end
+                      end,
+                      [], Consumers0),
+    G#group{consumers = CS1}.
 
 mod_call_effect(Pid, Msg) ->
     {mod_call, rabbit_stream_sac_coordinator, send_message, [Pid, Msg]}.
