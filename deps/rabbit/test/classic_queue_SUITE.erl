@@ -27,6 +27,17 @@
     %% publish.
     q = #{} :: #{pid() | internal => queue:queue()},
 
+    %% We must account for lost acks/unconfirmed publishes after restarts.
+    restarted = false :: boolean(),
+    %% We must keep some received messages around because basic.ack is not
+    %% synchronous and as a result we may end up receiving messages twice
+    %% after a queue is restarted.
+    acked = [] :: list(),
+    %% We must also keep some published messages around because when
+    %% confirms are not used, or were not received, we are uncertain
+    %% of whether the message made it to the queue or not.
+    uncertain = [] :: list(),
+
     %% CT config necessary to open channels.
     config = no_config :: list(),
 
@@ -41,6 +52,7 @@ all() ->
 
 groups() ->
     [{classic_queue_tests, [], [
+%        manual%,
         classic_queue_v1,
         lazy_queue_v1,
         classic_queue_v2,
@@ -75,6 +87,25 @@ end_per_group(classic_queue_tests, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
+
+manual(Config) ->
+    %% This is where tracing of client processes
+    %% (amqp_channel, amqp_selective_consumer)
+    %% should be added if necessary.
+    true = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, do_manual, [Config]).
+
+do_manual(Config) ->
+    InitialState = #cq{name=?FUNCTION_NAME, mode=default, version=1,
+                       config=minimal_config(Config)},
+    AMQ0 = cmd_setup_queue(InitialState),
+    State = InitialState#cq{amq=AMQ0},
+    true = is_record(State, cq),
+    %% This is where tracing of server processes
+    %% should be added if necessary.
+    %%
+    %% Insert commands here to reproduce the issue.
+    true.
 
 classic_queue_v1(Config) ->
     true = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -184,8 +215,8 @@ command(St) ->
     weighted_union([
         %% delete/recreate queue?
         %% dirty_restart
-        %% clean_restart: will have to account for channels being open!
         %% change CRC configuration
+        {100, {call, ?MODULE, cmd_restart_vhost_clean, []}},
         {100, {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]}},
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
@@ -214,6 +245,28 @@ channel(#cq{channels=Channels}) ->
 
 next_state(St, AMQ, {call, _, cmd_setup_queue, _}) ->
     St#cq{amq=AMQ};
+next_state(St=#cq{q=Q, uncertain=Uncertain0, channels=Channels0}, AMQ, {call, _, cmd_restart_vhost_clean, _}) ->
+    %% The server cancels all consumers when the queue process stops.
+    Channels = maps:map(fun
+        (_, ChInfo=#{consumer := Tag}) when is_binary(Tag) ->
+            receive #'basic.cancel'{consumer_tag = Tag} -> ok after 5000 -> error({timeout, {ChInfo, process_info(self(), messages)}}) end,
+            ChInfo#{consumer => none};
+        (_, ChInfo=#{consumer := none}) ->
+            ChInfo;
+        %% We need an additional clause for {var,integer()} tags.
+        (_, ChInfo) ->
+            ChInfo#{consumer => none}
+    end, Channels0),
+    %% The status of messages that were published before the vhost restart
+    %% is uncertain, unless the channel is in confirms mode and confirms
+    %% were received. We do not track them at the moment, so we instead
+    %% move all pending messages in the 'uncertain' list. When tracking
+    %% them it would be only messages after the last confirmed message
+    %% that would end up in uncertain state.
+    Uncertain = maps:fold(fun(_, ChQ, Acc) ->
+        queue:to_list(ChQ) ++ Acc
+    end, Uncertain0, Q),
+    St#cq{amq=AMQ, q=#{}, restarted=true, uncertain=Uncertain, channels=Channels};
 next_state(St, _, {call, _, cmd_set_mode, [_, Mode]}) ->
     St#cq{mode=Mode};
 next_state(St, _, {call, _, cmd_set_version, [_, Version]}) ->
@@ -275,7 +328,7 @@ next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_cancel, [_, Ch]})
     St#cq{channels=Channels#{Ch => ChInfo#{consumer => none}}};
 next_state(St, none, {call, _, cmd_channel_receive_and_ack, _}) ->
     St;
-next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_receive_and_ack, _}) ->
+next_state(St=#cq{q=Q, acked=Acked}, Msg, {call, _, cmd_channel_receive_and_ack, _}) ->
     %% When there are multiple active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
@@ -284,7 +337,7 @@ next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_receive_and_ack, _}) ->
     %% be the case also when we had two consumers and one was
     %% cancelled. So we do not verify the order of messages
     %% when using consume.
-    St#cq{q=delete_message(Q, Msg)};
+    St#cq{q=delete_message(Q, Msg), acked=[Msg|Acked]};
 next_state(St, _, {call, _, cmd_channel_receive_and_reject, _}) ->
     St.
 
@@ -315,6 +368,8 @@ delete_message(Qs0, Msg) ->
 %% in a symbolic context we cannot remove the messages from #cq.q
 %% (since we are always getting a new {var,integer()}).
 
+precondition(#cq{amq=AMQ}, {call, _, cmd_restart_vhost_clean, _}) ->
+    AMQ =/= undefined;
 precondition(#cq{channels=Channels}, {call, _, cmd_channel_confirm_mode, [Ch]}) ->
     %% Only enabled confirms if they were not already enabled.
     %% Otherwise it is a no-op so not a big problem but this
@@ -345,6 +400,8 @@ precondition(_, _) ->
 
 postcondition(_, {call, _, cmd_setup_queue, _}, Q) ->
     element(1, Q) =:= amqqueue;
+postcondition(_, {call, _, cmd_restart_vhost_clean, _}, Q) ->
+    element(1, Q) =:= amqqueue;
 postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode, [_, Mode]}, _) ->
     do_check_queue_mode(AMQ, Mode) =:= ok;
 postcondition(#cq{amq=AMQ}, {call, _, cmd_set_version, [_, Version]}, _) ->
@@ -355,7 +412,7 @@ postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode_version, [Mode, Version]}, _)
     (do_check_queue_version(AMQ, Version) =:= ok);
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) ->
     is_record(Msg, amqp_msg);
-postcondition(St=#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, empty) ->
+postcondition(St, {call, _, cmd_basic_get_msg, _}, empty) ->
     %% We may get 'empty' if there are/were consumers and the messages are
     %% in transit. We only check whether there are channels as a result,
     %% because messages may be in the process of being rejected following
@@ -366,21 +423,27 @@ postcondition(St=#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, empty) ->
     %% on a separate channel cannot retrieve it. In that case we accept
     %% an empty return value only if the channel we are calling
     %% basic.get on has no messages published and not consumed.
-    not maps:is_key(internal, Q) orelse
+    not queue_has_channel(St, internal) orelse
     %% When messages can expire they will never be removed from the
     %% property state because we cannot know whether the message
     %% will be received later on (it was in transit when it expired).
     %% Therefore we accept an empty response if all messages
     %% sent via this particular channel have an expiration.
-    queue_part_all_expired(Q, internal);
-postcondition(St=#cq{q=Q}, {call, _, cmd_basic_get_msg, _}, Msg) ->
+    queue_part_all_expired(St, internal);
+postcondition(St, {call, _, cmd_basic_get_msg, _}, Msg) ->
     %% When there are active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
     case has_consumers(St) of
-        true -> queue_has_msg(Q, Msg);
-        false -> queue_head_has_msg(Q, Msg)
-    end;
+        true -> queue_has_msg(St, Msg);
+        false -> queue_head_has_msg(St, Msg)
+    end
+    orelse
+    %% After a restart, unconfirmed messages and previously
+    %% acked messages may or may not be received again, due
+    %% to a race condition.
+    restarted_and_previously_acked(St, Msg) orelse
+    restarted_and_uncertain_publish_status(St, Msg);
 postcondition(_, {call, _, cmd_purge, _}, {ok, _}) ->
     true;
 postcondition(_, {call, _, cmd_channel_open, _}, _) ->
@@ -393,7 +456,7 @@ postcondition(_, {call, _, cmd_channel_publish, _}, Msg) ->
     is_record(Msg, amqp_msg);
 postcondition(_, {call, _, cmd_channel_wait_for_confirms, _}, Res) ->
     Res =:= true;
-postcondition(St=#cq{q=Q}, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
+postcondition(St, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
     %% We may get 'empty' if there are consumers and the messages are
     %% in transit.
     has_consumers(St) orelse
@@ -402,28 +465,34 @@ postcondition(St=#cq{q=Q}, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
     %% on a separate channel cannot retrieve it. In that case we accept
     %% an empty return value only if the channel we are calling
     %% basic.get on has no messages published and not consumed.
-    not maps:is_key(Ch, Q) orelse
+    not queue_has_channel(St, Ch) orelse
     %% When messages can expire they will never be removed from the
     %% property state because we cannot know whether the message
     %% will be received later on (it was in transit when it expired).
     %% Therefore we accept an empty response if all messages
     %% sent via this particular channel have an expiration.
-    queue_part_all_expired(Q, Ch);
-postcondition(St=#cq{q=Q}, {call, _, cmd_channel_basic_get, _}, Msg) ->
+    queue_part_all_expired(St, Ch);
+postcondition(St, {call, _, cmd_channel_basic_get, _}, Msg) ->
     %% When there are active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
     case has_consumers(St) of
-        true -> queue_has_msg(Q, Msg);
-        false -> queue_head_has_msg(Q, Msg)
-    end;
+        true -> queue_has_msg(St, Msg);
+        false -> queue_head_has_msg(St, Msg)
+    end
+    orelse
+    %% After a restart, unconfirmed messages and previously
+    %% acked messages may or may not be received again, due
+    %% to a race condition.
+    restarted_and_previously_acked(St, Msg) orelse
+    restarted_and_uncertain_publish_status(St, Msg);
 postcondition(_, {call, _, cmd_channel_consume, _}, _) ->
     true;
 postcondition(_, {call, _, cmd_channel_cancel, _}, _) ->
     true;
 postcondition(_, {call, _, cmd_channel_receive_and_ack, _}, none) ->
     true;
-postcondition(#cq{q=Q}, {call, _, cmd_channel_receive_and_ack, _}, Msg) ->
+postcondition(St, {call, _, cmd_channel_receive_and_ack, _}, Msg) ->
     %% When there are multiple active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
@@ -432,10 +501,15 @@ postcondition(#cq{q=Q}, {call, _, cmd_channel_receive_and_ack, _}, Msg) ->
     %% be the case also when we had two consumers and one was
     %% cancelled. So we do not verify the order of messages
     %% when using consume.
-    queue_has_msg(Q, Msg);
+    queue_has_msg(St, Msg) orelse
+    %% After a restart, unconfirmed messages and previously
+    %% acked messages may or may not be received again, due
+    %% to a race condition.
+    restarted_and_previously_acked(St, Msg) orelse
+    restarted_and_uncertain_publish_status(St, Msg);
 postcondition(_, {call, _, cmd_channel_receive_and_reject, _}, none) ->
     true;
-postcondition(#cq{q=Q}, {call, _, cmd_channel_receive_and_reject, _}, Msg) ->
+postcondition(St, {call, _, cmd_channel_receive_and_reject, _}, Msg) ->
     %% When there are multiple active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
@@ -444,7 +518,12 @@ postcondition(#cq{q=Q}, {call, _, cmd_channel_receive_and_reject, _}, Msg) ->
     %% be the case also when we had two consumers and one was
     %% cancelled. So we do not verify the order of messages
     %% when using consume.
-    queue_has_msg(Q, Msg).
+    queue_has_msg(St, Msg) orelse
+    %% After a restart, unconfirmed messages and previously
+    %% acked messages may or may not be received again, due
+    %% to a race condition.
+    restarted_and_previously_acked(St, Msg) orelse
+    restarted_and_uncertain_publish_status(St, Msg).
 
 has_consumers(#cq{channels=Channels}) ->
     maps:fold(fun
@@ -452,7 +531,10 @@ has_consumers(#cq{channels=Channels}) ->
         (_, _, _) -> true
     end, false, Channels).
 
-queue_head_has_msg(Qs, Msg) ->
+queue_has_channel(#cq{q=Q}, Ch) ->
+    maps:is_key(Ch, Q).
+
+queue_head_has_msg(#cq{q=Qs}, Msg) ->
     maps:fold(fun
         (_, _, true) ->
             true;
@@ -475,7 +557,7 @@ queue_head_has_msg(Qs, Msg) ->
             Res =:= true
     end, false, Qs).
 
-queue_has_msg(Qs, Msg) ->
+queue_has_msg(#cq{q=Qs}, Msg) ->
     maps:fold(fun
         (_, _, true) ->
             true;
@@ -483,15 +565,29 @@ queue_has_msg(Qs, Msg) ->
             queue:member(Msg, ChQ)
     end, false, Qs).
 
-queue_part_all_expired(Qs, Key) ->
+queue_part_all_expired(#cq{q=Qs}, Key) ->
     queue_all(fun(#amqp_msg{props=#'P_basic'{expiration=Expiration}}) ->
         Expiration =/= undefined
     end, maps:get(Key, Qs)).
 
+%% We may receive messages that were previously received and
+%% acked, but the server never received the ack because the
+%% vhost was restarting at the same time. Unfortunately the
+%% current implementation means that we cannot detect
+%% "receive, ack, receive again" errors after a restart.
+restarted_and_previously_acked(#cq{restarted=Restarted, acked=Acked}, Msg) ->
+    Restarted andalso lists:member(Msg, Acked).
+
+%% Some messages may have been published but lost during the
+%% restart (without publisher confirms). Messages we are
+%% uncertain about are kept in a separate list after restart.
+restarted_and_uncertain_publish_status(#cq{uncertain=Uncertain}, Msg) ->
+    lists:member(Msg, Uncertain).
+
 %% Helpers.
 
 cmd_setup_queue(#cq{name=Name, mode=Mode, version=Version}) ->
-    IsDurable = false,
+    IsDurable = true, %% We want to be able to restart the queue process.
     IsAutoDelete = false,
     %% We cannot use args to set mode/version as the arguments override
     %% the policies and we also want to test policy changes.
@@ -518,6 +614,18 @@ cmd_teardown_queue(#cq{amq=AMQ, channels=Channels}) ->
     rabbit_amqqueue:delete(AMQ, false, false, <<"acting-user">>),
     rabbit_policy:delete(<<"/">>, <<"queue-mode-version-policy">>, <<"acting-user">>),
     ok.
+
+cmd_restart_vhost_clean() ->
+    rabbit_amqqueue:stop(<<"/">>),
+    {Recovered, []} = rabbit_amqqueue:recover(<<"/">>),
+    rabbit_amqqueue:start(Recovered),
+    %% We must lookup the new AMQ value because the state has changed,
+    %% notably the pid of the queue process is now different.
+    [AMQ0] = Recovered,
+    %% We cannot use AMQ0 directly because it is in 'stopped' state.
+    %% We have to look up the most recent value.
+    {ok, AMQ} = rabbit_amqqueue:lookup(amqqueue:get_name(AMQ0)),
+    AMQ.
 
 cmd_set_mode(#cq{version=Version}, Mode) ->
     do_set_policy(Mode, Version).
@@ -599,8 +707,7 @@ cmd_purge(#cq{amq=AMQ}) ->
 
 cmd_channel_open(#cq{config=Config}) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    Ch.
+    rabbit_ct_client_helpers:open_channel(Config, Server).
 
 cmd_channel_confirm_mode(Ch) ->
     #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
@@ -660,7 +767,7 @@ cmd_channel_receive_and_ack(#cq{channels=Channels}, Ch) ->
     receive
         {#'basic.deliver'{consumer_tag = Tag,
                           delivery_tag = DeliveryTag}, Msg} ->
-            amqp_channel:call(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
+            amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
             Msg
     after 0 ->
         none
@@ -671,7 +778,7 @@ cmd_channel_receive_and_reject(#cq{channels=Channels}, Ch) ->
     receive
         {#'basic.deliver'{consumer_tag = Tag,
                           delivery_tag = DeliveryTag}, Msg} ->
-            amqp_channel:call(Ch, #'basic.reject'{delivery_tag = DeliveryTag}),
+            amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DeliveryTag}),
             Msg
     after 0 ->
         none
@@ -681,7 +788,7 @@ do_receive_reject_all(Ch, Tag) ->
     receive
         {#'basic.deliver'{consumer_tag = Tag,
                           delivery_tag = DeliveryTag}, _Msg} ->
-            amqp_channel:call(Ch, #'basic.reject'{delivery_tag = DeliveryTag}),
+            amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DeliveryTag}),
             do_receive_reject_all(Ch, Tag)
     after 0 ->
         ok

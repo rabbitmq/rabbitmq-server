@@ -813,7 +813,6 @@ ack(AckTags, State) ->
           end, {accumulate_ack_init(), State}, AckTags),
     {DeletedSegments, IndexState1} = IndexMod:ack(IndexOnDiskSeqIds, IndexState),
     StoreState1 = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState0),
-    %% @todo This is probably not needed considering we remove from the cache on delete_segments.
     StoreState = lists:foldl(fun rabbit_classic_queue_store_v2:remove/2, StoreState1, SeqIdsInStore),
     remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
     {lists:reverse(AllMsgIds),
