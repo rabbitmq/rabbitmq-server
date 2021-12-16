@@ -38,35 +38,42 @@ check_user_pass_login(Username, Password) ->
 check_user_login(Username, AuthProps) ->
     %% extra auth properties like MQTT client id are in AuthProps
     {ok, Modules} = application:get_env(rabbit, auth_backends),
-    R = lists:foldl(
-          fun (rabbit_auth_backend_cache=ModN, {refused, _, _, _}) ->
-                  %% It is possible to specify authn/authz within the cache module settings,
-                  %% so we have to do both auth steps here
-                  %% See this rabbitmq-users discussion:
-                  %% https://groups.google.com/d/topic/rabbitmq-users/ObqM7MQdA3I/discussion
-                  try_authenticate_and_try_authorize(ModN, ModN, Username, AuthProps);
-              ({ModN, ModZs}, {refused, _, _, _}) ->
-                  %% Different modules for authN vs authZ. So authenticate
-                  %% with authN module, then if that succeeds do
-                  %% passwordless (i.e pre-authenticated) login with authZ.
-                  try_authenticate_and_try_authorize(ModN, ModZs, Username, AuthProps);
-              (Mod, {refused, _, _, _}) ->
-                  %% Same module for authN and authZ. Just take the result
-                  %% it gives us
-                  case try_authenticate(Mod, Username, AuthProps) of
-                      {ok, ModNUser = #auth_user{username = Username2, impl = Impl}} ->
-                          rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, Mod]),
-                          user(ModNUser, {ok, [{Mod, Impl}], []});
-                      Else ->
-                          rabbit_log:debug("User '~s' failed authenticatation by backend ~s", [Username, Mod]),
-                          Else
-                  end;
-              (_, {ok, User}) ->
-                  %% We've successfully authenticated. Skip to the end...
-                  {ok, User}
-          end,
-          {refused, Username, "No modules checked '~s'", [Username]}, Modules),
-    R.
+    try 
+        lists:foldl(
+            fun (rabbit_auth_backend_cache=ModN, {refused, _, _, _}) ->
+                    %% It is possible to specify authn/authz within the cache module settings,
+                    %% so we have to do both auth steps here
+                    %% See this rabbitmq-users discussion:
+                    %% https://groups.google.com/d/topic/rabbitmq-users/ObqM7MQdA3I/discussion
+                    try_authenticate_and_try_authorize(ModN, ModN, Username, AuthProps);
+                ({ModN, ModZs}, {refused, _, _, _}) ->
+                    %% Different modules for authN vs authZ. So authenticate
+                    %% with authN module, then if that succeeds do
+                    %% passwordless (i.e pre-authenticated) login with authZ.
+                    try_authenticate_and_try_authorize(ModN, ModZs, Username, AuthProps);
+                (Mod, {refused, _, _, _}) ->
+                    %% Same module for authN and authZ. Just take the result
+                    %% it gives us
+                    case try_authenticate(Mod, Username, AuthProps) of
+                        {ok, ModNUser = #auth_user{username = Username2, impl = Impl}} ->
+                            rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, Mod]),
+                            user(ModNUser, {ok, [{Mod, Impl}], []});
+                        Else ->
+                            rabbit_log:debug("User '~s' failed authenticatation by backend ~s", [Username, Mod]),
+                            Else
+                    end;
+                (_, {ok, User}) ->
+                    %% We've successfully authenticated. Skip to the end...
+                    {ok, User}
+            end,
+            {refused, Username, "No modules checked '~s'", [Username]}, Modules)
+        catch 
+            Type:Error:Stacktrace -> 
+                rabbit_log:debug("User '~s' authentication failed with ~s:~p:~n~p", [Username, Type, Error, Stacktrace]),
+                {refused, Username, "User '~s' authentication failed with internal error. "
+                                    "Enable debug logs to see the real error.", [Username]}
+
+        end.
 
 try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
     ModZs = case ModZs0 of
