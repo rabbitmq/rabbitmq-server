@@ -698,7 +698,7 @@ suites = [
     ),
     rabbitmq_suite(
         name = "rabbit_fifo_prop_SUITE",
-        size = "medium",
+        size = "large",
         additional_beam = [
             ":test_util",
         ],
