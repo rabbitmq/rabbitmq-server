@@ -795,7 +795,7 @@ suites = [
         ],
     ),
     rabbitmq_suite(
-        name = "rabbit_stream_coordinator_sac_SUITE",
+        name = "rabbit_stream_sac_coordinator_SUITE",
         deps = [
             "//deps/rabbit_common:bazel_erlang_lib",
         ],
