@@ -64,7 +64,11 @@ node_health_check(rabbit_node_monitor) ->
     end;
 
 node_health_check(alarms) ->
-    case proplists:get_value(alarms, rabbit:status()) of
+    % Note:
+    % Removed call to rabbit:status/0 here due to a memory leak on win32,
+    % plus it uses an excessive amount of resources
+    % Alternative to https://github.com/rabbitmq/rabbitmq-server/pull/3893
+    case rabbit:alarms() of
         [] ->
             ok;
         Alarms ->
