@@ -237,7 +237,7 @@ add_user_sans_validation(Username, Password, ActingUser, Tags) ->
     add_user_sans_validation_in(Username, User, ConvertedTags, ActingUser).
 
 add_user_sans_validation(Username, PasswordHash, HashingAlgorithm, Tags, ActingUser) ->
-    rabbit_log:debug("Asked to create a new user '~s' with password hash", [Username]),
+    _ = rabbit_log:debug("Asked to create a new user '~s' with password hash", [Username]),
     ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
     HashingMod = rabbit_password:hashing_mod(),
     User0 = internal_user:create_user(Username, PasswordHash, HashingMod),
