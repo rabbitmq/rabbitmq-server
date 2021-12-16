@@ -177,9 +177,8 @@ pause_queue_sync(Delta) ->
 %% The amount of time to pause queue sync is the different between time needed to broadcast TotalBytes at max throughput
 %% and the elapsed time (Interval).
 get_time_diff(TotalBytes, Interval, SyncThroughput) ->
-    UsedThroughput = round(TotalBytes * 1000 / Interval),
-    rabbit_log_mirroring:debug("Total ~p bytes has been sent over last ~p ms. Effective sync througput: ~p", [TotalBytes, Interval, UsedThroughput]),
-    max(round(UsedThroughput/SyncThroughput * 1000 - Interval), 0).
+    rabbit_log_mirroring:debug("Total ~p bytes has been sent over last ~p ms. Effective sync througput: ~p", [TotalBytes, Interval, round(TotalBytes * 1000 / Interval)]),
+    max(round(TotalBytes/SyncThroughput * 1000 - Interval), 0).
 
 master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent}, BQS) ->
     receive
