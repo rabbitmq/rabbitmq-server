@@ -190,7 +190,7 @@ ensure_monitors({unregister_consumer,
                     _State0,
                 _Monitors,
                 _Effects) ->
-    _GroupId = {VirtualHost, Stream, ConsumerName},
+    % _GroupId = {VirtualHost, Stream, ConsumerName},
     case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
         undefined ->
             %% group is gone

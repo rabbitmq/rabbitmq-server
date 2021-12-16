@@ -55,8 +55,8 @@ CT_OPTS += -hidden
 # results over time.
 
 ifndef TRAVIS
-# CT_HOOKS ?= cth_styledout
-# TEST_DEPS += cth_styledout
+CT_HOOKS ?= cth_styledout
+TEST_DEPS += cth_styledout
 endif
 
 ifdef TRAVIS
