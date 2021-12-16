@@ -368,7 +368,7 @@ change_password_and_tags_sans_validation(Tags) ->
                 _ = rabbit_log:debug("Asked to change password of user '~s', new password length in bytes: ~p", [Username, bit_size(Password)]),
                 HashingAlgorithm = rabbit_password:hashing_mod(),
 
-                _ rabbit_log:debug("Asked to set user tags for user '~s' to ~p", [Username, Tags]),
+                _ = rabbit_log:debug("Asked to set user tags for user '~s' to ~p", [Username, Tags]),
 
                 ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
                 R = change_password_hash_and_tags(Username,
@@ -376,7 +376,7 @@ change_password_and_tags_sans_validation(Tags) ->
                                                                 Password),
                                                   HashingAlgorithm,
                                                   ConvertedTags),
-                _ rabbit_log:info("Successfully changed password for user '~s'", [Username]),
+                _ = rabbit_log:info("Successfully changed password for user '~s'", [Username]),
                 rabbit_event:notify(user_password_changed,
                                     [{name, Username},
                                      {user_who_performed_action, ActingUser}]),
