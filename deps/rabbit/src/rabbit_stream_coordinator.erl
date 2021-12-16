@@ -411,15 +411,20 @@ apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
         Reply ->
             return(Meta, State0, Reply, [])
     end;
-
-apply(Meta, {sac, SacCommand}, #?MODULE{single_active_consumer = SacState0} = State0) ->
-    {SacState1, Reply} = rabbit_stream_sac_coordinator:apply(SacCommand, SacState0),
-    return(Meta, State0#?MODULE{single_active_consumer = SacState1}, Reply, []);
+apply(Meta, {sac, SacCommand}, #?MODULE{single_active_consumer = SacState0,
+                                        monitors = Monitors0} = State0) ->
+    {SacState1, Reply, Effects0} = rabbit_stream_sac_coordinator:apply(SacCommand, SacState0),
+    % {SacState2, Monitors1, Effects1} = 
+    %     rabbit_stream_sac_coordinator:ensure_monitors(SacCommand, SacState1, Monitors0, Effects0),
+    % return(Meta, State0#?MODULE{single_active_consumer = SacState2,
+    %                             monitors = Monitors1}, Reply, Effects1);
+    return(Meta, State0#?MODULE{single_active_consumer = SacState1,
+                                monitors = Monitors0}, Reply, Effects0);
 apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
       #?MODULE{streams = Streams0,
                monitors = Monitors0,
-               listeners = StateListeners0} = State) ->
-
+               listeners = StateListeners0,
+               single_active_consumer = SacState0 } = State) ->
     Effects0 = case Reason of
                    noconnection ->
                        [{monitor, node, node(Pid)}];
@@ -473,6 +478,10 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                     return(Meta, State#?MODULE{streams = Streams0,
                                                monitors = Monitors1}, ok, Effects0)
             end;
+        {{Pid, sac}, Monitors1} ->
+            SacState1 = rabbit_stream_sac_coordinator:handle_connection_down(Pid, SacState0),
+            return(Meta, State#?MODULE{single_active_consumer = SacState1,
+                                       monitors = Monitors1}, ok, []);
         error ->
             return(Meta, State, ok, Effects0)
     end;

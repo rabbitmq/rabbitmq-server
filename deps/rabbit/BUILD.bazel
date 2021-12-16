@@ -794,6 +794,12 @@ suites = [
             "//deps/rabbit_common:erlang_app",
         ],
     ),
+    rabbitmq_suite(
+        name = "rabbit_stream_coordinator_sac_SUITE",
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "rabbit_stream_queue_SUITE",

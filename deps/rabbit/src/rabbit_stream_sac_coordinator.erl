@@ -16,12 +16,7 @@
 
 -module(rabbit_stream_sac_coordinator).
 
--type vhost() :: binary().
--type partition_index() :: integer().
--type stream() :: binary().
--type consumer_name() :: binary().
--type connection_pid() :: pid().
--type subscription_id() :: byte().
+-include("rabbit_stream_sac_coordinator.hrl").
 
 -opaque command() ::
     {register_consumer,
@@ -38,15 +33,6 @@
      connection_pid(),
      subscription_id() |
      {activate_consumer, vhost(), stream(), consumer_name()}}.
-
--record(consumer,
-        {pid :: pid(), subscription_id :: subscription_id(),
-         active :: boolean()}).
--record(group,
-        {consumers :: [#consumer{}], partition_index :: integer()}).
--record(?MODULE,
-        {groups :: #{{vhost(), stream(), consumer_name()} => #group{}}}).
-
 -opaque state() :: #?MODULE{}.
 
 -export_type([state/0,
@@ -54,11 +40,13 @@
 
 -export([apply/2,
          init_state/0,
-         send_message/2]).
+         send_message/2,
+         ensure_monitors/4,
+         handle_connection_down/2]).
 
 -spec init_state() -> state().
 init_state() ->
-    #?MODULE{groups = #{}}.
+    #?MODULE{groups = #{}, pids_groups = #{}}.
 
 -spec apply(command(), state()) ->
                {state(), term(), ra_machine:effects()}.
@@ -154,6 +142,68 @@ apply({activate_consumer, VirtualHost, Stream, ConsumerName},
     StreamGroups1 =
         update_groups(VirtualHost, Stream, ConsumerName, G, StreamGroups0),
     {State0#?MODULE{groups = StreamGroups1}, ok, Eff}.
+
+-spec ensure_monitors(command(), state(), map(), ra:effects()) ->
+                         {state(), map(), ra:effects()}.
+ensure_monitors({register_consumer,
+                 VirtualHost,
+                 Stream,
+                 _PartitionIndex,
+                 ConsumerName,
+                 Pid,
+                 _SubscriptionId},
+                #?MODULE{pids_groups = PidsGroups0} = State0,
+                Monitors0,
+                Effects) ->
+    GroupId = {VirtualHost, Stream, ConsumerName},
+    PidsGroups1 =
+        case PidsGroups0 of
+            #{Pid := Groups} ->
+                case sets:is_element(GroupId, Groups) of
+                    true ->
+                        PidsGroups0;
+                    false ->
+                        maps:put(Pid, sets:add_element(GroupId, Groups),
+                                 PidsGroups0)
+                end;
+            _ ->
+                Gs = sets:new(),
+                maps:put(Pid, sets:add_element(GroupId, Gs), PidsGroups0)
+        end,
+    Monitors1 =
+        case Monitors0 of
+            #{Pid := {Pid, sac}} ->
+                Monitors0;
+            _ ->
+                maps:put(Pid, {Pid, sac}, Monitors0)
+        end,
+
+    {State0#?MODULE{pids_groups = PidsGroups1}, Monitors1,
+     [{monitor, process, Pid}, {monitor, node, node(Pid)} | Effects]};
+ensure_monitors({unregister_consumer,
+                 VirtualHost,
+                 Stream,
+                 ConsumerName,
+                 _ConnectionPid,
+                 _SubscriptionId},
+                #?MODULE{groups = StreamGroups0, pids_groups = _PidsGroups0} =
+                    _State0,
+                _Monitors,
+                _Effects) ->
+    _GroupId = {VirtualHost, Stream, ConsumerName},
+    case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
+        undefined ->
+            %% group is gone
+            ok;
+        _Group ->
+            ok
+    end;
+ensure_monitors(_, #?MODULE{} = State0, Monitors, Effects) ->
+    {State0, Monitors, Effects}.
+
+-spec handle_connection_down(connection_pid(), state()) -> state().
+handle_connection_down(_Pid, State) ->
+    State.
 
 do_register_consumer(VirtualHost,
                      Stream,
