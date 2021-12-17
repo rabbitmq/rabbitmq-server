@@ -18,8 +18,8 @@
 
 -behaviour(gen_server).
 
--export([start_link/2]).
-%% gen_server2 callbacks
+-export([start_link/1]).
+%% gen_server callbacks
 -export([init/1, terminate/2, handle_continue/2,
          handle_cast/2, handle_call/3, handle_info/2,
          code_change/3, format_status/2]).
@@ -62,7 +62,6 @@
          }).
 
 -record(state, {
-          registered_name :: atom(),
           %% There is one rabbit_fifo_dlx_worker per source quorum queue
           %% (if dead-letter-strategy at-least-once is used).
           queue_ref :: rabbit_amqqueue:name(),
@@ -95,17 +94,15 @@
 
 %%TODO add metrics like global counters for messages routed, delivered, etc.
 
-start_link(QRef, RegName) ->
-    gen_server:start_link({local, RegName},
-                          ?MODULE, {QRef, RegName},
-                          [{hibernate_after, ?HIBERNATE_AFTER}]).
+start_link(QRef) ->
+    gen_server:start_link(?MODULE, QRef, [{hibernate_after, ?HIBERNATE_AFTER}]).
 
-% -spec init({rabbit_amqqueue:name(), atom()}) ->
-%     {ok, undefined, {continue, {rabbit_amqqueue:name(), atom()}}}.
-init(Arg) ->
-    {ok, undefined, {continue, Arg}}.
+% -spec init(rabbit_amqqueue:name()) ->
+%     {ok, undefined, {continue, rabbit_amqqueue:name()}}}.
+init(QRef) ->
+    {ok, undefined, {continue, QRef}}.
 
-handle_continue({QRef, RegName}, undefined) ->
+handle_continue(QRef, undefined) ->
     Prefetch = application:get_env(rabbit,
                                    dead_letter_worker_consumer_prefetch,
                                    ?DEFAULT_PREFETCH),
@@ -113,13 +110,11 @@ handle_continue({QRef, RegName}, undefined) ->
                                         dead_letter_worker_publisher_confirm_timeout_ms,
                                         ?DEFAULT_SETTLE_TIMEOUT),
     State = lookup_topology(#state{queue_ref = QRef,
-                                   registered_name = RegName,
                                    queue_type_state = rabbit_queue_type:init(),
                                    settle_timeout = SettleTimeout}),
     {ok, Q} = rabbit_amqqueue:lookup(QRef),
     {ClusterName, _MaybeOldLeaderNode} = amqqueue:get_pid(Q),
-    {ok, ConsumerState} = rabbit_fifo_dlx_client:checkout(RegName,
-                                                          QRef,
+    {ok, ConsumerState} = rabbit_fifo_dlx_client:checkout(QRef,
                                                           {ClusterName, node()},
                                                           Prefetch),
     MonitorRef = erlang:monitor(process, ClusterName),
@@ -561,7 +556,6 @@ maybe_cancel_timer(#state{timer = TRef,
 
 %% Avoids large message contents being logged.
 format_status(_Opt, [_PDict, #state{
-                                registered_name = RegisteredName,
                                 queue_ref = QueueRef,
                                 exchange_ref = ExchangeRef,
                                 routing_key = RoutingKey,
@@ -571,8 +565,7 @@ format_status(_Opt, [_PDict, #state{
                                 next_out_seq = NextOutSeq,
                                 timer = Timer
                                }]) ->
-    S = #{registered_name => RegisteredName,
-          queue_ref => QueueRef,
+    S = #{queue_ref => QueueRef,
           exchange_ref => ExchangeRef,
           routing_key => RoutingKey,
           dlx_client_state => rabbit_fifo_dlx_client:overview(DlxClientState),
