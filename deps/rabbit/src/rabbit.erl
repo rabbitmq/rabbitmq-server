@@ -458,10 +458,19 @@ stop_and_halt() ->
         %% init:stop() will be called regardless of any errors.
         try
             AppsLeft = [ A || {A, _, _} <- application:which_applications() ],
+<<<<<<< HEAD
             _ = rabbit_log:info(
                 lists:flatten(["Halting Erlang VM with the following applications:~n",
                                ["    ~p~n" || _ <- AppsLeft]]),
                 AppsLeft),
+=======
+            ?LOG_INFO(
+                lists:flatten(
+                  ["Halting Erlang VM with the following applications:~n",
+                   ["    ~p~n" || _ <- AppsLeft]]),
+                AppsLeft,
+                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+>>>>>>> 4f3ad87bd5 (Fix log level when halting the VM)
             %% Also duplicate this information to stderr, so console where
             %% foreground broker was running (or systemd journal) will
             %% contain information about graceful termination.
