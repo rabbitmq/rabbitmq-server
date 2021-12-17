@@ -500,7 +500,7 @@ stop_and_halt() ->
         %% init:stop() will be called regardless of any errors.
         try
             AppsLeft = [ A || {A, _, _} <- application:which_applications() ],
-            ?LOG_ERROR(
+            ?LOG_INFO(
                 lists:flatten(
                   ["Halting Erlang VM with the following applications:~n",
                    ["    ~p~n" || _ <- AppsLeft]]),
