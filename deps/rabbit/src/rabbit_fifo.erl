@@ -632,14 +632,19 @@ apply(#{index := Idx} = Meta, #update_config{config = Conf},
     %%TODO return aux effect here and move logic over to handle_aux/6 which can return effects as last arguments.
     {State4, Effects1} = case DLH of
                              at_least_once ->
-                                 case rabbit_fifo_dlx:consumer_pid(DlxState) of
+                                 case rabbit_fifo_dlx:local_alive_consumer_pid(DlxState) of
+                                     undefined
+                                       when Old_DLH =/= at_least_once ->
+                                         %% dead-letter-strategy changed to at-least-once.
+                                         %% Therefore, start dlx worker.
+                                         {State1, [{aux, ensure_dlx_worker}]};
                                      undefined ->
-                                         %% Policy changed from at-most-once to at-least-once.
-                                         %% Therefore, start rabbit_fifo_dlx_worker on leader.
-                                         {State1, [{aux, start_dlx_worker}]};
+                                         %% Do not start dlx worker twice.
+                                         %% It is about to be started, but DlxState does not reflect that yet.
+                                         {State1, []};
                                      DlxWorkerPid ->
-                                         %% Leader already exists.
-                                         %% Notify leader of new policy.
+                                         %% rabbit_fifo_dlx_worker already exists.
+                                         %% Notify worker of new policy.
                                          Effect = {send_msg, DlxWorkerPid, lookup_topology, ra_event},
                                          {State1, [Effect]}
                                  end;
@@ -666,7 +671,7 @@ apply(#{index := Idx} = Meta, #update_config{config = Conf},
     update_smallest_raft_index(Idx, Reply, State, Effects);
 apply(_Meta, {machine_version, FromVersion, ToVersion}, V0State) ->
     State = convert(FromVersion, ToVersion, V0State),
-    {State, ok, [{aux, start_dlx_worker}]};
+    {State, ok, [{aux, ensure_dlx_worker}]};
 %%TODO are there better approach to
 %% 1. matching against opaque rabbit_fifo_dlx:protocol / record (without exposing all the protocol details), and
 %% 2. Separate the logic running in rabbit_fifo and rabbit_fifo_dlx when dead-letter messages is acked?
@@ -852,10 +857,9 @@ update_waiting_consumer_status(Node,
 
 -spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
 state_enter(RaState, #?MODULE{cfg = #cfg{dead_letter_handler = at_least_once,
-                                         resource = QRef,
-                                         name = QName},
+                                         resource = QRef},
                               dlx = DlxState} = State) ->
-    rabbit_fifo_dlx:state_enter(RaState, QRef, QName, DlxState),
+    rabbit_fifo_dlx:state_enter(RaState, QRef, DlxState),
     state_enter0(RaState, State);
 state_enter(RaState, State) ->
     state_enter0(RaState, State).
@@ -1111,13 +1115,13 @@ handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
         Err ->
             {reply, Err, Aux0, Log0}
     end;
-handle_aux(leader, _, start_dlx_worker, Aux, Log,
-           #?MODULE{cfg = #cfg{resource = QRef,
-                               name = QName,
+handle_aux(leader, _, ensure_dlx_worker, Aux, Log,
+           #?MODULE{dlx = DlxState,
+                    cfg = #cfg{resource = QRef,
                                dead_letter_handler = at_least_once}}) ->
-    rabbit_fifo_dlx:start_worker(QRef, QName),
+    rabbit_fifo_dlx:ensure_worker_started(QRef, DlxState),
     {no_reply, Aux, Log};
-handle_aux(_, _, start_dlx_worker, Aux, Log, _) ->
+handle_aux(_, _, ensure_dlx_worker, Aux, Log, _) ->
     {no_reply, Aux, Log}.
 
 eval_gc(Log, #?MODULE{cfg = #cfg{resource = QR}} = MacState,
