@@ -14,11 +14,11 @@
          discard/3,
          overview/1,
          checkout/1,
-         state_enter/4,
-         start_worker/2,
+         state_enter/3,
+         ensure_worker_started/2,
          cleanup/1,
          purge/1,
-         consumer_pid/1,
+         local_alive_consumer_pid/1,
          dehydrate/1,
          normalize/1,
          stat/1]).
@@ -34,7 +34,7 @@
 %% It also runs its own checkout logic sending DLX messages to the DLX consumer.
 
 -record(checkout,{
-          consumer :: atom(),
+          consumer :: pid(),
           prefetch :: non_neg_integer()
          }).
 -record(settle, {msg_ids :: [msg_id()]}).
@@ -49,8 +49,8 @@
 init() ->
     #?MODULE{}.
 
-make_checkout(RegName, NumUnsettled) ->
-    {dlx, #checkout{consumer = RegName,
+make_checkout(Pid, NumUnsettled) ->
+    {dlx, #checkout{consumer = Pid,
                     prefetch = NumUnsettled
                    }}.
 
@@ -92,13 +92,13 @@ stat(#?MODULE{consumer = Con,
 
 -spec apply(command(), state()) ->
     {state(), ok | list()}. % TODO: refine return type
-apply(#checkout{consumer = RegName,
+apply(#checkout{consumer = Pid,
                 prefetch = Prefetch},
       #?MODULE{consumer = undefined} = State0) ->
-    State = State0#?MODULE{consumer = #dlx_consumer{registered_name = RegName,
+    State = State0#?MODULE{consumer = #dlx_consumer{pid = Pid,
                                                     prefetch = Prefetch}},
     {State, ok};
-apply(#checkout{consumer = RegName,
+apply(#checkout{consumer = ConsumerPid,
                 prefetch = Prefetch},
       #?MODULE{consumer = #dlx_consumer{checked_out = CheckedOutOldConsumer},
                discards = Discards0,
@@ -115,7 +115,7 @@ apply(#checkout{consumer = RegName,
                                fun({_Id, {_Reason, IdxMsg} = Msg}, {D, B}) ->
                                        {lqueue:in_r(Msg, D), B + size_in_bytes(IdxMsg)}
                                end, {Discards0, 0}, Checked1),
-    State = State0#?MODULE{consumer = #dlx_consumer{registered_name = RegName,
+    State = State0#?MODULE{consumer = #dlx_consumer{pid = ConsumerPid,
                                                     prefetch = Prefetch},
                            discards = Discards,
                            msg_bytes = Bytes + BytesMoved,
@@ -177,8 +177,8 @@ checkout0({success, _MsgId, {_Reason, ?TUPLE(_, _)}, State}, SendAcc) ->
     %% Therefore, here, we just check this message out to the consumer but do not re-deliver this message
     %% so that we will end up with the correct and deterministic state once the whole recovery log replay is completed.
     checkout0(checkout_one(State), SendAcc);
-checkout0(#?MODULE{consumer = #dlx_consumer{registered_name = RegName}} = State, SendAcc) ->
-    Effects = delivery_effects(whereis(RegName), SendAcc),
+checkout0(#?MODULE{consumer = #dlx_consumer{pid = Pid}} = State, SendAcc) ->
+    Effects = delivery_effects(Pid, SendAcc),
     {State, Effects}.
 
 checkout_one(#?MODULE{consumer = #dlx_consumer{checked_out = Checked,
@@ -237,54 +237,47 @@ delivery_effects(CPid, {InMemMsgs, IdxMsgs0}) ->
               [{send_msg, CPid, {dlx_delivery, Msgs}, [ra_event]}]
       end}].
 
-state_enter(leader, QRef, QName, _State) ->
-    start_worker(QRef, QName);
-state_enter(_, _, _, State) ->
-    terminate_worker(State).
+state_enter(leader, QRef, State) ->
+    ensure_worker_started(QRef, State);
+state_enter(_, _, State) ->
+    ensure_worker_terminated(State).
 
-start_worker(QRef, QName) ->
-    RegName = registered_name(QName),
-    %% We must ensure that starting the rabbit_fifo_dlx_worker succeeds.
-    %% Therefore, we don't use an effect.
-    %% Also therefore, if starting the rabbit_fifo_dlx_worker fails, let the whole Ra server process crash
-    %% in which case another Ra node will become leader.
-    %% supervisor:start_child/2 blocks until rabbit_fifo_dlx_worker:init/1 returns (TODO check if this is correct).
-    %% That's okay since rabbit_fifo_dlx_worker:init/1 returns immediately by delegating
-    %% initial setup to handle_continue/2.
-    case whereis(RegName) of
-        undefined ->
-            {ok, Pid} = supervisor:start_child(rabbit_fifo_dlx_sup, [QRef, RegName]),
-            rabbit_log:debug("started rabbit_fifo_dlx_worker (~s ~p)", [RegName, Pid]);
-        Pid ->
-            rabbit_log:debug("rabbit_fifo_dlx_worker (~s ~p) already started", [RegName, Pid])
+ensure_worker_started(QRef, #?MODULE{consumer = undefined}) ->
+    start_worker(QRef);
+ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
+    case is_local_and_alive(Pid) of
+        true ->
+            rabbit_log:debug("rabbit_fifo_dlx_worker ~p already started for ~s",
+                             [Pid, rabbit_misc:rs(QRef)]);
+        false ->
+            start_worker(QRef)
     end.
 
-terminate_worker(#?MODULE{consumer = #dlx_consumer{registered_name = RegName}}) ->
-    case whereis(RegName) of
-        undefined ->
-            ok;
-        Pid ->
+%% Ensure that starting the rabbit_fifo_dlx_worker succeeds.
+%% Therefore, do not use an effect.
+%% Also therefore, if starting the rabbit_fifo_dlx_worker fails, let the
+%% Ra server process crash in which case another Ra node will become leader.
+start_worker(QRef) ->
+    {ok, Pid} = supervisor:start_child(rabbit_fifo_dlx_sup, [QRef]),
+    rabbit_log:debug("started rabbit_fifo_dlx_worker ~p for ~s",
+                     [Pid, rabbit_misc:rs(QRef)]).
+
+ensure_worker_terminated(#?MODULE{consumer = undefined}) ->
+    ok;
+ensure_worker_terminated(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
+    case is_local_and_alive(Pid) of
+        true ->
             %% Note that we can't return a mod_call effect here because mod_call is executed on the leader only.
             ok = supervisor:terminate_child(rabbit_fifo_dlx_sup, Pid),
-            rabbit_log:debug("terminated rabbit_fifo_dlx_worker (~s ~p)", [RegName, Pid])
-    end;
-terminate_worker(_) ->
-    ok.
-
-%% TODO consider not registering the worker name at all
-%% because if there is a new worker process, it will always subscribe and tell us its new pid
-registered_name(QName) when is_atom(QName) ->
-    list_to_atom(atom_to_list(QName) ++ "_dlx").
-
-consumer_pid(#?MODULE{consumer = #dlx_consumer{registered_name = Name}}) ->
-    whereis(Name);
-consumer_pid(_) ->
-    undefined.
+            rabbit_log:debug("terminated rabbit_fifo_dlx_worker ~p", [Pid]);
+        false ->
+            ok
+    end.
 
 %% called when switching from at-least-once to at-most-once
 cleanup(#?MODULE{consumer = Consumer,
                  discards = Discards} = State) ->
-    terminate_worker(State),
+    ensure_worker_terminated(State),
     %% Return messages in the order they got discarded originally
     %% for the final at-most-once dead-lettering.
     CheckedReasonMsgs = case Consumer of
@@ -345,3 +338,19 @@ dehydrate_consumer(undefined) ->
 
 normalize(#?MODULE{discards = Discards} = State) ->
     State#?MODULE{discards = lqueue:from_list(lqueue:to_list(Discards))}.
+
+local_alive_consumer_pid(#?MODULE{consumer = undefined}) ->
+    undefined;
+local_alive_consumer_pid(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
+    case is_local_and_alive(Pid) of
+        true ->
+            Pid;
+        false ->
+            undefined
+    end.
+
+is_local_and_alive(Pid)
+  when node(Pid) =:= node() ->
+    is_process_alive(Pid);
+is_local_and_alive(_) ->
+    false.

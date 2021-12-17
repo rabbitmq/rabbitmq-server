@@ -1,6 +1,6 @@
 -module(rabbit_fifo_dlx_client).
 
--export([checkout/4, settle/2, handle_ra_event/3,
+-export([checkout/3, settle/2, handle_ra_event/3,
          overview/1]).
 
 -record(state,{
@@ -17,8 +17,8 @@ settle(MsgIds, #state{leader = Leader} = State)
     ra:pipeline_command(Leader, Cmd),
     {ok, State}.
 
-checkout(RegName, QResource, Leader, NumUnsettled) ->
-    Cmd = rabbit_fifo_dlx:make_checkout(RegName, NumUnsettled),
+checkout(QResource, Leader, NumUnsettled) ->
+    Cmd = rabbit_fifo_dlx:make_checkout(self(), NumUnsettled),
     State = #state{queue_resource = QResource,
                    leader = Leader,
                    last_msg_id = -1},
