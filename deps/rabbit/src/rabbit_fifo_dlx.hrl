@@ -11,14 +11,10 @@
           %% We don't require a consumer tag because a consumer tag is a means to distinguish
           %% multiple consumers in the same channel. The rabbit_fifo_dlx_worker channel like process however
           %% creates only a single consumer to this quorum queue's discards queue.
-          registered_name :: atom(),
+          pid :: pid(),
           prefetch :: non_neg_integer(),
           checked_out = #{} :: #{msg_id() => {reason(), indexed_msg()}},
           next_msg_id = 0 :: msg_id() % part of snapshot data
-          % total number of checked out messages - ever
-          % incremented for each delivery
-          % delivery_count = 0 :: non_neg_integer(),
-          % status = up :: up | suspected_down | cancelled
          }).
 
 -record(rabbit_fifo_dlx,{

@@ -1083,7 +1083,7 @@ dlx_01(_Config) ->
     C1 = {<<>>, C1Pid},
     E = c:pid(0,176,1),
     Commands = [
-                rabbit_fifo_dlx:make_checkout(my_dlx_worker, 1),
+                rabbit_fifo_dlx:make_checkout(ignore_pid, 1),
                 make_checkout(C1, {auto,1,simple_prefetch}),
                 make_enqueue(E,1,msg(<<"1">>)),
                 make_enqueue(E,2,msg(<<"2">>)),
@@ -1102,7 +1102,7 @@ dlx_02(_Config) ->
     C1 = {<<>>, C1Pid},
     E = c:pid(0,176,1),
     Commands = [
-                rabbit_fifo_dlx:make_checkout(my_dlx_worker, 1),
+                rabbit_fifo_dlx:make_checkout(ignore_pid, 1),
                 make_checkout(C1, {auto,1,simple_prefetch}),
                 make_enqueue(E,1,msg(<<"1">>)),
                 %% State contains release cursor A.
@@ -1131,7 +1131,7 @@ dlx_03(_Config) ->
                 make_enqueue(E,2,msg(<<"2">>)),
                 %% State contains release cursor B.
                 %% 1st message sitting in discards queue got dehydrated.
-                rabbit_fifo_dlx:make_checkout(my_dlx_worker, 1),
+                rabbit_fifo_dlx:make_checkout(ignore_pid, 1),
                 rabbit_fifo_dlx:make_settle([0])
                 %% Release cursor A got emitted.
                ],
@@ -1144,7 +1144,7 @@ dlx_04(_Config) ->
     C1 = {<<>>, C1Pid},
     E = c:pid(0,176,1),
     Commands = [
-                rabbit_fifo_dlx:make_checkout(my_dlx_worker, 3),
+                rabbit_fifo_dlx:make_checkout(ignore_pid, 3),
                 make_enqueue(E,1,msg(<<>>)),
                 make_enqueue(E,2,msg(<<>>)),
                 make_enqueue(E,3,msg(<<>>)),
@@ -1174,7 +1174,7 @@ dlx_05(_Config) ->
                 make_enqueue(E,3,msg(<<"msg3">>)),
                 %% 0 in discards (rabbit_fifo_dlx msg_bytes is still 0 because body of msg 0 is empty),
                 %% 1 in checkout, 2 in messages
-                rabbit_fifo_dlx:make_checkout(my_dlx_worker, 1),
+                rabbit_fifo_dlx:make_checkout(ignore_pid, 1),
                 %% 0 in dlx_checkout, 1 in checkout, 2 in messages
                 make_settle(C1, [1]),
                 %% 0 in dlx_checkout, 2 in checkout
@@ -1201,7 +1201,7 @@ dlx_06(_Config) ->
                 make_enqueue(E,2,msg(<<"111">>)),
                 make_enqueue(E,3,msg(<<>>)),
                 %% 0,1,2 in messages
-                rabbit_fifo_dlx:make_checkout(my_dlx_worker, 2),
+                rabbit_fifo_dlx:make_checkout(ignore_pid, 2),
                 make_checkout(C1, {auto,3,simple_prefetch}),
                 %% 0,1,2 in checkout
                 rabbit_fifo:make_discard(C1, [0,1,2]),
@@ -1227,11 +1227,11 @@ dlx_07(_Config) ->
                 %% 0 in discard, 1 in checkout
                 rabbit_fifo:make_discard(C1, [1]),
                 %% 0, 1 in discard
-                rabbit_fifo_dlx:make_checkout(my_dlx_worker, 1),
+                rabbit_fifo_dlx:make_checkout(ignore_pid, 1),
                 %% 0 in dlx_checkout, 1 in discard
                 make_enqueue(E,3,msg(<<"123">>)),
                 %% 0 in dlx_checkout, 1 in discard, 2 in checkout
-                rabbit_fifo_dlx:make_checkout(my_dlx_worker, 2),
+                rabbit_fifo_dlx:make_checkout(ignore_pid, 2),
                 %% 0,1 in dlx_checkout, 2 in checkout
                 rabbit_fifo_dlx:make_settle([0]),
                 %% 1 in dlx_checkout, 2 in checkout
@@ -1280,7 +1280,7 @@ dlx_08(_Config) ->
                 make_enqueue(E,9,msg(<<>>)),
                 rabbit_fifo:make_discard(C1, [6]),
                 rabbit_fifo:make_discard(C1, [7]),
-                rabbit_fifo_dlx:make_checkout(my_dlx_worker, 1),
+                rabbit_fifo_dlx:make_checkout(ignore_pid, 1),
                 make_enqueue(E,10,msg(<<>>)),
                 rabbit_fifo:make_discard(C1, [8]),
                 rabbit_fifo_dlx:make_settle([0]),
@@ -1814,7 +1814,7 @@ handle_op({update_config, Changes}, #t{config = Conf} = T) ->
     Config = maps:merge(Conf, Changes),
     do_apply(rabbit_fifo:make_update_config(Config), T);
 handle_op({checkout_dlx, Prefetch}, #t{config = #{dead_letter_handler := at_least_once}} = T) ->
-    Cmd = rabbit_fifo_dlx:make_checkout(proper_dlx_worker, Prefetch),
+    Cmd = rabbit_fifo_dlx:make_checkout(ignore_pid, Prefetch),
     do_apply(Cmd, T).
 
 
