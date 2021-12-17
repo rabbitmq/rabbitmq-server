@@ -5,7 +5,7 @@ load("elixir_home.bzl", "elixir_home")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
-load(":rabbitmq.bzl", "ALL_PLUGINS", "APP_VERSION")
+load(":rabbitmq.bzl", "APP_VERSION", "all_plugins")
 load(":dist.bzl", "collect_licenses", "versioned_rabbitmq_home")
 
 exports_files([
@@ -42,7 +42,7 @@ plt(
 
 rabbitmq_home(
     name = "broker-home",
-    plugins = ALL_PLUGINS,
+    plugins = all_plugins(rabbitmq_workspace = ""),
 )
 
 rabbitmq_home(
@@ -71,7 +71,6 @@ rabbitmq_run(
 
 # Allow us to `bazel run broker`
 # for the equivalent of `make run-broker`
-# (though it as of yet includes no plugins)
 rabbitmq_run_command(
     name = "broker",
     rabbitmq_run = ":rabbitmq-run",
@@ -97,7 +96,7 @@ rabbitmqctl(
 
 shell(
     name = "repl",
-    deps = ALL_PLUGINS,
+    deps = all_plugins(rabbitmq_workspace = ""),
 )
 
 collect_licenses(
@@ -109,12 +108,12 @@ collect_licenses(
             "LICENSE.txt",
         ],
     ),
-    deps = ALL_PLUGINS,
+    deps = all_plugins(rabbitmq_workspace = ""),
 )
 
 versioned_rabbitmq_home(
     name = "dist-home",
-    plugins = ALL_PLUGINS,
+    plugins = all_plugins(rabbitmq_workspace = ""),
 )
 
 pkg_tar(
