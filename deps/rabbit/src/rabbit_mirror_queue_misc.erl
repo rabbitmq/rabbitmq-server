@@ -16,7 +16,8 @@
          is_mirrored/1, is_mirrored_ha_nodes/1,
          update_mirrors/2, update_mirrors/1, validate_policy/1,
          maybe_auto_sync/1, maybe_drop_master_after_sync/1,
-         sync_batch_size/1, log_info/3, log_warning/3]).
+         sync_batch_size/1, default_max_sync_throughput/0,
+         log_info/3, log_warning/3]).
 -export([stop_all_slaves/5]).
 
 -export([sync_queue/1, cancel_sync_queue/1, queue_length/1]).
@@ -505,6 +506,25 @@ sync_batch_size(Q) when ?is_amqqueue(Q) ->
 default_batch_size() ->
     rabbit_misc:get_env(rabbit, mirroring_sync_batch_size,
                         ?DEFAULT_BATCH_SIZE).
+
+-define(DEFAULT_MAX_SYNC_THROUGHPUT, 0).
+
+default_max_sync_throughput() ->
+  case application:get_env(rabbit, mirroring_sync_max_throughput) of
+    {ok, Value} ->
+      case rabbit_resource_monitor_misc:parse_information_unit(Value) of
+        {ok, ParsedThroughput} ->
+          ParsedThroughput;
+        {error, parse_error} ->
+          rabbit_log:warning(
+            "The configured value for the mirroring_sync_max_throughput is "
+            "not a valid value: ~p. Disabled sync throughput control. ",
+            [Value]),
+          ?DEFAULT_MAX_SYNC_THROUGHPUT
+      end;
+    undefined ->
+      ?DEFAULT_MAX_SYNC_THROUGHPUT
+  end.
 
 -spec update_mirrors
         (amqqueue:amqqueue(), amqqueue:amqqueue()) -> 'ok'.
