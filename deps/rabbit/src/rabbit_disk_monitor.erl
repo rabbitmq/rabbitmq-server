@@ -232,12 +232,20 @@ get_disk_free(Dir, {unix, _}) ->
     Df = os:find_executable("df"),
     parse_free_unix(run_cmd(Df ++ " -kP " ++ Dir));
 get_disk_free(Dir, {win32, _}) ->
-    case win32_get_disk_free_fsutil(Dir) of
-        {ok, Free0} -> Free0;
+    % Dir:
+    % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
+    case win32_get_drive_letter(Dir) of
         error ->
-            case win32_get_disk_free_pwsh(Dir) of
-                {ok, Free1} -> Free1;
-                _ -> exit(could_not_determine_disk_free)
+            rabbit_log:warning("Mnesia directory is not in the expected format (C:): '~p'", [Dir]),
+            exit(could_not_determine_disk_free);
+        DriveLetter ->
+            case win32_get_disk_free_fsutil(DriveLetter) of
+                {ok, Free0} -> Free0;
+                error ->
+                    case win32_get_disk_free_pwsh(DriveLetter) of
+                        {ok, Free1} -> Free1;
+                        _ -> exit(could_not_determine_disk_free)
+                    end
             end
     end.
 
@@ -250,13 +258,18 @@ parse_free_unix(Str) ->
         _          -> exit({unparseable, Str})
     end.
 
-win32_get_disk_free_fsutil(Dir) ->
-    % Dir:
-    % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
-    Drive = string:slice(Dir, 0, 2),
+win32_get_drive_letter([DriveLetter, $:, $/ | _]) when
+      (DriveLetter >= $a andalso DriveLetter =< $z) orelse
+      (DriveLetter >= $A andalso DriveLetter =< $Z) ->
+    DriveLetter;
+win32_get_drive_letter(_) ->
+    error.
 
-    % Drive: c:
-    FsutilCmd = "fsutil.exe volume diskfree " ++ Drive,
+win32_get_disk_free_fsutil(DriveLetter) when
+      (DriveLetter >= $a andalso DriveLetter =< $z) orelse
+      (DriveLetter >= $A andalso DriveLetter =< $Z) ->
+    % DriveLetter $c
+    FsutilCmd = "fsutil.exe volume diskfree " ++ [DriveLetter] ++ ":",
 
     % C:\windows\system32>fsutil volume diskfree c:
     % Total free bytes        :   812,733,878,272 (756.9 GB)
@@ -276,12 +289,11 @@ win32_get_disk_free_fsutil(Dir) ->
             end
     end.
 
-
-win32_get_disk_free_pwsh(Dir) ->
-    % Dir:
-    % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
-    Drive = string:slice(Dir, 0, 1),
-    PoshCmd = "powershell.exe -NoLogo -NoProfile -NonInteractive -Command (Get-PSDrive " ++ Drive ++ ").Free",
+win32_get_disk_free_pwsh(DriveLetter) when
+      (DriveLetter >= $a andalso DriveLetter =< $z) orelse
+      (DriveLetter >= $A andalso DriveLetter =< $Z) ->
+    % DriveLetter $c
+    PoshCmd = "powershell.exe -NoLogo -NoProfile -NonInteractive -Command (Get-PSDrive " ++ [DriveLetter] ++ ").Free",
     case run_cmd(PoshCmd) of
         {error, timeout} ->
             error;
