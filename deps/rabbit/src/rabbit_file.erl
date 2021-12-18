@@ -40,7 +40,7 @@ is_file(File) ->
 
 is_dir(Dir) -> is_dir_internal(read_file_info(Dir)).
 
-is_dir_no_handle(Dir) -> is_dir_internal(prim_file:read_file_info(Dir)).
+is_dir_no_handle(Dir) -> is_dir_internal(file:read_file_info(Dir, [raw])).
 
 is_dir_internal({ok, #file_info{type=directory}}) -> true;
 is_dir_internal(_)                                -> false.
@@ -83,7 +83,7 @@ wildcard(Pattern, Dir) ->
 list_dir(Dir) -> with_handle(fun () -> prim_file:list_dir(Dir) end).
 
 read_file_info(File) ->
-    with_handle(fun () -> prim_file:read_file_info(File) end).
+    with_handle(fun () -> file:read_file_info(File, [raw]) end).
 
 -spec read_term_file
         (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any()).
