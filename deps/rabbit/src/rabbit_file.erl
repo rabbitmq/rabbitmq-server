@@ -90,19 +90,22 @@ read_file_info(File) ->
 
 read_term_file(File) ->
     try
-        {ok, FInfo} = file:read_file_info(File, [raw]),
-        {ok, Fd} = file:open(File, [read, raw, binary]),
-        try
-            {ok, Data} = file:read(Fd, FInfo#file_info.size),
-            {ok, Tokens, _} = erl_scan:string(binary_to_list(Data)),
-            TokenGroups = group_tokens(Tokens),
-            {ok, [begin
-                    {ok, Term} = erl_parse:parse_term(Tokens1),
-                    Term
-                end || Tokens1 <- TokenGroups]}
-        after
-            ok = file:close(Fd)
-        end
+        F = fun() ->
+                    {ok, FInfo} = file:read_file_info(File, [raw]),
+                    {ok, Fd} = file:open(File, [read, raw, binary]),
+                    try
+                        file:read(Fd, FInfo#file_info.size)
+                    after
+                        file:close(Fd)
+                    end
+            end,
+        {ok, Data} = with_handle(F),
+        {ok, Tokens, _} = erl_scan:string(binary_to_list(Data)),
+        TokenGroups = group_tokens(Tokens),
+        {ok, [begin
+                  {ok, Term} = erl_parse:parse_term(Tokens1),
+                  Term
+              end || Tokens1 <- TokenGroups]}
     catch
         error:{badmatch, Error} -> Error
     end.
