@@ -992,6 +992,14 @@ suites = [
         size = "medium",
         flaky = True,
     ),
+    rabbitmq_suite(
+        name = "rabbit_mirror_queue_sync_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "rabbit_mirror_queue_misc_SUITE",
+        size = "small",
+    ),
 ]
 
 assert_suites(
