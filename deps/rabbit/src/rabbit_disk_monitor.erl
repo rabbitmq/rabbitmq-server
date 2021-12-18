@@ -237,7 +237,11 @@ get_disk_free(Dir, {win32, _}) ->
     case win32_get_drive_letter(Dir) of
         error ->
             rabbit_log:warning("Mnesia directory is not in the expected format (C:): '~p'", [Dir]),
-            exit(could_not_determine_disk_free);
+            case win32_get_disk_free_dir(Dir) of
+                {ok, Free} ->
+                    Free;
+                _ -> exit(could_not_determine_disk_free)
+            end;
         DriveLetter ->
             case win32_get_disk_free_fsutil(DriveLetter) of
                 {ok, Free0} -> Free0;
@@ -302,6 +306,34 @@ win32_get_disk_free_pwsh(DriveLetter) when
             PoshResult = string:slice(PoshResultStr, 0, length(PoshResultStr) - 2),
             {ok, list_to_integer(PoshResult)}
     end.
+
+win32_get_disk_free_dir(Dir) ->
+    %% On Windows, the Win32 API enforces a limit of 260 characters
+    %% (MAX_PATH). If we call `dir` with a path longer than that, it
+    %% fails with "File not found". Starting with Windows 10 version
+    %% 1607, this limit was removed, but the administrator has to
+    %% configure that.
+    %%
+    %% NTFS supports paths up to 32767 characters. Therefore, paths
+    %% longer than 260 characters exist but they are "inaccessible" to
+    %% `dir`.
+    %%
+    %% A workaround is to tell the Win32 API to not parse a path and
+    %% just pass it raw to the underlying filesystem. To do this, the
+    %% path must be prepended with "\\?\". That's what we do here.
+    %%
+    %% However, the underlying filesystem may not support forward
+    %% slashes transparently, as the Win32 API does. Therefore, we
+    %% convert all forward slashes to backslashes.
+    %%
+    %% See the following page to learn more about this:
+    %% https://ss64.com/nt/syntax-filenames.html
+    RawDir = "\\\\?\\" ++ string:replace(Dir, "/", "\\", all),
+    CommandResult = run_cmd("dir /-C /W \"" ++ RawDir ++ "\""),
+    LastLine = lists:last(string:tokens(CommandResult, "\r\n")),
+    {match, [Free]} = re:run(lists:reverse(LastLine), "(\\d+)",
+                             [{capture, all_but_first, list}]),
+    {ok, list_to_integer(lists:reverse(Free))}.
 
 interpret_limit({mem_relative, Relative})
     when is_number(Relative) ->
