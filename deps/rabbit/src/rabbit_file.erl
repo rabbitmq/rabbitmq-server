@@ -40,7 +40,7 @@ is_file(File) ->
 
 is_dir(Dir) -> is_dir_internal(read_file_info(Dir)).
 
-is_dir_no_handle(Dir) -> is_dir_internal(prim_file:read_file_info(Dir)).
+is_dir_no_handle(Dir) -> is_dir_internal(file:read_file_info(Dir, [raw])).
 
 is_dir_internal({ok, #file_info{type=directory}}) -> true;
 is_dir_internal(_)                                -> false.
@@ -83,14 +83,23 @@ wildcard(Pattern, Dir) ->
 list_dir(Dir) -> with_handle(fun () -> prim_file:list_dir(Dir) end).
 
 read_file_info(File) ->
-    with_handle(fun () -> prim_file:read_file_info(File) end).
+    with_handle(fun () -> file:read_file_info(File, [raw]) end).
 
 -spec read_term_file
         (file:filename()) -> {'ok', [any()]} | rabbit_types:error(any()).
 
 read_term_file(File) ->
     try
-        {ok, Data} = with_handle(fun () -> prim_file:read_file(File) end),
+        F = fun() ->
+                    {ok, FInfo} = file:read_file_info(File, [raw]),
+                    {ok, Fd} = file:open(File, [read, raw, binary]),
+                    try
+                        file:read(Fd, FInfo#file_info.size)
+                    after
+                        file:close(Fd)
+                    end
+            end,
+        {ok, Data} = with_handle(F),
         {ok, Tokens, _} = erl_scan:string(binary_to_list(Data)),
         TokenGroups = group_tokens(Tokens),
         {ok, [begin
