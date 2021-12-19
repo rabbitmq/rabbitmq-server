@@ -34,6 +34,7 @@ scrape_configs:
   - job_name: 'cadvisor'
     static_configs:
       - targets: ['cadvisor:8080']
+
   - job_name: 'rabbitmq-server'
     static_configs:
       - targets:
@@ -49,6 +50,30 @@ scrape_configs:
           - 'rmq0-dist-metrics:15692'
           - 'rmq1-dist-metrics:15692'
           - 'rmq2-dist-metrics:15692'
+    # To be able to filter using cluster, `rabbitmq_cluster` label should be provided one way or another.
+    # Here is how you can do it using prometheus config:
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: rabbitmq_cluster
+      replacement: "cluster-of-three"
+    - source_labels: [__address__]
+      target_label: rabbitmq_node
+
+  # Let's pretend we have a second smaller cluster. Just to test that
+  # cluster selector in Grafana works correctly.
+  - job_name: 'rabbitmq-server-fake-second-cluster'
+    static_configs:
+      - targets:
+          - 'rmq0:15692'
+          - 'rmq0-dist-tls:15692'
+          - 'rmq0-qq:15692'
+          - 'rmq0-dist-metrics:15692'
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: rabbitmq_cluster
+      replacement: "fake-cluster"
+
+
   - job_name: 'rabbitmq-perf-test'
     static_configs:
       - targets:

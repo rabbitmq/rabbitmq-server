@@ -59,7 +59,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1637934894690,
+  "iteration": 1637935393887,
   "links": [
     {
       "icon": "doc",
@@ -135,7 +135,8 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_ready * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "sum(rabbitmq_queue_messages_ready{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -219,7 +220,8 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_published_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "sum(rate(rabbitmq_channel_messages_published_total{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}[60s]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -302,9 +304,11 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "sum(rabbitmq_channels * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) - sum(rabbitmq_channel_consumers * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "sum(rabbitmq_channels{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) - sum(rabbitmq_channel_consumers{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "",
           "refId": "A"
@@ -384,7 +388,8 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "sum(rabbitmq_connections * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "sum(rabbitmq_connections{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -467,9 +472,11 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "sum(rabbitmq_queues * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "sum(rabbitmq_queues{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "",
           "refId": "A"
@@ -549,10 +556,12 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_unacked * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "sum(rabbitmq_queue_messages_unacked{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "hide": false,
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "",
           "refId": "A"
@@ -632,10 +641,12 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_redelivered_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_channel_messages_delivered_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_channel_messages_delivered_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_channel_get_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_channel_get_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "sum(rate(rabbitmq_channel_messages_redelivered_total{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}[60s])) +\nsum(rate(rabbitmq_channel_messages_delivered_total{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}[60s])) +\nsum(rate(rabbitmq_channel_messages_delivered_ack_total{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}[60s])) +\nsum(rate(rabbitmq_channel_get_total{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}[60s])) +\nsum(rate(rabbitmq_channel_get_ack_total{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}[60s]))",
           "format": "time_series",
           "hide": false,
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "",
           "refId": "A"
@@ -715,9 +726,11 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "sum(rabbitmq_channel_consumers * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "sum(rabbitmq_channel_consumers{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "",
           "refId": "A"
@@ -797,9 +810,11 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "sum(rabbitmq_channels * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "sum(rabbitmq_channels{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "",
           "refId": "A"
@@ -879,9 +894,11 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "sum(rabbitmq_build_info * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "sum(rabbitmq_build_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "",
           "refId": "A"
@@ -895,10 +912,6 @@
     {
       "collapsed": false,
       "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1381,9 +1394,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rabbitmq_disk_space_available_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "exemplar": true,
+          "expr": "rabbitmq_disk_space_available_bytes{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
@@ -1542,9 +1557,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(rabbitmq_process_max_fds * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) -\n(rabbitmq_process_open_fds * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "(rabbitmq_process_max_fds{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) -\n(rabbitmq_process_open_fds{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
@@ -1702,9 +1719,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(rabbitmq_process_max_tcp_sockets * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) -\n(rabbitmq_process_open_tcp_sockets * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "exemplar": true,
+          "expr": "(rabbitmq_process_max_tcp_sockets{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) -\n(rabbitmq_process_open_tcp_sockets{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
@@ -1772,10 +1791,6 @@
     {
       "collapsed": false,
       "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1881,11 +1896,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_ready * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "exemplar": true,
+          "expr": "sum(rabbitmq_queue_messages_ready{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(instance)",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{rabbitmq_node}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -2025,11 +2042,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rabbitmq_queue_messages_unacked * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "exemplar": true,
+          "expr": "sum(rabbitmq_queue_messages_unacked{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(instance)",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{rabbitmq_node}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -2078,10 +2097,6 @@
     {
       "collapsed": false,
       "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -2187,9 +2202,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_published_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "exemplar": true,
+          "expr": "sum(rate(rabbitmq_channel_messages_published_total{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}[60s])) by(instance)",
           "format": "time_series",
           "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}}",
           "refId": "A"
@@ -2906,10 +2923,6 @@
     {
       "collapsed": false,
       "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -4013,10 +4026,6 @@
     {
       "collapsed": false,
       "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -4659,10 +4668,6 @@
     {
       "collapsed": false,
       "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -5143,10 +5148,6 @@
     {
       "collapsed": false,
       "datasource": null,
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -5735,5 +5736,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 13
+  "version": 64
 }
