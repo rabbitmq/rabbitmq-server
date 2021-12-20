@@ -2138,13 +2138,14 @@ reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
                              {dequeue, {MsgId, {Header, Msg}}, Ready}}}]
      end}.
 
-checkout_one(#{system_time := _Ts} = Meta, InitState0, Effects1) ->
+checkout_one(#{system_time := Ts} = Meta, InitState0, Effects0) ->
     %% Before checking out any messsage to any consumer,
     %% first remove all expired messages from the head of the queue.
-    #?MODULE{service_queue = SQ0,
+    {#?MODULE{service_queue = SQ0,
              messages = Messages0,
-             consumers = Cons0} = InitState = InitState0,
-        % expire_msgs(Ts, InitState0, Effects0),
+             consumers = Cons0} = InitState, Effects1} =
+        expire_msgs(Ts, InitState0, Effects0),
+
     case priority_queue:out(SQ0) of
         {{value, ConsumerId}, SQ1}
           when is_map_key(ConsumerId, Cons0) ->
@@ -2207,10 +2208,10 @@ checkout_one(#{system_time := _Ts} = Meta, InitState0, Effects1) ->
 
 %% dequeue all expired messages
 expire_msgs(RaCmdTs, State0, Effects0) ->
-    case take_next_msg(State0) of
-        {?INDEX_MSG(Idx, ?MSG(#{expiry := Expiry} = Header, _) = Msg) = FullMsg,
-         State1}
+    case peek_next_msg(State0) of
+        {value, ?INDEX_MSG(Idx, ?MSG(#{expiry := Expiry} = Header, _) = Msg) = FullMsg}
           when RaCmdTs >= Expiry ->
+            {_, State1} = take_next_msg(State0),
             #?MODULE{dlx = DlxState0,
                      cfg = #cfg{dead_letter_handler = DLH},
                      ra_indexes = Indexes0} = State2 = add_bytes_drop(Header, State1),
@@ -2233,12 +2234,14 @@ expire_msgs(RaCmdTs, State0, Effects0) ->
                     State = State4#?MODULE{ra_indexes = Indexes},
                     expire_msgs(RaCmdTs, State, Effects)
             end;
-        {?PREFIX_MEM_MSG(#{expiry := Expiry} = Header) = Msg, State1}
+        {value, ?PREFIX_MEM_MSG(#{expiry := Expiry} = Header) = Msg}
           when RaCmdTs >= Expiry ->
+            {_, State1} = take_next_msg(State0),
             State2 = expire_prefix_msg(Msg, Header, State1),
             expire_msgs(RaCmdTs, State2, Effects0);
-        {?DISK_MSG(#{expiry := Expiry} = Header) = Msg, State1}
+        {value, ?DISK_MSG(#{expiry := Expiry} = Header) = Msg}
           when RaCmdTs >= Expiry ->
+            {_, State1} = take_next_msg(State0),
             State2 = expire_prefix_msg(Msg, Header, State1),
             expire_msgs(RaCmdTs, State2, Effects0);
         _ ->
