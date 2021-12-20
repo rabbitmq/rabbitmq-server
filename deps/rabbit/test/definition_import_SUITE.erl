@@ -45,7 +45,9 @@ groups() ->
                                import_case12,
                                import_case13,
                                import_case14,
-                               import_case16
+                               %% case 15 is for v3.9.x+ only
+                               import_case16,
+                               import_case17
                               ]},
         {boot_time_import, [], [
             import_on_a_booting_node
@@ -176,6 +178,8 @@ import_case16(Config) ->
         %% skip the test in mixed version mode
         {skip, "Should not run in mixed version environments"}
     end.
+
+import_case17(Config) -> import_invalid_file_case(Config, "failing_case17").
 
 export_import_round_trip_case1(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
