@@ -465,7 +465,7 @@ add_policy(Param, Username) ->
 add_policy(VHost, Param, Username) ->
     Key   = maps:get(name,  Param, undefined),
     case Key of
-      undefined -> exit("policy name not defined");
+      undefined -> exit(rabbit_misc:format("policy in virtual host '~s' has undefined name", [VHost]));
       _ -> ok
     end,
     case rabbit_policy:set(
