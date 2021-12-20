@@ -464,11 +464,9 @@ add_policy(Param, Username) ->
 
 add_policy(VHost, Param, Username) ->
     Key   = maps:get(name,  Param, undefined),
-    case Key == undefined of
-      true ->
-        rabbit_misc:protocol_error(
-          command_invalid, "invalid policy name '~s'", [Key]);
-      false -> ok
+    case Key of
+      undefined -> exit("policy name not defined");
+      _ -> ok
     end,
     case rabbit_policy:set(
            VHost, Key, maps:get(pattern, Param, undefined),
