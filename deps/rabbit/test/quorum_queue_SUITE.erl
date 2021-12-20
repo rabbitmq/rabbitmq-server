@@ -139,6 +139,7 @@ all_tests() ->
      peek,
      message_ttl,
      per_message_ttl,
+     per_message_ttl_mixed_expiry,
      consumer_priorities,
      cancel_consumer_gh_3729
     ].
@@ -2609,8 +2610,7 @@ per_message_ttl(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                                  {<<"x-message-ttl">>, long, 2000}])),
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     Msg1 = <<"msg1">>,
 
@@ -2623,6 +2623,54 @@ per_message_ttl(Config) ->
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     timer:sleep(2000),
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    ok.
+
+per_message_ttl_mixed_expiry(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    Msg1 = <<"msg1">>,
+    Msg2 = <<"msg2">>,
+
+    %% message with no expiration
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{props = #'P_basic'{delivery_mode = 2},
+                                     payload = Msg1}),
+    %% followed by message with expiration
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QQ},
+                           #amqp_msg{props = #'P_basic'{delivery_mode = 2,
+                                                        expiration = <<"500">>},
+                                     payload = Msg2}),
+
+
+    wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+    timer:sleep(1000),
+    wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
+    subscribe(Ch, QQ, false),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag},
+         #amqp_msg{payload = Msg1}} ->
+            amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                               multiple     = false})
+    after 2000 ->
+              flush(10),
+              ct:fail("basic deliver timeout")
+    end,
+
+    %% the second message should NOT be received as it has expired
+    receive
+        {#'basic.deliver'{}, #amqp_msg{payload = Msg2}} ->
+              flush(10),
+              ct:fail("unexpected delivery")
+    after 500 ->
+              ok
+    end,
     ok.
 
 in_memory(Config) ->
