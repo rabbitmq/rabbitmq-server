@@ -180,8 +180,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 safe_ets_lookup(Key, Default) ->
     try
-        [{Key, Value}] = ets:lookup(?ETS_NAME, Key),
-        Value
+        case ets:lookup(?ETS_NAME, Key) of
+            [{Key, Value}] ->
+                Value;
+            [] ->
+                Default
+        end
     catch
         error:badarg ->
             Default

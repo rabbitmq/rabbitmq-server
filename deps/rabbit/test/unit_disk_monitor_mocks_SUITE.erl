@@ -88,7 +88,7 @@ disk_monitor_enable1(_Config) ->
     application:set_env(rabbit, disk_monitor_failure_retry_interval, 100),
     ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup),
     ok = rabbit_sup:start_delayed_restartable_child(rabbit_disk_monitor, [1000]),
-    undefined = rabbit_disk_monitor:get_disk_free(),
+    unknown = rabbit_disk_monitor:get_disk_free(),
     Cmd = case os:type() of
               {win32, _} -> " Le volume dans le lecteur C n’a pas de nom.\n"
                             " Le numéro de série du volume est 707D-5BDC\n"
