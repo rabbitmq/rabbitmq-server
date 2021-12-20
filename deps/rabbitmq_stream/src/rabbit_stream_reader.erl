@@ -1494,7 +1494,7 @@ handle_frame_post_auth(Transport,
             of
                 {false, false} ->
                     case lookup_leader(Stream, Connection0) of
-                        cluster_not_found ->
+                        {error, not_found} ->
                             response(Transport,
                                      Connection0,
                                      declare_publisher,
@@ -1502,6 +1502,16 @@ handle_frame_post_auth(Transport,
                                      ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
                             rabbit_global_counters:increase_protocol_counter(stream,
                                                                              ?STREAM_DOES_NOT_EXIST,
+                                                                             1),
+                            {Connection0, State};
+                        {error, not_available} ->
+                            response(Transport,
+                                     Connection0,
+                                     declare_publisher,
+                                     CorrelationId,
+                                     ?RESPONSE_CODE_STREAM_NOT_AVAILABLE),
+                            rabbit_global_counters:increase_protocol_counter(stream,
+                                                                             ?STREAM_NOT_AVAILABLE,
                                                                              1),
                             {Connection0, State};
                         {ClusterLeader,
@@ -1960,9 +1970,9 @@ handle_frame_post_auth(_Transport,
     of
         ok ->
             case lookup_leader(Stream, Connection) of
-                cluster_not_found ->
-                    rabbit_log:warning("Could not find leader to store offset on ~p",
-                                       [Stream]),
+                {error, Error} ->
+                    rabbit_log:warning("Could not find leader to store offset on ~p: ~p",
+                                       [Stream, Error]),
                     %% FIXME store offset is fire-and-forget, so no response even if error, change this?
                     {Connection, State};
                 {ClusterLeader, Connection1} ->
@@ -1992,11 +2002,16 @@ handle_frame_post_auth(Transport,
         of
             ok ->
                 case lookup_leader(Stream, Connection0) of
-                    cluster_not_found ->
+                    {error, not_found} ->
                         rabbit_global_counters:increase_protocol_counter(stream,
                                                                          ?STREAM_DOES_NOT_EXIST,
                                                                          1),
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0, Connection0};
+                    {error, not_available} ->
+                        rabbit_global_counters:increase_protocol_counter(stream,
+                                                                         ?STREAM_NOT_AVAILABLE,
+                                                                         1),
+                        {?RESPONSE_CODE_STREAM_NOT_AVAILABLE, 0, Connection0};
                     {LeaderPid, C} ->
                         {RC, O} =
                             case osiris:read_tracking(LeaderPid, Reference) of
@@ -2532,9 +2547,9 @@ lookup_leader(Stream,
     case maps:get(Stream, StreamLeaders, undefined) of
         undefined ->
             case lookup_leader_from_manager(VirtualHost, Stream) of
-                cluster_not_found ->
-                    cluster_not_found;
-                LeaderPid ->
+                {error, Error} ->
+                    {error, Error};
+                {ok, LeaderPid} ->
                     Connection1 =
                         maybe_monitor_stream(LeaderPid, Stream, Connection),
                     {LeaderPid,

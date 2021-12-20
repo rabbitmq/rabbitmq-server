@@ -176,4 +176,6 @@ merge_policy_value(<<"max-length-bytes">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"max-in-memory-length">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"max-in-memory-bytes">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"expires">>, Val, OpVal)          -> min(Val, OpVal);
-merge_policy_value(<<"delivery-limit">>, Val, OpVal)   -> min(Val, OpVal).
+merge_policy_value(<<"delivery-limit">>, Val, OpVal)   -> min(Val, OpVal);
+%% use operator policy value for booleans
+merge_policy_value(_Key, Val, OpVal) when is_boolean(Val) andalso is_boolean(OpVal) -> OpVal.

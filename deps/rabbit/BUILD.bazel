@@ -703,9 +703,6 @@ suites = [
         additional_hdrs = [
             "src/rabbit_fifo.hrl",
         ],
-        erlc_opts = [
-            "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-        ],
         runtime_deps = [
             "@meck//:bazel_erlang_lib",
             "@ra//:bazel_erlang_lib",
