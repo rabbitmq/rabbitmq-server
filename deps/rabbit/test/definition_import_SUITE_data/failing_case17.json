@@ -1,0 +1,19 @@
+{
+  "vhosts": [
+    {
+      "name": "\/"
+    }
+  ],
+  "policies": [
+    {
+      "vhost": "\/",
+      "pattern": "^project-nd-ns-",
+      "apply-to": "queues",
+      "definition": {
+        "expires": 120000,
+        "max-length": 10000
+      },
+      "priority": 1
+    }
+  ]
+}
