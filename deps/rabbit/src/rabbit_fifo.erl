@@ -484,8 +484,9 @@ apply(#{index := Index}, #purge{},
     update_smallest_raft_index(Index, Reply, State, Effects);
 apply(#{index := Idx}, #garbage_collection{}, State) ->
     update_smallest_raft_index(Idx, ok, State, [{aux, garbage_collection}]);
-apply(Meta, {timeout, expire_msgs}, State) ->
-    checkout(Meta, State, State, [], false);
+apply(#{system_time := Ts} = Meta, {timeout, expire_msgs}, State0) ->
+    {State, Effects} = expire_msgs(Ts, State0, []),
+    checkout(Meta, State, State, Effects, false);
 apply(#{system_time := Ts} = Meta, {down, Pid, noconnection},
       #?MODULE{consumers = Cons0,
                cfg = #cfg{consumer_strategy = single_active},
@@ -1284,7 +1285,8 @@ query_peek(Pos, State0) when Pos > 0 ->
 query_notify_decorators_info(#?MODULE{consumers = Consumers} = State) ->
     MaxActivePriority = maps:fold(fun(_, #consumer{credit = C,
                                                    status = up,
-                                                   priority = P0}, MaxP) when C > 0 ->
+                                                   priority = P0}, MaxP)
+                                        when C > 0 ->
                                           P = -P0,
                                           case MaxP of
                                               empty -> P;
@@ -2084,6 +2086,27 @@ take_next_msg(#?MODULE{returns = Returns0,
             end
     end.
 
+peek_next_msg(#?MODULE{prefix_msgs = {_NumR, [Msg | _],
+                                      _NumP, _P}}) ->
+    %% there are prefix returns, these should be served first
+    {value, Msg};
+peek_next_msg(#?MODULE{returns = Returns0,
+                       messages = Messages0,
+                       prefix_msgs = {_NumR, _R, _NumP, P}}) ->
+    case lqueue:peek(Returns0) of
+        {value, _} = Msg ->
+            Msg;
+        empty when P == [] ->
+            lqueue:peek(Messages0);
+        empty ->
+            case P of
+                [?PREFIX_MEM_MSG(_Header) = Msg | _] ->
+                    {value, Msg};
+                [?DISK_MSG(_Header) = Msg | _] ->
+                    {value, Msg}
+            end
+    end.
+
 delivery_effect({CTag, CPid}, [], InMemMsgs) ->
     {send_msg, CPid, {delivery, CTag, lists:reverse(InMemMsgs)},
      [local, ra_event]};
@@ -2115,13 +2138,13 @@ reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
                              {dequeue, {MsgId, {Header, Msg}}, Ready}}}]
      end}.
 
-checkout_one(#{system_time := Ts} = Meta, InitState0, Effects0) ->
+checkout_one(#{system_time := _Ts} = Meta, InitState0, Effects1) ->
     %% Before checking out any messsage to any consumer,
     %% first remove all expired messages from the head of the queue.
-    {#?MODULE{service_queue = SQ0,
-              messages = Messages0,
-              consumers = Cons0} = InitState, Effects1} =
-        expire_msgs(Ts, InitState0, Effects0),
+    #?MODULE{service_queue = SQ0,
+             messages = Messages0,
+             consumers = Cons0} = InitState = InitState0,
+        % expire_msgs(Ts, InitState0, Effects0),
     case priority_queue:out(SQ0) of
         {{value, ConsumerId}, SQ1}
           when is_map_key(ConsumerId, Cons0) ->
@@ -2129,11 +2152,14 @@ checkout_one(#{system_time := Ts} = Meta, InitState0, Effects0) ->
                 {ConsumerMsg, State0} ->
                     %% there are consumers waiting to be serviced
                     %% process consumer checkout
-                    case maps:get(ConsumerId, Cons0, error) of
+                    case maps:get(ConsumerId, Cons0) of
                         #consumer{credit = 0} ->
                             %% no credit but was still on queue
                             %% can happen when draining
                             %% recurse without consumer on queue
+                            %% NB: these retry cases introduce the "queue list reversal"
+                            %% inefficiency but this is a rare thing to happen
+                            %% so should not need optimising
                             checkout_one(Meta, InitState#?MODULE{service_queue = SQ1}, Effects1);
                         #consumer{status = cancelled} ->
                             checkout_one(Meta, InitState#?MODULE{service_queue = SQ1}, Effects1);
@@ -2161,10 +2187,7 @@ checkout_one(#{system_time := Ts} = Meta, InitState0, Effects0) ->
                                             subtract_in_memory_counts(
                                               Header, add_bytes_checkout(Header, State1))
                                     end,
-                            {success, ConsumerId, Next, ConsumerMsg, State, Effects1};
-                        error ->
-                            %% consumer did not exist but was queued, recurse
-                            checkout_one(Meta, InitState#?MODULE{service_queue = SQ1}, Effects1)
+                            {success, ConsumerId, Next, ConsumerMsg, State, Effects1}
                     end;
                 empty ->
                     {nochange, InitState, Effects1}
@@ -2185,7 +2208,8 @@ checkout_one(#{system_time := Ts} = Meta, InitState0, Effects0) ->
 %% dequeue all expired messages
 expire_msgs(RaCmdTs, State0, Effects0) ->
     case take_next_msg(State0) of
-        {?INDEX_MSG(Idx, ?MSG(#{expiry := Expiry} = Header, _) = Msg) = FullMsg, State1}
+        {?INDEX_MSG(Idx, ?MSG(#{expiry := Expiry} = Header, _) = Msg) = FullMsg,
+         State1}
           when RaCmdTs >= Expiry ->
             #?MODULE{dlx = DlxState0,
                      cfg = #cfg{dead_letter_handler = DLH},
@@ -2239,8 +2263,8 @@ expire_prefix_msg(Msg, Header, State0) ->
     end.
 
 timer_effect(RaCmdTs, State, Effects) ->
-    T = case take_next_msg(State) of
-            {?INDEX_MSG(_, ?MSG(#{expiry := Expiry}, _)), _}
+    T = case peek_next_msg(State) of
+            {value, ?INDEX_MSG(_, ?MSG(#{expiry := Expiry}, _))}
               when is_number(Expiry) ->
                 %% Next message contains 'expiry' header.
                 %% (Re)set timer so that mesage will be dropped or dead-lettered on time.
@@ -2661,7 +2685,6 @@ smallest_raft_index(#?MODULE{cfg = _Cfg,
                     {I, State}
             end;
         _ ->
-            %% TODO: could be inefficent if there is no front list
             case lqueue:peek(Messages) of
                 {value, ?INDEX_MSG(I, _)} ->
                     {I, State};
