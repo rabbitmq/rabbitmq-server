@@ -98,18 +98,11 @@ set_max_check_interval(Interval) ->
     gen_server:call(?MODULE, {set_max_check_interval, Interval}).
 
 -spec get_disk_free() -> (integer() | 'unknown').
-<<<<<<< HEAD
--spec set_enabled(string()) -> 'ok'.
 
-=======
->>>>>>> 590ead483f (Use protected ets so that data can be read quickly)
 get_disk_free() ->
     safe_ets_lookup(disk_free, unknown).
 
-<<<<<<< HEAD
-=======
 -spec set_enabled(string()) -> 'ok'.
->>>>>>> 590ead483f (Use protected ets so that data can be read quickly)
 set_enabled(Enabled) ->
     gen_server:call(?MODULE, {set_enabled, Enabled}).
 
