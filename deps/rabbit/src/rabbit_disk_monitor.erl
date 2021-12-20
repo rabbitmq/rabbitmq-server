@@ -33,6 +33,7 @@
          get_disk_free/0, set_enabled/1]).
 
 -define(SERVER, ?MODULE).
+-define(ETS_NAME, ?MODULE).
 -define(DEFAULT_MIN_DISK_CHECK_INTERVAL, 100).
 -define(DEFAULT_MAX_DISK_CHECK_INTERVAL, 10000).
 -define(DEFAULT_DISK_FREE_LIMIT, 50000000).
@@ -73,41 +74,42 @@
 %%----------------------------------------------------------------------------
 
 -spec get_disk_free_limit() -> integer().
-
 get_disk_free_limit() ->
-    gen_server:call(?MODULE, get_disk_free_limit).
+    safe_ets_lookup(disk_free_limit, ?DEFAULT_DISK_FREE_LIMIT).
 
 -spec set_disk_free_limit(disk_free_limit()) -> 'ok'.
-
 set_disk_free_limit(Limit) ->
     gen_server:call(?MODULE, {set_disk_free_limit, Limit}).
 
 -spec get_min_check_interval() -> integer().
-
 get_min_check_interval() ->
-    gen_server:call(?MODULE, get_min_check_interval).
+    safe_ets_lookup(min_check_interval, ?DEFAULT_MIN_DISK_CHECK_INTERVAL).
 
 -spec set_min_check_interval(integer()) -> 'ok'.
-
 set_min_check_interval(Interval) ->
     gen_server:call(?MODULE, {set_min_check_interval, Interval}).
 
 -spec get_max_check_interval() -> integer().
-
 get_max_check_interval() ->
-    gen_server:call(?MODULE, get_max_check_interval).
+    safe_ets_lookup(max_check_interval, ?DEFAULT_MAX_DISK_CHECK_INTERVAL).
 
 -spec set_max_check_interval(integer()) -> 'ok'.
-
 set_max_check_interval(Interval) ->
     gen_server:call(?MODULE, {set_max_check_interval, Interval}).
 
 -spec get_disk_free() -> (integer() | 'unknown').
+<<<<<<< HEAD
 -spec set_enabled(string()) -> 'ok'.
 
+=======
+>>>>>>> 590ead483f (Use protected ets so that data can be read quickly)
 get_disk_free() ->
-    gen_server:call(?MODULE, get_disk_free).
+    safe_ets_lookup(disk_free, unknown).
 
+<<<<<<< HEAD
+=======
+-spec set_enabled(string()) -> 'ok'.
+>>>>>>> 590ead483f (Use protected ets so that data can be read quickly)
 set_enabled(Enabled) ->
     gen_server:call(?MODULE, {set_enabled, Enabled}).
 
@@ -116,7 +118,6 @@ set_enabled(Enabled) ->
 %%----------------------------------------------------------------------------
 
 -spec start_link(disk_free_limit()) -> rabbit_types:ok_pid_or_error().
-
 start_link(Args) ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [Args], []).
 
@@ -124,18 +125,16 @@ init([Limit]) ->
     Dir = dir(),
     {ok, Retries} = application:get_env(rabbit, disk_monitor_failure_retries),
     {ok, Interval} = application:get_env(rabbit, disk_monitor_failure_retry_interval),
-    State = #state{dir          = Dir,
-                   min_interval = ?DEFAULT_MIN_DISK_CHECK_INTERVAL,
-                   max_interval = ?DEFAULT_MAX_DISK_CHECK_INTERVAL,
-                   alarmed      = false,
-                   enabled      = true,
-                   limit        = Limit,
-                   retries      = Retries,
-                   interval     = Interval},
-    {ok, enable(State)}.
-
-handle_call(get_disk_free_limit, _From, State = #state{limit = Limit}) ->
-    {reply, Limit, State};
+    ?ETS_NAME = ets:new(?ETS_NAME, [protected, set, named_table]),
+    State0 = #state{dir          = Dir,
+                    alarmed      = false,
+                    enabled      = true,
+                    limit        = Limit,
+                    retries      = Retries,
+                    interval     = Interval},
+    State1 = set_min_check_interval(?DEFAULT_MIN_DISK_CHECK_INTERVAL, State0),
+    State2 = set_max_check_interval(?DEFAULT_MAX_DISK_CHECK_INTERVAL, State1),
+    {ok, enable(State2)}.
 
 handle_call({set_disk_free_limit, _}, _From, #state{enabled = false} = State) ->
     _ = rabbit_log:info("Cannot set disk free limit: "
@@ -145,20 +144,14 @@ handle_call({set_disk_free_limit, _}, _From, #state{enabled = false} = State) ->
 handle_call({set_disk_free_limit, Limit}, _From, State) ->
     {reply, ok, set_disk_limits(State, Limit)};
 
-handle_call(get_min_check_interval, _From, State) ->
-    {reply, State#state.min_interval, State};
-
 handle_call(get_max_check_interval, _From, State) ->
     {reply, State#state.max_interval, State};
 
 handle_call({set_min_check_interval, MinInterval}, _From, State) ->
-    {reply, ok, State#state{min_interval = MinInterval}};
+    {reply, ok, set_min_check_interval(MinInterval, State)};
 
 handle_call({set_max_check_interval, MaxInterval}, _From, State) ->
-    {reply, ok, State#state{max_interval = MaxInterval}};
-
-handle_call(get_disk_free, _From, State = #state { actual = Actual }) ->
-    {reply, Actual, State};
+    {reply, ok, set_max_check_interval(MaxInterval, State)};
 
 handle_call({set_enabled, _Enabled = true}, _From, State) ->
     start_timer(set_disk_limits(State, State#state.limit)),
@@ -193,14 +186,32 @@ code_change(_OldVsn, State, _Extra) ->
 %% Server Internals
 %%----------------------------------------------------------------------------
 
+safe_ets_lookup(Key, Default) ->
+    try
+        [{Key, Value}] = ets:lookup(?ETS_NAME, Key),
+        Value
+    catch
+        error:badarg ->
+            Default
+    end.
+
 % the partition / drive containing this directory will be monitored
 dir() -> rabbit_mnesia:dir().
+
+set_min_check_interval(MinInterval, State) ->
+    ets:insert(?ETS_NAME, {min_check_interval, MinInterval}),
+    State#state{min_interval = MinInterval}.
+
+set_max_check_interval(MaxInterval, State) ->
+    ets:insert(?ETS_NAME, {max_check_interval, MaxInterval}),
+    State#state{max_interval = MaxInterval}.
 
 set_disk_limits(State, Limit0) ->
     Limit = interpret_limit(Limit0),
     State1 = State#state { limit = Limit },
     _ = rabbit_log:info("Disk free limit set to ~pMB~n",
                     [trunc(Limit / 1000000)]),
+    ets:insert(?ETS_NAME, {disk_free_limit, Limit}),
     internal_update(State1).
 
 internal_update(State = #state { limit   = Limit,
@@ -218,7 +229,8 @@ internal_update(State = #state { limit   = Limit,
         _ ->
             ok
     end,
-    State #state {alarmed = NewAlarmed, actual = CurrentFree}.
+    ets:insert(?ETS_NAME, {disk_free, CurrentFree}),
+    State#state{alarmed = NewAlarmed, actual = CurrentFree}.
 
 get_disk_free(Dir) ->
     get_disk_free(Dir, os:type()).
