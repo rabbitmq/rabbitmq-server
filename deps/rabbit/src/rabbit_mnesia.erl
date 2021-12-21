@@ -267,7 +267,34 @@ join_mnesia_cluster(DiscoveryNode, NodeType) ->
 
 join_khepri_cluster(DiscoveryNode) ->
     ThisNode = node(),
-    rabbit_khepri:add_member(ThisNode, [DiscoveryNode]).
+    retry_khepri_op(fun() -> rabbit_khepri:add_member(ThisNode, [DiscoveryNode]) end, 60).
+
+leave_khepri_cluster(Node) ->
+    retry_khepri_op(fun() -> rabbit_khepri:remove_member(Node) end, 60).
+
+retry_khepri_op(Fun, 0) ->
+    Fun();
+retry_khepri_op(Fun, N) ->
+    case Fun() of
+        {error, {no_more_servers_to_try, Reasons}} = Err ->
+            case lists:member({error,cluster_change_not_permitted}, Reasons) of
+                true ->
+                    timer:sleep(1000),
+                    retry_khepri_op(Fun, N - 1);
+                false ->
+                    Err
+            end;
+        {no_more_servers_to_try, Reasons} = Err ->
+            case lists:member({error,cluster_change_not_permitted}, Reasons) of
+                true ->
+                    timer:sleep(1000),
+                    retry_khepri_op(Fun, N - 1);
+                false ->
+                    Err
+            end;
+        Any ->
+            Any
+    end.
 
 %% return node to its virgin state, where it is not member of any
 %% cluster, has no cluster configuration, no local database, and no
@@ -878,7 +905,7 @@ remove_node_if_mnesia_running(Node) ->
                 {atomic, ok} ->
                     rabbit_amqqueue:forget_all_durable(Node),
                     rabbit_node_monitor:notify_left_cluster(Node),
-                    ok;
+                    leave_khepri_cluster(Node);
                 {aborted, Reason} ->
                     {error, {failed_to_remove_node, Node, Reason}}
             end
