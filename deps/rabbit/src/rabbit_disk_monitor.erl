@@ -244,9 +244,9 @@ get_disk_free(Dir, {win32, _}) ->
     % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
     case win32_get_drive_letter(Dir) of
         error ->
-            rabbit_log:warning("Expected the mnesia directory absolute "
-                               "path to start with a drive letter like "
-                               "'C:'. The path is: '~p'", [Dir]),
+            _ = rabbit_log:warning("Expected the mnesia directory absolute "
+                                   "path to start with a drive letter like "
+                                   "'C:'. The path is: '~p'", [Dir]),
             case win32_get_disk_free_dir(Dir) of
                 {ok, Free} ->
                     Free;
@@ -407,6 +407,6 @@ run_cmd(Cmd) ->
             CmdResult
     after 5000 ->
         exit(CmdPid, kill),
-        rabbit_log:error("Command timed out: '~s'", [Cmd]),
+        _ = rabbit_log:error("Command timed out: '~s'", [Cmd]),
         {error, timeout}
     end.
