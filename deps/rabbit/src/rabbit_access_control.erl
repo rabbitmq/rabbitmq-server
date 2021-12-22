@@ -38,7 +38,7 @@ check_user_pass_login(Username, Password) ->
 check_user_login(Username, AuthProps) ->
     %% extra auth properties like MQTT client id are in AuthProps
     {ok, Modules} = application:get_env(rabbit, auth_backends),
-    try 
+    try
         lists:foldl(
             fun (rabbit_auth_backend_cache=ModN, {refused, _, _, _}) ->
                     %% It is possible to specify authn/authz within the cache module settings,
