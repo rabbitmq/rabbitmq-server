@@ -14,7 +14,7 @@
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
 
--export([add_user/3, add_user/4, delete_user/2, lookup_user/1, exists/1,
+-export([add_user/3, add_user/4, add_user/5, delete_user/2, lookup_user/1, exists/1,
          change_password/3, clear_password/2,
          hash_password/2, change_password_hash/2, change_password_hash/3,
          set_tags/3, set_permissions/6, clear_permissions/3,
