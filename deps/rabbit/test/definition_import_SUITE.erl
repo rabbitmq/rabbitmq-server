@@ -47,7 +47,9 @@ groups() ->
                                import_case14,
                                import_case15,
                                import_case16,
-                               import_case17
+                               import_case17,
+                               import_case18,
+                               import_case19
                               ]},
         
         {boot_time_import_using_classic_source, [], [
@@ -239,6 +241,34 @@ import_case16(Config) ->
 
 import_case17(Config) -> import_invalid_file_case(Config, "failing_case17").
 
+import_case18(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+      false ->
+        case rabbit_ct_broker_helpers:enable_feature_flag(Config, user_limits) of
+            ok ->
+                import_file_case(Config, "case18"),
+                User = <<"limited_guest">>,
+                UserIsImported =
+                    fun () ->
+                            case user_lookup(Config, User) of
+                                {error, not_found} -> false;
+                                _       -> true
+                            end
+                    end,
+                rabbit_ct_helpers:await_condition(UserIsImported, 20000),
+                {ok, UserRec} = user_lookup(Config, User),
+                ?assertEqual(#{<<"max-connections">> => 2}, internal_user:get_limits(UserRec)),
+                ok;
+            Skip ->
+                Skip
+        end;
+      _ ->
+        %% skip the test in mixed version mode
+        {skip, "Should not run in mixed version environments"}
+    end.
+
+import_case19(Config) -> import_invalid_file_case(Config, "failing_case19").
+
 export_import_round_trip_case1(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
       false ->
@@ -385,3 +415,6 @@ queue_lookup(Config, VHost, Name) ->
 
 vhost_lookup(Config, VHost) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, lookup, [VHost]).
+
+user_lookup(Config, User) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, lookup_user, [User]).
