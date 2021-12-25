@@ -24,7 +24,15 @@ decode(Token) ->
     end.
 
 decode_and_verify(Jwk, Token) ->
-    case jose_jwt:verify(Jwk, Token) of
+    UaaEnv = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
+    Verify =
+        case proplists:get_value(algorithms, UaaEnv) of
+            undefined ->
+                jose_jwt:verify(Jwk, Token);
+            Algs ->
+                jose_jwt:verify_strict(Jwk, Algs, Token)
+        end,
+    case Verify of
         {true, #jose_jwt{fields = Fields}, _}  -> {true, Fields};
         {false, #jose_jwt{fields = Fields}, _} -> {false, Fields}
     end.

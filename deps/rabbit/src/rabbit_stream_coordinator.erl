@@ -846,18 +846,22 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
                     %% This can happen during recovery
                     %% we need to re-initialise the queue record
                     %% if the stream id is a match
-                    [Q] = mnesia:dirty_read(rabbit_durable_queue, QName),
-                    case amqqueue:get_type_state(Q) of
-                        #{name := S} when S == StreamId ->
-                            rabbit_log:debug("~s: initializing queue record for stream id  ~s",
-                                             [?MODULE, StreamId]),
-                            _ = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q)),
+                    case mnesia:dirty_read(rabbit_durable_queue, QName) of
+                        [] ->
+                            %% queue not found at all, it must have been deleted
                             ok;
-                        _ ->
-                            ok
-                    end,
-
-                    send_self_command({mnesia_updated, StreamId, Args});
+                        [Q] ->
+                            case amqqueue:get_type_state(Q) of
+                                #{name := S} when S == StreamId ->
+                                    rabbit_log:debug("~s: initializing queue record for stream id  ~s",
+                                                     [?MODULE, StreamId]),
+                                    _ = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q)),
+                                    ok;
+                                _ ->
+                                    ok
+                            end,
+                            send_self_command({mnesia_updated, StreamId, Args})
+                    end;
                 _ ->
                     send_self_command({mnesia_updated, StreamId, Args})
             catch _:E ->

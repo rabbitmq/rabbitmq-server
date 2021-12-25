@@ -15,7 +15,9 @@ deps_dirs:
   - bazel-bin/external/*
 include_dirs:
   - deps
+  - deps/*
   - deps/*/include
+  - deps/*/src
   - bazel-bin/external
   - bazel-bin/external/*/include
 plt_path: bazel-bin/deps/rabbit/.base_plt.plt

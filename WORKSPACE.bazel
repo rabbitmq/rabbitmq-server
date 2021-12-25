@@ -34,13 +34,13 @@ buildbuddy(
 
 git_repository(
     name = "rbe_23",
-    commit = "d2b454dc5138a2a92de45a0a672241a4fbb5a1e5",
+    commit = "b21c066e426de48e526cc0f8c5158b7024d04e85",
     remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
 )
 
 git_repository(
     name = "rbe_24",
-    commit = "a087892ef4202dc3245b64d36d5921491848315f",
+    commit = "c8cbf65e2facbe464ebbcee7b6cf6f7a2d422ded",
     remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
 )
 

@@ -1306,7 +1306,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_expiration_header(Props),
     DoConfirm = Tx =/= none orelse ConfirmEnabled,
     {MsgSeqNo, State1} =
-        case DoConfirm orelse Mandatory of
+        case DoConfirm of
             false -> {undefined, State0};
             true  -> rabbit_global_counters:messages_received_confirm(amqp091, 1),
                      SeqNo = State0#ch.publish_seqno,

@@ -1,8 +1,8 @@
 -module(jwks_http_app).
 
--export([start/1, stop/0]).
+-export([start/2, stop/0]).
 
-start(Port) ->
+start(Port, CertsDir) ->
     Dispatch =
         cowboy_router:compile(
           [
@@ -11,8 +11,10 @@ start(Port) ->
                  ]}
           ]
          ),
-    {ok, _} = cowboy:start_clear(jwks_http_listener,
-                      [{port, Port}],
+    {ok, _} = cowboy:start_tls(jwks_http_listener,
+                      [{port, Port},
+                       {certfile, filename:join([CertsDir, "server", "cert.pem"])},
+                       {keyfile, filename:join([CertsDir, "server", "key.pem"])}],
                       #{env => #{dispatch => Dispatch}}),
     ok.
 
