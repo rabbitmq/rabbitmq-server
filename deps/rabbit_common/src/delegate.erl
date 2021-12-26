@@ -36,16 +36,19 @@
 %% the pool is configurable, the aim is to make sure we don't have too
 %% few delegates and thus limit performance on many-CPU machines.
 
-%% Optimisation for 'delegate'
-%% If a message is sent to only one queue(in most application scenarios),
-%% passing through the 'delegate' is meaningless.
-%% Hardcoding "?DEFAULT_NAME and/or gen_server2" is to avoid affecting those
-%%  operations that must go through the 'delegate', such as:
-%%  1. "delegate:invoke(Pids, {erlang, process_info, [memory]})", "erlang, process_info" 
-%%      must be called inside the target node. 
+%% There are some optimisations applied.
+%% If a message is sent to only one queue (a common scenario),
+%% sending them over the delegate mechanism is redundant.
+%% This optimization is applied to gen_server2 module calls when
+%% delegate prefix matches the default, ?DEFAULT_NAME.
+%%
+%% Coonsider two examples:
+%%
+%%  1. "delegate:invoke(Pids, {erlang, process_info, [memory]})", "erlang:process_info/1"
+%%      should be called inside the target node.
 %%  2. "{Results, Errors} = delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA)",
-%%      For some reason, the operation specifically specifies a delegate name rather than
-%%      ?DEFAULT_NAME.
+%%      Since this operation specifically specifies a delegate name rather than
+%%      relying on ?DEFAULT_NAME, it will be invoked using the delegate mechanism.
 
 -behaviour(gen_server2).
 
