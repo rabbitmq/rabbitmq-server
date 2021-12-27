@@ -990,11 +990,11 @@ suites = [
         flaky = True,
     ),
     rabbitmq_suite(
-        name = "rabbit_mirror_queue_sync_SUITE",
+        name = "unit_classic_mirrored_queue_sync_throttling_SUITE",
         size = "small",
     ),
     rabbitmq_suite(
-        name = "rabbit_mirror_queue_misc_SUITE",
+        name = "unit_classic_mirrored_queue_throughput_SUITE",
         size = "small",
     ),
 ]
