@@ -1390,7 +1390,8 @@ reject_publish_applied_after_limit_test(_) ->
              queue_resource => rabbit_misc:r("/", queue,
                                              atom_to_binary(?FUNCTION_NAME, utf8)),
              max_length => 2,
-             overflow_strategy => reject_publish
+             overflow_strategy => reject_publish,
+             dead_letter_handler => undefined
             },
     {State5, ok, Efx1} = apply(meta(5), rabbit_fifo:make_update_config(Conf), State4),
     ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx1),

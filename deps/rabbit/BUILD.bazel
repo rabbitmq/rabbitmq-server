@@ -700,6 +700,9 @@ suites = [
             "src/rabbit_fifo.hrl",
             "src/rabbit_fifo_dlx.hrl",
         ],
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
     ),
     rabbitmq_integration_suite(
         PACKAGE,
