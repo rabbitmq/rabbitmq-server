@@ -1,8 +1,10 @@
 -module(unit_classic_mirrored_queue_sync_throttling_SUITE).
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
+
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
 
