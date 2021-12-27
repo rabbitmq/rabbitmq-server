@@ -1,4 +1,4 @@
--module(rabbit_mirror_queue_misc_SUITE).
+-module(unit_classic_mirrored_queue_throughput_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
