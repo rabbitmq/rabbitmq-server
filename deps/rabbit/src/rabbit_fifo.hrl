@@ -214,6 +214,7 @@
          %% TODO Remove this field and store prefix messages in-place. This will
          %% simplify the checkout logic.
          prefix_msgs = {0, [], 0, []} :: prefix_msgs(),
+         %% state for at-least-once dead-lettering
          dlx = rabbit_fifo_dlx:init() :: rabbit_fifo_dlx:state(),
          msg_bytes_enqueue = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer(),
