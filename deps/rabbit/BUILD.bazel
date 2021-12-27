@@ -992,10 +992,16 @@ suites = [
     rabbitmq_suite(
         name = "unit_classic_mirrored_queue_sync_throttling_SUITE",
         size = "small",
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ]
     ),
     rabbitmq_suite(
         name = "unit_classic_mirrored_queue_throughput_SUITE",
         size = "small",
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ]
     ),
 ]
 
