@@ -9,9 +9,14 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([master_prepare/4, master_go/8, slave/7, conserve_resources/3]).
+-export([master_prepare/4, master_go/9, slave/7, conserve_resources/3]).
+
+%% Export for UTs
+-export([maybe_master_batch_send/2, get_time_diff/3, append_to_acc/4]).
 
 -define(SYNC_PROGRESS_INTERVAL, 1000000).
+
+-define(SYNC_THROUGHPUT_EVAL_INTERVAL_MILLIS, 50).
 
 %% There are three processes around, the master, the syncer and the
 %% slave(s). The syncer is an intermediary, linked to the master in
@@ -67,23 +72,24 @@ master_prepare(Ref, QName, Log, SPids) ->
                       rabbit_mirror_queue_master:stats_fun(),
                       rabbit_mirror_queue_master:stats_fun(),
                       non_neg_integer(),
+                      non_neg_integer(),
                       bq(), bqs()) ->
                           {'already_synced', bqs()} | {'ok', bqs()} |
                           {'cancelled', bqs()} |
                           {'shutdown', any(), bqs()} |
                           {'sync_died', any(), bqs()}.
 
-master_go(Syncer, Ref, Log, HandleInfo, EmitStats, SyncBatchSize, BQ, BQS) ->
+master_go(Syncer, Ref, Log, HandleInfo, EmitStats, SyncBatchSize, SyncThroughput, BQ, BQS) ->
     Args = {Syncer, Ref, Log, HandleInfo, EmitStats, rabbit_misc:get_parent()},
     receive
         {'EXIT', Syncer, normal} -> {already_synced, BQS};
         {'EXIT', Syncer, Reason} -> {sync_died, Reason, BQS};
         {ready, Syncer}          -> EmitStats({syncing, 0}),
-                                    master_batch_go0(Args, SyncBatchSize,
+                                    master_batch_go0(Args, SyncBatchSize, SyncThroughput,
                                                      BQ, BQS)
     end.
 
-master_batch_go0(Args, BatchSize, BQ, BQS) ->
+master_batch_go0(Args, BatchSize, SyncThroughput, BQ, BQS) ->
     FoldFun =
         fun (Msg, MsgProps, Unacked, Acc) ->
                 Acc1 = append_to_acc(Msg, MsgProps, Unacked, Acc),
@@ -92,24 +98,27 @@ master_batch_go0(Args, BatchSize, BQ, BQS) ->
                     false -> {cont, Acc1}
                 end
         end,
-    FoldAcc = {[], 0, {0, BQ:depth(BQS)}, erlang:monotonic_time()},
+    FoldAcc = {[], 0, {0, erlang:monotonic_time(), SyncThroughput}, {0, BQ:depth(BQS)}, erlang:monotonic_time()},
     bq_fold(FoldFun, FoldAcc, Args, BQ, BQS).
 
 master_batch_send({Syncer, Ref, Log, HandleInfo, EmitStats, Parent},
-                  {Batch, I, {Curr, Len}, Last}) ->
+                  {Batch, I, {TotalBytes, LastCheck, SyncThroughput}, {Curr, Len}, Last}) ->
     T = maybe_emit_stats(Last, I, EmitStats, Log),
     HandleInfo({syncing, I}),
     handle_set_maximum_since_use(),
     SyncMsg = {msgs, Ref, lists:reverse(Batch)},
-    NewAcc = {[], I + length(Batch), {Curr, Len}, T},
+    NewAcc = {[], I + length(Batch), {TotalBytes, LastCheck, SyncThroughput}, {Curr, Len}, T},
     master_send_receive(SyncMsg, NewAcc, Syncer, Ref, Parent).
 
 %% Either send messages when we reach the last one in the queue or
 %% whenever we have accumulated BatchSize messages.
-maybe_master_batch_send({_, _, {Len, Len}, _}, _BatchSize) ->
+maybe_master_batch_send({_, _, _, {Len, Len}, _}, _BatchSize) ->
     true;
-maybe_master_batch_send({_, _, {Curr, _Len}, _}, BatchSize)
-  when Curr rem BatchSize =:= 0 ->
+maybe_master_batch_send({_, _, _, {Curr, _Len}, _}, BatchSize)
+    when Curr rem BatchSize =:= 0 ->
+    true;
+maybe_master_batch_send({_, _, {TotalBytes, _, SyncThroughput}, {_Curr, _Len}, _}, _BatchSize)
+    when TotalBytes > SyncThroughput ->
     true;
 maybe_master_batch_send(_Acc, _BatchSize) ->
     false.
@@ -121,8 +130,10 @@ bq_fold(FoldFun, FoldAcc, Args, BQ, BQS) ->
         {_,                   BQS1} -> master_done(Args, BQS1)
     end.
 
-append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {Curr, Len}, T}) ->
-    {[{Msg, MsgProps, Unacked} | Batch], I, {Curr + 1, Len}, T}.
+append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {_, _, 0}, {Curr, Len}, T}) ->
+    {[{Msg, MsgProps, Unacked} | Batch], I, {0, 0, 0}, {Curr + 1, Len}, T};
+append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {TotalBytes, LastCheck, SyncThroughput}, {Curr, Len}, T}) ->
+    {[{Msg, MsgProps, Unacked} | Batch], I, {TotalBytes + rabbit_basic:msg_size(Msg), LastCheck, SyncThroughput}, {Curr + 1, Len}, T}.
 
 master_send_receive(SyncMsg, NewAcc, Syncer, Ref, Parent) ->
     receive
@@ -131,10 +142,43 @@ master_send_receive(SyncMsg, NewAcc, Syncer, Ref, Parent) ->
                                     gen_server2:reply(From, ok),
                                     {stop, cancelled};
         {next, Ref}              -> Syncer ! SyncMsg,
-                                    {cont, NewAcc};
+                                    {Msgs, I , {TotalBytes, LastCheck, SyncThroughput}, {Curr, Len}, T} = NewAcc,
+                                    {NewTotalBytes, NewLastCheck} = maybe_throttle_sync_throughput(TotalBytes, LastCheck, SyncThroughput),
+                                    {cont, {Msgs, I, {NewTotalBytes, NewLastCheck, SyncThroughput}, {Curr, Len}, T}};
         {'EXIT', Parent, Reason} -> {stop, {shutdown,  Reason}};
         {'EXIT', Syncer, Reason} -> {stop, {sync_died, Reason}}
     end.
+
+maybe_throttle_sync_throughput(_ , _, 0) ->
+    {0, erlang:monotonic_time()};
+maybe_throttle_sync_throughput(TotalBytes, LastCheck, SyncThroughput) ->
+    Interval = erlang:convert_time_unit(erlang:monotonic_time() - LastCheck, native, milli_seconds),
+    case Interval > ?SYNC_THROUGHPUT_EVAL_INTERVAL_MILLIS of
+        true  -> maybe_pause_sync(TotalBytes, Interval, SyncThroughput),
+                 {0, erlang:monotonic_time()}; %% reset TotalBytes counter and LastCheck.;
+        false -> {TotalBytes, LastCheck}
+    end.
+
+maybe_pause_sync(TotalBytes, Interval, SyncThroughput) ->
+    Delta = get_time_diff(TotalBytes, Interval, SyncThroughput),
+    pause_queue_sync(Delta).
+
+pause_queue_sync(0) ->
+    rabbit_log_mirroring:debug("Sync throughput is ok.");
+pause_queue_sync(Delta) ->
+    rabbit_log_mirroring:debug("Sync throughput exceeds threshold. Pause queue sync for ~p ms", [Delta]),
+    timer:sleep(Delta).
+
+%% Sync throughput computation:
+%% - Total bytes have been sent since last check: TotalBytes
+%% - Used/Elapsed time since last check: Interval (in milliseconds)
+%% - Effective/Used throughput in bytes/s: TotalBytes/Interval * 1000.
+%% - When UsedThroughput > SyncThroughput -> we need to slow down to compensate over-used rate.
+%% The amount of time to pause queue sync is the different between time needed to broadcast TotalBytes at max throughput
+%% and the elapsed time (Interval).
+get_time_diff(TotalBytes, Interval, SyncThroughput) ->
+    rabbit_log_mirroring:debug("Total ~p bytes has been sent over last ~p ms. Effective sync througput: ~p", [TotalBytes, Interval, round(TotalBytes * 1000 / Interval)]),
+    max(round(TotalBytes/SyncThroughput * 1000 - Interval), 0).
 
 master_done({Syncer, Ref, _Log, _HandleInfo, _EmitStats, Parent}, BQS) ->
     receive
