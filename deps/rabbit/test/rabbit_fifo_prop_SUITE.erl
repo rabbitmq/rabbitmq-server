@@ -1687,7 +1687,9 @@ expand(Ops, Config, EnqFun) ->
     %% execute each command against a rabbit_fifo state and capture all relevant
     %% effects
     InitConfig0 = #{name => proper,
-                    queue_resource => blah,
+                    queue_resource => #resource{virtual_host = <<"/">>,
+                                                kind = queue,
+                                                name = <<"blah">>},
                     release_cursor_interval => 1},
     InitConfig = case Config of
                      #{dead_letter_handler := at_least_once} ->

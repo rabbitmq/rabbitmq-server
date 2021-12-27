@@ -201,8 +201,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 lookup_topology(#state{queue_ref = {resource, Vhost, queue, _} = QRef} = State) ->
     {ok, Q} = rabbit_amqqueue:lookup(QRef),
-    DLRKey = rabbit_queue_type_util:args_policy_lookup(<<"dead-letter-routing-key">>, fun(_Pol, QArg) -> QArg end, Q),
-    DLX = rabbit_queue_type_util:args_policy_lookup(<<"dead-letter-exchange">>, fun(_Pol, QArg) -> QArg end, Q),
+    DLRKey = rabbit_queue_type_util:args_policy_lookup(<<"dead-letter-routing-key">>,
+                                                       fun(_Pol, QArg) -> QArg end, Q),
+    DLX = rabbit_queue_type_util:args_policy_lookup(<<"dead-letter-exchange">>,
+                                                    fun(_Pol, QArg) -> QArg end, Q),
     DLXRef = rabbit_misc:r(Vhost, exchange, DLX),
     State#state{exchange_ref = DLXRef,
                 routing_key = DLRKey}.

@@ -1266,14 +1266,9 @@ reclaim_memory(Vhost, QueueName) ->
 
 %%----------------------------------------------------------------------------
 dead_letter_handler(Q, Overflow) ->
-    %% Queue arg continues to take precedence to not break existing configurations
-    %% for queues upgraded from <v3.10 to >=v3.10
     Exchange = args_policy_lookup(<<"dead-letter-exchange">>, fun queueArgHasPrecedence/2, Q),
     RoutingKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun queueArgHasPrecedence/2, Q),
-    %% Policy takes precedence because it's a new key introduced in v3.10 and we want
-    %% users to use policies instead of queue args allowing dynamic reconfiguration.
-    %% TODO change to queueArgHasPrecedence for dead-letter-strategy
-    Strategy = args_policy_lookup(<<"dead-letter-strategy">>, fun policyHasPrecedence/2, Q),
+    Strategy = args_policy_lookup(<<"dead-letter-strategy">>, fun queueArgHasPrecedence/2, Q),
     QName = amqqueue:get_name(Q),
     dlh(Exchange, RoutingKey, Strategy, Overflow, QName).
 

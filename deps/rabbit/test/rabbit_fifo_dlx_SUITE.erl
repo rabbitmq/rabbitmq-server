@@ -1,4 +1,3 @@
-
 -module(rabbit_fifo_dlx_SUITE).
 
 -compile(nowarn_export_all).
@@ -11,6 +10,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit/src/rabbit_fifo.hrl").
 -include_lib("rabbit/src/rabbit_fifo_dlx.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -55,9 +55,15 @@ end_per_testcase(_TestCase, _Config) ->
 %%%===================================================================
 
 discard_no_dlx_consumer(_Config) ->
-    S0 = rabbit_fifo_dlx:init(),
+    InitConfig = #{name => ?MODULE,
+                   queue_resource => #resource{virtual_host = <<"/">>,
+                                               kind = queue,
+                                               name = <<"blah">>},
+                   release_cursor_interval => 1,
+                   dead_letter_handler => at_least_once},
+    S0 = rabbit_fifo:init(InitConfig),
     ?assertMatch(#{num_discarded := 0}, rabbit_fifo_dlx:overview(S0)),
-    S1 = rabbit_fifo_dlx:discard(make_msg(1), because, S0),
+    {S1, _, _} = rabbit_fifo_dlx:discard([make_msg(1)], because, S0),
     ?assertMatch(#{num_discarded := 1}, rabbit_fifo_dlx:overview(S1)),
     ok.
 
