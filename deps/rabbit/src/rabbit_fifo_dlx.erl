@@ -82,7 +82,8 @@ stat(#rabbit_fifo{dlx = #?MODULE{consumer = Con,
     {Num, Bytes}.
 
 -spec apply(ra_machine:command_meta_data(), rabbit_fifo:command(), rabbit_fifo:state()) ->
-    {rabbit_fifo:state(), ra_machine:effects()}.
+    {rabbit_fifo:state(), Reply :: term(), ra_machine:effects()} |
+    {rabbit_fifo:state(), Reply :: term()}.
 apply(Meta, {dlx, #checkout{consumer = Pid,
                             prefetch = Prefetch}},
       #rabbit_fifo{cfg = #cfg{dead_letter_handler = at_least_once},
@@ -138,7 +139,7 @@ apply(#{index := IncomingRaftIdx} = Meta, {dlx, #settle{msg_ids = MsgIds}},
     rabbit_fifo:update_smallest_raft_index(IncomingRaftIdx, State, Effects);
 apply(_, Cmd, #rabbit_fifo{cfg = #cfg{dead_letter_handler = DLH}} = State) ->
     rabbit_log:debug("Ignoring command ~p for dead_letter_handler ~p", Cmd, DLH),
-    {State, []}.
+    {State, ok}.
 
 -spec discard([msg()], rabbit_dead_letter:reason(), rabbit_fifo:state()) ->
     {rabbit_fifo:state(), ra_machine:effects(), Delete :: boolean()}.
