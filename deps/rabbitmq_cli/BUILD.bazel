@@ -1,0 +1,42 @@
+load(":rabbitmqctl.bzl", "rabbitmqctl")
+load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
+load(":elixir.bzl", "elixir")
+
+# This rule simply exposes elixir as a runtime lib for tests in erlang
+elixir(
+    name = "elixir_as_bazel_erlang_lib",
+    visibility = ["//visibility:public"],
+)
+
+# Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
+rabbitmqctl(
+    name = "rabbitmqctl",
+    srcs = glob([
+        "mix.exs",
+        "config/config.exs",
+        "lib/**/*.ex",
+    ]),
+    visibility = ["//visibility:public"],
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)
+
+rabbitmqctl_test(
+    name = "rabbitmqctl_tests",
+    size = "large",
+    srcs = glob([
+        "mix.exs",
+        "config/config.exs",
+        "lib/**/*.ex",
+        "test/**/*.exs",
+    ]),
+    data = glob(["test/fixtures/**/*"]),
+    flaky = True,
+    rabbitmq_run = "//:rabbitmq-for-cli-tests-run",
+    deps = [
+        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_tracing_consumer).
@@ -76,7 +76,7 @@ init(Args0) ->
                     rabbit_tracing_traces:announce(VHost, Name, self()),
                     Format = list_to_atom(binary_to_list(pget(format, Args))),
                     rabbit_log:info("Tracer opened log file ~p with "
-                                    "format ~p~n", [Filename, Format]),
+                                    "format ~p", [Filename, Format]),
                     {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
                                 file = F, filename = Filename,
                                 format = Format, buf = [], buf_cnt = 0,
@@ -119,7 +119,7 @@ terminate(shutdown, State = #state{conn = Conn, ch = Ch,
     catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn),
     catch prim_file:close(F),
-    rabbit_log:info("Tracer closed log file ~p~n", [Filename]),
+    rabbit_log:info("Tracer closed log file ~p", [Filename]),
     ok;
 
 terminate(_Reason, _State) ->

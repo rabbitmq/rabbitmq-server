@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_federation_exchange_link_sup_sup).
@@ -21,6 +21,11 @@
 %%----------------------------------------------------------------------------
 
 start_link() ->
+    _ = pg:start_link(),
+    %% This scope is used by concurrently starting exchange and queue links,
+    %% and other places, so we have to start it very early outside of the supervision tree.
+    %% The scope is stopped in stop/1.
+    rabbit_federation_pg:start_scope(),
     mirrored_supervisor:start_link({local, ?SUPERVISOR}, ?SUPERVISOR,
                                    fun rabbit_misc:execute_mnesia_transaction/1,
                                    ?MODULE, []).

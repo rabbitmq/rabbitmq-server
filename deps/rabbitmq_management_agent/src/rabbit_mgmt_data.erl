@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_data).
@@ -282,7 +282,7 @@ augment_channel_pids(_Pid, ChPids) ->
     lists:map(fun (ChPid) -> augment_channel_pid(ChPid) end, ChPids).
 
 augment_channel_pid(Pid) ->
-    Ch = lookup_element(channel_created_stats, Pid, 3),
+    Ch = lookup_channel_with_fallback_to_connection(Pid),
     Conn = lookup_element(connection_created_stats, pget(connection, Ch), 3),
     case Conn of
     [] -> %% If the connection has just been opened, we might not yet have the data
@@ -295,6 +295,26 @@ augment_channel_pid(Pid) ->
          {connection_name, pget(name,         Conn)},
          {peer_port,       pget(peer_port,    Conn)},
          {peer_host,       pget(peer_host,    Conn)}]
+    end.
+
+lookup_channel_with_fallback_to_connection(ChannelOrConnectionPid) ->
+    % stream consumers report a stream connection PID for their channel PID,
+    % so we adapt to this here
+    case lookup_element(channel_created_stats, ChannelOrConnectionPid, 3) of
+        [] ->
+            case lookup_element(connection_created_stats, ChannelOrConnectionPid, 3) of
+                [] ->
+                    % not a channel and not a connection, not much we can do here
+                    [{pid, ChannelOrConnectionPid}];
+                Conn ->
+                    [{name, <<"">>},
+                     {pid, ChannelOrConnectionPid},
+                     {number, 0},
+                     {user, pget(user, Conn)},
+                     {connection, ChannelOrConnectionPid}]
+            end;
+        Ch ->
+            Ch
     end.
 
 augment_connection_pid(Pid) ->

@@ -4,13 +4,13 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "6.0.0"
+      "version": "7.0.0"
     },
     {
       "type": "datasource",
       "id": "prometheus",
       "name": "prometheus",
-      "version": "1.0.0"
+      "version": "2.0.0"
     },
     {
       "type": "panel",
@@ -34,7 +34,7 @@
       "type": "panel",
       "id": "flant-statusmap-panel",
       "name": "Statusmap",
-      "version": "0.1.1"
+      "version": "0.3.4"
     }
   ],
   "annotations": {
@@ -114,7 +114,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -198,7 +198,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"} == 3) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} == 3) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -282,7 +282,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"} == 1) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} == 1) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -366,7 +366,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"} == 2) OR vector(0)",
+          "expr": "count(erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} == 2) OR vector(0)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -461,7 +461,7 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -532,52 +532,52 @@
       "seriesOverrides": [
         {
           "$$hashKey": "object:130",
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
           "$$hashKey": "object:131",
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
           "$$hashKey": "object:132",
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
           "$$hashKey": "object:133",
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
           "$$hashKey": "object:134",
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
           "$$hashKey": "object:135",
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
           "$$hashKey": "object:136",
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
           "$$hashKey": "object:137",
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
           "$$hashKey": "object:138",
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
           "$$hashKey": "object:139",
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -586,7 +586,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_node_queue_size_bytes * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "erlang_vm_dist_node_queue_size_bytes * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -702,43 +702,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -747,7 +747,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -839,52 +839,52 @@
       "seriesOverrides": [
         {
           "$$hashKey": "object:276",
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
           "$$hashKey": "object:277",
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
           "$$hashKey": "object:278",
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
           "$$hashKey": "object:279",
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
           "$$hashKey": "object:280",
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
           "$$hashKey": "object:281",
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
           "$$hashKey": "object:282",
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
           "$$hashKey": "object:283",
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
           "$$hashKey": "object:284",
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
           "$$hashKey": "object:285",
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -893,7 +893,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "rate(erlang_vm_dist_recv_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} <- {{peer}}",
@@ -986,43 +986,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -1031,7 +1031,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "rate(erlang_vm_dist_send_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -1120,43 +1120,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -1165,7 +1165,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_recv_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "rate(erlang_vm_dist_recv_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} <- {{peer}}",
@@ -1254,43 +1254,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -1299,7 +1299,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) / \n(rate(erlang_vm_dist_send_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
+          "expr": "(rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) / \n(rate(erlang_vm_dist_send_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -1390,43 +1390,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -1435,7 +1435,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(rate(erlang_vm_dist_recv_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}) / \n(rate(erlang_vm_dist_recv_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"})",
+          "expr": "(rate(erlang_vm_dist_recv_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) / \n(rate(erlang_vm_dist_recv_cnt[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} <- {{peer}}",
@@ -1538,43 +1538,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -1583,7 +1583,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_port_memory_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "erlang_vm_dist_port_memory_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -1681,7 +1681,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_port_queue_size_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "erlang_vm_dist_port_queue_size_bytes * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -1828,7 +1828,7 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
-          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"} ",
+          "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} ",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -1907,7 +1907,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "erlang_vm_dist_proc_message_queue_len{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -2005,43 +2005,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -2050,7 +2050,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "erlang_vm_dist_proc_memory_bytes{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -2139,43 +2139,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -2184,7 +2184,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\"}",
+          "expr": "rate(erlang_vm_dist_proc_reductions{type=\"$erlang_vm_dist_proc_type\"}[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -2243,13 +2243,50 @@
   "templating": {
     "list": [
       {
-        "allValue": null,
         "current": {
-          "text": "rabbitmq-qq",
-          "value": "rabbitmq-qq"
+          "selected": false,
+          "text": "default",
+          "value": "default"
         },
+        "hide": 2,
+        "includeAll": false,
+        "label": "datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": null,
+        "current": {},
         "datasource": null,
-        "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
+        "definition": "label_values(rabbitmq_identity_info, namespace)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Namespace",
+        "multi": false,
+        "name": "namespace",
+        "options": [],
+        "query": "label_values(rabbitmq_identity_info, namespace)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": null,
+        "definition": "label_values(rabbitmq_identity_info{namespace=\"$namespace\"}, rabbitmq_cluster)",
         "hide": 0,
         "includeAll": false,
         "index": -1,
@@ -2257,7 +2294,7 @@
         "multi": false,
         "name": "rabbitmq_cluster",
         "options": [],
-        "query": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
+        "query": "label_values(rabbitmq_identity_info{namespace=\"$namespace\"}, rabbitmq_cluster)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -2328,5 +2365,5 @@
   "variables": {
     "list": []
   },
-  "version": 4
+  "version": 20210322
 }

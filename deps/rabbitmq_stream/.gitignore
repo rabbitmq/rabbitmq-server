@@ -24,8 +24,10 @@ erl_crash.dump
 /cover/
 /deps/
 /ebin/
+/escript/
 /logs/
 /plugins/
+/sbin/
 /xrefr
 elvis
 callgrind*

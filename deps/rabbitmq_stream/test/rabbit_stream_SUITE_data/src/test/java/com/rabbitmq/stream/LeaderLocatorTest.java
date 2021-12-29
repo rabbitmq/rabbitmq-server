@@ -11,11 +11,14 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
 
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.ko;
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.ok;
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.responseCode;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -47,8 +50,7 @@ public class LeaderLocatorTest {
     Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
     String s = UUID.randomUUID().toString();
     Response response = client.create(s, Collections.singletonMap("queue-leader-locator", "foo"));
-    assertThat(response.isOk()).isFalse();
-    assertThat(response.getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_PRECONDITION_FAILED);
+    assertThat(response).is(ko()).has(responseCode(Constants.RESPONSE_CODE_PRECONDITION_FAILED));
   }
 
   @Test
@@ -60,7 +62,7 @@ public class LeaderLocatorTest {
       try {
         Response response =
             client.create(s, Collections.singletonMap("queue-leader-locator", "client-local"));
-        assertThat(response.isOk()).isTrue();
+        assertThat(response).is(ok());
         StreamMetadata metadata = client.metadata(s).get(s);
         assertThat(metadata).isNotNull();
         assertThat(metadata.getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_OK);
@@ -136,7 +138,7 @@ public class LeaderLocatorTest {
                 Response response =
                     client.create(
                         s, Collections.singletonMap("queue-leader-locator", "least-leaders"));
-                assertThat(response.isOk()).isTrue();
+                assertThat(response).is(ok());
                 createdStreams.add(s);
               });
 

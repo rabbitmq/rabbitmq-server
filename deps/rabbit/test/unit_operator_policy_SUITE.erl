@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_operator_policy_SUITE).
@@ -21,7 +21,8 @@ all() ->
 groups() ->
     [
       {parallel_tests, [parallel], [
-          merge_operator_policy_definitions
+          merge_operator_policy_definitions,
+          conflict_resolution_for_booleans
         ]}
     ].
 
@@ -102,6 +103,54 @@ merge_operator_policy_definitions(_Config) ->
                     [{definition, [
                       {<<"message-ttl">>, 3000}
                     ]}])
-    ),
+    ).
 
-    passed.
+
+  conflict_resolution_for_booleans(_Config) ->
+    ?assertEqual(
+      [
+        {<<"remote-dc-replicate">>, true}
+      ],
+      rabbit_policy:merge_operator_definitions(
+         #{definition => #{
+           <<"remote-dc-replicate">> => true
+         }},
+         [{definition, [
+           {<<"remote-dc-replicate">>, true}
+         ]}])),
+
+    ?assertEqual(
+      [
+        {<<"remote-dc-replicate">>, false}
+      ],
+      rabbit_policy:merge_operator_definitions(
+        #{definition => #{
+          <<"remote-dc-replicate">> => false
+        }},
+        [{definition, [
+          {<<"remote-dc-replicate">>, false}
+        ]}])),
+
+    ?assertEqual(
+      [
+        {<<"remote-dc-replicate">>, true}
+      ],
+      rabbit_policy:merge_operator_definitions(
+        #{definition => #{
+          <<"remote-dc-replicate">> => false
+        }},
+        [{definition, [
+          {<<"remote-dc-replicate">>, true}
+        ]}])),
+
+    ?assertEqual(
+      [
+        {<<"remote-dc-replicate">>, false}
+      ],
+      rabbit_policy:merge_operator_definitions(
+        #{definition => #{
+          <<"remote-dc-replicate">> => true
+        }},
+        [{definition, [
+          {<<"remote-dc-replicate">>, false}
+        ]}])).

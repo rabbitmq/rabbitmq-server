@@ -50,49 +50,26 @@ defmodule LogLocationCommandTest do
   end
 
   test "run: prints default log location", context do
-    # Let Lager's log message rate lapse or else some messages
-    # we assert on might be dropped. MK.
-    Process.sleep(1000)
     {:ok, logfile} = @command.run([], context[:opts])
     log_message = "file location"
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [log_message])
+    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist(log_message)])
     wait_for_log_message(log_message, logfile)
     {:ok, log_file_data} = File.read(logfile)
     assert String.match?(log_file_data, Regex.compile!(log_message))
   end
 
   test "run: shows all log locations", context do
-    # Let Lager's log message rate lapse or else some messages
-    # we assert on might be dropped. MK.
-    Process.sleep(1000)
     # This assumes default configuration
-    [logfile, upgrade_log_file] =
+    [logfile, upgrade_log_file | _] =
       @command.run([], Map.merge(context[:opts], %{all: true}))
 
     log_message = "checking the default log file when checking all"
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [log_message])
+    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist(log_message)])
     wait_for_log_message(log_message, logfile)
 
     log_message_upgrade = "checking the upgrade log file when checking all"
     :rpc.call(get_rabbit_hostname(),
-              :rabbit_log, :log, [:upgrade, :error, log_message_upgrade, []])
+              :rabbit_log, :log, [:upgrade, :error, to_charlist(log_message_upgrade), []])
     wait_for_log_message(log_message_upgrade, upgrade_log_file)
-  end
-
-  test "run: fails if there is no log file configured", context do
-    {:ok, upgrade_file} = :rpc.call(get_rabbit_hostname(), :application, :get_env, [:rabbit, :lager_upgrade_file])
-    {:ok, default_file} = :rpc.call(get_rabbit_hostname(), :application, :get_env, [:rabbit, :lager_default_file])
-    on_exit([], fn ->
-      :rpc.call(get_rabbit_hostname(), :application, :set_env, [:rabbit, :lager_upgrade_file, upgrade_file])
-      :rpc.call(get_rabbit_hostname(), :application, :set_env, [:rabbit, :lager_default_file, default_file])
-      :rpc.call(get_rabbit_hostname(), :rabbit_lager, :configure_lager, [])
-      start_rabbitmq_app()
-    end)
-    stop_rabbitmq_app()
-    :rpc.call(get_rabbit_hostname(), :application, :unset_env, [:rabbit, :lager_upgrade_file])
-    :rpc.call(get_rabbit_hostname(), :application, :unset_env, [:rabbit, :lager_default_file])
-    :rpc.call(get_rabbit_hostname(), :application, :unset_env, [:rabbit, :log])
-    :rpc.call(get_rabbit_hostname(), :rabbit_lager, :configure_lager, [])
-    {:error, "No log files configured on the node"} = @command.run([], context[:opts])
   end
 end

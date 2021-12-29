@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 
@@ -49,14 +49,16 @@ init(Sock) ->
                        case rabbit_ssl:peer_cert_auth_name(C) of
                            unsafe    -> {refused, none, "TLS configuration is unsafe", []};
                            not_found -> {refused, none, "no name found", []};
-                           Name      -> rabbit_data_coercion:to_binary(Name)
+                           Name      ->
+                               Val = rabbit_data_coercion:to_binary(Name),
+                               rabbit_log:debug("auth mechanism TLS extracted username '~s' from peer certificate", [Val]),
+                               Val
                        end;
                    {error, no_peercert} ->
                        {refused, none, "connection peer presented no TLS (x.509) certificate", []};
                    nossl ->
                        {refused, none, "not a TLS-enabled connection", []}
                end,
-    rabbit_log:debug("auth mechanism TLS extracted username '~s' from peer certificate", [Username]),
     #state{username = Username}.
 
 handle_response(_Response, #state{username = Username}) ->

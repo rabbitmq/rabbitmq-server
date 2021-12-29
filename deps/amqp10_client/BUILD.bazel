@@ -1,0 +1,102 @@
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
+load(
+    "//:rabbitmq.bzl",
+    "assert_suites",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+    "rabbitmq_suite",
+)
+
+APP_NAME = "amqp10_client"
+
+APP_DESCRIPTION = "AMQP 1.0 client from the RabbitMQ Project"
+
+APP_MODULE = "amqp10_client_app"
+
+EXTRA_APPS = [
+    "ssl",
+    "inets",
+    "crypto",
+]
+
+BUILD_DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+]
+
+DEPS = [
+    "//deps/amqp10_common:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
+    extra_apps = EXTRA_APPS,
+    deps = DEPS,
+)
+
+xref(tags = ["xref"])
+
+plt(
+    name = "base_plt",
+    apps = EXTRA_APPS,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    plt = ":base_plt",
+    tags = ["dialyze"],
+)
+
+rabbitmq_home(
+    name = "broker-for-tests-home",
+    plugins = [
+        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-tests-run",
+    home = ":broker-for-tests-home",
+)
+
+PACKAGE = "deps/amqp10_client"
+
+suites = [
+    rabbitmq_suite(
+        name = "msg_SUITE",
+        deps = DEPS,
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "system_SUITE",
+        size = "medium",
+        additional_hdrs = [
+            "src/amqp10_client.hrl",
+        ],
+        additional_srcs = [
+            "test/activemq_ct_helpers.erl",
+            "test/mock_server.erl",
+        ],
+        data = [
+            "@activemq//:exec_dir",
+        ],
+        erlc_opts = [
+            "-I deps/amqp10_client",
+        ],
+        test_env = {
+            "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq",
+        },
+        deps = DEPS,
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

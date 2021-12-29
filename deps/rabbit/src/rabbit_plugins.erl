@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_plugins).
@@ -56,13 +56,13 @@ ensure1(FileJustChanged0) ->
                 {[], []} ->
                     ok;
                 {[], _} ->
-                    rabbit_log:info("Plugins changed; disabled ~p~n",
+                    rabbit_log:info("Plugins changed; disabled ~p",
                                     [Stop]);
                 {_, []} ->
-                    rabbit_log:info("Plugins changed; enabled ~p~n",
+                    rabbit_log:info("Plugins changed; enabled ~p",
                                     [Start]);
                 {_, _} ->
-                    rabbit_log:info("Plugins changed; enabled ~p, disabled ~p~n",
+                    rabbit_log:info("Plugins changed; enabled ~p, disabled ~p",
                                     [Start, Stop])
             end,
             {ok, Start, Stop};
@@ -429,7 +429,7 @@ prepare_dir_plugin(PluginAppDescPath) ->
                     rabbit_log:error("Failed to enable plugin \"~s\": "
                                      "it may have been built with an "
                                      "incompatible (more recent?) "
-                                     "version of Erlang~n", [Plugin]),
+                                     "version of Erlang", [Plugin]),
                     throw({plugin_built_with_incompatible_erlang, Plugin});
                 Error ->
                     throw({plugin_module_unloadable, Plugin, Error})
@@ -459,11 +459,11 @@ prepare_plugin(#plugin{type = ez, name = Name, location = Location}, ExpandDir) 
                 [PluginAppDescPath|_] ->
                     prepare_dir_plugin(PluginAppDescPath);
                 _ ->
-                    rabbit_log:error("Plugin archive '~s' doesn't contain an .app file~n", [Location]),
+                    rabbit_log:error("Plugin archive '~s' doesn't contain an .app file", [Location]),
                     throw({app_file_missing, Name, Location})
             end;
         {error, Reason} ->
-            rabbit_log:error("Could not unzip plugin archive '~s': ~p~n", [Location, Reason]),
+            rabbit_log:error("Could not unzip plugin archive '~s': ~p", [Location, Reason]),
             throw({failed_to_unzip_plugin, Name, Location, Reason})
     end;
 prepare_plugin(#plugin{type = dir, location = Location, name = Name},
@@ -472,7 +472,7 @@ prepare_plugin(#plugin{type = dir, location = Location, name = Name},
         [PluginAppDescPath|_] ->
             prepare_dir_plugin(PluginAppDescPath);
         _ ->
-            rabbit_log:error("Plugin directory '~s' doesn't contain an .app file~n", [Location]),
+            rabbit_log:error("Plugin directory '~s' doesn't contain an .app file", [Location]),
             throw({app_file_missing, Name, Location})
     end.
 
@@ -548,7 +548,7 @@ split_path(PathString) ->
                      {unix, _} -> ":";
                      {win32, _} -> ";"
                  end,
-    string:tokens(PathString, Delimiters).
+    lists:usort(string:tokens(PathString, Delimiters)).
 
 %% Search for files using glob in a given dir. Returns full filenames of those files.
 full_path_wildcard(Glob, Dir) ->

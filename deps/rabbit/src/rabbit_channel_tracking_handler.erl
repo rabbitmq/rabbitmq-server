@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_channel_tracking_handler).
@@ -21,7 +21,7 @@
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
--include_lib("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -rabbit_boot_step({?MODULE,
                    [{description, "channel tracking event handler"},

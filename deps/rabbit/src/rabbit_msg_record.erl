@@ -10,8 +10,8 @@
          message_annotation/3
          ]).
 
--include("rabbit.hrl").
--include("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -type maybe(T) :: T | undefined.
@@ -195,7 +195,7 @@ from_amqp091(#'P_basic'{message_id = MsgId,
                                                <- case Headers of
                                                       undefined -> [];
                                                       _ -> Headers
-                                                  end],
+                                                  end, not unsupported_header_value_type(T)],
     %% properties that do not map directly to AMQP 1.0 properties are stored
     %% in application properties
     APC = map_add(utf8, <<"x-basic-type">>, utf8, Type,
@@ -394,6 +394,13 @@ message_id({utf8, S}, HKey, H0) ->
     end;
 message_id(MsgId, _, H) ->
     {H, unwrap(MsgId)}.
+
+ unsupported_header_value_type(array) ->
+     true;
+ unsupported_header_value_type(table) ->
+     true;
+ unsupported_header_value_type(_) ->
+     false.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

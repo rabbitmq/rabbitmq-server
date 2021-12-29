@@ -3,20 +3,29 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2019-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2019-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_boot_state).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("eunit/include/eunit.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
 
 -export([get/0,
          set/1,
-         wait_for/2]).
+         wait_for/2,
+         has_reached/1,
+         has_reached_and_is_active/1]).
 
--define(PT_KEY_BOOT_STATE,    {?MODULE, boot_state}).
+-define(PT_KEY_BOOT_STATE, {?MODULE, boot_state}).
 
--type boot_state() :: 'stopped' | 'booting' | 'ready' | 'stopping'.
+-type boot_state() :: stopped |
+                      booting |
+                      core_started |
+                      ready |
+                      stopping.
 
 -export_type([boot_state/0]).
 
@@ -26,7 +35,8 @@ get() ->
 
 -spec set(boot_state()) -> ok.
 set(BootState) ->
-    rabbit_log_prelaunch:debug("Change boot state to `~s`", [BootState]),
+    ?LOG_DEBUG("Change boot state to `~s`", [BootState],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ?assert(is_valid(BootState)),
     case BootState of
         stopped -> persistent_term:erase(?PT_KEY_BOOT_STATE);
@@ -36,7 +46,7 @@ set(BootState) ->
 
 -spec wait_for(boot_state(), timeout()) -> ok | {error, timeout}.
 wait_for(BootState, infinity) ->
-    case is_reached(BootState) of
+    case has_reached(BootState) of
         true  -> ok;
         false -> Wait = 200,
                  timer:sleep(Wait),
@@ -44,7 +54,7 @@ wait_for(BootState, infinity) ->
     end;
 wait_for(BootState, Timeout)
   when is_integer(Timeout) andalso Timeout >= 0 ->
-    case is_reached(BootState) of
+    case has_reached(BootState) of
         true  -> ok;
         false -> Wait = 200,
                  timer:sleep(Wait),
@@ -53,24 +63,35 @@ wait_for(BootState, Timeout)
 wait_for(_, _) ->
     {error, timeout}.
 
-boot_state_idx(stopped)  -> 0;
-boot_state_idx(booting)  -> 1;
-boot_state_idx(ready)    -> 2;
-boot_state_idx(stopping) -> 3.
+boot_state_idx(stopped)      -> 0;
+boot_state_idx(booting)      -> 1;
+boot_state_idx(core_started) -> 2;
+boot_state_idx(ready)        -> 3;
+boot_state_idx(stopping)     -> 4.
 
 is_valid(BootState) ->
     is_integer(boot_state_idx(BootState)).
 
-is_reached(TargetBootState) ->
-    is_reached(?MODULE:get(), TargetBootState).
+has_reached(TargetBootState) ->
+    has_reached(?MODULE:get(), TargetBootState).
 
-is_reached(CurrentBootState, CurrentBootState) ->
+has_reached(CurrentBootState, CurrentBootState) ->
     true;
-is_reached(stopping, stopped) ->
+has_reached(stopping, stopped) ->
     false;
-is_reached(_CurrentBootState, stopped) ->
+has_reached(_CurrentBootState, stopped) ->
     true;
-is_reached(stopped, _TargetBootState) ->
+has_reached(stopped, _TargetBootState) ->
     true;
-is_reached(CurrentBootState, TargetBootState) ->
+has_reached(CurrentBootState, TargetBootState) ->
     boot_state_idx(TargetBootState) =< boot_state_idx(CurrentBootState).
+
+has_reached_and_is_active(TargetBootState) ->
+    case ?MODULE:get() of
+        stopped ->
+            false;
+        CurrentBootState ->
+            has_reached(CurrentBootState, TargetBootState)
+            andalso
+            not has_reached(CurrentBootState, stopping)
+    end.

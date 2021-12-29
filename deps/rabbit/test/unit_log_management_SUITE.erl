@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_log_management_SUITE).
@@ -25,7 +25,6 @@ all() ->
 groups() ->
     [
       {non_parallel_tests, [], [
-          log_management,
           log_file_initialised_during_startup,
           log_file_fails_to_initialise_during_startup,
           externally_rotated_logs_are_automatically_reopened
@@ -113,94 +112,6 @@ wait_for_application(Application, Time) ->
 %% Log management.
 %% -------------------------------------------------------------------
 
-log_management(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, log_management1, [Config]).
-
-log_management1(_Config) ->
-    [LogFile|_] = rabbit:log_locations(),
-    Suffix = ".0",
-
-    ok = test_logs_working([LogFile]),
-
-    %% prepare basic logs
-    file:delete(LogFile ++ Suffix),
-    ok = test_logs_working([LogFile]),
-
-    %% simple log rotation
-    ok = rabbit:rotate_logs(),
-    %% rabbit:rotate_logs/0 is asynchronous due to a limitation in
-    %% Lager. Therefore, we have no choice but to wait an arbitrary
-    %% amount of time.
-    ok = rabbit_ct_helpers:await_condition(
-           fun() ->
-                   [true, true] =:=
-                       non_empty_files([LogFile ++ Suffix, LogFile])
-           end, 5000),
-    ok = test_logs_working([LogFile]),
-
-    %% log rotation on empty files
-    ok = clean_logs([LogFile], Suffix),
-    ok = rabbit:rotate_logs(),
-    ok = rabbit_ct_helpers:await_condition(
-           fun() ->
-                   [true, true] =:=
-                       non_empty_files([LogFile ++ Suffix, LogFile])
-           end, 5000),
-
-    %% logs with suffix are not writable
-    ok = rabbit:rotate_logs(),
-    ok = rabbit_ct_helpers:await_condition(
-           fun() ->
-                   ok =:= make_files_non_writable([LogFile ++ Suffix])
-           end, 5000),
-    ok = rabbit:rotate_logs(),
-    ok = rabbit_ct_helpers:await_condition(
-           fun() ->
-                   ok =:= test_logs_working([LogFile])
-           end, 5000),
-
-    %% rotate when original log files are not writable
-    ok = make_files_non_writable([LogFile]),
-    ok = rabbit:rotate_logs(),
-    timer:sleep(2000),
-
-    %% logging directed to tty (first, remove handlers)
-    ok = rabbit:stop(),
-    ok = make_files_writable([LogFile ++ Suffix]),
-    ok = clean_logs([LogFile], Suffix),
-    ok = application:set_env(rabbit, lager_default_file, tty),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
-    ok = rabbit:start(),
-    timer:sleep(200),
-    rabbit_log:info("test info"),
-
-    %% rotate logs when logging is turned off
-    ok = rabbit:stop(),
-    ok = clean_logs([LogFile], Suffix),
-    ok = application:set_env(rabbit, lager_default_file, false),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
-    ok = rabbit:start(),
-    timer:sleep(200),
-    rabbit_log:error("test error"),
-    timer:sleep(200),
-    ?assertEqual([{error,enoent}], empty_files([LogFile])),
-
-    %% cleanup
-    ok = rabbit:stop(),
-    ok = clean_logs([LogFile], Suffix),
-    ok = application:set_env(rabbit, lager_default_file, LogFile),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
-    ok = rabbit:start(),
-    ok = test_logs_working([LogFile]),
-    passed.
-
 log_file_initialised_during_startup(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, log_file_initialised_during_startup1, [Config]).
@@ -212,10 +123,7 @@ log_file_initialised_during_startup1(_Config) ->
     %% start application with simple tty logging
     ok = rabbit:stop(),
     ok = clean_logs([LogFile], Suffix),
-    ok = application:set_env(rabbit, lager_default_file, tty),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
+    os:putenv("RABBITMQ_LOGS", "-"),
     ok = rabbit:start(),
 
     %% start application with logging to non-existing directory
@@ -224,18 +132,12 @@ log_file_initialised_during_startup1(_Config) ->
     delete_file(NonExistent),
     delete_file(filename:dirname(NonExistent)),
     ok = rabbit:stop(),
-    ct:pal("Setting lager_default_file to \"~s\"", [NonExistent]),
-    ok = application:set_env(rabbit, lager_default_file, NonExistent),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
+    io:format("Setting log file to \"~s\"~n", [NonExistent]),
+    os:putenv("RABBITMQ_LOGS", NonExistent),
     ok = rabbit:start(),
 
     %% clean up
-    ok = application:set_env(rabbit, lager_default_file, LogFile),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
+    os:unsetenv("RABBITMQ_LOGS"),
     ok = rabbit:start(),
     passed.
 
@@ -277,13 +179,8 @@ log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     delete_file(filename:dirname(NoPermission1)),
 
     ok = rabbit:stop(),
-    ct:pal("Setting lager_default_file to \"~s\"", [NoPermission1]),
-    ok = application:set_env(rabbit, lager_default_file, NoPermission1),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
-
-    ct:pal("`rabbit` application env.: ~p", [application:get_all_env(rabbit)]),
+    io:format("Setting log file to \"~s\"~n", [NoPermission1]),
+    os:putenv("RABBITMQ_LOGS", NoPermission1),
     ?assertThrow(
        {error, {rabbit, {{cannot_log_to_file, _, _}, _}}},
        rabbit:start()),
@@ -296,22 +193,14 @@ log_file_fails_to_initialise_during_startup1(_Config, NonWritableDir) ->
     delete_file(NoPermission2),
     delete_file(filename:dirname(NoPermission2)),
 
-    ct:pal("Setting lager_default_file to \"~s\"", [NoPermission2]),
-    ok = application:set_env(rabbit, lager_default_file, NoPermission2),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
-
-    ct:pal("`rabbit` application env.: ~p", [application:get_all_env(rabbit)]),
+    io:format("Setting log file to \"~s\"~n", [NoPermission2]),
+    os:putenv("RABBITMQ_LOGS", NoPermission2),
     ?assertThrow(
        {error, {rabbit, {{cannot_log_to_file, _, _}, _}}},
        rabbit:start()),
 
     %% clean up
-    ok = application:set_env(rabbit, lager_default_file, LogFile),
-    application:unset_env(rabbit, log),
-    application:unset_env(lager, handlers),
-    application:unset_env(lager, extra_sinks),
+    os:unsetenv("RABBITMQ_LOGS"),
     ok = rabbit:start(),
     passed.
 

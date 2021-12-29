@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_exchange_type_consistent_hash_SUITE).
@@ -41,7 +41,9 @@ groups() ->
                                 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case5,
                                 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure_case6,
                                 test_hash_ring_updates_when_exchange_is_deleted,
-                                test_hash_ring_updates_when_queue_is_unbound
+                                test_hash_ring_updates_when_queue_is_unbound,
+                                test_hash_ring_updates_when_duplicate_binding_is_created_and_queue_is_deleted,
+                                test_hash_ring_updates_when_duplicate_binding_is_created_and_binding_is_deleted
                                ]}
     ].
 
@@ -557,6 +559,99 @@ test_hash_ring_updates_when_queue_is_unbound(Config) ->
     rabbit_ct_client_helpers:close_channel(Chan),
     ok.
 
+test_hash_ring_updates_when_duplicate_binding_is_created_and_queue_is_deleted(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    X = <<"test_hash_ring_updates_when_duplicate_binding_is_created_and_queue_is_deleted">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    Declare = #'exchange.declare'{exchange = X,
+                                  type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Q1 = <<"f-q1">>,
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Chan, #'queue.declare'{
+                                    queue = Q1, durable = true, exclusive = false}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind'{queue = Q1,
+                                               exchange = X,
+                                               routing_key = <<"2">>}),
+
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind'{queue = Q1,
+                                               exchange = X,
+                                               routing_key = <<"3">>}),
+
+    ?assertEqual(5, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    Q2 = <<"f-q2">>,
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Chan, #'queue.declare'{
+                                    queue = Q2, durable = true, exclusive = false}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind'{queue = Q2,
+                                               exchange = X,
+                                               routing_key = <<"4">>}),
+
+    ?assertEqual(9, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    amqp_channel:call(Chan, #'queue.delete' {queue = Q1}),
+    ?assertEqual(4, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    clean_up_test_topology(Config, X, [Q1, Q2]),
+    rabbit_ct_client_helpers:close_channel(Chan),
+    ok.
+
+test_hash_ring_updates_when_duplicate_binding_is_created_and_binding_is_deleted(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    X = <<"test_hash_ring_updates_when_duplicate_binding_is_created_and_binding_is_deleted">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    Declare = #'exchange.declare'{exchange = X,
+                                  type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Q1 = <<"f-q1">>,
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Chan, #'queue.declare'{
+                                    queue = Q1, durable = true, exclusive = false}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind'{queue = Q1,
+                                               exchange = X,
+                                               routing_key = <<"2">>}),
+
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind'{queue = Q1,
+                                               exchange = X,
+                                               routing_key = <<"3">>}),
+
+    Q2 = <<"f-q2">>,
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Chan, #'queue.declare'{
+                                    queue = Q2, durable = true, exclusive = false}),
+    #'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind'{queue = Q2,
+                                               exchange = X,
+                                               routing_key = <<"4">>}),
+
+    ?assertEqual(9, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    %% Both bindings to Q1 will be deleted
+    amqp_channel:call(Chan, #'queue.unbind'{queue = Q1,
+                                            exchange = X,
+                                            routing_key = <<"3">>}),
+    ?assertEqual(4, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    clean_up_test_topology(Config, X, [Q1, Q2]),
+    rabbit_ct_client_helpers:close_channel(Chan),
+    ok.
 
 %%
 %% Helpers

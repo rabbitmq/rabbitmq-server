@@ -38,11 +38,12 @@ To use this plugin
 1. UAA should be configured to produce encrypted JWT tokens containing a set of RabbitMQ permission scopes
 2. All RabbitMQ nodes must be [configured to use the `rabbit_auth_backend_oauth2` backend](https://www.rabbitmq.com/access-control.html)
 3. All RabbitMQ nodes must be configure with a resource service ID (`resource_server_id`) that matches the scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`).
+4. The token **must** has a value in`aud` that match `resource_server_id` value. 
 
 ### Authorization Flow
 
 1. Client authorize with OAuth 2.0 provider, requesting an `access_token` (using any grant type desired)
-2. Token scope returned by OAuth 2.0 provider must include RabbitMQ resource scopes that follow a convention used by this plugin: `configure:%2F/foo` means "configure permissions for 'foo' in vhost '/'")
+2. Token scope returned by OAuth 2.0 provider must include RabbitMQ resource scopes that follow a convention used by this plugin: `configure:%2F/foo` means "configure permissions for 'foo' in vhost '/'") (`scope` field can be changed using `extra_scopes_source` in **advanced.config** file.
 3. Client passes the token as password when connecting to a RabbitMQ node. **The username field is ignored**.
 4. The translated permissions are stored as part of the authenticated connection state and used the same
    way permissions from RabbitMQ's internal database would be used.
@@ -122,6 +123,62 @@ If a symmetric key is used, the configuration will look like this:
 ].
 ```
 
+The key set can also be retrieved dynamically from a URL serving a [JWK Set](https://tools.ietf.org/html/rfc7517#section-5).
+In that case, the configuration will look like this:
+
+```erlang
+[
+  {rabbitmq_auth_backend_oauth2, [
+    {resource_server_id, <<"my_rabbit_server">>},
+    {key_config, [
+      {jwks_url, <<"https://my-jwt-issuer/jwks.json">>}
+    ]}
+  ]},
+].
+```
+
+NOTE: `jwks_url` takes precedence over `signing_keys` if both are provided.
+
+### Variables Configurable in rabbitmq.conf
+
+| Key                                      | Documentation     
+|------------------------------------------|-----------
+| `auth_oauth2.resource_server_id`         | [The Resource Server ID](#resource-server-id-and-scope-prefixes)
+| `auth_oauth2.additional_scopes_key`      | Configure the plugin to also look in other fields (maps to `additional_rabbitmq_scopes` in the old format).
+| `auth_oauth2.default_key`                | ID of the default signing key.
+| `auth_oauth2.signing_keys`               | Paths to signing key files.
+| `auth_oauth2.jwks_url`                   | The URL of key server. According to the [JWT Specification](https://datatracker.ietf.org/doc/html/rfc7515#section-4.1.2) key server URL must be https.
+| `auth_oauth2.https.cacertfile`           | Path to a file containing PEM-encoded CA certificates. The CA certificates are used during key server [peer verification](https://rabbitmq.com/ssl.html#peer-verification).
+| `auth_oauth2.https.depth`                | The maximum number of non-self-issued intermediate certificates that may follow the peer certificate in a valid [certification path](https://rabbitmq.com/ssl.html#peer-verification-depth). Default is 10.
+| `auth_oauth2.https.peer_verification`    | Should [peer verification](https://rabbitmq.com/ssl.html#peer-verification) be enabled. Available values: `verify_none`, `verify_peer`. Default is `verify_none`. It is recommended to configure `verify_peer`. Peer verification requires a certain amount of setup and is more secure.
+| `auth_oauth2.https.fail_if_no_peer_cert` | Used together with `auth_oauth2.https.peer_verification = verify_peer`. When set to `true`, TLS connection will be rejected if client fails to provide a certificate. Default is `false`.
+| `auth_oauth2.https.hostname_verification`| Enable wildcard-aware hostname verification for key server. Available values: `wildcard`, `none`. Default is `none`.
+| `auth_oauth2.algorithms`                 | Restrict [the usable algorithms](https://github.com/potatosalad/erlang-jose#algorithm-support).
+
+For example:
+
+Configure with key files
+```
+auth_oauth2.resource_server_id = new_resource_server_id
+auth_oauth2.additional_scopes_key = my_custom_scope_key
+auth_oauth2.default_key = id1
+auth_oauth2.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
+auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/cert.pem
+auth_oauth2.algorithms.1 = HS256
+auth_oauth2.algorithms.2 = RS256
+```
+Configure with key server
+```
+auth_oauth2.resource_server_id = new_resource_server_id
+auth_oauth2.jwks_url = https://my-jwt-issuer/jwks.json
+auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+auth_oauth2.https.peer_verification = verify_peer
+auth_oauth2.https.depth = 5
+auth_oauth2.https.fail_if_no_peer_cert = true
+auth_oauth2.https.hostname_verification = wildcard
+auth_oauth2.algorithms.1 = HS256
+auth_oauth2.algorithms.2 = RS256
+```
 ### Resource Server ID and Scope Prefixes
 
 OAuth 2.0 (and thus UAA-provided) tokens use scopes to communicate what set of permissions particular
@@ -175,17 +232,30 @@ be `my_rabbit.read:*/*`.
 
 ### Using a different token field for the Scope
 
-By default the plugin will look for the `scope` key in the token, you can configure the plugin to also look in other fields using the `additional_rabbitmq_scopes` setting.
+By default the plugin will look for the `scope` key in the token, you can configure the plugin to also look in other fields using the `extra_scopes_source` setting. Values format accepted are scope as **string** or **list**
+
 
 ```erlang
 [
   {rabbitmq_auth_backend_oauth2, [
     {resource_server_id, <<"my_rabbit_server">>},
-    {additional_rabbitmq_scopes, <<"my_custom_scope_key">>},
+    {extra_scopes_source, <<"my_custom_scope_key">>},
     ...
     ]}
   ]},
 ].
+```
+Token sample: 
+```
+{
+ "exp": 1618592626,
+ "iat": 1618578226,
+ "aud" : ["my_id"],
+ ...
+ "scope_as_string": "my_id.configure:*/* my_id.read:*/* my_id.write:*/*",
+ "scope_as_list": ["my_id.configure:*/*", "my_id.read:*/*", my_id.write:*/*"],
+ ...
+ }
 ```
 
 ### Using Tokens with Clients
@@ -207,7 +277,7 @@ the `monitoring` tag will be `my_rabbit.tag:monitoring`.
 
 ## Examples
 
-The [demo](/demo) directory contains example configuration files which can be used to set up
+The [demo](/deps/rabbitmq_auth_backend_oauth2/demo) directory contains example configuration files which can be used to set up
 a development UAA server and issue tokens, which can be used to access RabbitMQ
 resources.
 

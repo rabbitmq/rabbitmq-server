@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
   alias RabbitMQ.CLI.Core.DocGuide
@@ -75,10 +75,18 @@ defmodule RabbitMQ.CLI.Queues.Commands.RebalanceCommand do
 
   def help_section, do: :cluster_management
 
-  def description, do: "Rebalances queues."
+  def description, do: "Re-balances leaders of replicated queues across up-and-running cluster nodes"
 
-  def banner([type], _) do
-    "Rebalancing #{type} queues..."
+  def banner([:all], _) do
+    "Re-balancing leaders of all replicated queues..."
   end
-
+  def banner([:classic], _) do
+    "Re-balancing leaders of replicated (mirrored, non-exclusive) classic queues..."
+  end
+  def banner([:quorum], _) do
+    "Re-balancing leaders of quorum queues..."
+  end
+  def banner([type], _) do
+    "Re-balancing leaders of #{type} queues..."
+  end
 end

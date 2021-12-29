@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_runtime_parameters).
@@ -40,7 +40,7 @@
 %%  * rabbit_registry
 %%  * rabbit_event
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([parse_set/5, set/5, set_any/5, clear/4, clear_any/4, list/0, list/1,
          list_component/1, list/2, list_formatted/1, list_formatted/3,
@@ -55,35 +55,6 @@
 -type ok_or_error_string() :: 'ok' | {'error_string', string()}.
 -type ok_thunk_or_error_string() :: ok_or_error_string() | fun(() -> 'ok').
 
--spec parse_set(rabbit_types:vhost(), binary(), binary(), string(),
-                rabbit_types:user() | rabbit_types:username() | 'none')
-               -> ok_or_error_string().
--spec set(rabbit_types:vhost(), binary(), binary(), term(),
-                rabbit_types:user() | rabbit_types:username() | 'none')
-         -> ok_or_error_string().
--spec set_any(rabbit_types:vhost(), binary(), binary(), term(),
-              rabbit_types:user() | rabbit_types:username() | 'none')
-             -> ok_or_error_string().
--spec set_global(atom(), term(), rabbit_types:username()) -> 'ok'.
--spec clear(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
-           -> ok_thunk_or_error_string().
--spec clear_any(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
-                     -> ok_thunk_or_error_string().
--spec list() -> [rabbit_types:infos()].
--spec list(rabbit_types:vhost() | '_') -> [rabbit_types:infos()].
--spec list_component(binary()) -> [rabbit_types:infos()].
--spec list(rabbit_types:vhost() | '_', binary() | '_')
-                -> [rabbit_types:infos()].
--spec list_formatted(rabbit_types:vhost()) -> [rabbit_types:infos()].
--spec list_formatted(rabbit_types:vhost(), reference(), pid()) -> 'ok'.
--spec lookup(rabbit_types:vhost(), binary(), binary())
-                  -> rabbit_types:infos() | 'not_found'.
--spec value(rabbit_types:vhost(), binary(), binary()) -> term().
--spec value(rabbit_types:vhost(), binary(), binary(), term()) -> term().
--spec value_global(atom()) -> term() | 'not_found'.
--spec value_global(atom(), term()) -> term().
--spec info_keys() -> rabbit_types:info_keys().
-
 %%---------------------------------------------------------------------------
 
 -import(rabbit_misc, [pget/2]).
@@ -91,6 +62,10 @@
 -define(TABLE, rabbit_runtime_parameters).
 
 %%---------------------------------------------------------------------------
+
+-spec parse_set(rabbit_types:vhost(), binary(), binary(), string(),
+                rabbit_types:user() | rabbit_types:username() | 'none')
+               -> ok_or_error_string().
 
 parse_set(_, <<"policy">>, _, _, _) ->
     {error_string, "policies may not be set using this method"};
@@ -103,6 +78,10 @@ parse_set(VHost, Component, Name, String, User) ->
             {error_string,
                 rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}
     end.
+
+-spec set(rabbit_types:vhost(), binary(), binary(), term(),
+                rabbit_types:user() | rabbit_types:username() | 'none')
+         -> ok_or_error_string().
 
 set(_, <<"policy">>, _, _, _) ->
     {error_string, "policies may not be set using this method"};
@@ -119,6 +98,8 @@ parse_set_global(Name, String, ActingUser) ->
                 rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}
     end.
 
+-spec set_global(atom(), term(), rabbit_types:username()) -> 'ok'.
+
 set_global(Name, Term, ActingUser)  ->
     NameAsAtom = rabbit_data_coercion:to_atom(Name),
     rabbit_log:debug("Setting global parameter '~s' to ~p", [NameAsAtom, Term]),
@@ -130,6 +111,10 @@ set_global(Name, Term, ActingUser)  ->
 
 format_error(L) ->
     {error_string, rabbit_misc:format_many([{"Validation failed~n", []} | L])}.
+
+-spec set_any(rabbit_types:vhost(), binary(), binary(), term(),
+              rabbit_types:user() | rabbit_types:username() | 'none')
+             -> ok_or_error_string().
 
 set_any(VHost, Component, Name, Term, User) ->
     case set_any0(VHost, Component, Name, Term, User) of
@@ -196,6 +181,9 @@ mnesia_update_fun(Key, Term) ->
             Res
     end.
 
+-spec clear(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
+           -> ok_thunk_or_error_string().
+
 clear(_, <<"policy">> , _, _) ->
     {error_string, "policies may not be cleared using this method"};
 clear(VHost, Component, Name, ActingUser) ->
@@ -235,6 +223,9 @@ clear_component(Component, ActingUser) ->
             ok
     end.
 
+-spec clear_any(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
+                     -> ok_thunk_or_error_string().
+
 clear_any(VHost, Component, Name, ActingUser) ->
     Notify = fun () ->
                      case lookup_component(Component) of
@@ -269,15 +260,25 @@ event_notify(Event, VHost, Component, Props) ->
     rabbit_event:notify(Event, [{vhost,     VHost},
                                 {component, Component} | Props]).
 
+-spec list() -> [rabbit_types:infos()].
+
 list() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <-
              rabbit_misc:dirty_read_all(?TABLE), Comp /= <<"policy">>].
 
-list(VHost)               -> list(VHost, '_').
+-spec list(rabbit_types:vhost() | '_') -> [rabbit_types:infos()].
+
+list(VHost) -> list(VHost, '_').
+
+-spec list_component(binary()) -> [rabbit_types:infos()].
+
 list_component(Component) -> list('_',   Component).
 
 %% Not dirty_match_object since that would not be transactional when used in a
 %% tx context
+-spec list(rabbit_types:vhost() | '_', binary() | '_')
+                -> [rabbit_types:infos()].
+
 list(VHost, Component) ->
     mnesia:async_dirty(
       fun () ->
@@ -301,6 +302,8 @@ list_global() ->
                 is_atom(P#runtime_parameters.key)]
         end).
 
+-spec list_formatted(rabbit_types:vhost()) -> [rabbit_types:infos()].
+
 list_formatted(VHost) ->
     [ format_parameter(info_keys(), P) || P <- list(VHost) ].
 
@@ -316,6 +319,8 @@ format_parameter(InfoKeys, P) ->
                 end,
                 [], InfoKeys).
 
+-spec list_formatted(rabbit_types:vhost(), reference(), pid()) -> 'ok'.
+
 list_formatted(VHost, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref,
@@ -329,6 +334,9 @@ list_global_formatted(Ref, AggregatorPid) ->
         AggregatorPid, Ref,
         fun(P) -> format_parameter(global_info_keys(), P) end, list_global()).
 
+-spec lookup(rabbit_types:vhost(), binary(), binary())
+                  -> rabbit_types:infos() | 'not_found'.
+
 lookup(VHost, Component, Name) ->
     case lookup0({VHost, Component, Name}, rabbit_misc:const(not_found)) of
         not_found -> not_found;
@@ -341,11 +349,20 @@ lookup_global(Name)  ->
         Params    -> p(Params)
     end.
 
-value(VHost, Comp, Name)      -> value0({VHost, Comp, Name}).
+-spec value(rabbit_types:vhost(), binary(), binary()) -> term().
+
+value(VHost, Comp, Name) -> value0({VHost, Comp, Name}).
+
+-spec value(rabbit_types:vhost(), binary(), binary(), term()) -> term().
+
 value(VHost, Comp, Name, Def) -> value0({VHost, Comp, Name}, Def).
+
+-spec value_global(atom()) -> term() | 'not_found'.
 
 value_global(Key) ->
     value0(Key).
+
+-spec value_global(atom(), term()) -> term().
 
 value_global(Key, Default) ->
     value0(Key, Default).
@@ -390,6 +407,8 @@ p(#runtime_parameters{key = {VHost, Component, Name}, value = Value}) ->
 p(#runtime_parameters{key = Key, value = Value}) when is_atom(Key) ->
     [{name,      Key},
      {value,     Value}].
+
+-spec info_keys() -> rabbit_types:info_keys().
 
 info_keys() -> [component, name, value].
 

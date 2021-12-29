@@ -1,16 +1,8 @@
-%% The contents of this file are subject to the Mozilla Public License
-%% Version 1.1 (the "License"); you may not use this file except in
-%% compliance with the License. You may obtain a copy of the License
-%% at https://www.mozilla.org/MPL/
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and
-%% limitations under the License.
-%%
-%% The Original Code is RabbitMQ.
-%%
-%% Copyright (c) 2012-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_osiris_metrics).
@@ -32,7 +24,9 @@
          state,
          leader,
          online,
-         members
+         members,
+         memory,
+         readers
         ]).
 
 -record(state, {timeout :: non_neg_integer()}).
@@ -63,32 +57,34 @@ handle_info(tick, #state{timeout = Timeout} = State) ->
     maps:map(
       fun ({osiris_writer, QName}, #{offset := Offs,
                                      first_offset := FstOffs}) ->
-                      COffs = Offs + 1 - FstOffs,
-                      rabbit_core_metrics:queue_stats(QName, COffs, 0, COffs, 0),
-                      Infos = try
-                                  %% TODO complete stats!
-                                  case rabbit_amqqueue:lookup(QName) of
-                                      {ok, Q} ->
-                                          rabbit_stream_queue:info(Q, ?STATISTICS_KEYS);
-                                      _ ->
-                                          []
-                                  end
-                              catch
-                                  _:_ ->
-                                      %% It's possible that the writer has died but
-                                      %% it's still on the amqqueue record, so the
-                                      %% `erlang:process_info/2` calls will return
-                                      %% `undefined` and crash with a badmatch.
-                                      %% At least for now, skipping the metrics might
-                                      %% be the best option. Otherwise this brings
-                                      %% down `rabbit_sup` and the whole `rabbit` app.
-                                      []
-                              end,
-                      rabbit_core_metrics:queue_stats(QName, Infos),
-                      rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
-                                                                 {messages, COffs},
-                                                                 {messages_ready, COffs},
-                                                                 {messages_unacknowledged, 0}]),
+              COffs = Offs + 1 - FstOffs,
+              rabbit_core_metrics:queue_stats(QName, COffs, 0, COffs, 0),
+              Infos = try
+                          %% TODO complete stats!
+                          case rabbit_amqqueue:lookup(QName) of
+                              {ok, Q} ->
+                                  rabbit_stream_queue:info(Q, ?STATISTICS_KEYS);
+                              _ ->
+                                  []
+                          end
+                      catch
+                          _:_ ->
+                              %% It's possible that the writer has died but
+                              %% it's still on the amqqueue record, so the
+                              %% `erlang:process_info/2` calls will return
+                              %% `undefined` and crash with a badmatch.
+                              %% At least for now, skipping the metrics might
+                              %% be the best option. Otherwise this brings
+                              %% down `rabbit_sup` and the whole `rabbit` app.
+                              []
+                      end,
+
+
+              rabbit_core_metrics:queue_stats(QName, Infos),
+              rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
+                                                         {messages, COffs},
+                                                         {messages_ready, COffs},
+                                                         {messages_unacknowledged, 0}]),
               ok;
           (_, _V) ->
               ok

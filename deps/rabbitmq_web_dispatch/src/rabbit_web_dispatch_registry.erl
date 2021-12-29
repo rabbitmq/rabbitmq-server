@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_web_dispatch_registry).
@@ -116,7 +116,7 @@ handle_call(list_all, _From, undefined) ->
     {reply, list(), undefined};
 
 handle_call(Req, _From, State) ->
-    rabbit_log:error("Unexpected call to ~p: ~p~n", [?MODULE, Req]),
+    rabbit_log:error("Unexpected call to ~p: ~p", [?MODULE, Req]),
     {stop, unknown_request, State}.
 
 handle_cast(_, State) ->
@@ -157,9 +157,9 @@ listener_info(Listener) ->
                        P
                end,
     Port = pget(port, Listener),
-    [{Protocol, IPAddress, Port}
-     || {IPAddress, _Port, _Family}
-        <- rabbit_networking:tcp_listener_addresses(Port)].
+    [{IPAddress, _Port, _Family} | _]
+        = rabbit_networking:tcp_listener_addresses(Port),
+    [{Protocol, IPAddress, Port}].
 
 lookup_dispatch(Lsnr) ->
     case ets:lookup(?ETS, pget(port, Lsnr)) of

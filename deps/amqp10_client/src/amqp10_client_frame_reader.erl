@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(amqp10_client_frame_reader).
 
@@ -158,16 +158,16 @@ handle_event(info, {Tcp, _, Packet}, StateName, #state{buffer = Buffer} = State)
 
 handle_event(info, {TcpError, _, Reason}, StateName, State)
   when TcpError == tcp_error orelse TcpError == ssl_error ->
-    error_logger:warning_msg("AMQP 1.0 connection socket errored, connection state: '~s', reason: '~p'~n",
-                             [StateName, Reason]),
+    logger:warning("AMQP 1.0 connection socket errored, connection state: '~s', reason: '~p'",
+                    [StateName, Reason]),
     State1 = State#state{socket = undefined,
                          buffer = <<>>,
                          frame_state = undefined},
     {stop, {error, Reason}, State1};
 handle_event(info, {TcpClosed, _}, StateName, State)
   when TcpClosed == tcp_closed orelse TcpClosed == ssl_closed ->
-    error_logger:warning_msg("AMQP 1.0 connection socket was closed, connection state: '~s'~n",
-                             [StateName]),
+    logger:warning("AMQP 1.0 connection socket was closed, connection state: '~s'",
+                    [StateName]),
     State1 = State#state{socket = undefined,
                          buffer = <<>>,
                          frame_state = undefined},
@@ -279,7 +279,7 @@ defer_heartbeat_timer(State) -> State.
 route_frame(Channel, FrameType, {Performative, Payload} = Frame, State0) ->
     {DestinationPid, State} = find_destination(Channel, FrameType, Performative,
                                                State0),
-    ?DBG("FRAME -> ~p ~p~n ~p~n", [Channel, DestinationPid, Performative]),
+    ?DBG("FRAME -> ~p ~p~n ~p", [Channel, DestinationPid, Performative]),
     case Payload of
         <<>> -> ok = gen_statem:cast(DestinationPid, Performative);
         _ -> ok = gen_statem:cast(DestinationPid, Frame)

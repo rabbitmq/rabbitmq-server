@@ -40,6 +40,9 @@
 !/deps/rabbitmq_shovel_management/
 !/deps/rabbitmq_stomp/
 !/deps/rabbitmq_stream/
+!/deps/rabbitmq_stream_common/
+!/deps/rabbitmq_stream_management/
+!/deps/rabbitmq_stream_prometheus/
 !/deps/rabbitmq_top/
 !/deps/rabbitmq_tracing/
 !/deps/rabbitmq_trust_store/
@@ -54,7 +57,10 @@
 /plugins.lock
 /sbin/
 /sbin.lock
+erl_crash.dump
 .envrc
+*.plt
+*.lock
 
 /topic-branch-scratch/
 
@@ -66,3 +72,9 @@ rabbitmq-server-*.tar.gz
 rabbitmq-server-*.tar.bz2
 rabbitmq-server-*.tar.xz
 rabbitmq-server-*.zip
+
+traces*
+callgrand*
+
+/user.bazelrc
+/bazel-*

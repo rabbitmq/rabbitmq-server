@@ -2,11 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue).
 
+-export([store_queue_ram_dirty/1]).
 -export([warn_file_limit/0]).
 -export([recover/1, stop/1, start/1, declare/6, declare/7,
          delete_immediately/1, delete_exclusive/2, delete/4, purge/1,
@@ -35,13 +36,15 @@
 -export([update/2, store_queue/1, update_decorators/1, policy_changed/2]).
 -export([update_mirroring/1, sync_mirrors/1, cancel_sync_mirrors/1]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
--export([has_synchronised_mirrors_online/1]).
+-export([has_synchronised_mirrors_online/1, is_match/2, is_in_virtual_host/2]).
 -export([is_replicated/1, is_exclusive/1, is_not_exclusive/1, is_dead_exclusive/1]).
--export([list_local_quorum_queues/0, list_local_quorum_queue_names/0,
+-export([list_local_quorum_queues/0, list_local_quorum_queue_names/0, list_local_stream_queues/0,
          list_local_mirrored_classic_queues/0, list_local_mirrored_classic_names/0,
          list_local_leaders/0, list_local_followers/0, get_quorum_nodes/1,
          list_local_mirrored_classic_without_synchronised_mirrors/0,
-         list_local_mirrored_classic_without_synchronised_mirrors_for_cli/0]).
+         list_local_mirrored_classic_without_synchronised_mirrors_for_cli/0,
+         list_local_quorum_queues_with_name_matching/1,
+         list_local_quorum_queues_with_name_matching/2]).
 -export([ensure_rabbit_queue_record_is_initialized/1]).
 -export([format/1]).
 -export([delete_immediately_by_resource/1]).
@@ -55,11 +58,13 @@
 -export([rebalance/3]).
 -export([collect_info_all/2]).
 
--export([is_policy_applicable/2]).
+-export([is_policy_applicable/2, declare_args/0, consume_args/0]).
 -export([is_server_named_allowed/1]).
 
 -export([check_max_age/1]).
--export([get_queue_type/1]).
+-export([get_queue_type/1, get_resource_vhost_name/1, get_resource_name/1]).
+
+-export([deactivate_limit_all/2]).
 
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
@@ -72,8 +77,6 @@
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long,
                             unsignedbyte, unsignedshort, unsignedint]).
-
--define(MORE_CONSUMER_CREDIT_AFTER, 50).
 
 -define(IS_CLASSIC(QPid), is_pid(QPid)).
 -define(IS_QUORUM(QPid), is_tuple(QPid)).
@@ -111,7 +114,7 @@ warn_file_limit() ->
     case file_handle_cache:get_limit() < L of
         true ->
             rabbit_log:warning(
-              "Recovering ~p queues, available file handles: ~p. Please increase max open file handles limit to at least ~p!~n",
+              "Recovering ~p queues, available file handles: ~p. Please increase max open file handles limit to at least ~p!",
               [L, file_handle_cache:get_limit(), L]);
         false ->
             ok
@@ -222,7 +225,7 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
     Type = get_queue_type(Args),
     case rabbit_queue_type:is_enabled(Type) of
         true ->
-            Q0 = amqqueue:new(QueueName,
+            Q = amqqueue:new(QueueName,
                               none,
                               Durable,
                               AutoDelete,
@@ -231,8 +234,6 @@ declare(QueueName = #resource{virtual_host = VHost}, Durable, AutoDelete, Args,
                               VHost,
                               #{user => ActingUser},
                               Type),
-            Q = rabbit_queue_decorator:set(
-                  rabbit_policy:set(Q0)),
             rabbit_queue_type:declare(Q, Node);
         false ->
             {protocol_error, internal_error,
@@ -331,6 +332,9 @@ store_queue(Q) when not ?amqqueue_is_durable(Q) ->
 
 store_queue_ram(Q) ->
     ok = mnesia:write(rabbit_queue, rabbit_queue_decorator:set(Q), write).
+
+store_queue_ram_dirty(Q) ->
+    ok = mnesia:dirty_write(rabbit_queue, rabbit_queue_decorator:set(Q)).
 
 -spec update_decorators(name()) -> 'ok'.
 
@@ -436,7 +440,7 @@ rebalance(Type, VhostSpec, QueueSpec) ->
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     rabbit_log:info("Starting queue rebalance operation: '~s' for vhosts matching '~s' and queues matching '~s'",
                     [Type, VhostSpec, QueueSpec]),
-    Running = rabbit_nodes:all_running(),
+    Running = rabbit_maintenance:filter_out_drained_nodes_consistent_read(rabbit_nodes:all_running()),
     NumRunning = length(Running),
     ToRebalance = [Q || Q <- rabbit_amqqueue:list(),
                         filter_per_type(Type, Q),
@@ -458,8 +462,9 @@ maybe_rebalance(false, _Type, _VhostSpec, _QueueSpec) ->
     rabbit_log:warning("Queue rebalance operation is in progress, please wait."),
     {error, rebalance_in_progress}.
 
-filter_per_type(all, _) ->
-    true;
+%% Stream queues don't yet support rebalance
+filter_per_type(all, Q)  ->
+    ?amqqueue_is_quorum(Q) or ?amqqueue_is_classic(Q);
 filter_per_type(quorum, Q) ->
     ?amqqueue_is_quorum(Q);
 filter_per_type(classic, Q) ->
@@ -470,11 +475,14 @@ rebalance_module(Q) when ?amqqueue_is_quorum(Q) ->
 rebalance_module(Q) when ?amqqueue_is_classic(Q) ->
     rabbit_mirror_queue_misc.
 
-get_resource_name(#resource{name  = Name}) ->
+get_resource_name(#resource{name = Name}) ->
     Name.
 
-is_match(Subj, E) ->
-   nomatch /= re:run(Subj, E).
+get_resource_vhost_name(#resource{virtual_host = VHostName}) ->
+    VHostName.
+
+is_match(Subj, RegEx) ->
+   nomatch /= re:run(Subj, RegEx).
 
 iterative_rebalance(ByNode, MaxQueuesDesired) ->
     case maybe_migrate(ByNode, MaxQueuesDesired) of
@@ -496,24 +504,24 @@ maybe_migrate(ByNode, _, []) ->
                                                                 ?amqqueue_is_classic(Q)
                                                         end, V),
                            [[{<<"Node name">>, K}, {<<"Number of quorum queues">>, length(QQs)},
-                             {<<"Number of classic queues">>, length(CQs)}] | Acc]
+                             {<<"Number of replicated classic queues">>, length(CQs)}] | Acc]
                    end, [], ByNode)};
 maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
     case maps:get(N, ByNode, []) of
         [{_, Q, false} = Queue | Queues] = All when length(All) > MaxQueuesDesired ->
             Name = amqqueue:get_name(Q),
             Module = rebalance_module(Q),
-            OtherNodes = Module:get_replicas(Q) -- [N],
-            case OtherNodes of
+            Candidates = rabbit_maintenance:filter_out_drained_nodes_local_read(Module:get_replicas(Q) -- [N]),
+            case Candidates of
                 [] ->
                     {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)};
                 _ ->
-                    [{Length, Destination} | _] = sort_by_number_of_queues(OtherNodes, ByNode),
-                    rabbit_log:warning("Migrating queue ~p from node ~p with ~p queues to node ~p with ~p queues",
+                    [{Length, Destination} | _] = sort_by_number_of_queues(Candidates, ByNode),
+                    rabbit_log:info("Migrating queue ~p from node ~p with ~p queues to node ~p with ~p queues",
                                        [Name, N, length(All), Destination, Length]),
                     case Module:transfer_leadership(Q, Destination) of
                         {migrated, NewNode} ->
-                            rabbit_log:warning("Queue ~p migrated to ~p", [Name, NewNode]),
+                            rabbit_log:info("Queue ~p migrated to ~p", [Name, NewNode]),
                             {migrated, update_migrated_queue(Destination, N, Queue, Queues, ByNode)};
                         {not_migrated, Reason} ->
                             rabbit_log:warning("Error migrating queue ~p: ~p", [Name, Reason]),
@@ -525,7 +533,7 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
                                "Do nothing", [N, length(All)]),
             maybe_migrate(ByNode, MaxQueuesDesired, Nodes);
         All ->
-            rabbit_log:warning("Node ~p only contains ~p queues, do nothing",
+            rabbit_log:debug("Node ~p only contains ~p queues, do nothing",
                                [N, length(All)]),
             maybe_migrate(ByNode, MaxQueuesDesired, Nodes)
     end.
@@ -552,7 +560,7 @@ group_by_node(Queues) ->
                                  Module = rebalance_module(Q),
                                  Length = Module:queue_length(Q),
                                  maps:update_with(amqqueue:qnode(Q),
-                                                   fun(L) -> [{Length, Q, false} | L] end,
+                                                  fun(L) -> [{Length, Q, false} | L] end,
                                                   [{Length, Q, false}], Acc)
                          end, #{}, Queues),
     maps:map(fun(_K, V) -> lists:keysort(1, V) end, ByNode).
@@ -624,7 +632,7 @@ retry_wait(Q, F, E, RetriesLeft) ->
                     % The old check would have crashed here,
                     % instead, log it and run the exit fun. absent & alive is weird,
                     % but better than crashing with badmatch,true
-                    rabbit_log:debug("Unexpected alive queue process ~p~n", [QPid]),
+                    rabbit_log:debug("Unexpected alive queue process ~p", [QPid]),
                     E({absent, Q, alive});
                 false ->
                     ok % Expected result
@@ -675,7 +683,7 @@ priv_absent(QueueName, QPid, true, nodedown) ->
     rabbit_misc:protocol_error(
       not_found,
       "home node '~s' of durable ~s is down or inaccessible",
-      [node(QPid), rabbit_misc:rs(QueueName)]);
+      [amqqueue:qnode(QPid), rabbit_misc:rs(QueueName)]);
 
 priv_absent(QueueName, _QPid, _IsDurable, stopped) ->
     rabbit_misc:protocol_error(
@@ -781,24 +789,38 @@ declare_args() ->
      {<<"x-queue-type">>,              fun check_queue_type/2},
      {<<"x-quorum-initial-group-size">>,     fun check_initial_cluster_size_arg/2},
      {<<"x-max-age">>,                 fun check_max_age_arg/2},
-     {<<"x-max-segment-size">>,        fun check_non_neg_int_arg/2},
+     {<<"x-stream-max-segment-size-bytes">>,        fun check_non_neg_int_arg/2},
      {<<"x-initial-cluster-size">>,    fun check_initial_cluster_size_arg/2},
      {<<"x-queue-leader-locator">>,    fun check_queue_leader_locator_arg/2}].
 
 consume_args() -> [{<<"x-priority">>,              fun check_int_arg/2},
-                   {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2}].
+                   {<<"x-cancel-on-ha-failover">>, fun check_bool_arg/2},
+                   {<<"x-stream-offset">>, fun check_stream_offset_arg/2}].
 
 check_int_arg({Type, _}, _) ->
     case lists:member(Type, ?INTEGER_ARG_TYPES) of
         true  -> ok;
-        false -> {error, {unacceptable_type, Type}}
-    end.
+        false -> {error, rabbit_misc:format("expected integer, got ~p", [Type])}
+    end;
+check_int_arg(Val, _) when is_integer(Val) ->
+    ok;
+check_int_arg(_Val, _) ->
+    {error, {unacceptable_type, "expected integer"}}.
 
 check_bool_arg({bool, _}, _) -> ok;
-check_bool_arg({Type, _}, _) -> {error, {unacceptable_type, Type}}.
+check_bool_arg({Type, _}, _) -> {error, {unacceptable_type, Type}};
+check_bool_arg(true, _)  -> ok;
+check_bool_arg(false, _) -> ok;
+check_bool_arg(_Val, _) -> {error, {unacceptable_type, "expected boolean"}}.
 
 check_non_neg_int_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
+        ok when Val >= 0 -> ok;
+        ok               -> {error, {value_negative, Val}};
+        Error            -> Error
+    end;
+check_non_neg_int_arg(Val, Args) ->
+    case check_int_arg(Val, Args) of
         ok when Val >= 0 -> ok;
         ok               -> {error, {value_negative, Val}};
         Error            -> Error
@@ -809,10 +831,21 @@ check_expires_arg({Type, Val}, Args) ->
         ok when Val == 0 -> {error, {value_zero, Val}};
         ok               -> rabbit_misc:check_expiry(Val);
         Error            -> Error
+    end;
+check_expires_arg(Val, Args) ->
+    case check_int_arg(Val, Args) of
+        ok when Val == 0 -> {error, {value_zero, Val}};
+        ok               -> rabbit_misc:check_expiry(Val);
+        Error            -> Error
     end.
 
 check_message_ttl_arg({Type, Val}, Args) ->
     case check_int_arg({Type, Val}, Args) of
+        ok    -> rabbit_misc:check_expiry(Val);
+        Error -> Error
+    end;
+check_message_ttl_arg(Val, Args) ->
+    case check_int_arg(Val, Args) of
         ok    -> rabbit_misc:check_expiry(Val);
         Error -> Error
     end.
@@ -822,16 +855,27 @@ check_max_priority_arg({Type, Val}, Args) ->
         ok when Val =< ?MAX_SUPPORTED_PRIORITY -> ok;
         ok                                     -> {error, {max_value_exceeded, Val}};
         Error                                  -> Error
+    end;
+check_max_priority_arg(Val, Args) ->
+    case check_non_neg_int_arg(Val, Args) of
+        ok when Val =< ?MAX_SUPPORTED_PRIORITY -> ok;
+        ok                                     -> {error, {max_value_exceeded, Val}};
+        Error                                  -> Error
     end.
 
 check_single_active_consumer_arg({Type, Val}, Args) ->
-    case check_bool_arg({Type, Val}, Args) of
-        ok    -> ok;
-        Error -> Error
-    end.
+    check_bool_arg({Type, Val}, Args);
+check_single_active_consumer_arg(Val, Args) ->
+    check_bool_arg(Val, Args).
 
 check_initial_cluster_size_arg({Type, Val}, Args) ->
     case check_non_neg_int_arg({Type, Val}, Args) of
+        ok when Val == 0 -> {error, {value_zero, Val}};
+        ok               -> ok;
+        Error            -> Error
+    end;
+check_initial_cluster_size_arg(Val, Args) ->
+    case check_non_neg_int_arg(Val, Args) of
         ok when Val == 0 -> {error, {value_zero, Val}};
         ok               -> ok;
         Error            -> Error
@@ -882,7 +926,9 @@ unit_value_in_ms("s") ->
 %% Note that the validity of x-dead-letter-exchange is already verified
 %% by rabbit_channel's queue.declare handler.
 check_dlxname_arg({longstr, _}, _) -> ok;
-check_dlxname_arg({Type,    _}, _) -> {error, {unacceptable_type, Type}}.
+check_dlxname_arg({Type,    _}, _) -> {error, {unacceptable_type, Type}};
+check_dlxname_arg(Val, _) when is_list(Val) or is_binary(Val) -> ok;
+check_dlxname_arg(_Val, _) -> {error, {unacceptable_type, "expected a string (valid exchange name)"}}.
 
 check_dlxrk_arg({longstr, _}, Args) ->
     case rabbit_misc:table_lookup(Args, <<"x-dead-letter-exchange">>) of
@@ -890,43 +936,86 @@ check_dlxrk_arg({longstr, _}, Args) ->
         _         -> ok
     end;
 check_dlxrk_arg({Type,    _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
+    {error, {unacceptable_type, Type}};
+check_dlxrk_arg(Val, Args) when is_binary(Val) ->
+    case rabbit_misc:table_lookup(Args, <<"x-dead-letter-exchange">>) of
+        undefined -> {error, routing_key_but_no_dlx_defined};
+        _         -> ok
+    end;
+check_dlxrk_arg(_Val, _Args) ->
+    {error, {unacceptable_type, "expected a string"}}.
 
+-define(KNOWN_OVERFLOW_MODES, [<<"drop-head">>, <<"reject-publish">>, <<"reject-publish-dlx">>]).
 check_overflow({longstr, Val}, _Args) ->
-    case lists:member(Val, [<<"drop-head">>,
-                            <<"reject-publish">>,
-                            <<"reject-publish-dlx">>]) of
+    case lists:member(Val, ?KNOWN_OVERFLOW_MODES) of
         true  -> ok;
         false -> {error, invalid_overflow}
     end;
 check_overflow({Type,    _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
+    {error, {unacceptable_type, Type}};
+check_overflow(Val, _Args) when is_binary(Val) ->
+    case lists:member(Val, ?KNOWN_OVERFLOW_MODES) of
+        true  -> ok;
+        false -> {error, invalid_overflow}
+    end;
+check_overflow(_Val, _Args) ->
+    {error, invalid_overflow}.
 
+-define(KNOWN_LEADER_LOCATORS, [<<"client-local">>, <<"random">>, <<"least-leaders">>]).
 check_queue_leader_locator_arg({longstr, Val}, _Args) ->
-    case lists:member(Val, [<<"client-local">>,
-                            <<"random">>,
-                            <<"least-leaders">>]) of
+    case lists:member(Val, ?KNOWN_LEADER_LOCATORS) of
         true  -> ok;
         false -> {error, invalid_queue_locator_arg}
     end;
 check_queue_leader_locator_arg({Type, _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
-
-check_queue_mode({longstr, Val}, _Args) ->
-    case lists:member(Val, [<<"default">>, <<"lazy">>]) of
+    {error, {unacceptable_type, Type}};
+check_queue_leader_locator_arg(Val, _Args) when is_binary(Val) ->
+    case lists:member(Val, ?KNOWN_LEADER_LOCATORS) of
         true  -> ok;
-        false -> {error, invalid_queue_mode}
+        false -> {error, invalid_queue_locator_arg}
+    end;
+check_queue_leader_locator_arg(_Val, _Args) ->
+    {error, invalid_queue_locator_arg}.
+
+check_stream_offset_arg(Val, _Args) ->
+    case rabbit_stream_queue:parse_offset_arg(Val) of
+        {ok, _} ->
+            ok;
+        {error, _} ->
+            {error, {invalid_stream_offset_arg, Val}}
+    end.
+
+-define(KNOWN_QUEUE_MODES, [<<"default">>, <<"lazy">>]).
+check_queue_mode({longstr, Val}, _Args) ->
+    case lists:member(Val, ?KNOWN_QUEUE_MODES) of
+        true  -> ok;
+        false -> {error, rabbit_misc:format("unsupported queue mode '~s'", [Val])}
     end;
 check_queue_mode({Type,    _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
-
-check_queue_type({longstr, Val}, _Args) ->
-    case lists:member(Val, [<<"classic">>, <<"quorum">>, <<"stream">>]) of
+    {error, {unacceptable_type, Type}};
+check_queue_mode(Val, _Args) when is_binary(Val) ->
+    case lists:member(Val, ?KNOWN_QUEUE_MODES) of
         true  -> ok;
-        false -> {error, invalid_queue_type}
+        false -> {error, rabbit_misc:format("unsupported queue mode '~s'", [Val])}
+    end;
+check_queue_mode(_Val, _Args) ->
+    {error, invalid_queue_mode}.
+
+-define(KNOWN_QUEUE_TYPES, [<<"classic">>, <<"quorum">>, <<"stream">>]).
+check_queue_type({longstr, Val}, _Args) ->
+    case lists:member(Val, ?KNOWN_QUEUE_TYPES) of
+        true  -> ok;
+        false -> {error, rabbit_misc:format("unsupported queue type '~s'", [Val])}
     end;
 check_queue_type({Type,    _}, _Args) ->
-    {error, {unacceptable_type, Type}}.
+    {error, {unacceptable_type, Type}};
+check_queue_type(Val, _Args) when is_binary(Val) ->
+    case lists:member(Val, ?KNOWN_QUEUE_TYPES) of
+        true  -> ok;
+        false -> {error, rabbit_misc:format("unsupported queue type '~s'", [Val])}
+    end;
+check_queue_type(_Val, _Args) ->
+    {error, invalid_queue_type}.
 
 -spec list() -> [amqqueue:amqqueue()].
 
@@ -953,8 +1042,8 @@ list_local_names() ->
 
 list_local_names_down() ->
     [ amqqueue:get_name(Q) || Q <- list(),
-                              is_down(Q),
-                              is_local_to_node(amqqueue:get_pid(Q), node())].
+                              is_local_to_node(amqqueue:get_pid(Q), node()),
+                              is_down(Q)].
 
 is_down(Q) ->
     try
@@ -999,6 +1088,7 @@ sample_n(Queues, N) when is_list(Queues) andalso is_integer(N) andalso N > 0 ->
 
 list_by_type(classic) -> list_by_type(rabbit_classic_queue);
 list_by_type(quorum)  -> list_by_type(rabbit_quorum_queue);
+list_by_type(stream)  -> list_by_type(rabbit_stream_queue);
 list_by_type(Type) ->
     {atomic, Qs} =
         mnesia:sync_transaction(
@@ -1019,6 +1109,12 @@ list_local_quorum_queue_names() ->
 -spec list_local_quorum_queues() -> [amqqueue:amqqueue()].
 list_local_quorum_queues() ->
     [ Q || Q <- list_by_type(quorum),
+      amqqueue:get_state(Q) =/= crashed,
+      lists:member(node(), get_quorum_nodes(Q))].
+
+-spec list_local_stream_queues() -> [amqqueue:amqqueue()].
+list_local_stream_queues() ->
+    [ Q || Q <- list_by_type(stream),
       amqqueue:get_state(Q) =/= crashed,
       lists:member(node(), get_quorum_nodes(Q))].
 
@@ -1080,13 +1176,32 @@ list_local_mirrored_classic_without_synchronised_mirrors_for_cli() ->
          }
      end || Q <- ClassicQs].
 
+-spec list_local_quorum_queues_with_name_matching(binary()) -> [amqqueue:amqqueue()].
+list_local_quorum_queues_with_name_matching(Pattern) ->
+    [ Q || Q <- list_by_type(quorum),
+      amqqueue:get_state(Q) =/= crashed,
+      lists:member(node(), get_quorum_nodes(Q)),
+      is_match(get_resource_name(amqqueue:get_name(Q)), Pattern)].
+
+-spec list_local_quorum_queues_with_name_matching(vhost:name(), binary()) -> [amqqueue:amqqueue()].
+list_local_quorum_queues_with_name_matching(VHostName, Pattern) ->
+    [ Q || Q <- list_by_type(quorum),
+      amqqueue:get_state(Q) =/= crashed,
+      lists:member(node(), get_quorum_nodes(Q)),
+      is_in_virtual_host(Q, VHostName),
+      is_match(get_resource_name(amqqueue:get_name(Q)), Pattern)].
+
 is_local_to_node(QPid, Node) when ?IS_CLASSIC(QPid) ->
     Node =:= node(QPid);
 is_local_to_node({_, Leader} = QPid, Node) when ?IS_QUORUM(QPid) ->
-    Node =:= Leader.
+    Node =:= Leader;
+is_local_to_node(_QPid, _Node) ->
+    false.
 
--spec list(rabbit_types:vhost()) -> [amqqueue:amqqueue()].
+is_in_virtual_host(Q, VHostName) ->
+    VHostName =:= get_resource_vhost_name(amqqueue:get_name(Q)).
 
+-spec list(vhost:name()) -> [amqqueue:amqqueue()].
 list(VHostPath) ->
     list(VHostPath, rabbit_queue).
 
@@ -1160,7 +1275,7 @@ count(VHost) ->
     %% that requires a proper consensus algorithm.
     length(list_for_count(VHost))
   catch _:Err ->
-    rabbit_log:error("Failed to fetch number of queues in vhost ~p:~n~p~n",
+    rabbit_log:error("Failed to fetch number of queues in vhost ~p:~n~p",
                      [VHost, Err]),
     0
   end.
@@ -1201,6 +1316,17 @@ is_unresponsive(Q, Timeout) when ?amqqueue_is_quorum(Q) ->
           {ok, _, _}   -> false;
           {timeout, _} -> true;
           {error, _}   -> true
+        end
+    catch
+        exit:{timeout, _} ->
+            true
+    end;
+is_unresponsive(Q, Timeout) when ?amqqueue_is_stream(Q) ->
+    try
+        #{leader_pid := LeaderPid} = amqqueue:get_type_state(Q),
+        case gen_batch_server:call(LeaderPid, get_reader_context, Timeout) of
+            #{dir := _} -> false;
+            _ -> true
         end
     catch
         exit:{timeout, _} ->
@@ -1494,6 +1620,13 @@ activate_limit_all(QRefs, ChPid) ->
     delegate:invoke_no_result(QPids, {gen_server2, cast,
                                       [{activate_limit, ChPid}]}).
 
+-spec deactivate_limit_all(qpids(), pid()) -> ok.
+
+deactivate_limit_all(QRefs, ChPid) ->
+    QPids = [P || P <- QRefs, ?IS_CLASSIC(P)],
+    delegate:invoke_no_result(QPids, {gen_server2, cast,
+                                      [{deactivate_limit, ChPid}]}).									  
+
 -spec credit(amqqueue:amqqueue(),
              rabbit_types:ctag(),
              non_neg_integer(),
@@ -1550,8 +1683,7 @@ basic_cancel(Q, ConsumerTag, OkMsg, ActingUser, QStates) ->
 -spec notify_decorators(amqqueue:amqqueue()) -> 'ok'.
 
 notify_decorators(Q) ->
-    QPid = amqqueue:get_pid(Q),
-    delegate:invoke_no_result(QPid, {gen_server2, cast, [notify_decorators]}).
+    rabbit_queue_type:notify_decorators(Q).
 
 notify_sent(QPid, ChPid) ->
     rabbit_amqqueue_common:notify_sent(QPid, ChPid).
@@ -1660,7 +1792,7 @@ forget_node_for_queue(DeadNode, [H|T], Q) when ?is_amqqueue(Q) ->
 node_permits_offline_promotion(Node) ->
     case node() of
         Node -> not rabbit:is_running(); %% [1]
-        _    -> All = rabbit_mnesia:cluster_nodes(all),
+        _    -> All = rabbit_nodes:all(),
                 Running = rabbit_nodes:all_running(),
                 lists:member(Node, All) andalso
                     not lists:member(Node, Running) %% [2]
@@ -1714,10 +1846,11 @@ cancel_sync_mirrors(QPid) ->
 
 -spec is_replicated(amqqueue:amqqueue()) -> boolean().
 
-is_replicated(Q) when ?amqqueue_is_quorum(Q) ->
-    true;
-is_replicated(Q) ->
-    rabbit_mirror_queue_misc:is_mirrored(Q).
+is_replicated(Q) when ?amqqueue_is_classic(Q) ->
+    rabbit_mirror_queue_misc:is_mirrored(Q);
+is_replicated(_Q) ->
+    %% streams and quorum queues are all replicated
+    true.
 
 is_exclusive(Q) when ?amqqueue_exclusive_owner_is(Q, none) ->
     false;
@@ -1785,7 +1918,11 @@ maybe_clear_recoverable_node(Node, Q) ->
 -spec on_node_down(node()) -> 'ok'.
 
 on_node_down(Node) ->
-    {QueueNames, QueueDeletions} = delete_queues_on_node_down(Node),
+    {Time, {QueueNames, QueueDeletions}} = timer:tc(fun() -> delete_queues_on_node_down(Node) end),
+    case length(QueueNames) of
+        0 -> ok;
+        _ -> rabbit_log:info("~p transient queues from an old incarnation of node ~p deleted in ~fs", [length(QueueNames), Node, Time/1000000])
+    end,
     notify_queue_binding_deletions(QueueDeletions),
     rabbit_core_metrics:queues_deleted(QueueNames),
     notify_queues_deleted(QueueNames),

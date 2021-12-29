@@ -86,8 +86,11 @@ defmodule TestHelper do
   end
 
   def set_user_tags(name, tags) do
-    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_tags,
-      [name, tags, "acting-user"])
+    :rpc.call(get_rabbit_hostname(), :rabbit_auth_backend_internal, :set_tags, [name, tags, "acting-user"])
+  end
+
+  def set_vhost_tags(name, tags) do
+    :rpc.call(get_rabbit_hostname(), :rabbit_vhost, :update_tags, [name, tags, "acting-user"])
   end
 
   def authenticate_user(name, password) do
@@ -157,6 +160,10 @@ defmodule TestHelper do
     :rpc.call(get_rabbit_hostname(),
               :rabbit_amqqueue, :declare,
               [queue_name, durable, auto_delete, args, owner, "acting-user"])
+  end
+
+  def declare_stream(name, vhost) do
+    declare_queue(name, vhost, true, false, [{"x-queue-type", :longstr, "stream"}])
   end
 
   def delete_queue(name, vhost) do
@@ -374,6 +381,14 @@ defmodule TestHelper do
         :timer.sleep(10)
         await_no_client_connections_with_iterations(node, n - 1)
     end
+  end
+
+  def fetch_user_connections(username, context) do
+    node = Helpers.normalise_node(context[:node], :shortnames)
+
+    :rabbit_misc.rpc_call(node, :rabbit_connection_tracking, :list_of_user, [
+      username
+    ])
   end
 
   def close_all_connections(node) do
@@ -600,7 +615,7 @@ defmodule TestHelper do
     ## Assume default log is the first one
     log_file = case file do
       nil ->
-        [default_log | _] = :rpc.call(get_rabbit_hostname(), :rabbit_lager, :log_locations, [])
+        [default_log | _] = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
         default_log
       _ -> file
     end

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_msg_store).
@@ -27,7 +27,7 @@
 
 %%----------------------------------------------------------------------------
 
--include("rabbit_msg_store.hrl").
+-include_lib("rabbit_common/include/rabbit_msg_store.hrl").
 
 -define(SYNC_INTERVAL,  25).   %% milliseconds
 -define(CLEAN_FILENAME, "clean.dot").
@@ -686,6 +686,13 @@ client_update_flying(Diff, MsgId, #client_msstate { flying_ets = FlyingEts,
         false -> try ets:update_counter(FlyingEts, Key, {2, Diff}) of
                      0    -> ok;
                      Diff -> ok;
+                     Err when Err >= 2 ->
+                         %% The message must be referenced twice in the queue
+                         %% index. There is a bug somewhere, but we don't want
+                         %% to take down anything just because of this. Let's
+                         %% process the message as if the copies were in
+                         %% different queues (fan-out).
+                         ok;
                      Err  -> throw({bad_flying_ets_update, Diff, Err, Key})
                  catch error:badarg ->
                          %% this is guaranteed to succeed since the
@@ -717,7 +724,7 @@ init([Type, BaseDir, ClientRefs, StartupFunState]) ->
     Name = filename:join(filename:basename(BaseDir), atom_to_list(Type)),
 
     {ok, IndexModule} = application:get_env(rabbit, msg_store_index_module),
-    rabbit_log:info("Message store ~tp: using ~p to provide index~n", [Name, IndexModule]),
+    rabbit_log:info("Message store ~tp: using ~p to provide index", [Name, IndexModule]),
 
     AttemptFileSummaryRecovery =
         case ClientRefs of
@@ -794,11 +801,11 @@ init([Type, BaseDir, ClientRefs, StartupFunState]) ->
                       true -> "clean";
                       false -> "unclean"
                   end,
-    rabbit_log:debug("Rebuilding message location index after ~s shutdown...~n",
+    rabbit_log:debug("Rebuilding message location index after ~s shutdown...",
                      [Cleanliness]),
     {Offset, State1 = #msstate { current_file = CurFile }} =
         build_index(CleanShutdown, StartupFunState, State),
-    rabbit_log:debug("Finished rebuilding index~n", []),
+    rabbit_log:debug("Finished rebuilding index", []),
     %% read is only needed so that we can seek
     {ok, CurHdl} = open_file(Dir, filenum_to_name(CurFile),
                              [read | ?WRITE_MODE]),
@@ -999,7 +1006,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
         {error, FSErr} ->
             rabbit_log:error("Unable to store file summary"
                              " for vhost message store for directory ~p~n"
-                             "Error: ~p~n",
+                             "Error: ~p",
                              [Dir, FSErr])
     end,
     [true = ets:delete(T) || T <- [FileSummaryEts, FileHandlesEts,
@@ -1012,7 +1019,7 @@ terminate(_Reason, State = #msstate { index_state         = IndexState,
             ok;
         {error, RTErr} ->
             rabbit_log:error("Unable to save message store recovery terms"
-                             " for directory ~p~nError: ~p~n",
+                             " for directory ~p~nError: ~p",
                              [Dir, RTErr])
     end,
     State3 #msstate { index_state         = undefined,
@@ -1082,6 +1089,14 @@ update_flying(Diff, MsgId, CRef, #msstate { flying_ets = FlyingEts }) ->
                         process;
         [{_, 0}]     -> true = ets:delete_object(FlyingEts, {Key, 0}),
                         ignore;
+        [{_, Err}] when Err >= 2 ->
+            %% The message must be referenced twice in the queue index. There
+            %% is a bug somewhere, but we don't want to take down anything
+            %% just because of this. Let's process the message as if the
+            %% copies were in different queues (fan-out).
+            ets:update_counter(FlyingEts, Key, {2, Diff}),
+            true = ets:delete_object(FlyingEts, {Key, 0}),
+            process;
         [{_, Err}]   -> throw({bad_flying_ets_record, Diff, Err, Key})
     end.
 %% [1] We can get here, for example, in the following scenario: There
@@ -1574,12 +1589,12 @@ index_clean_up_temporary_reference_count_entries(
 recover_index_and_client_refs(IndexModule, _Recover, undefined, Dir, _Name) ->
     {false, IndexModule:new(Dir), []};
 recover_index_and_client_refs(IndexModule, false, _ClientRefs, Dir, Name) ->
-    rabbit_log:warning("Message store ~tp: rebuilding indices from scratch~n", [Name]),
+    rabbit_log:warning("Message store ~tp: rebuilding indices from scratch", [Name]),
     {false, IndexModule:new(Dir), []};
 recover_index_and_client_refs(IndexModule, true, ClientRefs, Dir, Name) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
                     rabbit_log:warning("Message store ~tp : " ++ ErrorMsg ++ "~n"
-                                       "rebuilding indices from scratch~n",
+                                       "rebuilding indices from scratch",
                                        [Name | ErrorArgs]),
                     {false, IndexModule:new(Dir), []}
             end,
@@ -1741,9 +1756,9 @@ build_index(true, _StartupFunState,
       end, {0, State}, FileSummaryEts);
 build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
             State = #msstate { dir = Dir }) ->
-    rabbit_log:debug("Rebuilding message refcount...~n", []),
+    rabbit_log:debug("Rebuilding message refcount...", []),
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
-    rabbit_log:debug("Done rebuilding message refcount~n", []),
+    rabbit_log:debug("Done rebuilding message refcount", []),
     {ok, Pid} = gatherer:start_link(),
     case [filename_to_num(FileName) ||
              FileName <- list_sorted_filenames(Dir, ?FILE_EXTENSION)] of
@@ -1757,7 +1772,7 @@ build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
 build_index_worker(Gatherer, State = #msstate { dir = Dir },
                    Left, File, Files) ->
     FileName = filenum_to_name(File),
-    rabbit_log:debug("Rebuilding message location index from ~p (~B file(s) remaining)~n",
+    rabbit_log:debug("Rebuilding message location index from ~p (~B file(s) remaining)",
                      [form_filename(Dir, FileName), length(Files)]),
     {ok, Messages, FileSize} =
         scan_file_for_valid_messages(Dir, FileName),

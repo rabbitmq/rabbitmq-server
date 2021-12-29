@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(per_vhost_connection_limit_SUITE).
@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -61,6 +62,8 @@ suite() ->
 
 %% see partitions_SUITE
 -define(DELAY, 9000).
+-define(AWAIT, 1000).
+-define(INTERVAL, 250).
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -148,36 +151,36 @@ most_basic_single_node_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
     [Conn] = open_connections(Config, [0]),
-    ?assertEqual(1, count_connections_in(Config, VHost)),
+    ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
     close_connections([Conn]),
-    ?assertEqual(0, count_connections_in(Config, VHost)).
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL).
 
 single_node_single_vhost_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
     [Conn1] = open_connections(Config, [0]),
-    ?assertEqual(1, count_connections_in(Config, VHost)),
+    ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost)),
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn2] = open_connections(Config, [0]),
-    ?assertEqual(1, count_connections_in(Config, VHost)),
+    ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn3] = open_connections(Config, [0]),
-    ?assertEqual(2, count_connections_in(Config, VHost)),
+    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn4] = open_connections(Config, [0]),
-    ?assertEqual(3, count_connections_in(Config, VHost)),
+    ?awaitMatch(3, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     kill_connections([Conn4]),
-    ?assertEqual(2, count_connections_in(Config, VHost)),
+    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn5] = open_connections(Config, [0]),
-    ?assertEqual(3, count_connections_in(Config, VHost)),
+    ?awaitMatch(3, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn2, Conn3, Conn5]),
-    ?assertEqual(0, count_connections_in(Config, VHost)).
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL).
 
 single_node_multiple_vhosts_connection_count(Config) ->
     VHost1 = <<"vhost1">>,
@@ -190,32 +193,32 @@ single_node_multiple_vhosts_connection_count(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
     [Conn1] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
 
     [Conn2] = open_connections(Config, [{0, VHost2}]),
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
+    ?awaitMatch(1, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     [Conn3] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(1, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     [Conn4] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(2, count_connections_in(Config, VHost1)),
+    ?awaitMatch(2, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
 
     kill_connections([Conn4]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
 
     [Conn5] = open_connections(Config, [{0, VHost2}]),
-    ?assertEqual(2, count_connections_in(Config, VHost2)),
+    ?awaitMatch(2, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     [Conn6] = open_connections(Config, [{0, VHost2}]),
-    ?assertEqual(3, count_connections_in(Config, VHost2)),
+    ?awaitMatch(3, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn2, Conn3, Conn5, Conn6]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
@@ -231,27 +234,42 @@ single_node_list_in_vhost(Config) ->
     ?assertEqual(0, length(connections_in(Config, VHost2))),
 
     [Conn1] = open_connections(Config, [{0, VHost1}]),
-    [#tracked_connection{vhost = VHost1}] = connections_in(Config, VHost1),
+    ?awaitMatch([#tracked_connection{vhost = VHost1}],
+                connections_in(Config, VHost1),
+                ?AWAIT, ?INTERVAL),
     close_connections([Conn1]),
-    ?assertEqual(0, length(connections_in(Config, VHost1))),
+    ?awaitMatch(Connections when length(Connections) == 0,
+                                 connections_in(Config, VHost1),
+                                 ?AWAIT, ?INTERVAL),
 
     [Conn2] = open_connections(Config, [{0, VHost2}]),
-    [#tracked_connection{vhost = VHost2}] = connections_in(Config, VHost2),
+    ?awaitMatch([#tracked_connection{vhost = VHost2}],
+                connections_in(Config, VHost2),
+                ?AWAIT, ?INTERVAL),
 
     [Conn3] = open_connections(Config, [{0, VHost1}]),
-    [#tracked_connection{vhost = VHost1}] = connections_in(Config, VHost1),
+    ?awaitMatch([#tracked_connection{vhost = VHost1}],
+                connections_in(Config, VHost1),
+                ?AWAIT, ?INTERVAL),
 
     [Conn4] = open_connections(Config, [{0, VHost1}]),
+    ?awaitMatch([#tracked_connection{vhost = VHost1},
+                 #tracked_connection{vhost = VHost1}],
+                connections_in(Config, VHost1),
+                ?AWAIT, ?INTERVAL),
     kill_connections([Conn4]),
-    [#tracked_connection{vhost = VHost1}] = connections_in(Config, VHost1),
+    ?awaitMatch([#tracked_connection{vhost = VHost1}],
+                connections_in(Config, VHost1),
+                ?AWAIT, ?INTERVAL),
 
     [Conn5, Conn6] = open_connections(Config, [{0, VHost2}, {0, VHost2}]),
-    [<<"vhost1">>, <<"vhost2">>] =
-      lists:usort(lists:map(fun (#tracked_connection{vhost = V}) -> V end,
-                     all_connections(Config))),
+    ?awaitMatch([<<"vhost1">>, <<"vhost2">>],
+                lists:usort(lists:map(fun (#tracked_connection{vhost = V}) -> V end,
+                                      all_connections(Config))),
+                ?AWAIT, ?INTERVAL),
 
     close_connections([Conn2, Conn3, Conn5, Conn6]),
-    ?assertEqual(0, length(all_connections(Config))),
+    ?awaitMatch(0, length(all_connections(Config)), ?AWAIT, ?INTERVAL),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
@@ -260,43 +278,43 @@ most_basic_cluster_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
     [Conn1] = open_connections(Config, [0]),
-    ?assertEqual(1, count_connections_in(Config, VHost)),
+    ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn2] = open_connections(Config, [1]),
-    ?assertEqual(2, count_connections_in(Config, VHost)),
+    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn3] = open_connections(Config, [1]),
-    ?assertEqual(3, count_connections_in(Config, VHost)),
+    ?awaitMatch(3, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn1, Conn2, Conn3]),
-    ?assertEqual(0, count_connections_in(Config, VHost)).
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL).
 
 cluster_single_vhost_connection_count(Config) ->
     VHost = <<"/">>,
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
     [Conn1] = open_connections(Config, [0]),
-    ?assertEqual(1, count_connections_in(Config, VHost)),
+    ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost)),
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn2] = open_connections(Config, [1]),
-    ?assertEqual(1, count_connections_in(Config, VHost)),
+    ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn3] = open_connections(Config, [0]),
-    ?assertEqual(2, count_connections_in(Config, VHost)),
+    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn4] = open_connections(Config, [1]),
-    ?assertEqual(3, count_connections_in(Config, VHost)),
+    ?awaitMatch(3, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     kill_connections([Conn4]),
-    ?assertEqual(2, count_connections_in(Config, VHost)),
+    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn5] = open_connections(Config, [1]),
-    ?assertEqual(3, count_connections_in(Config, VHost)),
+    ?awaitMatch(3, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn2, Conn3, Conn5]),
-    ?assertEqual(0, count_connections_in(Config, VHost)).
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL).
 
 cluster_multiple_vhosts_connection_count(Config) ->
     VHost1 = <<"vhost1">>,
@@ -309,32 +327,32 @@ cluster_multiple_vhosts_connection_count(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost2)),
 
     [Conn1] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
 
     [Conn2] = open_connections(Config, [{1, VHost2}]),
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
+    ?awaitMatch(1, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     [Conn3] = open_connections(Config, [{1, VHost1}]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
-    ?assertEqual(1, count_connections_in(Config, VHost2)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(1, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     [Conn4] = open_connections(Config, [{0, VHost1}]),
-    ?assertEqual(2, count_connections_in(Config, VHost1)),
+    ?awaitMatch(2, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
 
     kill_connections([Conn4]),
-    ?assertEqual(1, count_connections_in(Config, VHost1)),
+    ?awaitMatch(1, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
 
     [Conn5] = open_connections(Config, [{1, VHost2}]),
-    ?assertEqual(2, count_connections_in(Config, VHost2)),
+    ?awaitMatch(2, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     [Conn6] = open_connections(Config, [{0, VHost2}]),
-    ?assertEqual(3, count_connections_in(Config, VHost2)),
+    ?awaitMatch(3, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn2, Conn3, Conn5, Conn6]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost1),
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost2).
@@ -344,27 +362,27 @@ cluster_node_restart_connection_count(Config) ->
     ?assertEqual(0, count_connections_in(Config, VHost)),
 
     [Conn1] = open_connections(Config, [0]),
-    ?assertEqual(1, count_connections_in(Config, VHost)),
+    ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
     close_connections([Conn1]),
-    ?assertEqual(0, count_connections_in(Config, VHost)),
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn2] = open_connections(Config, [1]),
-    ?assertEqual(1, count_connections_in(Config, VHost)),
+    ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn3] = open_connections(Config, [0]),
-    ?assertEqual(2, count_connections_in(Config, VHost)),
+    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn4] = open_connections(Config, [1]),
-    ?assertEqual(3, count_connections_in(Config, VHost)),
+    ?awaitMatch(3, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     [Conn5] = open_connections(Config, [1]),
-    ?assertEqual(4, count_connections_in(Config, VHost)),
+    ?awaitMatch(4, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     rabbit_ct_broker_helpers:restart_broker(Config, 1),
-    ?assertEqual(1, count_connections_in(Config, VHost)),
+    ?awaitMatch(1, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn2, Conn3, Conn4, Conn5]),
-    ?assertEqual(0, count_connections_in(Config, VHost)).
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL).
 
 cluster_node_list_on_node(Config) ->
     [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -373,33 +391,36 @@ cluster_node_list_on_node(Config) ->
     ?assertEqual(0, length(connections_on_node(Config, 0))),
 
     [Conn1] = open_connections(Config, [0]),
-    [#tracked_connection{node = A}] = connections_on_node(Config, 0),
+    ?awaitMatch([#tracked_connection{node = A}],
+                connections_on_node(Config, 0),
+                ?AWAIT, ?INTERVAL),
     close_connections([Conn1]),
-    ?assertEqual(0, length(connections_on_node(Config, 0))),
+    ?awaitMatch(0, length(connections_on_node(Config, 0)), ?AWAIT, ?INTERVAL),
 
     [_Conn2] = open_connections(Config, [1]),
-    [#tracked_connection{node = B}] = connections_on_node(Config, 1),
+    ?awaitMatch([#tracked_connection{node = B}],
+                connections_on_node(Config, 1),
+                ?AWAIT, ?INTERVAL),
 
     [Conn3] = open_connections(Config, [0]),
-    ?assertEqual(1, length(connections_on_node(Config, 0))),
+    ?awaitMatch(1, length(connections_on_node(Config, 0)), ?AWAIT, ?INTERVAL),
 
     [Conn4] = open_connections(Config, [1]),
-    ?assertEqual(2, length(connections_on_node(Config, 1))),
+    ?awaitMatch(2, length(connections_on_node(Config, 1)), ?AWAIT, ?INTERVAL),
 
     kill_connections([Conn4]),
-    ?assertEqual(1, length(connections_on_node(Config, 1))),
+    ?awaitMatch(1, length(connections_on_node(Config, 1)), ?AWAIT, ?INTERVAL),
 
     [Conn5] = open_connections(Config, [0]),
-    ?assertEqual(2, length(connections_on_node(Config, 0))),
+    ?awaitMatch(2, length(connections_on_node(Config, 0)), ?AWAIT, ?INTERVAL),
 
     rabbit_ct_broker_helpers:stop_broker(Config, 1),
-    await_running_node_refresh(Config, 0),
 
-    ?assertEqual(2, length(all_connections(Config))),
+    ?awaitMatch(2, length(all_connections(Config)), 1000),
     ?assertEqual(0, length(connections_on_node(Config, 0, B))),
 
     close_connections([Conn3, Conn5]),
-    ?assertEqual(0, length(all_connections(Config, 0))),
+    ?awaitMatch(0, length(all_connections(Config, 0)), ?AWAIT, ?INTERVAL),
 
     rabbit_ct_broker_helpers:start_broker(Config, 1).
 
@@ -422,9 +443,10 @@ single_node_single_vhost_limit_with(Config, WatermarkLimit) ->
 
     set_vhost_connection_limit(Config, VHost, WatermarkLimit),
     [Conn4, Conn5] = open_connections(Config, [0, 0]),
+    ?awaitMatch(5, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn1, Conn2, Conn3, Conn4, Conn5]),
-    ?assertEqual(0, count_connections_in(Config, VHost)),
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     set_vhost_connection_limit(Config, VHost,  -1).
 
@@ -441,9 +463,10 @@ single_node_single_vhost_zero_limit(Config) ->
 
     set_vhost_connection_limit(Config, VHost, -1),
     [Conn1, Conn2] = open_connections(Config, [0, 0]),
+    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn1, Conn2]),
-    ?assertEqual(0, count_connections_in(Config, VHost)).
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL).
 
 
 single_node_multiple_vhosts_limit(Config) ->
@@ -456,8 +479,8 @@ single_node_multiple_vhosts_limit(Config) ->
     set_vhost_connection_limit(Config, VHost1, 2),
     set_vhost_connection_limit(Config, VHost2, 2),
 
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     [Conn1, Conn2, Conn3, Conn4] = open_connections(Config, [
         {0, VHost1},
@@ -470,6 +493,9 @@ single_node_multiple_vhosts_limit(Config) ->
     expect_that_client_connection_is_rejected(Config, 0, VHost2),
 
     [Conn5] = open_connections(Config, [0]),
+    ?awaitMatch(Conns when length(Conns) == 5,
+                           connections_on_node(Config, 0),
+                           ?AWAIT, ?INTERVAL),
 
     set_vhost_connection_limit(Config, VHost1, 5),
     set_vhost_connection_limit(Config, VHost2, -10),
@@ -480,11 +506,14 @@ single_node_multiple_vhosts_limit(Config) ->
         {0, VHost1},
         {0, VHost2},
         {0, VHost2}]),
+    ?awaitMatch(Conns when length(Conns) == 10,
+                           connections_on_node(Config, 0),
+                           ?AWAIT, ?INTERVAL),
 
     close_connections([Conn1, Conn2, Conn3, Conn4, Conn5,
                        Conn6, Conn7, Conn8, Conn9, Conn10]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     set_vhost_connection_limit(Config, VHost1, -1),
     set_vhost_connection_limit(Config, VHost2, -1),
@@ -503,8 +532,8 @@ single_node_multiple_vhosts_zero_limit(Config) ->
     set_vhost_connection_limit(Config, VHost1, 0),
     set_vhost_connection_limit(Config, VHost2, 0),
 
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     %% with limit = 0 no connections are allowed
     expect_that_client_connection_is_rejected(Config, 0, VHost1),
@@ -513,10 +542,11 @@ single_node_multiple_vhosts_zero_limit(Config) ->
 
     set_vhost_connection_limit(Config, VHost1, -1),
     [Conn1, Conn2] = open_connections(Config, [{0, VHost1}, {0, VHost1}]),
+    ?awaitMatch(2, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn1, Conn2]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     set_vhost_connection_limit(Config, VHost1, -1),
     set_vhost_connection_limit(Config, VHost2, -1).
@@ -530,6 +560,7 @@ cluster_single_vhost_limit(Config) ->
 
     %% here connections are opened to different nodes
     [Conn1, Conn2] = open_connections(Config, [{0, VHost}, {1, VHost}]),
+    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     %% we've crossed the limit
     expect_that_client_connection_is_rejected(Config, 0, VHost),
@@ -538,9 +569,10 @@ cluster_single_vhost_limit(Config) ->
     set_vhost_connection_limit(Config, VHost, 5),
 
     [Conn3, Conn4] = open_connections(Config, [{0, VHost}, {0, VHost}]),
+    ?awaitMatch(4, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn1, Conn2, Conn3, Conn4]),
-    ?assertEqual(0, count_connections_in(Config, VHost)),
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     set_vhost_connection_limit(Config, VHost,  -1).
 
@@ -552,6 +584,7 @@ cluster_single_vhost_limit2(Config) ->
 
     %% here a limit is reached on one node first
     [Conn1, Conn2] = open_connections(Config, [{0, VHost}, {0, VHost}]),
+    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     %% we've crossed the limit
     expect_that_client_connection_is_rejected(Config, 0, VHost),
@@ -564,9 +597,10 @@ cluster_single_vhost_limit2(Config) ->
         {1, VHost},
         {1, VHost},
         {1, VHost}]),
+    ?awaitMatch(5, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn1, Conn2, Conn3, Conn4, Conn5]),
-    ?assertEqual(0, count_connections_in(Config, VHost)),
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     set_vhost_connection_limit(Config, VHost,  -1).
 
@@ -584,9 +618,10 @@ cluster_single_vhost_zero_limit(Config) ->
 
     set_vhost_connection_limit(Config, VHost, -1),
     [Conn1, Conn2, Conn3, Conn4] = open_connections(Config, [0, 1, 0, 1]),
+    ?awaitMatch(4, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn1, Conn2, Conn3, Conn4]),
-    ?assertEqual(0, count_connections_in(Config, VHost)),
+    ?awaitMatch(0, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
 
     set_vhost_connection_limit(Config, VHost, -1).
 
@@ -618,10 +653,12 @@ cluster_multiple_vhosts_zero_limit(Config) ->
         {0, VHost2},
         {1, VHost1},
         {1, VHost2}]),
+    ?awaitMatch(2, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(2, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     close_connections([Conn1, Conn2, Conn3, Conn4]),
-    ?assertEqual(0, count_connections_in(Config, VHost1)),
-    ?assertEqual(0, count_connections_in(Config, VHost2)),
+    ?awaitMatch(0, count_connections_in(Config, VHost1), ?AWAIT, ?INTERVAL),
+    ?awaitMatch(0, count_connections_in(Config, VHost2), ?AWAIT, ?INTERVAL),
 
     set_vhost_connection_limit(Config, VHost1, -1),
     set_vhost_connection_limit(Config, VHost2, -1).
@@ -637,16 +674,16 @@ vhost_limit_after_node_renamed(Config) ->
 
     [Conn1, Conn2, {error, not_allowed}] = open_connections(Config,
       [{0, VHost}, {1, VHost}, {0, VHost}]),
-    ?assertEqual(2, count_connections_in(Config, VHost)),
+    ?awaitMatch(2, count_connections_in(Config, VHost), ?AWAIT, ?INTERVAL),
     close_connections([Conn1, Conn2]),
 
     Config1 = cluster_rename_SUITE:stop_rename_start(Config, A, [A, 'new-A']),
 
-    ?assertEqual(0, count_connections_in(Config1, VHost)),
+    ?awaitMatch(0, count_connections_in(Config1, VHost), ?AWAIT, ?INTERVAL),
 
-    [Conn3, Conn4, {error, not_allowed}] = open_connections(Config,
+    [Conn3, Conn4, {error, not_allowed}] = open_connections(Config1,
       [{0, VHost}, {1, VHost}, {0, VHost}]),
-    ?assertEqual(2, count_connections_in(Config1, VHost)),
+    ?awaitMatch(2, count_connections_in(Config1, VHost), ?AWAIT, ?INTERVAL),
     close_connections([Conn3, Conn4]),
 
     set_vhost_connection_limit(Config1, VHost,  -1),
@@ -669,22 +706,19 @@ open_connections(Config, NodesAndVHosts) ->
       (Node) ->
           rabbit_ct_client_helpers:OpenConnectionFun(Config, Node)
       end, NodesAndVHosts),
-    timer:sleep(500),
     Conns.
 
 close_connections(Conns) ->
     lists:foreach(fun
       (Conn) ->
           rabbit_ct_client_helpers:close_connection(Conn)
-      end, Conns),
-    timer:sleep(500).
+      end, Conns).
 
 kill_connections(Conns) ->
     lists:foreach(fun
       (Conn) ->
           (catch exit(Conn, please_terminate))
-      end, Conns),
-    timer:sleep(500).
+      end, Conns).
 
 count_connections_in(Config, VHost) ->
     count_connections_in(Config, VHost, 0).
@@ -735,9 +769,6 @@ set_vhost_connection_limit(Config, NodeIndex, VHost, Count) ->
       set_vhost_limits, Node,
       ["{\"max-connections\": " ++ integer_to_list(Count) ++ "}"],
       [{"-p", binary_to_list(VHost)}]).
-
-await_running_node_refresh(_Config, _NodeIndex) ->
-    timer:sleep(250).
 
 expect_that_client_connection_is_rejected(Config) ->
     expect_that_client_connection_is_rejected(Config, 0).

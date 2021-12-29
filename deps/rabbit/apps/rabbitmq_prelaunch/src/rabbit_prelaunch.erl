@@ -1,6 +1,9 @@
 -module(rabbit_prelaunch).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("eunit/include/eunit.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
 
 -export([run_prelaunch_first_phase/0,
          assert_mnesia_is_stopped/0,
@@ -24,6 +27,8 @@
 
 run_prelaunch_first_phase() ->
     try
+        ok = logger:set_process_metadata(
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
         do_run()
     catch
         throw:{error, _} = Error ->
@@ -67,26 +72,25 @@ do_run() ->
     ?assertMatch(#{}, Context0),
 
     %% Setup logging for the prelaunch phase.
-    ok = rabbit_prelaunch_early_logging:setup_early_logging(Context0, true),
+    ok = rabbit_prelaunch_early_logging:setup_early_logging(Context0),
 
     IsInitialPass = is_initial_pass(),
     case IsInitialPass of
         true ->
-            rabbit_log_prelaunch:debug(""),
-            rabbit_log_prelaunch:debug(
-              "== Prelaunch phase [1/2] (initial pass) =="),
-            rabbit_log_prelaunch:debug("");
+            ?LOG_DEBUG(""),
+            ?LOG_DEBUG("== Prelaunch phase [1/2] (initial pass) =="),
+            ?LOG_DEBUG("");
         false ->
-            rabbit_log_prelaunch:debug(""),
-            rabbit_log_prelaunch:debug("== Prelaunch phase [1/2] =="),
-            rabbit_log_prelaunch:debug("")
+            ?LOG_DEBUG(""),
+            ?LOG_DEBUG("== Prelaunch phase [1/2] =="),
+            ?LOG_DEBUG("")
     end,
     rabbit_env:log_process_env(),
 
     %% Load rabbitmq-env.conf, redo logging setup and continue.
     Context1 = rabbit_env:get_context_after_logging_init(Context0),
     ?assertMatch(#{}, Context1),
-    ok = rabbit_prelaunch_early_logging:setup_early_logging(Context1, true),
+    ok = rabbit_prelaunch_early_logging:setup_early_logging(Context1),
     rabbit_env:log_process_env(),
 
     %% Complete context now that we have the final environment loaded.
@@ -111,8 +115,15 @@ do_run() ->
     ok = rabbit_prelaunch_dist:setup(Context),
 
     %% 4. Write PID file.
-    rabbit_log_prelaunch:debug(""),
+    ?LOG_DEBUG(""),
     _ = write_pid_file(Context),
+
+    %% Garbage collect before returning because we do not want
+    %% to keep memory around forever unnecessarily, even if just
+    %% a few MiBs, because it will pollute output from tools like
+    %% Observer or observer_cli.
+    _ = erlang:garbage_collect(),
+
     ignore.
 
 assert_mnesia_is_stopped() ->
@@ -138,7 +149,7 @@ get_stop_reason() ->
 set_stop_reason(Reason) ->
     case get_stop_reason() of
         undefined ->
-            rabbit_log_prelaunch:debug("Set stop reason to: ~p", [Reason]),
+            ?LOG_DEBUG("Set stop reason to: ~p", [Reason]),
             persistent_term:put(?PT_KEY_STOP_REASON, Reason);
         _ ->
             ok
@@ -161,7 +172,7 @@ setup_shutdown_func() ->
         {ok, {ThisMod, ThisFunc}} ->
             ok;
         {ok, {ExistingMod, ExistingFunc}} ->
-            rabbit_log_prelaunch:debug(
+            ?LOG_DEBUG(
               "Setting up kernel shutdown function: ~s:~s/1 "
               "(chained with ~s:~s/1)",
               [ThisMod, ThisFunc, ExistingMod, ExistingFunc]),
@@ -170,7 +181,7 @@ setup_shutdown_func() ->
                    ExistingShutdownFunc),
             ok = record_kernel_shutdown_func(ThisMod, ThisFunc);
         _ ->
-            rabbit_log_prelaunch:debug(
+            ?LOG_DEBUG(
               "Setting up kernel shutdown function: ~s:~s/1",
               [ThisMod, ThisFunc]),
             ok = record_kernel_shutdown_func(ThisMod, ThisFunc)
@@ -182,7 +193,7 @@ record_kernel_shutdown_func(Mod, Func) ->
       [{persistent, true}]).
 
 shutdown_func(Reason) ->
-    rabbit_log_prelaunch:debug(
+    ?LOG_DEBUG(
       "Running ~s:shutdown_func() as part of `kernel` shutdown", [?MODULE]),
     Context = get_context(),
     remove_pid_file(Context),
@@ -195,7 +206,7 @@ shutdown_func(Reason) ->
     end.
 
 write_pid_file(#{pid_file := PidFile}) ->
-    rabbit_log_prelaunch:debug("Writing PID file: ~s", [PidFile]),
+    ?LOG_DEBUG("Writing PID file: ~s", [PidFile]),
     case filelib:ensure_dir(PidFile) of
         ok ->
             OSPid = os:getpid(),
@@ -203,13 +214,13 @@ write_pid_file(#{pid_file := PidFile}) ->
                 ok ->
                     ok;
                 {error, Reason} = Error ->
-                    rabbit_log_prelaunch:warning(
+                    ?LOG_WARNING(
                       "Failed to write PID file \"~s\": ~s",
                       [PidFile, file:format_error(Reason)]),
                     Error
             end;
         {error, Reason} = Error ->
-            rabbit_log_prelaunch:warning(
+            ?LOG_WARNING(
               "Failed to create PID file \"~s\" directory: ~s",
               [PidFile, file:format_error(Reason)]),
             Error
@@ -218,10 +229,10 @@ write_pid_file(_) ->
     ok.
 
 remove_pid_file(#{pid_file := PidFile, keep_pid_file_on_exit := true}) ->
-    rabbit_log_prelaunch:debug("Keeping PID file: ~s", [PidFile]),
+    ?LOG_DEBUG("Keeping PID file: ~s", [PidFile]),
     ok;
 remove_pid_file(#{pid_file := PidFile}) ->
-    rabbit_log_prelaunch:debug("Deleting PID file: ~s", [PidFile]),
+    ?LOG_DEBUG("Deleting PID file: ~s", [PidFile]),
     _ = file:delete(PidFile),
     ok;
 remove_pid_file(_) ->

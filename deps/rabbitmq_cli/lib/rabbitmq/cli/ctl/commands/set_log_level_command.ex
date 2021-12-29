@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
   alias RabbitMQ.CLI.Core.DocGuide
@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
 
   def run([log_level], %{node: node_name}) do
     arg = String.to_atom(log_level)
-    :rabbit_misc.rpc_call(node_name, :rabbit_lager, :set_log_level, [arg])
+    :rabbit_misc.rpc_call(node_name, :rabbit, :set_log_level, [arg])
   end
 
   def usage, do: "set_log_level <log_level>"

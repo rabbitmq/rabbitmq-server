@@ -1,0 +1,166 @@
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("@bazel-erlang//:dialyze.bzl", "plt")
+load("@bazel-erlang//:shell.bzl", "shell")
+load("elixir_home.bzl", "elixir_home")
+load(":rabbitmq_home.bzl", "rabbitmq_home")
+load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
+load(":rabbitmqctl.bzl", "rabbitmqctl")
+load(":rabbitmq.bzl", "ALL_PLUGINS", "APP_VERSION")
+load(":dist.bzl", "collect_licenses", "versioned_rabbitmq_home")
+
+exports_files([
+    "scripts/bazel/rabbitmq-run.sh",
+])
+
+# This allows us to
+# `bazel build //my/target \
+#    --//:elixir_home=/path/to/elixir/installation`
+elixir_home(
+    name = "elixir_home",
+    build_setting_default = "~/.kiex/elixirs/elixir-1.10.4",
+    visibility = ["//visibility:public"],
+)
+
+platform(
+    name = "erlang_git_platform",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+        "@bazel_tools//tools/cpp:clang",
+    ],
+    exec_properties = {
+        "OSFamily": "Linux",
+        # linux-erlang-git-master
+        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:5d4fa38f723186668a497a8ee57e22010187e9347add5d4a7cc199dc13f1493f",
+    },
+)
+
+plt(
+    name = "base_plt",
+    visibility = ["//visibility:public"],
+)
+
+rabbitmq_home(
+    name = "broker-home",
+    plugins = ALL_PLUGINS,
+)
+
+rabbitmq_home(
+    name = "broker-for-cli-tests-home",
+    testonly = True,
+    plugins = [
+        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbitmq_federation:bazel_erlang_lib",
+        "//deps/rabbitmq_stomp:bazel_erlang_lib",
+        "//deps/amqp_client:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-run",
+    home = ":broker-home",
+    visibility = ["//visibility:public"],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-cli-tests-run",
+    testonly = True,
+    home = ":broker-for-cli-tests-home",
+    visibility = ["//visibility:public"],
+)
+
+# Allow us to `bazel run broker`
+# for the equivalent of `make run-broker`
+# (though it as of yet includes no plugins)
+rabbitmq_run_command(
+    name = "broker",
+    rabbitmq_run = ":rabbitmq-run",
+    subcommand = "run-broker",
+)
+
+# `bazel run rabbitmqctl`
+rabbitmqctl(
+    name = "rabbitmqctl",
+    home = ":broker-home",
+    visibility = ["//visibility:public"],
+)
+
+rabbitmqctl(
+    name = "rabbitmq-diagnostics",
+    home = ":broker-home",
+)
+
+rabbitmqctl(
+    name = "rabbitmq-plugins",
+    home = ":broker-home",
+)
+
+shell(
+    name = "repl",
+    deps = ALL_PLUGINS,
+)
+
+collect_licenses(
+    name = "licenses",
+    srcs = glob(
+        ["LICENSE*"],
+        exclude = [
+            "LICENSE.md",
+            "LICENSE.txt",
+        ],
+    ),
+    deps = ALL_PLUGINS,
+)
+
+versioned_rabbitmq_home(
+    name = "dist-home",
+    plugins = ALL_PLUGINS,
+)
+
+pkg_tar(
+    name = "license-files",
+    srcs = [
+        ":licenses",
+        "//deps/rabbit:INSTALL",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "scripts",
+    srcs = [
+        "scripts/bash_autocomplete.sh",
+        "scripts/rabbitmq-script-wrapper",
+        "scripts/rabbitmqctl-autocomplete.sh",
+        "scripts/zsh_autocomplete.sh",
+    ],
+    package_dir = "scripts",
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "release-notes",
+    srcs = glob([
+        "release-notes/*.md",
+        "release-notes/*.txt",
+    ]),
+    package_dir = "release-notes",
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "package-generic-unix",
+    srcs = [
+        ":dist-home",
+    ],
+    extension = "tar.xz",
+    package_dir = "rabbitmq_server-{}".format(APP_VERSION),
+    strip_prefix = "dist-home",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":license-files",
+        ":release-notes",
+        ":scripts",
+        "//deps/rabbit:manpages-dir",
+    ],
+)

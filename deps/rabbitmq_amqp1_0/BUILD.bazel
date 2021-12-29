@@ -1,0 +1,107 @@
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "broker_for_integration_suites",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+    "rabbitmq_suite",
+)
+
+APP_ENV = """[
+	    {default_user, "guest"},
+	    {default_vhost, <<"/">>},
+	    {protocol_strict_mode, false}
+	  ]"""
+
+APP_NAME = "rabbitmq_amqp1_0"
+
+APP_DESCRIPTION = "AMQP 1.0 support for RabbitMQ"
+
+BUILD_DEPS = [
+    "//deps/rabbitmq_cli:rabbitmqctl",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/amqp_client:bazel_erlang_lib",
+    "//deps/amqp10_common:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+xref(
+    size = "small",
+    tags = ["xref"],
+)
+
+dialyze(
+    size = "medium",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)
+
+broker_for_integration_suites()
+
+PACKAGE = "deps/rabbitmq_amqp1_0"
+
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "amqp10_client_SUITE",
+        size = "medium",
+        runtime_deps = [
+            "//deps/amqp10_client:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "command_SUITE",
+        size = "medium",
+        deps = [
+            "//deps/amqp10_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "proxy_protocol_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "system_SUITE",
+        flaky = True,
+        tags = [
+            "dotnet",
+        ],
+        test_env = {
+            "TMPDIR": "$TEST_TMPDIR",
+        },
+    ),
+    rabbitmq_suite(
+        name = "unit_SUITE",
+        size = "small",
+        deps = [
+            "//deps/amqp10_common:bazel_erlang_lib",
+        ],
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

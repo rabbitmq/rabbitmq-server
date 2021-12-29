@@ -9,6 +9,23 @@ const PROCESS_THRESHOLDS = [[0.75, 'red'],
 const TAB_HIGHLIGHTER = "\u2192";
 const WHITESPACE_HIGHLIGHTER = "\u23B5";
 
+const CONSUMER_OWNER_FORMATTERS = [
+    {order: 10, formatter: function(consumer) {
+        if (consumer.consumer_tag.startsWith('stream.subid-')) {
+            return link_conn(consumer.channel_details.connection_name);
+        } else {
+            return undefined;
+        }
+    }},
+    {order: 100, formatter: function(consumer) {
+        return link_channel(consumer.channel_details.name);
+    }}
+];
+
+const CONSUMER_OWNER_FORMATTERS_COMPARATOR = function(formatter1, formatter2) {
+    return formatter1.order - formatter2.order;
+}
+
 function fmt_string(str, unknown) {
     if (unknown == undefined) {
         unknown = UNKNOWN_REPR;
@@ -729,6 +746,15 @@ function highlight_extra_whitespace(str) {
   }, str.replace(/\t/g, TAB_HIGHLIGHTER));
 }
 
+function link_consumer_owner(consumer) {
+    for (var i = 0; i < CONSUMER_OWNER_FORMATTERS.length; i++) {
+        var result = CONSUMER_OWNER_FORMATTERS[i].formatter(consumer);
+        if (result != undefined) {
+            return result;
+        }
+    }
+}
+
 function link_conn(name, desc) {
     if (desc == undefined) {
         return _link_to(short_conn(name), '#/connections/' + esc(name));
@@ -866,15 +892,18 @@ function filter_ui(items) {
 
 }
 
-function paginate_header_ui(pages, context){
+function paginate_header_ui(pages, context, label){
+     if (label == undefined) {
+         label = context;
+     }
      var res = '<h2 class="updatable">';
-     res += ' All ' + context +' (' + pages.total_count + ((pages.filtered_count != pages.total_count) ?  ', filtered down to ' + pages.filtered_count  : '') +  ')';
+     res += ' All ' + label +' (' + pages.total_count + ((pages.filtered_count != pages.total_count) ?  ', filtered down to ' + pages.filtered_count  : '') +  ')';
      res += '</h2>';
     return res;
 }
 
-function paginate_ui(pages, context){
-    var res = paginate_header_ui(pages, context);
+function paginate_ui(pages, context, label){
+    var res = paginate_header_ui(pages, context, label);
     res += '<div class="hider">';
     res += '<h3>Pagination</h3>';
     res += '<div class="filter">';
@@ -896,7 +925,7 @@ function paginate_ui(pages, context){
     res += '</select> </th>';
     res += '<th><label for="' + context +'-pageof">of </label>  ' + pages.page_count +'</th>';
     res += '<th><span><label for="'+ context +'-name"> - Filter: </label> <input id="'+ context +'-name"  data-page-start="1"  class="pagination_class pagination_class_input" type="text"';
-    res +=   'value = ' + fmt_filter_name_request(context, "") + '>';
+    res +=   'value="' + fmt_filter_name_request(context, "") + '">';
     res +=   '</input></th></span>';
 
     res += '<th> <input type="checkbox" data-page-start="1" class="pagination_class pagination_class_checkbox" id="'+ context +'-filter-regex-mode"' ;

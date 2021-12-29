@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_connection_tracking).
@@ -53,7 +53,7 @@
          lookup/1,
          count/0]).
 
--include_lib("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -import(rabbit_misc, [pget/2]).
 
@@ -351,7 +351,18 @@ list() ->
     lists:foldl(
       fun (Node, Acc) ->
               Tab = tracked_connection_table_name_for(Node),
-              Acc ++ mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
+              try
+                  Acc ++
+                  mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_'})
+              catch
+                  exit:{aborted, {no_exists, [Tab, _]}} ->
+                      %% The table might not exist yet (or is already gone)
+                      %% between the time rabbit_nodes:all_running() runs and
+                      %% returns a specific node, and
+                      %% mnesia:dirty_match_object() is called for that node's
+                      %% table.
+                      Acc
+              end
       end, [], rabbit_nodes:all_running()).
 
 -spec count() -> non_neg_integer().
@@ -360,6 +371,9 @@ count() ->
     lists:foldl(
       fun (Node, Acc) ->
               Tab = tracked_connection_table_name_for(Node),
+              %% mnesia:table_info() returns 0 if the table doesn't exist. We
+              %% don't need the same kind of protection as the list() function
+              %% above.
               Acc + mnesia:table_info(Tab, size)
       end, 0, rabbit_nodes:all_running()).
 
@@ -463,6 +477,7 @@ tracked_connection_from_connection_created(EventDetails) ->
                         username     = pget(user, EventDetails),
                         connected_at = pget(connected_at, EventDetails),
                         pid          = pget(pid, EventDetails),
+                        protocol     = pget(protocol, EventDetails),
                         type         = pget(type, EventDetails),
                         peer_host    = pget(peer_host, EventDetails),
                         peer_port    = pget(peer_port, EventDetails)}.
@@ -512,4 +527,8 @@ close_connection(#tracked_connection{pid = Pid, type = network}, Message) ->
 close_connection(#tracked_connection{pid = Pid, type = direct}, Message) ->
     %% Do an RPC call to the node running the direct client.
     Node = node(Pid),
-    rpc:call(Node, amqp_direct_connection, server_close, [Pid, 320, Message]).
+    rpc:call(Node, amqp_direct_connection, server_close, [Pid, 320, Message]);
+close_connection(#tracked_connection{pid = Pid}, Message) ->
+    % best effort, this will work for connections to the stream plugin
+    Node = node(Pid),
+    rpc:call(Node, gen_server, call, [Pid, {shutdown, Message}, infinity]).

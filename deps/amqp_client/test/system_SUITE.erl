@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(system_SUITE).
@@ -77,9 +77,10 @@ all() ->
     {hard_error_loop, [{repeat, 100}, parallel], [hard_error]}
   ]).
 -define(COMMON_NON_PARALLEL_TEST_CASES, [
-    basic_qos, %% Not parallel because it's time-based.
+    basic_qos, %% Not parallel because it's time-based, or has mocks
     connection_failure,
-    channel_death
+    channel_death,
+    safe_call_timeouts
   ]).
 
 groups() ->
@@ -128,8 +129,12 @@ end_per_suite(Config) ->
       ] ++ rabbit_ct_broker_helpers:teardown_steps()).
 
 ensure_amqp_client_srcdir(Config) ->
-    rabbit_ct_helpers:ensure_application_srcdir(Config,
-                                                amqp_client, amqp_client).
+    case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+        undefined ->
+            rabbit_ct_helpers:ensure_application_srcdir(Config,
+                                                        amqp_client, amqp_client);
+        _ -> Config
+    end.
 
 create_unauthorized_user(Config) ->
     Cmd = ["add_user", ?UNAUTHORIZED_USER, ?UNAUTHORIZED_USER],
@@ -291,6 +296,111 @@ named_connection(Config) ->
     get_and_assert_equals(Channel, Q, Payload),
     get_and_assert_empty(Channel, Q),
     teardown(Connection, Channel).
+
+%% -------------------------------------------------------------------
+
+safe_call_timeouts(Config) ->
+    Params = ?config(amqp_client_conn_params, Config),
+    safe_call_timeouts_test(Params).
+
+safe_call_timeouts_test(Params = #amqp_params_network{}) ->
+    TestConnTimeout = 2000,
+    TestCallTimeout = 1000,
+
+    Params1 = Params#amqp_params_network{connection_timeout = TestConnTimeout},
+
+    %% Normal connection
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    {ok, Connection1} = amqp_connection:start(Params1),
+    ?assertEqual(TestConnTimeout + ?CALL_TIMEOUT_DEVIATION, amqp_util:call_timeout()),
+
+    ?assertEqual(ok, amqp_connection:close(Connection1)),
+    wait_for_death(Connection1),
+
+    %% Failing connection
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    ok = meck:new(amqp_network_connection, [passthrough]),
+    ok = meck:expect(amqp_network_connection, connect,
+            fun(_AmqpParams, _SIF, _TypeSup, _State) ->
+                timer:sleep(TestConnTimeout),
+                {error, test_connection_timeout}
+            end),
+
+    ?assertEqual({error, test_connection_timeout}, amqp_connection:start(Params1)),
+
+    ?assertEqual(TestConnTimeout + ?CALL_TIMEOUT_DEVIATION, amqp_util:call_timeout()),
+
+    meck:unload(amqp_network_connection);
+
+safe_call_timeouts_test(Params = #amqp_params_direct{}) ->
+    TestCallTimeout = 30000,
+    NetTicktime0 = net_kernel:get_net_ticktime(),
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    %% 1. NetTicktime >= DIRECT_OPERATION_TIMEOUT (120s)
+    NetTicktime1 = 140,
+    net_kernel:set_net_ticktime(NetTicktime1, 1),
+    wait_until_net_ticktime(NetTicktime1),
+
+    {ok, Connection1} = amqp_connection:start(Params),
+    ?assertEqual((NetTicktime1 * 1000) + ?CALL_TIMEOUT_DEVIATION,
+        amqp_util:call_timeout()),
+
+    ?assertEqual(ok, amqp_connection:close(Connection1)),
+    wait_for_death(Connection1),
+
+    %% Reset call timeout
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    %% 2. Transitioning NetTicktime >= DIRECT_OPERATION_TIMEOUT (120s)
+    NetTicktime2 = 120,
+    net_kernel:set_net_ticktime(NetTicktime2, 1),
+    ?assertEqual({ongoing_change_to, NetTicktime2}, net_kernel:get_net_ticktime()),
+
+    {ok, Connection2} = amqp_connection:start(Params),
+    ?assertEqual((NetTicktime2 * 1000) + ?CALL_TIMEOUT_DEVIATION,
+        amqp_util:call_timeout()),
+
+    wait_until_net_ticktime(NetTicktime2),
+
+    ?assertEqual(ok, amqp_connection:close(Connection2)),
+    wait_for_death(Connection2),
+
+    %% Reset call timeout
+    amqp_util:update_call_timeout(TestCallTimeout),
+
+    %% 3. NetTicktime < DIRECT_OPERATION_TIMEOUT (120s)
+    NetTicktime3 = 60,
+    net_kernel:set_net_ticktime(NetTicktime3, 1),
+    wait_until_net_ticktime(NetTicktime3),
+
+    {ok, Connection3} = amqp_connection:start(Params),
+    ?assertEqual((?DIRECT_OPERATION_TIMEOUT + ?CALL_TIMEOUT_DEVIATION),
+        amqp_util:call_timeout()),
+
+    net_kernel:set_net_ticktime(NetTicktime0, 1),
+    wait_until_net_ticktime(NetTicktime0),
+    ?assertEqual(ok, amqp_connection:close(Connection3)),
+    wait_for_death(Connection3),
+
+    %% Failing direct connection
+    amqp_util:update_call_timeout(_LowCallTimeout = 1000),
+
+    ok = meck:new(amqp_direct_connection, [passthrough]),
+    ok = meck:expect(amqp_direct_connection, connect,
+            fun(_AmqpParams, _SIF, _TypeSup, _State) ->
+                timer:sleep(2000),
+                {error, test_connection_timeout}
+            end),
+
+    ?assertEqual({error, test_connection_timeout}, amqp_connection:start(Params)),
+
+    ?assertEqual((?DIRECT_OPERATION_TIMEOUT + ?CALL_TIMEOUT_DEVIATION),
+        amqp_util:call_timeout()),
+
+    meck:unload(amqp_direct_connection).
 
 %% -------------------------------------------------------------------
 
@@ -1298,14 +1408,10 @@ channel_death(Config) ->
     {ok, Connection} = new_connection(Config),
     {ok, Channel} = amqp_connection:open_channel(Connection),
     try
-        Ret = amqp_channel:call(Channel, bogus_message),
+        Ret = amqp_channel:call(Channel, {bogus_message, 123}),
         throw({unexpected_success, Ret})
     catch
-        exit:{{badarg,
-               [{amqp_channel, is_connection_method, 1, _} | _]}, _} -> ok;
-        exit:{{badarg,
-               [{erlang, element, [1, bogus_message], []},
-                {amqp_channel, is_connection_method, 1, _} | _]}, _} -> ok
+        exit:{{unknown_method_name, bogus_message}, _} -> ok
     end,
     wait_for_death(Channel),
     wait_for_death(Connection).
@@ -1456,30 +1562,38 @@ assert_down_with_error(MonitorRef, CodeAtom) ->
         exit(did_not_die)
     end.
 
-set_resource_alarm(memory, Config) ->
-    SrcDir = ?config(amqp_client_srcdir, Config),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, _} = rabbit_ct_helpers:make(Config, SrcDir, [
-        {"RABBITMQ_NODENAME=~s", [Nodename]},
-        "set-resource-alarm", "SOURCE=memory"]);
-set_resource_alarm(disk, Config) ->
-    SrcDir = ?config(amqp_client_srcdir, Config),
-    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, _} = rabbit_ct_helpers:make(Config, SrcDir, [
-        {"RABBITMQ_NODENAME=~s", [Nodename]},
-        "set-resource-alarm", "SOURCE=disk"]).
+wait_until_net_ticktime(NetTicktime) ->
+    case net_kernel:get_net_ticktime() of
+        NetTicktime -> ok;
+        {ongoing_change_to, NetTicktime} ->
+            timer:sleep(1000),
+            wait_until_net_ticktime(NetTicktime);
+        _ ->
+            throw({error, {net_ticktime_not_set, NetTicktime}})
+    end.
 
-clear_resource_alarm(memory, Config) ->
+set_resource_alarm(Resource, Config)
+  when Resource =:= memory orelse Resource =:= disk ->
     SrcDir = ?config(amqp_client_srcdir, Config),
     Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, _}= rabbit_ct_helpers:make(Config, SrcDir, [
-        {"RABBITMQ_NODENAME=~s", [Nodename]},
-        "clear-resource-alarm", "SOURCE=memory"]);
-clear_resource_alarm(disk, Config) ->
+    Cmd = [{"RABBITMQ_NODENAME=~s", [Nodename]},
+           "set-resource-alarm",
+           {"SOURCE=~s", [Resource]}],
+    {ok, _} = case os:getenv("RABBITMQ_RUN") of
+        false -> rabbit_ct_helpers:make(Config, SrcDir, Cmd);
+        Run -> rabbit_ct_helpers:exec([Run | Cmd])
+    end.
+
+clear_resource_alarm(Resource, Config)
+  when Resource =:= memory orelse Resource =:= disk ->
     SrcDir = ?config(amqp_client_srcdir, Config),
     Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    {ok, _}= rabbit_ct_helpers:make(Config, SrcDir, [
-        {"RABBITMQ_NODENAME=~s", [Nodename]},
-        "clear-resource-alarm", "SOURCE=disk"]).
+    Cmd = [{"RABBITMQ_NODENAME=~s", [Nodename]},
+           "clear-resource-alarm",
+           {"SOURCE=~s", [Resource]}],
+    {ok, _} = case os:getenv("RABBITMQ_RUN") of
+        false -> rabbit_ct_helpers:make(Config, SrcDir, Cmd);
+        Run -> rabbit_ct_helpers:exec([Run | Cmd])
+    end.
 
 fmt(Fmt, Args) -> list_to_binary(rabbit_misc:format(Fmt, Args)).

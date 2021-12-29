@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_prometheus_app).
@@ -74,14 +74,7 @@ has_configured_listener(Key) ->
     end.
 
 get_tls_listener() ->
-    {ok, Listener0} = application:get_env(rabbitmq_prometheus, ssl_config),
-     case proplists:get_value(cowboy_opts, Listener0) of
-        undefined ->
-             [{ssl, true}, {ssl_opts, Listener0}];
-        CowboyOpts ->
-            Listener1 = lists:keydelete(cowboy_opts, 1, Listener0),
-            [{ssl, true}, {ssl_opts, Listener1}, {cowboy_opts, CowboyOpts}]
-     end.
+    [{ssl, true} | application:get_env(rabbitmq_prometheus, ssl_config, [])].
 
 get_tcp_listener() ->
     application:get_env(rabbitmq_prometheus, tcp_config, []).
@@ -111,8 +104,9 @@ ensure_port_and_protocol(tcp, Protocol, Listener) ->
     do_ensure_port_and_protocol(?DEFAULT_PORT, Protocol, Listener).
 
 do_ensure_port_and_protocol(Port, Protocol, Listener) ->
-    %% include default port if it's not provided in the config
-    %% as Cowboy won't start if the port is missing
+    %% Include default port if it's not provided in the config
+    %% as Cowboy won't start if the port is missing.
+    %% Protocol is displayed in mgmt UI and CLI output.
     M0 = maps:from_list(Listener),
     M1 = maps:merge(#{port => Port, protocol => Protocol}, M0),
     {ok, maps:to_list(M1)}.

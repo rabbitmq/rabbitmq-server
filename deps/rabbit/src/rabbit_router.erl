@@ -2,12 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_router).
 -include_lib("stdlib/include/qlc.hrl").
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([match_bindings/2, match_routing_key/2]).
 
@@ -18,14 +18,11 @@
 -type routing_key() :: binary().
 -type match_result() :: [rabbit_types:binding_destination()].
 
+%%----------------------------------------------------------------------------
+
 -spec match_bindings(rabbit_types:binding_source(),
                            fun ((rabbit_types:binding()) -> boolean())) ->
     match_result().
--spec match_routing_key(rabbit_types:binding_source(),
-                             [routing_key()] | ['_']) ->
-    match_result().
-
-%%----------------------------------------------------------------------------
 
 match_bindings(SrcName, Match) ->
     MatchHead = #route{binding = #binding{source      = SrcName,
@@ -33,6 +30,10 @@ match_bindings(SrcName, Match) ->
     Routes = ets:select(rabbit_route, [{MatchHead, [], [['$_']]}]),
     [Dest || [#route{binding = Binding = #binding{destination = Dest}}] <-
         Routes, Match(Binding)].
+
+-spec match_routing_key(rabbit_types:binding_source(),
+                             [routing_key()] | ['_']) ->
+    match_result().
 
 match_routing_key(SrcName, [RoutingKey]) ->
     find_routes(#route{binding = #binding{source      = SrcName,

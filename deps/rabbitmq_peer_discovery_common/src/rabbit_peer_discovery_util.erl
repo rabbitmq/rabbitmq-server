@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 -module(rabbit_peer_discovery_util).
 
@@ -24,6 +24,8 @@
          maybe_backend_configured/4
         ]).
 
+-include_lib("kernel/include/logger.hrl").
+-include("rabbit_peer_discovery.hrl").
 
 %% Export all for unit tests
 -ifdef(TEST).
@@ -90,8 +92,10 @@ as_atom(Value) when is_binary(Value) ->
 as_atom(Value) when is_list(Value) ->
   list_to_atom(Value);
 as_atom(Value) ->
-  rabbit_log:error("Unexpected data type for atom value: ~p~n",
-                   [Value]),
+  ?LOG_ERROR(
+     "Unexpected data type for atom value: ~p",
+     [Value],
+     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   Value.
 
 
@@ -109,8 +113,10 @@ as_integer(Value) when is_list(Value) ->
 as_integer(Value) when is_integer(Value) ->
   Value;
 as_integer(Value) ->
-  rabbit_log:error("Unexpected data type for integer value: ~p~n",
-                   [Value]),
+  ?LOG_ERROR(
+     "Unexpected data type for integer value: ~p",
+     [Value],
+     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   Value.
 
 
@@ -131,8 +137,10 @@ as_string(Value) when is_integer(Value) ->
 as_string(Value) when is_list(Value) ->
   lists:flatten(Value);
 as_string(Value) ->
-  rabbit_log:error("Unexpected data type for list value: ~p~n",
-                        [Value]),
+  ?LOG_ERROR(
+     "Unexpected data type for list value: ~p",
+     [Value],
+     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   Value.
 
 
@@ -310,13 +318,17 @@ as_proplist(List) when is_list(List) ->
             [{binary_to_list(K), binary_to_list(V)}
              || {K, V} <- maps:to_list(Map)];
         {error, Error} ->
-            rabbit_log:error("Unexpected data type for proplist value: ~p. JSON parser returned an error: ~p!~n",
-                                  [Value, Error]),
+            ?LOG_ERROR(
+               "Unexpected data type for proplist value: ~p. JSON parser returned an error: ~p!",
+               [Value, Error],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             []
     end;
 as_proplist(Value) ->
-    rabbit_log:error("Unexpected data type for proplist value: ~p.~n",
-                          [Value]),
+    ?LOG_ERROR(
+       "Unexpected data type for proplist value: ~p.",
+       [Value],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
     [].
 
 %%--------------------------------------------------------------------
@@ -337,15 +349,19 @@ as_map(List) when is_list(List) ->
         {ok, Map} ->
             Map;
         {error, Error} ->
-            rabbit_log:error("Unexpected data type for map value: ~p. JSON parser returned an error: ~p!~n",
-                             [Value, Error]),
+            ?LOG_ERROR(
+               "Unexpected data type for map value: ~p. JSON parser returned an error: ~p!",
+               [Value, Error],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             []
     end;
 as_map(Map) when is_map(Map) ->
     Map;
 as_map(Value) ->
-    rabbit_log:error("Unexpected data type for map value: ~p.~n",
-                          [Value]),
+    ?LOG_ERROR(
+       "Unexpected data type for map value: ~p.",
+       [Value],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
     [].
 
 -spec stringify_error({ok, term()} | {error, term()}) -> {ok, term()} | {error, string()}.
@@ -368,12 +384,18 @@ maybe_backend_configured(BackendConfigKey,
         undefined ->
             ClusterFormationUndefinedFun();
         {ok, ClusterFormation} ->
-            rabbit_log:debug("Peer discovery: translated cluster formation configuration: ~p", [ClusterFormation]),
+            ?LOG_DEBUG(
+               "Peer discovery: translated cluster formation configuration: ~p",
+               [ClusterFormation],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             case proplists:get_value(BackendConfigKey, ClusterFormation) of
                 undefined ->
                     BackendUndefinedFun();
                 Proplist  ->
-                    rabbit_log:debug("Peer discovery: cluster formation backend configuration: ~p", [Proplist]),
+                    ?LOG_DEBUG(
+                       "Peer discovery: cluster formation backend configuration: ~p",
+                       [Proplist],
+                       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
                     ConfiguredFun(Proplist)
             end
     end.
@@ -399,6 +421,8 @@ as_list(Value) when is_list(Value) ->
     false -> Value
   end;
 as_list(Value) ->
-  rabbit_log:error("Unexpected data type for list value: ~p~n",
-                        [Value]),
+  ?LOG_ERROR(
+     "Unexpected data type for list value: ~p",
+     [Value],
+     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   Value.

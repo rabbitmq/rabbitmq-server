@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_definitions).
@@ -10,8 +10,13 @@
 
 -export([boot/0]).
 %% automatic import on boot
--export([maybe_load_definitions/0, maybe_load_definitions/2, maybe_load_definitions_from/2,
-         has_configured_definitions_to_load/0]).
+-export([
+    maybe_load_definitions/0,
+    maybe_load_definitions/2,
+    maybe_load_definitions_from/2,
+
+    has_configured_definitions_to_load/0
+]).
 %% import
 -export([import_raw/1, import_raw/2, import_parsed/1, import_parsed/2,
          apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5]).
@@ -25,7 +30,8 @@
 ]).
 -export([decode/1, decode/2, args/1]).
 
--import(rabbit_misc, [pget/2]).
+-import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_data_coercion, [to_binary/1]).
 
 %%
 %% API
@@ -58,9 +64,10 @@ boot() ->
     rabbit_sup:start_supervisor_child(definition_import_pool_sup, worker_pool_sup, [PoolSize, ?IMPORT_WORK_POOL]).
 
 maybe_load_definitions() ->
-    %% Note that management.load_definitions is handled in the plugin for backwards compatibility.
-    %% This executes the "core" version of load_definitions.
-    maybe_load_definitions(rabbit, load_definitions).
+    %% Classic source: local file or data directory
+    maybe_load_definitions_from_local_filesystem(rabbit, load_definitions),
+    %% Extensible sources
+    maybe_load_definitions_from_pluggable_source(rabbit, definitions).
 
 -spec import_raw(Body :: binary() | iolist()) -> ok | {error, term()}.
 import_raw(Body) ->
@@ -125,63 +132,76 @@ all_definitions() ->
         exchanges         => Xs
     }.
 
+-spec has_configured_definitions_to_load() -> boolean().
+has_configured_definitions_to_load() ->
+    has_configured_definitions_to_load_via_classic_option() or has_configured_definitions_to_load_via_modern_option().
+
+%% Retained for backwards compatibility, implicitly assumes the local filesystem source
+maybe_load_definitions(App, Key) ->
+    maybe_load_definitions_from_local_filesystem(App, Key).
+
+maybe_load_definitions_from(IsDir, Path) ->
+    rabbit_definitions_import_local_filesystem:load(IsDir, Path).
+
 %%
 %% Implementation
 %%
 
--spec has_configured_definitions_to_load() -> boolean().
-has_configured_definitions_to_load() ->
+-spec has_configured_definitions_to_load_via_modern_option() -> boolean().
+has_configured_definitions_to_load_via_modern_option() ->
+    case application:get_env(rabbit, definitions) of
+        undefined  -> false;
+        {ok, none} -> false;
+        {ok, []}   -> false;
+        {ok, _Options} -> true
+    end.
+
+has_configured_definitions_to_load_via_classic_option() ->
     case application:get_env(rabbit, load_definitions) of
         undefined   -> false;
         {ok, none}  -> false;
         {ok, _Path} -> true
     end.
 
-maybe_load_definitions(App, Key) ->
+maybe_load_definitions_from_local_filesystem(App, Key) ->
     case application:get_env(App, Key) of
-        undefined  ->
-            rabbit_log:debug("No definition file configured to import via load_definitions"),
-            ok;
-        {ok, none} ->
-            rabbit_log:debug("No definition file configured to import via load_definitions"),
-            ok;
-        {ok, FileOrDir} ->
-            rabbit_log:debug("Will import definitions file from load_definitions"),
-            IsDir = filelib:is_dir(FileOrDir),
-            maybe_load_definitions_from(IsDir, FileOrDir)
+        undefined  -> ok;
+        {ok, none} -> ok;
+        {ok, Path} ->
+            IsDir = filelib:is_dir(Path),
+            rabbit_definitions_import_local_filesystem:load(IsDir, Path)
     end.
 
-maybe_load_definitions_from(true, Dir) ->
-    rabbit_log:info("Applying definitions from directory ~s", [Dir]),
-    load_definitions_from_files(file:list_dir(Dir), Dir);
-maybe_load_definitions_from(false, File) ->
-    load_definitions_from_file(File).
-
-load_definitions_from_files({ok, Filenames0}, Dir) ->
-    Filenames1 = lists:sort(Filenames0),
-    Filenames2 = [filename:join(Dir, F) || F <- Filenames1],
-    load_definitions_from_filenames(Filenames2);
-load_definitions_from_files({error, E}, Dir) ->
-    rabbit_log:error("Could not read definitions from directory ~s, Error: ~p", [Dir, E]),
-    {error, {could_not_read_defs, E}}.
-
-load_definitions_from_filenames([]) ->
-    ok;
-load_definitions_from_filenames([File|Rest]) ->
-    case load_definitions_from_file(File) of
-        ok         -> load_definitions_from_filenames(Rest);
-        {error, E} -> {error, {failed_to_import_definitions, File, E}}
+maybe_load_definitions_from_pluggable_source(App, Key) ->
+    case application:get_env(App, Key) of
+        undefined  -> ok;
+        {ok, none} -> ok;
+        {ok, []}   -> ok;
+        {ok, Proplist} ->
+            case pget(import_backend, Proplist, undefined) of
+                undefined  ->
+                    {error, "definition import source is configured but definitions.import_backend is not set"};
+                ModOrAlias ->
+                    Mod = normalize_backend_module(ModOrAlias),
+                    rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
+                    Mod:load(Proplist)
+            end
     end.
 
-load_definitions_from_file(File) ->
-    case file:read_file(File) of
-        {ok, Body} ->
-            rabbit_log:info("Applying definitions from file at '~s'", [File]),
-            import_raw(Body);
-        {error, E} ->
-            rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [File, E]),
-            {error, {could_not_read_defs, {File, E}}}
-    end.
+normalize_backend_module(local_filesystem) ->
+    rabbit_definitions_import_local_filesystem;
+normalize_backend_module(local) ->
+    rabbit_definitions_import_local_filesystem;
+normalize_backend_module(https) ->
+    rabbit_definitions_import_https;
+normalize_backend_module(http)  ->
+    rabbit_definitions_import_https;
+normalize_backend_module(rabbitmq_definitions_import_local_filesystem) ->
+    rabbit_definitions_import_local_filesystem;
+normalize_backend_module(rabbitmq_definitions_import_https) ->
+    rabbit_definitions_import_https;
+normalize_backend_module(Other) ->
+    Other.
 
 decode(Keys, Body) ->
     case decode(Body) of
@@ -236,14 +256,17 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
         validate_limits(Map),
         concurrent_for_all(permissions,        ActingUser, Map, fun add_permission/2),
         concurrent_for_all(topic_permissions,  ActingUser, Map, fun add_topic_permission/2),
-        sequential_for_all(parameters,         ActingUser, Map, fun add_parameter/2),
+
+        concurrent_for_all(queues,             ActingUser, Map, fun add_queue/2),
+        concurrent_for_all(exchanges,          ActingUser, Map, fun add_exchange/2),
+        concurrent_for_all(bindings,           ActingUser, Map, fun add_binding/2),
+
         sequential_for_all(global_parameters,  ActingUser, Map, fun add_global_parameter/2),
         %% importing policies concurrently can be unsafe as queues will be getting
         %% potentially out of order notifications of applicable policy changes
         sequential_for_all(policies,           ActingUser, Map, fun add_policy/2),
-        concurrent_for_all(queues,             ActingUser, Map, fun add_queue/2),
-        concurrent_for_all(exchanges,          ActingUser, Map, fun add_exchange/2),
-        concurrent_for_all(bindings,           ActingUser, Map, fun add_binding/2),
+        sequential_for_all(parameters,         ActingUser, Map, fun add_parameter/2),
+
         SuccessFun(),
         ok
     catch {error, E} -> {error, E};
@@ -260,13 +283,16 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_binary(VHost) ->
                     [VHost, ActingUser]),
     try
         validate_limits(Map, VHost),
+
+        concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
+        concurrent_for_all(exchanges,  ActingUser, Map, VHost, fun add_exchange/3),
+        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
+
         sequential_for_all(parameters, ActingUser, Map, VHost, fun add_parameter/3),
         %% importing policies concurrently can be unsafe as queues will be getting
         %% potentially out of order notifications of applicable policy changes
         sequential_for_all(policies,   ActingUser, Map, VHost, fun add_policy/3),
-        concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
-        concurrent_for_all(exchanges,  ActingUser, Map, VHost, fun add_exchange/3),
-        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
+
         SuccessFun()
     catch {error, E} -> {error, format(E)};
           exit:E     -> {error, format(E)}
@@ -283,13 +309,16 @@ apply_defs(Map, ActingUser, SuccessFun, ErrorFun, VHost) ->
                     [VHost, ActingUser]),
     try
         validate_limits(Map, VHost),
+
+        concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
+        concurrent_for_all(exchanges,  ActingUser, Map, VHost, fun add_exchange/3),
+        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
+
         sequential_for_all(parameters, ActingUser, Map, VHost, fun add_parameter/3),
         %% importing policies concurrently can be unsafe as queues will be getting
         %% potentially out of order notifications of applicable policy changes
         sequential_for_all(policies,   ActingUser, Map, VHost, fun add_policy/3),
-        concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
-        concurrent_for_all(exchanges,  ActingUser, Map, VHost, fun add_exchange/3),
-        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
+
         SuccessFun()
     catch {error, E} -> ErrorFun(format(E));
           exit:E     -> ErrorFun(format(E))
@@ -435,6 +464,10 @@ add_policy(Param, Username) ->
 
 add_policy(VHost, Param, Username) ->
     Key   = maps:get(name,  Param, undefined),
+    case Key of
+      undefined -> exit(rabbit_misc:format("policy in virtual host '~s' has undefined name", [VHost]));
+      _ -> ok
+    end,
     case rabbit_policy:set(
            VHost, Key, maps:get(pattern, Param, undefined),
            case maps:get(definition, Param, undefined) of
@@ -452,11 +485,13 @@ add_policy(VHost, Param, Username) ->
 -spec add_vhost(map(), rabbit_types:username()) -> ok.
 
 add_vhost(VHost, ActingUser) ->
-    VHostName = maps:get(name, VHost, undefined),
-    VHostTrace = maps:get(tracing, VHost, undefined),
-    VHostDefinition = maps:get(definition, VHost, undefined),
-    VHostTags = maps:get(tags, VHost, undefined),
-    rabbit_vhost:put_vhost(VHostName, VHostDefinition, VHostTags, VHostTrace, ActingUser).
+    Name             = maps:get(name, VHost, undefined),
+    IsTracingEnabled = maps:get(tracing, VHost, undefined),
+    Metadata         = rabbit_data_coercion:atomize_keys(maps:get(metadata, VHost, #{})),
+    Description      = maps:get(description, VHost, maps:get(description, Metadata, <<"">>)),
+    Tags             = maps:get(tags, VHost, maps:get(tags, Metadata, [])),
+
+    rabbit_vhost:put_vhost(Name, Description, Tags, IsTracingEnabled, ActingUser).
 
 add_permission(Permission, ActingUser) ->
     rabbit_auth_backend_internal:set_permissions(maps:get(user,      Permission, undefined),
@@ -623,6 +658,7 @@ get_or_missing(K, L) ->
         V         -> V
     end.
 
+args(undefined) -> args(#{});
 args([]) -> args(#{});
 args(L)  -> rabbit_misc:to_amqp_table(L).
 
@@ -764,4 +800,4 @@ topic_permission_definition(P0) ->
     maps:from_list(P).
 
 tags_as_binaries(Tags) ->
-    list_to_binary(string:join([atom_to_list(T) || T <- Tags], ",")).
+    [to_binary(T) || T <- Tags].

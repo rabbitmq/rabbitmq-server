@@ -11,13 +11,20 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand').
 
--include("rabbit_stream.hrl").
+-include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
+
+-ignore_xref([{'Elixir.RabbitMQ.CLI.DefaultOutput', output, 1},
+              {'Elixir.RabbitMQ.CLI.Core.Helpers', nodes_in_cluster, 1},
+              {'Elixir.RabbitMQ.CLI.Ctl.InfoKeys', prepare_info_keys, 1},
+              {'Elixir.RabbitMQ.CLI.Ctl.RpcStream', receive_list_items, 7},
+              {'Elixir.RabbitMQ.CLI.Ctl.InfoKeys', validate_info_keys, 2},
+              {'Elixir.Enum', join, 2}]).
 
 -export([formatter/0,
          scopes/0,
@@ -34,23 +41,32 @@
          description/0,
          help_section/0]).
 
-formatter() -> 'Elixir.RabbitMQ.CLI.Formatters.Table'.
+formatter() ->
+    'Elixir.RabbitMQ.CLI.Formatters.PrettyTable'.
 
-scopes() -> [ctl, diagnostics, streams].
+scopes() ->
+    [ctl, diagnostics, streams].
 
-switches() -> [{verbose, boolean}].
-aliases() -> [{'V', verbose}].
+switches() ->
+    [{verbose, boolean}].
 
-description() -> <<"Lists stream connections on the target node">>.
+aliases() ->
+    [{'V', verbose}].
+
+description() ->
+    <<"Lists stream connections">>.
 
 help_section() ->
     {plugin, stream}.
 
 validate(Args, _) ->
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?INFO_ITEMS) of
-        {ok, _} -> ok;
-        Error   -> Error
+                                                               ?INFO_ITEMS)
+    of
+        {ok, _} ->
+            ok;
+        Error ->
+            Error
     end.
 
 merge_defaults([], Opts) ->
@@ -63,33 +79,37 @@ usage() ->
 
 usage_additional() ->
     Prefix = <<" must be one of ">>,
-    InfoItems = 'Elixir.Enum':join(lists:usort(?INFO_ITEMS), <<", ">>),
-    [
-      {<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}
-    ].
+    InfoItems =
+        'Elixir.Enum':join(
+            lists:usort(?INFO_ITEMS), <<", ">>),
+    [{<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}].
 
 usage_doc_guides() ->
     [?STREAM_GUIDE_URL].
 
-run(Args, #{node := NodeName,
-            timeout := Timeout,
-            verbose := Verbose}) ->
-    InfoKeys = case Verbose of
-        true  -> ?INFO_ITEMS;
-        false -> 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
-    end,
+run(Args,
+    #{node := NodeName,
+      timeout := Timeout,
+      verbose := Verbose}) ->
+    InfoKeys =
+        case Verbose of
+            true ->
+                ?INFO_ITEMS;
+            false ->
+                'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
+        end,
     Nodes = 'Elixir.RabbitMQ.CLI.Core.Helpers':nodes_in_cluster(NodeName),
 
-    'Elixir.RabbitMQ.CLI.Ctl.RpcStream':receive_list_items(
-        NodeName,
-        rabbit_stream,
-        emit_connection_info_all,
-        [Nodes, InfoKeys],
-        Timeout,
-        InfoKeys,
-        length(Nodes)).
+    'Elixir.RabbitMQ.CLI.Ctl.RpcStream':receive_list_items(NodeName,
+                                                           rabbit_stream,
+                                                           emit_connection_info_all,
+                                                           [Nodes, InfoKeys],
+                                                           Timeout,
+                                                           InfoKeys,
+                                                           length(Nodes)).
 
-banner(_, _) -> <<"Listing stream connections ...">>.
+banner(_, _) ->
+    <<"Listing stream connections ...">>.
 
 output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).

@@ -1,9 +1,24 @@
+## This example configuration file demonstrates various settings
+## available via rabbitmq.conf. It primarily focuses core broker settings
+## but some tier 1 plugin settings are also covered.
+##
+## This file is AN EXAMPLE. It is NOT MEANT TO BE USED IN PRODUCTION. Instead of
+## copying the entire (large!) file, create or generate a new rabbitmq.conf for the target system
+## and populate it with the necessary settings.
+##
+## See https://rabbitmq.com/configure.html to learn about how to configure RabbitMQ,
+## the ini-style format used by rabbitmq.conf, how it is different from `advanced.config`,
+## how to verify effective configuration, and so on.
+##
+## See https://rabbitmq.com/documentation.html for the rest of RabbitMQ documentation.
+##
+## In case you have questions, please use RabbitMQ community Slack and the rabbitmq-users Google group
+## instead of GitHub issues.
+
 # ======================================
-# RabbitMQ broker section
+# Core broker section
 # ======================================
 
-## Related doc guide: https://rabbitmq.com/configure.html. See
-## https://rabbitmq.com/documentation.html for documentation ToC.
 
 ## Networking
 ## ====================
@@ -85,6 +100,8 @@
 ##
 ## Related doc guide: https://rabbitmq.com/ssl.html.
 ##
+# listeners.ssl.1                  = 5671
+# 
 # ssl_options.verify               = verify_peer
 # ssl_options.fail_if_no_peer_cert = false
 # ssl_options.cacertfile           = /path/to/cacert.pem
@@ -93,7 +110,41 @@
 #
 # ssl_options.honor_cipher_order   = true
 # ssl_options.honor_ecc_order      = true
+#
+## These are highly recommended for TLSv1.2 but cannot be used
+## with TLSv1.3. If TLSv1.3 is enabled, these lines MUST be removed.
+# ssl_options.client_renegotiation = false
+# ssl_options.secure_renegotiate   = true
+#
+## Limits what TLS versions the server enables for client TLS
+## connections. See https://www.rabbitmq.com/ssl.html#tls-versions for details.
+##
+## Cutting edge TLS version which requires recent client runtime
+## versions and has no cipher suite in common with earlier TLS versions.
+# ssl_options.versions.1 = tlsv1.3
+## Enables TLSv1.2 for best compatibility
+# ssl_options.versions.2 = tlsv1.2
+## Older TLS versions have known vulnerabilities and are being phased out
+## from wide use.
 
+## Limits what cipher suites the server will use for client TLS
+## connections. Narrowing this down can prevent some clients
+## from connecting.
+## If TLSv1.3 is enabled and cipher suites are overridden, TLSv1.3-specific
+## cipher suites must also be explicitly enabled.
+## See https://www.rabbitmq.com/ssl.html#cipher-suites and https://wiki.openssl.org/index.php/TLS1.3#Ciphersuites
+## for details.
+#
+## The example below uses TLSv1.3 cipher suites only
+#
+# ssl_options.ciphers.1  = TLS_AES_256_GCM_SHA384
+# ssl_options.ciphers.2  = TLS_AES_128_GCM_SHA256
+# ssl_options.ciphers.3  = TLS_CHACHA20_POLY1305_SHA256
+# ssl_options.ciphers.4  = TLS_AES_128_CCM_SHA256
+# ssl_options.ciphers.5  = TLS_AES_128_CCM_8_SHA256
+#
+## The example below uses TLSv1.2 cipher suites only
+#
 # ssl_options.ciphers.1  = ECDHE-ECDSA-AES256-GCM-SHA384
 # ssl_options.ciphers.2  = ECDHE-RSA-AES256-GCM-SHA384
 # ssl_options.ciphers.3  = ECDHE-ECDSA-AES256-SHA384
@@ -130,6 +181,8 @@
 # ssl_options.ciphers.34 = DHE-DSS-AES128-SHA
 # ssl_options.ciphers.35 = ECDH-ECDSA-AES128-SHA
 # ssl_options.ciphers.36 = ECDH-RSA-AES128-SHA
+
+# ssl_options.bypass_pem_cache = true
 
 ## Select an authentication/authorisation backend to use.
 ##
@@ -263,7 +316,14 @@
 ## =====================================================
 ##
 
-## Set the default AMQP 0-9-1 heartbeat interval (in seconds).
+## Set the server AMQP 0-9-1 heartbeat timeout in seconds.
+## RabbitMQ nodes will send heartbeat frames at roughly
+## the (timeout / 2) interval. Two missed heartbeats from
+## a client will close its connection.
+##
+## Values lower than 6 seconds are very likely to produce
+## false positives and are not recommended.
+##
 ## Related doc guides:
 ##
 ## * https://rabbitmq.com/heartbeats.html
@@ -388,6 +448,10 @@
 ## =====================
 ##
 # cluster_partition_handling = ignore
+
+## Pauses all nodes on the minority side of a partition. The cluster
+## MUST have an odd number of nodes (3, 5, etc)
+# cluster_partition_handling = pause_minority
 
 ## pause_if_all_down strategy require additional configuration
 # cluster_partition_handling = pause_if_all_down
@@ -527,6 +591,13 @@
 ## on Windows.
 # motd_file = /etc/rabbitmq/motd
 
+## Consumer timeout
+## If a message delivered to a consumer has not been acknowledge before this timer
+## triggers the channel will be force closed by the broker. This ensure that
+## faultly consumers that never ack will not hold on to messages indefinitely.
+##
+# consumer_timeout = 900000
+
 ## ----------------------------------------------------------------------------
 ## Advanced Erlang Networking/Clustering Options.
 ##
@@ -591,12 +662,14 @@
 ## More TLS options
 # management.ssl.honor_cipher_order   = true
 # management.ssl.honor_ecc_order      = true
+
+## These are highly recommended for TLSv1.2 but cannot be used
+## with TLSv1.3. If TLSv1.3 is enabled, these lines MUST be removed.
 # management.ssl.client_renegotiation = false
 # management.ssl.secure_renegotiate   = true
 
 ## Supported TLS versions
 # management.ssl.versions.1 = tlsv1.2
-# management.ssl.versions.2 = tlsv1.1
 
 ## Cipher suites the server is allowed to use
 # management.ssl.ciphers.1 = ECDHE-ECDSA-AES256-GCM-SHA384
@@ -836,7 +909,7 @@
 
 ## Logging settings.
 ##
-## See https://rabbitmq.com/logging.html and https://github.com/erlang-lager/lager for details.
+## See https://rabbitmq.com/logging.html for details.
 ##
 
 ## Log directory, taken from the RABBITMQ_LOG_BASE env variable by default.

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% @copyright 2018-2020 VMware, Inc. or its affiliates.
+%% @copyright 2018-2021 VMware, Inc. or its affiliates.
 %%
 %% @doc
 %% This module provides extra functions unused by the feature flags

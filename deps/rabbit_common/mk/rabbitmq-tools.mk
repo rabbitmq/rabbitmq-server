@@ -1,7 +1,11 @@
 ifeq ($(PLATFORM),msys2)
-HOSTNAME := $(COMPUTERNAME)
+HOSTNAME = $(COMPUTERNAME)
 else
-HOSTNAME := $(shell hostname -s)
+ifeq ($(PLATFORM),solaris)
+HOSTNAME = $(shell hostname | sed 's@\..*@@')
+else
+HOSTNAME = $(shell hostname -s)
+endif
 endif
 
 READY_DEPS = $(foreach DEP,\
@@ -24,67 +28,6 @@ show-current-git-fetch-url:
 
 show-current-git-push-url:
 	@echo $(RABBITMQ_CURRENT_PUSH_URL)
-
-.PHONY: update-erlang-mk update-rabbitmq-components.mk
-
-update-erlang-mk: erlang-mk
-	$(verbose) if test "$(DO_COMMIT)" = 'yes'; then \
-		git diff --quiet -- erlang.mk \
-		|| git commit -m 'Update erlang.mk' -- erlang.mk; \
-	fi
-	$(verbose) for repo in $(READY_DEPS:%=$(DEPS_DIR)/%); do \
-		! test -f $$repo/erlang.mk \
-		|| $(MAKE) -C $$repo erlang-mk; \
-		if test "$(DO_COMMIT)" = 'yes'; then \
-			(cd $$repo; \
-			 git diff --quiet -- erlang.mk \
-			 || git commit -m 'Update erlang.mk' -- erlang.mk); \
-		fi; \
-	done
-
-# --------------------------------------------------------------------
-# rabbitmq-components.mk checks.
-# --------------------------------------------------------------------
-
-UPSTREAM_RMQ_COMPONENTS_MK = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.mk
-
-ifeq ($(PROJECT),rabbit_common)
-check-rabbitmq-components.mk:
-	@:
-else
-check-rabbitmq-components.mk:
-	$(verbose) cmp -s rabbitmq-components.mk \
-		$(UPSTREAM_RMQ_COMPONENTS_MK) || \
-		(echo "error: rabbitmq-components.mk must be updated!" 1>&2; \
-		  false)
-endif
-
-ifeq ($(PROJECT),rabbit_common)
-rabbitmq-components-mk:
-	@:
-else
-rabbitmq-components-mk:
-ifeq ($(FORCE),yes)
-	$(gen_verbose) cp -a $(UPSTREAM_RMQ_COMPONENTS_MK) .
-else
-	$(gen_verbose) if test -d .git && test -d $(DEPS_DIR)/rabbit_common/.git; then \
-		upstream_branch=$$(LANG=C git -C $(DEPS_DIR)/rabbit_common branch --list | awk '/^\* \(.*detached / {ref=$$0; sub(/.*detached [^ ]+ /, "", ref); sub(/\)$$/, "", ref); print ref; exit;} /^\* / {ref=$$0; sub(/^\* /, "", ref); print ref; exit}'); \
-		local_branch=$$(LANG=C git branch --list | awk '/^\* \(.*detached / {ref=$$0; sub(/.*detached [^ ]+ /, "", ref); sub(/\)$$/, "", ref); print ref; exit;} /^\* / {ref=$$0; sub(/^\* /, "", ref); print ref; exit}'); \
-		test "$$local_branch" = "$$upstream_branch" || exit 0; \
-	fi; \
-	cp -a $(UPSTREAM_RMQ_COMPONENTS_MK) .
-endif
-ifeq ($(DO_COMMIT),yes)
-	$(verbose) git diff --quiet rabbitmq-components.mk \
-	|| git commit -m 'Update rabbitmq-components.mk' rabbitmq-components.mk
-endif
-endif
-
-update-rabbitmq-components-mk: rabbitmq-components-mk
-	$(verbose) for repo in $(READY_DEPS:%=$(DEPS_DIR)/%); do \
-		! test -f $$repo/rabbitmq-components.mk \
-		|| $(MAKE) -C $$repo rabbitmq-components-mk; \
-	done
 
 update-contributor-code-of-conduct:
 	$(verbose) for repo in $(READY_DEPS:%=$(DEPS_DIR)/%); do \

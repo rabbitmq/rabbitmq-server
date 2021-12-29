@@ -4,7 +4,9 @@ PROJECT_MOD = rabbit_auth_backend_http_app
 
 define PROJECT_ENV
 [
-	    {http_method,   get},
+	    {http_method,   	 get},
+	    {request_timeout,    15000},
+	    {connection_timeout, 15000},
 	    {user_path,     "http://localhost:8000/auth/user"},
 	    {vhost_path,    "http://localhost:8000/auth/vhost"},
 	    {resource_path, "http://localhost:8000/auth/resource"},
@@ -29,5 +31,5 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-include rabbitmq-components.mk
-include erlang.mk
+include ../../rabbitmq-components.mk
+include ../../erlang.mk

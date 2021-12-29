@@ -152,8 +152,7 @@ $(error DIST_PLUGINS_LIST ($(DIST_PLUGINS_LIST)) is missing)
 endif
 
 $(eval $(foreach path, \
-  $(filter-out %/looking_glass %/lz4, \
-  $(sort $(shell cat $(DIST_PLUGINS_LIST))) $(CURDIR)), \
+  $(sort $(shell cat $(DIST_PLUGINS_LIST))) $(CURDIR), \
   $(call ez_target,$(if $(filter $(path),$(CURDIR)),$(PROJECT),$(notdir $(path))),$(path))))
 endif
 endif
@@ -186,10 +185,13 @@ $(ERLANGMK_DIST_EZS):
 		$(call core_unix_path,$(SRC_DIR))/ $(call core_unix_path,$(EZ_DIR))/
 	@# Give a chance to the application to make any modification it
 	@# wants to the tree before we make an archive.
-	$(verbose) ! (test -f $(SRC_DIR)/rabbitmq-components.mk \
-		&& grep -q '^prepare-dist::' $(SRC_DIR)/Makefile) || \
+ifneq ($(RABBITMQ_COMPONENTS),)
+ifneq ($(filter $(PROJECT),$(RABBITMQ_COMPONENTS)),)
+	$(verbose) ! (grep -q '^prepare-dist::' $(SRC_DIR)/Makefile) || \
 		$(MAKE) --no-print-directory -C $(SRC_DIR) prepare-dist \
 		APP=$(APP) VSN=$(VSN) EZ_DIR=$(EZ_DIR)
+endif
+endif
 ifneq ($(DIST_AS_EZS),)
 	$(verbose) (cd $(DIST_DIR) && \
 		find "$(basename $(notdir $@))" | LC_COLLATE=C sort \
@@ -263,7 +265,7 @@ do-dist:: $(DIST_EZS)
 CLI_SCRIPTS_LOCK = $(CLI_SCRIPTS_DIR).lock
 CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock
 
-ifneq ($(filter-out rabbit_common amqp10_common,$(PROJECT)),)
+ifneq ($(filter-out rabbit_common amqp10_common rabbitmq_stream_common,$(PROJECT)),)
 dist:: install-cli
 test-build:: install-cli
 endif

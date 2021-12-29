@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(vhost).
@@ -25,7 +25,10 @@
   get_metadata/1,
   get_description/1,
   get_tags/1,
-  set_limits/2
+  set_limits/2,
+  set_metadata/2,
+  merge_metadata/2,
+  is_tagged_with/2
 ]).
 
 -define(record_version, vhost_v2).
@@ -170,3 +173,29 @@ set_limits(VHost, Value) ->
       _ ->
         vhost_v1:set_limits(VHost, Value)
     end.
+
+-spec set_metadata(vhost(), metadata()) -> vhost().
+set_metadata(VHost, Value) ->
+    case record_version_to_use() of
+      ?record_version ->
+        VHost#vhost{metadata = Value};
+      _ ->
+        %% the field is not available, so this is a no-op
+        VHost
+    end.
+
+-spec merge_metadata(vhost(), metadata()) -> vhost().
+merge_metadata(VHost, Value) ->
+    case record_version_to_use() of
+      ?record_version ->
+        Meta0 = get_metadata(VHost),
+        NewMeta = maps:merge(Meta0, Value),
+        VHost#vhost{metadata = NewMeta};
+      _ ->
+        %% the field is not available, so this is a no-op
+        VHost
+    end.
+
+-spec is_tagged_with(vhost:vhost(), atom()) -> boolean().
+is_tagged_with(VHost, Tag) ->
+    lists:member(Tag, get_tags(VHost)).

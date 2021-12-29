@@ -37,73 +37,72 @@ endif
 # topic branch or fallback to `stable` or `master` whichever was the
 # base of the topic branch.
 
-dep_amqp_client                       = git_rmq rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref) master
-dep_amqp10_client                     = git_rmq rabbitmq-amqp1.0-client $(current_rmq_ref) $(base_rmq_ref) master
-dep_amqp10_common                     = git_rmq rabbitmq-amqp1.0-common $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbit                            = git_rmq rabbitmq-server $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbit_common                     = git_rmq rabbitmq-common $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_amqp1_0                  = git_rmq rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_auth_backend_amqp        = git_rmq rabbitmq-auth-backend-amqp $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_auth_backend_cache       = git_rmq rabbitmq-auth-backend-cache $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_auth_backend_http        = git_rmq rabbitmq-auth-backend-http $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_auth_backend_ldap        = git_rmq rabbitmq-auth-backend-ldap $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_auth_backend_oauth2      = git_rmq rabbitmq-auth-backend-oauth2 $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_auth_mechanism_ssl       = git_rmq rabbitmq-auth-mechanism-ssl $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_aws                      = git_rmq rabbitmq-aws $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_boot_steps_visualiser    = git_rmq rabbitmq-boot-steps-visualiser $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_cli                      = git_rmq rabbitmq-cli $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_codegen                  = git_rmq rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_consistent_hash_exchange = git_rmq rabbitmq-consistent-hash-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_ct_client_helpers        = git_rmq rabbitmq-ct-client-helpers $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_ct_helpers               = git_rmq rabbitmq-ct-helpers $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_delayed_message_exchange = git_rmq rabbitmq-delayed-message-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_dotnet_client            = git_rmq rabbitmq-dotnet-client $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_event_exchange           = git_rmq rabbitmq-event-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_federation               = git_rmq rabbitmq-federation $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_federation_management    = git_rmq rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_java_client              = git_rmq rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_jms_client               = git_rmq rabbitmq-jms-client $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_jms_cts                  = git_rmq rabbitmq-jms-cts $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_jms_topic_exchange       = git_rmq rabbitmq-jms-topic-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_lvc_exchange             = git_rmq rabbitmq-lvc-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_management               = git_rmq rabbitmq-management $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_management_agent         = git_rmq rabbitmq-management-agent $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_management_exchange      = git_rmq rabbitmq-management-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_management_themes        = git_rmq rabbitmq-management-themes $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_message_timestamp        = git_rmq rabbitmq-message-timestamp $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_metronome                = git_rmq rabbitmq-metronome $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_mqtt                     = git_rmq rabbitmq-mqtt $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_objc_client              = git_rmq rabbitmq-objc-client $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_peer_discovery_aws       = git_rmq rabbitmq-peer-discovery-aws $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_peer_discovery_common    = git_rmq rabbitmq-peer-discovery-common $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_peer_discovery_consul    = git_rmq rabbitmq-peer-discovery-consul $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_peer_discovery_etcd      = git_rmq rabbitmq-peer-discovery-etcd $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_peer_discovery_k8s       = git_rmq rabbitmq-peer-discovery-k8s $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_prometheus               = git_rmq rabbitmq-prometheus $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_random_exchange          = git_rmq rabbitmq-random-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_recent_history_exchange  = git_rmq rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_routing_node_stamp       = git_rmq rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_rtopic_exchange          = git_rmq rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_server_release           = git_rmq rabbitmq-server-release $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_sharding                 = git_rmq rabbitmq-sharding $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_shovel                   = git_rmq rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_shovel_management        = git_rmq rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_stomp                    = git_rmq rabbitmq-stomp $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_stream                   = git_rmq rabbitmq-stream $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_toke                     = git_rmq rabbitmq-toke $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_top                      = git_rmq rabbitmq-top $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_tracing                  = git_rmq rabbitmq-tracing $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_trust_store              = git_rmq rabbitmq-trust-store $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_test                     = git_rmq rabbitmq-test $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_web_dispatch             = git_rmq rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_web_stomp                = git_rmq rabbitmq-web-stomp $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_web_stomp_examples       = git_rmq rabbitmq-web-stomp-examples $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_web_mqtt                 = git_rmq rabbitmq-web-mqtt $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_web_mqtt_examples        = git_rmq rabbitmq-web-mqtt-examples $(current_rmq_ref) $(base_rmq_ref) master
-dep_rabbitmq_website                  = git_rmq rabbitmq-website $(current_rmq_ref) $(base_rmq_ref) live master
-dep_toke                              = git_rmq toke $(current_rmq_ref) $(base_rmq_ref) master
-
-dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(current_rmq_ref) $(base_rmq_ref) master
+dep_amqp_client                       = git_rmq-subfolder rabbitmq-erlang-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_amqp10_client                     = git_rmq-subfolder rabbitmq-amqp1.0-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_amqp10_common                     = git_rmq-subfolder rabbitmq-amqp1.0-common $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbit                            = git_rmq-subfolder rabbitmq-server $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbit_common                     = git_rmq-subfolder rabbitmq-common $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_amqp1_0                  = git_rmq-subfolder rabbitmq-amqp1.0 $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_auth_backend_amqp        = git_rmq           rabbitmq-auth-backend-amqp $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_auth_backend_cache       = git_rmq-subfolder rabbitmq-auth-backend-cache $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_auth_backend_http        = git_rmq-subfolder rabbitmq-auth-backend-http $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_auth_backend_ldap        = git_rmq-subfolder rabbitmq-auth-backend-ldap $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_auth_backend_oauth2      = git_rmq-subfolder rabbitmq-auth-backend-oauth2 $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_auth_mechanism_ssl       = git_rmq-subfolder rabbitmq-auth-mechanism-ssl $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_aws                      = git_rmq-subfolder rabbitmq-aws $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_boot_steps_visualiser    = git_rmq           rabbitmq-boot-steps-visualiser $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_cli                      = git_rmq-subfolder rabbitmq-cli $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_codegen                  = git_rmq-subfolder rabbitmq-codegen $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_consistent_hash_exchange = git_rmq-subfolder rabbitmq-consistent-hash-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_ct_client_helpers        = git_rmq-subfolder rabbitmq-ct-client-helpers $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_ct_helpers               = git_rmq-subfolder rabbitmq-ct-helpers $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_delayed_message_exchange = git_rmq           rabbitmq-delayed-message-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_dotnet_client            = git_rmq           rabbitmq-dotnet-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_event_exchange           = git_rmq-subfolder rabbitmq-event-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_federation               = git_rmq-subfolder rabbitmq-federation $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_federation_management    = git_rmq-subfolder rabbitmq-federation-management $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_java_client              = git_rmq           rabbitmq-java-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_jms_client               = git_rmq           rabbitmq-jms-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_jms_cts                  = git_rmq           rabbitmq-jms-cts $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_jms_topic_exchange       = git_rmq-subfolder rabbitmq-jms-topic-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_lvc_exchange             = git_rmq           rabbitmq-lvc-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_management               = git_rmq-subfolder rabbitmq-management $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_management_agent         = git_rmq-subfolder rabbitmq-management-agent $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_management_exchange      = git_rmq           rabbitmq-management-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_management_themes        = git_rmq           rabbitmq-management-themes $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_message_timestamp        = git_rmq           rabbitmq-message-timestamp $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_metronome                = git_rmq           rabbitmq-metronome $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_mqtt                     = git_rmq-subfolder rabbitmq-mqtt $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_objc_client              = git_rmq           rabbitmq-objc-client $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_aws       = git_rmq-subfolder rabbitmq-peer-discovery-aws $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_common    = git_rmq-subfolder rabbitmq-peer-discovery-common $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_consul    = git_rmq-subfolder rabbitmq-peer-discovery-consul $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_etcd      = git_rmq-subfolder rabbitmq-peer-discovery-etcd $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_peer_discovery_k8s       = git_rmq-subfolder rabbitmq-peer-discovery-k8s $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_prometheus               = git_rmq-subfolder rabbitmq-prometheus $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_random_exchange          = git_rmq-subfolder rabbitmq-random-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_recent_history_exchange  = git_rmq-subfolder rabbitmq-recent-history-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_routing_node_stamp       = git_rmq           rabbitmq-routing-node-stamp $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_rtopic_exchange          = git_rmq           rabbitmq-rtopic-exchange $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_sharding                 = git_rmq-subfolder rabbitmq-sharding $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_shovel                   = git_rmq-subfolder rabbitmq-shovel $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_shovel_management        = git_rmq-subfolder rabbitmq-shovel-management $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_stomp                    = git_rmq-subfolder rabbitmq-stomp $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_stream                   = git_rmq-subfolder rabbitmq-stream $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_stream_common            = git_rmq-subfolder rabbitmq-stream-common $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_stream_management        = git_rmq-subfolder rabbitmq-stream-management $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_toke                     = git_rmq           rabbitmq-toke $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_top                      = git_rmq-subfolder rabbitmq-top $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_tracing                  = git_rmq-subfolder rabbitmq-tracing $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_trust_store              = git_rmq-subfolder rabbitmq-trust-store $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_test                     = git_rmq           rabbitmq-test $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_web_dispatch             = git_rmq-subfolder rabbitmq-web-dispatch $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_web_stomp                = git_rmq-subfolder rabbitmq-web-stomp $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_web_stomp_examples       = git_rmq-subfolder rabbitmq-web-stomp-examples $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_web_mqtt                 = git_rmq-subfolder rabbitmq-web-mqtt $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_web_mqtt_examples        = git_rmq-subfolder rabbitmq-web-mqtt-examples $(current_rmq_ref) $(base_rmq_ref) master
+dep_rabbitmq_website                  = git_rmq           rabbitmq-website $(current_rmq_ref) $(base_rmq_ref) live master
+dep_toke                              = git_rmq           toke $(current_rmq_ref) $(base_rmq_ref) master
 
 # Third-party dependencies version pinning.
 #
@@ -114,13 +113,13 @@ dep_rabbitmq_public_umbrella          = git_rmq rabbitmq-public-umbrella $(curre
 dep_accept = hex 0.3.5
 dep_cowboy = hex 2.8.0
 dep_cowlib = hex 2.9.1
-dep_jsx = hex 2.11.0
-dep_lager = hex 3.8.0
-dep_prometheus = git https://github.com/deadtrickster/prometheus.erl.git master
-dep_ra = git https://github.com/rabbitmq/ra.git master
-dep_ranch = hex 1.7.1
+dep_jsx = hex 3.1.0
+dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
+dep_prometheus = git https://github.com/deadtrickster/prometheus.erl 06425c21a39c1564164f1cc3fe5bdfa8b23b1f78
+dep_ra = git https://github.com/rabbitmq/ra.git main
+dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.1
-dep_observer_cli = hex 1.5.4
+dep_observer_cli = hex 1.7.1
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
 
@@ -177,6 +176,8 @@ RABBITMQ_COMPONENTS = amqp_client \
 		      rabbitmq_shovel_management \
 		      rabbitmq_stomp \
 		      rabbitmq_stream \
+		      rabbitmq_stream_common \
+		      rabbitmq_stream_management \
 		      rabbitmq_toke \
 		      rabbitmq_top \
 		      rabbitmq_tracing \
@@ -302,6 +303,31 @@ define dep_fetch_git_rmq
 	  1>&2 && false) ) && \
 	(test "$$$$fetch_url" = "$$$$push_url" || \
 	 git remote set-url --push origin "$$$$push_url")
+endef
+
+define dep_fetch_git_rmq-subfolder
+	fetch_url1='https://github.com/rabbitmq/rabbitmq-server.git'; \
+	fetch_url2='git@github.com:rabbitmq/rabbitmq-server.git'; \
+	if [ ! -d $(ERLANG_MK_TMP)/rabbitmq-server ]; then \
+	  if test "$$$$fetch_url1" != '$(RABBITMQ_CURRENT_FETCH_URL)' && \
+	   git clone -q -n -- "$$$$fetch_url1" $(ERLANG_MK_TMP)/rabbitmq-server; then \
+	      fetch_url="$$$$fetch_url1"; \
+	      push_url='$(call dep_rmq_repo,$(RABBITMQ_CURRENT_PUSH_URL),rabbitmq-server)'; \
+	  elif git clone -q -n -- "$$$$fetch_url2" $(ERLANG_MK_TMP)/rabbitmq-server; then \
+	      fetch_url="$$$$fetch_url2"; \
+	      push_url='$(call dep_rmq_repo,$(RABBITMQ_UPSTREAM_PUSH_URL),rabbitmq-server)'; \
+	  fi; \
+	fi; \
+	cd $(ERLANG_MK_TMP)/rabbitmq-server && ( \
+	$(foreach ref,$(call dep_rmq_commits,$(1)), \
+	  git checkout -q $(ref) >/dev/null 2>&1 || \
+	  ) \
+	(echo "error: no valid pathspec among: $(call dep_rmq_commits,$(1))" \
+	  1>&2 && false) ) && \
+	(test "$$$$fetch_url" = "$$$$push_url" || \
+	 git remote set-url --push origin "$$$$push_url")
+	ln -s $(ERLANG_MK_TMP)/rabbitmq-server/deps/$(call dep_name,$(1)) \
+		$(DEPS_DIR)/$(call dep_name,$(1));
 endef
 
 # --------------------------------------------------------------------

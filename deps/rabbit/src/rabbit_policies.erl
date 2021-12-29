@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_policies).
@@ -13,7 +13,7 @@
 -behaviour(rabbit_policy_validator).
 -behaviour(rabbit_policy_merge_strategy).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([register/0, validate_policy/1, merge_policy_value/3]).
 
@@ -40,7 +40,7 @@ register() ->
                           {policy_validator, <<"overflow">>},
                           {policy_validator, <<"delivery-limit">>},
                           {policy_validator, <<"max-age">>},
-                          {policy_validator, <<"max-segment-size">>},
+                          {policy_validator, <<"stream-max-segment-size-bytes">>},
                           {policy_validator, <<"queue-leader-locator">>},
                           {policy_validator, <<"initial-cluster-size">>},
                           {operator_policy_validator, <<"expires">>},
@@ -164,10 +164,10 @@ validate_policy0(<<"initial-cluster-size">>, Value)
 validate_policy0(<<"initial-cluster-size">>, Value) ->
     {error, "~p is not a valid cluster size", [Value]};
 
-validate_policy0(<<"max-segment-size">>, Value)
+validate_policy0(<<"stream-max-segment-size-bytes">>, Value)
   when is_integer(Value), Value >= 0 ->
     ok;
-validate_policy0(<<"max-segment-size">>, Value) ->
+validate_policy0(<<"stream-max-segment-size-bytes">>, Value) ->
     {error, "~p is not a valid segment size", [Value]}.
 
 merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
@@ -176,4 +176,6 @@ merge_policy_value(<<"max-length-bytes">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"max-in-memory-length">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"max-in-memory-bytes">>, Val, OpVal) -> min(Val, OpVal);
 merge_policy_value(<<"expires">>, Val, OpVal)          -> min(Val, OpVal);
-merge_policy_value(<<"delivery-limit">>, Val, OpVal)   -> min(Val, OpVal).
+merge_policy_value(<<"delivery-limit">>, Val, OpVal)   -> min(Val, OpVal);
+%% use operator policy value for booleans
+merge_policy_value(_Key, Val, OpVal) when is_boolean(Val) andalso is_boolean(OpVal) -> OpVal.

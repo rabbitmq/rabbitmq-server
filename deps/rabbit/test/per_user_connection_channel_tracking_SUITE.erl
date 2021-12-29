@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(per_user_connection_channel_tracking_SUITE).
@@ -63,8 +63,16 @@ init_per_group(cluster_size_1_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
     init_per_multinode_group(cluster_size_1_network, Config1, 1);
 init_per_group(cluster_size_2_network, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
-    init_per_multinode_group(cluster_size_2_network, Config1, 2);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
+            init_per_multinode_group(cluster_size_2_network, Config1, 2);
+        _ ->
+            %% In a mixed 3.8/3.9 cluster, changes to rabbit_core_ff.erl imply that some
+            %% feature flag related migrations cannot occur, and therefore user_limits
+            %% cannot be enabled in a 3.8/3.9 mixed cluster
+            {skip, "cluster_size_2_network is not mixed version compatible"}
+    end;
 init_per_group(cluster_size_1_direct, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
     init_per_multinode_group(cluster_size_1_direct, Config1, 1);
@@ -86,9 +94,12 @@ init_per_multinode_group(Group, Config, NodeCount) ->
     case EnableFF of
         ok ->
             Config2;
-        Skip ->
+        {skip, _} = Skip ->
             end_per_group(Group, Config2),
-            Skip
+            Skip;
+        Other ->
+            end_per_group(Group, Config2),
+            {skip, Other}
     end.
 
 end_per_group(_Group, Config) ->

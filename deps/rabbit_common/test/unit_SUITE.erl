@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_SUITE).
@@ -15,6 +15,10 @@
 -include("rabbit.hrl").
 
 -compile(export_all).
+
+%% This cipher is listed as supported, but doesn't actually work.
+%% OTP bug: https://bugs.erlang.org/browse/ERL-1478
+-define(SKIPPED_CIPHERS, [aes_ige256]).
 
 all() ->
     [
@@ -29,6 +33,8 @@ groups() ->
             data_coercion_to_proplist,
             data_coercion_to_list,
             data_coercion_to_map,
+            data_coercion_atomize_keys_proplist,
+            data_coercion_atomize_keys_map,
             pget,
             encrypt_decrypt,
             encrypt_decrypt_term,
@@ -38,7 +44,8 @@ groups() ->
             frame_encoding_does_not_fail_with_empty_binary_payload,
             amqp_table_conversion,
             name_type,
-            get_erl_path
+            get_erl_path,
+            date_time_parse_duration
         ]},
         {parse_mem_limit, [parallel], [
             parse_mem_limit_relative_exactly_max,
@@ -295,6 +302,16 @@ data_coercion_to_proplist(_Config) ->
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_proplist([{a, 1}])),
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_proplist(#{a => 1})).
 
+data_coercion_atomize_keys_map(_Config) ->
+    A = #{a => 1, b => 2, c => 3},
+    B = rabbit_data_coercion:atomize_keys(#{a => 1, "b" => 2, <<"c">> => 3}),
+    ?assertEqual(A, B).
+
+data_coercion_atomize_keys_proplist(_Config) ->
+    A = [{a, 1}, {b, 2}, {c, 3}],
+    B = rabbit_data_coercion:atomize_keys([{a, 1}, {"b", 2}, {<<"c">>, 3}]),
+    ?assertEqual(lists:usort(A), lists:usort(B)).
+
 data_coercion_to_list(_Config) ->
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_list([{a, 1}])),
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_list(#{a => 1})).
@@ -318,7 +335,7 @@ pid_decompose_compose(_Config) ->
 encrypt_decrypt(_Config) ->
     %% Take all available block ciphers.
     Hashes = rabbit_pbe:supported_hashes(),
-    Ciphers = rabbit_pbe:supported_ciphers(),
+    Ciphers = rabbit_pbe:supported_ciphers() -- ?SKIPPED_CIPHERS,
     %% For each cipher, try to encrypt and decrypt data sizes from 0 to 64 bytes
     %% with a random passphrase.
     _ = [begin
@@ -336,7 +353,7 @@ encrypt_decrypt(_Config) ->
 encrypt_decrypt_term(_Config) ->
     %% Take all available block ciphers.
     Hashes = rabbit_pbe:supported_hashes(),
-    Ciphers = rabbit_pbe:supported_ciphers(),
+    Ciphers = rabbit_pbe:supported_ciphers() -- ?SKIPPED_CIPHERS,
     %% Different Erlang terms to try encrypting.
     DataSet = [
         10000,
@@ -443,4 +460,24 @@ get_erl_path(_) ->
         _ ->
             ?assertNotMatch(nomatch, string:find(Exe, "erl"))
     end,
+    ok.
+
+date_time_parse_duration(_) ->
+    ?assertEqual(
+        {ok, [{sign, "+"}, {years, 6}, {months, 3}, {days, 1}, {hours, 1}, {minutes, 1}, {seconds, 1}]},
+        rabbit_date_time:parse_duration("+P6Y3M1DT1H1M1.1S")
+    ),
+    ?assertEqual(
+        {ok, [{sign, []}, {years, 0}, {months, 0}, {days, 0}, {hours, 0}, {minutes, 6}, {seconds, 0}]},
+        rabbit_date_time:parse_duration("PT6M")
+    ),
+    ?assertEqual(
+        {ok, [{sign, []}, {years, 0}, {months, 0}, {days, 0}, {hours, 0}, {minutes, 10}, {seconds, 30}]},
+        rabbit_date_time:parse_duration("PT10M30S")
+    ),
+    ?assertEqual(
+        {ok, [{sign, []}, {years, 0}, {months, 0}, {days, 5}, {hours, 8}, {minutes, 0}, {seconds, 0}]},
+        rabbit_date_time:parse_duration("P5DT8H")
+    ),
+    ?assertEqual(error, rabbit_date_time:parse_duration("foo")),
     ok.

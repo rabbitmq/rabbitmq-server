@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_ldap_app).
@@ -10,7 +10,8 @@
 -behaviour(application).
 -export([start/2, stop/1]).
 
-%% Dummy supervisor to get this application behaviour working
+%% Dummy supervisor - see Ulf Wiger's comment at
+%% http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
 -behaviour(supervisor).
 -export([create_ldap_pool/0, init/1]).
 

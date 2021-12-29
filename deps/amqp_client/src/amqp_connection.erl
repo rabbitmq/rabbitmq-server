@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% @type close_reason(Type) = {shutdown, amqp_reason(Type)}.
@@ -170,6 +170,7 @@ start(AmqpParams, ConnName) when ConnName == undefined; is_binary(ConnName) ->
         end,
     AmqpParams2 = set_connection_name(ConnName, AmqpParams1),
     AmqpParams3 = amqp_ssl:maybe_enhance_ssl_options(AmqpParams2),
+    ok = ensure_safe_call_timeout(AmqpParams3, amqp_util:call_timeout()),
     {ok, _Sup, Connection} = amqp_sup:start_connection_sup(AmqpParams3),
     amqp_gen_connection:connect(Connection).
 
@@ -393,3 +394,30 @@ connection_name(ConnectionPid) ->
         {<<"connection_name">>, _, ConnName} -> ConnName;
         false                                -> undefined
     end.
+
+ensure_safe_call_timeout(#amqp_params_network{connection_timeout = ConnTimeout}, CallTimeout) ->
+    maybe_update_call_timeout(ConnTimeout, CallTimeout);
+ensure_safe_call_timeout(#amqp_params_direct{}, CallTimeout) ->
+    case net_kernel:get_net_ticktime() of
+        NetTicktime when is_integer(NetTicktime) ->
+            maybe_update_call_timeout(tick_or_direct_timeout(NetTicktime * 1000),
+                CallTimeout);
+        {ongoing_change_to, NetTicktime} ->
+            maybe_update_call_timeout(tick_or_direct_timeout(NetTicktime * 1000),
+                CallTimeout);
+        ignored ->
+            maybe_update_call_timeout(?DIRECT_OPERATION_TIMEOUT, CallTimeout)
+    end.
+
+maybe_update_call_timeout(BaseTimeout, CallTimeout)
+  when is_integer(BaseTimeout), CallTimeout > BaseTimeout ->
+    ok;
+maybe_update_call_timeout(BaseTimeout, CallTimeout) ->
+    EffectiveSafeCallTimeout = amqp_util:safe_call_timeout(BaseTimeout),
+    ?LOG_WARN("AMQP 0-9-1 client call timeout was ~p ms, is updated to a safe effective "
+              "value of ~p ms", [CallTimeout, EffectiveSafeCallTimeout]),
+    amqp_util:update_call_timeout(EffectiveSafeCallTimeout),
+    ok.
+
+tick_or_direct_timeout(Timeout) when Timeout >= ?DIRECT_OPERATION_TIMEOUT -> Timeout;
+tick_or_direct_timeout(_Timeout) -> ?DIRECT_OPERATION_TIMEOUT.

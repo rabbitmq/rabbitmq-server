@@ -1,21 +1,9 @@
-%% The contents of this file are subject to the Mozilla Public License
-%% Version 1.1 (the "License"); you may not use this file except in
-%% compliance with the License. You may obtain a copy of the License
-%% at https://www.mozilla.org/MPL/
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and
-%% limitations under the License.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
-%% The Original Code is RabbitMQ.
-%%
-%% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
-%%
-
-%% stomp_frame implements the STOMP framing protocol "version 1.0", as
-%% per https://stomp.codehaus.org/Protocol
 
 -module(rabbit_stomp_frame).
 
@@ -27,6 +15,7 @@
          boolean_header/2, boolean_header/3,
          integer_header/2, integer_header/3,
          binary_header/2, binary_header/3]).
+-export([stream_offset_header/2]).
 -export([serialize/1, serialize/2]).
 
 initial_state() -> none.
@@ -221,6 +210,22 @@ binary_header(F, K) ->
     end.
 
 binary_header(F, K, D) -> default_value(binary_header(F, K), D).
+
+stream_offset_header(F, D) ->
+    case binary_header(F, ?HEADER_X_STREAM_OFFSET, D) of
+        <<"first">> ->
+            {longstr, <<"first">>};
+        <<"last">> ->
+            {longstr, <<"last">>};
+        <<"next">> ->
+            {longstr, <<"next">>};
+        <<"offset=", OffsetValue/binary>> ->
+            {long, binary_to_integer(OffsetValue)};
+        <<"timestamp=", TimestampValue/binary>> ->
+            {timestamp, binary_to_integer(TimestampValue)};
+        _ ->
+            D
+    end.
 
 serialize(Frame) ->
     serialize(Frame, true).

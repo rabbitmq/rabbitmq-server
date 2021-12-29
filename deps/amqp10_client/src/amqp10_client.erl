@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(amqp10_client).
@@ -434,7 +434,9 @@ parse_usertoken("") ->
     none;
 parse_usertoken(U) ->
     [User, Pass] = string:tokens(U, ":"),
-    {plain, to_binary(http_uri:decode(User)), to_binary(http_uri:decode(Pass))}.
+    {plain,
+     to_binary(uri_string:percent_decode(User)),
+     to_binary(uri_string:percent_decode(Pass))}.
 
 parse_tls_opts(M) ->
     lists:sort(maps:fold(fun parse_tls_opt/3, [], M)).

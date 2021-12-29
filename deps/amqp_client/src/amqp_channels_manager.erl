@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% @private
@@ -203,7 +203,7 @@ internal_pass_frame(Number, Frame, State) ->
     case internal_lookup_npa(Number, State) of
         undefined ->
             ?LOG_INFO("Dropping frame ~p for invalid or closed "
-                      "channel number ~p~n", [Frame, Number]),
+                      "channel number ~p", [Frame, Number]),
             State;
         {ChPid, AState} ->
             NewAState = process_channel_frame(Frame, Number, ChPid, AState),

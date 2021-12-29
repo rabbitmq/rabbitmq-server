@@ -4,10 +4,13 @@ PROJECT_MOD = rabbit_stream
 
 define PROJECT_ENV
 [
-	{tcp_listeners, [5555]},
+	{tcp_listeners, [5552]},
 	{num_tcp_acceptors, 10},
 	{tcp_listen_options, [{backlog,   128},
                           {nodelay,   true}]},
+	{ssl_listeners, []},
+	{num_ssl_acceptors, 10},
+	{ssl_listen_options, []},
 	{initial_credits, 50000},
 	{credits_required_for_unblocking, 12500},
 	{frame_max, 1048576},
@@ -18,8 +21,8 @@ define PROJECT_ENV
 endef
 
 
-DEPS = rabbit
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
+DEPS = rabbit rabbitmq_stream_common
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
@@ -30,5 +33,5 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
 ERLANG_MK_COMMIT = rabbitmq-tmp
 
-include rabbitmq-components.mk
-include erlang.mk
+include ../../rabbitmq-components.mk
+include ../../erlang.mk

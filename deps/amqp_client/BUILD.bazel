@@ -1,0 +1,97 @@
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
+load(
+    "//:rabbitmq.bzl",
+    "assert_suites",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+    "rabbitmq_suite",
+)
+
+APP_ENV = """[
+	    {prefer_ipv6, false},
+	    {ssl_options, []},
+	    {writer_gc_threshold, 1000000000}
+	  ]"""
+
+EXTRA_APPS = [
+    "xmerl",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = "RabbitMQ AMQP Client",
+    app_env = APP_ENV,
+    app_module = "amqp_client",
+    app_name = "amqp_client",
+    app_registered = [
+        "amqp_sup",
+    ],
+    extra_apps = EXTRA_APPS,
+    first_srcs = [
+        "src/amqp_gen_connection.erl",
+        "src/amqp_gen_consumer.erl",
+    ],
+    deps = DEPS,
+)
+
+xref(
+    additional_libs = [
+        "@ranch//:bazel_erlang_lib",
+    ],
+    tags = ["xref"],
+)
+
+plt(
+    name = "base_plt",
+    apps = EXTRA_APPS,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    plt = ":base_plt",
+    tags = ["dialyze"],
+)
+
+rabbitmq_home(
+    name = "broker-for-tests-home",
+    plugins = [
+        "//deps/rabbit:bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-tests-run",
+    home = ":broker-for-tests-home",
+)
+
+suites = [
+    rabbitmq_integration_suite(
+        "deps/amqp_client",
+        name = "system_SUITE",
+        size = "large",
+        runtime_deps = [
+            "@meck//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "unit_SUITE",
+        size = "small",
+        runtime_deps = [
+            "//deps/rabbit:bazel_erlang_lib",
+        ],
+        deps = [
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

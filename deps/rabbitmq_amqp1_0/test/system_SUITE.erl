@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(system_SUITE).
@@ -37,10 +37,15 @@ groups() ->
           auth_failure,
           access_failure,
           access_failure_not_allowed,
-          access_failure_send
+          access_failure_send,
+          streams
         ]},
       {java, [], [
           roundtrip
+        ]},
+      {streams, [
+                 streams
+                ], [
         ]}
     ].
 
@@ -55,6 +60,22 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
+init_per_group(streams, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+            Config1 = rabbit_ct_helpers:set_config(Config, [
+                {rmq_nodename_suffix, Suffix},
+                {amqp10_client_library, dotnet}
+              ]),
+            rabbit_ct_helpers:run_setup_steps(Config1, [
+                fun build_dotnet_test_project/1
+            ] ++
+            rabbit_ct_broker_helpers:setup_steps() ++
+            rabbit_ct_client_helpers:setup_steps());
+        _     ->
+            {skip, "stream tests are skipped in mixed mode"}
+    end;
 init_per_group(Group, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
@@ -117,6 +138,15 @@ roundtrip(Config) ->
         {java, "RoundTripTest"}
       ]).
 
+streams(Config) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q">>,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, "stream"}]}),
+    run(Config, [
+        {dotnet, "streams"}
+      ]).
+
 roundtrip_to_amqp_091(Config) ->
     run(Config, [
         {dotnet, "roundtrip_to_amqp_091"}
@@ -152,10 +182,6 @@ data_types(Config) ->
         {dotnet, "data_types"}
       ]).
 
-%% at_most_once(Config) ->
-%%     run(Config, [
-%%       ]).
-
 reject(Config) ->
     run(Config, [
         {dotnet, "reject"}
@@ -167,13 +193,46 @@ redelivery(Config) ->
       ]).
 
 routing(Config) ->
+
+    StreamQT =
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, stream_queue) of
+        ok ->
+            <<"stream">>;
+        _ ->
+            %% if the feature flag could not be enabled we run the stream
+            %% routing test using a classc quue instead
+            ct:pal("stream feature flag could not be enabled"
+                   "running stream tests against classic"),
+            <<"classic">>
+    end,
     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    amqp_channel:call(Ch, #'queue.declare'{queue   = <<"transient_q">>,
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"transient_q">>,
                                            durable = false}),
-    amqp_channel:call(Ch, #'queue.declare'{queue   = <<"durable_q">>,
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"durable_q">>,
                                            durable = true}),
-    amqp_channel:call(Ch, #'queue.declare'{queue       = <<"autodel_q">>,
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"quorum_q">>,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q">>,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, StreamQT}]}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"stream_q2">>,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, StreamQT}]}),
+    amqp_channel:call(Ch, #'queue.declare'{queue = <<"autodel_q">>,
                                            auto_delete = true}),
+    run(Config, [
+        {dotnet, "routing"}
+      ]).
+
+%% TODO: this tests doesn't test anything that the standard routing test
+%% already does. We should test stream specific things here like attaching
+%% to a given offset
+stream_interop_basics(Config) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.declare'{queue   = <<"stream_q">>,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
     run(Config, [
         {dotnet, "routing"}
       ]).

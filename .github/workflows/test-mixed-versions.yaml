@@ -1,0 +1,115 @@
+name: Test Mixed Version Clusters
+on:
+  push:
+    branches:
+      - master
+      - v3.9.x
+      - v3.8.x
+      - bump-rbe-image-*
+      - bump-otp-for-oci
+      - bump-rabbitmq-ct-helpers
+    paths:
+      - 'deps/**'
+      - 'scripts/**'
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
+      - .bazelrc
+      - .bazelversion
+      - BUILD.*
+      - '*.bzl'
+      - '*.bazel'
+      - .github/workflows/test-mixed-versions.yaml
+  workflow_dispatch:
+jobs:
+  test-mixed-versions:
+    name: Test (Mixed Version Cluster)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - "23"
+        - "24"
+    timeout-minutes: 120
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.4.0
+    - name: MOUNT BAZEL CACHE
+      uses: actions/cache@v1
+      with:
+        path: "/home/runner/repo-cache/"
+        key: repo-cache
+    - name: CONFIGURE BAZEL
+      run: |
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${{ matrix.erlang_version }}
+          build:buildbuddy --repository_cache=/home/runner/repo-cache/
+          build:buildbuddy --color=yes
+          build:buildbuddy --disk_cache=
+        EOF
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: RUN TESTS
+      run: |
+        sudo sysctl -w net.ipv4.tcp_keepalive_time=60
+        sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
+        bazelisk test //... \
+          --config=rbe-${{ matrix.erlang_version }} \
+          --test_tag_filters=mixed-version-cluster,-exclusive,-aws \
+          --verbose_failures
+  test-exclusive-mixed-versions:
+    name: Test (Exclusive Tests with Mixed Version Cluster)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        erlang_version:
+        - "23"
+        - "24"
+    timeout-minutes: 60
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.4.0
+    - name: CONFIGURE OTP & ELIXIR
+      uses: erlef/setup-beam@v1.9
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: 1.11.4
+    - name: MOUNT BAZEL CACHE
+      uses: actions/cache@v1
+      with:
+        path: "/home/runner/repo-cache/"
+        key: repo-cache
+    - name: CONFIGURE BAZEL
+      run: |
+        ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+        ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+        cat << EOF >> user.bazelrc
+          build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+
+          build:buildbuddy --build_metadata=ROLE=CI
+          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-exclusive-${{ matrix.erlang_version }}
+          build:buildbuddy --repository_cache=/home/runner/repo-cache/
+          build:buildbuddy --color=yes
+          build:buildbuddy --disk_cache=
+
+          build --@bazel-erlang//:erlang_version=${{ matrix.erlang_version }}
+          build --@bazel-erlang//:erlang_home=${ERLANG_HOME}
+          build --//:elixir_home=${ELIXIR_HOME}
+        EOF
+    #! - name: Setup tmate session
+    #!   uses: mxschmitt/action-tmate@v3
+    - name: RUN EXCLUSIVE TESTS
+      run: |
+        MIXED_EXCLUSIVE_TESTS=$(bazel query 'attr(tags, "mixed-version-cluster", attr(tags, "exclusive", tests(//...)))')
+        bazelisk test $MIXED_EXCLUSIVE_TESTS \
+          --config=buildbuddy \
+          --test_tag_filters=-aws \
+          --build_tests_only \
+          --test_env RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES=true \
+          --verbose_failures

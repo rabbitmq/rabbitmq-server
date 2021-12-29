@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(uaa_jwt).
 
@@ -51,6 +51,23 @@ update_uaa_jwt_signing_keys(UaaEnv0, SigningKeys) ->
     UaaEnv2 = [{signing_keys, SigningKeys} | UaaEnv1],
     application:set_env(?APP, key_config, UaaEnv2).
 
+-spec update_jwks_signing_keys() -> ok | {error, term()}.
+update_jwks_signing_keys() ->
+    UaaEnv = application:get_env(?APP, key_config, []),
+    case proplists:get_value(jwks_url, UaaEnv) of
+        undefined ->
+            {error, no_jwks_url};
+        JwksUrl ->
+            case uaa_jwks:get(JwksUrl) of
+                {ok, {_, _, JwksBody}} ->
+                    KeyList = maps:get(<<"keys">>, jose:decode(erlang:iolist_to_binary(JwksBody)), []),
+                    Keys = maps:from_list(lists:map(fun(Key) -> {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
+                    update_uaa_jwt_signing_keys(UaaEnv, Keys);
+                {error, _} = Err ->
+                    Err
+            end
+    end.
+
 -spec decode_and_verify(binary()) -> {boolean(), map()} | {error, term()}.
 decode_and_verify(Token) ->
     case uaa_jwt_jwt:get_key_id(Token) of
@@ -67,21 +84,33 @@ decode_and_verify(Token) ->
 
 -spec get_jwk(binary()) -> {ok, map()} | {error, term()}.
 get_jwk(KeyId) ->
-    case signing_keys() of
-      undefined -> {error, signing_keys_not_configured};
-      Keys      ->
-        case maps:get(KeyId, Keys, undefined) of
-            undefined ->
-                {error, key_not_found};
-            {Type, Value} ->
-                case Type of
-                    json     -> uaa_jwt_jwk:make_jwk(Value);
-                    pem      -> uaa_jwt_jwk:from_pem(Value);
-                    pem_file -> uaa_jwt_jwk:from_pem_file(Value);
-                    map      -> uaa_jwt_jwk:make_jwk(Value);
-                    _        -> {error, unknown_signing_key_type}
-                end
-        end
+    get_jwk(KeyId, true).
+
+get_jwk(KeyId, AllowUpdateJwks) ->
+    Keys = signing_keys(),
+    case maps:get(KeyId, Keys, undefined) of
+        undefined ->
+            if
+                AllowUpdateJwks ->
+                    case update_jwks_signing_keys() of
+                        ok ->
+                            get_jwk(KeyId, false);
+                        {error, no_jwks_url} ->
+                            {error, key_not_found};
+                        {error, _} = Err ->
+                            Err
+                    end;
+                true            ->
+                    {error, key_not_found}
+            end;
+        {Type, Value} ->
+            case Type of
+                json     -> uaa_jwt_jwk:make_jwk(Value);
+                pem      -> uaa_jwt_jwk:from_pem(Value);
+                pem_file -> uaa_jwt_jwk:from_pem_file(Value);
+                map      -> uaa_jwt_jwk:make_jwk(Value);
+                _        -> {error, unknown_signing_key_type}
+            end
     end.
 
 verify_signing_key(Type, Value) ->
@@ -103,7 +132,7 @@ verify_signing_key(Type, Value) ->
 
 signing_keys() ->
     UaaEnv = application:get_env(?APP, key_config, []),
-    proplists:get_value(signing_keys, UaaEnv).
+    proplists:get_value(signing_keys, UaaEnv, #{}).
 
 -spec client_id(map()) -> binary() | undefined.
 client_id(DecodedToken) ->

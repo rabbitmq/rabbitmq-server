@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_channel_tracking).
@@ -32,7 +32,7 @@
          get_all_tracked_channel_table_names_for_node/1,
          delete_tracked_channel_user_entry/1]).
 
--include_lib("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -import(rabbit_misc, [pget/2]).
 
@@ -86,7 +86,7 @@ handle_cast({channel_created, Details}) ->
             ok
     end;
 handle_cast({channel_closed, Details}) ->
-    %% channel has terminated, unregister iff local
+    %% channel has terminated, unregister if local
     case get_tracked_channel_by_pid(pget(pid, Details)) of
         [#tracked_channel{name = Name}] ->
             unregister_tracked(rabbit_tracking:id(node(), Name));
@@ -99,8 +99,8 @@ handle_cast({connection_closed, ConnDetails}) ->
     case pget(node, ConnDetails) of
         ThisNode ->
             TrackedChs = get_tracked_channels_by_connection_pid(ConnPid),
-            rabbit_log_connection:info(
-                "Closing all channels from connection '~p' "
+            rabbit_log_channel:debug(
+                "Closing all channels from connection '~s' "
                 "because it has been closed", [pget(name, ConnDetails)]),
             %% Shutting down channels will take care of unregistering the
             %% corresponding tracking.
@@ -117,7 +117,7 @@ handle_cast({user_deleted, Details}) ->
     ok;
 handle_cast({node_deleted, Details}) ->
     Node = pget(node, Details),
-    rabbit_log_connection:info(
+    rabbit_log_channel:info(
         "Node '~s' was removed from the cluster, deleting"
         " its channel tracking tables...", [Node]),
     delete_tracked_channels_table_for_node(Node),
@@ -179,7 +179,18 @@ list() ->
     lists:foldl(
       fun (Node, Acc) ->
               Tab = tracked_channel_table_name_for(Node),
-              Acc ++ mnesia:dirty_match_object(Tab, #tracked_channel{_ = '_'})
+              try
+                  Acc ++
+                  mnesia:dirty_match_object(Tab, #tracked_channel{_ = '_'})
+              catch
+                  exit:{aborted, {no_exists, [Tab, _]}} ->
+                      %% The table might not exist yet (or is already gone)
+                      %% between the time rabbit_nodes:all_running() runs and
+                      %% returns a specific node, and
+                      %% mnesia:dirty_match_object() is called for that node's
+                      %% table.
+                      Acc
+              end
       end, [], rabbit_nodes:all_running()).
 
 -spec list_of_user(rabbit_types:username()) -> [rabbit_types:tracked_channel()].

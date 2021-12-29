@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_format).
@@ -30,6 +30,7 @@
 -export([args_hash/1]).
 
 -import(rabbit_misc, [pget/2, pget/3, pset/3]).
+-import(rabbit_data_coercion, [to_binary/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
@@ -176,7 +177,9 @@ protocol(unknown) ->
 protocol(Version = {_Major, _Minor, _Revision}) ->
     protocol({'AMQP', Version});
 protocol({Family, Version}) ->
-    print("~s ~s", [Family, protocol_version(Version)]).
+    print("~s ~s", [Family, protocol_version(Version)]);
+protocol(Protocol) when is_binary(Protocol) ->
+    print("~s", [Protocol]).
 
 protocol_version(Arbitrary)
   when is_list(Arbitrary)                  -> Arbitrary;
@@ -215,15 +218,16 @@ internal_user(User) ->
      {password_hash,     base64:encode(internal_user:get_password_hash(User))},
      {hashing_algorithm, rabbit_auth_backend_internal:hashing_module_for_user(
                              User)},
-     {tags,              tags(internal_user:get_tags(User))},
+     {tags,              tags_as_binaries(internal_user:get_tags(User))},
      {limits,            internal_user:get_limits(User)}].
 
 user(User) ->
     [{name, User#user.username},
-     {tags, tags(User#user.tags)}].
+     {tags, tags_as_binaries(User#user.tags)}].
 
-tags(Tags) ->
-    list_to_binary(string:join([atom_to_list(T) || T <- Tags], ",")).
+tags_as_binaries(Tags) ->
+    [to_binary(T) || T <- Tags].
+
 
 listener(#listener{node = Node, protocol = Protocol,
                    ip_address = IPAddress, port = Port, opts=Opts}) ->
@@ -338,6 +342,7 @@ queue(Q) when ?is_amqqueue(Q) ->
     Type = case amqqueue:get_type(Q) of
                rabbit_classic_queue -> classic;
                rabbit_quorum_queue -> quorum;
+               rabbit_stream_queue -> stream;
                T -> T
            end,
     format(

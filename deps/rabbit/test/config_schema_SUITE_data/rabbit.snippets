@@ -72,6 +72,28 @@ ssl_options.fail_if_no_peer_cert = true",
  {num_acceptors,
   "num_acceptors.ssl = 1",[{rabbit,[{num_ssl_acceptors,1}]}],[]},
 
+ {distribution_listener,
+ "distribution.listener.interface = 192.168.0.1
+  distribution.listener.port_range.min = 25679
+  distribution.listener.port_range.max = 25679",
+ [{kernel, [
+    {inet_dist_listen_min, 25679},
+    {inet_dist_listen_max, 25679},
+    {inet_dist_use_interface, {192,168,0,1}}
+   ]}],
+ []},
+
+ {distribution_listener_ipv6,
+ "distribution.listener.interface = ::1
+  distribution.listener.port_range.min = 25679
+  distribution.listener.port_range.max = 25679",
+ [{kernel, [
+    {inet_dist_listen_min, 25679},
+    {inet_dist_listen_max, 25679},
+    {inet_dist_use_interface, {0,0,0,0,0,0,0,1}}
+   ]}],
+ []},
+
  {socket_writer_gc_threshold,
   "socket_writer.gc_threshold = 999666111", [{rabbit, [{writer_gc_threshold, 999666111}]}],[]},
 
@@ -139,6 +161,15 @@ cluster_formation.dns.hostname = discovery.eng.example.local",
   []},
  {cluster_formation_ram_ignored,
   "cluster_formation.node_type = ram",[],[]},
+ {cluster_formation_target_cluster_size_hint,
+  "cluster_formation.target_cluster_size_hint = 3",
+  [{rabbit, [
+    {cluster_formation, [
+       {target_cluster_size_hint, 3}
+     ]}
+   ]}],
+ []},
+
  {tcp_listen_options,
   "tcp_listen_options.backlog = 128
 tcp_listen_options.nodelay = true
@@ -510,6 +541,14 @@ tcp_listen_options.exit_on_close = false",
   ]}],
   []},
   
+
+  {ssl_options_bypass_pem_cache,
+   "ssl_options.bypass_pem_cache = true",
+   [{ssl, [
+      {bypass_pem_cache, true}
+     ]}],
+   []},
+
  {tcp_listen_options_linger_on,
   "tcp_listen_options.linger.on = true
    tcp_listen_options.linger.timeout = 100",
@@ -532,23 +571,22 @@ tcp_listen_options.exit_on_close = false",
  {cluster_formation_randomized_startup_delay_both_values,
   "cluster_formation.randomized_startup_delay_range.min = 10
    cluster_formation.randomized_startup_delay_range.max = 30",
-  [{rabbit, [{cluster_formation, [
-                                  {randomized_startup_delay_range, {10, 30}}
-                                  ]}]}],
+  [],
   []},
 
  {cluster_formation_randomized_startup_delay_min_only,
   "cluster_formation.randomized_startup_delay_range.min = 10",
-  [{rabbit, [{cluster_formation, [
-                                  {randomized_startup_delay_range, {10, 60}}
-                                  ]}]}],
+  [],
   []},
 
  {cluster_formation_randomized_startup_delay_max_only,
   "cluster_formation.randomized_startup_delay_range.max = 30",
-  [{rabbit, [{cluster_formation, [
-                                  {randomized_startup_delay_range, {5, 30}}
-                                  ]}]}],
+  [],
+  []},
+
+ {cluster_formation_internal_lock_retries,
+  "cluster_formation.internal_lock_retries = 10",
+  [{rabbit,[{cluster_formation,[{internal_lock_retries,10}]}]}],
   []},
 
  {cluster_formation_dns,
@@ -612,45 +650,6 @@ credential_validator.regexp = ^abc\\d+",
  {proxy_protocol_off,
   "proxy_protocol = false",
   [{rabbit,[{proxy_protocol,false}]}],[]},
- {log_debug_file,
-  "log.file.level = debug",
-  [{rabbit,[{log, [{file, [{level, debug}]}]}]}],
-  []},
- {log_debug_console,
-  "log.console = true
-   log.console.level = debug",
-  [{rabbit,[{log, [{console, [{enabled, true}, {level, debug}]}]}]}],
-  []},
- {log_debug_exchange,
-  "log.exchange = true
-   log.exchange.level = debug",
-  [{rabbit,[{log, [{exchange, [{enabled, true}, {level, debug}]}]}]}],
-  []},
- {log_debug_syslog,
-  "log.syslog = true
-   log.syslog.level = debug",
-  [{rabbit,[{log, [{syslog, [{enabled, true}, {level, debug}]}]}]}],
-  []},
- {log_file_name,
-  "log.file = file_name",
-  [{rabbit,[{log, [{file, [{file, "file_name"}]}]}]}],
-  []},
- {log_file_disabled,
-  "log.file = false",
-  [{rabbit,[{log, [{file, [{file, false}]}]}]}],
-  []},
- {log_category_level,
-  "log.connection.level = debug
-   log.channel.level = error",
-  [{rabbit,[{log, [{categories, [{connection, [{level, debug}]},
-                                 {channel, [{level, error}]}]}]}]}],
-  []},
- {log_category_file,
-  "log.connection.file = file_name_connection
-   log.channel.file = file_name_channel",
-  [{rabbit,[{log, [{categories, [{connection, [{file, "file_name_connection"}]},
-                                 {channel, [{file, "file_name_channel"}]}]}]}]}],
-  []},
 
  {default_worker_pool_size,
   "default_worker_pool_size = 512",
@@ -694,65 +693,71 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
-  {log_syslog_settings,
-   "log.syslog = true
-    log.syslog.identity = rabbitmq
-    log.syslog.facility = user
-    log.syslog.multiline_mode = true
-    log.syslog.ip = 10.10.10.10
-    log.syslog.port = 123",
-   [
-    {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
-    {syslog, [{app_name, "rabbitmq"},
-              {facility, user},
-              {multiline_mode, true},
-              {dest_host, "10.10.10.10"},
-              {dest_port, 123}]}
-   ],
-   []},
-  {log_syslog_tcp,
-   "log.syslog = true
-    log.syslog.transport = tcp
-    log.syslog.protocol = rfc5424
-    log.syslog.host = syslog.my-network.com",
-   [
-    {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
-    {syslog, [{protocol, {rfc5424, tcp}},
-              {dest_host, "syslog.my-network.com"}]}
-   ],
-   []},
-  {log_syslog_udp_default,
-   "log.syslog = true
-    log.syslog.protocol = rfc3164",
-   [
-    {rabbit,[{log, [{syslog, [{enabled, true}]}]}]},
-    {syslog, [{protocol, {rfc3164, udp}}]}
-   ],
-   []},
-  {log_syslog_tls,
-  "log.syslog = true
-   log.syslog.transport = tls
-   log.syslog.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
-   log.syslog.ssl_options.certfile = test/config_schema_SUITE_data/certs/cert.pem
-   log.syslog.ssl_options.keyfile = test/config_schema_SUITE_data/certs/key.pem
-   log.syslog.ssl_options.verify = verify_peer
-   log.syslog.ssl_options.fail_if_no_peer_cert = false",
-  [{rabbit, [{log, [{syslog, [{enabled, true}]}]}]},
-   {syslog, [{protocol, {rfc5424, tls,
-              [{verify,verify_peer},
-               {fail_if_no_peer_cert,false},
-               {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
-               {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-               {keyfile,"test/config_schema_SUITE_data/certs/key.pem"}]}}]}],
-  []},
-
   %%
   %% Definitions
   %%
 
+ %% classic configuration key, implies a local filesystem path
  {definition_files, "load_definitions = test/definition_import_SUITE_data/case1.json",
   [{rabbit,
        [{load_definitions, "test/definition_import_SUITE_data/case1.json"}]}],
+  []},
+
+ %% modern configuration key, local filesystem source
+ {definition_files, "definitions.import_backend = local_filesystem
+                     definitions.local.path = test/definition_import_SUITE_data/case1.json",
+  [{rabbit, [
+    {definitions, [
+      {import_backend, rabbit_definitions_import_local_filesystem},
+      {local_path, "test/definition_import_SUITE_data/case1.json"}
+    ]}
+  ]}],
+  []},
+
+  %% modern configuration key, HTTPS source
+ {definition_files, "definitions.import_backend = https
+                     definitions.https.url = https://rabbitmq.eng.megacorp.local/env-1/case1.json
+                     definitions.tls.versions.1 = tlsv1.2
+                     definitions.tls.log_level   = error
+
+                     definitions.tls.secure_renegotiate = true
+
+                     definitions.tls.ciphers.1  = ECDHE-ECDSA-AES256-GCM-SHA384
+                     definitions.tls.ciphers.2  = ECDHE-RSA-AES256-GCM-SHA384
+                     definitions.tls.ciphers.3  = ECDH-ECDSA-AES256-GCM-SHA384
+                     definitions.tls.ciphers.4  = ECDH-RSA-AES256-GCM-SHA384
+                     definitions.tls.ciphers.5  = DHE-RSA-AES256-GCM-SHA384
+                     definitions.tls.ciphers.6  = DHE-DSS-AES256-GCM-SHA384
+                     definitions.tls.ciphers.7  = ECDHE-ECDSA-AES128-GCM-SHA256
+                     definitions.tls.ciphers.8  = ECDHE-RSA-AES128-GCM-SHA256
+                     definitions.tls.ciphers.9  = ECDH-ECDSA-AES128-GCM-SHA256
+                     definitions.tls.ciphers.10 = ECDH-RSA-AES128-GCM-SHA256
+                     definitions.tls.ciphers.11 = DHE-RSA-AES128-GCM-SHA256
+                     definitions.tls.ciphers.12 = DHE-DSS-AES128-GCM-SHA256",
+  [{rabbit, [
+    {definitions, [
+      {import_backend, rabbit_definitions_import_https},
+      {url, "https://rabbitmq.eng.megacorp.local/env-1/case1.json"},
+      {ssl_options,  [
+           {log_level, error},
+           {secure_renegotiate, true},
+           {versions, ['tlsv1.2']},
+           {ciphers, [
+            "ECDHE-ECDSA-AES256-GCM-SHA384",
+            "ECDHE-RSA-AES256-GCM-SHA384",
+            "ECDH-ECDSA-AES256-GCM-SHA384",
+            "ECDH-RSA-AES256-GCM-SHA384",
+            "DHE-RSA-AES256-GCM-SHA384",
+            "DHE-DSS-AES256-GCM-SHA384",
+            "ECDHE-ECDSA-AES128-GCM-SHA256",
+            "ECDHE-RSA-AES128-GCM-SHA256",
+            "ECDH-ECDSA-AES128-GCM-SHA256",
+            "ECDH-RSA-AES128-GCM-SHA256",
+            "DHE-RSA-AES128-GCM-SHA256",
+            "DHE-DSS-AES128-GCM-SHA256"
+            ]}
+        ]}
+    ]}]}],
   []},
 
   %%

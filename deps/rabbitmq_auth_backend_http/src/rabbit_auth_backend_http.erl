@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_http).
@@ -139,10 +139,28 @@ do_http_req(Path0, Query) ->
             rabbit_log:debug("auth_backend_http: POST ~s", [Path0]),
             {Path0, [{"Host", HostHdr}], "application/x-www-form-urlencoded", Query}
     end,
-    HttpOpts = case application:get_env(rabbitmq_auth_backend_http,
-                                        ssl_options) of
-        {ok, Opts} when is_list(Opts) -> [{ssl, Opts}];
-        _                             -> []
+    RequestTimeout =
+        case application:get_env(rabbitmq_auth_backend_http, request_timeout) of
+            {ok, Val1} -> Val1;
+            _ -> infinity
+        end,
+    ConnectionTimeout =
+        case application:get_env(rabbitmq_auth_backend_http, connection_timeout) of
+            {ok, Val2} -> Val2;
+            _ -> RequestTimeout
+        end,
+    rabbit_log:debug("auth_backend_http: request timeout: ~p, connection timeout: ~p", [RequestTimeout, ConnectionTimeout]),
+    HttpOpts = case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
+        {ok, Opts} when is_list(Opts) ->
+            [
+                {ssl, Opts},
+                {timeout, RequestTimeout},
+                {connect_timeout, ConnectionTimeout}];
+        _                             ->
+            [
+                {timeout, RequestTimeout},
+                {connect_timeout, ConnectionTimeout}
+            ]
     end,
 
     case httpc:request(Method, Request, HttpOpts, []) of

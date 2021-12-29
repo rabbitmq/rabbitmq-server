@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% An HTTP API counterpart of 'rabbitmq-diagnostics check_certificate_expiration'
@@ -80,7 +80,7 @@ convert(Time, Unit) ->
         error:badarg ->
             {error, "Invalid expiration value."};
         invalid_unit ->
-            {error, "Time unit not recognised. Use: days, seconds, months, years."}
+            {error, "Time unit not recognised. Supported units: days, weeks, months, years."}
     end. 
 
 do_convert(Time, "days") ->

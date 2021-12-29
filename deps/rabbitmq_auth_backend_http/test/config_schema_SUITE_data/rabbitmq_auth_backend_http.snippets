@@ -23,4 +23,21 @@
      {vhost_path,"http://some-server/auth/vhost"},
      {resource_path,"http://some-server/auth/resource"}]}],
   [rabbitmq_auth_backend_http]}
+
+, {timeouts,
+  "auth_backends.1        = http
+   auth_http.user_path     = http://some-server/auth/user
+   auth_http.vhost_path    = http://some-server/auth/vhost
+   auth_http.resource_path = http://some-server/auth/resource
+   auth_http.request_timeout    = 30000
+   auth_http.connection_timeout = 30000",
+  [{rabbit,[{auth_backends,[rabbit_auth_backend_http]}]},
+   {rabbitmq_auth_backend_http,
+    [
+     {connection_timeout,30000},
+     {request_timeout,30000},
+     {user_path,"http://some-server/auth/user"},
+     {vhost_path,"http://some-server/auth/vhost"},
+     {resource_path,"http://some-server/auth/resource"}]}],
+  [rabbitmq_auth_backend_http]}
   ].

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_amqqueue_process).
@@ -110,6 +110,7 @@
          single_active_consumer_tag,
          consumers,
          consumer_utilisation,
+         consumer_capacity,
          memory,
          slave_pids,
          synchronised_slave_pids,
@@ -1118,10 +1119,12 @@ i(messages, State) ->
                                           messages_unacknowledged]]);
 i(consumers, _) ->
     rabbit_queue_consumers:count();
-i(consumer_utilisation, #q{consumers = Consumers}) ->
+i(consumer_utilisation, State) ->
+    i(consumer_capacity, State);
+i(consumer_capacity, #q{consumers = Consumers}) ->
     case rabbit_queue_consumers:count() of
-        0 -> '';
-        _ -> rabbit_queue_consumers:utilisation(Consumers)
+        0 -> 0;
+        _ -> rabbit_queue_consumers:capacity(Consumers)
     end;
 i(memory, _) ->
     {memory, M} = process_info(self(), memory),
@@ -1579,6 +1582,10 @@ handle_cast({activate_limit, ChPid}, State) ->
     noreply(possibly_unblock(rabbit_queue_consumers:activate_limit_fun(),
                              ChPid, State));
 
+handle_cast({deactivate_limit, ChPid}, State) ->
+    noreply(possibly_unblock(rabbit_queue_consumers:deactivate_limit_fun(),
+                             ChPid, State));
+
 handle_cast({set_ram_duration_target, Duration},
             State = #q{backing_queue = BQ, backing_queue_state = BQS}) ->
     BQS1 = BQ:set_ram_duration_target(Duration, BQS),
@@ -1617,23 +1624,16 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
 % This event is necessary for the stats timer to be initialized with
 % the correct values once the management agent has started
 handle_cast({force_event_refresh, Ref},
-            State = #q{consumers       = Consumers,
-                       active_consumer = Holder}) ->
+            State = #q{consumers = Consumers}) ->
     rabbit_event:notify(queue_created, infos(?CREATION_EVENT_KEYS, State), Ref),
     QName = qname(State),
     AllConsumers = rabbit_queue_consumers:all(Consumers),
-    case Holder of
-        none ->
-            [emit_consumer_created(
-               Ch, CTag, false, AckRequired, QName, Prefetch,
-               Args, Ref, ActingUser) ||
-                {Ch, CTag, AckRequired, Prefetch, _, _, Args, ActingUser}
-                    <- AllConsumers];
-        {Ch, CTag} ->
-            [{Ch, CTag, AckRequired, Prefetch, _, _, Args, ActingUser}] = AllConsumers,
-            emit_consumer_created(
-              Ch, CTag, true, AckRequired, QName, Prefetch, Args, Ref, ActingUser)
-    end,
+    rabbit_log:debug("Queue ~s forced to re-emit events, consumers: ~p", [rabbit_misc:rs(QName), AllConsumers]),
+    [emit_consumer_created(
+       Ch, CTag, ActiveOrExclusive, AckRequired, QName, Prefetch,
+       Args, Ref, ActingUser) ||
+        {Ch, CTag, AckRequired, Prefetch, ActiveOrExclusive, _, Args, ActingUser}
+            <- AllConsumers],
     noreply(rabbit_event:init_stats_timer(State, #q.stats_timer));
 
 handle_cast(notify_decorators, State) ->
@@ -1750,8 +1750,7 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
       State, #q.stats_timer,
       fun () -> emit_stats(State,
                            [{idle_since,
-                             os:system_time(milli_seconds)},
-                            {consumer_utilisation, ''}])
+                             os:system_time(milli_seconds)}])
                 end),
     State1 = rabbit_event:stop_stats_timer(State#q{backing_queue_state = BQS3},
                                            #q.stats_timer),

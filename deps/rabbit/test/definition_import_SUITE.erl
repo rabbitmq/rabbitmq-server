@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(definition_import_SUITE).
@@ -15,7 +15,11 @@
 
 all() ->
     [
-     {group, boot_time_import},
+     %% uses rabbit.load_definitions
+     {group, boot_time_import_using_classic_source},
+     %% uses rabbit.definitions with import_backend set to local_filesystem
+     {group, boot_time_import_using_modern_local_filesystem_source},
+     {group, boot_time_import_using_public_https_source},
      {group, roundtrip},
      {group, import_on_a_running_node}
     ].
@@ -39,10 +43,25 @@ groups() ->
                                import_case10,
                                import_case11,
                                import_case12,
-                               import_case13
+                               import_case13,
+                               import_case14,
+                               import_case15,
+                               import_case16,
+                               import_case17,
+                               import_case18,
+                               import_case19
                               ]},
-        {boot_time_import, [], [
-            import_on_a_booting_node
+        
+        {boot_time_import_using_classic_source, [], [
+            import_on_a_booting_node_using_classic_local_source
+        ]},
+
+        {boot_time_import_using_modern_local_filesystem_source, [], [
+            import_on_a_booting_node_using_modern_local_filesystem_source
+        ]},
+
+        {boot_time_import_using_public_https_source, [], [
+            import_on_a_booting_node_using_public_https_source
         ]},
 
         {roundtrip, [], [
@@ -62,7 +81,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(boot_time_import = Group, Config) ->
+init_per_group(boot_time_import_using_classic_source = Group, Config) ->
     CasePath = filename:join(?config(data_dir, Config), "case5.json"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Group},
@@ -71,6 +90,53 @@ init_per_group(boot_time_import = Group, Config) ->
     Config2 = rabbit_ct_helpers:merge_app_env(Config1,
       {rabbit, [
           {load_definitions, CasePath}
+      ]}),
+    rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
+%% same as the classic source semantically but uses a different configuration structure
+init_per_group(boot_time_import_using_modern_local_filesystem_source = Group, Config) ->
+    CasePath = filename:join(?config(data_dir, Config), "case5.json"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Group},
+        {rmq_nodes_count, 1}
+      ]),
+    Config2 = rabbit_ct_helpers:merge_app_env(Config1,
+      {rabbit, [
+          {definitions, [
+              {import_backend, rabbit_definitions_import_local_filesystem},
+              {local_path,     CasePath}
+          ]}
+      ]}),
+    rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
+init_per_group(boot_time_import_using_public_https_source = Group, Config) ->
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Group},
+        {rmq_nodes_count, 1}
+      ]),
+    Config2 = rabbit_ct_helpers:merge_app_env(Config1,
+      {rabbit, [
+          {definitions, [
+              {import_backend, rabbit_definitions_import_https},
+              {url,             "https://gist.githubusercontent.com/michaelklishin/e73b0114728d9391425d0644304f264a/raw/f15642771f099c60b6fa93f75d46a4246bb47c45/upstream.definitions.json"},
+              {ssl_options,  [
+                   {log_level, error},
+                   {secure_renegotiate, true},
+                   {versions, ['tlsv1.2']},
+                   {ciphers, [
+                    "ECDHE-ECDSA-AES256-GCM-SHA384",
+                    "ECDHE-RSA-AES256-GCM-SHA384",
+                    "ECDH-ECDSA-AES256-GCM-SHA384",
+                    "ECDH-RSA-AES256-GCM-SHA384",
+                    "DHE-RSA-AES256-GCM-SHA384",
+                    "DHE-DSS-AES256-GCM-SHA384",
+                    "ECDHE-ECDSA-AES128-GCM-SHA256",
+                    "ECDHE-RSA-AES128-GCM-SHA256",
+                    "ECDH-ECDSA-AES128-GCM-SHA256",
+                    "ECDH-RSA-AES128-GCM-SHA256",
+                    "DHE-RSA-AES128-GCM-SHA256",
+                    "DHE-DSS-AES128-GCM-SHA256"
+                    ]}
+            ]}
+          ]}
       ]}),
     rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
 init_per_group(Group, Config) ->
@@ -141,21 +207,112 @@ import_case13(Config) ->
             Skip
     end.
 
+import_case14(Config) -> import_file_case(Config, "case14").
+%% contains a user with tags as a list
+import_case15(Config) -> import_file_case(Config, "case15").
+%% contains a virtual host with tags
+import_case16(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+      false ->
+        case rabbit_ct_broker_helpers:enable_feature_flag(Config, virtual_host_metadata) of
+            ok ->
+                import_file_case(Config, "case16"),
+                VHost = <<"tagged">>,
+                VHostIsImported =
+                fun () ->
+                        case vhost_lookup(Config, VHost) of
+                            {error, {no_such_vhosts, _}} -> false;
+                            _       -> true
+                        end
+                end,
+                rabbit_ct_helpers:await_condition(VHostIsImported, 20000),
+                VHostRec = vhost_lookup(Config, VHost),
+                ?assertEqual(<<"A case16 description">>, vhost:get_description(VHostRec)),
+                ?assertEqual([multi_dc_replication,ab,cde], vhost:get_tags(VHostRec)),
+
+                ok;
+            Skip ->
+                Skip
+        end;
+      _ ->
+        %% skip the test in mixed version mode
+        {skip, "Should not run in mixed version environments"}
+    end.
+
+import_case17(Config) -> import_invalid_file_case(Config, "failing_case17").
+
+import_case18(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+      false ->
+        case rabbit_ct_broker_helpers:enable_feature_flag(Config, user_limits) of
+            ok ->
+                import_file_case(Config, "case18"),
+                User = <<"limited_guest">>,
+                UserIsImported =
+                    fun () ->
+                            case user_lookup(Config, User) of
+                                {error, not_found} -> false;
+                                _       -> true
+                            end
+                    end,
+                rabbit_ct_helpers:await_condition(UserIsImported, 20000),
+                {ok, UserRec} = user_lookup(Config, User),
+                ?assertEqual(#{<<"max-connections">> => 2}, internal_user:get_limits(UserRec)),
+                ok;
+            Skip ->
+                Skip
+        end;
+      _ ->
+        %% skip the test in mixed version mode
+        {skip, "Should not run in mixed version environments"}
+    end.
+
+import_case19(Config) -> import_invalid_file_case(Config, "failing_case19").
+
 export_import_round_trip_case1(Config) ->
-    %% case 6 has runtime parameters that do not depend on any plugins
-    import_file_case(Config, "case6"),
-    Defs = export(Config),
-    import_raw(Config, rabbit_json:encode(Defs)).
+    case rabbit_ct_helpers:is_mixed_versions() of
+      false ->
+        %% case 6 has runtime parameters that do not depend on any plugins
+        import_file_case(Config, "case6"),
+        Defs = export(Config),
+        import_raw(Config, rabbit_json:encode(Defs));
+      _ ->
+        %% skip the test in mixed version mode
+        {skip, "Should not run in mixed version environments"}
+    end.
 
 export_import_round_trip_case2(Config) ->
-    import_file_case(Config, "case9", "case9a"),
-    Defs = export(Config),
-    import_parsed(Config, Defs).
+    case rabbit_ct_helpers:is_mixed_versions() of
+      false ->
+        import_file_case(Config, "case9", "case9a"),
+        Defs = export(Config),
+        import_parsed(Config, Defs);
+      _ ->
+        %% skip the test in mixed version mode
+        {skip, "Should not run in mixed version environments"}
+    end.
 
-import_on_a_booting_node(Config) ->
+import_on_a_booting_node_using_classic_local_source(Config) ->
     %% see case5.json
     VHost = <<"vhost2">>,
     %% verify that vhost2 eventually starts
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
+        ok -> ok;
+        {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
+    end.
+
+import_on_a_booting_node_using_modern_local_filesystem_source(Config) ->
+    %% see case5.json
+    VHost = <<"vhost2">>,
+    %% verify that vhost2 eventually starts
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
+        ok -> ok;
+        {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
+    end.
+
+import_on_a_booting_node_using_public_https_source(Config) ->
+    VHost = <<"bunny_testbed">>,
+    %% verify that virtual host eventually starts
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
         ok -> ok;
         {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
@@ -255,3 +412,9 @@ run_invalid_import_case(Path) ->
 
 queue_lookup(Config, VHost, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [rabbit_misc:r(VHost, queue, Name)]).
+
+vhost_lookup(Config, VHost) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, lookup, [VHost]).
+
+user_lookup(Config, User) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_auth_backend_internal, lookup_user, [User]).

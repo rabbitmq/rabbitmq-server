@@ -1,20 +1,13 @@
-%% The contents of this file are subject to the Mozilla Public License
-%% Version 1.1 (the "License"); you may not use this file except in
-%% compliance with the License. You may obtain a copy of the License
-%% at https://www.mozilla.org/MPL/
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and
-%% limitations under the License.
-%%
-%% The Original Code is RabbitMQ.
-%%
-%% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stomp_processor).
+
+-compile({no_auto_import, [error/3]}).
 
 -export([initial_state/2, process_frame/2, flush_and_die/1]).
 -export([flush_pending_receipts/3,
@@ -618,25 +611,24 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                                 connection = Connection,
                                 version    = Version});
         {error, {auth_failure, _}} ->
-            rabbit_log:warning("STOMP login failed for user ~p~n",
-                               [binary_to_list(Username)]),
+            rabbit_log:warning("STOMP login failed for user '~s': authentication failed", [Username]),
             error("Bad CONNECT", "Access refused for user '" ++
                   binary_to_list(Username) ++ "'~n", [], State);
         {error, not_allowed} ->
-            rabbit_log:warning("STOMP login failed - not_allowed "
-                               "(vhost access not allowed)~n"),
+            rabbit_log:warning("STOMP login failed for user '~s': "
+                               "virtual host access not allowed", [Username]),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
                                  "' access denied", State);
         {error, access_refused} ->
-            rabbit_log:warning("STOMP login failed - access_refused "
-                               "(vhost access not allowed)~n"),
+            rabbit_log:warning("STOMP login failed for user '~s': "
+                               "virtual host access not allowed", [Username]),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
                                  "' access denied", State);
         {error, not_loopback} ->
-            rabbit_log:warning("STOMP login failed - access_refused "
-                               "(user must access over loopback)~n"),
+            rabbit_log:warning("STOMP login failed for user '~s': "
+                               "this user's access is restricted to localhost", [Username]),
             error("Bad CONNECT", "non-loopback access denied", State)
     end.
 
@@ -684,6 +676,13 @@ do_subscribe(Destination, DestHdr, Frame,
                     {stop, normal, close_connection(State)};
                 error ->
                     ExchangeAndKey = parse_routing(Destination, DfltTopicEx),
+                    StreamOffset = rabbit_stomp_frame:stream_offset_header(Frame, undefined),
+                    Arguments = case StreamOffset of
+                                    undefined ->
+                                        [];
+                                    {Type, Value} ->
+                                        [{<<"x-stream-offset">>, Type, Value}]
+                                end,
                     try
                         amqp_channel:subscribe(Channel,
                                                #'basic.consume'{
@@ -692,7 +691,7 @@ do_subscribe(Destination, DestHdr, Frame,
                                                   no_local     = false,
                                                   no_ack       = (AckMode == auto),
                                                   exclusive    = false,
-                                                  arguments    = []},
+                                                  arguments    = Arguments},
                                                self()),
                         ok = rabbit_routing_util:ensure_binding(
                                Queue, ExchangeAndKey, Channel)
@@ -828,7 +827,7 @@ send_delivery(Delivery = #'basic.deliver'{consumer_tag = ConsumerTag},
     NewState.
 
 notify_received(undefined) ->
-  %% no notification for quorum queues
+  %% no notification for quorum queues and streams
   ok;
 notify_received(DeliveryCtx) ->
   %% notification for flow control
@@ -1133,12 +1132,12 @@ ok(Command, Headers, BodyFragments, State) ->
                       body_iolist = BodyFragments}, State}.
 
 amqp_death(access_refused = ErrorName, Explanation, State) ->
-    ErrorDesc = rabbit_misc:format("~s~n", [Explanation]),
+    ErrorDesc = rabbit_misc:format("~s", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
     {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))};
 amqp_death(ReplyCode, Explanation, State) ->
     ErrorName = amqp_connection:error_atom(ReplyCode),
-    ErrorDesc = rabbit_misc:format("~s~n", [Explanation]),
+    ErrorDesc = rabbit_misc:format("~s", [Explanation]),
     log_error(ErrorName, ErrorDesc, none),
     {stop, normal, close_connection(send_error(atom_to_list(ErrorName), ErrorDesc, State))}.
 
@@ -1160,7 +1159,7 @@ log_error(Message, Detail, ServerPrivateDetail) ->
     rabbit_log:error("STOMP error frame sent:~n"
                      "Message: ~p~n"
                      "Detail: ~p~n"
-                     "Server private detail: ~p~n",
+                     "Server private detail: ~p",
                      [Message, Detail, ServerPrivateDetail]).
 
 %%----------------------------------------------------------------------------

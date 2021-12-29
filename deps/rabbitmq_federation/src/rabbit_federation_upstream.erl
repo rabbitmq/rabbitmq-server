@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_federation_upstream).
@@ -139,7 +139,9 @@ from_upstream_or_set(US, Name, U, XorQ) ->
               ha_policy       = bget('ha-policy',       US, U, none),
               name            = Name,
               bind_nowait     = bget('bind-nowait',     US, U, false),
-              resource_cleanup_mode = to_atom(bget('resource-cleanup-mode', US, U, <<"default">>))}.
+              resource_cleanup_mode = to_atom(bget('resource-cleanup-mode', US, U, <<"default">>)),
+              channel_use_mode      = to_atom(bget('channel-use-mode', US, U, multiple))
+    }.
 
 %%----------------------------------------------------------------------------
 

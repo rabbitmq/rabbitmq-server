@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(dynamic_SUITE).
@@ -14,12 +14,14 @@
 
 all() ->
     [
-      {group, non_parallel_tests}
+      {group, core_tests},
+      {group, quorum_queue_tests},
+      {group, stream_queue_tests}
     ].
 
 groups() ->
     [
-      {non_parallel_tests, [], [
+      {core_tests, [], [
           simple,
           set_properties_using_proplist,
           set_properties_using_map,
@@ -33,6 +35,14 @@ groups() ->
           validation,
           security_validation,
           get_connection_name
+        ]},
+
+        {quorum_queue_tests, [], [
+          quorum_queues
+        ]},
+
+        {stream_queue_tests, [], [
+          stream_queues
         ]}
     ].
 
@@ -54,6 +64,16 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_group(quorum_queue_tests, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false -> Config;
+        _     -> {skip, "quorum queue tests are skipped in mixed mode"}
+    end;
+init_per_group(stream_queue_tests, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false -> Config;
+        _     -> {skip, "stream queue tests are skipped in mixed mode"}
+    end;
 init_per_group(_, Config) ->
     Config.
 
@@ -77,6 +97,34 @@ simple(Config) ->
                 Config,
                 <<"test">>, [{<<"src-queue">>,  <<"src">>},
                              {<<"dest-queue">>, <<"dest">>}]),
+              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
+      end).
+
+quorum_queues(Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              shovel_test_utils:set_param(
+                Config,
+                <<"test">>, [
+                             {<<"src-queue">>,       <<"src">>},
+                             {<<"dest-queue">>,      <<"dest">>},
+                             {<<"src-queue-args">>,  #{<<"x-queue-type">> => <<"quorum">>}},
+                             {<<"dest-queue-args">>, #{<<"x-queue-type">> => <<"quorum">>}}
+                            ]),
+              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
+      end).
+
+stream_queues(Config) ->
+    with_ch(Config,
+      fun (Ch) ->
+              shovel_test_utils:set_param(
+                Config,
+                <<"test">>, [
+                             {<<"src-queue">>,       <<"src">>},
+                             {<<"dest-queue">>,      <<"dest">>},
+                             {<<"src-queue-args">>,  #{<<"x-queue-type">> => <<"stream">>}},
+                             {<<"src-consumer-args">>,  #{<<"x-stream-offset">> => <<"first">>}}
+                            ]),
               publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
       end).
 

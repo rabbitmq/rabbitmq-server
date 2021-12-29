@@ -13,7 +13,15 @@ PACKAGES_DIR ?= $(abspath PACKAGES)
 # List of plugins to include in a RabbitMQ release.
 include plugins.mk
 
-DEPS = rabbit_common rabbit $(PLUGINS)
+# An additional list of plugins to include in a RabbitMQ release,
+# on top of the standard plugins. For example, looking_glass.
+#
+# Note: When including NIFs in a release make sure to build
+# them on the appropriate platform for the target environment.
+# For example build looking_glass on Linux when targeting Docker.
+ADDITIONAL_PLUGINS ?=
+
+DEPS = rabbit_common rabbit $(PLUGINS) $(ADDITIONAL_PLUGINS)
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
@@ -33,8 +41,8 @@ endif
 
 include rabbitmq-components.mk
 include erlang.mk
-include mk/stats.mk
 include mk/github-actions.mk
+include mk/bazel.mk
 include mk/topic-branches.mk
 
 # --------------------------------------------------------------------
@@ -205,8 +213,8 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		mix_exs=$@/deps/$$(basename $$dep)/mix.exs; \
 		if test -f $$mix_exs; then \
 			(cd $$(dirname "$$mix_exs") && \
-			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force && \
-			 env DEPS_DIR=$@/deps HOME=$@/deps MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get --only prod && \
+			 (test -d $@/deps/.hex || env DEPS_DIR=$@/deps MIX_HOME=$@/deps/.mix HEX_HOME=$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force) && \
+			 env DEPS_DIR=$@/deps MIX_HOME=$@/deps/.mix HEX_HOME=$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get --only prod && \
 			 cp $(CURDIR)/mk/rabbitmq-mix.mk . && \
 			 rm -rf _build deps); \
 		fi; \
@@ -248,7 +256,7 @@ $(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 #
 # The ETS file must be recreated before compiling RabbitMQ. See the
 # `restore-hex-cache-ets-file` Make target.
-	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$@,$@.git-time.txt))
+	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$(call core_native_path,$@),$(call core_native_path,$@.git-time.txt)))
 # Fix file timestamps to have reproducible source archives.
 	$(verbose) find $@ -print0 | xargs -0 touch -t "$$(cat "$@.git-time.txt")"
 	$(verbose) rm "$@.git-times.txt" "$@.git-time.txt"
@@ -339,6 +347,9 @@ clean-unpacked-source-dist:
 		fi; \
 	done
 
+clean-deps:
+	git clean -xfffd deps
+
 # --------------------------------------------------------------------
 # Packaging.
 # --------------------------------------------------------------------
@@ -353,14 +364,27 @@ clean-unpacked-source-dist:
 # archive.
 PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
 
-packages package-deb package-rpm \
+RABBITMQ_PACKAGING_TARGETS = package-deb package-rpm \
 package-rpm-redhat package-rpm-fedora package-rpm-rhel6 package-rpm-rhel7 \
 package-rpm-rhel8 package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
-package-windows \
+package-windows
+
+ifneq ($(filter $(RABBITMQ_PACKAGING_TARGETS),$(MAKECMDGOALS)),)
+ifeq ($(RABBITMQ_PACKAGING_REPO),)
+$(error Cannot find rabbitmq-packaging repository dir; please clone from rabbitmq/rabbitmq-packaging and specify RABBITMQ_PACKAGING_REPO)
+endif
+endif
+
+$(RABBITMQ_PACKAGING_TARGETS): $(PACKAGES_SOURCE_DIST_FILE)
+	$(verbose) $(MAKE) -C $(RABBITMQ_PACKAGING_REPO) $@ \
+		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
+
 package-generic-unix \
 docker-image: $(PACKAGES_SOURCE_DIST_FILE)
 	$(verbose) $(MAKE) -C packaging $@ \
 		SOURCE_DIST_FILE=$(abspath $(PACKAGES_SOURCE_DIST_FILE))
+
+packages: package-deb package-rpm package-windows package-generic-unix
 
 # --------------------------------------------------------------------
 # Installation.
@@ -394,7 +418,9 @@ SCRIPTS = rabbitmq-defaults \
 	  rabbitmq-plugins \
 	  rabbitmq-diagnostics \
 	  rabbitmq-queues \
-	  rabbitmq-upgrade
+	  rabbitmq-upgrade \
+	  rabbitmq-streams \
+		rabbitmq-tanzu
 
 AUTOCOMPLETE_SCRIPTS = bash_autocomplete.sh zsh_autocomplete.sh
 
@@ -407,6 +433,8 @@ WINDOWS_SCRIPTS = rabbitmq-defaults.bat \
 		  rabbitmq-server.bat \
 		  rabbitmq-service.bat \
 		  rabbitmq-upgrade.bat \
+		  rabbitmq-streams.bat \
+			rabbitmq-tanzu.bat \
 		  rabbitmqctl.bat
 
 UNIX_TO_DOS ?= todos
@@ -475,24 +503,12 @@ install-windows-erlapp: dist
 	$(verbose) mkdir -p $(DESTDIR)$(WINDOWS_PREFIX)
 	$(inst_verbose) cp -r \
 		LICENSE* \
-		$(DEPS_DIR)/rabbit/ebin \
-		$(DEPS_DIR)/rabbit/priv \
 		$(DEPS_DIR)/rabbit/INSTALL \
 		$(DIST_DIR) \
 		$(DESTDIR)$(WINDOWS_PREFIX)
 	$(verbose) echo "Put your EZs here and use rabbitmq-plugins.bat to enable them." \
 		> $(DESTDIR)$(WINDOWS_PREFIX)/$(notdir $(DIST_DIR))/README.txt
 	$(verbose) $(UNIX_TO_DOS) $(DESTDIR)$(WINDOWS_PREFIX)/plugins/README.txt
-
-	@# FIXME: Why do we copy headers?
-	$(verbose) cp -r \
-		$(DEPS_DIR)/rabbit/include \
-		$(DESTDIR)$(WINDOWS_PREFIX)
-	@# rabbitmq-common provides headers too: copy them to
-	@# rabbitmq_server/include.
-	$(verbose) cp -r \
-		$(DEPS_DIR)/rabbit_common/include \
-		$(DESTDIR)$(WINDOWS_PREFIX)
 
 install-windows-escripts:
 	$(verbose) $(MAKE) -C $(DEPS_DIR)/rabbitmq_cli install \

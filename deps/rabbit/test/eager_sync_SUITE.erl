@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(eager_sync_SUITE).
@@ -30,6 +30,12 @@ groups() ->
           eager_sync_auto_on_policy_change,
           eager_sync_requeue
         ]}
+    ].
+
+suite() ->
+    [
+      %% If a test hangs, no need to wait for 30 minutes.
+      {timetrap, {minutes, 15}}
     ].
 
 %% -------------------------------------------------------------------

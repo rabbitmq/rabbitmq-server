@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2010-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2010-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_prequeue).
@@ -79,7 +79,7 @@ init(Q0, restart) when ?is_amqqueue(Q0) ->
 
 crash_restart(Q0) when ?is_amqqueue(Q0) ->
     QueueName = amqqueue:get_name(Q0),
-    rabbit_log:error("Restarting crashed ~s.~n", [rabbit_misc:rs(QueueName)]),
+    rabbit_log:error("Restarting crashed ~s.", [rabbit_misc:rs(QueueName)]),
     gen_server2:cast(self(), init),
     Q1 = amqqueue:set_pid(Q0, self()),
     rabbit_amqqueue_process:init(Q1).

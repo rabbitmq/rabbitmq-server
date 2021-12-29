@@ -2,18 +2,17 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_db).
-
-%% pg2 is deprecated in OTP 23.
--compile(nowarn_deprecated_function).
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
+
+-include("rabbit_mgmt.hrl").
 
 -behaviour(gen_server2).
 
@@ -29,6 +28,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3, handle_pre_hibernate/1,
          format_message_queue/2]).
+
+-export([submit/1, get_data_from_nodes/1]).
 
 -import(rabbit_misc, [pget/3]).
 
@@ -369,7 +370,6 @@ detail_queue_stats(Ranges, Objs, Interval) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
     DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_detail_queue_data,
                                       [Ids, Ranges]}),
-
     QueueStats = adjust_hibernated_memory_use(
       [begin
        Id = id_lookup(queue_stats, Obj),
@@ -695,7 +695,7 @@ merge_data(_, D1, D2) -> % we assume if we get here both values a maps
        maps_merge(fun merge_data/3, D1, D2)
    catch
        error:Err ->
-           rabbit_log:debug("merge_data err ~p got: ~p ~p ~n", [Err, D1, D2]),
+           rabbit_log:debug("merge_data err ~p got: ~p ~p", [Err, D1, D2]),
            case is_map(D1) of
                true -> D1;
                false -> D2
@@ -732,7 +732,7 @@ created_stats_delegated(Type) ->
 
 -spec delegate_invoke(mfargs()) -> [any()].
 delegate_invoke(FunOrMFA) ->
-    MemberPids = [P || P <- pg2:get_members(management_db)],
+    MemberPids = [P || P <- pg:get_members(?MANAGEMENT_PG_SCOPE, ?MANAGEMENT_PG_GROUP)],
     {Results, Errors} = delegate:invoke(MemberPids, ?DELEGATE_PREFIX, FunOrMFA),
     case Errors of
         [] -> ok;

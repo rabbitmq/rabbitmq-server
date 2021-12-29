@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_disk_monitor_SUITE).
@@ -67,6 +67,12 @@ set_disk_free_limit_command(Config) ->
       ?MODULE, set_disk_free_limit_command1, [Config]).
 
 set_disk_free_limit_command1(_Config) ->
+    F = fun () ->
+        DiskFree = rabbit_disk_monitor:get_disk_free(),
+        DiskFree =/= unknown
+    end,
+    rabbit_ct_helpers:await_condition(F),
+
     %% Use an integer
     rabbit_disk_monitor:set_disk_free_limit({mem_relative, 1}),
     disk_free_limit_to_total_memory_ratio_is(1),
@@ -84,7 +90,8 @@ set_disk_free_limit_command1(_Config) ->
     passed.
 
 disk_free_limit_to_total_memory_ratio_is(MemRatio) ->
+    DiskFreeLimit = rabbit_disk_monitor:get_disk_free_limit(),
     ExpectedLimit = MemRatio * vm_memory_monitor:get_total_memory(),
     % Total memory is unstable, so checking order
-    true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() < 1.2,
-    true = ExpectedLimit/rabbit_disk_monitor:get_disk_free_limit() > 0.98.
+    true = ExpectedLimit/DiskFreeLimit < 1.2,
+    true = ExpectedLimit/DiskFreeLimit > 0.98.

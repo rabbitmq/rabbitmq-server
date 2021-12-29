@@ -15,7 +15,9 @@
          request/5, request/6, request/7,
          set_credentials/2,
          has_credentials/0,
-         set_region/1]).
+         set_region/1,
+         ensure_imdsv2_token_valid/0,
+         api_get_request/2]).
 
 %% gen-server exports
 -export([start_link/0,
@@ -71,11 +73,20 @@ post(Service, Path, Body, Headers) ->
 
 
 -spec refresh_credentials() -> ok | error.
-%% @doc Manually refresh the credentials from the environment, filesystem or EC2
-%%      Instance metadata service.
+%% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
 %% @end
 refresh_credentials() ->
   gen_server:call(rabbitmq_aws, refresh_credentials).
+
+
+-spec refresh_credentials(state()) -> ok | error.
+%% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
+%% @end
+refresh_credentials(State) ->
+  rabbit_log:debug("Refreshing AWS credentials..."),
+  {_, NewState} = load_credentials(State),
+  rabbit_log:debug("AWS credentials have been refreshed"),
+  set_credentials(NewState).
 
 
 -spec request(Service :: string(),
@@ -120,6 +131,9 @@ request(Service, Method, Path, Body, Headers, HTTPOptions) ->
 request(Service, Method, Path, Body, Headers, HTTPOptions, Endpoint) ->
   gen_server:call(rabbitmq_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}).
 
+-spec set_credentials(state()) -> ok.
+set_credentials(NewState) ->
+  gen_server:call(rabbitmq_aws, {set_credentials, NewState}).
 
 -spec set_credentials(access_key(), secret_access_key()) -> ok.
 %% @doc Manually set the access credentials for requests. This should
@@ -136,6 +150,20 @@ set_credentials(AccessKey, SecretAccessKey) ->
 %% @end
 set_region(Region) ->
   gen_server:call(rabbitmq_aws, {set_region, Region}).
+
+-spec set_imdsv2_token(imdsv2token()) -> ok.
+%% @doc Manually set the Imdsv2Token used to perform instance metadata service requests.
+%% @end
+set_imdsv2_token(Imdsv2Token) ->
+  gen_server:call(rabbitmq_aws, {set_imdsv2_token, Imdsv2Token}).
+
+
+-spec get_imdsv2_token() -> imdsv2token().
+%% @doc return the current Imdsv2Token used to perform instance metadata service requests.
+%% @end
+get_imdsv2_token() ->
+  {ok, Imdsv2Token} = gen_server:call(rabbitmq_aws, get_imdsv2_token),
+  Imdsv2Token.
 
 
 %%====================================================================
@@ -158,15 +186,8 @@ terminate(_, _) ->
 code_change(_, _, State) ->
   {ok, State}.
 
-
-handle_call(Msg, _From, #state{region = undefined}) ->
-    %% Delay initialisation until a RabbitMQ plugin require the AWS backend
-    {ok, Region} = rabbitmq_aws_config:region(),
-    {_, State} = load_credentials(#state{region = Region}),
-    handle_msg(Msg, State);
 handle_call(Msg, _From, State) ->
-    handle_msg(Msg, State).
-
+  handle_msg(Msg, State).
 
 handle_cast(_Request, State) ->
   {noreply, State}.
@@ -196,14 +217,28 @@ handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
                             expiration = undefined,
                             error = undefined}};
 
+handle_msg({set_credentials, NewState}, State) ->
+  {reply, ok, State#state{access_key = NewState#state.access_key,
+                          secret_access_key = NewState#state.secret_access_key,
+                          security_token = NewState#state.security_token,
+                          expiration = NewState#state.expiration,
+                          error = NewState#state.error}};
+
 handle_msg({set_region, Region}, State) ->
     {reply, ok, State#state{region = Region}};
+
+handle_msg({set_imdsv2_token, Imdsv2Token}, State) ->
+    {reply, ok, State#state{imdsv2_token = Imdsv2Token}};
 
 handle_msg(has_credentials, State) ->
     {reply, has_credentials(State), State};
 
+handle_msg(get_imdsv2_token, State) ->
+    {reply, {ok, State#state.imdsv2_token}, State};
+
 handle_msg(_Request, State) ->
     {noreply, State}.
+
 
 -spec endpoint(State :: state(), Host :: string(),
                Service :: string(), Path :: string()) -> string().
@@ -296,15 +331,17 @@ load_credentials(#state{region = Region}) ->
                   access_key = AccessKey,
                   secret_access_key = SecretAccessKey,
                   expiration = Expiration,
-                  security_token = SecurityToken}};
+                  security_token = SecurityToken,
+                  imdsv2_token = undefined}};
     {error, Reason} ->
-      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~p. Will depend on config settings to be set.~n.", [Reason]),
+      error_logger:error_msg("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~p. Will depend on config settings to be set~n", [Reason]),
       {error, #state{region = Region,
                      error = Reason,
                      access_key = undefined,
                      secret_access_key = undefined,
                      expiration = undefined,
-                     security_token = undefined}}
+                     security_token = undefined,
+                     imdsv2_token = undefined}}
   end.
 
 
@@ -377,23 +414,8 @@ perform_request_has_creds(false, State, _, _, _, _, _, _, _) ->
 %% @end
 perform_request_creds_expired(false, State, Service, Method, Headers, Path, Body, Options, Host) ->
   perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host);
-perform_request_creds_expired(true, State, Service, Method, Headers, Path, Body, Options, Host) ->
-  perform_request_creds_refreshed(load_credentials(State), Service, Method, Headers, Path, Body, Options, Host).
-
-
--spec perform_request_creds_refreshed({ok, State :: state()} | {error, State :: state()},
-                                      Service :: string(), Method :: method(),
-                                      Headers :: headers(), Path :: path(), Body :: body(),
-                                      Options :: http_options(), Host :: string() | undefined)
-    -> {Result :: result(), NewState :: state()}.
-%% @doc If it's been determined that there are credentials but they have expired,
-%%      check to see if the credentials could be loaded and either make the request
-%%      or return an error.
-%% @end
-perform_request_creds_refreshed({ok, State}, Service, Method, Headers, Path, Body, Options, Host) ->
-  perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host);
-perform_request_creds_refreshed({error, State}, _, _, _, _, _, _, _) ->
-  perform_request_creds_error(State).
+perform_request_creds_expired(true, State, _, _, _, _, _, _, _) ->
+  perform_request_creds_error(State#state{error = "Credentials expired!"}).
 
 
 -spec perform_request_with_creds(State :: state(), Service :: string(), Method :: method(),
@@ -470,3 +492,78 @@ sign_headers(#state{access_key = AccessKey,
                                   uri = URI,
                                   headers = Headers,
                                   body = Body}).
+
+-spec expired_imdsv2_token(imdsv2token()) -> boolean().
+%% @doc Determine whether or not an Imdsv2Token has expired.
+%% @end
+expired_imdsv2_token(undefined) ->
+  rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained"),
+  true;
+expired_imdsv2_token({_, _, undefined}) ->
+  rabbit_log:debug("EC2 IMDSv2 token is not available"),
+  true;
+expired_imdsv2_token({_, _, Expiration}) ->
+  Now = calendar:datetime_to_gregorian_seconds(local_time()),
+  HasExpired = Now >= Expiration,
+  rabbit_log:debug("EC2 IMDSv2 token has expired: ~p", [HasExpired]),
+  HasExpired.
+
+
+-spec ensure_imdsv2_token_valid() -> imdsv2token().
+ensure_imdsv2_token_valid() ->
+  Imdsv2Token = get_imdsv2_token(),
+  case expired_imdsv2_token(Imdsv2Token) of
+    true -> Value = rabbitmq_aws_config:load_imdsv2_token(),
+            Expiration = calendar:datetime_to_gregorian_seconds(local_time()) + ?METADATA_TOKEN_TTL_SECONDS,
+            set_imdsv2_token(#imdsv2token{token = Value,
+                                          expiration = Expiration}),
+            Value;
+    _    -> Imdsv2Token#imdsv2token.token
+  end.
+
+-spec ensure_credentials_valid() -> ok.
+%% @doc Invoked before each AWS service API request to check if the current credentials are available and that they have not expired.
+%%      If the credentials are available and are still current, then move on and perform the request.
+%%      If the credentials are not available or have expired, then refresh them before performing the request.
+%% @end
+ensure_credentials_valid() ->
+  rabbit_log:debug("Making sure AWS credentials are available and still valid"),
+  {ok, State} = gen_server:call(rabbitmq_aws, get_state),
+  case has_credentials(State) of
+    true -> case expired_credentials(State#state.expiration) of
+              true -> refresh_credentials(State);
+              _    -> ok
+            end;
+    _    ->  refresh_credentials(State)
+  end.
+
+
+-spec api_get_request(string(), path()) -> result().
+%% @doc Invoke an API call to an AWS service.
+%% @end
+api_get_request(Service, Path) ->
+  rabbit_log:debug("Invoking AWS request {Service: ~p; Path: ~p}...", [Service, Path]),
+  api_get_request_with_retries(Service, Path, ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
+
+
+-spec api_get_request_with_retries(string(), path(), integer(), integer()) -> result().
+%% @doc Invoke an API call to an AWS service with retries.
+%% @end
+api_get_request_with_retries(_, _, 0, _) ->
+  rabbit_log:warning("Request to AWS service has failed after ~b retries", [?MAX_RETRIES]),
+  {error, "AWS service is unavailable"};
+api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
+  ensure_credentials_valid(),
+  case get(Service, Path) of
+    {ok, {_Headers, Payload}}  -> rabbit_log:debug("AWS request: ~s~nResponse: ~p", [Path, Payload]),
+                                  {ok, Payload};
+    {error, {credentials, _}}  -> {error, credentials};
+    {error, Message, Response} -> rabbit_log:warning("Error occurred: ~s", [Message]),
+                                  case Response of
+                                      {_, Payload} -> rabbit_log:warning("Failed AWS request: ~s~nResponse: ~p", [Path, Payload]);
+                                      _            -> ok
+                                  end,
+                                  rabbit_log:warning("Will retry AWS request, remaining retries: ~b", [Retries]),
+                                  timer:sleep(WaitTimeBetweenRetries),
+                                  api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
+  end.

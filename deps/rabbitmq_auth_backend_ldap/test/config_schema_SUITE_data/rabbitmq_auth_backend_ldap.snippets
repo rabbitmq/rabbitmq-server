@@ -271,6 +271,68 @@
              {verify,verify_peer},
              {fail_if_no_peer_cert, false},
              {honor_ecc_order, true}]}]}],
-  []}
+  []},
 
+ {ssl_options_sni_disabled,
+  "auth_ldap.use_ssl = true
+   auth_ldap.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_ldap.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_ldap.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_ldap.ssl_options.versions.tls1_2 = tlsv1.2
+   auth_ldap.ssl_options.versions.tls1_1 = tlsv1.1
+
+   auth_ldap.ssl_options.sni = none",
+  [],
+  [{rabbitmq_auth_backend_ldap,
+       [{ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {versions,['tlsv1.2','tlsv1.1']}]
+             },
+        {use_ssl, true}]}],
+  []},
+
+ {ssl_options_sni_hostname,
+  "auth_ldap.use_ssl = true
+   auth_ldap.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_ldap.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_ldap.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_ldap.ssl_options.versions.tls1_2 = tlsv1.2
+   auth_ldap.ssl_options.versions.tls1_1 = tlsv1.1
+
+   auth_ldap.ssl_options.sni = hostname.dev",
+  [],
+  [{rabbitmq_auth_backend_ldap,
+       [{ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {versions,['tlsv1.2','tlsv1.1']},
+             {server_name_indication, "hostname.dev"}
+             ]},
+        {use_ssl, true}]}],
+  []},
+
+ {ssl_options_hostname_verification_wildcard,
+  "auth_ldap.use_ssl = true
+   auth_ldap.ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   auth_ldap.ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   auth_ldap.ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   auth_ldap.ssl_options.versions.tls1_2 = tlsv1.2
+   auth_ldap.ssl_options.versions.tls1_1 = tlsv1.1
+
+   auth_ldap.ssl_options.hostname_verification = wildcard",
+  [],
+  [{rabbitmq_auth_backend_ldap,
+       [
+        {ssl_hostname_verification, wildcard},
+        {ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {versions,['tlsv1.2','tlsv1.1']}
+             ]},
+        {use_ssl, true}]}],
+  []}
 ].

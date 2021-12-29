@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_shovel_worker).
@@ -27,6 +27,18 @@
 %% [2] Counts down until we stop publishing in on-confirm mode
 
 start_link(Type, Name, Config) ->
+    ShovelParameter = rabbit_shovel_util:get_shovel_parameter(Name),
+    maybe_start_link(ShovelParameter, Type, Name, Config).
+
+maybe_start_link(not_found, dynamic, _Name, _Config) ->
+    %% See rabbitmq/rabbitmq-server#2655.
+    %% All dynamic shovels require that their associated parameter is present.
+    %% If not, this shovel has been deleted and stale child spec information
+    %% may still reside in the supervisor.
+    %%
+    %% We return 'ignore' to ensure that the child is not [re-]added in such case.
+    ignore;
+maybe_start_link(_, Type, Name, Config) ->
     ok = rabbit_shovel_status:report(Name, Type, starting),
     gen_server2:start_link(?MODULE, [Type, Name, Config], []).
 
@@ -120,15 +132,16 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
             {noreply, State#state{config = Config1}}
     end.
 
-terminate({shutdown, autodelete}, State = #state{name = {VHost, Name},
+terminate({shutdown, autodelete}, State = #state{name = Name,
                                                  type = dynamic}) ->
+    {VHost, ShovelName} = Name,
     rabbit_log_shovel:info("Shovel '~s' is stopping (it was configured to autodelete and transfer is completed)",
-                           [human_readable_name({VHost, Name})]),
+                           [human_readable_name(Name)]),
     close_connections(State),
     %% See rabbit_shovel_dyn_worker_sup_sup:stop_child/1
-    put(shovel_worker_autodelete, true),
-    _ = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ?SHOVEL_USER),
-    rabbit_shovel_status:remove({VHost, Name}),
+    put({shovel_worker_autodelete, Name}, true),
+    _ = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, ShovelName, ?SHOVEL_USER),
+    rabbit_shovel_status:remove(Name),
     ok;
 terminate(shutdown, State) ->
     close_connections(State),
@@ -162,6 +175,14 @@ terminate({shutdown, heartbeat_timeout}, State = #state{name = Name}) ->
     ok;
 terminate({shutdown, restart}, State = #state{name = Name}) ->
     rabbit_log_shovel:error("Shovel ~s is stopping to restart", [human_readable_name(Name)]),
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {terminated, "needed a restart"}),
+    close_connections(State),
+    ok;
+terminate({{shutdown, {server_initiated_close, Code, Reason}}, _}, State = #state{name = Name}) ->
+    rabbit_log_shovel:error("Shovel ~s is stopping: one of its connections closed "
+                            "with code ~b, reason: ~s",
+                            [human_readable_name(Name), Code, Reason]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "needed a restart"}),
     close_connections(State),

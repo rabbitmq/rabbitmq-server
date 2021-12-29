@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(simple_ha_SUITE).
@@ -30,8 +30,7 @@ groups() ->
       {cluster_size_2, [], [
           rapid_redeclare,
           declare_synchrony,
-          clean_up_exclusive_queues,
-          clean_up_and_redeclare_exclusive_queues_on_other_nodes
+          clean_up_exclusive_queues
         ]},
       {cluster_size_3, [], [
           consume_survives_stop,
@@ -149,43 +148,6 @@ clean_up_exclusive_queues(Config) ->
     timer:sleep(?DELAY),
     [[],[]] = rabbit_ct_broker_helpers:rpc_all(Config, rabbit_amqqueue, list, []),
     ok.
-
-clean_up_and_redeclare_exclusive_queues_on_other_nodes(Config) ->
-    QueueCount = 10,
-    QueueNames = lists:map(fun(N) ->
-        NBin = erlang:integer_to_binary(N),
-        <<"exclusive-q-", NBin/binary>>
-        end, lists:seq(1, QueueCount)),
-    [A, B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, A),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-
-    LocationMinMasters = [
-        {<<"x-queue-master-locator">>, longstr, <<"min-masters">>}
-    ],
-    lists:foreach(fun(QueueName) ->
-            declare_exclusive(Ch, QueueName, LocationMinMasters),
-            subscribe(Ch, QueueName)
-    end, QueueNames),
-
-    ok = rabbit_ct_broker_helpers:kill_node(Config, B),
-
-    Cancels = receive_cancels([]),
-    ?assert(length(Cancels) > 0),
-
-    RemaniningQueues = rabbit_ct_broker_helpers:rpc(Config, A, rabbit_amqqueue, list, []),
-
-    ?assertEqual(length(RemaniningQueues), QueueCount - length(Cancels)),
-
-    lists:foreach(fun(QueueName) ->
-            declare_exclusive(Ch, QueueName, LocationMinMasters),
-            true = rabbit_ct_client_helpers:publish(Ch, QueueName, 1),
-            subscribe(Ch, QueueName)
-    end, QueueNames),
-    Messages = receive_messages([]),
-    ?assertEqual(10, length(Messages)),
-    ok = rabbit_ct_client_helpers:close_connection(Conn).
-
 
 consume_survives_stop(Cf)     -> consume_survives(Cf, fun stop/2,    true).
 consume_survives_sigkill(Cf)  -> consume_survives(Cf, fun sigkill/2, true).

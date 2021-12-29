@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_auth_mechanism_ssl_app).
@@ -11,7 +11,7 @@
 -export([start/2, stop/1]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
-%% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
+%% http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
 
 -behaviour(supervisor).
 -export([init/1]).

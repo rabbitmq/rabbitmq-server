@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(per_user_connection_channel_limit_partitions_SUITE).
@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -50,8 +51,16 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(net_ticktime_1 = Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{net_ticktime, 1}]),
-    init_per_multinode_group(Group, Config1, 3).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% In a mixed 3.8/3.9 cluster, changes to rabbit_core_ff.erl imply that some
+            %% feature flag related migrations cannot occur, and therefore user_limits
+            %% cannot be enabled in a 3.8/3.9 mixed cluster
+            {skip, "group is not mixed version compatible"};
+        _ ->
+            Config1 = rabbit_ct_helpers:set_config(Config, [{net_ticktime, 1}]),
+            init_per_multinode_group(Group, Config1, 3)
+    end.
 
 init_per_multinode_group(Group, Config, NodeCount) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
@@ -67,9 +76,12 @@ init_per_multinode_group(Group, Config, NodeCount) ->
     case EnableFF of
         ok ->
             Config2;
-        Skip ->
+        {skip, _} = Skip ->
             end_per_group(Group, Config2),
-            Skip
+            Skip;
+        Other ->
+            end_per_group(Group, Config2),
+            {skip, Other}
     end.
 
 end_per_group(_Group, Config) ->
@@ -105,8 +117,10 @@ cluster_full_partition_with_autoheal(Config) ->
     _Chans1 = [_|_] = open_channels(Conn1, 5),
     _Chans3 = [_|_] = open_channels(Conn3, 5),
     _Chans5 = [_|_] = open_channels(Conn5, 5),
-    wait_for_count_connections_in(Config, Username, 6, 60000),
-    ?assertEqual(15, count_channels_in(Config, Username)),
+    ?awaitMatch({6, 15},
+                {count_connections_in(Config, Username),
+                 count_channels_in(Config, Username)},
+                60000, 3000),
 
     %% B drops off the network, non-reachable by either A or C
     rabbit_ct_broker_helpers:block_traffic_between(A, B),
@@ -115,42 +129,35 @@ cluster_full_partition_with_autoheal(Config) ->
 
     %% A and C are still connected, so 4 connections are tracked
     %% All connections to B are dropped
-    wait_for_count_connections_in(Config, Username, 4, 60000),
-    ?assertEqual(10, count_channels_in(Config, Username)),
+    ?awaitMatch({4, 10},
+                {count_connections_in(Config, Username),
+                 count_channels_in(Config, Username)},
+                60000, 3000),
 
     rabbit_ct_broker_helpers:allow_traffic_between(A, B),
     rabbit_ct_broker_helpers:allow_traffic_between(B, C),
     timer:sleep(?DELAY),
 
     %% during autoheal B's connections were dropped
-    wait_for_count_connections_in(Config, Username, 4, 60000),
-    ?assertEqual(10, count_channels_in(Config, Username)),
+    ?awaitMatch({4, 10},
+                {count_connections_in(Config, Username),
+                 count_channels_in(Config, Username)},
+                60000, 3000),
 
     lists:foreach(fun (Conn) ->
                           (catch rabbit_ct_client_helpers:close_connection(Conn))
                   end, [Conn1, Conn2, Conn3, Conn4,
                         Conn5, Conn6]),
-    ?assertEqual(0, count_connections_in(Config, Username)),
-    ?assertEqual(0, count_channels_in(Config, Username)),
+    ?awaitMatch({0, 0},
+                {count_connections_in(Config, Username),
+                 count_channels_in(Config, Username)},
+                60000, 3000),
 
     passed.
 
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
-
-wait_for_count_connections_in(Config, Username, Expected, Time) when Time =< 0 ->
-    ?assertMatch(Connections when length(Connections) == Expected,
-                                  connections_in(Config, Username));
-wait_for_count_connections_in(Config, Username, Expected, Time) ->
-    case connections_in(Config, Username) of
-        Connections when length(Connections) == Expected ->
-            ok;
-        _ ->
-            Sleep = 3000,
-            timer:sleep(Sleep),
-            wait_for_count_connections_in(Config, Username, Expected, Time - Sleep)
-    end.
 
 open_channels(Conn, N) ->
     [begin

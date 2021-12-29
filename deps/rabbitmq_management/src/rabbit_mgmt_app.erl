@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_app).
@@ -24,8 +24,7 @@
 
 -rabbit_boot_step({rabbit_management_load_definitions,
                    [{description, "Imports definition file at management.load_definitions"},
-                    {mfa,         {rabbit_mgmt_load_definitions, boot, []}},
-                    {enables,     empty_db_check}]}).
+                    {mfa,         {rabbit_mgmt_load_definitions, boot, []}}]}).
 
 start(_Type, _StartArgs) ->
     case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
@@ -134,11 +133,11 @@ get_tls_listener() ->
                  {ssl_opts, Listener0}
              ];
         CowboyOpts ->
-            Listener1 = lists:keydelete(cowboy_opts, 1, Listener0),
+            WithoutCowboyOpts = lists:keydelete(cowboy_opts, 1, Listener0),
             [
                 {port, Port},
                 {ssl, true},
-                {ssl_opts, Listener1},
+                {ssl_opts, WithoutCowboyOpts},
                 {cowboy_opts, CowboyOpts}
             ]
      end.

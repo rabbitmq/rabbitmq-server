@@ -2,13 +2,17 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(integration_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+
+-define(CLUSTER_SIZE, 3).
+-define(TIMEOUT_MILLIS, 180_000).
 
 -export([all/0,
          suite/0,
@@ -28,7 +32,7 @@ all() ->
 
 suite() ->
     [
-     {timetrap, {hours, 1}}
+     {timetrap, {minutes, 20}}
     ].
 
 groups() ->
@@ -38,153 +42,134 @@ groups() ->
     ].
 
 init_per_suite(Config) ->
-    rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(
-                Config,
-                [
-                 {terraform_files_suffix, rabbit_ct_helpers:random_term_checksum()},
-                 {terraform_aws_ec2_region, "eu-west-1"},
-                 {rmq_nodes_clustered, false}
-                ]),
-    Config2 = init_aws_credentials(Config1),
-    rabbit_ct_helpers:run_setup_steps(Config2).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% These test would like passed in mixed versions, but they won't
+            %% actually honor mixed versions as currently specified via env var
+            {skip, "not mixed versions compatible"};
+        _ ->
+            inets:start(),
+            rabbit_ct_helpers:log_environment(),
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config, [
+                                {ecs_region, "eu-west-1"},
+                                {ecs_cluster_name, os:getenv("AWS_ECS_CLUSTER_NAME", "rabbitmq-peer-discovery-aws")},
+                                {ecs_profile_name, "rabbitmq-peer-discovery-aws-profile"},
+                                {ecs_instance_role, "ecs-peer-discovery-aws"},
+                                {ecs_cluster_size, ?CLUSTER_SIZE},
+                                {rabbitmq_default_user, "test"},
+                                {rabbitmq_default_pass, rabbit_ct_helpers:random_term_checksum()},
+                                {rabbitmq_erlang_cookie, rabbit_ct_helpers:random_term_checksum()}
+                                ]),
+            Config2 = rabbit_ct_helpers:register_teardown_step(Config1, fun aws_ecs_util:destroy_ecs_cluster/1),
+            rabbit_ct_helpers:run_steps(
+            Config2, [
+                        fun rabbit_ct_helpers:init_skip_as_error_flag/1,
+                        fun rabbit_ct_helpers:start_long_running_testsuite_monitor/1,
+                        fun aws_ecs_util:ensure_aws_cli/1,
+                        fun aws_ecs_util:ensure_ecs_cli/1,
+                        fun aws_ecs_util:init_aws_credentials/1,
+                        fun aws_ecs_util:ensure_rabbitmq_image/1,
+                        fun aws_ecs_util:start_ecs_cluster/1
+                    ])
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(using_tags, Config) ->
-    TfConfigDir = rabbit_ct_vm_helpers:aws_autoscaling_group_module(Config),
-    AccessKeyId = ?config(aws_access_key_id, Config),
-    SecretAccessKey = ?config(aws_secret_access_key, Config),
-    Suffix = ?config(terraform_files_suffix, Config),
     Config1 = rabbit_ct_helpers:set_config(
-                Config, {terraform_config_dir, TfConfigDir}),
-    rabbit_ct_helpers:merge_app_env(
-      Config1,
-      {rabbit,
-       [{cluster_formation,
-         [{peer_discovery_backend, rabbit_peer_discovery_aws},
-          {peer_discovery_aws,
-           [
-            {aws_ec2_region, ?config(terraform_aws_ec2_region, Config)},
-            {aws_access_key, AccessKeyId},
-            {aws_secret_key, SecretAccessKey},
-            {aws_ec2_tags, [{"rabbitmq-testing-suffix", Suffix}]}
-           ]}]}]});
+                Config,
+                [{ecs_service_name, "rabbitmq-tagged"}]),
+    rabbit_ct_helpers:run_steps(Config1, [fun register_tagged_task/1,
+                                          fun aws_ecs_util:create_service/1]);
 init_per_group(using_autoscaling_group, Config) ->
-    TfConfigDir = rabbit_ct_vm_helpers:aws_autoscaling_group_module(Config),
-    AccessKeyId = ?config(aws_access_key_id, Config),
-    SecretAccessKey = ?config(aws_secret_access_key, Config),
     Config1 = rabbit_ct_helpers:set_config(
-                Config, {terraform_config_dir, TfConfigDir}),
-    rabbit_ct_helpers:merge_app_env(
-      Config1,
-      {rabbit,
-       [{cluster_formation,
-         [{peer_discovery_backend, rabbit_peer_discovery_aws},
-          {peer_discovery_aws,
-           [
-            {aws_ec2_region, ?config(terraform_aws_ec2_region, Config)},
-            {aws_access_key, AccessKeyId},
-            {aws_secret_key, SecretAccessKey},
-            {aws_autoscaling, true}
-           ]}]}]}).
+                Config,
+                [{ecs_service_name, "rabbitmq-autoscaled"}]),
+    rabbit_ct_helpers:run_steps(Config1, [fun register_autoscaled_task/1,
+                                          fun aws_ecs_util:create_service/1]).
 
 end_per_group(_Group, Config) ->
-    Config.
+    rabbit_ct_helpers:run_steps(Config, [fun aws_ecs_util:delete_service/1,
+                                         fun (C) ->
+                                                 % A short delay so that all tasks
+                                                 % associated with the service can
+                                                 % be deregistered
+                                                 timer:sleep(15000),
+                                                 C
+                                         end,
+                                         fun aws_ecs_util:deregister_tasks/1]).
 
 init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
-    InstanceName = rabbit_ct_helpers:testcase_absname(Config, Testcase),
-    InstanceCount = 2,
-    ClusterSize = InstanceCount,
-    Config1 = rabbit_ct_helpers:set_config(
-                Config,
-                [{terraform_instance_name, InstanceName},
-                 {terraform_instance_count, InstanceCount},
-                 {rmq_nodename_suffix, Testcase},
-                 {rmq_nodes_count, ClusterSize}]),
-    rabbit_ct_helpers:run_steps(
-      Config1,
-      [fun rabbit_ct_broker_helpers:run_make_dist/1] ++
-      rabbit_ct_vm_helpers:setup_steps() ++
-      rabbit_ct_broker_helpers:setup_steps_for_vms()).
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:run_steps(
-                Config,
-                rabbit_ct_broker_helpers:teardown_steps_for_vms() ++
-                rabbit_ct_vm_helpers:teardown_steps()),
-    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
-
-init_aws_credentials(Config) ->
-    AccessKeyId = get_env_var_or_awscli_config_key(
-                    "AWS_ACCESS_KEY_ID", "aws_access_key_id"),
-    SecretAccessKey = get_env_var_or_awscli_config_key(
-                        "AWS_SECRET_ACCESS_KEY", "aws_secret_access_key"),
-    rabbit_ct_helpers:set_config(
-      Config,
-      [
-       {aws_access_key_id, AccessKeyId},
-       {aws_secret_access_key, SecretAccessKey}
-      ]).
-
-get_env_var_or_awscli_config_key(EnvVar, AwscliKey) ->
-    case os:getenv(EnvVar) of
-        false -> get_awscli_config_key(AwscliKey);
-        Value -> Value
-    end.
-
-get_awscli_config_key(AwscliKey) ->
-    AwscliConfig = read_awscli_config(),
-    maps:get(AwscliKey, AwscliConfig, undefined).
-
-read_awscli_config() ->
-    Filename = filename:join([os:getenv("HOME"), ".aws", "credentials"]),
-    case filelib:is_regular(Filename) of
-        true  -> read_awscli_config(Filename);
-        false -> #{}
-    end.
-
-read_awscli_config(Filename) ->
-    {ok, Content} = file:read_file(Filename),
-    Lines = string:tokens(binary_to_list(Content), "\n"),
-    read_awscli_config(Lines, #{}).
-
-read_awscli_config([Line | Rest], AwscliConfig) ->
-    Line1 = string:strip(Line),
-    case Line1 of
-        [$# | _] ->
-            read_awscli_config(Rest, AwscliConfig);
-        [$[ | _] ->
-            read_awscli_config(Rest, AwscliConfig);
-        _ ->
-            [Key, Value] = string:tokens(Line1, "="),
-            Key1 = string:strip(Key),
-            Value1 = string:strip(Value),
-            read_awscli_config(Rest, AwscliConfig#{Key1 => Value1})
-    end;
-read_awscli_config([], AwscliConfig) ->
-    AwscliConfig.
-
-%% -------------------------------------------------------------------
-%% Run arbitrary code.
-%% -------------------------------------------------------------------
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 cluster_was_formed(Config) ->
-    CTPeers = rabbit_ct_vm_helpers:get_ct_peers(Config),
-    ?assertEqual(lists:duplicate(length(CTPeers), false),
-                 [rabbit:is_running(CTPeer) || CTPeer <- CTPeers]),
-    RabbitMQNodes = lists:sort(
-                      rabbit_ct_broker_helpers:get_node_configs(
-                        Config, nodename)),
-    ?assertEqual(lists:duplicate(length(RabbitMQNodes), true),
-                 [rabbit:is_running(Node) || Node <- RabbitMQNodes]),
+    {ok, [H1, H2, H3]} = ?awaitMatch({ok, L} when length(L) == ?CLUSTER_SIZE,
+                                                  aws_ecs_util:public_dns_names(Config),
+                                                  ?TIMEOUT_MILLIS),
 
-    ?assertEqual(lists:duplicate(length(RabbitMQNodes), true),
-                 rabbit_ct_broker_helpers:rpc_all(
-                   Config, rabbit_mnesia, is_clustered, [])),
-    ClusteredNodes = lists:sort(
-                       rabbit_ct_broker_helpers:rpc(
-                         Config, 0, rabbit_mnesia, cluster_nodes, [running])),
-    ?assertEqual(ClusteredNodes, RabbitMQNodes).
+    [N1Nodes, N2Nodes, N3Nodes] =
+        [begin
+             {ok, R} = ?awaitMatch({ok, R} when is_list(R) andalso length(R) == ?CLUSTER_SIZE,
+                                                aws_ecs_util:fetch_nodes_endpoint(Config, binary_to_list(H)),
+                                                ?TIMEOUT_MILLIS),
+             [maps:get(<<"name">>, N) || N <- R]
+         end || H <- [H1, H2, H3]],
+
+    ?assertEqual(lists:sort(N1Nodes), lists:sort(N2Nodes)),
+    ?assertEqual(lists:sort(N2Nodes), lists:sort(N3Nodes)).
+
+register_tagged_task(Config) ->
+    RabbitmqDefaultUser = ?config(rabbitmq_default_user, Config),
+    RabbitmqDefaultPass = ?config(rabbitmq_default_pass, Config),
+    RabbitmqConf = string:join([
+                                "default_user = " ++ RabbitmqDefaultUser,
+                                "default_pass = " ++ RabbitmqDefaultPass,
+                                "cluster_formation.peer_discovery_backend = aws",
+                                "cluster_formation.aws.instance_tags.service = rabbitmq",
+                                ""
+                               ], "\n"),
+    TaskJson = task_json(Config, RabbitmqConf),
+    aws_ecs_util:register_task(Config, TaskJson).
+
+register_autoscaled_task(Config) ->
+    RabbitmqDefaultUser = ?config(rabbitmq_default_user, Config),
+    RabbitmqDefaultPass = ?config(rabbitmq_default_pass, Config),
+    RabbitmqConf = string:join([
+                                "default_user = " ++ RabbitmqDefaultUser,
+                                "default_pass = " ++ RabbitmqDefaultPass,
+                                "cluster_formation.peer_discovery_backend = aws",
+                                "cluster_formation.aws.use_autoscaling_group = true",
+                                ""
+                               ], "\n"),
+    TaskJson = task_json(Config, RabbitmqConf),
+    aws_ecs_util:register_task(Config, TaskJson).
+
+task_json(Config, RabbitmqConf) ->
+    DataDir = ?config(data_dir, Config),
+    RabbitmqImage = ?config(rabbitmq_image, Config),
+    RabbitmqDefaultUser = ?config(rabbitmq_default_user, Config),
+    RabbitmqDefaultPass = ?config(rabbitmq_default_pass, Config),
+    RabbitmqErlangCookie = ?config(rabbitmq_erlang_cookie, Config),
+    ServiceName = ?config(ecs_service_name, Config),
+
+    {ok, Binary} = file:read_file(filename:join(DataDir, "task_definition.json")),
+    TaskDef = rabbit_json:decode(Binary),
+
+    [RabbitContainerDef, SidecarContainerDef] = maps:get(<<"containerDefinitions">>, TaskDef),
+    RabbitContainerDef1 =
+        RabbitContainerDef#{
+                            <<"image">> := list_to_binary(RabbitmqImage),
+                            <<"environment">> := [#{<<"name">> => <<"RABBITMQ_ERLANG_COOKIE">>,
+                                                    <<"value">> => list_to_binary(RabbitmqErlangCookie)}]
+                           },
+    SidecarContainerDef1 =
+        SidecarContainerDef#{<<"environment">> := [#{<<"name">> => <<"DATA">>,
+                                                     <<"value">> => base64:encode(RabbitmqConf)}]},
+    rabbit_json:encode(
+      TaskDef#{<<"family">> := list_to_binary(ServiceName),
+               <<"containerDefinitions">> := [RabbitContainerDef1, SidecarContainerDef1]}).

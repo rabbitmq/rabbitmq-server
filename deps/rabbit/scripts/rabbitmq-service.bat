@@ -198,8 +198,8 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS! ^
 !RABBITMQ_SERVER_START_ARGS! ^
 !RABBITMQ_DIST_ARG! ^
--lager crash_log false ^
--lager handlers "[]" ^
+-syslog logger [] ^
+-syslog syslog_error_logger false ^
 !STARVAR!
 
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:\=\\!
@@ -223,6 +223,8 @@ rem user-specific directory.
 -env ERL_LIBS="!ERL_LIBS!" ^
 -env ERL_MAX_ETS_TABLES="!ERL_MAX_ETS_TABLES!" ^
 -env ERL_MAX_PORTS="!ERL_MAX_PORTS!" ^
+-env RABBITMQ_BASE="!RABBITMQ_BASE!" ^
+-env RABBITMQ_NODENAME="!RABBITMQ_NODENAME!" ^
 -workdir "!RABBITMQ_BASE!" ^
 -stopaction "rabbit:stop_and_halt()." ^
 !RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^

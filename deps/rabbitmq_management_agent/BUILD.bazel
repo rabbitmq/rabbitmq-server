@@ -1,0 +1,111 @@
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "broker_for_integration_suites",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+    "rabbitmq_suite",
+)
+
+APP_ENV = """[
+	    {rates_mode,        basic},
+	    {sample_retention_policies,
+	     %% List of {MaxAgeInSeconds, SampleEveryNSeconds}
+	     [{global,   [{605, 5}, {3660, 60}, {29400, 600}, {86400, 1800}]},
+	      {basic,    [{605, 5}, {3600, 60}]},
+	      {detailed, [{605, 5}]}]}
+	  ]"""
+
+APP_NAME = "rabbitmq_management_agent"
+
+APP_DESCRIPTION = "RabbitMQ Management Agent"
+
+APP_MODULE = "rabbit_mgmt_agent_app"
+
+EXTRA_APPS = [
+    "xmerl",
+    "mnesia",
+    "ranch",
+    "ssl",
+    "crypto",
+    "public_key",
+]
+
+BUILD_DEPS = [
+    "//deps/rabbitmq_cli:rabbitmqctl",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
+    extra_apps = EXTRA_APPS,
+    deps = DEPS,
+)
+
+xref(tags = ["xref"])
+
+plt_apps = list(EXTRA_APPS)
+
+plt_apps.remove("ranch")
+
+plt(
+    name = "base_plt",
+    apps = plt_apps,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":base_plt",
+    tags = ["dialyze"],
+)
+
+broker_for_integration_suites()
+
+PACKAGE = "deps/rabbitmq_management_agent"
+
+suites = [
+    rabbitmq_suite(
+        name = "exometer_slide_SUITE",
+        size = "medium",
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "metrics_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_mgmt_gc_SUITE",
+        size = "medium",
+    ),
+    rabbitmq_suite(
+        name = "rabbit_mgmt_slide_SUITE",
+        size = "small",
+        runtime_deps = [
+            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
+        ],
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

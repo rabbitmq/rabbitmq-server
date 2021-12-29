@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_web_dispatch_sup).
@@ -39,7 +39,7 @@ ensure_listener(Listener) ->
                                 [rabbit_cowboy_middleware, cowboy_router, cowboy_handler],
                              stream_handlers => StreamHandlers},
                            ProtoOptsMap),
-            Child = ranch:child_spec(rabbit_networking:ranch_ref(Listener), 100,
+            Child = ranch:child_spec(rabbit_networking:ranch_ref(Listener),
                 Transport, TransportOpts,
                 cowboy_clear, CowboyOptsMap),
             case supervisor:start_child(?SUP, Child) of
@@ -51,18 +51,18 @@ ensure_listener(Listener) ->
 
 stop_listener(Listener) ->
     Name = rabbit_networking:ranch_ref(Listener),
-    ok = supervisor:terminate_child(?SUP, {ranch_listener_sup, Name}),
-    ok = supervisor:delete_child(?SUP, {ranch_listener_sup, Name}).
+    ok = supervisor:terminate_child(?SUP, {ranch_embedded_sup, Name}),
+    ok = supervisor:delete_child(?SUP, {ranch_embedded_sup, Name}).
 
 %% @spec init([[instance()]]) -> SupervisorTree
 %% @doc supervisor callback.
 init([]) ->
     Registry = {rabbit_web_dispatch_registry,
                 {rabbit_web_dispatch_registry, start_link, []},
-                transient, 5000, worker, dynamic},
+                transient, 5000, worker, [rabbit_web_dispatch_registry]},
     Log = {rabbit_mgmt_access_logger, {gen_event, start_link,
             [{local, webmachine_log_event}]},
-           permanent, 5000, worker, [dynamic]},
+           permanent, 5000, worker, dynamic},
     {ok, {{one_for_one, 10, 10}, [Registry, Log]}}.
 
 %%

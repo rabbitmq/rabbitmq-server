@@ -1,17 +1,8 @@
-%% The contents of this file are subject to the Mozilla Public License
-%% Version 1.1 (the "License"); you may not use this file except in
-%% compliance with the License. You may obtain a copy of the License
-%% at https://www.mozilla.org/MPL/
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Software distributed under the License is distributed on an "AS IS"
-%% basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-%% the License for the specific language governing rights and
-%% limitations under the License.
-%%
-%% The Original Code is RabbitMQ.
-%%
-%% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stomp).
@@ -97,7 +88,7 @@ parse_default_user([{passcode, Passcode} | Rest], Configuration) ->
                                default_passcode = Passcode});
 parse_default_user([Unknown | Rest], Configuration) ->
     rabbit_log:warning("rabbit_stomp: ignoring invalid default_user "
-                       "configuration option: ~p~n", [Unknown]),
+                       "configuration option: ~p", [Unknown]),
     parse_default_user(Rest, Configuration).
 
 report_configuration(#stomp_configuration{
@@ -107,25 +98,27 @@ report_configuration(#stomp_configuration{
     case Login of
         undefined -> ok;
         _         -> rabbit_log:info("rabbit_stomp: default user '~s' "
-                                     "enabled~n", [Login])
+                                     "enabled", [Login])
     end,
 
     case ImplicitConnect of
-        true  -> rabbit_log:info("rabbit_stomp: implicit connect enabled~n");
+        true  -> rabbit_log:info("rabbit_stomp: implicit connect enabled");
         false -> ok
     end,
 
     case SSLCertLogin of
-        true  -> rabbit_log:info("rabbit_stomp: ssl_cert_login enabled~n");
+        true  -> rabbit_log:info("rabbit_stomp: ssl_cert_login enabled");
         false -> ok
     end,
 
     ok.
 
 list() ->
-    [Client
-     || {_, ListSupPid, _, _} <- supervisor2:which_children(rabbit_stomp_sup),
-        {_, RanchSup, supervisor, _} <- supervisor2:which_children(ListSupPid),
-        {ranch_conns_sup, ConnSup, _, _} <- supervisor:which_children(RanchSup),
-        {_, CliSup, _, _} <- supervisor:which_children(ConnSup),
-        {rabbit_stomp_reader, Client, _, _} <- supervisor:which_children(CliSup)].
+    [Client ||
+        {_, ListSup, _, _} <- supervisor2:which_children(rabbit_stomp_sup),
+        {_, RanchEmbeddedSup, supervisor, _} <- supervisor2:which_children(ListSup),
+        {{ranch_listener_sup, _}, RanchListSup, _, _} <- supervisor:which_children(RanchEmbeddedSup),
+        {ranch_conns_sup_sup, RanchConnsSup, supervisor, _} <- supervisor2:which_children(RanchListSup),
+        {_, RanchConnSup, supervisor, _} <- supervisor2:which_children(RanchConnsSup),
+        {_, StompClientSup, supervisor, _} <- supervisor2:which_children(RanchConnSup),
+        {rabbit_stomp_reader, Client, _, _} <- supervisor:which_children(StompClientSup)].

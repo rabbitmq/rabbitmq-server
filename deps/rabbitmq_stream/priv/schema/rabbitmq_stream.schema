@@ -16,8 +16,8 @@
 %   [%% Network Configuration - the format is generally the same as for the broker
 
 %% Listen only on localhost (ipv4 & ipv6) on a specific port.
-%% {tcp_listeners, [{"127.0.0.1", 5555},
-%%                  {"::1",       5555}]},
+%% {tcp_listeners, [{"127.0.0.1", 5552},
+%%                  {"::1",       5552}]},
 
 {mapping, "stream.listeners.tcp", "rabbitmq_stream.tcp_listeners",[
     {datatype, {enum, [none]}}
@@ -128,6 +128,46 @@ end}.
     {datatype, integer}
 ]}.
 
+
+%%
+%% TLS
+%%
+
+{mapping, "stream.listeners.ssl", "rabbitmq_stream.ssl_listeners",[
+    {datatype, {enum, [none]}}
+]}.
+
+{mapping, "stream.listeners.ssl.$name", "rabbitmq_stream.ssl_listeners",[
+    {datatype, [integer, ip]}
+]}.
+
+{translation, "rabbitmq_stream.ssl_listeners",
+fun(Conf) ->
+    case cuttlefish:conf_get("stream.listeners.ssl", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("stream.listeners.ssl", Conf),
+            [ V || {_, V} <- Settings ]
+    end
+end}.
+
+%% Number of Erlang processes that will accept connections for the SSL listeners.
+%%
+%% {num_ssl_acceptors, 10},
+
+{mapping, "stream.num_acceptors.ssl", "rabbitmq_stream.num_ssl_acceptors", [
+    {datatype, integer}
+]}.
+
+%% Additional TLS options
+
+%% Extract a name from the client's certificate when using TLS.
+%%
+%% Defaults to true.
+
+{mapping, "stream.ssl_cert_login", "rabbitmq_stream.ssl_cert_login",
+    [{datatype, {enum, [true, false]}}]}.
+
 {mapping, "stream.initial_credits", "rabbitmq_stream.initial_credits", [
     {datatype, integer}
 ]}.
@@ -153,6 +193,19 @@ fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("stream.advertised_host", Conf))
 end}.
 
+{mapping, "stream.advertised_tls_host", "rabbitmq_stream.advertised_tls_host", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_stream.advertised_tls_host",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("stream.advertised_tls_host", Conf))
+end}.
+
 {mapping, "stream.advertised_port", "rabbitmq_stream.advertised_port", [
+    {datatype, integer}
+]}.
+
+{mapping, "stream.advertised_tls_port", "rabbitmq_stream.advertised_tls_port", [
     {datatype, integer}
 ]}.

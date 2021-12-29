@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% @private
@@ -143,7 +143,7 @@ connect(Params = #amqp_params_direct{username     = Username,
     DecryptedPassword = credentials_obfuscation:decrypt(Password),
     case rpc:call(Node, rabbit_direct, connect,
                   [{Username, DecryptedPassword}, VHost, ?PROTOCOL, self(),
-                   connection_info(State1)]) of
+                   connection_info(State1)], ?DIRECT_OPERATION_TIMEOUT) of
         {ok, {User, ServerProperties}} ->
             {ok, ChMgr, Collector} = SIF(i(name, State1)),
             State2 = State1#state{user      = User,
@@ -158,8 +158,8 @@ connect(Params = #amqp_params_direct{username     = Username,
             {ok, {ServerProperties, 0, ChMgr, State2}};
         {error, _} = E ->
             E;
-        {badrpc, nodedown} ->
-            {error, {nodedown, Node}}
+        {badrpc, Reason} ->
+            {error, {Reason, Node}}
     end.
 
 ensure_adapter_info(none) ->
@@ -195,14 +195,14 @@ socket_adapter_info(Sock, Protocol) ->
 
 maybe_ssl_info(Sock) ->
     RealSocket = rabbit_net:unwrap_socket(Sock),
-    case rabbit_net:is_ssl(RealSocket) of
-        true  -> [{ssl, true}] ++ ssl_info(RealSocket) ++ ssl_cert_info(RealSocket);
-        false -> [{ssl, false}]
+    case rabbit_net:proxy_ssl_info(RealSocket, rabbit_net:maybe_get_proxy_socket(Sock)) of
+        nossl -> [{ssl, false}];
+        Info -> [{ssl, true}] ++ ssl_info(Info) ++ ssl_cert_info(RealSocket)
     end.
 
-ssl_info(Sock) ->
+ssl_info(Info) ->
     {Protocol, KeyExchange, Cipher, Hash} =
-        case rabbit_net:ssl_info(Sock) of
+        case Info of
             {ok, Infos} ->
                 {_, P} = lists:keyfind(protocol, 1, Infos),
                 #{cipher := C,

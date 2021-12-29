@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_connection_sup).
@@ -19,18 +19,18 @@
 -behaviour(supervisor2).
 -behaviour(ranch_protocol).
 
--export([start_link/4, reader/1]).
+-export([start_link/3, reader/1]).
 
 -export([init/1]).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 
--spec start_link(any(), rabbit_net:socket(), module(), any()) ->
+-spec start_link(any(), module(), any()) ->
           {'ok', pid(), pid()}.
 
-start_link(Ref, _Sock, _Transport, _Opts) ->
+start_link(Ref, _Transport, _Opts) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
     %% We need to get channels in the hierarchy here so they get shut
     %% down after the reader, so the reader gets a chance to terminate

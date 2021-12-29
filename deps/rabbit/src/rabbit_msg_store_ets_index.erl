@@ -2,12 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_msg_store_ets_index).
 
--include("rabbit_msg_store.hrl").
+-include_lib("rabbit_common/include/rabbit_msg_store.hrl").
 
 -behaviour(rabbit_msg_store_index).
 
@@ -70,7 +70,7 @@ terminate(#state { table = MsgLocations, dir = Dir }) ->
         ok           -> ok;
         {error, Err} ->
             rabbit_log:error("Unable to save message store index"
-                             " for directory ~p.~nError: ~p~n",
+                             " for directory ~p.~nError: ~p",
                              [Dir, Err])
     end,
     ets:delete(MsgLocations).

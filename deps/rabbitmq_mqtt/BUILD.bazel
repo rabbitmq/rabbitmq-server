@@ -1,0 +1,177 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
+    "broker_for_integration_suites",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+    "rabbitmq_suite",
+)
+
+APP_NAME = "rabbitmq_mqtt"
+
+APP_DESCRIPTION = "RabbitMQ MQTT Adapter"
+
+APP_MODULE = "rabbit_mqtt"
+
+APP_ENV = """[
+	    {default_user, <<"guest">>},
+	    {default_pass, <<"guest">>},
+	    {ssl_cert_login,false},
+	    %% To satisfy an unfortunate expectation from popular MQTT clients.
+	    {allow_anonymous, true},
+	    {vhost, <<"/">>},
+	    {exchange, <<"amq.topic">>},
+	    {subscription_ttl, 86400000}, %% 24 hours
+	    {retained_message_store, rabbit_mqtt_retained_msg_store_dets},
+	    %% only used by DETS store
+	    {retained_message_store_dets_sync_interval, 2000},
+	    {prefetch, 10},
+	    {ssl_listeners, []},
+	    {tcp_listeners, [1883]},
+	    {num_tcp_acceptors, 10},
+	    {num_ssl_acceptors, 10},
+	    {tcp_listen_options, [{backlog,   128},
+	                          {nodelay,   true}]},
+	    {proxy_protocol, false},
+	    {sparkplug, false}
+	  ]"""
+
+FIRST_SRCS = [
+    "src/rabbit_mqtt_retained_msg_store.erl",
+]
+
+BUILD_DEPS = [
+    "//deps/rabbitmq_cli:rabbitmqctl",
+]
+
+DEPS = [
+    "//deps/amqp_client:bazel_erlang_lib",
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "@ra//:bazel_erlang_lib",
+    "@ranch//:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
+    first_srcs = FIRST_SRCS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+xref(tags = ["xref"])
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)
+
+broker_for_integration_suites()
+
+erlc(
+    name = "rabbit_auth_backend_mqtt_mock",
+    testonly = True,
+    srcs = [
+        "test/rabbit_auth_backend_mqtt_mock.erl",
+    ],
+    dest = "test",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+    ],
+)
+
+PACKAGE = "deps/rabbitmq_mqtt"
+
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "auth_SUITE",
+        additional_beam = [
+            ":rabbit_auth_backend_mqtt_mock",
+        ],
+        runtime_deps = [
+            "@emqttc//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "cluster_SUITE",
+        size = "large",
+        flaky = True,
+        runtime_deps = [
+            "@emqttc//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "command_SUITE",
+        runtime_deps = [
+            "@emqttc//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "java_SUITE",
+        flaky = True,
+    ),
+    rabbitmq_suite(
+        name = "mqtt_machine_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "processor_SUITE",
+        size = "small",
+        deps = [
+            "//deps/amqp_client:bazel_erlang_lib",
+            "//deps/rabbit_common:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "proxy_protocol_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "reader_SUITE",
+        runtime_deps = [
+            "@emqttc//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "retainer_SUITE",
+        runtime_deps = [
+            "@emqttc//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "util_SUITE",
+        size = "small",
+        data = [
+            "test/rabbitmq_mqtt.app",
+        ],
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

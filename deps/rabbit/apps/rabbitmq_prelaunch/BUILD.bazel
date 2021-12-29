@@ -1,0 +1,45 @@
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load("//:rabbitmq.bzl", "APP_VERSION", "rabbitmq_lib", "rabbitmq_suite")
+
+APP_NAME = "rabbitmq_prelaunch"
+
+APP_DESCRIPTION = "RabbitMQ prelaunch setup"
+
+APP_MODULE = "rabbit_prelaunch_app"
+
+RUNTIME_DEPS = [
+    "@cuttlefish//:bazel_erlang_lib",
+    "@jsx//:bazel_erlang_lib",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+xref(
+    additional_libs = [
+        "@ranch//:bazel_erlang_lib",
+        "@systemd//:bazel_erlang_lib",
+        "@osiris//:bazel_erlang_lib",
+    ],
+    tags = ["xref"],
+)
+
+dialyze(
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)
+
+rabbitmq_suite(
+    name = "rabbit_logger_std_h_SUITE",
+)

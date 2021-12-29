@@ -1,0 +1,40 @@
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "rabbitmq_lib",
+)
+
+APP_NAME = "rabbitmq_web_stomp_examples"
+
+APP_DESCRIPTION = "Rabbit WEB-STOMP - examples"
+
+APP_MODULE = "rabbit_web_stomp_examples_app"
+
+APP_ENV = """[
+	    {listener, [{port, 15670}]}
+	  ]"""
+
+RUNTIME_DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
+    "//deps/rabbitmq_web_stomp:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    runtime_deps = RUNTIME_DEPS,
+)
+
+xref(tags = ["xref"])
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)

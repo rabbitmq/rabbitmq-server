@@ -1,0 +1,34 @@
+{
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "x_demo",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false
+    }
+  ],
+  "queues": [
+    {
+      "name": "q_demo",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false
+    }
+  ],
+  "bindings": [
+    {
+      "source": "x_demo",
+      "vhost": "/",
+      "destination": "q_demo",
+      "destination_type": "queue",
+      "routing_key": "#"
+    }
+  ]
+}

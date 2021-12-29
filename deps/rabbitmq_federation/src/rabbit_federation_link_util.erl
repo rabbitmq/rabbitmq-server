@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_federation_link_util).
@@ -56,7 +56,7 @@ start_conn_ch(Fun, OUpstream, OUParams,
                     try
                         R = Fun(Conn, Ch, DConn, DCh),
                         log_info(
-                          XorQName, "connected to ~s~n",
+                          XorQName, "connected to ~s",
                           [rabbit_federation_upstream:params_to_string(
                              UParams)]),
                         Name = pget(name, amqp_connection:info(DConn, [name])),
@@ -290,7 +290,7 @@ log_terminate(shutdown, Upstream, UParams, XorQName) ->
     %% the link because configuration has changed. So try to shut down
     %% nicely so that we do not cause unacked messages to be
     %% redelivered.
-    log_info(XorQName, "disconnecting from ~s~n",
+    log_info(XorQName, "disconnecting from ~s",
              [rabbit_federation_upstream:params_to_string(UParams)]),
     rabbit_federation_status:remove(Upstream, XorQName);
 
@@ -332,7 +332,7 @@ disposable_channel_call(Conn, Method, ErrFun) ->
         end
     catch
           Exception:Reason ->
-            rabbit_log_federation:error("Federation link could not create a disposable (one-off) channel due to an error ~p: ~p~n", [Exception, Reason])
+            rabbit_log_federation:error("Federation link could not create a disposable (one-off) channel due to an error ~p: ~p", [Exception, Reason])
     end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
@@ -351,14 +351,14 @@ disposable_connection_call(Params, Method, ErrFun) ->
                 end;
             {error, {auth_failure, Message}} ->
                 rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection "
-                                            "due to an authentication failure: ~s~n", [Message]);
+                                            "due to an authentication failure: ~s", [Message]);
             Error ->
                 rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection, "
-                                            "reason: ~p~n", [Error]),
+                                            "reason: ~p", [Error]),
                 Error
         end
     catch
         Exception:Reason ->
             rabbit_log_federation:error("Federation link could not create a disposable (one-off) connection "
-                                        "due to an error ~p: ~p~n", [Exception, Reason])
+                                        "due to an error ~p: ~p", [Exception, Reason])
     end.

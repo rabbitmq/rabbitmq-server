@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(quorum_queue_SUITE).
@@ -10,16 +10,19 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(quorum_queue_utils, [wait_for_messages_ready/3,
                              wait_for_messages_pending_ack/3,
                              wait_for_messages_total/3,
                              wait_for_messages/2,
                              dirty_query/3,
-                             ra_name/1,
-                             is_mixed_versions/0]).
+                             ra_name/1]).
 
+-compile([nowarn_export_all, export_all]).
 -compile(export_all).
+
+-define(DEFAULT_AWAIT, 10000).
 
 suite() ->
     [{timetrap, 5 * 60000}].
@@ -33,14 +36,13 @@ all() ->
 
 groups() ->
     [
-     {single_node, [], all_tests()},
-     {single_node, [], memory_tests()},
-     {single_node, [], [node_removal_is_quorum_critical]},
+     {single_node, [], all_tests()
+                       ++ memory_tests()
+                       ++ [node_removal_is_quorum_critical]},
      {unclustered, [], [
-                        {cluster_size_2, [], [add_member]}
+                        {uncluster_size_2, [], [add_member]}
                        ]},
      {clustered, [], [
-                      {cluster_size_2, [], [cleanup_data_dir]},
                       {cluster_size_2, [], [add_member_not_running,
                                             add_member_classic,
                                             add_member_already_a_member,
@@ -50,9 +52,9 @@ groups() ->
                                             delete_member_queue_not_found,
                                             delete_member,
                                             delete_member_not_a_member,
-                                            node_removal_is_quorum_critical]
-                       ++ all_tests()},
-                      {cluster_size_2, [], memory_tests()},
+                                            node_removal_is_quorum_critical,
+                                            cleanup_data_dir]
+                       ++ memory_tests()},
                       {cluster_size_3, [], [
                                             declare_during_node_down,
                                             simple_confirm_availability_on_leader_change,
@@ -71,7 +73,8 @@ groups() ->
                                             file_handle_reservations,
                                             file_handle_reservations_above_limit,
                                             node_removal_is_not_quorum_critical
-                                            ]},
+                                            ]
+                       ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
                                             start_queue_concurrent,
                                             quorum_cluster_size_3,
@@ -92,6 +95,7 @@ all_tests() ->
      declare_invalid_properties,
      declare_server_named,
      start_queue,
+     long_name,
      stop_queue,
      restart_queue,
      restart_all_types,
@@ -133,7 +137,8 @@ all_tests() ->
      delete_if_unused,
      queue_ttl,
      peek,
-     consumer_priorities
+     consumer_priorities,
+     cancel_consumer_gh_3729
     ].
 
 memory_tests() ->
@@ -141,6 +146,7 @@ memory_tests() ->
      memory_alarm_rolls_wal
     ].
 
+-define(SUPNAME, ra_server_sup_sup).
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
@@ -148,12 +154,10 @@ memory_tests() ->
 init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:merge_app_env(
-               Config0, {rabbit, [{quorum_tick_interval, 1000}]}),
-    Config = rabbit_ct_helpers:merge_app_env(
-               Config1, {aten, [{poll_interval, 1000}]}),
-    rabbit_ct_helpers:run_setup_steps(
-      Config,
-      [fun rabbit_ct_broker_helpers:configure_dist_proxy/1]).
+                Config0, {rabbit, [{quorum_tick_interval, 1000}]}),
+    rabbit_ct_helpers:merge_app_env(
+      Config1, {aten, [{poll_interval, 1000}]}),
+    rabbit_ct_helpers:run_setup_steps(Config1, []).
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
@@ -162,21 +166,25 @@ init_per_group(clustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(unclustered, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
-init_per_group(clustered_with_partitions, Config) ->
-    case is_mixed_versions() of
+init_per_group(clustered_with_partitions, Config0) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "clustered_with_partitions is too unreliable in mixed mode"};
         false ->
+            Config = rabbit_ct_helpers:run_setup_steps(
+                       Config0,
+                       [fun rabbit_ct_broker_helpers:configure_dist_proxy/1]),
             rabbit_ct_helpers:set_config(Config, [{net_ticktime, 10}])
     end;
 init_per_group(Group, Config) ->
     ClusterSize = case Group of
                       single_node -> 1;
+                      uncluster_size_2 -> 2;
                       cluster_size_2 -> 2;
                       cluster_size_3 -> 3;
                       cluster_size_5 -> 5
                   end,
-    IsMixed = not (false == os:getenv("SECONDARY_UMBRELLA")),
+    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
     case ClusterSize of
         2 when IsMixed ->
             {skip, "cluster size 2 isn't mixed versions compatible"};
@@ -203,13 +211,8 @@ init_per_group(Group, Config) ->
                             %% HACK: the larger cluster sizes benefit for a bit
                             %% more time after clustering before running the
                             %% tests.
-                            case Group of
-                                cluster_size_5 ->
-                                    timer:sleep(5000),
-                                    Config2;
-                                _ ->
-                                    Config2
-                            end;
+                            timer:sleep(ClusterSize * 1000),
+                            Config2;
                         Skip ->
                             end_per_group(Group, Config2),
                             Skip
@@ -258,14 +261,48 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
             end
     end;
 init_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
-    Q = rabbit_data_coercion:to_binary(Testcase),
-    Config2 = rabbit_ct_helpers:set_config(Config1,
-                                           [{queue_name, Q},
-                                            {alt_queue_name, <<Q/binary, "_alt">>}
-                                           ]),
-    rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
+    ClusterSize = ?config(rmq_nodes_count, Config),
+    IsMixed = rabbit_ct_helpers:is_mixed_versions(),
+    case Testcase of
+        node_removal_is_not_quorum_critical when IsMixed ->
+            {skip, "node_removal_is_not_quorum_critical isn't mixed versions compatible"};
+        simple_confirm_availability_on_leader_change when IsMixed ->
+            {skip, "simple_confirm_availability_on_leader_change isn't mixed versions compatible"};
+        confirm_availability_on_leader_change when IsMixed ->
+            {skip, "confirm_availability_on_leader_change isn't mixed versions compatible"};
+        recover_from_single_failure when IsMixed ->
+            %% In a 3.8/3.9 cluster this will pass only if the failure occurs on the 3.8 node
+            {skip, "recover_from_single_failure isn't mixed versions compatible"};
+        shrink_all when IsMixed ->
+            %% In a 3.8/3.9 cluster only the first shrink will work as expected
+            {skip, "skrink_all isn't mixed versions compatible"};
+        delete_immediately_by_resource when IsMixed andalso ClusterSize == 3 ->
+            {skip, "delete_immediately_by_resource isn't mixed versions compatible"};
+        queue_ttl when IsMixed andalso ClusterSize == 3 ->
+            {skip, "queue_ttl isn't mixed versions compatible"};
+        start_queue when IsMixed andalso ClusterSize == 5 ->
+            {skip, "start_queue isn't mixed versions compatible"};
+        start_queue_concurrent when IsMixed andalso ClusterSize == 5 ->
+            {skip, "start_queue_concurrent isn't mixed versions compatible"};
+        _ ->
+            Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
+            rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
+            Q = rabbit_data_coercion:to_binary(Testcase),
+            Config2 = rabbit_ct_helpers:set_config(Config1,
+                                                   [{queue_name, Q},
+                                                    {alt_queue_name, <<Q/binary, "_alt">>}
+                                                   ]),
+            EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
+                         Config2, quorum_queue),
+            case EnableFF of
+                ok ->
+                    Config2;
+                Skip ->
+                    end_per_testcase(Testcase, Config2),
+                    Skip
+            end,
+            rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps())
+    end.
 
 merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(
@@ -281,7 +318,7 @@ end_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publi
       rabbit_ct_broker_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase);
 end_per_testcase(Testcase, Config) ->
-    catch delete_queues(),
+    % catch delete_queues(),
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
                 rabbit_ct_client_helpers:teardown_steps()),
@@ -350,19 +387,20 @@ start_queue(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
-    %% The stream coordinator is also a ra process, we need to ensure the quorum tests
-    %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% Check that the application and one ra node are up
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))),
+    ?awaitMatch({ra, _, _},
+                lists:keyfind(ra, 1,
+                              rpc:call(Server, application, which_applications, [])),
+                ?DEFAULT_AWAIT),
     Expected = Children + 1,
-    ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
+    ?awaitMatch(Expected,
+                length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
+                ?DEFAULT_AWAIT),
 
     %% Test declare an existing queue
     ?assertEqual({'queue.declare_ok', LQ, 0, 0},
@@ -379,7 +417,28 @@ start_queue(Config) ->
     ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
                                            rpc:call(Server, application, which_applications, []))),
     ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))).
+                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
+
+    ok.
+
+
+long_name(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    %% 64 + chars
+    VHost = <<"long_name_vhost____________________________________">>,
+    QName = atom_to_binary(?FUNCTION_NAME, utf8),
+    User = ?config(rmq_username, Config),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, Node, VHost, User),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node,
+                                                              VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    %% long name
+    LongName = binary:copy(QName, 240 div byte_size(QName)),
+    ?assertEqual({'queue.declare_ok', LongName, 0, 0},
+                 declare(Ch, LongName,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ok.
 
 start_queue_concurrent(Config) ->
     Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -387,20 +446,22 @@ start_queue_concurrent(Config) ->
     Self = self(),
     [begin
          _ = spawn_link(fun () ->
-                                {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
+                                {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
                                 %% Test declare an existing queue
                                 ?assertEqual({'queue.declare_ok', LQ, 0, 0},
                                              declare(Ch, LQ,
                                                      [{<<"x-queue-type">>,
                                                        longstr,
                                                        <<"quorum">>}])),
+                                timer:sleep(500),
+                                rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
                                 Self ! {done, Server}
                         end)
      end || Server <- Servers],
 
     [begin
          receive {done, Server} -> ok
-         after 5000 -> exit({await_done_timeout, Server})
+         after 10000 -> exit({await_done_timeout, Server})
          end
      end || Server <- Servers],
 
@@ -408,7 +469,7 @@ start_queue_concurrent(Config) ->
     ok.
 
 quorum_cluster_size_3(Config) ->
-    case is_mixed_versions() of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "quorum_cluster_size_3 tests isn't mixed version reliable"};
         false ->
@@ -427,19 +488,22 @@ quorum_cluster_size_x(Config, Max, Expected) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-quorum-initial-group-size">>, long, Max}])),
-    {ok, Members, _} = ra:members({RaName, Server}),
-    ?assertEqual(Expected, length(Members)),
-    Info = rpc:call(Server, rabbit_quorum_queue, infos,
-                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
-    MembersQ = proplists:get_value(members, Info),
-    ?assertEqual(Expected, length(MembersQ)).
+    ?awaitMatch({ok, Members, _} when length(Members) == Expected,
+                ra:members({RaName, Server}),
+                ?DEFAULT_AWAIT),
+    ?awaitMatch(MembersQ when length(MembersQ) == Expected,
+                begin
+                    Info = rpc:call(Server, rabbit_quorum_queue, infos,
+                                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+                    proplists:get_value(members, Info)
+                end, ?DEFAULT_AWAIT).
 
 stop_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
@@ -447,27 +511,32 @@ stop_queue(Config) ->
                  declare(Ch, LQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% Check that the application and one ra node are up
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))),
+    ?awaitMatch({ra, _, _},
+                lists:keyfind(ra, 1,
+                              rpc:call(Server, application, which_applications, [])),
+                ?DEFAULT_AWAIT),
     Expected = Children + 1,
-    ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
+    ?awaitMatch(Expected,
+                length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
+                ?DEFAULT_AWAIT),
 
     %% Delete the quorum queue
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch, #'queue.delete'{queue = LQ})),
     %% Check that the application and process are down
-    wait_until(fun() ->
-                       Children == length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))
-               end),
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))).
+    ?awaitMatch(Children,
+                length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
+                30000),
+    ?awaitMatch({ra, _, _},
+                lists:keyfind(ra, 1,
+                              rpc:call(Server, application, which_applications, [])),
+                ?DEFAULT_AWAIT).
 
 restart_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     LQ = ?config(queue_name, Config),
@@ -482,7 +551,7 @@ restart_queue(Config) ->
                                            rpc:call(Server, application, which_applications, []))),
     Expected = Children + 1,
     ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
+                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     delete_queues(Ch2, [LQ]).
 
@@ -504,16 +573,23 @@ idempotent_recover(Config) ->
     %% kill the vhost process to trigger recover
     rpc:call(Server, erlang, exit, [Pid, kill]),
 
-    timer:sleep(1000),
+
     %% validate quorum queue is still functional
-    RaName = ra_name(LQ),
-    {ok, _, _} = ra:members({RaName, Server}),
+    ?awaitMatch({ok, _, _},
+                begin
+                    RaName = ra_name(LQ),
+                    ra:members({RaName, Server})
+                end, ?DEFAULT_AWAIT),
     %% validate vhosts are running - or rather validate that at least one
     %% vhost per cluster is running
-    [begin
-         #{cluster_state := ServerStatuses} = maps:from_list(I),
-         ?assertMatch(#{Server := running}, maps:from_list(ServerStatuses))
-     end || I <- rpc:call(Server, rabbit_vhost,info_all, [])],
+    ?awaitMatch(true,
+                begin
+                    Is = rpc:call(Server, rabbit_vhost,info_all, []),
+                    lists:all(fun (I) ->
+                                      #{cluster_state := ServerStatuses} = maps:from_list(I),
+                                      maps:get(Server, maps:from_list(ServerStatuses)) =:= running
+                              end, Is)
+                end, ?DEFAULT_AWAIT),
     ok.
 
 vhost_with_quorum_queue_is_deleted(Config) ->
@@ -530,11 +606,11 @@ vhost_with_quorum_queue_is_deleted(Config) ->
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    UId = rpc:call(Node, ra_directory, where_is, [RaName]),
+    UId = rpc:call(Node, ra_directory, where_is, [quorum_queues, RaName]),
     ?assert(UId =/= undefined),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, VHost),
     %% validate quorum queues got deleted
-    undefined = rpc:call(Node, ra_directory, where_is, [RaName]),
+    undefined = rpc:call(Node, ra_directory, where_is, [quorum_queues, RaName]),
     ok.
 
 restart_all_types(Config) ->
@@ -544,7 +620,7 @@ restart_all_types(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]),
+    Children = rpc:call(Server, supervisor, which_children, [?SUPNAME]),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ1 = <<"restart_all_types-qq1">>,
@@ -567,18 +643,14 @@ restart_all_types(Config) ->
     %% Check that the application and two ra nodes are up. Queues are restored
     %% after the broker is marked as "ready", that's why we need to wait for
     %% the condition.
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))),
+    ?awaitMatch({ra, _, _},
+                lists:keyfind(ra, 1,
+                              rpc:call(Server, application, which_applications, [])),
+                ?DEFAULT_AWAIT),
     Expected = length(Children) + 2,
-    ok = rabbit_ct_helpers:await_condition(
-           fun() ->
-                   Expected =:= length(
-                                  rpc:call(
-                                    Server,
-                                    supervisor,
-                                    which_children,
-                                    [ra_server_sup_sup]))
-           end, 60000),
+    ?awaitMatch(Expected,
+                length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
+                60000),
     %% Check the classic queues restarted correctly
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
@@ -598,7 +670,7 @@ stop_start_rabbit_app(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ1 = <<"stop_start_rabbit_app-qq">>,
@@ -615,19 +687,32 @@ stop_start_rabbit_app(Config) ->
     ?assertEqual({'queue.declare_ok', CQ2, 0, 0}, declare(Ch, CQ2, [])),
     rabbit_ct_client_helpers:publish(Ch, CQ2, 1),
 
-    rabbit_control_helper:command(stop_app, Server),
+    ?assertEqual(ok, rabbit_control_helper:command(stop_app, Server)),
     %% Check the ra application has stopped (thus its supervisor and queues)
-    ?assertMatch(false, lists:keyfind(ra, 1,
-                                      rpc:call(Server, application, which_applications, []))),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            Apps = rpc:call(Server, application, which_applications, []),
+            %% we expect the app to NOT be running
+            case lists:keyfind(ra, 1, Apps) of
+                false      -> true;
+                {ra, _, _} -> false
+            end
+        end),
 
-    rabbit_control_helper:command(start_app, Server),
+    ?assertEqual(ok, rabbit_control_helper:command(start_app, Server)),
 
     %% Check that the application and two ra nodes are up
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            Apps = rpc:call(Server, application, which_applications, []),
+            case lists:keyfind(ra, 1, Apps) of
+                false      -> false;
+                {ra, _, _} -> true
+            end
+        end),
     Expected = Children + 2,
     ?assertMatch(Expected,
-                 length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))),
+                 length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))),
     %% Check the classic queues restarted correctly
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
     {#'basic.get_ok'{}, #amqp_msg{}} =
@@ -637,6 +722,9 @@ stop_start_rabbit_app(Config) ->
     delete_queues(Ch2, [QQ1, QQ2, CQ1, CQ2]).
 
 publish_confirm(Ch, QName) ->
+    publish_confirm(Ch, QName, 2500).
+
+publish_confirm(Ch, QName, Timeout) ->
     publish(Ch, QName),
     amqp_channel:register_confirm_handler(Ch, self()),
     ct:pal("waiting for confirms from ~s", [QName]),
@@ -647,7 +735,7 @@ publish_confirm(Ch, QName) ->
         #'basic.nack'{} ->
             ct:pal("NOT CONFIRMED! ~s", [QName]),
             fail
-    after 2500 ->
+    after Timeout ->
               exit(confirm_timeout)
     end.
 
@@ -704,18 +792,21 @@ shrink_all(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({'queue.declare_ok', AQ, 0, 0},
                  declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    timer:sleep(500),
-    Result = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server2]),
-    ?assertMatch([{_, {ok, 2}}, {_, {ok, 2}}], Result),
-    Result1 = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server1]),
-    ?assertMatch([{_, {ok, 1}}, {_, {ok, 1}}], Result1),
-    Result2 = rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server0]),
-    ?assertMatch([{_, {error, 1, last_node}},
-                  {_, {error, 1, last_node}}], Result2),
+
+    ?awaitMatch([{_, {ok, 2}}, {_, {ok, 2}}],
+                rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server2]),
+                ?DEFAULT_AWAIT),
+    ?awaitMatch([{_, {ok, 1}}, {_, {ok, 1}}],
+                rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server1]),
+                ?DEFAULT_AWAIT),
+    ?awaitMatch([{_, {error, 1, last_node}},
+                 {_, {error, 1, last_node}}],
+                rpc:call(Server0, rabbit_quorum_queue, shrink_all, [Server0]),
+                ?DEFAULT_AWAIT),
     ok.
 
 rebalance(Config) ->
-    case is_mixed_versions() of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "rebalance tests isn't mixed version compatible"};
         false ->
@@ -738,10 +829,13 @@ rebalance0(Config) ->
                  declare(Ch, Q1, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
                  declare(Ch, Q2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    timer:sleep(1000),
 
-    {ok, _, {_, Leader1}} = ra:members({ra_name(Q1), Server0}),
-    {ok, _, {_, Leader2}} = ra:members({ra_name(Q2), Server0}),
+    {ok, _, {_, Leader1}} = ?awaitMatch({ok, _, {_, _}},
+                                        ra:members({ra_name(Q1), Server0}),
+                                        ?DEFAULT_AWAIT),
+    {ok, _, {_, Leader2}} = ?awaitMatch({ok, _, {_, _}},
+                                        ra:members({ra_name(Q2), Server0}),
+                                        ?DEFAULT_AWAIT),
     rabbit_ct_client_helpers:publish(Ch, Q1, 3),
     rabbit_ct_client_helpers:publish(Ch, Q2, 2),
 
@@ -751,20 +845,22 @@ rebalance0(Config) ->
                  declare(Ch, Q4, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertEqual({'queue.declare_ok', Q5, 0, 0},
                  declare(Ch, Q5, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    timer:sleep(500),
-    {ok, Summary} = rpc:call(Server0, rabbit_amqqueue, rebalance, [quorum, ".*", ".*"]),
 
     %% Q1 and Q2 should not have moved leader, as these are the queues with more
     %% log entries and we allow up to two queues per node (3 nodes, 5 queues)
-    ?assertMatch({ok, _, {_, Leader1}}, ra:members({ra_name(Q1), Server0})),
-    ?assertMatch({ok, _, {_, Leader2}}, ra:members({ra_name(Q2), Server0})),
+    ?awaitMatch({ok, _, {_, Leader1}}, ra:members({ra_name(Q1), Server0}), ?DEFAULT_AWAIT),
+    ?awaitMatch({ok, _, {_, Leader2}}, ra:members({ra_name(Q2), Server0}), ?DEFAULT_AWAIT),
 
     %% Check that we have at most 2 queues per node
-    ?assert(lists:all(fun(NodeData) ->
-                              lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
-                                           (_) -> true end,
-                                        NodeData)
-                      end, Summary)),
+    ?awaitMatch(true,
+                begin
+                    {ok, Summary} = rpc:call(Server0, rabbit_amqqueue, rebalance, [quorum, ".*", ".*"]),
+                    lists:all(fun(NodeData) ->
+                                      lists:all(fun({_, V}) when is_integer(V) -> V =< 2;
+                                                   (_) -> true end,
+                                                NodeData)
+                              end, Summary)
+                end, ?DEFAULT_AWAIT),
     ok.
 
 subscribe_should_fail_when_global_qos_true(Config) ->
@@ -947,7 +1043,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -970,7 +1066,7 @@ cleanup_queue_state_on_channel_after_publish(Config) ->
                  amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
                        Children == length(rpc:call(Server, supervisor, which_children,
-                                                   [ra_server_sup_sup]))
+                                                   [?SUPNAME]))
                end),
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Server, NCh2, 0),
@@ -983,7 +1079,7 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server),
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -1011,7 +1107,7 @@ cleanup_queue_state_on_channel_after_subscribe(Config) ->
     wait_for_cleanup(Server, NCh2, 1),
     ?assertMatch(#'queue.delete_ok'{}, amqp_channel:call(Ch1, #'queue.delete'{queue = QQ})),
     wait_until(fun() ->
-                       Children == length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))
+                       Children == length(rpc:call(Server, supervisor, which_children, [?SUPNAME]))
                end),
     %% Check that all queue states have been cleaned
     wait_for_cleanup(Server, NCh1, 0),
@@ -1145,7 +1241,7 @@ leadership_takeover(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0).
 
 metrics_cleanup_on_leadership_takeover(Config) ->
-    case is_mixed_versions() of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "metrics_cleanup_on_leadership_takeover tests isn't mixed version compatible"};
         false ->
@@ -1229,7 +1325,7 @@ metrics_cleanup_on_leader_crash(Config) ->
 
 
 delete_declare(Config) ->
-    case is_mixed_versions() of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "delete_declare isn't mixed version reliable"};
         false ->
@@ -1257,7 +1353,7 @@ delete_declare0(Config) ->
     %% the actual data deletions happen after the call has returned as a quorum
     %% queue leader waits for all nodes to confirm they replicated the poison
     %% pill before terminating itself.
-    case is_mixed_versions() of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             %% when in mixed versions the QQ may not be able to apply the posion
             %% pill for all nodes so need to wait longer for forced delete to
@@ -1349,19 +1445,23 @@ confirm_availability_on_leader_change(Config) ->
                  declare(DCh, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     erlang:process_flag(trap_exit, true),
-    Pid = spawn_link(fun () ->
-                             %% open a channel to another node
-                             Ch = rabbit_ct_client_helpers:open_channel(Config, Node1),
-                             #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
-                             ConfirmLoop = fun Loop() ->
-                                                     ok = publish_confirm(Ch, QQ),
-                                                     receive {done, P} ->
-                                                                 P ! done,
-                                                                 ok
-                                                     after 0 -> Loop() end
-                                             end,
-                             ConfirmLoop()
-                       end),
+    Publisher = spawn_link(
+                  fun () ->
+                          %% open a channel to another node
+                          Ch = rabbit_ct_client_helpers:open_channel(Config, Node1),
+                          #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+                          ConfirmLoop = fun Loop() ->
+                                                ok = publish_confirm(Ch, QQ, 15000),
+                                                receive
+                                                    {done, P} ->
+                                                        P ! publisher_done,
+                                                        ok
+                                                after 0 ->
+                                                        Loop()
+                                                end
+                                        end,
+                          ConfirmLoop()
+                  end),
 
     timer:sleep(500),
     %% stop the node hosting the leader
@@ -1369,14 +1469,17 @@ confirm_availability_on_leader_change(Config) ->
     %% this should not fail as the channel should detect the new leader and
     %% resend to that
     timer:sleep(500),
-    Pid ! {done, self()},
+    Publisher ! {done, self()},
     receive
-        done -> ok;
-        {'EXIT', Pid, Err} ->
+        publisher_done ->
+            ok;
+        {'EXIT', Publisher, Err} ->
+            ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
             exit(Err)
-    after 5500 ->
+    after 30000 ->
+              ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
               flush(100),
-              exit(bah)
+              exit(nothing_received_from_publisher_process)
     end,
     ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
     ok.
@@ -1548,7 +1651,7 @@ node_removal_is_not_quorum_critical(Config) ->
 
 
 file_handle_reservations(Config) ->
-    case is_mixed_versions() of
+    case rabbit_ct_helpers:is_mixed_versions() of
         true ->
             {skip, "file_handle_reservations tests isn't mixed version compatible"};
         false ->
@@ -1614,10 +1717,10 @@ cleanup_data_dir(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     timer:sleep(100),
 
-    UId1 = proplists:get_value(ra_name(QQ), rpc:call(Server1, ra_directory, list_registered, [])),
-    UId2 = proplists:get_value(ra_name(QQ), rpc:call(Server2, ra_directory, list_registered, [])),
-    DataDir1 = rpc:call(Server1, ra_env, server_data_dir, [UId1]),
-    DataDir2 = rpc:call(Server2, ra_env, server_data_dir, [UId2]),
+    UId1 = proplists:get_value(ra_name(QQ), rpc:call(Server1, ra_directory, list_registered, [quorum_queues])),
+    UId2 = proplists:get_value(ra_name(QQ), rpc:call(Server2, ra_directory, list_registered, [quorum_queues])),
+    DataDir1 = rpc:call(Server1, ra_env, server_data_dir, [quorum_queues, UId1]),
+    DataDir2 = rpc:call(Server2, ra_env, server_data_dir, [quorum_queues, UId2]),
     ?assert(filelib:is_dir(DataDir1)),
     ?assert(filelib:is_dir(DataDir2)),
 
@@ -1769,7 +1872,7 @@ delete_immediately_by_resource(Config) ->
 
     %% The stream coordinator is also a ra process, we need to ensure the quorum tests
     %% are not affected by any other ra cluster that could be added in the future
-    Children = length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup])),
+    Children = length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
 
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
@@ -1778,11 +1881,12 @@ delete_immediately_by_resource(Config) ->
     ?assertEqual({ok, "ok\n"}, rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, Cmd2)),
 
     %% Check that the application and process are down
-    wait_until(fun() ->
-                       Children == length(rpc:call(Server, supervisor, which_children, [ra_server_sup_sup]))
-               end),
-    ?assertMatch({ra, _, _}, lists:keyfind(ra, 1,
-                                           rpc:call(Server, application, which_applications, []))).
+    ?awaitMatch(Children,
+                length(rpc:call(Server, supervisor, which_children, [?SUPNAME])),
+                60000),
+    ?awaitMatch({ra, _, _}, lists:keyfind(ra, 1,
+                                          rpc:call(Server, application, which_applications, [])),
+                                          ?DEFAULT_AWAIT).
 
 subscribe_redelivery_count(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1878,7 +1982,7 @@ subscribe_redelivery_limit(Config) ->
     receive
         {#'basic.deliver'{redelivered  = true}, #amqp_msg{}} ->
             throw(unexpected_redelivery)
-    after 2000 ->
+    after 5000 ->
             ok
     end.
 
@@ -1924,7 +2028,7 @@ subscribe_redelivery_policy(Config) ->
     receive
         {#'basic.deliver'{redelivered  = true}, #amqp_msg{}} ->
             throw(unexpected_redelivery)
-    after 2000 ->
+    after 5000 ->
             ok
     end,
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"delivery-limit">>).
@@ -2082,7 +2186,7 @@ message_bytes_metrics(Config) ->
 
 memory_alarm_rolls_wal(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    WalDataDir = rpc:call(Server, ra_env, wal_data_dir, []),
+    #{wal_data_dir := WalDataDir} = ra_system:fetch(quorum_queues, Server),
     [Wal0] = filelib:wildcard(WalDataDir ++ "/*.wal"),
     rabbit_ct_broker_helpers:set_alarm(Config, Server, memory),
     rabbit_ct_helpers:await_condition(
@@ -2100,9 +2204,10 @@ memory_alarm_rolls_wal(Config) ->
     timer:sleep(1000),
     [Wal2] = filelib:wildcard(WalDataDir ++ "/*.wal"),
     ?assert(Wal1 == Wal2),
-    ok = rpc:call(Server, rabbit_alarm, clear_alarm,
-                  [{{resource_limit, memory, Server}, []}]),
-    timer:sleep(1000),
+    lists:foreach(fun (Node) ->
+        ok = rabbit_ct_broker_helpers:clear_alarm(Config, Node, memory)
+    end, rabbit_ct_broker_helpers:get_node_configs(Config, nodename)),
+    ?awaitMatch([], rabbit_ct_broker_helpers:get_alarms(Config, Server), ?DEFAULT_AWAIT),
     ok.
 
 queue_length_limit_drop_head(Config) ->
@@ -2243,6 +2348,8 @@ queue_length_in_memory_limit(Config) ->
     Msg2 = <<"msg11">>,
     Msg3 = <<"msg111">>,
     Msg4 = <<"msg1111">>,
+    Msg5 = <<"msg1111">>,
+
 
     publish(Ch, QQ, Msg1),
     publish(Ch, QQ, Msg2),
@@ -2261,7 +2368,12 @@ queue_length_in_memory_limit(Config) ->
     wait_for_messages(Config, [[QQ, <<"3">>, <<"3">>, <<"0">>]]),
 
     ?assertEqual([{2, byte_size(Msg2) + byte_size(Msg4)}],
-                 dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)).
+                 dirty_query([Server], RaName, fun rabbit_fifo:query_in_memory_usage/1)),
+    publish(Ch, QQ, Msg5),
+    wait_for_messages(Config, [[QQ, <<"4">>, <<"4">>, <<"0">>]]),
+    ExpectedMsgs = [Msg2, Msg3, Msg4, Msg5],
+    validate_queue(Ch, QQ, ExpectedMsgs),
+    ok.
 
 queue_length_in_memory_limit_returns(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -2655,6 +2767,53 @@ consumer_priorities(Config) ->
 
     ok.
 
+cancel_consumer_gh_3729(Config) ->
+    %% Test the scenario where a message is published to a quorum queue
+    %% but the consumer has been cancelled
+    %% https://github.com/rabbitmq/rabbitmq-server/pull/3746
+    QQ = ?config(queue_name, Config),
+
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+
+    ExpectedDeclareRslt0 = #'queue.declare_ok'{queue = QQ, message_count = 0, consumer_count = 0},
+    DeclareRslt0 = declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    ?assertMatch(ExpectedDeclareRslt0, DeclareRslt0),
+
+    ok = publish(Ch, QQ),
+
+    ok = subscribe(Ch, QQ, false),
+
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
+            R = #'basic.reject'{delivery_tag = DeliveryTag, requeue = true},
+            ok = amqp_channel:cast(Ch, R)
+    after 5000 ->
+        flush(100),
+        ct:fail("basic.deliver timeout")
+    end,
+
+    ok = cancel(Ch),
+
+    receive
+        #'basic.cancel_ok'{consumer_tag = <<"ctag">>} -> ok
+    after 5000 ->
+        flush(100),
+        ct:fail("basic.cancel_ok timeout")
+    end,
+
+    D = #'queue.declare'{queue = QQ, passive = true, arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+
+    F = fun() ->
+            #'queue.declare_ok'{queue = QQ,
+                                message_count = MC,
+                                consumer_count = CC} = amqp_channel:call(Ch, D),
+            MC =:= 1 andalso CC =:= 0
+        end,
+    wait_until(F),
+
+    ok = rabbit_ct_client_helpers:close_channel(Ch).
+
 %%----------------------------------------------------------------------------
 
 declare(Ch, Q) ->
@@ -2712,6 +2871,10 @@ qos(Ch, Prefetch, Global) ->
     ?assertMatch(#'basic.qos_ok'{},
                  amqp_channel:call(Ch, #'basic.qos'{global = Global,
                                                     prefetch_count = Prefetch})).
+
+cancel(Ch) ->
+    ?assertMatch(#'basic.cancel_ok'{consumer_tag = <<"ctag">>},
+                 amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = <<"ctag">>})).
 
 receive_basic_deliver(Redelivered) ->
     receive
@@ -2790,3 +2953,21 @@ queue_names(Records) ->
          #resource{name = Name} = amqqueue:get_name(Q),
          Name
      end || Q <- Records].
+
+
+validate_queue(Ch, Queue, ExpectedMsgs) ->
+    qos(Ch, length(ExpectedMsgs), false),
+    subscribe(Ch, Queue, false),
+    [begin
+         receive
+             {#'basic.deliver'{delivery_tag = DeliveryTag1,
+                               redelivered = false},
+              #amqp_msg{payload = M}} ->
+                 amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
+                                                    multiple = false})
+         after 5000 ->
+                   flush(10),
+                   exit({validate_queue_timeout, M})
+         end
+     end || M <- ExpectedMsgs],
+    ok.

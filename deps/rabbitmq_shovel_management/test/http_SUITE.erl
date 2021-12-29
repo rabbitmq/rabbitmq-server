@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(http_SUITE).
@@ -164,6 +164,27 @@ shovels(Config) ->
                            'dest-protocol' => <<"amqp091">>,
                            'dest-uri'   => <<"amqp://">>,
                            'dest-queue' => <<"test2">>}}, ?CREATED)
+     || V <- ["%2f", "v"]],
+
+     [http_put(Config, "/parameters/shovel/" ++ V ++ "/my-dynamic",
+              #{value => #{'src-protocol' => <<"amqp091">>,
+                           'src-uri'    => <<"amqp://">>,
+                           'src-queue'  => <<"test">>,
+                           'dest-protocol' => <<"amqp091">>,
+                           'dest-uri'   => <<"amqp://">>,
+                           'dest-queue' => list_to_binary(
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"
+                                           "test2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq")}},
+               ?BAD_REQUEST)
      || V <- ["%2f", "v"]],
 
     ?assertMatch([?StaticPattern, ?Dynamic1Pattern, ?Dynamic2Pattern],

@@ -2,13 +2,10 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_federation_exchange_link).
-
-%% pg2 is deprecated in OTP 23.
--compile(nowarn_deprecated_function).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
@@ -51,7 +48,9 @@
 %% start during exchange recovery, when rabbit is not fully started
 %% and the Erlang client is not running. This then gets invoked when
 %% the federation app is started.
-go() -> cast(go).
+go() ->
+    rabbit_federation_pg:start_scope(),
+    cast(go).
 
 add_binding(S, XN, B)      -> cast(XN, {enqueue, S, {add_binding, B}}).
 remove_bindings(S, XN, Bs) -> cast(XN, {enqueue, S, {remove_bindings, Bs}}).
@@ -79,7 +78,7 @@ init({Upstream, XName}) ->
             gen_server2:cast(self(), maybe_go),
             {ok, {not_started, {Upstream, UParams, XName}}};
         {error, not_found} ->
-            rabbit_federation_link_util:log_warning(XName, "not found, stopping link~n", []),
+            rabbit_federation_link_util:log_warning(XName, "not found, stopping link", []),
             {stop, gone}
     end.
 
@@ -89,11 +88,8 @@ handle_call(list_routing_keys, _From, State = #state{bindings = Bindings}) ->
 handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
-handle_cast(maybe_go, S0 = {not_started, _Args}) ->
-    case federation_up() of
-        true  -> go(S0);
-        false -> {noreply, S0}
-    end;
+handle_cast(maybe_go, State = {not_started, _Args}) ->
+    go(State);
 
 handle_cast(go, S0 = {not_started, _Args}) ->
     go(S0);
@@ -114,7 +110,7 @@ handle_cast({enqueue, Serial, Cmd},
         {noreply, play_back_commands(State#state{waiting_cmds = Waiting1})}
     catch exit:{{shutdown, {server_initiated_close, 404, Text}}, _} ->
             rabbit_federation_link_util:log_warning(
-              XName, "detected upstream changes, restarting link: ~p~n", [Text]),
+              XName, "detected upstream changes, restarting link: ~p", [Text]),
             {stop, {shutdown, restart}, State}
     end;
 
@@ -247,20 +243,15 @@ cast(Msg)        -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
 cast(XName, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- x(XName)].
 
 join(Name) ->
-    pg2:create(pgname(Name)),
-    ok = pg2:join(pgname(Name), self()).
+    ok = pg:join(?FEDERATION_PG_SCOPE, pgname(Name), self()).
 
 all() ->
-    pg2:create(pgname(rabbit_federation_exchanges)),
-    pg2:get_members(pgname(rabbit_federation_exchanges)).
+    pg:get_members(?FEDERATION_PG_SCOPE, pgname(rabbit_federation_exchanges)).
 
 x(XName) ->
-    pg2:create(pgname({rabbit_federation_exchange, XName})),
-    pg2:get_members(pgname({rabbit_federation_exchange, XName})).
+    pg:get_members(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_exchange, XName})).
 
 %%----------------------------------------------------------------------------
-
-federation_up() -> is_pid(whereis(rabbit_federation_app)).
 
 handle_command({add_binding, Binding}, State) ->
     add_binding(Binding, State);
@@ -430,11 +421,15 @@ key(#binding{key = Key, args = Args}) -> {Key, Args}.
 
 go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
     Unacked = rabbit_federation_link_util:unacked_new(),
-
     log_link_startup_attempt(Upstream, DownXName),
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
-              {ok, CmdCh} = open_cmd_channel(Conn, Upstream, UParams, DownXName, S0),
+              {ok, CmdCh} =
+                  case Upstream#upstream.channel_use_mode of
+                    single   -> reuse_command_channel(Ch, Upstream, DownXName);
+                    multiple -> open_command_channel(Conn, Upstream, UParams, DownXName, S0);
+                    _        -> open_command_channel(Conn, Upstream, UParams, DownXName, S0)
+                  end,
               erlang:monitor(process, CmdCh),
               Props = pget(server_properties,
                            amqp_connection:info(Conn, [server_properties])),
@@ -480,11 +475,18 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
               {noreply, State#state{internal_exchange_timer = TRef}}
       end, Upstream, UParams, DownXName, S0).
 
-log_link_startup_attempt(OUpstream, DownXName) ->
-    rabbit_log_federation:debug("Will try to start a federation link for ~s, upstream: '~s'",
-                                [rabbit_misc:rs(DownXName), OUpstream#upstream.name]).
+log_link_startup_attempt(#upstream{name = Name, channel_use_mode = ChMode}, DownXName) ->
+    rabbit_log_federation:debug("Will try to start a federation link for ~s, upstream: '~s', channel use mode: ~s",
+                                [rabbit_misc:rs(DownXName), Name, ChMode]).
 
-open_cmd_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXName, S0) ->
+%% If channel use mode is 'single', reuse the message transfer channel.
+%% Otherwise open a separate one.
+reuse_command_channel(MainCh, #upstream{name = UName}, DownXName) ->
+    rabbit_log_federation:debug("Will use a single channel for both schema operations and message transfer on links to upstream '~s' for downstream federated ~s",
+                                [UName, rabbit_misc:rs(DownXName)]),
+    {ok, MainCh}.
+
+open_command_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXName, S0) ->
     rabbit_log_federation:debug("Will open a command channel to upstream '~s' for downstream federated ~s",
                                 [UName, rabbit_misc:rs(DownXName)]),
     case amqp_connection:open_channel(Conn) of
@@ -627,11 +629,11 @@ check_internal_exchange(IntXNameBin,
       Params, XFU, fun(404, Text) ->
                            rabbit_federation_link_util:log_warning(
                              XName, "detected internal upstream exchange changes,"
-                             " restarting link: ~p~n", [Text]),
+                             " restarting link: ~p", [Text]),
                            upstream_not_found;
                       (Code, Text) ->
                            rabbit_federation_link_util:log_warning(
-                             XName, "internal upstream exchange check failed: ~p ~p~n",
+                             XName, "internal upstream exchange check failed: ~p ~p",
                              [Code, Text]),
                            error
                    end).

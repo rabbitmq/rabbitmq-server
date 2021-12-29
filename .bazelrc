@@ -1,0 +1,57 @@
+build --incompatible_strict_action_env
+build --local_test_jobs=1
+
+build:buildbuddy --bes_results_url=https://app.buildbuddy.io/invocation/
+build:buildbuddy --bes_backend=grpcs://remote.buildbuddy.io
+build:buildbuddy --remote_cache=grpcs://remote.buildbuddy.io
+build:buildbuddy --remote_timeout=1200
+build:buildbuddy --grpc_keepalive_time=360s
+build:buildbuddy --grpc_keepalive_timeout=360s
+build:buildbuddy --remote_download_minimal
+build:buildbuddy --build_metadata=REPO_URL=https://github.com/rabbitmq/rabbitmq-server.git
+
+build:rbe --config=buildbuddy
+
+build:rbe --remote_executor=grpcs://remote.buildbuddy.io
+
+build:rbe --host_java_toolchain=@bazel_tools//tools/jdk:toolchain_hostjdk8
+build:rbe --java_toolchain=@bazel_tools//tools/jdk:toolchain_hostjdk8
+build:rbe --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+
+build:rbe --@bazel-erlang//:erlang_home=/usr/lib/erlang
+build:rbe --//:elixir_home=/usr/local
+
+build:rbe --spawn_strategy=remote
+build:rbe --test_strategy=""
+build:rbe --jobs=100
+
+build:rbe-23 --config=rbe
+build:rbe-23 --host_javabase=@rbe_23//java:jdk
+build:rbe-23 --javabase=@rbe_23//java:jdk
+build:rbe-23 --host_java_toolchain=@bazel_tools//tools/jdk:toolchain_hostjdk8
+build:rbe-23 --java_toolchain=@bazel_tools//tools/jdk:toolchain_hostjdk8
+build:rbe-23 --crosstool_top=@rbe_23//cc:toolchain
+build:rbe-23 --extra_toolchains=@rbe_23//config:cc-toolchain
+
+build:rbe-23 --host_platform=@rbe_23//config:platform
+build:rbe-23 --platforms=@rbe_23//config:platform
+build:rbe-23 --extra_execution_platforms=@rbe_23//config:platform
+
+build:rbe-23 --@bazel-erlang//:erlang_version=23
+
+build:rbe-24 --config=rbe
+build:rbe-24 --host_javabase=@rbe_24//java:jdk
+build:rbe-24 --javabase=@rbe_24//java:jdk
+build:rbe-24 --crosstool_top=@rbe_24//cc:toolchain
+build:rbe-24 --extra_toolchains=@rbe_24//config:cc-toolchain
+
+build:rbe-24 --host_platform=@rbe_24//config:platform
+build:rbe-24 --platforms=@rbe_24//config:platform
+build:rbe-24 --extra_execution_platforms=@rbe_24//config:platform
+
+build:rbe-24 --@bazel-erlang//:erlang_version=24
+
+# Try importing a user specific .bazelrc
+# You can create your own by copying and editing the template-user.bazelrc template:
+# cp template-user.bazelrc user.bazelrc
+try-import %workspace%/user.bazelrc

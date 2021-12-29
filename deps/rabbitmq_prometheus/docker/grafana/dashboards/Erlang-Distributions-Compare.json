@@ -4,13 +4,13 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "6.0.0"
+      "version": "7.0.0"
     },
     {
       "type": "datasource",
       "id": "prometheus",
       "name": "prometheus",
-      "version": "1.0.0"
+      "version": "2.0.0"
     },
     {
       "type": "table",
@@ -137,7 +137,7 @@
       ],
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
           "refId": "A"
         }
@@ -190,43 +190,43 @@
       "renderer": "flot",
       "seriesOverrides": [
         {
-          "alias": "/^rabbit@[\\w.-]+0/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?0(\\b|\\.)/",
           "color": "#56A64B"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+1/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?1(\\b|\\.)/",
           "color": "#F2CC0C"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+2/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?2(\\b|\\.)/",
           "color": "#3274D9"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+3/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?3(\\b|\\.)/",
           "color": "#A352CC"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+4/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?4(\\b|\\.)/",
           "color": "#FF780A"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+5/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?5(\\b|\\.)/",
           "color": "#96D98D"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+6/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?6(\\b|\\.)/",
           "color": "#FFEE52"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+7/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?7(\\b|\\.)/",
           "color": "#8AB8FF"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+8/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?8(\\b|\\.)/",
           "color": "#CA95E5"
         },
         {
-          "alias": "/^rabbit@[\\w.-]+9/",
+          "alias": "/^rabbit@[a-zA-Z\\.\\-]*?9(\\b|\\.)/",
           "color": "#FFB357"
         }
       ],
@@ -235,7 +235,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\"}",
+          "expr": "rate(erlang_vm_dist_send_bytes[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=~\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
@@ -1642,6 +1642,46 @@
   "templating": {
     "list": [
       {
+        "current": {
+          "selected": false,
+          "text": "default",
+          "value": "default"
+        },
+        "hide": 2,
+        "includeAll": false,
+        "label": "datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": null,
+        "current": {},
+        "datasource": null,
+        "definition": "label_values(rabbitmq_identity_info, namespace)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Namespace",
+        "multi": false,
+        "name": "namespace",
+        "options": [],
+        "query": "label_values(rabbitmq_identity_info, namespace)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
         "allValue": null,
         "current": {
           "text": "All",
@@ -1650,14 +1690,14 @@
           ]
         },
         "datasource": null,
-        "definition": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
+        "definition": "label_values(rabbitmq_identity_info{namespace=\"$namespace\"}, rabbitmq_cluster)",
         "hide": 0,
         "includeAll": true,
         "label": "RabbitMQ Cluster",
         "multi": true,
         "name": "rabbitmq_cluster",
         "options": [],
-        "query": "label_values(rabbitmq_identity_info, rabbitmq_cluster)",
+        "query": "label_values(rabbitmq_identity_info{namespace=\"$namespace\"}, rabbitmq_cluster)",
         "refresh": 2,
         "regex": "",
         "skipUrlSync": false,
@@ -1803,5 +1843,5 @@
   "timezone": "",
   "title": "Erlang-Distributions-Compare",
   "uid": "C0jeDstZk",
-  "version": 1
+  "version": 20210322
 }

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_misc).
@@ -327,7 +327,7 @@ assert_args_equivalence1(Orig, New, Name, Key) ->
 %%
 %% Fixes rabbitmq/rabbitmq-common#341
 %%
-assert_field_equivalence(_Orig, _Orig, _Name, _Key) ->
+assert_field_equivalence(Current, Current, _Name, _Key) ->
     ok;
 assert_field_equivalence(undefined, {longstr, <<"classic">>}, _Name, <<"x-queue-type">>) ->
     ok;

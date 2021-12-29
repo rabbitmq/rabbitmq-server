@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbitmq_peer_discovery_etcd_v3_client).
@@ -39,7 +39,7 @@
 %% don't allow node lease key TTL to be lower than this
 %% as overly low values can cause annoying timeouts in etcd client operations
 -define(MINIMUM_NODE_KEY_LEASE_TTL, 15).
-%% default randomized delay range is 5s to 60s, so this value
+%% default randomized delay range was 5s to 60s, so this value
 %% produces a comparable delay
 -define(DEFAULT_LOCK_WAIT_TTL, 70).
 %% don't allow lock lease TTL to be lower than this

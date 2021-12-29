@@ -11,11 +11,14 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
 
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.ko;
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.ok;
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.responseCode;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.rabbitmq.stream.impl.Client;
@@ -40,24 +43,29 @@ public class ClusterSizeTest {
     String s = UUID.randomUUID().toString();
     Response response =
         client.create(s, Collections.singletonMap("initial-cluster-size", clusterSize));
-    assertThat(response.isOk()).isFalse();
-    assertThat(response.getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_PRECONDITION_FAILED);
+    assertThat(response).is(ko()).has(responseCode(Constants.RESPONSE_CODE_PRECONDITION_FAILED));
   }
 
   @ParameterizedTest
   @CsvSource({"1,1", "2,2", "3,3", "5,3"})
-  void clusterSizeShouldReflectOnMetadata(String requestedClusterSize, int expectedClusterSize) {
+  void clusterSizeShouldReflectOnMetadata(String requestedClusterSize, int expectedClusterSize)
+      throws InterruptedException {
     Client client = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode1()));
     String s = UUID.randomUUID().toString();
     try {
       Response response =
           client.create(s, Collections.singletonMap("initial-cluster-size", requestedClusterSize));
-      assertThat(response.isOk()).isTrue();
+      assertThat(response).is(ok());
       StreamMetadata metadata = client.metadata(s).get(s);
       assertThat(metadata).isNotNull();
       assertThat(metadata.getResponseCode()).isEqualTo(Constants.RESPONSE_CODE_OK);
-      int actualClusterSize = metadata.getLeader() == null ? 0 : 1 + metadata.getReplicas().size();
-      assertThat(actualClusterSize).isEqualTo(expectedClusterSize);
+      TestUtils.waitUntil(
+          () -> {
+            StreamMetadata m = client.metadata(s).get(s);
+            assertThat(metadata).isNotNull();
+            int actualClusterSize = m.getLeader() == null ? 0 : 1 + m.getReplicas().size();
+            return actualClusterSize == expectedClusterSize;
+          });
     } finally {
       client.delete(s);
     }

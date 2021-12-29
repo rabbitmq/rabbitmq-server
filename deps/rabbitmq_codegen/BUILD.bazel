@@ -1,0 +1,18 @@
+exports_files([
+    "amqp-1.0/messaging.xml",
+    "amqp-1.0/security.xml",
+    "amqp-1.0/transactions.xml",
+    "amqp-1.0/transport.xml",
+])
+
+exports_files([
+    "amqp-rabbitmq-0.9.1.json",
+    "credit_extension.json",
+    "amqp-rabbitmq-0.8.json",
+])
+
+py_library(
+    name = "amqp_codegen",
+    srcs = ["amqp_codegen.py"],
+    visibility = ["//visibility:public"],
+)

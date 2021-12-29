@@ -2,10 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_queue_index).
+
+-compile({inline, [segment_entry_count/0]}).
 
 -export([erase/1, init/3, reset_state/1, recover/6,
          terminate/3, delete_and_terminate/1,
@@ -21,6 +23,9 @@
          update_recovery_term/2,
          read_global_recovery_terms/1,
          cleanup_global_recovery_terms/0]).
+
+%% Used by rabbit_vhost to set the segment_entry_count.
+-export([all_queue_directory_names/1]).
 
 -define(CLEAN_FILENAME, "clean.dot").
 
@@ -43,13 +48,13 @@
 %% then delivered, then ack'd.
 %%
 %% In order to be able to clean up ack'd messages, we write to segment
-%% files. These files have a fixed number of entries: ?SEGMENT_ENTRY_COUNT
+%% files. These files have a fixed number of entries: segment_entry_count()
 %% publishes, delivers and acknowledgements. They are numbered, and so
 %% it is known that the 0th segment contains messages 0 ->
-%% ?SEGMENT_ENTRY_COUNT - 1, the 1st segment contains messages
-%% ?SEGMENT_ENTRY_COUNT -> 2*?SEGMENT_ENTRY_COUNT - 1 and so on. As
+%% segment_entry_count() - 1, the 1st segment contains messages
+%% segment_entry_count() -> 2*segment_entry_count() - 1 and so on. As
 %% such, in the segment files, we only refer to message sequence ids
-%% by the LSBs as SeqId rem ?SEGMENT_ENTRY_COUNT. This gives them a
+%% by the LSBs as SeqId rem segment_entry_count(). This gives them a
 %% fixed size.
 %%
 %% However, transient messages which are not sent to disk at any point
@@ -127,8 +132,6 @@
 %% binary generation/matching with constant vs variable lengths.
 
 -define(REL_SEQ_BITS, 14).
-%% calculated as trunc(math:pow(2,?REL_SEQ_BITS))).
--define(SEGMENT_ENTRY_COUNT, 16384).
 
 %% seq only is binary 01 followed by 14 bits of rel seq id
 %% (range: 0 - 16383)
@@ -212,7 +215,7 @@
   unacked
 }).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -280,6 +283,8 @@ reset_state(#qistate{ queue_name     = Name,
                  on_sync_fun(), on_sync_fun()) -> qistate().
 
 init(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
+    #{segment_entry_count := SegmentEntryCount} = rabbit_vhost:read_config(VHost),
+    put(segment_entry_count, SegmentEntryCount),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     State = #qistate { dir = Dir } = blank_state(VHostDir, Name),
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
@@ -294,14 +299,18 @@ init(#resource{ virtual_host = VHost } = Name, OnSyncFun, OnSyncMsgFun) ->
 
 recover(#resource{ virtual_host = VHost } = Name, Terms, MsgStoreRecovered,
         ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
+    #{segment_entry_count := SegmentEntryCount} = rabbit_vhost:read_config(VHost),
+    put(segment_entry_count, SegmentEntryCount),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     State = blank_state(VHostDir, Name),
     State1 = State #qistate{on_sync     = OnSyncFun,
                             on_sync_msg = OnSyncMsgFun},
     CleanShutdown = Terms /= non_clean_shutdown,
     case CleanShutdown andalso MsgStoreRecovered of
-        true  -> RecoveredCounts = proplists:get_value(segments, Terms, []),
-                 init_clean(RecoveredCounts, State1);
+        true  -> case proplists:get_value(segments, Terms, non_clean_shutdown) of
+                     non_clean_shutdown -> init_dirty(false, ContainsCheckFun, State1);
+                     RecoveredCounts    -> init_clean(RecoveredCounts, State1)
+                 end;
         false -> init_dirty(CleanShutdown, ContainsCheckFun, State1)
     end.
 
@@ -352,11 +361,11 @@ pre_publish(MsgOrId, SeqId, MsgProps, IsPersistent, IsDelivered, JournalSizeHint
 %% pre_publish_cache is the entry with most elements when compared to
 %% delivered_cache so we only check the former in the guard.
 maybe_flush_pre_publish_cache(JournalSizeHint,
-                              #qistate{pre_publish_cache = PPC} = State)
-  when length(PPC) >= ?SEGMENT_ENTRY_COUNT ->
-    flush_pre_publish_cache(JournalSizeHint, State);
-maybe_flush_pre_publish_cache(_JournalSizeHint, State) ->
-    State.
+                              #qistate{pre_publish_cache = PPC} = State) ->
+    case length(PPC) >= segment_entry_count() of
+        true -> flush_pre_publish_cache(JournalSizeHint, State);
+        false -> State
+    end.
 
 flush_pre_publish_cache(JournalSizeHint, State) ->
     State1 = flush_pre_publish_cache(State),
@@ -728,6 +737,9 @@ queue_index_walker_reader(QueueName, Gatherer) ->
     ok = gatherer:finish(Gatherer).
 
 scan_queue_segments(Fun, Acc, #resource{ virtual_host = VHost } = QueueName) ->
+    %% Set the segment_entry_count for this worker process.
+    #{segment_entry_count := SegmentEntryCount} = rabbit_vhost:read_config(VHost),
+    put(segment_entry_count, SegmentEntryCount),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     scan_queue_segments(Fun, Acc, VHostDir, QueueName).
 
@@ -991,10 +1003,11 @@ notify_sync(State = #qistate{unconfirmed     = UC,
 %%----------------------------------------------------------------------------
 
 seq_id_to_seg_and_rel_seq_id(SeqId) ->
-    { SeqId div ?SEGMENT_ENTRY_COUNT, SeqId rem ?SEGMENT_ENTRY_COUNT }.
+    SegmentEntryCount = segment_entry_count(),
+    { SeqId div SegmentEntryCount, SeqId rem SegmentEntryCount }.
 
 reconstruct_seq_id(Seg, RelSeq) ->
-    (Seg * ?SEGMENT_ENTRY_COUNT) + RelSeq.
+    (Seg * segment_entry_count()) + RelSeq.
 
 all_segment_nums(#qistate { dir = Dir, segments = Segments }) ->
     lists:sort(
@@ -1163,7 +1176,10 @@ array_new() ->
     array_new(undefined).
 
 array_new(Default) ->
-    array:new([{default, Default}, fixed, {size, ?SEGMENT_ENTRY_COUNT}]).
+    array:new([{default, Default}, fixed, {size, segment_entry_count()}]).
+
+segment_entry_count() ->
+    get(segment_entry_count).
 
 bool_to_int(true ) -> 1;
 bool_to_int(false) -> 0.
@@ -1478,7 +1494,7 @@ move_to_per_vhost_stores(#resource{virtual_host = VHost} = QueueName) ->
             ok = rabbit_file:rename(OldQueueDir, NewQueueDir),
             ok = ensure_queue_name_stub_file(NewQueueDir, QueueName);
         false ->
-            Msg  = "Queue index directory '~s' not found for ~s~n",
+            Msg  = "Queue index directory '~s' not found for ~s",
             Args = [OldQueueDir, rabbit_misc:rs(QueueName)],
             rabbit_log_upgrade:error(Msg, Args),
             rabbit_log:error(Msg, Args)

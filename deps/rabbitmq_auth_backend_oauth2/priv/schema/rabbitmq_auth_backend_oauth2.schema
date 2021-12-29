@@ -1,0 +1,128 @@
+%% ----------------------------------------------------------------------------
+%% RabbitMQ OAuth2 Plugin
+%%
+%% See https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_auth_backend_oauth2/ for details.
+%%
+%% ----------------------------------------------------------------------------
+
+%% A prefix used for scopes in UAA to avoid scope collisions (or unintended overlap). It is an empty string by default.
+%%
+%% {resource_server_id, <<"my_rabbit_server">>},
+
+{mapping,
+ "auth_oauth2.resource_server_id",
+ "rabbitmq_auth_backend_oauth2.resource_server_id",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.resource_server_id",
+ fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.resource_server_id", Conf))
+ end}.
+
+%% Configure the plugin to also look in other fields using additional_scopes_key (maps to additional_rabbitmq_scopes in the old format)
+%%
+%% {additional_rabbitmq_scopes, <<"my_custom_scope_key">>},
+
+{mapping,
+ "auth_oauth2.additional_scopes_key",
+ "rabbitmq_auth_backend_oauth2.additional_rabbitmq_scopes",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.additional_rabbitmq_scopes",
+ fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("auth_oauth2.additional_scopes_key", Conf))
+ end}.
+
+%% ID of the default signing key
+%%
+%% {default_key, <<"key-1">>},
+
+{mapping,
+ "auth_oauth2.default_key",
+ "rabbitmq_auth_backend_oauth2.key_config.default_key",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.key_config.default_key",
+ fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.default_key", Conf)) end}.
+
+%% A map of signing keys
+%%
+%% {signing_keys, #{<<"id1">> => {pem, <<"value1">>}, <<"id2">> => {pem, <<"value2">>}}}
+%% validator doesn't work
+
+{mapping,
+ "auth_oauth2.signing_keys.$name",
+ "rabbitmq_auth_backend_oauth2.key_config.signing_keys",
+ [{datatype, file}, {validators, ["file_accessible"]}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.key_config.signing_keys",
+ fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.signing_keys", Conf),
+    TryReadingFileFun =
+        fun(Path) ->
+            case file:read_file(Path) of
+                {ok, Bin} ->
+                    string:trim(Bin, trailing, "\n");
+                _ ->
+                    %% this throws and makes Cuttlefish treak the key as invalid
+                    cuttlefish:invalid("file does not exist or cannot be read by the node")
+            end
+        end,
+    SigningKeys =
+        lists:map(fun({Id, Path}) ->
+                    {list_to_binary(lists:last(Id)), {pem, TryReadingFileFun(Path)}}
+                  end, Settings),
+    maps:from_list(SigningKeys)
+ end}.
+
+{mapping,
+ "auth_oauth2.jwks_url",
+ "rabbitmq_auth_backend_oauth2.key_config.jwks_url",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
+
+{mapping,
+ "auth_oauth2.https.peer_verification",
+ "rabbitmq_auth_backend_oauth2.key_config.peer_verification",
+ [{datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping,
+ "auth_oauth2.https.cacertfile",
+ "rabbitmq_auth_backend_oauth2.key_config.cacertfile",
+ [{datatype, file}, {validators, ["file_accessible"]}]}.
+
+{mapping,
+ "auth_oauth2.https.depth",
+ "rabbitmq_auth_backend_oauth2.key_config.depth",
+ [{datatype, integer}]}.
+
+{mapping,
+ "auth_oauth2.https.hostname_verification",
+ "rabbitmq_auth_backend_oauth2.key_config.hostname_verification",
+ [{datatype, {enum, [wildcard, none]}}]}.
+
+{mapping,
+ "auth_oauth2.https.crl_check",
+ "rabbitmq_auth_backend_oauth2.key_config.crl_check",
+ [{datatype, {enum, [true, false, peer, best_effort]}}]}.
+
+{mapping,
+ "auth_oauth2.https.fail_if_no_peer_cert",
+ "rabbitmq_auth_backend_oauth2.key_config.fail_if_no_peer_cert",
+ [{datatype, {enum, [true, false]}}]}.
+
+{validator, "https_uri", "According to the JWT Specification, Key Server URL must be https.",
+ fun(Uri) -> string:nth_lexeme(Uri, 1, "://") == "https" end}.
+
+{mapping,
+ "auth_oauth2.algorithms.$algorithm",
+ "rabbitmq_auth_backend_oauth2.key_config.algorithms",
+ [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_oauth2.key_config.algorithms",
+ fun(Conf) ->
+     Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.algorithms", Conf),
+     [list_to_binary(V) || {_, V} <- Settings]
+ end}.

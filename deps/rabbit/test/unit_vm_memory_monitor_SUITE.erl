@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_vm_memory_monitor_SUITE).
@@ -21,7 +21,9 @@ groups() ->
     [
       {sequential_tests, [], [
           parse_line_linux,
-          set_vm_memory_high_watermark_command
+          set_vm_memory_high_watermark_relative1,
+          set_vm_memory_high_watermark_relative2,
+          set_vm_memory_high_watermark_absolute
         ]}
     ].
 
@@ -75,21 +77,46 @@ parse_line_linux(_Config) ->
                    {"MemTotal     50296866   ",   {'MemTotal', 50296866}}]),
     ok.
 
-set_vm_memory_high_watermark_command(Config) ->
+set_vm_memory_high_watermark_relative1(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, set_vm_memory_high_watermark_command1, [Config]).
+      ?MODULE, set_and_verify_vm_memory_high_watermark_relative, [1.0]).
 
-set_vm_memory_high_watermark_command1(_Config) ->
-    MemLimitRatio = 1.0,
+%% an alternative way of setting it via advanced.config, equivalent to the relative1 case above
+set_vm_memory_high_watermark_relative2(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, set_and_verify_vm_memory_high_watermark_relative, [{relative, 1.0}]).
+
+set_vm_memory_high_watermark_absolute(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      %% note: we cannot use 100M here because this function won't do any
+      %% parsing of the argument
+      ?MODULE, set_and_verify_vm_memory_high_watermark_absolute, [{absolute, 104857600}]).
+
+
+set_and_verify_vm_memory_high_watermark_relative(MemLimitRatio) ->
     MemTotal = vm_memory_monitor:get_total_memory(),
 
     vm_memory_monitor:set_vm_memory_high_watermark(MemLimitRatio),
     MemLimit = vm_memory_monitor:get_memory_limit(),
     case MemLimit of
         MemTotal -> ok;
-        _        -> MemTotalToMemLimitRatio = MemLimit * 100.0 / MemTotal / 100,
+        _        -> MemTotalToMemLimitRatio = (MemLimit * 100) / (MemTotal * 100),
                     ct:fail(
-                        "Expected memory high watermark to be ~p (~s), but it was ~p (~.1f)",
+                        "Expected memory high watermark to be ~p (~p), but it was ~p (~.1f)",
                         [MemTotal, MemLimitRatio, MemLimit, MemTotalToMemLimitRatio]
                     )
     end.
+
+set_and_verify_vm_memory_high_watermark_absolute(MemLimit0) ->
+    MemTotal = vm_memory_monitor:get_total_memory(),
+    Interpreted = vm_memory_monitor:interpret_limit(MemLimit0, MemTotal),
+
+    vm_memory_monitor:set_vm_memory_high_watermark(MemLimit0),
+    MemLimit = vm_memory_monitor:get_memory_limit(),
+    case MemLimit of
+        MemTotal    -> ok;
+        Interpreted -> ok;
+        _           ->
+            ct:fail("Expected memory high watermark to be ~p but it was ~p", [Interpreted, MemLimit])
+    end,
+    vm_memory_monitor:set_vm_memory_high_watermark(0.4).

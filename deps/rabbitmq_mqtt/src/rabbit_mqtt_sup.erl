@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mqtt_sup).
@@ -20,6 +20,7 @@ start_link(Listeners, []) ->
 
 init([{Listeners, SslListeners0}]) ->
     NumTcpAcceptors = application:get_env(rabbitmq_mqtt, num_tcp_acceptors, 10),
+    ConcurrentConnsSups = application:get_env(rabbitmq_mqtt, num_conns_sups, 1),
     {ok, SocketOpts} = application:get_env(rabbitmq_mqtt, tcp_listen_options),
     {SslOpts, NumSslAcceptors, SslListeners}
         = case SslListeners0 of
@@ -36,9 +37,10 @@ init([{Listeners, SslListeners0}]) ->
             {rabbit_mqtt_retainer_sup, start_link, [{local, rabbit_mqtt_retainer_sup}]},
              transient, ?SUPERVISOR_WAIT, supervisor, [rabbit_mqtt_retainer_sup]} |
            listener_specs(fun tcp_listener_spec/1,
-                          [SocketOpts, NumTcpAcceptors], Listeners) ++
+                          [SocketOpts, NumTcpAcceptors, ConcurrentConnsSups], Listeners) ++
            listener_specs(fun ssl_listener_spec/1,
-                          [SocketOpts, SslOpts, NumSslAcceptors], SslListeners)]}}.
+                          [SocketOpts, SslOpts, NumSslAcceptors, ConcurrentConnsSups],
+                          SslListeners)]}}.
 
 stop_listeners() ->
     rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
@@ -54,17 +56,17 @@ listener_specs(Fun, Args, Listeners) ->
         Listener <- Listeners,
         Address  <- rabbit_networking:tcp_listener_addresses(Listener)].
 
-tcp_listener_spec([Address, SocketOpts, NumAcceptors]) ->
+tcp_listener_spec([Address, SocketOpts, NumAcceptors, ConcurrentConnsSups]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_mqtt_listener_sup, Address, SocketOpts,
       transport(?TCP_PROTOCOL), rabbit_mqtt_connection_sup, [],
-      mqtt, NumAcceptors, "MQTT TCP listener").
+      mqtt, NumAcceptors, ConcurrentConnsSups, "MQTT TCP listener").
 
-ssl_listener_spec([Address, SocketOpts, SslOpts, NumAcceptors]) ->
+ssl_listener_spec([Address, SocketOpts, SslOpts, NumAcceptors, ConcurrentConnsSups]) ->
     rabbit_networking:tcp_listener_spec(
       rabbit_mqtt_listener_sup, Address, SocketOpts ++ SslOpts,
       transport(?TLS_PROTOCOL), rabbit_mqtt_connection_sup, [],
-      'mqtt/ssl', NumAcceptors, "MQTT TLS listener").
+      'mqtt/ssl', NumAcceptors, ConcurrentConnsSups, "MQTT TLS listener").
 
 transport(Protocol) ->
     case Protocol of

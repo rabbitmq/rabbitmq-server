@@ -31,12 +31,20 @@ class TestAmqpHeaders(base.BaseTest):
 
         # check if we receive the message from the STOMP subscription
         self.assertTrue(self.listener.wait(2), "initial message not received")
-        self.assertEquals(1, len(self.listener.messages))
+        self.assertEqual(1, len(self.listener.messages))
         msg = self.listener.messages[0]
-        self.assertEquals('Hello World!', msg['message'])
-        self.assertEquals('value1', msg['headers']['x-custom-hdr-1'])
-        self.assertEquals('value2', msg['headers']['x-custom-hdr-2'])
-        self.assertEquals('value3', msg['headers']['custom-hdr-3'])
+        self.assertEqual('Hello World!', msg['message'])
+        self.assertEqual('value1', msg['headers']['x-custom-hdr-1'])
+        self.assertEqual('value2', msg['headers']['x-custom-hdr-2'])
+        self.assertEqual('value3', msg['headers']['custom-hdr-3'])
 
         self.conn.disconnect()
         amqp_conn.close()
+
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)

@@ -13,7 +13,7 @@ volumes:
 services:
   grafana:
     # https://hub.docker.com/r/grafana/grafana/tags
-    image: grafana/grafana:7.3.2
+    image: grafana/grafana:8.0.6
     ports:
       - "3000:3000"
     networks:
@@ -34,7 +34,7 @@ services:
       GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-piechart-panel"
   prometheus:
     # https://hub.docker.com/r/prom/prometheus/tags
-    image: prom/prometheus:v2.22.1
+    image: prom/prometheus:v2.28.1
     networks:
       - "rabbitmq-prometheus"
     ports:
@@ -51,7 +51,7 @@ services:
     expose:
       - 9100
     # https://hub.docker.com/r/prom/node-exporter/tags
-    image: prom/node-exporter:v1.0.1
+    image: prom/node-exporter:v1.2.0
     networks:
       - "rabbitmq-prometheus"
     volumes:

@@ -1,16 +1,9 @@
-## The contents of this file are subject to the Mozilla Public License
-## Version 1.1 (the "License"); you may not use this file except in
-## compliance with the License. You may obtain a copy of the License
-## at https://www.mozilla.org/MPL/
+## This Source Code Form is subject to the terms of the Mozilla Public
+## License, v. 2.0. If a copy of the MPL was not distributed with this
+## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Software distributed under the License is distributed on an "AS IS"
-## basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-## the License for the specific language governing rights and
-## limitations under the License.
+## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 ##
-## The Original Code is RabbitMQ.
-##
-## Copyright (c) 2012-2020 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Streams.Commands.DeleteReplicaCommandTest do
   use ExUnit.Case, async: false
@@ -27,7 +20,8 @@ defmodule RabbitMQ.CLI.Streams.Commands.DeleteReplicaCommandTest do
   setup context do
     {:ok, opts: %{
         node: get_rabbit_hostname(),
-        timeout: context[:test_timeout] || 30000
+        timeout: context[:test_timeout] || 30000,
+        vhost: "/"
       }}
   end
 
@@ -47,6 +41,12 @@ defmodule RabbitMQ.CLI.Streams.Commands.DeleteReplicaCommandTest do
 
   test "validate: treats two positional arguments and default switches as a success" do
     assert @command.validate(["stream-queue-a", "rabbit@new-node"], %{}) == :ok
+  end
+
+  test "run: trying to delete the last member of a stream should fail and return a meaningful message", context do
+    declare_stream("test_stream_1", "/")
+    assert @command.run(["test_stream_1", get_rabbit_hostname()], context[:opts]) ==
+             {:error, "Cannot delete the last member of a stream"}
   end
 
   @tag test_timeout: 3000

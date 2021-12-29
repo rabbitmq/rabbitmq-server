@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(uaa_jwt_jwt).
 
@@ -24,7 +24,15 @@ decode(Token) ->
     end.
 
 decode_and_verify(Jwk, Token) ->
-    case jose_jwt:verify(Jwk, Token) of
+    UaaEnv = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
+    Verify =
+        case proplists:get_value(algorithms, UaaEnv) of
+            undefined ->
+                jose_jwt:verify(Jwk, Token);
+            Algs ->
+                jose_jwt:verify_strict(Jwk, Algs, Token)
+        end,
+    case Verify of
         {true, #jose_jwt{fields = Fields}, _}  -> {true, Fields};
         {false, #jose_jwt{fields = Fields}, _} -> {false, Fields}
     end.

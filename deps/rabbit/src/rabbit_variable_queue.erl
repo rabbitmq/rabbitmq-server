@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_variable_queue).
@@ -484,7 +484,7 @@ stop(VHost) ->
     ok = rabbit_queue_index:stop(VHost).
 
 start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefined ->
-    rabbit_log:info("Starting message stores for vhost '~s'~n", [VHost]),
+    rabbit_log:info("Starting message stores for vhost '~s'", [VHost]),
     do_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE),
     do_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState),
     ok.
@@ -492,13 +492,13 @@ start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefine
 do_start_msg_store(VHost, Type, Refs, StartFunState) ->
     case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState) of
         {ok, _} ->
-            rabbit_log:info("Started message store of type ~s for vhost '~s'~n", [abbreviated_type(Type), VHost]);
+            rabbit_log:info("Started message store of type ~s for vhost '~s'", [abbreviated_type(Type), VHost]);
         {error, {no_such_vhost, VHost}} = Err ->
-            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': the vhost no longer exists!~n",
+            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': the vhost no longer exists!",
                              [Type, VHost]),
             exit(Err);
         {error, Error} ->
-            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': ~p~n",
+            rabbit_log:error("Failed to start message store of type ~s for vhost '~s': ~p",
                              [Type, VHost, Error]),
             exit({error, Error})
     end.
@@ -1110,7 +1110,7 @@ a(State = #vqstate { q1 = Q1, q2 = Q2, delta = Delta, q3 = Q3, q4 = Q4,
     %% disk). See push_alphas_to_betas/2.
     true = E2 or not ED,
     %% if delta has messages then q3 cannot be empty. This is enforced
-    %% by paging, where min([?SEGMENT_ENTRY_COUNT, len(q3)]) messages
+    %% by paging, where min([segment_entry_count(), len(q3)]) messages
     %% are always kept on RAM.
     true = ED or not E3,
     %% if the queue length is 0, then q3 and q4 must be empty.
@@ -2302,7 +2302,7 @@ beta_limit(Q) ->
         empty                                   -> undefined
     end.
 
-delta_limit(?BLANK_DELTA_PATTERN(_X))             -> undefined;
+delta_limit(?BLANK_DELTA_PATTERN(_))              -> undefined;
 delta_limit(#delta { start_seq_id = StartSeqId }) -> StartSeqId.
 
 %%----------------------------------------------------------------------------
@@ -2846,7 +2846,7 @@ move_messages_to_vhost_store(Queues) ->
     in_batches(MigrationBatchSize,
         {rabbit_variable_queue, migrate_queue, [OldStore, NewMsgStore]},
         QueuesWithTerms,
-        "message_store upgrades: Migrating batch ~p of ~p queues. Out of total ~p ~n",
+        "message_store upgrades: Migrating batch ~p of ~p queues. Out of total ~p ",
         "message_store upgrades: Batch ~p of ~p queues migrated ~n. ~p total left"),
 
     log_upgrade("Message store migration finished"),
@@ -2882,7 +2882,7 @@ migrate_queue({QueueName = #resource{virtual_host = VHost, name = Name},
                RecoveryTerm},
               OldStore, NewStore) ->
     log_upgrade_verbose(
-        "Migrating messages in queue ~s in vhost ~s to per-vhost message store~n",
+        "Migrating messages in queue ~s in vhost ~s to per-vhost message store",
         [Name, VHost]),
     OldStoreClient = get_global_store_client(OldStore),
     NewStoreClient = get_per_vhost_store_client(QueueName, NewStore),

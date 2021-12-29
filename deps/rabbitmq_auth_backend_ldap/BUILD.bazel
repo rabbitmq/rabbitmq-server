@@ -1,0 +1,114 @@
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "broker_for_integration_suites",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+    "rabbitmq_suite",
+)
+
+APP_ENV = """[
+	    {servers,               undefined},
+	    {user_bind_pattern,     none},
+	    {user_dn_pattern,       "$${username}"},
+	    {dn_lookup_attribute,   none},
+	    {dn_lookup_base,        none},
+	    {group_lookup_base,     none},
+	    {dn_lookup_bind,        as_user},
+	    {other_bind,            as_user},
+	    {anon_auth,             false},
+	    {vhost_access_query,    {constant, true}},
+	    {resource_access_query, {constant, true}},
+	    {topic_access_query,    {constant, true}},
+	    {tag_queries,           [{administrator, {constant, false}}]},
+	    {use_ssl,               false},
+	    {use_starttls,          false},
+	    {ssl_options,           []},
+	    {port,                  389},
+	    {timeout,               infinity},
+	    {log,                   false},
+	    {pool_size,             64},
+	    {idle_timeout,          300000}
+	  ]"""
+
+APP_NAME = "rabbitmq_auth_backend_ldap"
+
+APP_DESCRIPTION = "RabbitMQ LDAP Authentication Backend"
+
+APP_MODULE = "rabbit_auth_backend_ldap_app"
+
+EXTRA_APPS = [
+    "eldap",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    extra_apps = EXTRA_APPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+xref(tags = ["xref"])
+
+plt(
+    name = "base_plt",
+    apps = EXTRA_APPS,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":base_plt",
+    tags = ["dialyze"],
+)
+
+broker_for_integration_suites()
+
+PACKAGE = "deps/rabbitmq_auth_backend_ldap"
+
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "system_SUITE",
+        size = "medium",
+        additional_srcs = [
+            "test/rabbit_ldap_seed.erl",
+        ],
+        data = [
+            "example/global.ldif",
+            "example/memberof_init.ldif",
+            "example/refint_1.ldif",
+            "example/refint_2.ldif",
+        ],
+        tags = [
+            "ldap",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "unit_SUITE",
+        size = "small",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_shovel_behaviour).
@@ -48,7 +48,7 @@
                    ack_mode => ack_mode(),
                    atom() => term()}.
 
--export_type([state/0, source_config/0, dest_config/0, uri/0]).
+-export_type([state/0, source_config/0, dest_config/0, uri/0, tag/0]).
 
 -callback parse(binary(), {source | destination, Conf :: proplists:proplist()}) ->
     source_config() | dest_config().
@@ -166,7 +166,7 @@ decr_remaining(N, State = #{source := #{remaining := M} = Src,
     case M > N of
         true  -> State#{source => Src#{remaining => M - N}};
         false ->
-            error_logger:info_msg("shutting down shovel ~s, none remaining ~p~n",
-                                  [Name, State]),
+            rabbit_log_shovel:info("shutting down Shovel '~s', no messages left to transfer", [Name]),
+            rabbit_log_shovel:debug("shutting down Shovel '~s', no messages left to transfer. Shovel state: ~p", [Name, State]),
             exit({shutdown, autodelete})
     end.

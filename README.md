@@ -1,5 +1,4 @@
-[![OTP v22.3](https://img.shields.io/github/workflow/status/rabbitmq/rabbitmq-server/Test%20-%20Erlang%2022.3/master?label=Erlang%2022.3)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22Test+-+Erlang+22.3%22+branch%3A%22master%22)
-[![OTP v23](https://img.shields.io/github/workflow/status/rabbitmq/rabbitmq-server/Test%20-%20Erlang%2023.1/master?label=Erlang%2023.1)](https://github.com/rabbitmq/rabbitmq-server/actions?query=workflow%3A%22Test+-+Erlang+23.1%22+branch%3Amaster)
+[![Test](https://github.com/rabbitmq/rabbitmq-server/actions/workflows/test.yaml/badge.svg)](https://github.com/rabbitmq/rabbitmq-server/actions/workflows/test.yaml)
 
 # RabbitMQ Server
 
@@ -25,19 +24,28 @@
 
  * [RabbitMQ tutorials](https://rabbitmq.com/getstarted.html)
  * [All documentation guides](https://rabbitmq.com/documentation.html)
+
+Some key doc guides include
+
  * [CLI tools guide](https://rabbitmq.com/cli.html) 
+ * [Clustering](https://www.rabbitmq.com/clustering.html) and [Cluster Formation](https://www.rabbitmq.com/cluster-formation.html) guides
  * [Configuration guide](https://rabbitmq.com/configure.html) 
  * [Client libraries and tools](https://rabbitmq.com/devtools.html)
- * [Monitoring guide](https://rabbitmq.com/monitoring.html)
+ * [Monitoring](https://rabbitmq.com/monitoring.html) and [Prometheus/Grafana](https://www.rabbitmq.com/prometheus.html) guides
  * [Production checklist](https://rabbitmq.com/production-checklist.html)
+ * [Quorum queues](https://rabbitmq.com/quorum-queues.html): a replicated, data safety- and consistency-oriented queue type
  * [Runnable tutorials](https://github.com/rabbitmq/rabbitmq-tutorials/)
  * [Documentation source](https://github.com/rabbitmq/rabbitmq-website/)
 
 
-## Getting Help
+## Commercial Support
 
+* [Commercial support](https://rabbitmq.com/services.html) from [VMware](https://vmware.com) for open source RabbitMQ
+
+## Getting Help from the Community
+
+ * [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions/)
  * [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
- * [Commercial support](https://rabbitmq.com/services.html) from [Pivotal](https://pivotal.io) for open source RabbitMQ
  * [Community Slack](https://rabbitmq-slack.herokuapp.com/)
  * `#rabbitmq` on Freenode
 
@@ -62,4 +70,4 @@ RabbitMQ server is [licensed under the MPL 2.0](LICENSE-MPL-RabbitMQ).
 
 ## Copyright
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2021 VMware, Inc. or its affiliates.

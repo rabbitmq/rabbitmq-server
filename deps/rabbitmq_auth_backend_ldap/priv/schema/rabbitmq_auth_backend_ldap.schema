@@ -337,3 +337,19 @@ fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("auth_ldap.ssl_options.versions", Conf),
     [ V || {_, V} <- Settings ]
 end}.
+
+{mapping, "auth_ldap.ssl_options.sni", "rabbitmq_auth_backend_ldap.ssl_options.server_name_indication",
+    [{datatype, [{enum, [none]}, string]}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.ssl_options.server_name_indication",
+fun(Conf) ->
+    case cuttlefish:conf_get("auth_ldap.ssl_options.sni", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        none      -> cuttlefish:unset();
+        Hostname  -> Hostname
+    end
+end}.
+
+
+{mapping, "auth_ldap.ssl_options.hostname_verification", "rabbitmq_auth_backend_ldap.ssl_hostname_verification", [
+    {datatype, {enum, [wildcard, none]}}]}.

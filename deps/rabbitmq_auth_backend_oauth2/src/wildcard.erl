@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(wildcard).
@@ -52,7 +52,7 @@ parse_pattern(Pattern) ->
     Parts = binary:split(Pattern, <<"*">>, [global]),
     try lists:map(fun(Part) -> cow_qs:urldecode(Part) end, Parts)
     catch Type:Error ->
-        rabbit_log:warning("Invalid pattern ~p : ~p~n",
+        rabbit_log:warning("Invalid pattern ~p : ~p",
                            [Pattern, {Type, Error}]),
         invalid
     end.

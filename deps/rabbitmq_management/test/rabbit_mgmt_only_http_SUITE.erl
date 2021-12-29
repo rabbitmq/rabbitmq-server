@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_only_http_SUITE).
@@ -17,7 +17,7 @@
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
-                                http_get_no_map/2,
+                                http_get_as_proplist/2,
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
                                 http_upload_raw/8,
@@ -260,6 +260,33 @@ vhosts_test(Config) ->
     ?assert(not maps:is_key(messages_ready_details, GetFirst)),
     ?assert(not maps:is_key(recv_oct, GetFirst)),
     ?assert(maps:is_key(cluster_state, GetFirst)),
+
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% these won't pass for older 3.8 nodes
+            ok;
+        false ->
+            %% PUT can update metadata (description, tags)
+            Desc0 = "desc 0",
+            Meta0 = [
+                {description, Desc0},
+                {tags,        "tag1,tag2"}
+            ],
+            http_put(Config, "/vhosts/myvhost", Meta0, {group, '2xx'}),
+            #{description := Desc1, tags := Tags1} = http_get(Config, "/vhosts/myvhost", ?OK),
+            ?assertEqual(Desc0, Desc1),
+            ?assertEqual([<<"tag1">>, <<"tag2">>], Tags1),
+
+            Desc2 = "desc 2",
+            Meta2 = [
+                {description, Desc2},
+                {tags,        "tag3"}
+            ],
+            http_put(Config, "/vhosts/myvhost", Meta2, {group, '2xx'}),
+            #{description := Desc3, tags := Tags3} = http_get(Config, "/vhosts/myvhost", ?OK),
+            ?assertEqual(Desc2, Desc3),
+            ?assertEqual([<<"tag3">>], Tags3)
+    end,
 
     %% Check individually
     Get = http_get(Config, "/vhosts/%2F", ?OK),
@@ -612,7 +639,7 @@ queues_well_formed_json_test(Config) ->
     http_put(Config, "/queues/%2F/foo", Good, {group, '2xx'}),
     http_put(Config, "/queues/%2F/baz", Good, {group, '2xx'}),
 
-    Queues = http_get_no_map(Config, "/queues/%2F"),
+    Queues = http_get_as_proplist(Config, "/queues/%2F"),
     %% Ensure keys are unique
     [begin
      Sorted = lists:sort(Q),

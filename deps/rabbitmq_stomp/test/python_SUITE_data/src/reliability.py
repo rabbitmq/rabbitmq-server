@@ -32,10 +32,18 @@ class TestReliability(base.BaseTest):
             pub_conn.disconnect()
 
             if listener.wait(30):
-                self.assertEquals(count, len(listener.messages))
+                self.assertEqual(count, len(listener.messages))
             else:
                 listener.print_state("Final state of listener:")
                 self.fail("Did not receive %s messages in time" % count)
         finally:
             if pub_conn.is_connected():
                 pub_conn.disconnect()
+
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)

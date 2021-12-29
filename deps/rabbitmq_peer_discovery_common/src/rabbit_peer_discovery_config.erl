@@ -4,11 +4,12 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_config).
 
+-include_lib("kernel/include/logger.hrl").
 -include("rabbit_peer_discovery.hrl").
 
 -export([get/3, get_integer/3, config_map/1]).
@@ -24,7 +25,10 @@
 get(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
         false ->
-            rabbit_log:error("Key ~s is not found in peer discovery config mapping ~p!", [Key, Mapping]),
+            ?LOG_ERROR(
+               "Key ~s is not found in peer discovery config mapping ~p!",
+               [Key, Mapping],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             throw({badkey, Key});
         true  ->
             get_with_entry_meta(Key, maps:get(Key, Mapping), Config)
@@ -37,7 +41,10 @@ get(Key, Mapping, Config) ->
 get_integer(Key, Mapping, Config) ->
     case maps:is_key(Key, Mapping) of
         false ->
-            rabbit_log:error("Key ~s is not found in peer discovery config mapping ~p!", [Key, Mapping]),
+            ?LOG_ERROR(
+               "Key ~s is not found in peer discovery config mapping ~p!",
+               [Key, Mapping],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             throw({badkey, Key});
         true  ->
             get_integer_with_entry_meta(Key, maps:get(Key, Mapping), Config)

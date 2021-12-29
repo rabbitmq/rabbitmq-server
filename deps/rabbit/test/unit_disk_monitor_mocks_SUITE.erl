@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_disk_monitor_mocks_SUITE).
@@ -88,7 +88,7 @@ disk_monitor_enable1(_Config) ->
     application:set_env(rabbit, disk_monitor_failure_retry_interval, 100),
     ok = rabbit_sup:stop_child(rabbit_disk_monitor_sup),
     ok = rabbit_sup:start_delayed_restartable_child(rabbit_disk_monitor, [1000]),
-    undefined = rabbit_disk_monitor:get_disk_free(),
+    unknown = rabbit_disk_monitor:get_disk_free(),
     Cmd = case os:type() of
               {win32, _} -> " Le volume dans le lecteur C n’a pas de nom.\n"
                             " Le numéro de série du volume est 707D-5BDC\n"

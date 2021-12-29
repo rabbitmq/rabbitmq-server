@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%%  Copyright (c) 2015-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%%  Copyright (c) 2015-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_priority_queue).
@@ -67,7 +67,7 @@ enable() ->
     {ok, RealBQ} = application:get_env(rabbit, backing_queue_module),
     case RealBQ of
         ?MODULE -> ok;
-        _       -> rabbit_log:info("Priority queues enabled, real BQ is ~s~n",
+        _       -> rabbit_log:info("Priority queues enabled, real BQ is ~s",
                                    [RealBQ]),
                    application:set_env(
                      rabbitmq_priority_queue, backing_queue_module, RealBQ),

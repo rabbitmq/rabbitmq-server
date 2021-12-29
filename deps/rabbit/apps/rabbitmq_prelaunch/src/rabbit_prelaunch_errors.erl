@@ -1,5 +1,9 @@
 -module(rabbit_prelaunch_errors).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([format_error/1,
          format_exception/3,
          log_error/1,
@@ -94,9 +98,35 @@ log_exception(Class, Exception, Stacktrace) ->
     log_message(Message).
 
 format_exception(Class, Exception, Stacktrace) ->
+    StacktraceStrs = [begin
+                          case proplists:get_value(line, Props) of
+                              undefined when is_list(ArgListOrArity) ->
+                                  io_lib:format(
+                                    "    ~ts:~ts/~b~n"
+                                    "        args: ~p",
+                                    [Mod, Fun, length(ArgListOrArity),
+                                     ArgListOrArity]);
+                              undefined when is_integer(ArgListOrArity) ->
+                                  io_lib:format(
+                                    "    ~ts:~ts/~b",
+                                    [Mod, Fun, ArgListOrArity]);
+                              Line when is_list(ArgListOrArity) ->
+                                  io_lib:format(
+                                    "    ~ts:~ts/~b, line ~b~n"
+                                    "        args: ~p",
+                                    [Mod, Fun, length(ArgListOrArity), Line,
+                                     ArgListOrArity]);
+                              Line when is_integer(ArgListOrArity) ->
+                                  io_lib:format(
+                                    "    ~ts:~ts/~b, line ~b",
+                                    [Mod, Fun, ArgListOrArity, Line])
+                          end
+                      end
+                      || {Mod, Fun, ArgListOrArity, Props} <- Stacktrace],
+    ExceptionStr = io_lib:format("~ts:~0p", [Class, Exception]),
     rabbit_misc:format(
-      "Exception during startup:~n~s",
-      [lager:pr_stacktrace(Stacktrace, {Class, Exception})]).
+      "Exception during startup:~n~n~s~n~n~s",
+      [ExceptionStr, string:join(StacktraceStrs, "\n")]).
 
 log_message(Message) ->
     Lines = string:split(
@@ -105,9 +135,11 @@ log_message(Message) ->
               ?BOOT_FAILED_FOOTER,
               [$\n],
               all),
+    ?LOG_ERROR(
+       "~s", [string:join(Lines, "\n")],
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     lists:foreach(
       fun(Line) ->
-              rabbit_log_prelaunch:error("~s", [Line]),
               io:format(standard_error, "~s~n", [Line])
       end, Lines),
     timer:sleep(1000),

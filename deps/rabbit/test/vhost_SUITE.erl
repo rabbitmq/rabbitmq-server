@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(vhost_SUITE).
@@ -25,7 +25,8 @@ groups() ->
     ClusterSize1Tests = [
         single_node_vhost_deletion_forces_connection_closure,
         vhost_failure_forces_connection_closure,
-        vhost_creation_idempotency
+        vhost_creation_idempotency,
+        parse_tags
     ],
     ClusterSize2Tests = [
         cluster_vhost_deletion_forces_connection_closure,
@@ -317,6 +318,17 @@ vhost_creation_idempotency(Config) ->
     after
         rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
     end.
+
+parse_tags(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_tags1, [Config]).
+
+parse_tags1(_Config) ->
+    ?assertEqual([], rabbit_vhost:parse_tags(<<"">>)),
+    ?assertEqual([], rabbit_vhost:parse_tags("")),
+    ?assertEqual([], rabbit_vhost:parse_tags([])),
+    ?assertEqual([a, b], rabbit_vhost:parse_tags(<<"a,b">>)),
+    ?assertEqual([a3, b3], rabbit_vhost:parse_tags("a3,b3")),
+    ?assertEqual([tag1, tag2], rabbit_vhost:parse_tags([<<"tag1">>, <<"tag2">>])).
 
 %% -------------------------------------------------------------------
 %% Helpers

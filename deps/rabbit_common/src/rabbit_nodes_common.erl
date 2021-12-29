@@ -2,12 +2,13 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_nodes_common).
 
--define(EPMD_TIMEOUT, 30000).
+-define(EPMD_OPERATION_TIMEOUT, 6000).
+-define(NAME_LOOKUP_ATTEMPTS, 10).
 -define(TCP_DIAGNOSTIC_TIMEOUT, 5000).
 -define(ERROR_LOGGER_HANDLER, rabbit_error_logger_handler).
 
@@ -17,16 +18,20 @@
 %% API
 %%
 
--export([make/1, parts/1, names/1, name_type/1, ensure_epmd/0, is_running/2, is_process_running/2]).
+-export([make/1, make/2, parts/1, names/1, name_type/1, ensure_epmd/0, is_running/2, is_process_running/2]).
 -export([cookie_hash/0, epmd_port/0, diagnostics/1]).
 
 -spec make({string(), string()} | string()) -> node().
+-spec make(string(), string()) -> node().
 -spec parts(node() | string()) -> {string(), string()}.
 -spec ensure_epmd() -> 'ok'.
 -spec epmd_port() -> string().
 
 -spec names(string()) ->
           rabbit_types:ok_or_error2([{string(), integer()}], term()).
+-spec epmd_names(string()) ->
+  rabbit_types:ok_or_error2([{string(), integer()}], term()).
+
 -spec diagnostics([node()]) -> string().
 -spec cookie_hash() -> string().
 
@@ -36,12 +41,31 @@
 %% Therefore we disable this specific warning.
 -dialyzer({nowarn_function, diagnostics_node/1}).
 
+%% In same case the hostname resolution can take a moment.
+%% In K8s for example *.nodes.default needs some second.
+
 names(Hostname) ->
+  names(Hostname, ?NAME_LOOKUP_ATTEMPTS).
+
+names(Hostname, 0) ->
+  epmd_names(Hostname);
+names(Hostname, RetriesLeft) ->
+  rabbit_log:debug("Getting epmd names for hostname '~s', ~b retries left",
+    [Hostname, RetriesLeft]),
+  case catch epmd_names(Hostname) of
+    {ok, R } -> {ok, R};
+    noport ->
+      names(Hostname, RetriesLeft - 1);
+    {error, _} ->
+      names(Hostname, RetriesLeft - 1)
+  end.
+
+epmd_names(Hostname) ->
     Self = self(),
     Ref = make_ref(),
     {Pid, MRef} = spawn_monitor(
                     fun () -> Self ! {Ref, net_adm:names(Hostname)} end),
-    _ = timer:exit_after(?EPMD_TIMEOUT, Pid, timeout),
+    _ = timer:exit_after(?EPMD_OPERATION_TIMEOUT, Pid, timeout),
     receive
         {Ref, Names}                         -> erlang:demonitor(MRef, [flush]),
                                                 Names;
@@ -53,6 +77,8 @@ make({Prefix, Suffix}) -> rabbit_data_coercion:to_atom(
                                           "@",
                                           rabbit_data_coercion:to_list(Suffix)]));
 make(NodeStr)          -> make(parts(NodeStr)).
+
+make(Prefix, Suffix) -> make({Prefix, Suffix}).
 
 parts(Node) when is_atom(Node) ->
     parts(atom_to_list(Node));
@@ -90,7 +116,17 @@ ensure_epmd() ->
 port_shutdown_loop(Port) ->
     receive
         {Port, {exit_status, _Rc}} -> ok;
-        {Port, _}                  -> port_shutdown_loop(Port)
+        {Port, closed}             -> ok;
+        {Port, {data, _}}          -> port_shutdown_loop(Port);
+        {'EXIT', Port, Reason}     ->
+            rabbit_log:error("Failed to start a one-off Erlang VM to keep epmd alive: ~p", [Reason])
+    after 15000 ->
+        %% ensure the port is closed
+        Port ! {self(), close},
+        receive
+            {Port, closed } -> ok
+        after 5000 -> ok
+        end
     end.
 
 cookie_hash() ->
@@ -115,7 +151,7 @@ verbose_erlang_distribution(false) ->
 current_node_details() ->
     [{"~nCurrent node details:~n * node name: ~w", [node()]},
      case init:get_argument(home) of
-         {ok, [[Home]]} -> {" * effective user's home directory: ~s", [Home]};
+         {ok, [[Home]]} -> {" * effective user's home directory: ~s", [filename:absname(Home)]};
          Other          -> {" * effective user has no home directory: ~p", [Other]}
      end,
      {" * Erlang cookie hash: ~s", [cookie_hash()]}].
@@ -190,7 +226,7 @@ connection_succeeded_diagnostics() ->
     case gen_event:call(error_logger, ?ERROR_LOGGER_HANDLER, get_connection_report) of
         [] ->
             [{"  * TCP connection succeeded but Erlang distribution failed ~n"
-              "  * suggestion: check if the Erlang cookie identical for all server nodes and CLI tools~n"
+              "  * suggestion: check if the Erlang cookie is identical for all server nodes and CLI tools~n"
               "  * suggestion: check if all server nodes and CLI tools use consistent hostnames when addressing each other~n"
               "  * suggestion: check if inter-node connections may be configured to use TLS. If so, all nodes and CLI tools must do that~n"
              "   * suggestion: see the CLI, clustering and networking guides on https://rabbitmq.com/documentation.html to learn more~n", []}];

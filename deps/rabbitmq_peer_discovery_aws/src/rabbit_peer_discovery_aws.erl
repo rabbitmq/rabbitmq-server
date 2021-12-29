@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_aws).
@@ -22,16 +22,6 @@
 -ifdef(TEST).
 -compile(export_all).
 -endif.
-
-% rabbitmq/rabbitmq-peer-discovery-aws#25
-
-% Note: this timeout must not be greater than the default
-% gen_server:call timeout of 5000ms. Note that `timeout`,
-% when set, is used as the connect and then request timeout
-% by `httpc`
--define(INSTANCE_ID_TIMEOUT, 2250).
--define(INSTANCE_ID_URL,
-        "http://169.254.169.254/latest/meta-data/instance-id").
 
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(UTIL_MODULE,   rabbit_peer_discovery_util).
@@ -91,14 +81,17 @@ init() ->
 list_nodes() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     {ok, _} = application:ensure_all_started(rabbitmq_aws),
-    rabbit_log:debug("Started rabbitmq_aws"),
     rabbit_log:debug("Will use AWS access key of '~s'", [get_config_key(aws_access_key, M)]),
     ok = maybe_set_region(get_config_key(aws_ec2_region, M)),
     ok = maybe_set_credentials(get_config_key(aws_access_key, M),
                                get_config_key(aws_secret_key, M)),
     case get_config_key(aws_autoscaling, M) of
         true ->
-            get_autoscaling_group_node_list(instance_id(), get_tags());
+            case rabbitmq_aws_config:instance_id() of
+                {ok, InstanceId} -> rabbit_log:debug("EC2 instance ID is determined from metadata service: ~p", [InstanceId]),
+                                    get_autoscaling_group_node_list(InstanceId, get_tags());
+                _                -> {error, "Failed to determine EC2 instance ID from metadata service"}
+            end;
         false ->
             get_node_list_from_tags(get_tags())
     end.
@@ -106,9 +99,7 @@ list_nodes() ->
 -spec supports_registration() -> boolean().
 
 supports_registration() ->
-    %% see rabbitmq-peer-discovery-aws#17
-    true.
-
+    false.
 
 -spec register() -> ok.
 register() ->
@@ -123,19 +114,44 @@ unregister() ->
 post_registration() ->
     ok.
 
--spec lock(Node :: atom()) -> not_supported.
+-spec lock(Node :: node()) -> {ok, {{ResourceId :: string(), LockRequesterId :: node()}, Nodes :: [node()]}} |
+                              {error, Reason :: string()}.
 
-lock(_Node) ->
-    not_supported.
+lock(Node) ->
+  %% call list_nodes/0 externally such that meck can mock the function
+  case ?MODULE:list_nodes() of
+    {ok, {[], disc}} ->
+          {error, "Cannot lock since no nodes got discovered."};
+    {ok, {Nodes, disc}} ->
+      case lists:member(Node, Nodes) of
+        true ->
+          rabbit_log:info("Will try to lock connecting to nodes ~p", [Nodes]),
+          LockId = rabbit_nodes:lock_id(Node),
+          Retries = rabbit_nodes:lock_retries(),
+          case global:set_lock(LockId, Nodes, Retries) of
+            true ->
+              {ok, {LockId, Nodes}};
+            false ->
+              {error, io_lib:format("Acquiring lock taking too long, bailing out after ~b retries", [Retries])}
+          end;
+        false ->
+          %% Don't try to acquire the global lock when our own node is not discoverable by peers.
+          %% We shouldn't run into this branch because our node is running and should have been discovered.
+          {error, lists:flatten(io_lib:format("Local node ~s is not part of discovered nodes ~p", [Node, Nodes]))}
+      end;
+    {error, _} = Error ->
+      Error
+  end.
 
--spec unlock(Data :: term()) -> ok.
-
-unlock(_Data) ->
-    ok.
+-spec unlock({{ResourceId :: string(), LockRequestedId :: atom()}, Nodes :: [atom()]}) -> 'ok'.
+unlock({LockId, Nodes}) ->
+  global:del_lock(LockId, Nodes),
+  ok.
 
 %%
 %% Implementation
 %%
+
 -spec get_config_key(Key :: atom(), Map :: #{atom() => peer_discovery_config_value()})
                     -> peer_discovery_config_value().
 
@@ -160,14 +176,18 @@ maybe_set_credentials(AccessKey, SecretKey) ->
 %% @doc Set the region from the configuration value, if it was set.
 %% @end
 %%
-maybe_set_region("undefined") -> ok;
+maybe_set_region("undefined") ->
+    case rabbitmq_aws_config:region() of
+        {ok, Region} -> maybe_set_region(Region);
+        _            -> ok
+    end;
 maybe_set_region(Value) ->
     rabbit_log:debug("Setting AWS region to ~p", [Value]),
     rabbitmq_aws:set_region(Value).
 
 get_autoscaling_group_node_list(error, _) ->
     rabbit_log:warning("Cannot discover any nodes: failed to fetch this node's EC2 "
-                       "instance id from ~s", [?INSTANCE_ID_URL]),
+                       "instance id from ~s", [rabbitmq_aws_config:instance_id_url()]),
     {ok, {[], disc}};
 get_autoscaling_group_node_list(Instance, Tag) ->
     case get_all_autoscaling_instances([]) of
@@ -222,7 +242,7 @@ get_all_autoscaling_instances(Accum, NextToken) ->
 
 fetch_all_autoscaling_instances(QArgs, Accum) ->
     Path = "/?" ++ rabbitmq_aws_urilib:build_query_string(QArgs),
-    case api_get_request("autoscaling", Path) of
+    case rabbitmq_aws:api_get_request("autoscaling", Path) of
         {ok, Payload} ->
             Instances = flatten_autoscaling_datastructure(Payload),
             NextToken = get_next_token(Payload),
@@ -243,16 +263,6 @@ get_next_token(Value) ->
     Result = proplists:get_value("DescribeAutoScalingInstancesResult", Response),
     NextToken = proplists:get_value("NextToken", Result),
     NextToken.
-
-api_get_request(Service, Path) ->
-    case rabbitmq_aws:get(Service, Path) of
-        {ok, {_Headers, Payload}} ->
-            rabbit_log:debug("AWS request: ~s~nResponse: ~p~n",
-                             [Path, Payload]),
-            {ok, Payload};
-        {error, {credentials, _}} -> {error, credentials};
-        {error, Message, _} -> {error, Message}
-    end.
 
 -spec find_autoscaling_group(Instances :: list(), Instance :: string())
                             -> string() | error.
@@ -320,7 +330,7 @@ get_hostname_name_from_reservation_set([{"item", RI}|T], Accum) ->
     get_hostname_name_from_reservation_set(T, Accum ++ Hostnames).
 
 get_hostname_names(Path) ->
-    case api_get_request("ec2", Path) of
+    case rabbitmq_aws:api_get_request("ec2", Path) of
         {ok, Payload} ->
             Response = proplists:get_value("DescribeInstancesResponse", Payload),
             ReservationSet = proplists:get_value("reservationSet", Response),
@@ -349,24 +359,6 @@ select_hostname() ->
         true  -> "privateIpAddress";
         false -> "privateDnsName";
         _     -> "privateDnsName"
-    end.
-
--spec instance_id() -> string() | error.
-%% @private
-%% @doc Return the local instance ID from the EC2 metadata service
-%% @end
-%%
-instance_id() ->
-    case httpc:request(get, {?INSTANCE_ID_URL, []},
-                       [{timeout, ?INSTANCE_ID_TIMEOUT}], []) of
-        {ok, {{_, 200, _}, _, Value}} ->
-            rabbit_log:debug("Fetched EC2 instance ID from ~p: ~p",
-                             [?INSTANCE_ID_URL, Value]),
-            Value;
-        Other ->
-            rabbit_log:error("Failed to fetch EC2 instance ID from ~p: ~p",
-                             [?INSTANCE_ID_URL, Other]),
-            error
     end.
 
 -spec get_tags() -> tags().

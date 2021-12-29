@@ -1,4 +1,4 @@
-<h1>Connection <%= fmt_string(connection.name) %> <%= fmt_maybe_vhost(connection.vhost) %></h1>
+<h2>Connection <%= fmt_string(connection.name) %> <%= fmt_maybe_vhost(connection.vhost) %></h1>
 
 <% if (!disable_stats) { %>
 <div class="section">
@@ -76,7 +76,7 @@
 </div>
 
 <div class="section">
-  <h2>Channels</h2>
+  <h2 class="updatable" >Channels (<%=(channels.length)%>) </h2>
   <div class="hider updatable">
     <%= format('channels-list', {'channels': channels, 'mode': 'connection'}) %>
   </div>

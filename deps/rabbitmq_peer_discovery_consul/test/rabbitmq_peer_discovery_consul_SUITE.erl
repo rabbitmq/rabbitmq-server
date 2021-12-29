@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbitmq_peer_discovery_consul_SUITE).
@@ -325,7 +325,6 @@ list_nodes_return_value_basic_test(_Config) ->
     application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
-                         {randomized_startup_delay_range, {0, 1}},
                          {peer_discovery_consul,          [
                                                            {consul_host, "localhost"},
                                                            {consul_port, 8500}
@@ -344,7 +343,6 @@ list_nodes_return_value_basic_long_node_name_test(_Config) ->
     application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
-                         {randomized_startup_delay_range, {0, 1}},
                          {peer_discovery_consul,          [
                                                            {consul_host,         "localhost"},
                                                            {consul_port,         8500},
@@ -364,7 +362,6 @@ list_nodes_return_value_long_node_name_and_custom_domain_test(_Config) ->
     application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
-                         {randomized_startup_delay_range, {0, 1}},
                          {peer_discovery_consul,          [
                                                            {consul_host,         "localhost"},
                                                            {consul_port,         8500},
@@ -385,7 +382,6 @@ list_nodes_return_value_srv_address_test(_Config) ->
     application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
-                         {randomized_startup_delay_range, {0, 1}},
                          {peer_discovery_consul,          [
                                                            {consul_host,         "localhost"},
                                                            {consul_port,         8500}
@@ -404,7 +400,6 @@ list_nodes_return_value_nodes_in_warning_state_included_test(_Config) ->
     application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
-                         {randomized_startup_delay_range, {0, 1}},
                          {peer_discovery_consul,          [
                                                            {consul_host,         "localhost"},
                                                            {consul_port,         8500}
@@ -425,7 +420,6 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
     application:set_env(rabbit, cluster_formation,
                         [
                          {peer_discovery_backend,         rabbit_peer_discovery_consul},
-                         {randomized_startup_delay_range, {0, 1}},
                          {peer_discovery_consul,          [
                                                            {consul_host,         "localhost"},
                                                            {consul_port,         8500}

@@ -26,12 +26,10 @@
     </developers>
 
     <properties>
-        <stream-client.version>0.1.0-SNAPSHOT</stream-client.version>
-        <proton-j.version>0.33.6</proton-j.version>
-        <junit.jupiter.version>5.7.0</junit.jupiter.version>
-        <assertj.version>3.17.2</assertj.version>
-        <mockito.version>3.5.11</mockito.version>
-        <logback.version>1.2.3</logback.version>
+	<stream-client.version>[0.5.0-SNAPSHOT,1.0-SNAPSHOT)</stream-client.version>
+        <junit.jupiter.version>5.8.2</junit.jupiter.version>
+        <assertj.version>3.21.0</assertj.version>
+        <logback.version>1.2.7</logback.version>
         <maven.compiler.plugin.version>3.8.1</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
         <spotless.version>2.2.0</spotless.version>
@@ -44,12 +42,6 @@
             <groupId>com.rabbitmq</groupId>
             <artifactId>stream-client</artifactId>
             <version>${stream-client.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.qpid</groupId>
-            <artifactId>proton-j</artifactId>
-            <version>${proton-j.version}</version>
         </dependency>
 
         <dependency>
@@ -70,13 +62,6 @@
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>${assertj.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
 

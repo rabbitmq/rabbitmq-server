@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_net).
@@ -15,7 +15,7 @@
     setopts/2, send/2, close/1, fast_close/1, sockname/1, peername/1,
     peercert/1, connection_string/2, socket_ends/2, is_loopback/1,
     tcp_host/1, unwrap_socket/1, maybe_get_proxy_socket/1,
-    hostname/0, getifaddrs/0]).
+    hostname/0, getifaddrs/0, proxy_ssl_info/2]).
 
 %%---------------------------------------------------------------------------
 
@@ -34,6 +34,7 @@
 % -type host_or_ip() :: binary() | inet:ip_address().
 -spec is_ssl(socket()) -> boolean().
 -spec ssl_info(socket()) -> 'nossl' | ok_val_or_error([{atom(), any()}]).
+-spec proxy_ssl_info(socket(), ranch_proxy:proxy_socket()) -> 'nossl' | ok_val_or_error([{atom(), any()}]).
 -spec controlling_process(socket(), pid()) -> ok_or_any_error().
 -spec getstat(socket(), [stat_option()]) ->
           ok_val_or_error([{stat_option(), integer()}]).
@@ -97,6 +98,19 @@ ssl_info(Sock) when ?IS_SSL(Sock) ->
     ssl:connection_information(Sock);
 ssl_info(_Sock) ->
     nossl.
+
+proxy_ssl_info(Sock, {rabbit_proxy_socket, _, ProxyInfo}) ->
+    ConnInfo = ranch_proxy_header:to_connection_info(ProxyInfo),
+    case lists:keymember(protocol, 1, ConnInfo) andalso
+         lists:keymember(selected_cipher_suite, 1, ConnInfo) of
+        true ->
+            {ok, ConnInfo};
+        false ->
+            ssl_info(Sock)
+    end;
+proxy_ssl_info(Sock, _) ->
+    ssl_info(Sock).
+
 
 controlling_process(Sock, Pid) when ?IS_SSL(Sock) ->
     ssl:controlling_process(Sock, Pid);
@@ -228,19 +242,15 @@ socket_ends(Sock, Direction) when ?IS_SSL(Sock);
         {_, {error, _Reason} = Error} ->
             Error
     end;
-socket_ends({rabbit_proxy_socket, CSocket, ProxyInfo}, Direction = inbound) ->
+socket_ends({rabbit_proxy_socket, _, ProxyInfo}, _) ->
     #{
-        src_address := FromAddress,
-        src_port := FromPort
-    } = ProxyInfo,
-    {_From, To} = sock_funs(Direction),
-    case To(CSocket) of
-        {ok, {ToAddress, ToPort}} ->
-            {ok, {rdns(FromAddress), FromPort,
-                rdns(ToAddress),   ToPort}};
-        {error, _Reason} = Error ->
-            Error
-    end.
+      src_address := FromAddress,
+      src_port := FromPort,
+      dest_address := ToAddress,
+      dest_port := ToPort
+     } = ProxyInfo,
+    {ok, {rdns(FromAddress), FromPort,
+          rdns(ToAddress),   ToPort}}.
 
 maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
 maybe_ntoab(Host)                     -> Host.

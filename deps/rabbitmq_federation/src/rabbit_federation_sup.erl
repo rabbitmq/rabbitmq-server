@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_federation_sup).
@@ -12,6 +12,7 @@
 %% Supervises everything. There is just one of these.
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+
 -define(SUPERVISOR, rabbit_federation_sup).
 
 -export([start_link/0, stop/0]).
@@ -45,19 +46,38 @@ stop() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
-    Status = {status, {rabbit_federation_status, start_link, []},
-              transient, ?WORKER_WAIT, worker,
-              [rabbit_federation_status]},
-    XLinkSupSup = {x_links,
-                   {rabbit_federation_exchange_link_sup_sup, start_link, []},
-                   transient, ?SUPERVISOR_WAIT, supervisor,
-                   [rabbit_federation_exchange_link_sup_sup]},
-    QLinkSupSup = {q_links,
-                   {rabbit_federation_queue_link_sup_sup, start_link, []},
-                  transient, ?SUPERVISOR_WAIT, supervisor,
-                  [rabbit_federation_queue_link_sup_sup]},
+    Status = #{
+        id       => status,
+        start    => {rabbit_federation_status, start_link, []},
+        restart  => transient,
+        shutdown => ?WORKER_WAIT,
+        type     => worker,
+        modules  => [rabbit_federation_status]
+    },
+    XLinkSupSup = #{
+        id       => x_links,
+        start    => {rabbit_federation_exchange_link_sup_sup, start_link, []},
+        restart  => transient,
+        shutdown => ?SUPERVISOR_WAIT,
+        type     => supervisor,
+        modules  =>[rabbit_federation_exchange_link_sup_sup]
+    },
+    QLinkSupSup = #{
+        id       => q_links,
+        start    => {rabbit_federation_queue_link_sup_sup, start_link, []},
+        restart  => transient,
+        shutdown => ?SUPERVISOR_WAIT,
+        type     => supervisor,
+        modules  => [rabbit_federation_queue_link_sup_sup]
+    },
     %% with default reconnect-delay of 5 second, this supports up to
     %% 100 links constantly failing and being restarted a minute
     %% (or 200 links if reconnect-delay is 10 seconds, 600 with 30 seconds,
     %% etc: N * (60/reconnect-delay) <= 1200)
-    {ok, {{one_for_one, 1200, 60}, [Status, XLinkSupSup, QLinkSupSup]}}.
+    Flags = #{
+        strategy  => one_for_one,
+        intensity => 1200,
+        period    => 60
+    },
+    Specs = [Status, XLinkSupSup, QLinkSupSup],
+    {ok, {Flags, Specs}}.

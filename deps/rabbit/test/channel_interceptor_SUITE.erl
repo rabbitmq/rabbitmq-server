@@ -2,13 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(channel_interceptor_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
 
@@ -21,6 +22,7 @@ groups() ->
     [
       {non_parallel_tests, [], [
           register_interceptor,
+          register_interceptor_failing_with_amqp_error,
           register_failing_interceptors
         ]}
     ].
@@ -92,6 +94,55 @@ register_interceptor1(Config, Interceptor) ->
     [{interceptors, []}] = rabbit_channel:info(ChannelProc, [interceptors]),
 
     check_send_receive(Ch1, QName, <<"bar">>, <<"bar">>),
+    passed.
+
+register_interceptor_failing_with_amqp_error(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, register_interceptor_failing_with_amqp_error1,
+      [Config, dummy_interceptor]).
+
+register_interceptor_failing_with_amqp_error1(Config, Interceptor) ->
+    PredefinedChannels = rabbit_channel:list(),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    [ChannelProc] = rabbit_channel:list() -- PredefinedChannels,
+
+    [{interceptors, []}] = rabbit_channel:info(ChannelProc, [interceptors]),
+
+    ok = rabbit_registry:register(channel_interceptor,
+                                  <<"dummy interceptor">>,
+                                  Interceptor),
+    [{interceptors, [{Interceptor, undefined}]}] =
+      rabbit_channel:info(ChannelProc, [interceptors]),
+
+    Q1 = <<"succeeding-q">>,
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch1, #'queue.declare'{queue = Q1}),
+
+    Q2 = <<"failing-q">>,
+    try
+        amqp_channel:call(Ch1, #'queue.declare'{queue = Q2})
+    catch
+      _:Reason ->
+          ?assertMatch(
+              {{shutdown, {_, _, <<"PRECONDITION_FAILED - operation not allowed">>}}, _},
+              Reason)
+    end,
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, 0),
+    [ChannelProc1] = rabbit_channel:list() -- PredefinedChannels,
+
+    ok = rabbit_registry:unregister(channel_interceptor,
+                                  <<"dummy interceptor">>),
+    [{interceptors, []}] = rabbit_channel:info(ChannelProc1, [interceptors]),
+
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch2, #'queue.declare'{queue = Q2}),
+
+    #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete' {queue = Q1}),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch2, #'queue.delete' {queue = Q2}),
+
     passed.
 
 register_failing_interceptors(Config) ->

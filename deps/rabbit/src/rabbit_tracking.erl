@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_tracking).
@@ -52,7 +52,7 @@ count_tracked_items(TableNameFun, CountRecPosition, Key, ContextMsg) ->
                             Acc + N
                         catch _:Err  ->
                                 rabbit_log:error(
-                                  "Failed to fetch number of ~p ~p on node ~p:~n~p~n",
+                                  "Failed to fetch number of ~p ~p on node ~p:~n~p",
                                   [ContextMsg, Key, Node, Err]),
                                 Acc
                         end

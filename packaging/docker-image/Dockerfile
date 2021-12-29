@@ -1,6 +1,6 @@
 # The official Canonical Ubuntu Bionic image is ideal from a security perspective,
 # especially for the enterprises that we, the RabbitMQ team, have to deal with
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
 RUN set -eux; \
 	apt-get update; \
@@ -12,6 +12,9 @@ RUN set -eux; \
 # verify that the "gosu" binary works
 	gosu nobody true
 
+# PGP key servers are too flaky for us to verify during every CI triggered build
+# https://github.com/docker-library/official-images/issues/4252
+ARG SKIP_PGP_VERIFY=false
 # Default to a PGP keyserver that pgp-happy-eyeballs recognizes, but allow for substitutions locally
 ARG PGP_KEYSERVER=ha.pool.sks-keyservers.net
 # If you are building this image locally and are getting `gpg: keyserver receive failed: No data` errors,
@@ -33,7 +36,7 @@ ARG OTP_SHA256
 ENV OTP_SOURCE_SHA256=${OTP_SHA256}
 
 # Install dependencies required to build Erlang/OTP from source
-# http://erlang.org/doc/installation_guide/INSTALL.html
+# https://erlang.org/doc/installation_guide/INSTALL.html
 # autoconf: Required to configure Erlang/OTP before compiling
 # dpkg-dev: Required to set up host & build type when compiling Erlang/OTP
 # gnupg: Required to verify OpenSSL artefacts
@@ -47,6 +50,7 @@ RUN set -eux; \
 		ca-certificates \
 		dpkg-dev \
 		gcc \
+		g++ \
 		gnupg \
 		libncurses5-dev \
 		make \
@@ -65,7 +69,7 @@ RUN set -eux; \
 	for key in $OPENSSL_PGP_KEY_IDS; do \
 		gpg --batch --keyserver "$PGP_KEYSERVER" --recv-keys "$key" || true; \
 	done; \
-	gpg --batch --verify "$OPENSSL_PATH.tar.gz.asc" "$OPENSSL_PATH.tar.gz"; \
+	test "$SKIP_PGP_VERIFY" == "true" || gpg --batch --verify "$OPENSSL_PATH.tar.gz.asc" "$OPENSSL_PATH.tar.gz"; \
 	gpgconf --kill all; \
 	rm -rf "$GNUPGHOME"; \
 	echo "$OPENSSL_SOURCE_SHA256 *$OPENSSL_PATH.tar.gz" | sha256sum --check --strict -; \
@@ -106,7 +110,7 @@ RUN set -eux; \
 	tar --extract --file "$OTP_PATH.tar.gz" --directory "$OTP_PATH" --strip-components 1; \
 	\
 # Configure Erlang/OTP for compilation, disable unused features & applications
-# http://erlang.org/doc/applications.html
+# https://erlang.org/doc/applications.html
 # ERL_TOP is required for Erlang/OTP makefiles to find the absolute path for the installation
 	cd "$OTP_PATH"; \
 	export ERL_TOP="$OTP_PATH"; \
@@ -124,6 +128,7 @@ RUN set -eux; \
 		--disable-hipe \
 		--disable-sctp \
 		--disable-silent-rules \
+		--enable-jit \
 		--enable-clock-gettime \
 		--enable-hybrid-heap \
 		--enable-kernel-poll \
@@ -137,7 +142,6 @@ RUN set -eux; \
 		--without-diameter \
 		--without-edoc \
 		--without-erl_docgen \
-		--without-erl_interface \
 		--without-et \
 		--without-eunit \
 		--without-ftp \
@@ -184,14 +188,11 @@ ENV RABBITMQ_DATA_DIR=/var/lib/rabbitmq
 RUN set -eux; \
 	groupadd --gid 999 --system rabbitmq; \
 	useradd --uid 999 --system --home-dir "$RABBITMQ_DATA_DIR" --gid rabbitmq rabbitmq; \
-	mkdir -p "$RABBITMQ_DATA_DIR" /etc/rabbitmq /tmp/rabbitmq-ssl /var/log/rabbitmq; \
-	chown -fR rabbitmq:rabbitmq "$RABBITMQ_DATA_DIR" /etc/rabbitmq /tmp/rabbitmq-ssl /var/log/rabbitmq; \
-	chmod 777 "$RABBITMQ_DATA_DIR" /etc/rabbitmq /tmp/rabbitmq-ssl /var/log/rabbitmq; \
+	mkdir -p "$RABBITMQ_DATA_DIR" /etc/rabbitmq /etc/rabbitmq/conf.d /tmp/rabbitmq-ssl /var/log/rabbitmq; \
+	chown -fR rabbitmq:rabbitmq "$RABBITMQ_DATA_DIR" /etc/rabbitmq /etc/rabbitmq/conf.d /tmp/rabbitmq-ssl /var/log/rabbitmq; \
+	chmod 777 "$RABBITMQ_DATA_DIR" /etc/rabbitmq /etc/rabbitmq/conf.d /tmp/rabbitmq-ssl /var/log/rabbitmq; \
 	ln -sf "$RABBITMQ_DATA_DIR/.erlang.cookie" /root/.erlang.cookie
 
-# Use the latest alpha RabbitMQ 3.8 release - https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/
-ARG RABBITMQ_VERSION
-ENV RABBITMQ_VERSION=${RABBITMQ_VERSION}
 # https://www.rabbitmq.com/signatures.html#importing-gpg
 # ENV RABBITMQ_PGP_KEY_ID="0x0A9AF2115F4687BD29803A206B73A36E6026DFCA"
 ENV RABBITMQ_HOME=/opt/rabbitmq
@@ -216,21 +217,6 @@ RUN set -eux; \
 	; \
 	rm -rf /var/lib/apt/lists/*; \
 	\
-        # RABBITMQ_SOURCE_URL="https://dl.bintray.com/rabbitmq/all-dev/rabbitmq-server/$RABBITMQ_VERSION/rabbitmq-server-generic-unix-latest-toolchain-${RABBITMQ_VERSION}.tar.xz"; \
-	# RABBITMQ_PATH="/usr/local/src/rabbitmq-$RABBITMQ_VERSION"; \
-	\
-	# wget --progress dot:giga --output-document "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_SOURCE_URL.asc"; \
-	# wget --progress dot:giga --output-document "$RABBITMQ_PATH.tar.xz" "$RABBITMQ_SOURCE_URL"; \
-	\
-	# export GNUPGHOME="$(mktemp -d)"; \
-	# gpg --batch --keyserver "$PGP_KEYSERVER" --recv-keys "$RABBITMQ_PGP_KEY_ID"; \
-	# gpg --batch --verify "$RABBITMQ_PATH.tar.xz.asc" "$RABBITMQ_PATH.tar.xz"; \
-	# gpgconf --kill all; \
-	# rm -rf "$GNUPGHOME"; \
-	\
-	# mkdir -p "$RABBITMQ_HOME"; \
-	# tar --extract --file "$RABBITMQ_PATH.tar.xz" --directory "$RABBITMQ_HOME" --strip-components 1; \
-	# rm -rf "$RABBITMQ_PATH"*; \
 # Do not default SYS_PREFIX to RABBITMQ_HOME, leave it empty
 	grep -qE '^SYS_PREFIX=\$\{RABBITMQ_HOME\}$' "$RABBITMQ_HOME/sbin/rabbitmq-defaults"; \
 	sed -i 's/^SYS_PREFIX=.*$/SYS_PREFIX=/' "$RABBITMQ_HOME/sbin/rabbitmq-defaults"; \
@@ -264,9 +250,11 @@ VOLUME $RABBITMQ_DATA_DIR
 # https://docs.docker.com/samples/library/ubuntu/#locales
 ENV LANG=C.UTF-8 LANGUAGE=C.UTF-8 LC_ALL=C.UTF-8
 
+COPY --chown=rabbitmq:rabbitmq 10-default-guest-user.conf /etc/rabbitmq/conf.d/
 COPY docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]
 
+# EPMD AMQP-TLS AMQP ERLANG
 EXPOSE 4369 5671 5672 25672
 CMD ["rabbitmq-server"]
 
@@ -275,27 +263,49 @@ RUN rabbitmq-plugins enable --offline rabbitmq_management && \
     rabbitmq-plugins is_enabled rabbitmq_management --offline
 # extract "rabbitmqadmin" from inside the "rabbitmq_management-X.Y.Z.ez" plugin zipfile
 # see https://github.com/docker-library/rabbitmq/issues/207
+# RabbitMQ 3.9 onwards uses uncompressed plugins by default, in which case extraction is
+# unnecesary
 RUN set -eux; \
-	erl -noinput -eval ' \
-		{ ok, AdminBin } = zip:foldl(fun(FileInArchive, GetInfo, GetBin, Acc) -> \
-			case Acc of \
-				"" -> \
-					case lists:suffix("/rabbitmqadmin", FileInArchive) of \
-						true -> GetBin(); \
-						false -> Acc \
-					end; \
-				_ -> Acc \
-			end \
-		end, "", init:get_plain_arguments()), \
-		io:format("~s", [ AdminBin ]), \
-		init:stop(). \
-	' -- /plugins/rabbitmq_management-*.ez > /usr/local/bin/rabbitmqadmin; \
+	if [ -s /plugins/rabbitmq_management-*.ez ]; then \
+		erl -noinput -eval ' \
+			{ ok, AdminBin } = zip:foldl(fun(FileInArchive, GetInfo, GetBin, Acc) -> \
+				case Acc of \
+					"" -> \
+						case lists:suffix("/rabbitmqadmin", FileInArchive) of \
+							true -> GetBin(); \
+							false -> Acc \
+						end; \
+					_ -> Acc \
+				end \
+			end, "", init:get_plain_arguments()), \
+			io:format("~s", [ AdminBin ]), \
+			init:stop(). \
+		' -- /plugins/rabbitmq_management-*.ez > /usr/local/bin/rabbitmqadmin; \
+	else \
+		cp /plugins/rabbitmq_management-*/priv/www/cli/rabbitmqadmin /usr/local/bin/rabbitmqadmin; \
+	fi; \
 	[ -s /usr/local/bin/rabbitmqadmin ]; \
 	chmod +x /usr/local/bin/rabbitmqadmin; \
-	apt-get update; apt-get install -y --no-install-recommends python3; rm -rf /var/lib/apt/lists/*; \
+	apt-get update; apt-get install -y --no-install-recommends python3 dstat sysstat htop nmon tmux neovim; rm -rf /var/lib/apt/lists/*; \
 	rabbitmqadmin --version
+# MANAGEMENT-TLS MANAGEMENT
 EXPOSE 15671 15672
 
 RUN rabbitmq-plugins enable --offline rabbitmq_prometheus && \
     rabbitmq-plugins is_enabled rabbitmq_prometheus --offline
-EXPOSE 15692
+# PROMETHEUS-TLS PROMETHEUS
+EXPOSE 15691 15692
+
+RUN rabbitmq-plugins enable --all
+# STREAM-TLS STREAM
+EXPOSE 5551 5552
+# MQTT-TLS MQTT
+EXPOSE 8883 1883
+# WEB-MQTT-TLS WEB-MQTT
+EXPOSE 15676 15675
+# STOMP-TLS STOMP
+EXPOSE 61614 61613
+# WEB-STOMP-TLS WEB-STOMP
+EXPOSE 15673 15674
+# EXAMPLES
+EXPOSE 15670

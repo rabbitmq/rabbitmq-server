@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_shovel_util).
@@ -10,7 +10,8 @@
 -export([update_headers/5,
          add_timestamp_header/1,
          delete_shovel/3,
-         restart_shovel/2]).
+         restart_shovel/2,
+         get_shovel_parameter/1]).
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
@@ -48,7 +49,13 @@ restart_shovel(VHost, Name) ->
         not_found ->
             {error, not_found};
         _Obj ->
+            rabbit_log_shovel:info("Shovel '~s' in virtual host '~s' will be restarted", [Name, VHost]),
             ok = rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}),
             {ok, _} = rabbit_shovel_dyn_worker_sup_sup:start_link(),
             ok
     end.
+
+get_shovel_parameter({VHost, ShovelName}) ->
+    rabbit_runtime_parameters:lookup(VHost, <<"shovel">>, ShovelName);
+get_shovel_parameter(ShovelName) ->
+    rabbit_runtime_parameters:lookup(<<"/">>, <<"shovel">>, ShovelName).

@@ -2,13 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(exchange_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -include("rabbit_federation.hrl").
@@ -29,6 +30,7 @@
 all() ->
     [
       {group, without_automatic_setup},
+      {group, channel_use_mode_single},
       {group, without_disambiguate},
       {group, with_disambiguate}
     ].
@@ -76,11 +78,24 @@ groups() ->
                   upstream_has_no_federation
                 ]}
             ]}
+        ]},
+        {channel_use_mode_single, [], [
+            simple,
+            single_channel_mode,
+            multiple_upstreams,
+            multiple_upstreams_pattern,
+            multiple_uris,
+            multiple_downstreams,
+            e2e,
+            unbind_on_delete,
+            unbind_on_unbind,
+            unbind_gets_transmitted,
+            federate_unfederate
         ]}
     ].
 
 suite() ->
-    [{timetrap, {minutes, 5}}].
+    [{timetrap, {minutes, 3}}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -93,6 +108,24 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+%% Some of the "regular" tests but in the single channel mode.
+init_per_group(channel_use_mode_single, Config) ->
+    SetupFederation = [
+        fun(Config1) ->
+            rabbit_federation_test_util:setup_federation_with_upstream_params(Config1, [
+                {<<"channel-use-mode">>, <<"single">>}
+            ])
+        end
+    ],
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Suffix},
+        {rmq_nodes_clustered, false}
+      ]),
+    rabbit_ct_helpers:run_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps() ++
+      SetupFederation);
 init_per_group(without_automatic_setup, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
@@ -170,6 +203,17 @@ end_per_testcase(Testcase, Config) ->
 simple(Config) ->
     with_ch(Config,
       fun (Ch) ->
+              Q = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
+              await_binding(Config, 0, <<"upstream">>, <<"key">>),
+              publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>)
+      end, upstream_downstream()).
+
+single_channel_mode(Config) ->
+    with_conn_and_ch(Config,
+      fun (Conn, Ch) ->
+              Infos = amqp_connection:info(Conn, [num_channels]),
+              N = proplists:get_value(num_channels, Infos),
+              ?assertEqual(1, N),
               Q = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
               await_binding(Config, 0, <<"upstream">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO">>)
@@ -366,58 +410,50 @@ user_id(Config) ->
                 end
         end,
 
-    wait_for_federation(
-      90,
-      fun() ->
-              VHost = <<"/">>,
-              X1s = rabbit_ct_broker_helpers:rpc(
-                      Config, Rabbit, rabbit_exchange, list, [VHost]),
-              L1 =
-              [X || X <- X1s,
-               X#exchange.name =:= #resource{virtual_host = VHost,
-                                             kind = exchange,
-                                             name = <<"test">>},
-               X#exchange.scratches =:= [{federation,
-                                          [{{<<"upstream-2">>,
-                                             <<"test">>},
-                                            <<"B">>}]}]],
-              X2s = rabbit_ct_broker_helpers:rpc(
-                      Config, Hare, rabbit_exchange, list, [VHost]),
-              L2 =
-              [X || X <- X2s,
-                    X#exchange.type =:= 'x-federation-upstream'],
-              [] =/= L1 andalso [] =/= L2 andalso
-              has_internal_federated_queue(Config, Hare, VHost)
-      end),
+    ?awaitMatch({L1, L2, true} when L1 =/= [] andalso L2 =/= [],
+                begin
+                    VHost = <<"/">>,
+                    X1s = rabbit_ct_broker_helpers:rpc(
+                            Config, Rabbit, rabbit_exchange, list, [VHost]),
+                    L1 = [X || X <- X1s,
+                               X#exchange.name =:= #resource{virtual_host = VHost,
+                                                             kind = exchange,
+                                                             name = <<"test">>},
+                               X#exchange.scratches =:= [{federation,
+                                                          [{{<<"upstream-2">>,
+                                                             <<"test">>},
+                                                            <<"B">>}]}]],
+                    X2s = rabbit_ct_broker_helpers:rpc(
+                            Config, Hare, rabbit_exchange, list, [VHost]),
+                    L2 = [X || X <- X2s,
+                               X#exchange.type =:= 'x-federation-upstream'],
+                    {L1, L2, has_internal_federated_queue(Config, Hare, VHost)}
+                end, 90000),
     publish(Ch2, <<"test">>, <<"key">>, Msg),
     expect(Ch, Q, ExpectUser(undefined)),
 
     set_policy_upstream(Config, Rabbit, <<"^test$">>,
       rabbit_ct_broker_helpers:node_uri(Config, 1),
       [{<<"trust-user-id">>, true}]),
-    wait_for_federation(
-      90,
-      fun() ->
-              VHost = <<"/">>,
-              X1s = rabbit_ct_broker_helpers:rpc(
-                      Config, Rabbit, rabbit_exchange, list, [VHost]),
-              L1 =
-              [X || X <- X1s,
-               X#exchange.name =:= #resource{virtual_host = VHost,
-                                             kind = exchange,
-                                             name = <<"test">>},
-               X#exchange.scratches =:= [{federation,
-                                          [{{<<"upstream-2">>,
-                                             <<"test">>},
-                                            <<"A">>}]}]],
-              X2s = rabbit_ct_broker_helpers:rpc(
-                      Config, Hare, rabbit_exchange, list, [VHost]),
-              L2 =
-              [X || X <- X2s,
-                    X#exchange.type =:= 'x-federation-upstream'],
-              [] =/= L1 andalso [] =/= L2 andalso
-              has_internal_federated_queue(Config, Hare, VHost)
-      end),
+    ?awaitMatch({L1, L2, true} when L1 =/= [] andalso L2 =/= [],
+                begin
+                    VHost = <<"/">>,
+                    X1s = rabbit_ct_broker_helpers:rpc(
+                            Config, Rabbit, rabbit_exchange, list, [VHost]),
+                    L1 = [X || X <- X1s,
+                               X#exchange.name =:= #resource{virtual_host = VHost,
+                                                             kind = exchange,
+                                                             name = <<"test">>},
+                               X#exchange.scratches =:= [{federation,
+                                                          [{{<<"upstream-2">>,
+                                                             <<"test">>},
+                                                            <<"A">>}]}]],
+                    X2s = rabbit_ct_broker_helpers:rpc(
+                            Config, Hare, rabbit_exchange, list, [VHost]),
+                    L2 = [X || X <- X2s,
+                               X#exchange.type =:= 'x-federation-upstream'],
+                    {L1, L2, has_internal_federated_queue(Config, Hare, VHost)}
+                end, 90000),
     publish(Ch2, <<"test">>, <<"key">>, Msg),
     expect(Ch, Q, ExpectUser(<<"hare-user">>)),
 
@@ -490,6 +526,7 @@ restart_upstream(Config) ->
     Qgoes = bind_queue(Downstream, <<"hare.downstream">>, <<"goes">>),
 
     rabbit_ct_client_helpers:close_channels_and_connection(Config, Hare),
+    timer:sleep(3000),
     rabbit_ct_broker_helpers:stop_node(Config, Hare),
 
     Qcomes = bind_queue(Downstream, <<"hare.downstream">>, <<"comes">>),
@@ -933,15 +970,9 @@ delete_federated_queue_upstream(Config) ->
                                           #'queue.declare'{queue = <<"federated.queue">>,
                                                            durable = true}),
 
-    
-    rabbit_ct_helpers:await_condition(
-        fun () ->
-            length(federation_links_in_vhost(Config, 0, VH1)) > 0 andalso
-            length(federation_links_in_vhost(Config, 0, VH2)) > 0
-        end),
-    
-    ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH1))),
-    ?assertEqual(1, length(federation_links_in_vhost(Config, 0, VH2))),
+    ?awaitMatch({1, 1},
+                {length(federation_links_in_vhost(Config, 0, VH1)),
+                 length(federation_links_in_vhost(Config, 0, VH2))}, 90000),
 
     rabbit_ct_broker_helpers:clear_parameter(Config, 0, VH2,
                                              <<"federation-upstream">>, <<"upstream">>),
@@ -1003,38 +1034,33 @@ dynamic_plugin_stop_start(Config) ->
                 rabbit_registry, lookup_module,
                 [exchange, 'x-federation-upstream']),
 
-              wait_for_federation(
-                90,
-                fun() ->
-                        VHost = <<"/">>,
-                        Xs = rabbit_ct_broker_helpers:rpc(
-                               Config, 0, rabbit_exchange, list, [VHost]),
-                        L1 =
-                        [X || X <- Xs,
-                              X#exchange.type =:= 'x-federation-upstream'],
-                        L2 =
-                        [X || X <- Xs,
-                              X#exchange.name =:= #resource{
-                                                     virtual_host = VHost,
-                                                     kind = exchange,
-                                                     name = X1},
-                              X#exchange.scratches =:= [{federation,
-                                                         [{{<<"localhost">>,
-                                                            X1},
-                                                           <<"A">>}]}]],
-                        L3 =
-                        [X || X <- Xs,
-                              X#exchange.name =:= #resource{
-                                                     virtual_host = VHost,
-                                                     kind = exchange,
-                                                     name = X2},
-                              X#exchange.scratches =:= [{federation,
-                                                         [{{<<"localhost">>,
-                                                            X2},
-                                                           <<"B">>}]}]],
-                        length(L1) =:= 2 andalso [] =/= L2 andalso [] =/= L3 andalso
-                        has_internal_federated_queue(Config, 0, VHost)
-                end),
+              ?awaitMatch({L1, L2, L3, true} when length(L1) == 2; L2 =/= []; L3 =/= [],
+                          begin
+                              VHost = <<"/">>,
+                              Xs = rabbit_ct_broker_helpers:rpc(
+                                     Config, 0, rabbit_exchange, list, [VHost]),
+                              L1 = [X || X <- Xs,
+                                         X#exchange.type =:= 'x-federation-upstream'],
+                              L2 = [X || X <- Xs,
+                                         X#exchange.name =:= #resource{
+                                                                virtual_host = VHost,
+                                                                kind = exchange,
+                                                                name = X1},
+                                         X#exchange.scratches =:= [{federation,
+                                                                    [{{<<"localhost">>,
+                                                                       X1},
+                                                                      <<"A">>}]}]],
+                              L3 = [X || X <- Xs,
+                                         X#exchange.name =:= #resource{
+                                                                virtual_host = VHost,
+                                                                kind = exchange,
+                                                                name = X2},
+                                         X#exchange.scratches =:= [{federation,
+                                                                    [{{<<"localhost">>,
+                                                                       X2},
+                                                                      <<"B">>}]}]],
+                              {L1, L2, L3, has_internal_federated_queue(Config, 0, VHost)}
+                          end, 90000),
 
               %% Test both exchanges work. They are just federated to
               %% themselves so should duplicate messages.
@@ -1059,29 +1085,24 @@ dynamic_plugin_cleanup_stop_start(Config) ->
 
               %% Declare a federated exchange, a link starts
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
-              wait_for_federation(
-                90,
-                fun() ->
-                        VHost = <<"/">>,
-                        Xs = rabbit_ct_broker_helpers:rpc(
-                               Config, 0, rabbit_exchange, list, [VHost]),
-                        L1 =
-                        [X || X <- Xs,
-                              X#exchange.type =:= 'x-federation-upstream'],
-                        L2 =
-                        [X || X <- Xs,
-                              X#exchange.name =:= #resource{
-                                                     virtual_host = VHost,
-                                                     kind = exchange,
-                                                     name = X1},
-                              X#exchange.scratches =:= [{federation,
-                                                         [{{<<"localhost">>,
-                                                            X1},
-                                                           <<"B">>}]}]],
-                        [] =/= L1 andalso [] =/= L2 andalso
-                        has_internal_federated_queue(Config, 0, VHost)
-                end),
-
+              ?awaitMatch({L1, L2, true} when L1 =/= []; L2 =/= [],
+                          begin
+                              VHost = <<"/">>,
+                              Xs = rabbit_ct_broker_helpers:rpc(
+                                     Config, 0, rabbit_exchange, list, [VHost]),
+                              L1 = [X || X <- Xs,
+                                         X#exchange.type =:= 'x-federation-upstream'],
+                              L2 = [X || X <- Xs,
+                                         X#exchange.name =:= #resource{
+                                                                virtual_host = VHost,
+                                                                kind = exchange,
+                                                                name = X1},
+                                         X#exchange.scratches =:= [{federation,
+                                                                    [{{<<"localhost">>,
+                                                                       X1},
+                                                                      <<"B">>}]}]],
+                              {L1, L2, has_internal_federated_queue(Config, 0, VHost)}
+                          end, 90000),
               ?assert(has_internal_federated_exchange(Config, 0, <<"/">>)),
               ?assert(has_internal_federated_queue(Config, 0, <<"/">>)),
 
@@ -1107,38 +1128,34 @@ dynamic_policy_cleanup(Config) ->
 
               %% Declare federated exchange - get link
               assert_connections(Config, 0, [X1], [<<"localhost">>]),
-              wait_for_federation(
-                90,
-                fun() ->
-                        VHost = <<"/">>,
-                        Xs = rabbit_ct_broker_helpers:rpc(
-                               Config, 0, rabbit_exchange, list, [VHost]),
-                        L1 =
-                        [X || X <- Xs,
-                              X#exchange.type =:= 'x-federation-upstream'],
-                        L2 =
-                        [X || X <- Xs,
-                              X#exchange.name =:= #resource{
-                                                     virtual_host = VHost,
-                                                     kind = exchange,
-                                                     name = X1},
-                              X#exchange.scratches =:= [{federation,
-                                                         [{{<<"localhost">>,
-                                                            X1},
-                                                           <<"B">>}]}]],
-                        [] =/= L1 andalso [] =/= L2 andalso
-                        has_internal_federated_queue(Config, 0, VHost)
-                end),
+              ?awaitMatch({L1, L2, true} when L1 =/= []; L2 =/= [],
+                          begin
+                              VHost = <<"/">>,
+                              Xs = rabbit_ct_broker_helpers:rpc(
+                                     Config, 0, rabbit_exchange, list, [VHost]),
+                              L1 = [X || X <- Xs,
+                                         X#exchange.type =:= 'x-federation-upstream'],
+                              L2 = [X || X <- Xs,
+                                         X#exchange.name =:= #resource{
+                                                                virtual_host = VHost,
+                                                                kind = exchange,
+                                                                name = X1},
+                                         X#exchange.scratches =:= [{federation,
+                                                                    [{{<<"localhost">>,
+                                                                       X1},
+                                                                      <<"B">>}]}]],
+                              {L1, L2, has_internal_federated_queue(Config, 0, VHost)}
+                          end, 90000),
 
               ?assert(has_internal_federated_exchange(Config, 0, <<"/">>)),
               ?assert(has_internal_federated_queue(Config, 0, <<"/">>)),
 
               clear_policy(Config, 0, <<"dyn">>),
-              timer:sleep(5000),
-
               %% Internal exchanges and queues need cleanup
-              ?assert(not has_internal_federated_exchange(Config, 0, <<"/">>)),
-              ?assert(not has_internal_federated_queue(Config, 0, <<"/">>)),
+              ?awaitMatch({false, false},
+                          {has_internal_federated_exchange(Config, 0, <<"/">>),
+                           has_internal_federated_queue(Config, 0, <<"/">>)},
+                          10000),
 
               clear_policy(Config, 0, <<"dyn">>),
               assert_connections(Config, 0, [X1], [])
@@ -1166,6 +1183,17 @@ with_ch(Config, Fun, Xs) ->
     rabbit_federation_test_util:assert_status(Config, 0,
       Xs, {exchange, upstream_exchange}),
     Fun(Ch),
+    delete_all(Ch, Xs),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    cleanup(Config, 0),
+    ok.
+
+with_conn_and_ch(Config, Fun, Xs) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    declare_all(Ch, Xs),
+    rabbit_federation_test_util:assert_status(Config, 0,
+      Xs, {exchange, upstream_exchange}),
+    Fun(Conn, Ch),
     delete_all(Ch, Xs),
     rabbit_ct_client_helpers:close_channel(Ch),
     cleanup(Config, 0),
@@ -1254,7 +1282,7 @@ await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount) when is_integer
     await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, Attempts).
 
 await_binding(_Config, _Node, _Vhost, _X, _Key, ExpectedBindingCount, 0) ->
-    {error, rabbit_misc:format("expected ~s bindings but they did not materialize in time", [ExpectedBindingCount])};
+    {error, rabbit_misc:format("expected ~b bindings but they did not materialize in time", [ExpectedBindingCount])};
 await_binding(Config, Node, Vhost, X, Key, ExpectedBindingCount, AttemptsLeft) when is_integer(ExpectedBindingCount) ->
     case bound_keys_from(Config, Node, Vhost, X, Key) of
         Bs when length(Bs) < ExpectedBindingCount ->

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_amqp091_shovel).
@@ -41,12 +41,15 @@ parse(_Name, {source, Source}) ->
                                                    ?DEFAULT_PREFETCH)),
     Queue = parse_parameter(queue, fun parse_binary/1,
                             proplists:get_value(queue, Source)),
+    %% TODO parse
+    CArgs = proplists:get_value(consumer_args, Source, []),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Source),
       resource_decl => decl_fun(Source),
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
-      prefetch_count => Prefetch};
+      prefetch_count => Prefetch,
+      consumer_args => CArgs};
 parse(Name, {destination, Dest}) ->
     PubProp = proplists:get_value(publish_properties, Dest, []),
     PropsFun = try_make_parse_publish(publish_properties, PubProp),
@@ -73,7 +76,8 @@ init_source(Conf = #{ack_mode := AckMode,
                      source := #{queue := Queue,
                                  current := {Conn, Chan, _},
                                  prefetch_count := Prefetch,
-                                 resource_decl := Decl} = Src}) ->
+                                 resource_decl := Decl,
+                                 consumer_args := Args} = Src}) ->
     Decl(Conn, Chan),
 
     NoAck = AckMode =:= no_ack,
@@ -92,7 +96,8 @@ init_source(Conf = #{ack_mode := AckMode,
     end,
     #'basic.consume_ok'{} =
         amqp_channel:subscribe(Chan, #'basic.consume'{queue = Queue,
-                                                      no_ack = NoAck}, self()),
+                                                      no_ack = NoAck,
+                                                      arguments = Args}, self()),
     Conf#{source => Src#{remaining => Remaining,
                          remaining_unacked => Remaining}}.
 
@@ -338,11 +343,11 @@ do_make_conn_and_chan(URIs, ShovelName) ->
 
 log_connection_failure(Reason, URI, {VHost, Name} = _ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' in vhost '~s' failed to connect (URI: ~s): ~s~n",
+          "Shovel '~s' in vhost '~s' failed to connect (URI: ~s): ~s",
       [Name, VHost, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]);
 log_connection_failure(Reason, URI, ShovelName) ->
     rabbit_log:error(
-          "Shovel '~s' failed to connect (URI: ~s): ~s~n",
+          "Shovel '~s' failed to connect (URI: ~s): ~s",
           [ShovelName, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]).
 
 human_readable_connection_error({auth_failure, Msg}) ->

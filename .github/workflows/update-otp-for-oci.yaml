@@ -1,0 +1,67 @@
+name: Update OTP Versions for OCI Workflow
+on:
+  schedule:
+  - cron: '0 3 * * *'
+  workflow_dispatch:
+jobs:
+  update-rbe-images:
+    name: Update OTP Versions
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        erlang_version:
+        - "24.1"
+        include:
+        - erlang_version: "24.1"
+          image_tag_suffix: 'otp-max'
+    timeout-minutes: 10
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.4.0
+    - name: SKIP IF THE PR ALREADY EXISTS
+      id: check-for-branch
+      run: |
+        set +e
+        git ls-remote --exit-code --heads origin bump-otp-for-oci
+        echo "::set-output name=c::$?"
+    - name: DETERMINE LATEST PATCH & SHA
+      if: steps.check-for-branch.outputs.c != 0
+      id: fetch-version
+      run: |
+        TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags \
+          | jq -r 'map(select(.name | contains("OTP-${{ matrix.erlang_version }}"))) | first | .name')
+
+        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "https://github.com/erlang/otp/archive/${TAG_NAME}.tar.gz" && \
+        SHA=$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')
+
+        echo "::set-output name=VERSION::${TAG_NAME#OTP-}"
+        echo "::set-output name=SHA::${SHA}"
+    - name: MODIFY VERSION FILE
+      if: steps.check-for-branch.outputs.c != 0
+      run: |
+        echo "Updating packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml with:"
+        echo "  otp -> ${{ steps.fetch-version.outputs.VERSION }}"
+        echo "  otp_sha256 -> ${{ steps.fetch-version.outputs.SHA }}"
+
+        FILE=packaging/docker-image/otp-versions/${{ matrix.image_tag_suffix }}.yaml
+        sed -i "s/otp: .*/otp: '${{ steps.fetch-version.outputs.VERSION }}'/" $FILE
+        sed -i "s/otp_sha256: .*/otp_sha256: ${{ steps.fetch-version.outputs.SHA }}/" $FILE
+
+        set -x
+        git diff
+    - name: CREATE PULL REQUEST
+      if: steps.check-for-branch.outputs.c != 0
+      uses: peter-evans/create-pull-request@v3
+      with:
+        token: ${{ secrets.REPO_SCOPED_TOKEN }}
+        committer: GitHub <noreply@github.com>
+        author: GitHub <noreply@github.com>
+        title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }} for OCI workflow
+        commit-message: |
+          Adopt otp ${{ steps.fetch-version.outputs.VERSION }} for OCI workflow
+        labels: |
+          backport-v3.9.x
+          backport-v3.8.x
+        branch: bump-otp-for-oci
+        delete-branch: true

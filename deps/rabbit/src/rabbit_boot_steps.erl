@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_boot_steps).
@@ -39,7 +39,9 @@ run_step(Attributes, AttributeName) ->
         rabbit_log:debug("Applying MFA: M = ~s, F = ~s, A = ~p",
                         [M, F, A]),
         case apply(M,F,A) of
-            ok              -> ok;
+            ok              ->
+                rabbit_log:debug("Finished MFA: M = ~s, F = ~s, A = ~p",
+                                 [M, F, A]);
             {error, Reason} -> exit({error, Reason})
         end
      end

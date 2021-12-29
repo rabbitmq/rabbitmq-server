@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(upgrade_preparation_SUITE).
@@ -38,13 +38,21 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 3},
-        {rmq_nodename_suffix, Group}
-      ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% in a 3.8/3.9 mixed cluster, ra will not cluster across versions,
+            %% so quorum plus one will not be achieved
+            {skip, "not mixed versions compatible"};
+        _ ->
+            Config1 = rabbit_ct_helpers:set_config(Config,
+                                                   [
+                                                    {rmq_nodes_count, 3},
+                                                    {rmq_nodename_suffix, Group}
+                                                   ]),
+            rabbit_ct_helpers:run_steps(Config1,
+                                        rabbit_ct_broker_helpers:setup_steps() ++
+                                            rabbit_ct_client_helpers:setup_steps())
+    end.
 
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,

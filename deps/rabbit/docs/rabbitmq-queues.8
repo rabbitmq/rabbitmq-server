@@ -1,11 +1,11 @@
 .\" vim:ft=nroff:
-.\" This Source Code Form is subject to the terms of the Mozilla Public 
+.\" This Source Code Form is subject to the terms of the Mozilla Public
 .\" License, v. 2.0. If a copy of the MPL was not distributed with this
 .\" file, You can obtain one at https://mozilla.org/MPL/2.0/.
 .\"
-.\" Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+.\" Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 .\"
-.Dd September 28, 2019
+.Dd June 19, 2021
 .Dt RABBITMQ-QUEUES 8
 .Os "RabbitMQ Server"
 .Sh NAME
@@ -27,11 +27,11 @@
 .\" ------------------------------------------------------------------
 .Nm
 is a command line tool that provides commands used to manage queues,
-mainly member handling for quorum queues.
+for example, grow, shrink or rebalance replicas of replicated queue types.
 See the
 .Lk https://www.rabbitmq.com/quorum-queues.html "RabbitMQ quorum queues guide"
-and
-.Lk https://www.rabbitmq.com/ha.html "RabbitMQ classic mirrored queues guide"
+and the general
+.Lk https://www.rabbitmq.com/queues.html "RabbitMQ queues guide"
 to learn more about queue types in RabbitMQ.
 .
 .\" ------------------------------------------------------------------
@@ -115,7 +115,7 @@ Example:
 .\" ------------------------------------
 .It Cm rebalance Ar type Fl -vhost-pattern Ar pattern Fl -queue-pattern Ar pattern
 .Pp
-Rebalances queue master replicas across cluster nodes.
+Rebalances queue leader replicas across cluster nodes.
 .Pp
 Supported
 .Ar type

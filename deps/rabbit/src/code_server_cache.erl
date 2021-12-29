@@ -4,7 +4,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(code_server_cache).
@@ -70,7 +70,7 @@ handle_maybe_call_mfa(true, {Module, Function, Args, Default}, State) ->
         error:undef ->
             handle_maybe_call_mfa_error(Module, Default, State);
         Err:Reason ->
-            rabbit_log:error("Calling ~p:~p failed: ~p:~p~n",
+            rabbit_log:error("Calling ~p:~p failed: ~p:~p",
                              [Module, Function, Err, Reason]),
             handle_maybe_call_mfa_error(Module, Default, State)
     end.

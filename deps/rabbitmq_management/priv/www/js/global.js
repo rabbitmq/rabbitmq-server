@@ -71,7 +71,7 @@ var ALL_COLUMNS =
                    ['features_no_policy',   'Features (no policy)',   false],
                    ['policy',               'Policy',                 false],
                    ['consumers',            'Consumer count',         false],
-                   ['consumer_utilisation', 'Consumer utilisation',   false],
+                   ['consumer_capacity',    'Consumer capacity',      false],
                    ['state',                'State',                  true]],
       'Messages': [['msgs-ready',      'Ready',          true],
                    ['msgs-unacked',    'Unacknowledged', true],
@@ -166,10 +166,15 @@ var DISABLED_STATS_COLUMNS =
 
 var COLUMNS;
 
+var RENDER_CALLBACKS = {};
+
+const QUEUE_EXTRA_CONTENT = [];
+const QUEUE_EXTRA_CONTENT_REQUESTS = [];
+
 // All help ? popups
 var HELP = {
     'delivery-limit':
-      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsucessfully this many times it will be dropped or dead-lettered, depending on the queue configuration.',
+      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsuccessfully this many times it will be dropped or dead-lettered, depending on the queue configuration.',
 
     'exchange-auto-delete':
       'If yes, the exchange will delete itself after at least one queue or exchange has been bound to this one, and then all queues or exchanges have been unbound.',
@@ -201,8 +206,8 @@ var HELP = {
     'queue-max-age':
       'How long a message published to a stream queue can live before it is discarded.',
 
-    'queue-max-segment-size':
-      'Total segment size for stream segments on disk.<br/>(Sets the x-max-segment-size argument.)',
+    'queue-stream-max-segment-size-bytes':
+      'Total segment size for stream segments on disk.<br/>(Sets the x-stream-max-segment-size-bytes argument.)',
 
     'queue-auto-delete':
       'If yes, the queue will delete itself after at least one consumer has connected, and then all consumers have disconnected.',
@@ -220,7 +225,7 @@ var HELP = {
       'Maximum number of priority levels for the queue to support; if not set, the queue will not support message priorities.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/priority.html">x-max-priority</a>" argument.)',
 
     'queue-max-age':
-      'Retention policy for stream queues.<br/>(Sets the x-max-age argument.)',
+      'Sets the data retention for stream queues in time units </br>(Y=Years, M=Months, D=Days, h=hours, m=minutes, s=seconds).<br/>E.g. "1h" configures the stream to only keep the last 1 hour of received messages.</br></br>(Sets the x-max-age argument.)',
 
     'queue-lazy':
       'Set the queue into lazy mode, keeping as many messages as possible on disk to reduce RAM usage; if not set, the queue will keep an in-memory cache to deliver messages as fast as possible.<br/>(Sets the "<a target="_blank" href="https://www.rabbitmq.com/lazy-queues.html">x-queue-mode</a>" argument.)',
@@ -249,12 +254,12 @@ var HELP = {
     'queue-process-memory':
       'Total memory used by this queue process. This does not include in-memory message bodies (which may be shared between queues and will appear in the global "binaries" memory) but does include everything else.',
 
-    'queue-consumer-utilisation':
-      'Fraction of the time that the queue is able to immediately deliver messages to consumers. If this number is less than 100% you may be able to deliver messages faster if: \
+    'queue-consumer-capacity':
+      'Fraction of the time that the queue is able to immediately deliver messages to consumers. Will be 0 for queues that have no consumers. If this number is less than 100% you may be able to deliver messages faster if: \
         <ul> \
           <li>There were more consumers or</li> \
           <li>The consumers were faster or</li> \
-          <li>The consumers had a higher prefetch count</li> \
+          <li>The consumer channels used a higher prefetch count</li> \
         </ul>',
 
     'internal-users-only':
@@ -491,6 +496,10 @@ var HELP = {
     For a quorum queue, a consumer can be inactive because its owning node is suspected down. <br/><br/> \
     (<a href="https://www.rabbitmq.com/consumers.html#active-consumer" target="_blank">Documentation</a>)',
 
+    'consumer-owner' :
+    '<a href="https://www.rabbitmq.com/consumers.html">AMQP consumers</a> belong to an AMQP channel, \
+    and <a href="https://www.rabbitmq.com/stream.html">stream consumers</a> belong to a stream connection.',
+
     'plugins' :
     'Note that only plugins which are both explicitly enabled and running are shown here.',
 
@@ -630,7 +639,7 @@ var user;
 function setup_global_vars() {
     var overview = JSON.parse(sync_get('/overview'));
     rates_mode = overview.rates_mode;
-    user_tags = expand_user_tags(user.tags.split(","));
+    user_tags = expand_user_tags(user.tags);
     user_administrator = jQuery.inArray("administrator", user_tags) != -1;
     is_user_policymaker = jQuery.inArray("policymaker", user_tags) != -1;
     user_monitor = jQuery.inArray("monitoring", user_tags) != -1;

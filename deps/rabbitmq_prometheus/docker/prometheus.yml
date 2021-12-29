@@ -46,6 +46,9 @@ scrape_configs:
           - 'rmq0-qq:15692'
           - 'rmq1-qq:15692'
           - 'rmq2-qq:15692'
+          - 'rmq0-dist-metrics:15692'
+          - 'rmq1-dist-metrics:15692'
+          - 'rmq2-dist-metrics:15692'
   - job_name: 'rabbitmq-perf-test'
     static_configs:
       - targets:

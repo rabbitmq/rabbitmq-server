@@ -2,13 +2,10 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_federation_queue_link).
-
-%% pg2 is deprecated in OTP 23.
--compile(nowarn_deprecated_function).
 
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -33,7 +30,9 @@ start_link(Args) ->
 
 run(QName)   -> cast(QName, run).
 pause(QName) -> cast(QName, pause).
-go()         -> cast(go).
+go()         ->
+    rabbit_federation_pg:start_scope(),
+    cast(go).
 
 %%----------------------------------------------------------------------------
 %%call(QName, Msg) -> [gen_server2:call(Pid, Msg, infinity) || Pid <- q(QName)].
@@ -41,20 +40,18 @@ cast(Msg)        -> [gen_server2:cast(Pid, Msg) || Pid <- all()].
 cast(QName, Msg) -> [gen_server2:cast(Pid, Msg) || Pid <- q(QName)].
 
 join(Name) ->
-    pg2:create(pgname(Name)),
-    ok = pg2:join(pgname(Name), self()).
+    ok = pg:join(?FEDERATION_PG_SCOPE, pgname(Name), self()).
 
 all() ->
-    pg2:create(pgname(rabbit_federation_queues)),
-    pg2:get_members(pgname(rabbit_federation_queues)).
+    pg:get_members(?FEDERATION_PG_SCOPE, pgname(rabbit_federation_queues)).
 
 q(QName) ->
-    pg2:create(pgname({rabbit_federation_queue, QName})),
-    pg2:get_members(pgname({rabbit_federation_queue, QName})).
-
-federation_up() ->
-    proplists:is_defined(rabbitmq_federation,
-                         application:which_applications(infinity)).
+    case pg:get_members(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_queue, QName})) of
+        {error, {no_such_group, _}} ->
+            [];
+        Members ->
+            Members
+    end.
 
 %%----------------------------------------------------------------------------
 
@@ -75,7 +72,7 @@ init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
                               upstream        = Upstream,
                               upstream_params = UParams}};
         {error, not_found} ->
-            rabbit_federation_link_util:log_warning(QName, "not found, stopping link~n", []),
+            rabbit_federation_link_util:log_warning(QName, "not found, stopping link", []),
             {stop, gone}
     end.
 
@@ -83,10 +80,7 @@ handle_call(Msg, _From, State) ->
     {stop, {unexpected_call, Msg}, State}.
 
 handle_cast(maybe_go, State) ->
-    case federation_up() of
-        true  -> go(State);
-        false -> {noreply, State}
-    end;
+    go(State);
 
 handle_cast(go, State = #not_started{}) ->
     go(State);
@@ -180,6 +174,7 @@ terminate(Reason, #not_started{upstream        = Upstream,
                                queue           = Q}) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
+    _ = pg:leave(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_queue, QName}), self()),
     ok;
 
 terminate(Reason, #state{dconn           = DConn,
@@ -191,6 +186,7 @@ terminate(Reason, #state{dconn           = DConn,
     rabbit_federation_link_util:ensure_connection_closed(DConn),
     rabbit_federation_link_util:ensure_connection_closed(Conn),
     rabbit_federation_link_util:log_terminate(Reason, Upstream, UParams, QName),
+    _ = pg:leave(?FEDERATION_PG_SCOPE, pgname({rabbit_federation_queue, QName}), self()),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -212,10 +208,15 @@ go(S0 = #not_started{run             = Run,
     rabbit_federation_link_util:start_conn_ch(
       fun (Conn, Ch, DConn, DCh) ->
               check_upstream_suitable(Conn),
-              amqp_channel:call(Ch, #'queue.declare'{queue       = name(UQueue),
-                                                     durable     = Durable,
-                                                     auto_delete = AutoDelete,
-                                                     arguments   = Args}),
+              Declare = #'queue.declare'{queue       = name(UQueue),
+                                         durable     = Durable,
+                                         auto_delete = AutoDelete,
+                                         arguments   = Args},
+              rabbit_federation_link_util:disposable_channel_call(
+                Conn, Declare#'queue.declare'{passive = true},
+                fun(?NOT_FOUND, _Text) ->
+                        amqp_channel:call(Ch, Declare)
+                end),
               case Upstream#upstream.ack_mode of
                   'no-ack' -> ok;
                   _        -> amqp_channel:call(

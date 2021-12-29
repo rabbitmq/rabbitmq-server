@@ -17,6 +17,7 @@
 /sbin.lock
 /xrefr
 debug/*
+*.plt
 
 test/config_schema_SUITE_data/schema/
 test/.idea/*

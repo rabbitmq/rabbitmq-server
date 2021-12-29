@@ -2,11 +2,13 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2010-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2010-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_misc).
 -behaviour(rabbit_policy_validator).
+
+-include("amqqueue.hrl").
 
 -export([remove_from_queue/3, on_vhost_up/1, add_mirrors/3,
          report_deaths/4, store_updated_slaves/1,
@@ -14,18 +16,18 @@
          is_mirrored/1, is_mirrored_ha_nodes/1,
          update_mirrors/2, update_mirrors/1, validate_policy/1,
          maybe_auto_sync/1, maybe_drop_master_after_sync/1,
-         sync_batch_size/1, log_info/3, log_warning/3]).
+         sync_batch_size/1, default_max_sync_throughput/0,
+         log_info/3, log_warning/3]).
 -export([stop_all_slaves/5]).
 
--export([sync_queue/1, cancel_sync_queue/1]).
+-export([sync_queue/1, cancel_sync_queue/1, queue_length/1]).
 
--export([transfer_leadership/2, queue_length/1, get_replicas/1]).
+-export([get_replicas/1, transfer_leadership/2, migrate_leadership_to_existing_replica/2]).
 
 %% for testing only
 -export([module/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("amqqueue.hrl").
 
 -define(HA_NODES_MODULE, rabbit_mirror_queue_mode_nodes).
 
@@ -201,15 +203,16 @@ drop_mirror(QName, MirrorNode) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?is_amqqueue(Q) ->
             Name = amqqueue:get_name(Q),
-            QPid = amqqueue:get_pid(Q),
-            SPids = amqqueue:get_slave_pids(Q),
-            case [Pid || Pid <- [QPid | SPids], node(Pid) =:= MirrorNode] of
+            PrimaryPid = amqqueue:get_pid(Q),
+            MirrorPids = amqqueue:get_slave_pids(Q),
+            AllReplicaPids = [PrimaryPid | MirrorPids],
+            case [Pid || Pid <- AllReplicaPids, node(Pid) =:= MirrorNode] of
                 [] ->
                     {error, {queue_not_mirrored_on_node, MirrorNode}};
-                [QPid] when SPids =:= [] ->
+                [PrimaryPid] when MirrorPids =:= [] ->
                     {error, cannot_drop_only_mirror};
                 [Pid] ->
-                    log_info(Name, "Dropping queue mirror on node ~p~n",
+                    log_info(Name, "Dropping queue mirror on node ~p",
                              [MirrorNode]),
                     exit(Pid, {shutdown, dropped}),
                     {ok, dropped}
@@ -235,24 +238,22 @@ add_mirror(QName, MirrorNode, SyncMode) ->
                     case rabbit_vhost_sup_sup:get_vhost_sup(VHost, MirrorNode) of
                         {ok, _} ->
                             try
-                                SPid = rabbit_amqqueue_sup_sup:start_queue_process(
-                                       MirrorNode, Q, slave),
-                                log_info(QName, "Adding mirror on node ~p: ~p~n",
-                                     [MirrorNode, SPid]),
-                                rabbit_mirror_queue_slave:go(SPid, SyncMode)
+                                MirrorPid = rabbit_amqqueue_sup_sup:start_queue_process(MirrorNode, Q, slave),
+                                log_info(QName, "Adding mirror on node ~p: ~p", [MirrorNode, MirrorPid]),
+                                rabbit_mirror_queue_slave:go(MirrorPid, SyncMode)
                             of
                                 _ -> ok
                             catch
                                 error:QError ->
                                     log_warning(QName,
                                         "Unable to start queue mirror on node '~p'. "
-                                        "Target queue supervisor is not running: ~p~n",
+                                        "Target queue supervisor is not running: ~p",
                                         [MirrorNode, QError])
                             end;
                         {error, Error} ->
                             log_warning(QName,
                                         "Unable to start queue mirror on node '~p'. "
-                                        "Target virtual host is not running: ~p~n",
+                                        "Target virtual host is not running: ~p",
                                         [MirrorNode, Error]),
                             ok
                     end
@@ -264,10 +265,10 @@ add_mirror(QName, MirrorNode, SyncMode) ->
 report_deaths(_MirrorPid, _IsMaster, _QueueName, []) ->
     ok;
 report_deaths(MirrorPid, IsMaster, QueueName, DeadPids) ->
-    log_info(QueueName, "~s ~s saw deaths of mirrors~s~n",
+    log_info(QueueName, "~s replica of queue ~s detected replica ~s to be down",
                     [case IsMaster of
-                         true  -> "Master";
-                         false -> "Slave"
+                         true  -> "Primary";
+                         false -> "Secondary"
                      end,
                      rabbit_misc:pid_to_string(MirrorPid),
                      [[$ , rabbit_misc:pid_to_string(P)] || P <- DeadPids]]).
@@ -342,7 +343,7 @@ stop_all_slaves(Reason, SPids, QName, GM, WaitTimeout) ->
                 after WaitTimeout ->
                         rabbit_mirror_queue_misc:log_warning(
                           QName, "Missing 'DOWN' message from ~p in"
-                          " node ~p~n", [Pid, node(Pid)]),
+                          " node ~p", [Pid, node(Pid)]),
                         [Pid | Acc]
                 end;
             false ->
@@ -435,26 +436,29 @@ validate_mode(Mode) ->
 -spec is_mirrored(amqqueue:amqqueue()) -> boolean().
 
 is_mirrored(Q) ->
-    case module(Q) of
+    MatchedByPolicy = case module(Q) of
         {ok, _}  -> true;
         _        -> false
-    end.
+    end,
+    MatchedByPolicy andalso (not rabbit_amqqueue:is_exclusive(Q)).
 
 is_mirrored_ha_nodes(Q) ->
-    case module(Q) of
+    MatchedByPolicy = case module(Q) of
         {ok, ?HA_NODES_MODULE} -> true;
         _ -> false
-    end.
+    end,
+    MatchedByPolicy andalso (not rabbit_amqqueue:is_exclusive(Q)).
 
 actual_queue_nodes(Q) when ?is_amqqueue(Q) ->
-    MPid = amqqueue:get_pid(Q),
-    SPids = amqqueue:get_slave_pids(Q),
-    SSPids = amqqueue:get_sync_slave_pids(Q),
-    Nodes = fun (L) -> [node(Pid) || Pid <- L] end,
-    {case MPid of
-         none -> none;
-         _    -> node(MPid)
-     end, Nodes(SPids), Nodes(SSPids)}.
+    PrimaryPid = amqqueue:get_pid(Q),
+    MirrorPids = amqqueue:get_slave_pids(Q),
+    InSyncMirrorPids = amqqueue:get_sync_slave_pids(Q),
+    CollectNodes = fun (L) -> [node(Pid) || Pid <- L] end,
+    NodeHostingPrimary = case PrimaryPid of
+                         none -> none;
+                         _ -> node(PrimaryPid)
+                     end,
+    {NodeHostingPrimary, CollectNodes(MirrorPids), CollectNodes(InSyncMirrorPids)}.
 
 -spec maybe_auto_sync(amqqueue:amqqueue()) -> 'ok'.
 
@@ -503,6 +507,25 @@ default_batch_size() ->
     rabbit_misc:get_env(rabbit, mirroring_sync_batch_size,
                         ?DEFAULT_BATCH_SIZE).
 
+-define(DEFAULT_MAX_SYNC_THROUGHPUT, 0).
+
+default_max_sync_throughput() ->
+  case application:get_env(rabbit, mirroring_sync_max_throughput) of
+    {ok, Value} ->
+      case rabbit_resource_monitor_misc:parse_information_unit(Value) of
+        {ok, ParsedThroughput} ->
+          ParsedThroughput;
+        {error, parse_error} ->
+          rabbit_log:warning(
+            "The configured value for the mirroring_sync_max_throughput is "
+            "not a valid value: ~p. Disabled sync throughput control. ",
+            [Value]),
+          ?DEFAULT_MAX_SYNC_THROUGHPUT
+      end;
+    undefined ->
+      ?DEFAULT_MAX_SYNC_THROUGHPUT
+  end.
+
 -spec update_mirrors
         (amqqueue:amqqueue(), amqqueue:amqqueue()) -> 'ok'.
 
@@ -520,19 +543,19 @@ update_mirrors(OldQ, NewQ) when ?amqqueue_pids_are_equal(OldQ, NewQ) ->
 
 update_mirrors(Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
-    {OldMNode, OldSNodes, _} = actual_queue_nodes(Q),
-    {NewMNode, NewSNodes}    = suggested_queue_nodes(Q),
-    OldNodes = [OldMNode | OldSNodes],
-    NewNodes = [NewMNode | NewSNodes],
+    {PreTransferPrimaryNode, PreTransferMirrorNodes, __PreTransferInSyncMirrorNodes} = actual_queue_nodes(Q),
+    {NewlySelectedPrimaryNode, NewlySelectedMirrorNodes} = suggested_queue_nodes(Q),
+    PreTransferNodesWithReplicas = [PreTransferPrimaryNode | PreTransferMirrorNodes],
+    NewlySelectedNodesWithReplicas = [NewlySelectedPrimaryNode | NewlySelectedMirrorNodes],
     %% When a mirror dies, remove_from_queue/2 might have to add new
-    %% mirrors (in "exactly" mode). It will check mnesia to see which
+    %% mirrors (in "exactly" mode). It will check the queue record to see which
     %% mirrors there currently are. If drop_mirror/2 is invoked first
     %% then when we end up in remove_from_queue/2 it will not see the
     %% mirrors that add_mirror/2 will add, and also want to add them
     %% (even though we are not responding to the death of a
     %% mirror). Breakage ensues.
-    add_mirrors (QName, NewNodes -- OldNodes, async),
-    drop_mirrors(QName, OldNodes -- NewNodes),
+    add_mirrors(QName, NewlySelectedNodesWithReplicas -- PreTransferNodesWithReplicas, async),
+    drop_mirrors(QName, PreTransferNodesWithReplicas -- NewlySelectedNodesWithReplicas),
     %% This is for the case where no extra nodes were added but we changed to
     %% a policy requiring auto-sync.
     maybe_auto_sync(Q),
@@ -543,38 +566,92 @@ queue_length(Q) ->
     M.
 
 get_replicas(Q) ->
-    {MNode, SNodes} = suggested_queue_nodes(Q),
-    [MNode] ++ SNodes.
+    {PrimaryNode, MirrorNodes} = suggested_queue_nodes(Q),
+    [PrimaryNode] ++ MirrorNodes.
 
+-spec transfer_leadership(amqqueue:amqqueue(), node()) -> {migrated, node()} | {not_migrated, atom()}.
+%% Moves the primary replica (leader) of a classic mirrored queue to another node.
+%% Target node can be any node in the cluster, and does not have to host a replica
+%% of this queue.
 transfer_leadership(Q, Destination) ->
     QName = amqqueue:get_name(Q),
-    {OldMNode, OldSNodes, _} = actual_queue_nodes(Q),
-    OldNodes = [OldMNode | OldSNodes],
-    add_mirrors(QName, [Destination] -- OldNodes, async),
-    drop_mirrors(QName, OldNodes -- [Destination]),
-    {Result, NewQ} = wait_for_new_master(QName, Destination),
-    update_mirrors(NewQ),
-    Result.
+    {PreTransferPrimaryNode, PreTransferMirrorNodes, _PreTransferInSyncMirrorNodes} = actual_queue_nodes(Q),
+    PreTransferNodesWithReplicas = [PreTransferPrimaryNode | PreTransferMirrorNodes],
 
+    NodesToAddMirrorsOn = [Destination] -- PreTransferNodesWithReplicas,
+    %% This will wait for the transfer/eager sync to finish before we begin dropping
+    %% mirrors on the next step. In this case we cannot add mirrors asynchronously
+    %% as that will race with the dropping step.
+    add_mirrors(QName, NodesToAddMirrorsOn, sync),
+
+    NodesToDropMirrorsOn = PreTransferNodesWithReplicas -- [Destination],
+    drop_mirrors(QName, NodesToDropMirrorsOn),
+
+    case wait_for_new_master(QName, Destination) of
+        not_migrated ->
+            {not_migrated, undefined};
+        {{not_migrated, Destination} = Result, _Q1} ->
+            Result;
+        {Result, NewQ} ->
+            update_mirrors(NewQ),
+            Result
+    end.
+
+
+-spec migrate_leadership_to_existing_replica(amqqueue:amqqueue(), atom()) -> {migrated, node()} | {not_migrated, atom()}.
+%% Moves the primary replica (leader) of a classic mirrored queue to another node
+%% which already hosts a replica of this queue. In this case we can stop
+%% fewer replicas and reduce the load the operation has on the cluster.
+migrate_leadership_to_existing_replica(Q, Destination) ->
+    QName = amqqueue:get_name(Q),
+    {PreTransferPrimaryNode, PreTransferMirrorNodes, _PreTransferInSyncMirrorNodes} = actual_queue_nodes(Q),
+    PreTransferNodesWithReplicas = [PreTransferPrimaryNode | PreTransferMirrorNodes],
+
+    NodesToAddMirrorsOn = [Destination] -- PreTransferNodesWithReplicas,
+    %% This will wait for the transfer/eager sync to finish before we begin dropping
+    %% mirrors on the next step. In this case we cannot add mirrors asynchronously
+    %% as that will race with the dropping step.
+    add_mirrors(QName, NodesToAddMirrorsOn, sync),
+
+    NodesToDropMirrorsOn = [PreTransferPrimaryNode],
+    drop_mirrors(QName, NodesToDropMirrorsOn),
+
+    case wait_for_new_master(QName, Destination) of
+        not_migrated ->
+            {not_migrated, undefined};
+        {{not_migrated, Destination} = Result, _Q1} ->
+            Result;
+        {Result, NewQ} ->
+            update_mirrors(NewQ),
+            Result
+    end.
+
+-spec wait_for_new_master(rabbit_amqqueue:name(), atom()) -> {{migrated, node()}, amqqueue:amqqueue()} | {{not_migrated, node()}, amqqueue:amqqueue()} | not_migrated.
 wait_for_new_master(QName, Destination) ->
     wait_for_new_master(QName, Destination, 100).
 
 wait_for_new_master(QName, _, 0) ->
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
-    {{not_migrated, ""}, Q};
+    case rabbit_amqqueue:lookup(QName) of
+        {error, not_found} -> not_migrated;
+        {ok, Q}            -> {{not_migrated, undefined}, Q}
+    end;
 wait_for_new_master(QName, Destination, N) ->
-    {ok, Q} = rabbit_amqqueue:lookup(QName),
-    case amqqueue:get_pid(Q) of
-        none ->
-            timer:sleep(100),
-            wait_for_new_master(QName, Destination, N - 1);
-        Pid ->
-            case node(Pid) of
-                Destination ->
-                    {{migrated, Destination}, Q};
-                _ ->
+    case rabbit_amqqueue:lookup(QName) of
+        {error, not_found} ->
+            not_migrated;
+        {ok, Q} ->
+            case amqqueue:get_pid(Q) of
+                none ->
                     timer:sleep(100),
-                    wait_for_new_master(QName, Destination, N - 1)
+                    wait_for_new_master(QName, Destination, N - 1);
+                Pid ->
+                    case node(Pid) of
+                        Destination ->
+                            {{migrated, Destination}, Q};
+                        _ ->
+                            timer:sleep(100),
+                            wait_for_new_master(QName, Destination, N - 1)
+                    end
             end
     end.
 

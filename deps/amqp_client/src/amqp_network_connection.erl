@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% @private
@@ -108,9 +108,8 @@ info_keys() ->
 
 connect(AmqpParams = #amqp_params_network{host = Host}, SIF, TypeSup, State) ->
     case gethostaddr(Host) of
-        []     -> {error, unknown_host};
-        [AF|_] -> do_connect(
-                    AF, AmqpParams, SIF, State#state{type_sup = TypeSup})
+        {error, Reason}     -> {error, Reason};
+        AF -> do_connect(AF, AmqpParams, SIF, State#state{type_sup = TypeSup})
     end.
 
 do_connect({Addr, Family},
@@ -163,9 +162,15 @@ inet_address_preference() ->
     end.
 
 gethostaddr(Host) ->
-    Lookups = [{Family, inet:getaddr(Host, Family)}
-               || Family <- inet_address_preference()],
-    [{IP, Family} || {Family, {ok, IP}} <- Lookups].
+    resolve_address(Host, inet_address_preference()).
+
+resolve_address(Host, [Family | Remaining]) ->
+    case inet:getaddr(Host, Family) of
+        {ok, IP} -> {IP, Family};
+        _ -> resolve_address(Host, Remaining)
+    end;
+resolve_address(_Host, []) ->
+    {error, unknown_host}.
 
 try_handshake(AmqpParams, SIF, State = #state{sock = Sock}) ->
     Name = case rabbit_net:connection_string(Sock, outbound) of
@@ -179,12 +184,16 @@ try_handshake(AmqpParams, SIF, State = #state{sock = Sock}) ->
     end.
 
 handshake(AmqpParams, SIF, State0 = #state{sock = Sock}) ->
-    ok = rabbit_net:send(Sock, ?PROTOCOL_HEADER),
-    case start_infrastructure(SIF, State0) of
-      {ok, ChMgr, State1} ->
-        network_handshake(AmqpParams, {ChMgr, State1});
-      {error, Reason} ->
-        {error, Reason}
+    case rabbit_net:send(Sock, ?PROTOCOL_HEADER) of
+        ok ->
+            case start_infrastructure(SIF, State0) of
+              {ok, ChMgr, State1} ->
+                network_handshake(AmqpParams, {ChMgr, State1});
+              {error, Reason} ->
+                {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 start_infrastructure(SIF, State = #state{sock = Sock, name = Name}) ->
@@ -308,7 +317,7 @@ client_properties(UserProperties) ->
                {<<"version">>,   longstr, list_to_binary(Vsn)},
                {<<"platform">>,  longstr, <<"Erlang">>},
                {<<"copyright">>, longstr,
-                <<"Copyright (c) 2007-2020 VMware, Inc. or its affiliates.">>},
+                <<"Copyright (c) 2007-2021 VMware, Inc. or its affiliates.">>},
                {<<"information">>, longstr,
                 <<"Licensed under the MPL.  "
                   "See https://www.rabbitmq.com/">>},

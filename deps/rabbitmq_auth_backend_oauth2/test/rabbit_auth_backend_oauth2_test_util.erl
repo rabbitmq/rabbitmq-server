@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(rabbit_auth_backend_oauth2_test_util).
 
@@ -73,7 +73,7 @@ expired_token_with_scopes(Scopes) ->
     token_with_scopes_and_expiration(Scopes, os:system_time(seconds) - 10).
 
 fixture_token_with_scopes(Scopes) ->
-    token_with_scopes_and_expiration(Scopes, os:system_time(seconds) + 10).
+    token_with_scopes_and_expiration(Scopes, os:system_time(seconds) + 30).
 
 token_with_scopes_and_expiration(Scopes, Expiration) ->
     %% expiration is a timestamp with precision in seconds

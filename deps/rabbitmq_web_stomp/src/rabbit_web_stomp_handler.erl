@@ -2,11 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_web_stomp_handler).
 -behaviour(cowboy_websocket).
+-behaviour(cowboy_sub_protocol).
 
 -include_lib("rabbitmq_stomp/include/rabbit_stomp.hrl").
 -include_lib("rabbitmq_stomp/include/rabbit_stomp_frame.hrl").
@@ -21,6 +22,11 @@
     terminate/3
 ]).
 -export([close_connection/2]).
+
+%% cowboy_sub_protocol
+-export([upgrade/4,
+         upgrade/5,
+         takeover/7]).
 
 -record(state, {
     frame_type,
@@ -38,17 +44,30 @@
     connection
 }).
 
+%% cowboy_sub_protcol
+upgrade(Req, Env, Handler, HandlerState) ->
+    upgrade(Req, Env, Handler, HandlerState, #{}).
+
+upgrade(Req, Env, Handler, HandlerState, Opts) ->
+    cowboy_websocket:upgrade(Req, Env, Handler, HandlerState, Opts).
+
+takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) ->
+    Sock = case HandlerState#state.socket of
+               undefined ->
+                   Socket;
+               ProxyInfo ->
+                   {rabbit_proxy_socket, Socket, ProxyInfo}
+           end,
+    Env0 = maps:get(env, Opts, #{}),
+    Env = Env0#{socket => Sock},
+    cowboy_websocket:takeover(Parent, Ref, Socket, Transport, maps:put(env, Env, Opts), Buffer,
+                              {Handler, HandlerState#state{socket = Sock}}).
+
 %% Websocket.
 init(Req0, Opts) ->
     {PeerAddr, _PeerPort} = maps:get(peer, Req0),
     {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
-    {_, Sock0} = lists:keyfind(socket, 1, Opts),
-    Sock = case maps:get(proxy_header, Req0, undefined) of
-        undefined ->
-            Sock0;
-        ProxyInfo ->
-            {rabbit_proxy_socket, Sock0, ProxyInfo}
-    end,
+    SockInfo = maps:get(proxy_header, Req0, undefined),
     Req = case cowboy_req:parse_header(<<"sec-websocket-protocol">>, Req0) of
         undefined  -> Req0;
         Protocols ->
@@ -61,14 +80,14 @@ init(Req0, Opts) ->
     end,
     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
-    {cowboy_websocket, Req, #state{
+    {?MODULE, Req, #state{
         frame_type         = proplists:get_value(type, Opts, text),
         heartbeat_sup      = KeepaliveSup,
         heartbeat          = {none, none},
         heartbeat_mode     = heartbeat,
         state              = running,
         conserve_resources = false,
-        socket             = Sock,
+        socket             = SockInfo,
         peername           = PeerAddr,
         auth_hd            = cowboy_req:header(<<"authorization">>, Req)
     }, WsOpts}.
@@ -164,6 +183,15 @@ websocket_info({Delivery = #'basic.deliver'{},
                                                      DeliveryCtx,
                                                      ProcState0),
     {ok, State#state{ proc_state = ProcState }};
+websocket_info({Delivery = #'basic.deliver'{},
+               #amqp_msg{props = Props, payload = Payload}},
+               State=#state{ proc_state = ProcState0 }) ->
+    ProcState = rabbit_stomp_processor:send_delivery(Delivery,
+                                                     Props,
+                                                     Payload,
+                                                     undefined,
+                                                     ProcState0),
+    {ok, State#state{ proc_state = ProcState }};
 websocket_info(#'basic.cancel'{consumer_tag = Ctag},
                State=#state{ proc_state = ProcState0 }) ->
     case rabbit_stomp_processor:cancel_consumer(Ctag, ProcState0) of
@@ -207,7 +235,7 @@ websocket_info(emit_stats, State) ->
     {ok, emit_stats(State)};
 
 websocket_info(Msg, State) ->
-    rabbit_log_connection:info("Web STOMP: unexpected message ~p~n",
+    rabbit_log_connection:info("Web STOMP: unexpected message ~p",
                     [Msg]),
     {ok, State}.
 
@@ -239,7 +267,7 @@ handle_data(Data, State0) ->
             {[{active, false}], State1};
         {error, Error0} ->
             Error1 = rabbit_misc:format("~p", [Error0]),
-            rabbit_log_connection:error("STOMP detected framing error '~s'~n", [Error1]),
+            rabbit_log_connection:error("STOMP detected framing error '~s'", [Error1]),
             stop(State0, 1007, Error1);
         Other ->
             Other

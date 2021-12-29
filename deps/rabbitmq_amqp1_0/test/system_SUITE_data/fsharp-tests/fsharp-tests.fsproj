@@ -1,14 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="RabbitMQ.Client" Version="5.*" />
-    <PackageReference Include="AmqpNetLite" Version="2.1.2" />
-    <PackageReference Include="AmqpNetLite.Serialization" Version="2.1.2" />
+    <PackageReference Include="RabbitMQ.Client" Version="6.*" />
+    <PackageReference Include="AmqpNetLite" Version="2.4.1" />
+    <PackageReference Include="AmqpNetLite.Serialization" Version="2.4.1" />
   </ItemGroup>
 </Project>

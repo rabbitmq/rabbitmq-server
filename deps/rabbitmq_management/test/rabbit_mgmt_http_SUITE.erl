@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_http_SUITE).
@@ -18,7 +18,7 @@
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
                                 http_get_no_auth/3,
-                                http_get_no_map/2,
+                                http_get_as_proplist/2,
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
                                 http_upload_raw/8,
@@ -257,6 +257,11 @@ end_per_testcase0(T, Config)
     [rabbit_ct_broker_helpers:delete_vhost(Config, Name)
      || #{name := Name} <- Vhosts],
     Config;
+end_per_testcase0(definitions_password_test, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 application, unset_env,
+                                 [rabbit, password_hashing_module]),
+    Config;
 end_per_testcase0(queues_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"downvhost">>),
     Config;
@@ -279,7 +284,7 @@ end_per_testcase0(user_limits_list_test, Config) ->
     Config;
 end_per_testcase0(user_limit_set_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"limit_test_vhost_1">>),
-    rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_user_1_user">>),
+    rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_user_1">>),
     rabbit_ct_broker_helpers:delete_user(Config, <<"limit_test_vhost_1_user">>),
     Config;
 end_per_testcase0(permissions_vhost_test, Config) ->
@@ -410,9 +415,13 @@ assert_percentage(Breakdown0, ExtraMargin) ->
 auth_test(Config) ->
     http_put(Config, "/users/user", [{password, <<"user">>},
                                      {tags, <<"">>}], {group, '2xx'}),
-    test_auth(Config, ?NOT_AUTHORISED, []),
+    EmptyAuthResponseHeaders = test_auth(Config, ?NOT_AUTHORISED, []),
+    ?assertEqual(true, lists:keymember("www-authenticate", 1,  EmptyAuthResponseHeaders)),
+    %% NOTE: this one won't have www-authenticate in the response,
+    %% because user/password are ok, tags are not
     test_auth(Config, ?NOT_AUTHORISED, [auth_header("user", "user")]),
-    test_auth(Config, ?NOT_AUTHORISED, [auth_header("guest", "gust")]),
+    WrongAuthResponseHeaders = test_auth(Config, ?NOT_AUTHORISED, [auth_header("guest", "gust")]),
+    ?assertEqual(true, lists:keymember("www-authenticate", 1,  WrongAuthResponseHeaders)),
     test_auth(Config, ?OK, [auth_header("guest", "guest")]),
     http_delete(Config, "/users/user", {group, '2xx'}),
     passed.
@@ -491,25 +500,25 @@ vhosts_trace_test(Config) ->
     passed.
 
 users_test(Config) ->
-    assert_item(#{name => <<"guest">>, tags => <<"administrator">>},
+    assert_item(#{name => <<"guest">>, tags => [<<"administrator">>]},
                 http_get(Config, "/whoami")),
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbitmq_management, login_session_timeout, 100]),
     assert_item(#{name => <<"guest">>,
-                  tags => <<"administrator">>,
+                  tags => [<<"administrator">>],
                   login_session_timeout => 100},
                 http_get(Config, "/whoami")),
     http_get(Config, "/users/myuser", ?NOT_FOUND),
     http_put_raw(Config, "/users/myuser", "Something not JSON", ?BAD_REQUEST),
     http_put(Config, "/users/myuser", [{flim, <<"flam">>}], ?BAD_REQUEST),
-    http_put(Config, "/users/myuser", [{tags,     <<"management">>},
+    http_put(Config, "/users/myuser", [{tags,     [<<"management">>]},
                                        {password, <<"myuser">>}],
              {group, '2xx'}),
     http_put(Config, "/users/myuser", [{password_hash, <<"not_hash">>}], ?BAD_REQUEST),
     http_put(Config, "/users/myuser", [{password_hash,
                                         <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
                                        {tags, <<"management">>}], {group, '2xx'}),
-    assert_item(#{name => <<"myuser">>, tags => <<"management">>,
+    assert_item(#{name => <<"myuser">>, tags => [<<"management">>],
                   password_hash => <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/myuser")),
@@ -517,17 +526,17 @@ users_test(Config) ->
     http_put(Config, "/users/myuser", [{password_hash,
                                         <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
                                        {hashing_algorithm, <<"rabbit_password_hashing_md5">>},
-                                       {tags, <<"management">>}], {group, '2xx'}),
-    assert_item(#{name => <<"myuser">>, tags => <<"management">>,
+                                       {tags, [<<"management">>]}], {group, '2xx'}),
+    assert_item(#{name => <<"myuser">>, tags => [<<"management">>],
                   password_hash => <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>,
                   hashing_algorithm => <<"rabbit_password_hashing_md5">>},
                 http_get(Config, "/users/myuser")),
     http_put(Config, "/users/myuser", [{password, <<"password">>},
-                                       {tags, <<"administrator, foo">>}], {group, '2xx'}),
-    assert_item(#{name => <<"myuser">>, tags => <<"administrator,foo">>},
+                                       {tags, [<<"administrator">>, <<"foo">>]}], {group, '2xx'}),
+    assert_item(#{name => <<"myuser">>, tags => [<<"administrator">>, <<"foo">>]},
                 http_get(Config, "/users/myuser")),
-    assert_list(lists:sort([#{name => <<"myuser">>, tags => <<"administrator,foo">>},
-                 #{name => <<"guest">>, tags => <<"administrator">>}]),
+    assert_list(lists:sort([#{name => <<"myuser">>, tags => [<<"administrator">>, <<"foo">>]},
+                 #{name => <<"guest">>, tags => [<<"administrator">>]}]),
                 lists:sort(http_get(Config, "/users"))),
     test_auth(Config, ?OK, [auth_header("myuser", "password")]),
     http_delete(Config, "/users/myuser", {group, '2xx'}),
@@ -536,7 +545,7 @@ users_test(Config) ->
     passed.
 
 without_permissions_users_test(Config) ->
-    assert_item(#{name => <<"guest">>, tags => <<"administrator">>},
+    assert_item(#{name => <<"guest">>, tags => [<<"administrator">>]},
                 http_get(Config, "/whoami")),
     http_put(Config, "/users/myuser", [{password_hash,
                                         <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
@@ -546,7 +555,7 @@ without_permissions_users_test(Config) ->
     http_put(Config, "/users/myuserwithoutpermissions", [{password_hash,
                                                           <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>},
                                                          {tags, <<"management">>}], {group, '2xx'}),
-    assert_list([#{name => <<"myuserwithoutpermissions">>, tags => <<"management">>,
+    assert_list([#{name => <<"myuserwithoutpermissions">>, tags => [<<"management">>],
                    hashing_algorithm => <<"rabbit_password_hashing_sha256">>,
                    password_hash => <<"IECV6PZI/Invh0DL187KFpkO5Jc=">>}],
                 http_get(Config, "/users/without-permissions")),
@@ -555,7 +564,7 @@ without_permissions_users_test(Config) ->
     passed.
 
 users_bulk_delete_test(Config) ->
-    assert_item(#{name => <<"guest">>, tags => <<"administrator">>},
+    assert_item(#{name => <<"guest">>, tags => [<<"administrator">>]},
                 http_get(Config, "/whoami")),
     http_put(Config, "/users/myuser1", [{tags, <<"management">>}, {password, <<"myuser">>}],
              {group, '2xx'}),
@@ -584,9 +593,9 @@ users_legacy_administrator_test(Config) ->
     http_put(Config, "/users/myuser2", [{administrator, <<"false">>},
                                         {password,      <<"myuser2">>}],
              {group, '2xx'}),
-    assert_item(#{name => <<"myuser1">>, tags => <<"administrator">>},
+    assert_item(#{name => <<"myuser1">>, tags => [<<"administrator">>]},
                 http_get(Config, "/users/myuser1")),
-    assert_item(#{name => <<"myuser2">>, tags => <<"">>},
+    assert_item(#{name => <<"myuser2">>, tags => []},
                 http_get(Config, "/users/myuser2")),
     http_delete(Config, "/users/myuser1", {group, '2xx'}),
     http_delete(Config, "/users/myuser2", {group, '2xx'}),
@@ -685,7 +694,7 @@ updating_a_user_without_password_or_hash_clears_password_test(Config) ->
     %% clear users' credentials
     http_put(Config, "/users/myuser", [{tags,     <<"management">>}], [?CREATED, ?NO_CONTENT]),
     assert_item(#{name => <<"myuser">>,
-                  tags => <<"management">>,
+                  tags => [<<"management">>],
                   password_hash => <<>>,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/myuser")),
@@ -723,21 +732,21 @@ updating_tags_of_a_passwordless_user_test(Config) ->
     %% clear user's password
     http_put(Config, "/users/abc", [{tags,     <<"management">>}], [?CREATED, ?NO_CONTENT]),
     assert_item(#{name => ?NON_GUEST_USERNAME,
-                  tags => <<"management">>,
+                  tags => [<<"management">>],
                   password_hash => <<>>,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/abc")),
 
     http_put(Config, "/users/abc", [{tags,     <<"impersonator">>}], [?CREATED, ?NO_CONTENT]),
     assert_item(#{name => ?NON_GUEST_USERNAME,
-                  tags => <<"impersonator">>,
+                  tags => [<<"impersonator">>],
                   password_hash => <<>>,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/abc")),
 
     http_put(Config, "/users/abc", [{tags,     <<"">>}], [?CREATED, ?NO_CONTENT]),
     assert_item(#{name => ?NON_GUEST_USERNAME,
-                  tags => <<"">>,
+                  tags => [],
                   password_hash => <<>>,
                   hashing_algorithm => <<"rabbit_password_hashing_sha256">>},
                 http_get(Config, "/users/abc")),
@@ -930,8 +939,8 @@ multiple_invalid_connections_test(Config) ->
     passed.
 
 test_auth(Config, Code, Headers) ->
-    {ok, {{_, Code, _}, _, _}} = req(Config, get, "/overview", Headers),
-    passed.
+    {ok, {{_, Code, _}, RespHeaders, _}} = req(Config, get, "/overview", Headers),
+    RespHeaders.
 
 exchanges_test(Config) ->
     %% Can list exchanges
@@ -1092,12 +1101,12 @@ queues_well_formed_json_test(Config) ->
     http_put(Config, "/queues/%2F/foo", Good, {group, '2xx'}),
     http_put(Config, "/queues/%2F/baz", Good, {group, '2xx'}),
 
-    Queues = http_get_no_map(Config, "/queues/%2F"),
+    Queues = http_get_as_proplist(Config, "/queues/%2F"),
     %% Ensure keys are unique
     [begin
-     Sorted = lists:sort(Q),
-     Sorted = lists:usort(Q)
-     end || Q <- Queues],
+         Q = rabbit_data_coercion:to_proplist(Q0),
+         ?assertEqual(lists:sort(Q), lists:usort(Q))
+     end || Q0 <- Queues],
 
     http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
     http_delete(Config, "/queues/%2F/baz", {group, '2xx'}),
@@ -1613,7 +1622,7 @@ definitions_test(Config) ->
          #{name              => <<"myuser">>,
            password_hash     => <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>,
            hashing_algorithm => <<"rabbit_password_hashing_sha256">>,
-           tags              => <<"management">>}),
+           tags              => [<<"management">>]}),
     defs(Config, vhosts, "/vhosts/myvhost", put,
          #{name => <<"myvhost">>}),
     defs(Config, permissions, "/permissions/%2F/guest", put,
@@ -1788,7 +1797,7 @@ definitions_password_test(Config) ->
     Expected35 = #{name              => <<"myuser">>,
                    password_hash     => <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>,
                    hashing_algorithm => <<"rabbit_password_hashing_md5">>,
-                   tags              => <<"management">>},
+                   tags              => [<<"management">>]},
     http_post(Config, "/definitions", Config35, {group, '2xx'}),
     Definitions35 = http_get(Config, "/definitions", ?OK),
     ct:pal("Definitions35: ~p", [Definitions35]),
@@ -1804,7 +1813,7 @@ definitions_password_test(Config) ->
     Expected36 = #{name              => <<"myuser">>,
                    password_hash     => <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>,
                    hashing_algorithm => <<"rabbit_password_hashing_sha256">>,
-                   tags              => <<"management">>},
+                   tags              => [<<"management">>]},
     http_post(Config, "/definitions", Config36, {group, '2xx'}),
 
     Definitions36 = http_get(Config, "/definitions", ?OK),
@@ -1824,7 +1833,7 @@ definitions_password_test(Config) ->
     ExpectedDefault = #{name              => <<"myuser">>,
                         password_hash     => <<"WAbU0ZIcvjTpxM3Q3SbJhEAM2tQ=">>,
                         hashing_algorithm => <<"rabbit_password_hashing_sha512">>,
-                        tags              => <<"management">>},
+                        tags              => [<<"management">>]},
     http_post(Config, "/definitions", ConfigDefault, {group, '2xx'}),
 
     DefinitionsDefault = http_get(Config, "/definitions", ?OK),
@@ -2462,7 +2471,8 @@ format_output_test(Config) ->
     http_put(Config, "/queues/%2F/test0", QArgs, {group, '2xx'}),
     timer:sleep(2000),
     assert_list([#{name => <<"test0">>,
-                   consumer_utilisation => null,
+                   consumer_capacity => 0,
+                   consumer_utilisation => 0,
                    exclusive_consumer_tag => null,
                    recoverable_slaves => null}], http_get(Config, "/queues", ?OK)),
     http_delete(Config, "/queues/%2F/test0", {group, '2xx'}),

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(feature_flags_SUITE).
@@ -61,14 +61,12 @@ groups() ->
      {enabling_on_single_node, [],
       [
        enable_feature_flag_in_a_healthy_situation,
-       enable_unsupported_feature_flag_in_a_healthy_situation,
-       enable_feature_flag_when_ff_file_is_unwritable
+       enable_unsupported_feature_flag_in_a_healthy_situation
       ]},
      {enabling_in_cluster, [],
       [
        enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
-       enable_feature_flag_when_ff_file_is_unwritable,
        enable_feature_flag_with_a_network_partition,
        mark_feature_flag_as_enabled_with_a_network_partition
       ]},
@@ -107,29 +105,53 @@ init_per_group(enabling_on_single_node, Config) ->
       Config,
       [{rmq_nodes_count, 1}]);
 init_per_group(enabling_in_cluster, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{rmq_nodes_count, 5}]);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% This test relies on functions only exported for test,
+            %% which is not true of mixed version nodes in bazel
+            {skip, "mixed mode not supported"};
+        _ ->
+            rabbit_ct_helpers:set_config(
+              Config,
+              [{rmq_nodes_count, 5}])
+    end;
 init_per_group(clustering, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(
-                Config,
-                [{rmq_nodes_count, 2},
-                 {rmq_nodes_clustered, false},
-                 {start_rmq_with_plugins_disabled, true}]),
-    rabbit_ct_helpers:run_setup_steps(Config1, [
-        fun build_my_plugin/1,
-        fun work_around_cli_and_rabbit_circular_dep/1
-      ]);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% This test relies on functions only exported for test,
+            %% which is not true of mixed version nodes in bazel
+            {skip, "mixed mode not supported"};
+        _ ->
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config,
+                        [{rmq_nodes_count, 2},
+                         {rmq_nodes_clustered, false},
+                         {start_rmq_with_plugins_disabled, true}]),
+            rabbit_ct_helpers:run_setup_steps(Config1, [
+                                                        fun prepare_my_plugin/1,
+                                                        fun work_around_cli_and_rabbit_circular_dep/1
+                                                       ])
+    end;
 init_per_group(activating_plugin, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(
-                Config,
-                [{rmq_nodes_count, 2},
-                 {rmq_nodes_clustered, true},
-                 {start_rmq_with_plugins_disabled, true}]),
-    rabbit_ct_helpers:run_setup_steps(Config1, [
-        fun build_my_plugin/1,
-        fun work_around_cli_and_rabbit_circular_dep/1
-      ]);
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% mixed mode testing in bazel uses a production build of
+            %% the broker, however this group invokes functions via
+            %% rpc that are only available in test builds
+            {skip, "mixed mode not supported"};
+        _ ->
+            Config1 = rabbit_ct_helpers:set_config(
+                        Config,
+                        [{rmq_nodes_count, 2},
+                         {rmq_nodes_clustered, true},
+                         {start_rmq_with_plugins_disabled, true}]),
+            rabbit_ct_helpers:run_setup_steps(
+              Config1,
+              [
+               fun prepare_my_plugin/1,
+               fun work_around_cli_and_rabbit_circular_dep/1
+              ])
+    end;
 init_per_group(_, Config) ->
     Config.
 
@@ -141,20 +163,7 @@ init_per_testcase(Testcase, Config) ->
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
     case ?config(tc_group_properties, Config) of
         [{name, registry} | _] ->
-            application:set_env(lager, colored, true),
-            application:set_env(
-              lager,
-              handlers, [{lager_console_backend, [{level, debug}]}]),
-            application:set_env(
-              lager,
-              extra_sinks,
-              [{rabbit_log_lager_event,
-                [{handlers, [{lager_console_backend, [{level, debug}]}]}]
-               },
-               {rabbit_log_feature_flags_lager_event,
-                [{handlers, [{lager_console_backend, [{level, debug}]}]}]
-               }]),
-            lager:start(),
+            logger:set_primary_config(level, debug),
             FeatureFlagsFile = filename:join(?config(priv_dir, Config),
                                              rabbit_misc:format(
                                                "feature_flags-~s",
@@ -679,10 +688,10 @@ mark_feature_flag_as_enabled_with_a_network_partition(Config) ->
         FeatureName,
         true,
         RemoteNodes},
-       rabbit_ct_broker_helpers:rpc(
-         Config, B,
-         rabbit_feature_flags, mark_as_enabled_remotely,
-         [RemoteNodes, FeatureName, true, 20000])),
+       catch rabbit_ct_broker_helpers:rpc(
+               Config, B,
+               rabbit_feature_flags, mark_as_enabled_remotely,
+               [RemoteNodes, FeatureName, true, 20000])),
 
     RepairFun = fun() ->
                         %% Wait a few seconds before we repair the network.
@@ -997,6 +1006,17 @@ activating_plugin_with_new_ff_enabled(Config) ->
 %% -------------------------------------------------------------------
 %% Internal helpers.
 %% -------------------------------------------------------------------
+
+prepare_my_plugin(Config) ->
+    case os:getenv("RABBITMQ_RUN") of
+        false ->
+            build_my_plugin(Config);
+        _ ->
+            MyPluginDir = filename:dirname(filename:dirname(code:where_is_file("my_plugin.app"))),
+            PluginsDir = filename:dirname(MyPluginDir),
+            rabbit_ct_helpers:set_config(Config,
+                                         [{rmq_plugins_dir, PluginsDir}])
+    end.
 
 build_my_plugin(Config) ->
     PluginSrcDir = filename:join(?config(data_dir, Config), "my_plugin"),

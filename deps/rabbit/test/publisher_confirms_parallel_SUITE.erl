@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(publisher_confirms_parallel_SUITE).
 
@@ -29,6 +29,7 @@ groups() ->
                              confirm_nowait,
                              confirm_ack,
                              confirm_acks,
+                             confirm_after_mandatory_bug,
                              confirm_mandatory_unroutable,
                              confirm_unroutable_message],
     [
@@ -186,6 +187,17 @@ confirm_acks(Config) ->
     amqp_channel:register_confirm_handler(Ch, self()),
     publish(Ch, QName, [<<"msg1">>, <<"msg2">>, <<"msg3">>, <<"msg4">>]),
     receive_many(lists:seq(1, 4)).
+
+confirm_after_mandatory_bug(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+    ok = amqp_channel:call(Ch, #'basic.publish'{routing_key = QName,
+                                                mandatory = true}, #amqp_msg{payload = <<"msg1">>}),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    publish(Ch, QName, [<<"msg2">>]),
+    true = amqp_channel:wait_for_confirms(Ch, 1),
+    ok.
 
 %% For unroutable messages, the broker will issue a confirm once the exchange verifies a message
 %% won't route to any queue (returns an empty list of queues).

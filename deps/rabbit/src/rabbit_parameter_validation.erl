@@ -2,12 +2,13 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_parameter_validation).
 
--export([number/2, integer/2, binary/2, boolean/2, list/2, regex/2, proplist/3, enum/1]).
+-export([number/2, integer/2, binary/2, amqp091_queue_name/2,
+        boolean/2, list/2, regex/2, proplist/3, enum/1]).
 
 number(_Name, Term) when is_number(Term) ->
     ok;
@@ -26,6 +27,16 @@ binary(_Name, Term) when is_binary(Term) ->
 
 binary(Name, Term) ->
     {error, "~s should be binary, actually was ~p", [Name, Term]}.
+
+amqp091_queue_name(Name, S) when is_binary(S) ->
+    case size(S) of
+        Len when Len =< 255 -> ok;
+        _                   -> {error, "~s should be less than 255 bytes, actually was ~p", [Name, size(S)]}
+    end;
+
+amqp091_queue_name(Name, Term) ->
+    {error, "~s should be binary, actually was ~p", [Name, Term]}.
+
 
 boolean(_Name, Term) when is_boolean(Term) ->
     ok;
@@ -50,7 +61,20 @@ regex(Name, Term) ->
 proplist(Name, Constraints, Term) when is_list(Term) ->
     {Results, Remainder}
         = lists:foldl(
-            fun ({Key, Fun, Needed}, {Results0, Term0}) ->
+            %% if the optional/mandatory flag is not provided in a constraint tuple,
+            %% assume 'optional'
+            fun ({Key, Fun}, {Results0, Term0}) ->
+                    case lists:keytake(Key, 1, Term0) of
+                        {value, {Key, Value}, Term1} ->
+                            {[Fun(Key, Value) | Results0],
+                             Term1};
+                        {value, {Key, Type, Value}, Term1} ->
+                            {[Fun(Key, Type, Value) | Results0],
+                             Term1};
+                        false ->
+                            {Results0, Term0}
+                    end;
+                ({Key, Fun, Needed}, {Results0, Term0}) ->
                     case {lists:keytake(Key, 1, Term0), Needed} of
                         {{value, {Key, Value}, Term1}, _} ->
                             {[Fun(Key, Value) | Results0],

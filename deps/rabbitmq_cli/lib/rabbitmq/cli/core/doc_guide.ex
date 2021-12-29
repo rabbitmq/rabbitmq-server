@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2016-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.DocGuide.Macros do
   @moduledoc """
@@ -57,8 +57,8 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   Macros.defguide("publishers")
   Macros.defguide("plugins")
   Macros.defguide("queues")
-  Macros.defguide("quorum_queues", domain: "next.rabbitmq.com")
-  Macros.defguide("stream_queues", domain: "next.rabbitmq.com")
+  Macros.defguide("quorum_queues")
+  Macros.defguide("streams")
   Macros.defguide("runtime_tuning", path_segment: "runtime")
   Macros.defguide("tls", path_segment: "ssl")
   Macros.defguide("troubleshooting")

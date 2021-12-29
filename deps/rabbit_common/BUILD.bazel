@@ -1,0 +1,239 @@
+load(
+    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "app_file",
+    "bazel_erlang_lib",
+    "erlc",
+)
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
+    "rabbitmq_suite",
+)
+
+py_binary(
+    name = "codegen",
+    srcs = [
+        "codegen.py",
+    ],
+    imports = ["../../deps/rabbitmq_codegen"],
+    deps = [
+        "//deps/rabbitmq_codegen:amqp_codegen",
+    ],
+)
+
+genrule(
+    name = "generated_headers",
+    srcs = [
+        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
+        "//deps/rabbitmq_codegen:credit_extension.json",
+        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
+    ],
+    outs = ["include/rabbit_framing.hrl"],
+    cmd = "$(location :codegen) --ignore-conflicts header $(SRCS) $@",
+    tools = [":codegen"],
+)
+
+genrule(
+    name = "rabbit_framing_amqp_0_9_1.erl",
+    srcs = [
+        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
+        "//deps/rabbitmq_codegen:credit_extension.json",
+    ],
+    outs = ["src/rabbit_framing_amqp_0_9_1.erl"],
+    cmd = "$(location :codegen) body $(SRCS) $@",
+    tools = [":codegen"],
+)
+
+genrule(
+    name = "rabbit_framing_amqp_0_8.erl",
+    srcs = [
+        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
+    ],
+    outs = ["src/rabbit_framing_amqp_0_8.erl"],
+    cmd = "$(location :codegen) body $(SRCS) $@",
+    tools = [":codegen"],
+)
+
+DEPS = []
+
+RUNTIME_DEPS = [
+    "@jsx//:bazel_erlang_lib",
+    "@recon//:bazel_erlang_lib",
+    "@credentials_obfuscation//:bazel_erlang_lib",
+]
+
+APP_NAME = "rabbit_common"
+
+EXTRA_APPS = [
+    "compiler",
+    "crypto",
+    "public_key",
+    "sasl",
+    "ssl",
+    "syntax_tools",
+    "tools",
+    "xmerl",
+]
+
+HDRS = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"]
+
+app_file(
+    name = "app_file",
+    app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
+    app_name = APP_NAME,
+    app_version = APP_VERSION,
+    extra_apps = EXTRA_APPS,
+    modules = [":beam_files"],
+    deps = DEPS + RUNTIME_DEPS,
+)
+
+FIRST_SRCS = [
+    "src/gen_server2.erl",
+    "src/rabbit_authn_backend.erl",
+    "src/rabbit_authz_backend.erl",
+    "src/rabbit_registry_class.erl",
+]
+
+erlc(
+    name = "first_beam_files",
+    srcs = glob(FIRST_SRCS),
+    hdrs = HDRS,
+    dest = "ebin",
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    deps = DEPS,
+)
+
+erlc(
+    name = "beam_files",
+    srcs = glob(
+        ["src/*.erl"],
+        exclude = FIRST_SRCS,
+    ) + [
+        "src/rabbit_framing_amqp_0_8.erl",
+        "src/rabbit_framing_amqp_0_9_1.erl",
+    ],
+    hdrs = HDRS,
+    beam = [":first_beam_files"],
+    dest = "ebin",
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+    deps = DEPS,
+)
+
+bazel_erlang_lib(
+    name = "bazel_erlang_lib",
+    hdrs = HDRS,
+    app = ":app_file",
+    app_name = APP_NAME,
+    beam = [
+        ":first_beam_files",
+        ":beam_files",
+    ],
+    visibility = ["//visibility:public"],
+    deps = DEPS + RUNTIME_DEPS,
+)
+
+erlc(
+    name = "first_test_beam_files",
+    testonly = True,
+    srcs = glob(FIRST_SRCS),
+    hdrs = HDRS,
+    dest = "src",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    deps = DEPS,
+)
+
+erlc(
+    name = "test_beam_files",
+    testonly = True,
+    srcs = glob(
+        ["src/*.erl"],
+        exclude = FIRST_SRCS,
+    ) + [
+        "src/rabbit_framing_amqp_0_8.erl",
+        "src/rabbit_framing_amqp_0_9_1.erl",
+    ],
+    hdrs = HDRS,
+    beam = [":first_test_beam_files"],
+    dest = "src",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+    deps = DEPS,
+)
+
+bazel_erlang_lib(
+    name = "test_bazel_erlang_lib",
+    testonly = True,
+    hdrs = HDRS,
+    app = ":app_file",
+    app_name = APP_NAME,
+    beam = [
+        ":first_test_beam_files",
+        ":test_beam_files",
+    ],
+    visibility = ["//:__subpackages__"],
+    deps = DEPS + RUNTIME_DEPS,
+)
+
+xref(
+    additional_libs = [
+        "@ranch//:bazel_erlang_lib",
+    ],
+    tags = ["xref"],
+)
+
+plt(
+    name = "base_plt",
+    apps = [
+        "mnesia",
+        "crypto",
+        "ssl",
+    ] + EXTRA_APPS,
+    plt = "//:base_plt",
+)
+
+dialyze(
+    plt = ":base_plt",
+    tags = ["dialyze"],
+)
+
+suites = [
+    rabbitmq_suite(
+        name = "rabbit_env_SUITE",
+        size = "small",
+        deps = [
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "supervisor2_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_priority_queue_SUITE",
+        size = "small",
+    ),
+    rabbitmq_suite(
+        name = "unit_SUITE",
+        size = "medium",
+        additional_srcs = [
+            "test/gen_server2_test_server.erl",
+        ],
+        deps = [
+            "@credentials_obfuscation//:bazel_erlang_lib",
+            "@proper//:bazel_erlang_lib",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "worker_pool_SUITE",
+        size = "small",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

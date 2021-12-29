@@ -1,7 +1,0 @@
-Origin: RabbitMQ
-Label: RabbitMQ Repository for Debian / Ubuntu etc
-Suite: testing
-Codename: kitten
-Architectures: alpha amd64 arm arm64 armeb armel armhf avr32 hppa hurd-i386 i386 ia64 kfreebsd-amd64 kfreebsd-i386 m32 m32r m68k mips mips64 mips64el mips64r6 mips64r6el mipsel mipsr6 mipsr6el netbsd-alpha netbsd-i386 nios2 or1k powerpc powerpcel ppc64 ppc64el s390 s390x sh sh3 sh3eb sh4 sh4eb sparc sparc64 tilegx source
-Components: main
-Description: RabbitMQ Repository for Debian / Ubuntu etc

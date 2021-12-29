@@ -62,52 +62,53 @@
     [{datatype, integer}]}.
 {mapping, "prometheus.ssl.ip", "rabbitmq_prometheus.ssl_config.ip",
     [{datatype, string}, {validators, ["is_ip"]}]}.
-{mapping, "prometheus.ssl.certfile", "rabbitmq_prometheus.ssl_config.certfile",
+
+{mapping, "prometheus.ssl.certfile", "rabbitmq_prometheus.ssl_config.ssl_opts.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
-{mapping, "prometheus.ssl.keyfile", "rabbitmq_prometheus.ssl_config.keyfile",
+{mapping, "prometheus.ssl.keyfile", "rabbitmq_prometheus.ssl_config.ssl_opts.keyfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
-{mapping, "prometheus.ssl.cacertfile", "rabbitmq_prometheus.ssl_config.cacertfile",
+{mapping, "prometheus.ssl.cacertfile", "rabbitmq_prometheus.ssl_config.ssl_opts.cacertfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
-{mapping, "prometheus.ssl.password", "rabbitmq_prometheus.ssl_config.password",
+{mapping, "prometheus.ssl.password", "rabbitmq_prometheus.ssl_config.ssl_opts.password",
     [{datatype, string}]}.
 
-{mapping, "prometheus.ssl.verify", "rabbitmq_prometheus.ssl_config.verify", [
+{mapping, "prometheus.ssl.verify", "rabbitmq_prometheus.ssl_config.ssl_opts.verify", [
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
-{mapping, "prometheus.ssl.fail_if_no_peer_cert", "rabbitmq_prometheus.ssl_config.fail_if_no_peer_cert", [
+{mapping, "prometheus.ssl.fail_if_no_peer_cert", "rabbitmq_prometheus.ssl_config.ssl_opts.fail_if_no_peer_cert", [
     {datatype, {enum, [true, false]}}]}.
 
-{mapping, "prometheus.ssl.honor_cipher_order", "rabbitmq_prometheus.ssl_config.honor_cipher_order",
+{mapping, "prometheus.ssl.honor_cipher_order", "rabbitmq_prometheus.ssl_config.ssl_opts.honor_cipher_order",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "prometheus.ssl.honor_ecc_order", "rabbitmq_prometheus.ssl_config.honor_ecc_order",
+{mapping, "prometheus.ssl.honor_ecc_order", "rabbitmq_prometheus.ssl_config.ssl_opts.honor_ecc_order",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "prometheus.ssl.reuse_sessions", "rabbitmq_prometheus.ssl_config.reuse_sessions",
+{mapping, "prometheus.ssl.reuse_sessions", "rabbitmq_prometheus.ssl_config.ssl_opts.reuse_sessions",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "prometheus.ssl.secure_renegotiate", "rabbitmq_prometheus.ssl_config.secure_renegotiate",
+{mapping, "prometheus.ssl.secure_renegotiate", "rabbitmq_prometheus.ssl_config.ssl_opts.secure_renegotiate",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "prometheus.ssl.client_renegotiation", "rabbitmq_prometheus.ssl_config.client_renegotiation",
+{mapping, "prometheus.ssl.client_renegotiation", "rabbitmq_prometheus.ssl_config.ssl_opts.client_renegotiation",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "prometheus.ssl.depth", "rabbitmq_prometheus.ssl_config.depth",
+{mapping, "prometheus.ssl.depth", "rabbitmq_prometheus.ssl_config.ssl_opts.depth",
     [{datatype, integer}, {validators, ["byte"]}]}.
 
-{mapping, "prometheus.ssl.versions.$version", "rabbitmq_prometheus.ssl_config.versions",
+{mapping, "prometheus.ssl.versions.$version", "rabbitmq_prometheus.ssl_config.ssl_opts.versions",
     [{datatype, atom}]}.
 
-{translation, "rabbitmq_prometheus.ssl_config.versions",
+{translation, "rabbitmq_prometheus.ssl_config.ssl_opts.versions",
 fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("prometheus.ssl.versions", Conf),
     [V || {_, V} <- Settings]
 end}.
 
-{mapping, "prometheus.ssl.ciphers.$cipher", "rabbitmq_prometheus.ssl_config.ciphers",
+{mapping, "prometheus.ssl.ciphers.$cipher", "rabbitmq_prometheus.ssl_config.ssl_opts.ciphers",
     [{datatype, string}]}.
 
-{translation, "rabbitmq_prometheus.ssl_config.ciphers",
+{translation, "rabbitmq_prometheus.ssl_config.ssl_opts.ciphers",
 fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("prometheus.ssl.ciphers", Conf),
     lists:reverse([V || {_, V} <- Settings])
@@ -125,3 +126,5 @@ end}.
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
 {mapping, "prometheus.ssl.max_keepalive", "rabbitmq_prometheus.ssl_config.cowboy_opts.max_keepalive",
     [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
+{mapping, "prometheus.filter_aggregated_queue_metrics_pattern", "rabbitmq_prometheus.filter_aggregated_queue_metrics_pattern", [{datatype, string}]}.

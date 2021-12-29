@@ -1,0 +1,42 @@
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "rabbitmq_lib",
+)
+
+APP_NAME = "rabbitmq_auth_mechanism_ssl"
+
+APP_DESCRIPTION = "RabbitMQ SSL authentication (SASL EXTERNAL)"
+
+APP_MODULE = "rabbit_auth_mechanism_ssl_app"
+
+APP_ENV = """[
+	    {name_from, distinguished_name}
+	  ]"""
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+xref(tags = ["xref"])
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)

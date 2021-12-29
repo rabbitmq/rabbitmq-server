@@ -50,15 +50,12 @@ defmodule LogTailCommandTest do
   end
 
   test "run: shows last 50 lines from the log by default", context do
-    # Let Lager's log message rate lapse or else some messages
-    # we assert on might be dropped. MK.
-    Process.sleep(1000)
     clear_log_files()
     log_messages =
       Enum.map(:lists.seq(1, 50),
                fn(n) ->
                  message = "Getting log tail #{n}"
-                 :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [message])
+                 :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist(message)])
                  message
                end)
     wait_for_log_message("Getting log tail 50")
@@ -72,15 +69,11 @@ defmodule LogTailCommandTest do
   end
 
   test "run: returns N lines", context do
-    # Let Lager's log message rate lapse or else some messages
-    # we assert on might be dropped. MK.
-    Process.sleep(1000)
-
     ## Log a bunch of lines
     Enum.map(:lists.seq(1, 50),
              fn(n) ->
                message = "More lines #{n}"
-               :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [message])
+               :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist(message)])
                message
              end)
     wait_for_log_message("More lines 50")
@@ -90,15 +83,12 @@ defmodule LogTailCommandTest do
   end
 
   test "run: may return less than N lines if N is high", context do
-    # Let Lager's log message rate lapse or else some messages
-    # we assert on might be dropped. MK.
-    Process.sleep(1000)
     clear_log_files()
     ## Log a bunch of lines
     Enum.map(:lists.seq(1, 100),
              fn(n) ->
                message = "More lines #{n}"
-               :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [message])
+               :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist(message)])
                message
              end)
     wait_for_log_message("More lines 50")
@@ -107,9 +97,12 @@ defmodule LogTailCommandTest do
   end
 
   def clear_log_files() do
-    [_|_] = logs = :rpc.call(get_rabbit_hostname(), :rabbit_lager, :log_locations, [])
+    [_|_] = logs = :rpc.call(get_rabbit_hostname(), :rabbit, :log_locations, [])
     Enum.map(logs, fn(log) ->
-      File.write(log, "")
+      case log do
+        '<stdout>' -> :ok
+        _          -> File.write(log, "")
+      end
     end)
   end
 end

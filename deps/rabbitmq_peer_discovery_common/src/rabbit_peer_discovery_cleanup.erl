@@ -4,13 +4,14 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 -module(rabbit_peer_discovery_cleanup).
 
 -behaviour(gen_server).
 
--include("include/rabbit_peer_discovery.hrl").
+-include_lib("kernel/include/logger.hrl").
+-include("rabbit_peer_discovery.hrl").
 
 -export([start_link/0,
          check_cluster/0]).
@@ -84,7 +85,9 @@ init([]) ->
     Map = ?CONFIG_MODULE:config_map(?CONFIG_KEY),
     case map_size(Map) of
         0 ->
-            rabbit_log:info("Peer discovery: node cleanup is disabled", []),
+            ?LOG_INFO(
+               "Peer discovery: node cleanup is disabled",
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             {ok, #state{}};
         _ ->
             Interval = ?CONFIG_MODULE:get(cleanup_interval, ?CONFIG_MAPPING, Map),
@@ -96,8 +99,10 @@ init([]) ->
                           true -> "will only log warnings";
                           false -> "will remove nodes not known to the discovery backend"
                       end,
-            rabbit_log:info("Peer discovery: enabling node cleanup (~s). Check interval: ~p seconds.",
-                            [WarnMsg, State#state.interval]),
+            ?LOG_INFO(
+               "Peer discovery: enabling node cleanup (~s). Check interval: ~p seconds.",
+               [WarnMsg, State#state.interval],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             {ok, State}
     end.
 
@@ -118,7 +123,9 @@ init([]) ->
         {stop, Reason :: term(), NewState :: #state{}}).
 
 handle_call(check_cluster, _From, State) ->
-    rabbit_log:debug("Peer discovery: checking for partitioned nodes to clean up."),
+    ?LOG_DEBUG(
+       "Peer discovery: checking for partitioned nodes to clean up.",
+       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
     maybe_cleanup(State),
     {reply, ok, State};
 handle_call(_Request, _From, State) ->
@@ -226,19 +233,27 @@ maybe_cleanup(State) ->
 -spec maybe_cleanup(State :: #state{},
                     UnreachableNodes :: [node()]) -> ok.
 maybe_cleanup(_, []) ->
-    rabbit_log:debug("Peer discovery: all known cluster nodes are up.");
+    ?LOG_DEBUG(
+       "Peer discovery: all known cluster nodes are up.",
+       #{domain => ?RMQLOG_DOMAIN_PEER_DIS});
 maybe_cleanup(State, UnreachableNodes) ->
-    rabbit_log:debug("Peer discovery: cleanup discovered unreachable nodes: ~p",
-                     [UnreachableNodes]),
+    ?LOG_DEBUG(
+       "Peer discovery: cleanup discovered unreachable nodes: ~p",
+       [UnreachableNodes],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
     case lists:subtract(UnreachableNodes, service_discovery_nodes()) of
         [] ->
-            rabbit_log:debug("Peer discovery: all unreachable nodes are still "
-                             "registered with the discovery backend ~p",
-                             [rabbit_peer_discovery:backend()]),
+            ?LOG_DEBUG(
+               "Peer discovery: all unreachable nodes are still "
+               "registered with the discovery backend ~p",
+               [rabbit_peer_discovery:backend()],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             ok;
         Nodes ->
-            rabbit_log:debug("Peer discovery: unreachable nodes are not registered "
-                             "with the discovery backend ~p", [Nodes]),
+            ?LOG_DEBUG(
+               "Peer discovery: unreachable nodes are not registered "
+               "with the discovery backend ~p", [Nodes],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             maybe_remove_nodes(Nodes, State#state.warn_only)
     end.
 
@@ -254,10 +269,14 @@ maybe_cleanup(State, UnreachableNodes) ->
                          WarnOnly :: true | false) -> ok.
 maybe_remove_nodes([], _) -> ok;
 maybe_remove_nodes([Node | Nodes], true) ->
-    rabbit_log:warning("Peer discovery: node ~s is unreachable", [Node]),
+    ?LOG_WARNING(
+       "Peer discovery: node ~s is unreachable", [Node],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
     maybe_remove_nodes(Nodes, true);
 maybe_remove_nodes([Node | Nodes], false) ->
-    rabbit_log:warning("Peer discovery: removing unknown node ~s from the cluster", [Node]),
+    ?LOG_WARNING(
+       "Peer discovery: removing unknown node ~s from the cluster", [Node],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
     rabbit_mnesia:forget_cluster_node(Node, false),
     maybe_remove_nodes(Nodes, false).
 
@@ -288,11 +307,15 @@ service_discovery_nodes() ->
     Module = rabbit_peer_discovery:backend(),
     case rabbit_peer_discovery:normalize(Module:list_nodes()) of
         {ok, {Nodes, _Type}} ->
-            rabbit_log:debug("Peer discovery cleanup: ~p returned ~p",
-                             [Module, Nodes]),
+            ?LOG_DEBUG(
+               "Peer discovery cleanup: ~p returned ~p",
+               [Module, Nodes],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             Nodes;
         {error, Reason} ->
-            rabbit_log:debug("Peer discovery cleanup: ~p returned error ~p",
-                            [Module, Reason]),
+            ?LOG_DEBUG(
+               "Peer discovery cleanup: ~p returned error ~p",
+               [Module, Reason],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             []
     end.

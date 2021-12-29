@@ -121,18 +121,139 @@ end}.
 %% Definition import
 %%
 
-%% Load definitions from a JSON file or directory of files. See
+%% Original key for definition loading from a JSON file or directory of files. See
 %% https://www.rabbitmq.com/management.html#load-definitions
-%%
-%% {load_definitions, "/path/to/schema.json"},
-%% {load_definitions, "/path/to/schemas"},
 {mapping, "load_definitions", "rabbit.load_definitions",
     [{datatype, string},
      {validators, ["file_accessible"]}]}.
 
+%% Newer syntax for definition loading from a JSON file or directory of files. See
+%% https://www.rabbitmq.com/management.html#load-definitions
+{mapping, "definitions.local.path", "rabbit.definitions.local_path",
+    [{datatype, string},
+     {validators, ["file_accessible"]}]}.
+
+%% Extensive mechanism for loading definitions from a remote source
+{mapping, "definitions.import_backend", "rabbit.definitions.import_backend", [
+    {datatype, atom}
+]}.
+
+{translation, "rabbit.definitions.import_backend",
+fun(Conf) ->
+    case cuttlefish:conf_get("definitions.import_backend", Conf, rabbit_definitions_import_local_filesystem) of
+        %% short aliases for known backends
+        local_filesystem -> rabbit_definitions_import_local_filesystem;
+        local            -> rabbit_definitions_import_local_filesystem;
+        https            -> rabbit_definitions_import_https;
+        http             -> rabbit_definitions_import_https;
+        %% accept both rabbitmq_ and rabbit_ (typical core module prefix)
+        rabbitmq_definitions_import_local_filesystem -> rabbit_definitions_import_local_filesystem;
+        rabbitmq_definitions_import_local_filesystem -> rabbit_definitions_import_https;
+        %% any other value is used as is
+        Module           -> Module
+    end
+end}.
+
+%% Load definitions from a remote URL over HTTPS. See
+%% https://www.rabbitmq.com/management.html#load-definitions
+{mapping, "definitions.https.url", "rabbit.definitions.url",
+    [{datatype, string}]}.
+
+%% Client-side TLS settings used by e.g. HTTPS definition loading mechanism.
+%% These can be reused by other clients.
+
+{mapping, "definitions.tls.verify", "rabbit.definitions.ssl_options.verify", [
+    {datatype, {enum, [verify_peer, verify_none]}}]}.
+
+{mapping, "definitions.tls.fail_if_no_peer_cert", "rabbit.definitions.ssl_options.fail_if_no_peer_cert", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.tls.cacertfile", "rabbit.definitions.ssl_options.cacertfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "definitions.tls.certfile", "rabbit.definitions.ssl_options.certfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "definitions.tls.cacerts.$name", "rabbit.definitions.ssl_options.cacerts",
+    [{datatype, string}]}.
+
+{translation, "rabbit.definitions.ssl_options.cacerts",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("definitions.tls.cacerts", Conf),
+    [ list_to_binary(V) || {_, V} <- Settings ]
+end}.
+
+{mapping, "definitions.tls.cert", "rabbit.definitions.ssl_options.cert",
+    [{datatype, string}]}.
+
+{translation, "rabbit.definitions.ssl_options.cert",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("definitions.tls.cert", Conf))
+end}.
+
+{mapping, "definitions.tls.reuse_session", "rabbit.definitions.ssl_options.reuse_session",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.tls.crl_check", "rabbit.definitions.ssl_options.crl_check",
+    [{datatype, [{enum, [true, false, peer, best_effort]}]}]}.
+
+{mapping, "definitions.tls.depth", "rabbit.definitions.ssl_options.depth",
+    [{datatype, integer}, {validators, ["byte"]}]}.
+
+{mapping, "definitions.tls.dh", "rabbit.definitions.ssl_options.dh",
+    [{datatype, string}]}.
+
+{translation, "rabbit.definitions.ssl_options.dh",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("definitions.tls.dh", Conf))
+end}.
+
+{translation, "rabbit.definitions.ssl_options.key",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("definitions.tls.key", Conf) of
+        [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
+        _ -> cuttlefish:unset()
+    end
+end}.
+
+{mapping, "definitions.tls.keyfile", "rabbit.definitions.ssl_options.keyfile",
+    [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "definitions.tls.log_alert", "rabbit.definitions.ssl_options.log_alert",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.tls.password", "rabbit.definitions.ssl_options.password",
+    [{datatype, string}]}.
+
+{mapping, "definitions.tls.secure_renegotiate", "rabbit.definitions.ssl_options.secure_renegotiate",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.tls.reuse_sessions", "rabbit.definitions.ssl_options.reuse_sessions",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.tls.versions.$version", "rabbit.definitions.ssl_options.versions",
+    [{datatype, atom}]}.
+
+{translation, "rabbit.definitions.ssl_options.versions",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("definitions.tls.versions", Conf),
+    [V || {_, V} <- Settings]
+end}.
+
+{mapping, "definitions.tls.ciphers.$cipher", "rabbit.definitions.ssl_options.ciphers",
+    [{datatype, string}]}.
+
+{translation, "rabbit.definitions.ssl_options.ciphers",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("definitions.tls.ciphers", Conf),
+    lists:reverse([V || {_, V} <- Settings])
+end}.
+
+{mapping, "definitions.tls.log_level", "rabbit.definitions.ssl_options.log_level",
+    [{datatype, {enum, [emergency, alert, critical, error, warning, notice, info, debug]}}]}.
+
 %%
-%% Security / AAA
-%% ==============
+%% Seed User, Authentication, Access Control
 %%
 
 %% The default "guest" user is only permitted to access the server
@@ -254,12 +375,15 @@ end}.
 fun(Conf) ->
     case cuttlefish_variable:filter_by_prefix("ssl_options.key", Conf) of
         [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
-        _ -> undefined
+        _ -> cuttlefish:unset()
     end
 end}.
 
 {mapping, "ssl_options.keyfile", "rabbit.ssl_options.keyfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
+
+{mapping, "ssl_options.log_level", "rabbit.ssl_options.log_level",
+    [{datatype, {enum, [emergency, alert, critical, error, warning, notice, info, debug]}}]}.
 
 {mapping, "ssl_options.log_alert", "rabbit.ssl_options.log_alert",
     [{datatype, {enum, [true, false]}}]}.
@@ -293,6 +417,9 @@ fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("ssl_options.ciphers", Conf),
     lists:reverse([V || {_, V} <- Settings])
 end}.
+
+{mapping, "ssl_options.bypass_pem_cache", "ssl.bypass_pem_cache",
+    [{datatype, {enum, [true, false]}}]}.
 
 %% ===========================================================================
 
@@ -616,7 +743,7 @@ end}.
 
 
 {mapping, "max_message_size", "rabbit.max_message_size",
-    [{datatype, integer}, {validators, ["less_then_512MB"]}]}.
+    [{datatype, integer}, {validators, ["max_message_size"]}]}.
 
 %% Customising Socket Options.
 %%
@@ -892,7 +1019,24 @@ end}.
 %% {mirroring_sync_batch_size, 4096},
 
 {mapping, "mirroring_sync_batch_size", "rabbit.mirroring_sync_batch_size",
-    [{datatype, bytesize}, {validators, ["size_less_than_2G"]}]}.
+    [{datatype, bytesize}, {validators, ["mirroring_sync_batch_size"]}]}.
+
+%% Mirror sync max throughput (in bytes) per second.
+%% Supported unit symbols:
+%% k, kiB: kibibytes (2^10 - 1,024 bytes)
+%% M, MiB: mebibytes (2^20 - 1,048,576 bytes)
+%% G, GiB: gibibytes (2^30 - 1,073,741,824 bytes)
+%% kB: kilobytes (10^3 - 1,000 bytes)
+%% MB: megabytes (10^6 - 1,000,000 bytes)
+%% GB: gigabytes (10^9 - 1,000,000,000 bytes)
+%%
+%% 0 means "no limit".
+%%
+%% {mirroring_sync_max_throughput, 0},
+
+{mapping, "mirroring_sync_max_throughput", "rabbit.mirroring_sync_max_throughput", [
+    {datatype, [integer, string]}
+]}.
 
 %% Peer discovery backend used by cluster formation.
 %%
@@ -942,11 +1086,11 @@ fun(Conf) ->
 end}.
 
 %% Cluster formation: Randomized startup delay
+%%
+%% DEPRECATED: This is a no-op. Old configs are still allowed, but a warning will be printed.
 
-{mapping, "cluster_formation.randomized_startup_delay_range.min", "rabbit.cluster_formation.randomized_startup_delay_range",
-    [{datatype, integer}]}.
-{mapping, "cluster_formation.randomized_startup_delay_range.max", "rabbit.cluster_formation.randomized_startup_delay_range",
-    [{datatype, integer}]}.
+{mapping, "cluster_formation.randomized_startup_delay_range.min", "rabbit.cluster_formation.randomized_startup_delay_range", []}.
+{mapping, "cluster_formation.randomized_startup_delay_range.max", "rabbit.cluster_formation.randomized_startup_delay_range", []}.
 
 {translation, "rabbit.cluster_formation.randomized_startup_delay_range",
 fun(Conf) ->
@@ -954,18 +1098,24 @@ fun(Conf) ->
     Max = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.max", Conf, undefined),
 
     case {Min, Max} of
-        {undefined, undefined} ->
-            cuttlefish:unset();
-        {undefined, Max}       ->
-            %% fallback default
-            {5, Max};
-        {Min, undefined}       ->
-            %% fallback default
-            {Min, 60};
-        {Min, Max}             ->
-            {Min, Max}
-    end
+      {undefined, undefined} ->
+        ok;
+      _ ->
+        cuttlefish:warn("cluster_formation.randomized_startup_delay_range.min and "
+                               "cluster_formation.randomized_startup_delay_range.max are deprecated")
+    end,
+    cuttlefish:unset()
 end}.
+
+%% Cluster formation: lock acquisition retries as passed to https://erlang.org/doc/man/global.html#set_lock-3
+%%
+%% Currently used in classic, k8s, and aws peer discovery backends.
+
+{mapping, "cluster_formation.internal_lock_retries", "rabbit.cluster_formation.internal_lock_retries",
+    [
+     {datatype, integer},
+     {validators, ["non_zero_positive_integer"]}
+    ]}.
 
 %% Cluster formation: discovery failure retries
 
@@ -990,6 +1140,18 @@ end}.
      {datatype, integer},
      {validators, ["non_zero_positive_integer"]}
     ]}.
+
+
+%% Target cluster size hint may be used by certain core features or plugins to perform
+%% actions that should only be performed when a certain number of nodes (or a quorum of a certain number)
+%% has already joined (started).
+%%
+
+{mapping, "cluster_formation.target_cluster_size_hint", "rabbit.cluster_formation.target_cluster_size_hint", [
+    {datatype, integer},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
 
 %% Classic config-driven peer discovery backend.
 %%
@@ -1149,9 +1311,9 @@ end}.
     [{datatype, {enum, [stop_node, continue, transient, persistent]}}]}.
 
 %% Approximate maximum time a consumer can spend processing a message before
-%% the channel is terminated, in milliseconds. Default is no timeout.
+%% the channel is terminated, in milliseconds.
 %%
-%% {consumer_timeout, 10000},
+%% {consumer_timeout, 1800000},
 
 {mapping, "consumer_timeout", "rabbit.consumer_timeout", [
     {datatype, integer},
@@ -1176,10 +1338,10 @@ end}.
 ]}.
 
 % ==========================
-% Lager section
+% Logging section
 % ==========================
 
-{mapping, "log.dir", "lager.log_root", [
+{mapping, "log.dir", "rabbit.log_root", [
     {datatype, string},
     {validators, ["dir_writable"]}]}.
 
@@ -1189,6 +1351,78 @@ end}.
 {mapping, "log.console.level", "rabbit.log.console.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
+{mapping, "log.console.stdio", "rabbit.log.console.stdio", [
+    {default, stdout},
+    {datatype, {enum, [stdout, stderr]}}
+]}.
+{mapping, "log.console.use_colors", "rabbit.log.console.formatter", [
+    {default, on},
+    {datatype, flag}
+]}.
+{mapping, "log.console.color_esc_seqs.debug", "rabbit.log.console.formatter", [
+    {default, "\033[38;5;246m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.info", "rabbit.log.console.formatter", [
+    {default, ""},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.notice", "rabbit.log.console.formatter", [
+    {default, "\033[38;5;87m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.warning", "rabbit.log.console.formatter", [
+    {default, "\033[38;5;214m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.error", "rabbit.log.console.formatter", [
+    {default, "\033[38;5;160m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.critical", "rabbit.log.console.formatter", [
+    {default, "\033[1;37m\033[48;5;20m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.alert", "rabbit.log.console.formatter", [
+    {default, "\033[1;37m\033[48;5;93m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.color_esc_seqs.emergency", "rabbit.log.console.formatter", [
+    {default, "\033[1;37m\033[48;5;196m"},
+    {datatype, string}
+]}.
+{mapping, "log.console.formatter", "rabbit.log.console.formatter", [
+    {default, plaintext},
+    {datatype, {enum, [plaintext, json]}}
+]}.
+{mapping, "log.console.formatter.time_format", "rabbit.log.console.formatter", [
+    {default, rfc3339_space},
+    {datatype, {enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}}
+]}.
+{mapping, "log.console.formatter.level_format", "rabbit.log.console.formatter", [
+    {default, lc},
+    {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
+]}.
+{mapping, "log.console.formatter.single_line", "rabbit.log.console.formatter", [
+    {default, off},
+    {datatype, flag}
+]}.
+{mapping, "log.console.formatter.plaintext.format", "rabbit.log.console.formatter", [
+    {default, "$time [$level] $pid $msg"},
+    {datatype, string}
+]}.
+{mapping, "log.console.formatter.json.field_map", "rabbit.log.console.formatter", [
+    {default, "time level msg gl:- logger_formatter:- report_cb:- error_logger:-"},
+    {datatype, string}
+]}.
+{mapping, "log.console.formatter.json.verbosity_map", "rabbit.log.console.formatter", [
+    {default, ""},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.console.formatter",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_formatter_conf("log.console.formatter", Conf)
+ end}.
 
 {mapping, "log.exchange", "rabbit.log.exchange.enabled", [
     {datatype, {enum, [true, false]}}
@@ -1196,6 +1430,53 @@ end}.
 {mapping, "log.exchange.level", "rabbit.log.exchange.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
+{mapping, "log.exchange.formatter", "rabbit.log.exchange.formatter", [
+    {default, plaintext},
+    {datatype, {enum, [plaintext, json]}}
+]}.
+{mapping, "log.exchange.formatter.time_format", "rabbit.log.console.formatter", [
+    {default, rfc3339_space},
+    {datatype, [{enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}, string]}
+]}.
+{mapping, "log.exchange.formatter.level_format", "rabbit.log.exchange.formatter", [
+    {default, lc},
+    {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
+]}.
+{mapping, "log.exchange.formatter.single_line", "rabbit.log.exchange.formatter", [
+    {default, off},
+    {datatype, flag}
+]}.
+{mapping, "log.exchange.formatter.plaintext.format", "rabbit.log.exchange.formatter", [
+    {default, "$time [$level] $pid $msg"},
+    {datatype, string}
+]}.
+{mapping, "log.exchange.formatter.json.field_map", "rabbit.log.exchange.formatter", [
+    {default, "time level msg gl:- logger_formatter:- report_cb:- error_logger:-"},
+    {datatype, string}
+]}.
+{mapping, "log.exchange.formatter.json.verbosity_map", "rabbit.log.exchange.formatter", [
+    {default, ""},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.exchange.formatter",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_formatter_conf("log.exchange.formatter", Conf)
+ end}.
+
+{mapping, "log.journald", "rabbit.log.journald.enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.journald.level", "rabbit.log.journald.level", [
+    {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.journald.fields", "rabbit.log.journald.fields", [
+    {default, "SYSLOG_IDENTIFIER=\"rabbitmq-server\" syslog_timestamp syslog_pid priority ERL_PID=pid CODE_FILE=file CODE_LINE=line CODE_MFA=mfa"},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.journald.fields",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_journald_fields_conf("log.journald.fields", Conf)
+ end}.
 
 {mapping, "log.syslog", "rabbit.log.syslog.enabled", [
     {datatype, {enum, [true, false]}}
@@ -1204,6 +1485,38 @@ end}.
 {mapping, "log.syslog.level", "rabbit.log.syslog.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
+{mapping, "log.syslog.formatter", "rabbit.log.syslog.formatter", [
+    {default, plaintext},
+    {datatype, {enum, [plaintext, json]}}
+]}.
+{mapping, "log.syslog.formatter.time_format", "rabbit.log.console.formatter", [
+    {default, rfc3339_space},
+    {datatype, [{enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}, string]}
+]}.
+{mapping, "log.syslog.formatter.level_format", "rabbit.log.syslog.formatter", [
+    {default, lc},
+    {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
+]}.
+{mapping, "log.syslog.formatter.single_line", "rabbit.log.syslog.formatter", [
+    {default, off},
+    {datatype, flag}
+]}.
+{mapping, "log.syslog.formatter.plaintext.format", "rabbit.log.syslog.formatter", [
+    {default, "$msg"},
+    {datatype, string}
+]}.
+{mapping, "log.syslog.formatter.json.field_map", "rabbit.log.syslog.formatter", [
+    {default, "time level msg gl:- logger_formatter:- report_cb:- error_logger:-"},
+    {datatype, string}
+]}.
+{mapping, "log.syslog.formatter.json.verbosity_map", "rabbit.log.syslog.formatter", [
+    {default, ""},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.syslog.formatter",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_formatter_conf("log.syslog.formatter", Conf)
+ end}.
 
 {mapping, "log.syslog.identity", "syslog.app_name", [
     {datatype, string}
@@ -1404,12 +1717,48 @@ end}.
 {mapping, "log.file.rotation.date", "rabbit.log.file.date", [
     {datatype, string}
 ]}.
+{mapping, "log.file.rotation.compress", "rabbit.log.file.compress", [
+    {default, false},
+    {datatype, {enum, [true, false]}}
+]}.
 {mapping, "log.file.rotation.size", "rabbit.log.file.size", [
     {datatype, integer}
 ]}.
 {mapping, "log.file.rotation.count", "rabbit.log.file.count", [
     {datatype, integer}
 ]}.
+{mapping, "log.file.formatter", "rabbit.log.file.formatter", [
+    {default, plaintext},
+    {datatype, {enum, [plaintext, json]}}
+]}.
+{mapping, "log.file.formatter.time_format", "rabbit.log.file.formatter", [
+    {default, rfc3339_space},
+    {datatype, [{enum, [rfc3339_space, rfc3339_T, epoch_usecs, epoch_secs, lager_default]}, string]}
+]}.
+{mapping, "log.file.formatter.level_format", "rabbit.log.file.formatter", [
+    {default, lc},
+    {datatype, {enum, [lc, uc, lc3, uc3, lc4, uc4]}}
+]}.
+{mapping, "log.file.formatter.single_line", "rabbit.log.file.formatter", [
+    {default, off},
+    {datatype, flag}
+]}.
+{mapping, "log.file.formatter.plaintext.format", "rabbit.log.file.formatter", [
+    {default, "$time [$level] $pid $msg"},
+    {datatype, string}
+]}.
+{mapping, "log.file.formatter.json.field_map", "rabbit.log.file.formatter", [
+    {default, "time level msg gl:- logger_formatter:- report_cb:- error_logger:-"},
+    {datatype, string}
+]}.
+{mapping, "log.file.formatter.json.verbosity_map", "rabbit.log.file.formatter", [
+    {default, ""},
+    {datatype, string}
+]}.
+{translation, "rabbit.log.file.formatter",
+ fun(Conf) ->
+         rabbit_prelaunch_early_logging:translate_formatter_conf("log.file.formatter", Conf)
+ end}.
 
 %% Log categories
 
@@ -1474,6 +1823,37 @@ end}.
     {datatype, [integer]},
     {validators, ["non_zero_positive_integer"]}
 ]}.
+
+{mapping, "distribution.listener.port_range.min", "kernel.inet_dist_listen_min", [
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "distribution.listener.port_range.max", "kernel.inet_dist_listen_max", [
+    {datatype, [integer]},
+    {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "distribution.listener.interface", "kernel.inet_dist_use_interface", [
+    {datatype, [string]},
+    {validators, ["is_ip"]}
+]}.
+
+{translation, "kernel.inet_dist_use_interface",
+    fun(Conf) ->
+            case cuttlefish:conf_get("distribution.listener.interface", Conf, undefined) of
+                undefined ->
+                    cuttlefish:unset();
+                Value when is_list(Value) ->
+                    case inet:parse_address(Value) of
+                        {ok, Parsed} -> Parsed;
+                        {error, _}   -> cuttlefish:invalid("should be a valid IP address")
+                    end;
+                _ ->
+                    cuttlefish:invalid("should be a valid IP address")
+            end
+    end
+}.
 
 % ==========================
 % sysmon_handler section
@@ -1734,14 +2114,14 @@ end}.
 % Validators
 % ===============================
 
-{validator, "size_less_than_2G", "Byte size should be less than 2G and greater than 0",
+{validator, "mirroring_sync_batch_size", "Batch size should be greater than 0 and less than 1M",
 fun(Size) when is_integer(Size) ->
-    Size > 0 andalso Size < 2147483648
+    Size > 0 andalso Size =< 1000000
 end}.
 
-{validator, "less_then_512MB", "Max message size should be less than 512MB and gre than 0",
+{validator, "max_message_size", "Max message size should be between 0 and 512MB",
 fun(Size) when is_integer(Size) ->
-    Size > 0 andalso Size < 536870912
+    Size > 0 andalso Size =< 536870912
 end}.
 
 {validator, "less_than_1", "Float is not between 0 and 1",
@@ -1759,7 +2139,7 @@ fun(Int) when is_integer(Int) ->
     Int >= 0 andalso Int =< 255
 end}.
 
-{validator, "dir_writable", "Cannot create file in dir",
+{validator, "dir_writable", "Directory must be writable",
 fun(Dir) ->
     TestFile = filename:join(Dir, "test_file"),
     file:delete(TestFile),
@@ -1768,13 +2148,15 @@ fun(Dir) ->
     Res
 end}.
 
-{validator, "file_accessible", "file doesn't exist or isn't readable",
+{validator, "file_accessible", "file does not exist or cannot be read by the node",
 fun(File) ->
-    ReadFile = file:read_file_info(File),
-    element(1, ReadFile) == ok
+    case file:read_file_info(File) of
+        {ok, FileInfo} -> (element(4, FileInfo) == read) or (element(4, FileInfo) == read_write);
+        _ -> false
+    end
 end}.
 
-{validator, "is_ip", "string is a valid IP address",
+{validator, "is_ip", "value should be a valid IP address",
 fun(IpStr) ->
     Res = inet:parse_address(IpStr),
     element(1, Res) == ok

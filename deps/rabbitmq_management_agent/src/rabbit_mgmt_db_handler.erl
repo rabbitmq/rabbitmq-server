@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_db_handler).
@@ -49,7 +49,7 @@ handle_force_fine_statistics() ->
             rabbit_log:warning(
               "force_fine_statistics set to ~p; ignored.~n"
               "Replaced by {rates_mode, none} in the rabbitmq_management "
-              "application.~n", [X])
+              "application.", [X])
     end.
 
 %%----------------------------------------------------------------------------
@@ -58,7 +58,7 @@ ensure_statistics_enabled() ->
     ForceStats = rates_mode() =/= none,
     handle_force_fine_statistics(),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    rabbit_log:info("Management plugin: using rates mode '~p'~n", [rates_mode()]),
+    rabbit_log:info("Management plugin: using rates mode '~p'", [rates_mode()]),
     case {ForceStats, StatsLevel} of
         {true,  fine} ->
             ok;
@@ -93,7 +93,15 @@ handle_info(_Info, State) ->
     {ok, State}.
 
 terminate(_Arg, _State) ->
+    ensure_statistics_disabled(),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+ensure_statistics_disabled() ->
+    %% Reset the default values, see Makefile
+    _ = rabbit_log:info("Management plugin: to stop collect_statistics."),
+    application:set_env(rabbit, collect_statistics, none),
+    application:set_env(rabbit, collect_statistics_interval, 5000),
+    ok = rabbit:force_event_refresh(erlang:make_ref()).

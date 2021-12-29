@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(backing_queue_SUITE).
@@ -28,6 +28,8 @@
     variable_queue_fold_msg_on_disk,
     variable_queue_dropfetchwhile,
     variable_queue_dropwhile_varying_ram_duration,
+    variable_queue_dropwhile_restart,
+    variable_queue_dropwhile_sync_restart,
     variable_queue_fetchwhile_varying_ram_duration,
     variable_queue_ack_limiting,
     variable_queue_purge,
@@ -527,6 +529,7 @@ bq_queue_index(Config) ->
       ?MODULE, bq_queue_index1, [Config]).
 
 bq_queue_index1(_Config) ->
+    init_queue_index(),
     SegmentSize = rabbit_queue_index:next_segment_boundary(0),
     TwoSegs = SegmentSize + SegmentSize,
     MostOfASegment = trunc(SegmentSize*0.75),
@@ -708,6 +711,7 @@ bq_queue_recover(Config) ->
       ?MODULE, bq_queue_recover1, [Config]).
 
 bq_queue_recover1(Config) ->
+    init_queue_index(),
     Count = 2 * rabbit_queue_index:next_segment_boundary(0),
     QName0 = queue_name(Config, <<"bq_queue_recover-q">>),
     {new, Q} = rabbit_amqqueue:declare(QName0, true, false, [], none, <<"acting-user">>),
@@ -972,6 +976,87 @@ variable_queue_dropfetchwhile2(VQ0, _QName) ->
                               {{Msg, _, _}, VQM} =
                                   rabbit_variable_queue:fetch(false, VQN),
                               true = msg2int(Msg) == N,
+                              VQM
+                      end, VQ4, lists:seq(6, Count)),
+
+    %% should be empty now
+    true = rabbit_variable_queue:is_empty(VQ5),
+
+    VQ5.
+
+variable_queue_dropwhile_restart(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, variable_queue_dropwhile_restart1, [Config]).
+
+variable_queue_dropwhile_restart1(Config) ->
+    with_fresh_variable_queue(
+      fun variable_queue_dropwhile_restart2/2,
+      ?config(variable_queue_type, Config)).
+
+variable_queue_dropwhile_restart2(VQ0, QName) ->
+    Count = 10000,
+
+    %% add messages with sequential expiry
+    VQ1 = variable_queue_publish(
+            true, 1, Count,
+            fun (N, Props) -> Props#message_properties{expiry = N} end,
+            fun erlang:term_to_binary/1, VQ0),
+
+    %% drop the first 5 messages
+    {#message_properties{expiry = 6}, VQ2} =
+        rabbit_variable_queue:dropwhile(
+          fun (#message_properties {expiry = Expiry}) -> Expiry =< 5 end, VQ1),
+
+    _VQ3 = rabbit_variable_queue:terminate(shutdown, VQ2),
+    Terms = variable_queue_read_terms(QName),
+    VQ4 = variable_queue_init(test_amqqueue(QName, true), Terms),
+
+    %% fetch 5
+    VQ5 = lists:foldl(fun (_, VQN) ->
+                              {{_, _, _}, VQM} =
+                                  rabbit_variable_queue:fetch(false, VQN),
+                              VQM
+                      end, VQ4, lists:seq(6, Count)),
+
+    %% should be empty now
+    true = rabbit_variable_queue:is_empty(VQ5),
+
+    VQ5.
+
+variable_queue_dropwhile_sync_restart(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, variable_queue_dropwhile_sync_restart1, [Config]).
+
+variable_queue_dropwhile_sync_restart1(Config) ->
+    with_fresh_variable_queue(
+      fun variable_queue_dropwhile_sync_restart2/2,
+      ?config(variable_queue_type, Config)).
+
+variable_queue_dropwhile_sync_restart2(VQ0, QName) ->
+    Count = 10000,
+
+    %% add messages with sequential expiry
+    VQ1 = variable_queue_publish(
+            true, 1, Count,
+            fun (N, Props) -> Props#message_properties{expiry = N} end,
+            fun erlang:term_to_binary/1, VQ0),
+
+    %% drop the first 5 messages
+    {#message_properties{expiry = 6}, VQ2} =
+        rabbit_variable_queue:dropwhile(
+          fun (#message_properties {expiry = Expiry}) -> Expiry =< 5 end, VQ1),
+
+    %% Queue index sync.
+    VQ2b = rabbit_variable_queue:handle_pre_hibernate(VQ2),
+
+    _VQ3 = rabbit_variable_queue:terminate(shutdown, VQ2b),
+    Terms = variable_queue_read_terms(QName),
+    VQ4 = variable_queue_init(test_amqqueue(QName, true), Terms),
+
+    %% fetch 5
+    VQ5 = lists:foldl(fun (_, VQN) ->
+                              {{_, _, _}, VQM} =
+                                  rabbit_variable_queue:fetch(false, VQN),
                               VQM
                       end, VQ4, lists:seq(6, Count)),
 
@@ -1315,6 +1400,13 @@ with_empty_test_queue(Fun) ->
     {0, 0, Qi} = init_test_queue(QName),
     rabbit_queue_index:delete_and_terminate(Fun(Qi, QName)).
 
+init_queue_index() ->
+    %% We must set the segment entry count in the process dictionary
+    %% for tests that call the queue index directly to have a correct
+    %% value.
+    put(segment_entry_count, 2048),
+    ok.
+
 restart_app() ->
     rabbit:stop(),
     rabbit:start().
@@ -1360,8 +1452,18 @@ variable_queue_init(Q, Recover) ->
     rabbit_variable_queue:init(
       Q, case Recover of
              true  -> non_clean_shutdown;
-             false -> new
+             false -> new;
+             Terms -> Terms
          end, fun nop/2, fun nop/2, fun nop/1, fun nop/1).
+
+variable_queue_read_terms(QName) ->
+    #resource { kind = queue,
+                virtual_host = VHost,
+                name = Name } = QName,
+    <<Num:128>> = erlang:md5(<<"queue", VHost/binary, Name/binary>>),
+    DirName = rabbit_misc:format("~.36B", [Num]),
+    {ok, Terms} = rabbit_recovery_terms:read(VHost, DirName),
+    Terms.
 
 publish_and_confirm(Q, Payload, Count) ->
     Seqs = lists:seq(1, Count),

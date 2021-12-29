@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_networking).
@@ -19,7 +19,8 @@
 %%
 %% See also tcp_listener_sup and tcp_listener.
 
--export([boot/0, start_tcp_listener/2, start_ssl_listener/3,
+-export([boot/0, start_tcp_listener/2, start_tcp_listener/3,
+         start_ssl_listener/3, start_ssl_listener/4,
          stop_tcp_listener/1, on_node_down/1, active_listeners/0,
          node_listeners/1, node_client_listeners/1,
          register_connection/1, unregister_connection/1,
@@ -29,13 +30,15 @@
          connection_info_all/0, connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
          close_connection/2, close_connections/2, close_all_connections/1,
+         close_all_user_connections/2,
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, tcp_host/1,
          ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1,
          listener_of_protocol/1, stop_ranch_listener_of_protocol/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
--export([tcp_listener_addresses/1, tcp_listener_spec/9,
+-export([tcp_listener_addresses/1,
+         tcp_listener_spec/9, tcp_listener_spec/10,
          ensure_ssl/0, fix_ssl_options/1, poodle_check/1]).
 
 -export([tcp_listener_started/4, tcp_listener_stopped/4]).
@@ -49,8 +52,8 @@
     connections_local/0
 ]).
 
--include("rabbit.hrl").
--include("rabbit_misc.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_misc.hrl").
 
 %% IANA-suggested ephemeral port range is 49152 to 65535
 -define(FIRST_TEST_BIND_PORT, 49152).
@@ -78,12 +81,14 @@ boot() ->
     _ = application:start(ranch),
     rabbit_log:debug("Started Ranch"),
     %% Failures will throw exceptions
-    _ = boot_listeners(fun boot_tcp/1, application:get_env(rabbit, num_tcp_acceptors, 10), "TCP"),
-    _ = boot_listeners(fun boot_tls/1, application:get_env(rabbit, num_ssl_acceptors, 10), "TLS"),
+    _ = boot_listeners(fun boot_tcp/2, application:get_env(rabbit, num_tcp_acceptors, 10),
+                       application:get_env(rabbit, num_conns_sups, 1), "TCP"),
+    _ = boot_listeners(fun boot_tls/2, application:get_env(rabbit, num_ssl_acceptors, 10),
+                       application:get_env(rabbit, num_conns_sups, 1), "TLS"),
     ok.
 
-boot_listeners(Fun, NumAcceptors, Type) ->
-    case Fun(NumAcceptors) of
+boot_listeners(Fun, NumAcceptors, ConcurrentConnsSupsCount, Type) ->
+    case Fun(NumAcceptors, ConcurrentConnsSupsCount) of
         ok                                                                  ->
             ok;
         {error, {could_not_start_listener, Address, Port, Details}} = Error ->
@@ -92,10 +97,10 @@ boot_listeners(Fun, NumAcceptors, Type) ->
             throw(Error)
     end.
 
-boot_tcp(NumAcceptors) ->
+boot_tcp(NumAcceptors, ConcurrentConnsSupsCount) ->
     {ok, TcpListeners} = application:get_env(tcp_listeners),
     case lists:foldl(fun(Listener, ok) ->
-                             start_tcp_listener(Listener, NumAcceptors);
+                             start_tcp_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount);
                         (_Listener, Error) ->
                              Error
                      end,
@@ -104,14 +109,15 @@ boot_tcp(NumAcceptors) ->
         {error, _} = Error -> Error
     end.
 
-boot_tls(NumAcceptors) ->
+boot_tls(NumAcceptors, ConcurrentConnsSupsCount) ->
     case application:get_env(ssl_listeners) of
         {ok, []} ->
             ok;
         {ok, SslListeners} ->
             SslOpts = ensure_ssl(),
             case poodle_check('AMQP') of
-                ok     -> [start_ssl_listener(L, SslOpts, NumAcceptors) || L <- SslListeners];
+                ok     -> [start_ssl_listener(L, SslOpts, NumAcceptors, ConcurrentConnsSupsCount)
+                           || L <- SslListeners];
                 danger -> ok
             end,
             ok
@@ -149,7 +155,7 @@ log_poodle_fail(Context) ->
       "better.~n~n"
       "If you cannot upgrade now and want to re-enable SSL listeners, you can~n"
       "set the config item 'ssl_allow_poodle_attack' to 'true' in the~n"
-      "'rabbit' section of your configuration file.~n",
+      "'rabbit' section of your configuration file.",
       [rabbit_misc:otp_release(), Context]).
 
 fix_ssl_options(Config) ->
@@ -170,24 +176,30 @@ tcp_listener_addresses({Host, Port, Family0})
     [{IPAddress, Port, Family} ||
         {IPAddress, Family} <- getaddr(Host, Family0)];
 tcp_listener_addresses({_Host, Port, _Family0}) ->
-    rabbit_log:error("invalid port ~p - not 0..65535~n", [Port]),
+    rabbit_log:error("invalid port ~p - not 0..65535", [Port]),
     throw({error, {invalid_port, Port}}).
 
 tcp_listener_addresses_auto(Port) ->
     lists:append([tcp_listener_addresses(Listener) ||
                      Listener <- port_to_listeners(Port)]).
 
+tcp_listener_spec(NamePrefix, Address, SocketOpts, Transport, ProtoSup, ProtoOpts,
+                  Protocol, NumAcceptors, Label) ->
+    tcp_listener_spec(NamePrefix, Address, SocketOpts, Transport, ProtoSup, ProtoOpts,
+                      Protocol, NumAcceptors, 1, Label).
+
 -spec tcp_listener_spec
         (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(),
-         any(), protocol(), non_neg_integer(), label()) ->
+         any(), protocol(), non_neg_integer(), non_neg_integer(), label()) ->
             supervisor:child_spec().
 
 tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
-                  Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors, Label) ->
+                  Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors,
+                  ConcurrentConnsSupsCount, Label) ->
     Args = [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
             {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
             {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
-            NumAcceptors, Label],
+            NumAcceptors, ConcurrentConnsSupsCount, Label],
     {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
      {tcp_listener_sup, start_link, Args},
      transient, infinity, supervisor, [tcp_listener_sup]}.
@@ -241,29 +253,44 @@ stop_ranch_listener_of_protocol(Protocol) ->
         listener_config(), integer()) -> 'ok' | {'error', term()}.
 
 start_tcp_listener(Listener, NumAcceptors) ->
-    start_listener(Listener, NumAcceptors, amqp, "TCP listener", tcp_opts()).
+    start_tcp_listener(Listener, NumAcceptors, 1).
+
+-spec start_tcp_listener(
+        listener_config(), integer(), integer()) -> 'ok' | {'error', term()}.
+
+start_tcp_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount) ->
+    start_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount, amqp,
+                   "TCP listener", tcp_opts()).
 
 -spec start_ssl_listener(
         listener_config(), rabbit_types:infos(), integer()) -> 'ok' | {'error', term()}.
 
 start_ssl_listener(Listener, SslOpts, NumAcceptors) ->
-    start_listener(Listener, NumAcceptors, 'amqp/ssl', "TLS (SSL) listener", tcp_opts() ++ SslOpts).
+    start_ssl_listener(Listener, SslOpts, NumAcceptors, 1).
 
+-spec start_ssl_listener(
+        listener_config(), rabbit_types:infos(), integer(), integer()) -> 'ok' | {'error', term()}.
+
+start_ssl_listener(Listener, SslOpts, NumAcceptors, ConcurrentConnsSupsCount) ->
+    start_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount, 'amqp/ssl',
+                   "TLS (SSL) listener", tcp_opts() ++ SslOpts).
 
 -spec start_listener(
-        listener_config(), integer(), protocol(), label(), list()) -> 'ok' | {'error', term()}.
-start_listener(Listener, NumAcceptors, Protocol, Label, Opts) ->
+        listener_config(), integer(), integer(), protocol(), label(), list()) ->
+          'ok' | {'error', term()}.
+start_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount, Protocol, Label, Opts) ->
     lists:foldl(fun (Address, ok) ->
-                        start_listener0(Address, NumAcceptors, Protocol, Label, Opts);
+                        start_listener0(Address, NumAcceptors, ConcurrentConnsSupsCount, Protocol,
+                                        Label, Opts);
                     (_Address, {error, _} = Error) ->
                         Error
                 end, ok, tcp_listener_addresses(Listener)).
 
-start_listener0(Address, NumAcceptors, Protocol, Label, Opts) ->
+start_listener0(Address, NumAcceptors, ConcurrentConnsSupsCount, Protocol, Label, Opts) ->
     Transport = transport(Protocol),
     Spec = tcp_listener_spec(rabbit_tcp_listener_sup, Address, Opts,
                              Transport, rabbit_connection_sup, [], Protocol,
-                             NumAcceptors, Label),
+                             NumAcceptors, ConcurrentConnsSupsCount, Label),
     case supervisor:start_child(rabbit_sup, Spec) of
         {ok, _}          -> ok;
         {error, {{shutdown, {failed_to_start_child, _,
@@ -370,11 +397,11 @@ on_node_down(Node) ->
     case lists:member(Node, nodes()) of
         false ->
             rabbit_log:info(
-                   "Node ~s is down, deleting its listeners~n", [Node]),
+                   "Node ~s is down, deleting its listeners", [Node]),
             ok = mnesia:dirty_delete(rabbit_listener, Node);
         true  ->
             rabbit_log:info(
-                   "Keeping ~s listeners: the node is already back~n", [Node])
+                   "Keeping ~s listeners: the node is already back", [Node])
     end.
 
 -spec register_connection(pid()) -> ok.
@@ -456,17 +483,23 @@ close_connection(Pid, Explanation) ->
     case lists:member(Pid, connections()) of
         true  ->
             Res = rabbit_reader:shutdown(Pid, Explanation),
-            rabbit_log:info("Closing connection ~p because ~p~n", [Pid, Explanation]),
+            rabbit_log:info("Closing connection ~p because ~p", [Pid, Explanation]),
             Res;
         false ->
             rabbit_log:warning("Asked to close connection ~p (reason: ~p) "
-                               "but no running cluster node reported it as an active connection. Was it already closed? ~n",
+                               "but no running cluster node reported it as an active connection. Was it already closed? ",
                                [Pid, Explanation]),
             ok
     end.
 
 -spec close_connections([pid()], string()) -> 'ok'.
 close_connections(Pids, Explanation) ->
+    [close_connection(Pid, Explanation) || Pid <- Pids],
+    ok.
+
+-spec close_all_user_connections(rabbit_types:username(), string()) -> 'ok'.
+close_all_user_connections(Username, Explanation) ->
+    Pids = [Pid || #tracked_connection{pid = Pid} <- rabbit_connection_tracking:list_of_user(Username)],
     [close_connection(Pid, Explanation) || Pid <- Pids],
     ok.
 
@@ -571,7 +604,7 @@ gethostaddr(Host, Family) ->
 
 -spec host_lookup_error(_, _) -> no_return().
 host_lookup_error(Host, Reason) ->
-    rabbit_log:error("invalid host ~p - ~p~n", [Host, Reason]),
+    rabbit_log:error("invalid host ~p - ~p", [Host, Reason]),
     throw({error, {invalid_host, Host, Reason}}).
 
 resolve_family({_,_,_,_},         auto) -> inet;

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_gc_SUITE).
@@ -78,13 +78,20 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(quorum_queue_stats = Testcase, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, Testcase),
-            rabbit_ct_helpers:run_steps(
-              Config, rabbit_ct_client_helpers:setup_steps());
-        Skip ->
-            Skip
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
+                ok ->
+                    rabbit_ct_helpers:testcase_started(Config, Testcase),
+                    rabbit_ct_helpers:run_steps(
+                    Config, rabbit_ct_client_helpers:setup_steps());
+                {skip, _} = Skip ->
+                    Skip;
+                Other ->
+                    {skip, Other}
+            end
     end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),

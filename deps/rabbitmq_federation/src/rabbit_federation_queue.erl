@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_federation_queue).
@@ -48,8 +48,7 @@ policy_changed(Q1, Q2) when ?is_amqqueue(Q1) ->
     QName = amqqueue:get_name(Q1),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q0} when ?is_amqqueue(Q0) ->
-            QPid = amqqueue:get_pid(Q0),
-            rpc:call(node(QPid), rabbit_federation_queue,
+            rpc:call(amqqueue:qnode(Q0), rabbit_federation_queue,
                      policy_changed_local, [Q1, Q2]);
         {error, not_found} ->
             ok

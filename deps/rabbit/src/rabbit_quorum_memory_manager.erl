@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(rabbit_quorum_memory_manager).
 
@@ -60,7 +60,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 force_roll_over(State) ->
-    ra_log_wal:force_roll_over(ra_log_wal),
+    rabbit_quorum_queue:wal_force_roll_over(node()),
     State#state{last_roll_over = erlang:system_time(millisecond)}.
 
 interval() ->

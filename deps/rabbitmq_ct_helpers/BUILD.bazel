@@ -1,0 +1,14 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+
+erlang_lib(
+    app_name = "rabbitmq_ct_helpers",
+    app_version = "master",
+    extra_priv = [
+        "tools/tls-certs/Makefile",
+        "tools/tls-certs/openssl.cnf.in",
+    ],
+    deps = [
+        "//deps/rabbit_common:bazel_erlang_lib",
+        "@proper//:bazel_erlang_lib",
+    ],
+)

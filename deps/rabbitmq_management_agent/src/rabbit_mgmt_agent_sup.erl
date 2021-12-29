@@ -2,19 +2,17 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_agent_sup).
-
-%% pg2 is deprecated in OTP 23.
--compile(nowarn_deprecated_function).
 
 -behaviour(supervisor).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_core_metrics.hrl").
 -include("rabbit_mgmt_metrics.hrl").
+-include("rabbit_mgmt_agent.hrl").
 
 -export([init/1]).
 -export([start_link/0]).
@@ -24,7 +22,12 @@ init([]) ->
     ExternalStats = {rabbit_mgmt_external_stats,
                      {rabbit_mgmt_external_stats, start_link, []},
                      permanent, 5000, worker, [rabbit_mgmt_external_stats]},
-    {ok, {{one_for_one, 100, 10}, [ExternalStats] ++ MCs}}.
+    Flags = #{
+        strategy  => one_for_one,
+        intensity => 100,
+        period    => 50
+    },
+    {ok, {Flags, [ExternalStats] ++ MCs}}.
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
@@ -33,8 +36,7 @@ start_link() ->
 maybe_enable_metrics_collector() ->
     case application:get_env(rabbitmq_management_agent, disable_metrics_collector, false) of
         false ->
-            pg2:create(management_db),
-            ok = pg2:join(management_db, self()),
+            ok = pg:join(?MANAGEMENT_PG_SCOPE, ?MANAGEMENT_PG_GROUP, self()),
             ST = {rabbit_mgmt_storage, {rabbit_mgmt_storage, start_link, []},
                   permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_storage]},
             MD = {delegate_management_sup, {delegate_sup, start_link, [5, ?DELEGATE_PREFIX]},

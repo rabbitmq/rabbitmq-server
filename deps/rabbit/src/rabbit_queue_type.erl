@@ -33,10 +33,10 @@
          dequeue/5,
          fold_state/3,
          is_policy_applicable/2,
-         is_server_named_allowed/1
+         is_server_named_allowed/1,
+         notify_decorators/1
          ]).
 
-%% gah what is a good identity of a classic queue including all replicas
 -type queue_name() :: rabbit_types:r(queue).
 -type queue_ref() :: queue_name() | atom().
 -type queue_state() :: term().
@@ -140,7 +140,7 @@
 
 %% stateful
 %% intitialise and return a queue type specific session context
--callback init(amqqueue:amqqueue()) -> queue_state().
+-callback init(amqqueue:amqqueue()) -> {ok, queue_state()} | {error, Reason :: term()}.
 
 -callback close(queue_state()) -> ok.
 %% update the queue type state from amqqrecord
@@ -199,6 +199,9 @@
 -callback capabilities() ->
     #{atom() := term()}.
 
+-callback notify_decorators(amqqueue:amqqueue()) ->
+    ok.
+
 %% TODO: this should be controlled by a registry that is populated on boot
 discover(<<"quorum">>) ->
     rabbit_quorum_queue;
@@ -218,7 +221,8 @@ is_enabled(Type) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
-declare(Q, Node) ->
+declare(Q0, Node) ->
+    Q = rabbit_queue_decorator:set(rabbit_policy:set(Q0)),
     Mod = amqqueue:get_type(Q),
     Mod:declare(Q, Node).
 
@@ -299,14 +303,18 @@ i_down(_K, _Q, _DownReason) -> ''.
 is_policy_applicable(Q, Policy) ->
     Mod = amqqueue:get_type(Q),
     Capabilities = Mod:capabilities(),
-    Applicable = maps:get(policies, Capabilities, []),
+    NotApplicable = maps:get(unsupported_policies, Capabilities, []),
     lists:all(fun({P, _}) ->
-                      lists:member(P, Applicable)
+                      not lists:member(P, NotApplicable)
               end, Policy).
 
 is_server_named_allowed(Type) ->
     Capabilities = Type:capabilities(),
     maps:get(server_named, Capabilities, false).
+
+notify_decorators(Q) ->
+    Mod = amqqueue:get_type(Q),
+    Mod:notify_decorators(Q).
 
 -spec init() -> state().
 init() ->
@@ -376,12 +384,14 @@ recover(VHost, Qs) ->
                      rabbit_quorum_queue => [],
                      rabbit_stream_queue => []}, Qs),
    maps:fold(fun (Mod, Queues, {R0, F0}) ->
-                     {R, F} = Mod:recover(VHost, Queues),
+                     {Taken, {R, F}} =  timer:tc(Mod, recover, [VHost, Queues]),
+                     rabbit_log:info("Recovering ~b queues of type ~s took ~bms",
+                                    [length(Queues), Mod, Taken div 1000]),
                      {R0 ++ R, F0 ++ F}
              end, {[], []}, ByType).
 
 -spec handle_down(pid(), term(), state()) ->
-    {ok, state(), actions()} | {eol, queue_ref()} | {error, term()}.
+    {ok, state(), actions()} | {eol, state(), queue_ref()} | {error, term()}.
 handle_down(Pid, Info, #?STATE{monitor_registry = Reg0} = State0) ->
     %% lookup queue ref in monitor registry
     case maps:take(Pid, Reg0) of
@@ -390,7 +400,7 @@ handle_down(Pid, Info, #?STATE{monitor_registry = Reg0} = State0) ->
                 {ok, State, Actions} ->
                     {ok, State#?STATE{monitor_registry = Reg}, Actions};
                 eol ->
-                    {eol, QRef};
+                    {eol, State0#?STATE{monitor_registry = Reg}, QRef};
                 Err ->
                     Err
             end;
@@ -432,14 +442,23 @@ module(QRef, Ctxs) ->
 
 -spec deliver([amqqueue:amqqueue()], Delivery :: term(),
               stateless | state()) ->
-    {ok, state(), actions()}.
-deliver(Qs, Delivery, stateless) ->
+    {ok, state(), actions()} | {error, Reason :: term()}.
+deliver(Qs, Delivery, State) ->
+    try
+        deliver0(Qs, Delivery, State)
+    catch
+        exit:Reason ->
+            {error, Reason}
+    end.
+
+deliver0(Qs, Delivery, stateless) ->
     _ = lists:map(fun(Q) ->
                           Mod = amqqueue:get_type(Q),
                           _ = Mod:deliver([{Q, stateless}], Delivery)
                   end, Qs),
     {ok, stateless, []};
-deliver(Qs, Delivery, #?STATE{} = State0) ->
+deliver0(Qs, Delivery, #?STATE{} = State0) ->
+    %% TODO: optimise single queue case?
     %% sort by queue type - then dispatch each group
     ByType = lists:foldl(
                fun (Q, Acc) ->
@@ -457,7 +476,7 @@ deliver(Qs, Delivery, #?STATE{} = State0) ->
                               end, {[], []}, ByType),
     State = lists:foldl(
               fun({Q, S}, Acc) ->
-                      Ctx = get_ctx(Q, Acc),
+                      Ctx = get_ctx_with(Q, Acc, S),
                       set_ctx(qref(Q), Ctx#ctx{state = S}, Acc)
               end, State0, Xs),
     return_ok(State, Actions).
@@ -511,21 +530,37 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
             Err
     end.
 
-get_ctx(Q, #?STATE{ctxs = Contexts}) when ?is_amqqueue(Q) ->
+get_ctx(QOrQref, State) ->
+    get_ctx_with(QOrQref, State, undefined).
+
+get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState)
+  when ?is_amqqueue(Q) ->
     Ref = qref(Q),
     case Contexts of
         #{Ref := #ctx{module = Mod,
                       state = State} = Ctx} ->
             Ctx#ctx{state = Mod:update(Q, State)};
-        _ ->
-            %% not found - initialize
+        _ when InitState == undefined ->
+            %% not found and no initial state passed - initialize new state
+            Mod = amqqueue:get_type(Q),
+            Name = amqqueue:get_name(Q),
+            case Mod:init(Q) of
+                {error, Reason} ->
+                    exit({Reason, Ref});
+                {ok, QState} ->
+                    #ctx{module = Mod,
+                         name = Name,
+                         state = QState}
+            end;
+        _  ->
+            %% not found - initialize with supplied initial state
             Mod = amqqueue:get_type(Q),
             Name = amqqueue:get_name(Q),
             #ctx{module = Mod,
                  name = Name,
-                 state = Mod:init(Q)}
+                 state = InitState}
     end;
-get_ctx(QRef, Contexts) when ?QREF(QRef) ->
+get_ctx_with(QRef, Contexts, undefined) when ?QREF(QRef) ->
     case get_ctx(QRef, Contexts, undefined) of
         undefined ->
             exit({queue_context_not_found, QRef});

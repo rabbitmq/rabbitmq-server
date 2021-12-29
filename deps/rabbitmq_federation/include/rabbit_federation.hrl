@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -record(upstream, {uris,
@@ -19,7 +19,9 @@
                    ha_policy,
                    name,
                    bind_nowait,
-                   resource_cleanup_mode}).
+                   resource_cleanup_mode,
+                   channel_use_mode
+    }).
 
 -record(upstream_params,
         {uri,
@@ -42,3 +44,5 @@
 -define(DEF_PREFETCH, 1000).
 
 -define(FEDERATION_GUIDE_URL, <<"https://rabbitmq.com/federation.html">>).
+
+-define(FEDERATION_PG_SCOPE, rabbitmq_federation_pg_scope).

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_web_dispatch_SUITE).
@@ -71,12 +71,9 @@ query_static_resource_test1(Host, Port) ->
     rabbit_web_dispatch:register_static_context(test, [{port, Port}],
                                                 "rabbit_web_dispatch_test",
                                                 ?MODULE, "test/priv/www", "Test"),
-    inets:start(),
     {ok, {_Status, _Headers, Body}} =
         httpc:request(format("http://~s:~w/rabbit_web_dispatch_test/index.html", [Host, Port])),
-    ?assert(string:str(Body, "RabbitMQ HTTP Server Test Page") /= 0),
-
-    passed.
+    ?assertMatch(I when I > 0, string:str(Body, "RabbitMQ HTTP Server Test Page")).
 
 add_idempotence_test(Config) ->
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_http_extra),

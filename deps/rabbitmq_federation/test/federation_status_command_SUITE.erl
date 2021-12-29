@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(federation_status_command_SUITE).
@@ -118,13 +118,15 @@ run_down_federated(Config) ->
     rabbit_federation_test_util:with_ch(
       Config,
       fun(_) ->
-              timer:sleep(3000),
-              {stream, ManyProps} = ?CMD:run([], Opts#{only_down => false}),
-              Links = [{proplists:get_value(upstream, Props),
-                        proplists:get_value(status, Props)}
-                       || Props <- ManyProps],
-              [{<<"broken-bunny">>, error}, {<<"localhost">>, running}]
-                  = lists:sort(Links)
+              rabbit_ct_helpers:await_condition(
+                fun() ->
+                        {stream, ManyProps} = ?CMD:run([], Opts#{only_down => false}),
+                        Links = [{proplists:get_value(upstream, Props),
+                                  proplists:get_value(status, Props)}
+                                 || Props <- ManyProps],
+                        [{<<"broken-bunny">>, error}, {<<"localhost">>, running}]
+                            == lists:sort(Links)
+                end, 15000)
       end,
       [rabbit_federation_test_util:q(<<"upstream">>),
        rabbit_federation_test_util:q(<<"fed.downstream">>)]),
@@ -132,10 +134,13 @@ run_down_federated(Config) ->
     rabbit_federation_test_util:with_ch(
       Config,
       fun(_) ->
-              timer:sleep(3000),
-              {stream, [Props]} = ?CMD:run([], Opts#{only_down => true}),
-              <<"broken-bunny">> = proplists:get_value(upstream, Props),
-              error = proplists:get_value(status, Props)
+              rabbit_ct_helpers:await_condition(
+                fun() ->
+                        {stream, Props} = ?CMD:run([], Opts#{only_down => true}),
+                        (length(Props) == 1)
+                            andalso (<<"broken-bunny">> == proplists:get_value(upstream, hd(Props)))
+                            andalso (error == proplists:get_value(status, hd(Props)))
+                end, 15000)
       end,
       [rabbit_federation_test_util:q(<<"upstream">>),
        rabbit_federation_test_util:q(<<"fed.downstream">>)]).

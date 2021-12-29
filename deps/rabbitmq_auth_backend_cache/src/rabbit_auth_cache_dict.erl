@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_auth_cache_dict).
@@ -12,6 +12,8 @@
 
 -behaviour(rabbit_auth_cache).
 
+-include("rabbit_auth_backend_cache.hrl").
+
 -export([start_link/0,
          get/1, put/3, delete/1]).
 
@@ -20,9 +22,11 @@
 
 start_link() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-get(Key) -> gen_server:call(?MODULE, {get, Key}).
+get(Key) -> gen_server:call(?MODULE, {get, Key}, ?CACHE_OPERATION_TIMEOUT).
+
 put(Key, Value, TTL) -> gen_server:cast(?MODULE, {put, Key, Value, TTL}).
-delete(Key) -> gen_server:call(?MODULE, {delete, Key}).
+
+delete(Key) -> gen_server:call(?MODULE, {delete, Key}, ?CACHE_OPERATION_TIMEOUT).
 
 init(_Args) -> {ok, nostate}.
 

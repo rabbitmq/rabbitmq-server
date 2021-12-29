@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_ssl_options).
@@ -43,7 +43,7 @@ make_verify_fun(Module, Function, InitialUserState) ->
         Module:module_info()
     catch
         _:Exception ->
-            rabbit_log:error("SSL verify_fun: module ~s missing: ~p~n",
+            rabbit_log:error("TLS verify_fun: module ~s missing: ~p",
                              [Module, Exception]),
             throw({error, {invalid_verify_fun, missing_module}})
     end,
@@ -66,7 +66,7 @@ make_verify_fun(Module, Function, InitialUserState) ->
                     Module:Function(Args)
             end;
         _ ->
-            rabbit_log:error("SSL verify_fun: no ~s:~s/3 exported~n",
+            rabbit_log:error("TLS verify_fun: no ~s:~s/3 exported",
               [Module, Function]),
             throw({error, {invalid_verify_fun, function_not_exported}})
     end.

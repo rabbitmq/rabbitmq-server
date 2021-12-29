@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_amqp1_0_session_process).
@@ -57,12 +57,12 @@ init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
                                 session            = rabbit_amqp1_0_session:init(Channel)
                                }};
                 {error, Reason} ->
-                    rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+                    rabbit_log:warning("Closing session for connection ~p:~n~p",
                                        [ReaderPid, Reason]),
                     {stop, Reason}
             end;
         {error, Reason} ->
-            rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+            rabbit_log:warning("Closing session for connection ~p:~n~p",
                                [ReaderPid, Reason]),
             {stop, Reason}
     end.
@@ -85,6 +85,11 @@ handle_info(#'basic.consume_ok'{}, State) ->
     %% Handled above
     {noreply, State};
 
+handle_info(#'basic.cancel_ok'{}, State) ->
+    %% just ignore this for now,
+    %% At some point we should send the detach here but then we'd need to track
+    %% consumer tags -> link handle somewhere
+    {noreply, State};
 handle_info({#'basic.deliver'{ consumer_tag = ConsumerTag,
                                delivery_tag = DeliveryTag } = Deliver, Msg},
             State = #state{frame_max       = FrameMax,
@@ -158,7 +163,7 @@ handle_info({'DOWN', _MRef, process, Ch, Reason},
                                              io_lib:format("~w", [Reason])))}}
     end,
     End = #'v1_0.end'{ error = Error },
-    rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+    rabbit_log:warning("Closing session for connection ~p:~n~p",
                        [ReaderPid, Reason]),
     ok = rabbit_amqp1_0_writer:send_command_sync(Sock, End),
     {stop, normal, State};
@@ -186,7 +191,7 @@ handle_cast({frame, Frame, FlowPid},
     catch exit:Reason = #'v1_0.error'{} ->
             %% TODO shut down nicely like rabbit_channel
             End = #'v1_0.end'{ error = Reason },
-            rabbit_log:warning("Closing session for connection ~p:~n~p~n",
+            rabbit_log:warning("Closing session for connection ~p:~n~p",
                                [ReaderPid, Reason]),
             ok = rabbit_amqp1_0_writer:send_command_sync(Sock, End),
             {stop, normal, State};
@@ -286,7 +291,7 @@ handle_control(#'v1_0.disposition'{state = Outcome,
                                    protocol_error(
                                      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
                                      "Unrecognised state: ~p~n"
-                                     "Disposition was: ~p~n", [Outcome, Disp])
+                                     "Disposition was: ~p", [Outcome, Disp])
                            end)
         end,
     case rabbit_amqp1_0_session:settle(Disp, session(State), AckFun) of
@@ -294,11 +299,19 @@ handle_control(#'v1_0.disposition'{state = Outcome,
         {Reply, Session1} -> {reply,   Reply, state(Session1, State)}
     end;
 
-handle_control(#'v1_0.detach'{ handle = Handle }, State) ->
+handle_control(#'v1_0.detach'{handle = Handle} = Detach,
+               #state{backing_channel = BCh} = State) ->
     %% TODO keep the state around depending on the lifetime
     %% TODO outgoing links?
+    case get({out, Handle}) of
+        undefined ->
+            ok;
+        Link ->
+            erase({out, Handle}),
+            ok = rabbit_amqp1_0_outgoing_link:detach(Detach, BCh, Link)
+    end,
     erase({in, Handle}),
-    {reply, #'v1_0.detach'{ handle = Handle }, State};
+    {reply, #'v1_0.detach'{handle = Handle}, State};
 
 handle_control(#'v1_0.end'{}, _State = #state{ writer_pid = Sock }) ->
     ok = rabbit_amqp1_0_writer:send_command(Sock, #'v1_0.end'{}),

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_epmd_monitor).
@@ -78,18 +78,16 @@ check_epmd(State = #state{mod  = Mod,
                           me   = Me,
                           host = Host,
                           port = Port0}) ->
-    rabbit_log:debug("Asked to [re-]register this node (~s@~s) with epmd...", [Me, Host]),
     {ok, Port1} = handle_port_please(check, Mod:port_please(Me, Host), Me, Port0),
     rabbit_nodes:ensure_epmd(),
     Mod:register_node(Me, Port1),
-    rabbit_log:debug("[Re-]registered this node (~s@~s) with epmd at port ~p", [Me, Host, Port1]),
     {ok, State#state{port = Port1}}.
 
 handle_port_please(init, noport, Me, Port) ->
-    rabbit_log:info("epmd does not know us, re-registering as ~s~n", [Me]),
+    rabbit_log:info("epmd does not know us, re-registering as ~s", [Me]),
     {ok, Port};
 handle_port_please(check, noport, Me, Port) ->
-    rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b~n", [Me, Port]),
+    rabbit_log:warning("epmd does not know us, re-registering ~s at port ~b", [Me, Port]),
     {ok, Port};
 handle_port_please(_, closed, _Me, Port) ->
     rabbit_log:error("epmd monitor failed to retrieve our port from epmd: closed"),

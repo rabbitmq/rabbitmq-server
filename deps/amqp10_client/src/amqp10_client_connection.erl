@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(amqp10_client_connection).
@@ -91,8 +91,6 @@
 
 -export_type([connection_config/0,
               amqp10_socket/0]).
-
--define(DEFAULT_TIMEOUT, 5000).
 
 %% -------------------------------------------------------------------
 %% Public API.
@@ -228,7 +226,7 @@ hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
     end;
 hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
                                 Rev}, State) ->
-    error_logger:warning_msg("Unsupported protocol version: ~b ~b.~b.~b~n",
+    logger:warning("Unsupported protocol version: ~b ~b.~b.~b",
                              [Protocol, Maj, Min, Rev]),
     {stop, normal, State};
 hdr_sent({call, From}, begin_session,
@@ -257,7 +255,7 @@ open_sent(_EvtType, #'v1_0.open'{max_frame_size = MFSz,
                        S2
                end, State1, PendingSessionReqs),
     ok = notify_opened(Config),
-    {next_state, opened, State2};
+    {next_state, opened, State2#state{pending_session_reqs = []}};
 open_sent({call, From}, begin_session,
           #state{pending_session_reqs = PendingSessionReqs} = State) ->
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
@@ -291,12 +289,19 @@ opened(info, {'DOWN', MRef, _, _, _Info},
     ok = notify_closed(Config, shutdown),
     {stop, normal, State};
 opened(_EvtType, Frame, State) ->
-    error_logger:warning_msg("Unexpected connection frame ~p when in state ~p ~n",
+    logger:warning("Unexpected connection frame ~p when in state ~p ",
                              [Frame, State]),
     {keep_state, State}.
 
 close_sent(_EvtType, heartbeat, State) ->
     {next_state, close_sent, State};
+close_sent(_EvtType, {'EXIT', _Pid, shutdown}, State) ->
+    %% monitored processes may exit during closure
+    {next_state, close_sent, State};
+close_sent(_EvtType, {'DOWN', _Ref, process, ReaderPid, _},
+           #state{reader = ReaderPid} = State) ->
+    %% if the reader exits we probably wont receive a close frame
+    {stop, normal, State};
 close_sent(_EvtType, #'v1_0.close'{}, State) ->
     %% TODO: we should probably set up a timer before this to ensure
     %% we close down event if no reply is received
@@ -367,7 +372,7 @@ send_open(#state{socket = Socket, config = Config}) ->
            end,
     Encoded = amqp10_framing:encode_bin(Open),
     Frame = amqp10_binary_generator:build_frame(0, Encoded),
-    ?DBG("CONN <- ~p~n", [Open]),
+    ?DBG("CONN <- ~p", [Open]),
     socket_send(Socket, Frame).
 
 
@@ -375,7 +380,7 @@ send_close(#state{socket = Socket}, _Reason) ->
     Close = #'v1_0.close'{},
     Encoded = amqp10_framing:encode_bin(Close),
     Frame = amqp10_binary_generator:build_frame(0, Encoded),
-    ?DBG("CONN <- ~p~n", [Close]),
+    ?DBG("CONN <- ~p", [Close]),
     Ret = socket_send(Socket, Frame),
     case Ret of
         ok -> _ =
@@ -397,7 +402,7 @@ send_sasl_init(State, {plain, User, Pass}) ->
 send(Record, FrameType, #state{socket = Socket}) ->
     Encoded = amqp10_framing:encode_bin(Record),
     Frame = amqp10_binary_generator:build_frame(0, FrameType, Encoded),
-    ?DBG("CONN <- ~p~n", [Record]),
+    ?DBG("CONN <- ~p", [Record]),
     socket_send(Socket, Frame).
 
 send_heartbeat(#state{socket = Socket}) ->

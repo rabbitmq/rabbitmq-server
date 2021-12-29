@@ -20,8 +20,8 @@ class TestRedelivered(base.BaseTest):
         self.conn.send(destination, "test1")
         message_receive_timeout = 30
         self.assertTrue(self.listener.wait(message_receive_timeout), "Test message not received within {0} seconds".format(message_receive_timeout))
-        self.assertEquals(1, len(self.listener.messages))
-        self.assertEquals('false', self.listener.messages[0]['headers']['redelivered'])
+        self.assertEqual(1, len(self.listener.messages))
+        self.assertEqual('false', self.listener.messages[0]['headers']['redelivered'])
 
         # disconnect with no ack
         self.conn.disconnect()
@@ -34,7 +34,14 @@ class TestRedelivered(base.BaseTest):
             conn2.set_listener('', listener2)
             self.subscribe_dest(conn2, destination, None, ack='client')
             self.assertTrue(listener2.wait(), "message not received again")
-            self.assertEquals(1, len(listener2.messages))
-            self.assertEquals('true', listener2.messages[0]['headers']['redelivered'])
+            self.assertEqual(1, len(listener2.messages))
+            self.assertEqual('true', listener2.messages[0]['headers']['redelivered'])
         finally:
             conn2.disconnect()
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)

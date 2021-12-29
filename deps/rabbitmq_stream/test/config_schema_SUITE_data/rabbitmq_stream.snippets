@@ -3,14 +3,14 @@
   [{rabbitmq_stream,[{tcp_listeners,[12345]}]}],
   [rabbitmq_stream]},
  {listeners_ip,
-  "stream.listeners.tcp.1 = 127.0.0.1:5555
-   stream.listeners.tcp.2 = ::1:5555",
-  [{rabbitmq_stream,[{tcp_listeners,[{"127.0.0.1",5555},{"::1",5555}]}]}],
+  "stream.listeners.tcp.1 = 127.0.0.1:5552
+   stream.listeners.tcp.2 = ::1:5552",
+  [{rabbitmq_stream,[{tcp_listeners,[{"127.0.0.1",5552},{"::1",5552}]}]}],
   [rabbitmq_stream]},
 
  {listener_tcp_options,
-  "stream.listeners.tcp.1 = 127.0.0.1:5555
-   stream.listeners.tcp.2 = ::1:5555
+  "stream.listeners.tcp.1 = 127.0.0.1:5552
+   stream.listeners.tcp.2 = ::1:5552
 
    stream.tcp_listen_options.backlog = 2048
    stream.tcp_listen_options.recbuf = 8192
@@ -25,8 +25,8 @@
 ",
   [{rabbitmq_stream,[
                     {tcp_listeners,[
-                                    {"127.0.0.1",5555},
-                                    {"::1",5555}
+                                    {"127.0.0.1",5552},
+                                    {"::1",5552}
                                    ]}
                     , {tcp_listen_options, [
                                             {backlog, 2048},
@@ -54,9 +54,13 @@
   [rabbitmq_stream]},
   {advertised_host_port,
       "stream.advertised_host = some-host
-       stream.advertised_port = 5556",
+       stream.advertised_tls_host = some-other-host
+       stream.advertised_port = 5556
+       stream.advertised_tls_port = 5553",
       [{rabbitmq_stream,[{advertised_host, <<"some-host">>},
-                         	{advertised_port, 5556}]}],
+                          {advertised_tls_host, <<"some-other-host">>},
+                         	{advertised_port, 5556},
+                         	{advertised_tls_port, 5553}]}],
       [rabbitmq_stream]},
   {credits,
     "stream.frame_max = 2097152

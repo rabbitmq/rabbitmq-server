@@ -2,12 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_access_control).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([check_user_pass_login/2, check_user_login/2, check_user_loopback/2,
          check_vhost_access/4, check_resource_access/4, check_topic_access/4]).
@@ -38,35 +38,42 @@ check_user_pass_login(Username, Password) ->
 check_user_login(Username, AuthProps) ->
     %% extra auth properties like MQTT client id are in AuthProps
     {ok, Modules} = application:get_env(rabbit, auth_backends),
-    R = lists:foldl(
-          fun (rabbit_auth_backend_cache=ModN, {refused, _, _, _}) ->
-                  %% It is possible to specify authn/authz within the cache module settings,
-                  %% so we have to do both auth steps here
-                  %% See this rabbitmq-users discussion:
-                  %% https://groups.google.com/d/topic/rabbitmq-users/ObqM7MQdA3I/discussion
-                  try_authenticate_and_try_authorize(ModN, ModN, Username, AuthProps);
-              ({ModN, ModZs}, {refused, _, _, _}) ->
-                  %% Different modules for authN vs authZ. So authenticate
-                  %% with authN module, then if that succeeds do
-                  %% passwordless (i.e pre-authenticated) login with authZ.
-                  try_authenticate_and_try_authorize(ModN, ModZs, Username, AuthProps);
-              (Mod, {refused, _, _, _}) ->
-                  %% Same module for authN and authZ. Just take the result
-                  %% it gives us
-                  case try_authenticate(Mod, Username, AuthProps) of
-                      {ok, ModNUser = #auth_user{username = Username2, impl = Impl}} ->
-                          rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, Mod]),
-                          user(ModNUser, {ok, [{Mod, Impl}], []});
-                      Else ->
-                          rabbit_log:debug("User '~s' failed authenticatation by backend ~s", [Username, Mod]),
-                          Else
-                  end;
-              (_, {ok, User}) ->
-                  %% We've successfully authenticated. Skip to the end...
-                  {ok, User}
-          end,
-          {refused, Username, "No modules checked '~s'", [Username]}, Modules),
-    R.
+    try
+        lists:foldl(
+            fun (rabbit_auth_backend_cache=ModN, {refused, _, _, _}) ->
+                    %% It is possible to specify authn/authz within the cache module settings,
+                    %% so we have to do both auth steps here
+                    %% See this rabbitmq-users discussion:
+                    %% https://groups.google.com/d/topic/rabbitmq-users/ObqM7MQdA3I/discussion
+                    try_authenticate_and_try_authorize(ModN, ModN, Username, AuthProps);
+                ({ModN, ModZs}, {refused, _, _, _}) ->
+                    %% Different modules for authN vs authZ. So authenticate
+                    %% with authN module, then if that succeeds do
+                    %% passwordless (i.e pre-authenticated) login with authZ.
+                    try_authenticate_and_try_authorize(ModN, ModZs, Username, AuthProps);
+                (Mod, {refused, _, _, _}) ->
+                    %% Same module for authN and authZ. Just take the result
+                    %% it gives us
+                    case try_authenticate(Mod, Username, AuthProps) of
+                        {ok, ModNUser = #auth_user{username = Username2, impl = Impl}} ->
+                            rabbit_log:debug("User '~s' authenticated successfully by backend ~s", [Username2, Mod]),
+                            user(ModNUser, {ok, [{Mod, Impl}], []});
+                        Else ->
+                            rabbit_log:debug("User '~s' failed authenticatation by backend ~s", [Username, Mod]),
+                            Else
+                    end;
+                (_, {ok, User}) ->
+                    %% We've successfully authenticated. Skip to the end...
+                    {ok, User}
+            end,
+            {refused, Username, "No modules checked '~s'", [Username]}, Modules)
+        catch 
+            Type:Error:Stacktrace -> 
+                rabbit_log:debug("User '~s' authentication failed with ~s:~p:~n~p", [Username, Type, Error, Stacktrace]),
+                {refused, Username, "User '~s' authentication failed with internal error. "
+                                    "Enable debug logs to see the real error.", [Username]}
+
+        end.
 
 try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
     ModZs = case ModZs0 of
@@ -85,7 +92,7 @@ try_authenticate(Module, Username, AuthProps) ->
     case Module:user_login_authentication(Username, AuthProps) of
         {ok, AuthUser}  -> {ok, AuthUser};
         {error, E}      -> {refused, Username,
-                            "~s failed authenticating ~s: ~p~n",
+                            "~s failed authenticating ~s: ~p",
                             [Module, Username, E]};
         {refused, F, A} -> {refused, Username, F, A}
     end.
@@ -97,7 +104,7 @@ try_authorize(Modules, Username, AuthProps) ->
                   {ok, Impl, Tags}-> {ok, [{Module, Impl} | ModsImpls], ModsTags ++ Tags};
                   {ok, Impl}      -> {ok, [{Module, Impl} | ModsImpls], ModsTags};
                   {error, E}      -> {refused, Username,
-                                        "~s failed authorizing ~s: ~p~n",
+                                        "~s failed authorizing ~s: ~p",
                                         [Module, Username, E]};
                   {refused, F, A} -> {refused, Username, F, A}
               end;
@@ -215,7 +222,7 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
         false ->
             rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs);
         {error, E}  ->
-            FullErrStr = ErrStr ++ ", backend ~s returned an error: ~p~n",
+            FullErrStr = ErrStr ++ ", backend ~s returned an error: ~p",
             FullErrArgs = ErrArgs ++ [Module, E],
             rabbit_log:error(FullErrStr, FullErrArgs),
             rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs)

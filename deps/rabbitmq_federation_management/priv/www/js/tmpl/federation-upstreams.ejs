@@ -45,7 +45,7 @@
      <td class="r"><%= fmt_time(upstream.value['message-ttl'], 'ms') %></td>
      <td class="r"><%= fmt_string(upstream.value['ha-policy']) %></td>
      <td class="r"><%= fmt_string(upstream.value['queue']) %></td>
-     <td class="r"><%= upstream.value['consumer-tag'] %></td>
+     <td class="r"><%= fmt_string(upstream.value['consumer-tag']) %></td>
    </tr>
 <% } %>
  </tbody>

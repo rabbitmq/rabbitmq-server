@@ -1,0 +1,114 @@
+load(
+    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "app_file",
+    "bazel_erlang_lib",
+    "erlc",
+)
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load(
+    "//:rabbitmq.bzl",
+    "APP_VERSION",
+    "RABBITMQ_ERLC_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
+    "rabbitmq_suite",
+)
+
+py_binary(
+    name = "codegen",
+    srcs = [
+        "codegen.py",
+    ],
+    imports = ["../../deps/rabbitmq_codegen"],
+    deps = [
+        "//deps/rabbitmq_codegen:amqp_codegen",
+    ],
+)
+
+AMQP_SPEC_1_0 = [
+    "//deps/rabbitmq_codegen:amqp-1.0/messaging.xml",
+    "//deps/rabbitmq_codegen:amqp-1.0/security.xml",
+    "//deps/rabbitmq_codegen:amqp-1.0/transport.xml",
+    "//deps/rabbitmq_codegen:amqp-1.0/transactions.xml",
+]
+
+genrule(
+    name = "generated_headers",
+    srcs = AMQP_SPEC_1_0,
+    outs = ["include/amqp10_framing.hrl"],
+    cmd = "$(location :codegen) hrl $(SRCS) > $@",
+    tools = [":codegen"],
+)
+
+genrule(
+    name = "generated_sources",
+    srcs = AMQP_SPEC_1_0,
+    outs = ["src/amqp10_framing0.erl"],
+    cmd = "$(location :codegen) erl $(SRCS) > $@",
+    tools = [":codegen"],
+)
+
+app_file(
+    name = "app_file",
+    app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",
+    app_name = "amqp10_common",
+    app_version = APP_VERSION,
+    modules = [":beam_files"],
+)
+
+erlc(
+    name = "beam_files",
+    srcs = ["src/amqp10_framing0.erl"] + glob(["src/*.erl"]),
+    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    dest = "ebin",
+    erlc_opts = RABBITMQ_ERLC_OPTS,
+)
+
+bazel_erlang_lib(
+    name = "bazel_erlang_lib",
+    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    app = ":app_file",
+    app_name = "amqp10_common",
+    beam = [":beam_files"],
+    visibility = ["//visibility:public"],
+)
+
+erlc(
+    name = "test_beam_files",
+    srcs = ["src/amqp10_framing0.erl"] + glob(["src/*.erl"]),
+    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    dest = "test",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+)
+
+bazel_erlang_lib(
+    name = "test_bazel_erlang_lib",
+    testonly = True,
+    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
+    app = ":app_file",
+    app_name = "amqp10_common",
+    beam = [":test_beam_files"],
+    visibility = ["//visibility:public"],
+)
+
+xref(tags = ["xref"])
+
+dialyze(
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)
+
+suites = [
+    rabbitmq_suite(
+        name = "binary_generator_SUITE",
+    ),
+    rabbitmq_suite(
+        name = "binary_parser_SUITE",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

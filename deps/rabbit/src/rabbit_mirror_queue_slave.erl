@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2010-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2010-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mirror_queue_slave).
@@ -137,7 +137,7 @@ handle_go(Q0) when ?is_amqqueue(Q0) ->
             {ok, State};
         {stale, StalePid} ->
             rabbit_mirror_queue_misc:log_warning(
-              QName, "Detected stale HA master: ~p~n", [StalePid]),
+              QName, "Detected stale classic mirrored queue leader: ~p", [StalePid]),
             gm:leave(GM),
             {error, {stale_master_pid, StalePid}};
         duplicate_live_master ->
@@ -189,7 +189,7 @@ init_it(Self, GM, Node, QName) ->
 stop_pending_slaves(QName, Pids) ->
     [begin
          rabbit_mirror_queue_misc:log_warning(
-           QName, "Detected a non-responsive classic queue mirror, stopping it: ~p~n", [Pid]),
+           QName, "Detected a non-responsive classic queue mirror, stopping it: ~p", [Pid]),
          case erlang:process_info(Pid, dictionary) of
              undefined -> ok;
              {dictionary, Dict} ->
@@ -385,8 +385,13 @@ handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     noreply(State);
 
-handle_info(bump_reduce_memory_use, State) ->
-    noreply(State);
+handle_info(bump_reduce_memory_use, State = #state{backing_queue       = BQ,
+                                                backing_queue_state = BQS}) ->
+    BQS1 = BQ:handle_info(bump_reduce_memory_use, BQS),
+    BQS2 = BQ:resume(BQS1),
+    noreply(State#state{
+        backing_queue_state = BQS2
+    });
 
 %% In the event of a short partition during sync we can detect the
 %% master's 'death', drop out of sync, and then receive sync messages
@@ -478,7 +483,11 @@ format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 %% GM
 %% ---------------------------------------------------------------------------
 
+-spec joined(args(), members()) -> callback_result().
+
 joined([SPid], _Members) -> SPid ! {joined, self()}, ok.
+
+-spec members_changed(args(), members(),members()) -> callback_result().
 
 members_changed([_SPid], _Births, []) ->
     ok;
@@ -491,6 +500,8 @@ members_changed([ SPid], _Births, Deaths) ->
         ok              -> ok;
         {promote, CPid} -> {become, rabbit_mirror_queue_coordinator, [CPid]}
     end.
+
+-spec handle_msg(args(), pid(), any()) -> callback_result().
 
 handle_msg([_SPid], _From, hibernate_heartbeat) ->
     %% See rabbit_mirror_queue_coordinator:handle_pre_hibernate/1
@@ -517,6 +528,8 @@ handle_msg([SPid], _From, {sync_start, Ref, Syncer, SPids}) ->
     end;
 handle_msg([SPid], _From, Msg) ->
     ok = gen_server2:cast(SPid, {gm, Msg}).
+
+-spec handle_terminate(args(), term()) -> any().
 
 handle_terminate([_SPid], _Reason) ->
     ok.
@@ -633,7 +646,7 @@ promote_me(From, #state { q                   = Q0,
                           msg_id_status       = MS,
                           known_senders       = KS}) when ?is_amqqueue(Q0) ->
     QName = amqqueue:get_name(Q0),
-    rabbit_mirror_queue_misc:log_info(QName, "Promoting mirror ~s to master~n",
+    rabbit_mirror_queue_misc:log_info(QName, "Promoting mirror ~s to leader",
                                       [rabbit_misc:pid_to_string(self())]),
     Q1 = amqqueue:set_pid(Q0, self()),
     DeathFun = rabbit_mirror_queue_master:sender_death_fun(),

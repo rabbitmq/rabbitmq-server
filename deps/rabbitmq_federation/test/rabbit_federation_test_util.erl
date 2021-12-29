@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_federation_test_util).
@@ -13,17 +13,24 @@
 
 -compile(export_all).
 
+-deprecated({wait_for_federation,2,"Use rabbit_ct_helpers:await_condition or ?awaitMatch instead"}).
+
 -import(rabbit_misc, [pget/2]).
 
 setup_federation(Config) ->
+    setup_federation_with_upstream_params(Config, []).
+
+setup_federation_with_upstream_params(Config, ExtraParams) ->
     rabbit_ct_broker_helpers:set_parameter(Config, 0,
       <<"federation-upstream">>, <<"localhost">>, [
         {<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config, 0)},
-        {<<"consumer-tag">>, <<"fed.tag">>}]),
+        {<<"consumer-tag">>, <<"fed.tag">>}
+        ] ++ ExtraParams),
 
     rabbit_ct_broker_helpers:set_parameter(Config, 0,
       <<"federation-upstream">>, <<"local5673">>, [
-        {<<"uri">>, <<"amqp://localhost:1">>}]),
+        {<<"uri">>, <<"amqp://localhost:1">>}
+        ] ++ ExtraParams),
 
     rabbit_ct_broker_helpers:set_parameter(Config, 0,
       <<"federation-upstream-set">>, <<"upstream">>, [
@@ -176,10 +183,10 @@ expect([], _Timeout) ->
     ok;
 expect(Payloads, Timeout) ->
     receive
-        {#'basic.deliver'{}, #amqp_msg{payload = Payload}} ->
+        {#'basic.deliver'{delivery_tag = DTag}, #amqp_msg{payload = Payload}} ->
             case lists:member(Payload, Payloads) of
                 true  ->
-                    ct:pal("Consumed a message: ~p", [Payload]),
+                    ct:pal("Consumed a message: ~p ~p left: ~p", [Payload, DTag, length(Payloads) - 1]),
                     expect(Payloads -- [Payload], Timeout);
                 false -> ?assert(false, rabbit_misc:format("received an unexpected payload ~p", [Payload]))
             end
@@ -327,28 +334,41 @@ links(#'exchange.declare'{exchange = Name}) ->
 
 xr(Name) -> rabbit_misc:r(<<"/">>, exchange, Name).
 
-with_ch(Config, Fun, Qs) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
-    declare_all(Ch, Qs),
+with_ch(Config, Fun, Methods) ->
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    declare_all(Config, Ch, Methods),
     %% Clean up queues even after test failure.
     try
         Fun(Ch)
     after
-        delete_all(Ch, Qs),
+        delete_all(Ch, Methods),
         rabbit_ct_client_helpers:close_channel(Ch)
     end,
     ok.
 
-declare_all(Ch, Qs) -> [declare_queue(Ch, Q) || Q <- Qs].
-delete_all(Ch, Qs) ->
-    [delete_queue(Ch, Q) || #'queue.declare'{queue = Q} <- Qs].
+declare_all(Config, Ch, Methods) -> [maybe_declare_queue(Config, Ch, Op) || Op <- Methods].
+delete_all(Ch, Methods) ->
+    [delete_queue(Ch, Q) || #'queue.declare'{queue = Q} <- Methods].
 
-declare_queue(Ch, Q) ->
-    amqp_channel:call(Ch, Q).
+maybe_declare_queue(Config, Ch, Method) ->
+    OneOffCh = rabbit_ct_client_helpers:open_channel(Config),
+    try
+        amqp_channel:call(OneOffCh, Method#'queue.declare'{passive = true})
+    catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Message}}, _} ->
+        amqp_channel:call(Ch, Method)
+    after
+        catch rabbit_ct_client_helpers:close_channel(OneOffCh)
+    end.
 
 delete_queue(Ch, Q) ->
     amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
 
 q(Name) ->
+    q(Name, []).
+
+q(Name, undefined) ->
+    q(Name, []);
+q(Name, Args) ->
     #'queue.declare'{queue   = Name,
-                     durable = true}.
+                     durable = true,
+                     arguments = Args}.

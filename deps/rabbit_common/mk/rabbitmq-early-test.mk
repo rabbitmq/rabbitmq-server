@@ -109,7 +109,6 @@ endif
 
 ifneq ("$(RABBITMQ_TRACER)","")
 BUILD_DEPS += looking_glass
-dep_looking_glass = git https://github.com/rabbitmq/looking-glass master
 ERL_LIBS := "$(ERL_LIBS):../looking_glass:../lz4"
 export RABBITMQ_TRACER
 endif

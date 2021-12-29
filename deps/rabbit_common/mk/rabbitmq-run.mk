@@ -67,9 +67,13 @@ node_enabled_plugins_file = $(call node_tmpdir,$(1))/enabled_plugins
 
 # Broker startup variables for the test environment.
 ifeq ($(PLATFORM),msys2)
-HOSTNAME := $(COMPUTERNAME)
+HOSTNAME = $(COMPUTERNAME)
 else
-HOSTNAME := $(shell hostname -s)
+ifeq ($(PLATFORM),solaris)
+HOSTNAME = $(shell hostname | sed 's@\..*@@')
+else
+HOSTNAME = $(shell hostname -s)
+endif
 endif
 
 RABBITMQ_NODENAME ?= rabbit@$(HOSTNAME)
@@ -104,6 +108,8 @@ else
 RMQ_PLUGINS_DIR=$(CURDIR)/$(DIST_DIR)
 endif
 
+node_plugins_dir = $(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(if $(EXTRA_PLUGINS_DIR),$(EXTRA_PLUGINS_DIR):$(RMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR)))
+
 define basic_script_env_settings
 MAKE="$(MAKE)" \
 ERL_LIBS="$(DIST_ERL_LIBS)" \
@@ -118,7 +124,7 @@ RABBITMQ_MNESIA_DIR="$(call node_mnesia_dir,$(2))" \
 RABBITMQ_QUORUM_DIR="$(call node_quorum_dir,$(2))" \
 RABBITMQ_STREAM_DIR="$(call node_stream_dir,$(2))" \
 RABBITMQ_FEATURE_FLAGS_FILE="$(call node_feature_flags_file,$(2))" \
-RABBITMQ_PLUGINS_DIR="$(if $(RABBITMQ_PLUGINS_DIR),$(RABBITMQ_PLUGINS_DIR),$(RMQ_PLUGINS_DIR))" \
+RABBITMQ_PLUGINS_DIR="$(call node_plugins_dir)" \
 RABBITMQ_PLUGINS_EXPAND_DIR="$(call node_plugins_expand_dir,$(2))" \
 RABBITMQ_SERVER_START_ARGS="-ra wal_sync_method sync $(RABBITMQ_SERVER_START_ARGS)" \
 RABBITMQ_ENABLED_PLUGINS="$(RABBITMQ_ENABLED_PLUGINS)"
@@ -164,9 +170,7 @@ define test_rabbitmq_config
 [
   {rabbit, [
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(RABBITMQ_NODE_PORT)]}$(comma),)
-      {loopback_users, []},
-      {log, [{file, [{level, debug}]},
-             {console, [{level, debug}]}]}
+      {loopback_users, []}
     ]},
   {rabbitmq_management, [
 $(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
@@ -174,25 +178,30 @@ $(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "
   {rabbitmq_mqtt, [
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},
+  {rabbitmq_web_mqtt, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15675 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
+    ]},
+  {rabbitmq_web_mqtt_examples, [
+$(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$((15670 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
+    ]},
   {rabbitmq_stomp, [
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((61613 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
+    ]},
+  {rabbitmq_web_stomp, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15674 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
+    ]},
+  {rabbitmq_web_stomp_examples, [
+$(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$((15670 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
+    ]},
+  {rabbitmq_stream, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((5552 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
+    ]},
+  {rabbitmq_prometheus, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15692 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
     ]},
   {ra, [
       {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
       {wal_sync_method, sync}
-    ]},
-  {lager, [
-      {colors, [
-          %% https://misc.flogisoft.com/bash/tip_colors_and_formatting
-          {debug,     "\\\e[0;34m" },
-          {info,      "\\\e[1;37m" },
-          {notice,    "\\\e[1;36m" },
-          {warning,   "\\\e[1;33m" },
-          {error,     "\\\e[1;31m" },
-          {critical,  "\\\e[1;35m" },
-          {alert,     "\\\e[1;44m" },
-          {emergency, "\\\e[1;41m" }
-      ]}
     ]},
   {osiris, [
       {data_dir, "$(RABBITMQ_STREAM_DIR)"}
@@ -206,8 +215,6 @@ define test_rabbitmq_config_with_tls
 [
   {rabbit, [
       {loopback_users, []},
-      {log, [{file, [{level, debug}]},
-             {console, [{level, debug}]}]},
       {ssl_listeners, [5671]},
       {ssl_options, [
           {cacertfile, "$(TEST_TLS_CERTS_DIR_in_config)/testca/cacert.pem"},
@@ -233,19 +240,6 @@ define test_rabbitmq_config_with_tls
   {ra, [
       {data_dir, "$(RABBITMQ_QUORUM_DIR)"},
       {wal_sync_method, sync}
-    ]},
-  {lager, [
-      {colors, [
-          %% https://misc.flogisoft.com/bash/tip_colors_and_formatting
-          {debug,     "\\\e[0;34m" },
-          {info,      "\\\e[1;37m" },
-          {notice,    "\\\e[1;36m" },
-          {warning,   "\\\e[1;33m" },
-          {error,     "\\\e[1;31m" },
-          {critical,  "\\\e[1;35m" },
-          {alert,     "\\\e[1;44m" },
-          {emergency, "\\\e[1;41m" }
-      ]}
     ]},
   {osiris, [
       {data_dir, "$(RABBITMQ_STREAM_DIR)"}
@@ -286,8 +280,8 @@ endif
 endif
 
 run-broker run-tls-broker: RABBITMQ_CONFIG_FILE := $(basename $(TEST_CONFIG_FILE))
-run-broker:     config := $(test_rabbitmq_config)
-run-tls-broker: config := $(test_rabbitmq_config_with_tls)
+run-broker:     config = $(test_rabbitmq_config)
+run-tls-broker: config = $(test_rabbitmq_config_with_tls)
 run-tls-broker: $(TEST_TLS_CERTS_DIR)
 
 run-broker run-tls-broker: node-tmpdir $(DIST_TARGET) $(TEST_CONFIG_FILE)
@@ -377,7 +371,7 @@ stop-node:
 # Start a RabbitMQ cluster in the background.
 # --------------------------------------------------------------------
 
-NODES ?= 2
+NODES ?= 3
 
 start-brokers start-cluster: $(DIST_TARGET)
 	@for n in $$(seq $(NODES)); do \
@@ -390,9 +384,13 @@ start-brokers start-cluster: $(DIST_TARGET)
 		  -rabbit loopback_users [] \
 		  -rabbitmq_management listener [{port,$$((15672 + $$n - 1))}] \
 		  -rabbitmq_mqtt tcp_listeners [$$((1883 + $$n - 1))] \
+		  -rabbitmq_web_mqtt tcp_config [{port,$$((1893 + $$n - 1))}] \
+		  -rabbitmq_web_mqtt_examples listener [{port,$$((1903 + $$n - 1))}] \
 		  -rabbitmq_stomp tcp_listeners [$$((61613 + $$n - 1))] \
+		  -rabbitmq_web_stomp tcp_config [{port,$$((61623 + $$n - 1))}] \
+		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
-		  -rabbitmq_stream tcp_listeners [$$((5555 + $$n - 1))] \
+		  -rabbitmq_stream tcp_listeners [$$((5552 + $$n - 1))] \
 		  "; \
 		if test '$@' = 'start-cluster' && test "$$nodename1"; then \
 			ERL_LIBS="$(DIST_ERL_LIBS)" \

@@ -79,8 +79,8 @@ start_rabbitmq_server() {
         ${RABBITMQ_SERVER_ERL_ARGS} \
         ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS} \
         ${RABBITMQ_SERVER_START_ARGS} \
-        -lager crash_log false \
-        -lager handlers '[]' \
+        -syslog logger '[]' \
+        -syslog syslog_error_logger false \
         "$@"
 }
 

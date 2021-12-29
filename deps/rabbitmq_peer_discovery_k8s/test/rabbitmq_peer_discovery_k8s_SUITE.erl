@@ -4,7 +4,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbitmq_peer_discovery_k8s_SUITE).
@@ -14,9 +14,14 @@
 -include_lib("eunit/include/eunit.hrl").
 
 
+%% rabbitmq/cluster-operator contains an implicit integration test
+%% for the rabbitmq_peer_discovery_k8s plugin added by
+%% https://github.com/rabbitmq/cluster-operator/pull/704
+
 all() ->
     [
-     {group, unit}
+     {group, unit},
+     {group, lock}
     ].
 
 groups() ->
@@ -31,15 +36,21 @@ groups() ->
                  node_name_suffix_test,
                  registration_support,
                  event_v1_test
-                ]}].
+                ]},
+     {lock, [], [
+                 lock_single_node,
+                 lock_multiple_nodes,
+                 lock_local_node_not_discovered,
+                 lock_list_nodes_fails
+                ]}
+    ].
 
 init_per_testcase(T, Config) when T == node_name_empty_test;
                                   T == node_name_suffix_test ->
     meck:new(net_kernel, [passthrough, unstick]),
     meck:expect(net_kernel, longnames, fun() -> true end),
     Config;
-init_per_testcase(_, Config) ->
-    Config.
+init_per_testcase(_, Config) -> Config.
 
 end_per_testcase(_, _Config) ->
     meck:unload(),
@@ -52,7 +63,7 @@ end_per_testcase(_, _Config) ->
 %%%
 
 registration_support(_Config) ->
-    ?assertEqual(rabbit_peer_discovery_k8s:supports_registration(), true).
+    ?assertEqual(true, rabbit_peer_discovery_k8s:supports_registration()).
 
 extract_node_list_long_test(_Config) ->
     {ok, Response} =
@@ -92,9 +103,10 @@ extract_node_list_with_not_ready_addresses_test(_Config) ->
     {ok, Response}  =
 	rabbit_json:try_decode(
           rabbit_data_coercion:to_binary(
-            "{\"kind\":\"Endpoints\",\"apiVersion\":\"v1\",\"metadata\":{\"name\":\"rabbitmq\",\"namespace\":\"test-rabbitmq\",\"selfLink\":\"\/api\/v1\/namespaces\/test-rabbitmq\/endpoints\/rabbitmq\",\"uid\":\"4ff733b8-3ad2-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170098\",\"creationTimestamp\":\"2017-05-17T07:27:41Z\",\"labels\":{\"app\":\"rabbitmq\",\"type\":\"LoadBalancer\"}},\"subsets\":[{\"notReadyAddresses\":[{\"ip\":\"172.17.0.2\",\"hostname\":\"rabbitmq-0\",\"nodeName\":\"minikube\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"test-rabbitmq\",\"name\":\"rabbitmq-0\",\"uid\":\"e980fe5a-3afd-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170044\"}},{\"ip\":\"172.17.0.4\",\"hostname\":\"rabbitmq-1\",\"nodeName\":\"minikube\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"test-rabbitmq\",\"name\":\"rabbitmq-1\",\"uid\":\"f6285603-3afd-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170071\"}},{\"ip\":\"172.17.0.5\",\"hostname\":\"rabbitmq-2\",\"nodeName\":\"minikube\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"test-rabbitmq\",\"name\":\"rabbitmq-2\",\"uid\":\"fd5a86dc-3afd-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170096\"}}],\"ports\":[{\"name\":\"amqp\",\"port\":5672,\"protocol\":\"TCP\"},{\"name\":\"http\",\"port\":15672,\"protocol\":\"TCP\"}]}]}")),
-    Expectation = [],
-    ?assertEqual(Expectation, rabbit_peer_discovery_k8s:extract_node_list(Response)).
+            "{\"kind\":\"Endpoints\",\"apiVersion\":\"v1\",\"metadata\":{\"name\":\"rabbitmq\",\"namespace\":\"test-rabbitmq\",\"selfLink\":\"\/api\/v1\/namespaces\/test-rabbitmq\/endpoints\/rabbitmq\",\"uid\":\"4ff733b8-3ad2-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170098\",\"creationTimestamp\":\"2017-05-17T07:27:41Z\",\"labels\":{\"app\":\"rabbitmq\",\"type\":\"LoadBalancer\"}},\"subsets\":[{\"addresses\":[{\"ip\":\"10.1.29.8\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"default\",\"name\":\"mariadb-tco7k\",\"uid\":\"fb59cc71-558c-11e6-86e9-ecf4bbd91e6c\",\"resourceVersion\":\"13034802\"}}],\"ports\":[{\"name\":\"mysql\",\"port\":3306,\"protocol\":\"TCP\"}]},{\"notReadyAddresses\":[{\"ip\":\"172.17.0.2\",\"hostname\":\"rabbitmq-0\",\"nodeName\":\"minikube\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"test-rabbitmq\",\"name\":\"rabbitmq-0\",\"uid\":\"e980fe5a-3afd-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170044\"}},{\"ip\":\"172.17.0.4\",\"hostname\":\"rabbitmq-1\",\"nodeName\":\"minikube\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"test-rabbitmq\",\"name\":\"rabbitmq-1\",\"uid\":\"f6285603-3afd-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170071\"}},{\"ip\":\"172.17.0.5\",\"hostname\":\"rabbitmq-2\",\"nodeName\":\"minikube\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"test-rabbitmq\",\"name\":\"rabbitmq-2\",\"uid\":\"fd5a86dc-3afd-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170096\"}}],\"ports\":[{\"name\":\"amqp\",\"port\":5672,\"protocol\":\"TCP\"},{\"name\":\"http\",\"port\":15672,\"protocol\":\"TCP\"}]}]}")),
+    Expectation = [<<"10.1.29.8">>,
+                   <<"172.17.0.2">>, <<"172.17.0.4">>, <<"172.17.0.5">>],
+    ?assertEqual(Expectation, lists:sort(rabbit_peer_discovery_k8s:extract_node_list(Response))).
 
 node_name_empty_test(_Config) ->
     Expectation = 'rabbit@rabbitmq-0',
@@ -130,3 +142,33 @@ event_v1_test(_Config) ->
     ?assertEqual(Expectation, 
 		 rabbit_peer_discovery_k8s:generate_v1_event(<<"namespace">>, "test",  
 							     "Normal", "Reason", "MyMessage", "2019-12-06T15:10:23+00:00", "MyHostName")).
+
+lock_single_node(_Config) ->
+  LocalNode = node(),
+  Nodes = [LocalNode],
+  meck:expect(rabbit_peer_discovery_k8s, list_nodes, 0, {ok, {[LocalNode], disc}}),
+
+  {ok, {LockId, Nodes}} = rabbit_peer_discovery_k8s:lock(LocalNode),
+  ?assertEqual(ok, rabbit_peer_discovery_k8s:unlock({LockId, Nodes})).
+
+lock_multiple_nodes(_Config) ->
+  application:set_env(rabbit, cluster_formation, [{internal_lock_retries, 2}]),
+  LocalNode = node(),
+  OtherNode = other@host,
+  Nodes = [OtherNode, LocalNode],
+  meck:expect(rabbit_peer_discovery_k8s, list_nodes, 0, {ok, {Nodes, disc}}),
+
+  {ok, {{LockResourceId, OtherNode}, Nodes}} = rabbit_peer_discovery_k8s:lock(OtherNode),
+  ?assertEqual({error, "Acquiring lock taking too long, bailing out after 2 retries"}, rabbit_peer_discovery_k8s:lock(LocalNode)),
+  ?assertEqual(ok, rabbitmq_peer_discovery_k8s:unlock({{LockResourceId, OtherNode}, Nodes})),
+  ?assertEqual({ok, {{LockResourceId, LocalNode}, Nodes}}, rabbit_peer_discovery_k8s:lock(LocalNode)),
+  ?assertEqual(ok, rabbitmq_peer_discovery_k8s:unlock({{LockResourceId, LocalNode}, Nodes})).
+
+lock_local_node_not_discovered(_Config) ->
+  meck:expect(rabbit_peer_discovery_k8s, list_nodes, 0, {ok, {[n1@host, n2@host], disc}} ),
+  Expectation = {error, "Local node me@host is not part of discovered nodes [n1@host,n2@host]"},
+  ?assertEqual(Expectation, rabbit_peer_discovery_k8s:lock(me@host)).
+
+lock_list_nodes_fails(_Config) ->
+  meck:expect(rabbit_peer_discovery_k8s, list_nodes, 0, {error, "K8s API unavailable"}),
+  ?assertEqual({error, "K8s API unavailable"}, rabbit_peer_discovery_k8s:lock(me@host)).

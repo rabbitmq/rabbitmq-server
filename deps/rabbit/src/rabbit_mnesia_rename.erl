@@ -2,11 +2,11 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mnesia_rename).
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([rename/2]).
 -export([maybe_finish/1]).
@@ -100,7 +100,7 @@ prepare(Node, NodeMapList) ->
 
     %% Check that we are in the cluster, all old nodes are in the
     %% cluster, and no new nodes are.
-    Nodes = rabbit_mnesia:cluster_nodes(all),
+    Nodes = rabbit_nodes:all(),
     case {FromNodes -- Nodes, ToNodes -- (ToNodes -- Nodes),
           lists:member(Node, Nodes ++ ToNodes)} of
         {[], [], true}  -> ok;
@@ -144,7 +144,7 @@ finish(FromNode, ToNode, AllNodes) ->
             end;
         FromNode ->
             rabbit_log:info(
-              "Abandoning rename from ~s to ~s since we are still ~s~n",
+              "Abandoning rename from ~s to ~s since we are still ~s",
               [FromNode, ToNode, FromNode]),
             [{ok, _} = file:copy(backup_of_conf(F), F) || F <- config_files()],
             ok = rabbit_file:recursive_delete([rabbit_mnesia:dir()]),
@@ -155,18 +155,18 @@ finish(FromNode, ToNode, AllNodes) ->
             %% Boot will almost certainly fail but we might as
             %% well just log this
             rabbit_log:info(
-              "Rename attempted from ~s to ~s but we are ~s - ignoring.~n",
+              "Rename attempted from ~s to ~s but we are ~s - ignoring.",
               [FromNode, ToNode, node()])
     end.
 
 finish_primary(FromNode, ToNode) ->
-    rabbit_log:info("Restarting as primary after rename from ~s to ~s~n",
+    rabbit_log:info("Restarting as primary after rename from ~s to ~s",
                     [FromNode, ToNode]),
     delete_rename_files(),
     ok.
 
 finish_secondary(FromNode, ToNode, AllNodes) ->
-    rabbit_log:info("Restarting as secondary after rename from ~s to ~s~n",
+    rabbit_log:info("Restarting as secondary after rename from ~s to ~s",
                     [FromNode, ToNode]),
     rabbit_upgrade:secondary_upgrade(AllNodes),
     rename_in_running_mnesia(FromNode, ToNode),
@@ -232,7 +232,7 @@ update_term(_NodeMap, Term) ->
     Term.
 
 rename_in_running_mnesia(FromNode, ToNode) ->
-    All = rabbit_mnesia:cluster_nodes(all),
+    All = rabbit_nodes:all(),
     Running = rabbit_nodes:all_running(),
     case {lists:member(FromNode, Running), lists:member(ToNode, All)} of
         {false, true}  -> ok;

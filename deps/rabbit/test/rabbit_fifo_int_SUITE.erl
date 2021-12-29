@@ -9,6 +9,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(RA_EVENT_TIMEOUT, 5000).
+-define(RA_SYSTEM, quorum_queues).
 
 all() ->
     [
@@ -48,6 +49,8 @@ init_per_group(_, Config) ->
     ok = application:set_env(ra, data_dir, PrivDir),
     application:ensure_all_started(ra),
     application:ensure_all_started(lg),
+    SysCfg = ra_system:default_config(),
+    ra_system:start(SysCfg#{name => ?RA_SYSTEM}),
     Config.
 
 end_per_group(_, Config) ->
@@ -61,7 +64,7 @@ init_per_testcase(TestCase, Config) ->
     meck:expect(rabbit_quorum_queue, file_handle_other_reservation, fun () -> ok end),
     meck:expect(rabbit_quorum_queue, cancel_consumer_handler,
                 fun (_, _) -> ok end),
-    ra_server_sup_sup:remove_all(),
+    ra_server_sup_sup:remove_all(?RA_SYSTEM),
     ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
     ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
     ClusterName = rabbit_misc:r("/", queue, atom_to_binary(TestCase, utf8)),
@@ -89,7 +92,7 @@ basics(Config) ->
     {ok, FState1} = rabbit_fifo_client:checkout(CustomerTag, 1, simple_prefetch,
                                                 #{}, FState0),
 
-    ra_log_wal:force_roll_over(ra_log_wal),
+    rabbit_quorum_queue:wal_force_roll_over(node()),
     % create segment the segment will trigger a snapshot
     timer:sleep(1000),
 
@@ -112,8 +115,8 @@ basics(Config) ->
 
     % process settle applied notification
     FState5b = process_ra_event(FState5, ?RA_EVENT_TIMEOUT),
-    _ = ra:stop_server(ServerId),
-    _ = ra:restart_server(ServerId),
+    _ = rabbit_quorum_queue:stop_server(ServerId),
+    _ = rabbit_quorum_queue:restart_server(ServerId),
 
     %% wait for leader change to notice server is up again
     receive
@@ -137,7 +140,7 @@ basics(Config) ->
     after 2000 ->
               exit(await_msg_timeout)
     end,
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 return(Config) ->
@@ -152,7 +155,7 @@ return(Config) ->
     {ok, _, {_, _, MsgId, _, _}, F} = rabbit_fifo_client:dequeue(<<"tag">>, unsettled, F2),
     _F2 = rabbit_fifo_client:return(<<"tag">>, [MsgId], F),
 
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 rabbit_fifo_returns_correlation(Config) ->
@@ -172,7 +175,7 @@ rabbit_fifo_returns_correlation(Config) ->
     after 2000 ->
               exit(await_msg_timeout)
     end,
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 duplicate_delivery(Config) ->
@@ -207,7 +210,7 @@ duplicate_delivery(Config) ->
             end
         end,
     Fun(F2),
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 usage(Config) ->
@@ -223,7 +226,7 @@ usage(Config) ->
     ServerId ! tick_timeout,
     timer:sleep(50),
     Use = rabbit_fifo:usage(element(1, ServerId)),
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ?assert(Use > 0.0),
     ok.
 
@@ -245,7 +248,7 @@ resends_lost_command(Config) ->
     {ok, _, {_, _, _, _, msg1}, F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F4),
     {ok, _, {_, _, _, _, msg2}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
     {ok, _, {_, _, _, _, msg3}, _F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 two_quick_enqueues(Config) ->
@@ -257,7 +260,7 @@ two_quick_enqueues(Config) ->
     F1 = element(2, rabbit_fifo_client:enqueue(msg1, F0)),
     {ok, F2} = rabbit_fifo_client:enqueue(msg2, F1),
     _ = process_ra_events(receive_ra_events(2, 0), F2),
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 detects_lost_delivery(Config) ->
@@ -281,7 +284,7 @@ detects_lost_delivery(Config) ->
 
     % assert three deliveries were received
     {[_, _, _], _, _} = process_ra_events(receive_ra_events(2, 2), F3),
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 returns_after_down(Config) ->
@@ -306,7 +309,7 @@ returns_after_down(Config) ->
     timer:sleep(1000),
     % message should be available for dequeue
     {ok, _, {_, _, _, _, msg1}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F2),
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 resends_after_lost_applied(Config) ->
@@ -331,7 +334,7 @@ resends_after_lost_applied(Config) ->
     {ok, _, {_, _, _, _, msg1}, F6} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F5),
     {ok, _, {_, _, _, _, msg2}, F7} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F6),
     {ok, _, {_, _, _, _, msg3}, _F8} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F7),
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 handles_reject_notification(Config) ->
@@ -355,8 +358,8 @@ handles_reject_notification(Config) ->
 
     % the applied notification
     _F2 = process_ra_events(receive_ra_events(1, 0), F1),
-    ra:stop_server(ServerId1),
-    ra:stop_server(ServerId2),
+    rabbit_quorum_queue:stop_server(ServerId1),
+    rabbit_quorum_queue:stop_server(ServerId2),
     ok.
 
 discard(Config) ->
@@ -373,7 +376,7 @@ discard(Config) ->
                          #{queue_resource => discard,
                            dead_letter_handler =>
                            {?MODULE, dead_letter_handler, [self()]}}}},
-    _ = ra:start_server(Conf),
+    _ = rabbit_quorum_queue:start_server(Conf),
     ok = ra:trigger_election(ServerId),
     _ = ra:members(ServerId),
 
@@ -391,7 +394,7 @@ discard(Config) ->
               flush(),
               exit(dead_letter_timeout)
     end,
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 cancel_checkout(Config) ->
@@ -455,7 +458,7 @@ untracked_enqueue(Config) ->
     timer:sleep(100),
     F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
     {ok, _, {_, _, _, _, msg1}, _F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F0),
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 
@@ -470,7 +473,7 @@ flow(Config) ->
     {slow, F4} = rabbit_fifo_client:enqueue(m4, F3),
     {_, _, F5} = process_ra_events(receive_ra_events(4, 0), F4),
     {ok, _} = rabbit_fifo_client:enqueue(m5, F5),
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 test_queries(Config) ->
@@ -504,7 +507,7 @@ test_queries(Config) ->
                                              fun rabbit_fifo:query_processes/1),
     ?assertEqual(2, length(Processes)),
     P ! stop,
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 dead_letter_handler(Pid, Msgs) ->
@@ -527,7 +530,7 @@ dequeue(Config) ->
     {_, _, F4} = process_ra_events(receive_ra_events(1, 0), F4_),
     {ok, _, {_, _, MsgId, _, msg2}, F5} = rabbit_fifo_client:dequeue(Tag, unsettled, F4),
     {_F6, _A} = rabbit_fifo_client:settle(Tag, [MsgId], F5),
-    ra:stop_server(ServerId),
+    rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
 conf(ClusterName, UId, ServerId, _, Peers) ->
@@ -641,7 +644,8 @@ validate_process_down(Name, Num) ->
     end.
 
 start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
-    {ok, Started, _} = ra:start_cluster(ClusterName#resource.name,
+    {ok, Started, _} = ra:start_cluster(?RA_SYSTEM,
+                                        ClusterName#resource.name,
                                         {module, rabbit_fifo, RaFifoConfig},
                                         ServerIds),
     ?assertEqual(length(Started), length(ServerIds)),

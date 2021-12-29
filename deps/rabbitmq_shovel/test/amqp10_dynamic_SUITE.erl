@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(amqp10_dynamic_SUITE).
@@ -45,9 +45,7 @@ groups() ->
 init_per_suite(Config0) ->
     {ok, _} = application:ensure_all_started(amqp10_client),
     rabbit_ct_helpers:log_environment(),
-    Config = rabbit_ct_helpers:merge_app_env(Config0,
-                                             [{lager, [{error_logger_hwm, 200}]}]),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
+    Config1 = rabbit_ct_helpers:set_config(Config0, [
         {rmq_nodename_suffix, ?MODULE}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1,

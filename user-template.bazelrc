@@ -1,0 +1,17 @@
+build --@bazel-erlang//:erlang_home=/Users/rabbitmq/kerl/24.0
+build --@bazel-erlang//:erlang_version=24.0
+build --//:elixir_home=/Users/rabbitmq/.kiex/elixirs/elixir-1.12.0/lib/elixir
+
+# rabbitmqctl wait shells out to 'ps', which is broken in the bazel macOS
+# sandbox (https://github.com/bazelbuild/bazel/issues/7448)
+# adding "--spawn_strategy=local" to the invocation is a workaround
+build --spawn_strategy=local
+
+# don't re-run flakes automatically on the local machine
+build --flaky_test_attempts=1
+
+build:buildbuddy --remote_header=x-buildbuddy-api-key=YOUR_API_KEY
+
+# cross compile for linux (if on macOS) with rbe
+build:rbe --host_cpu=k8
+build:rbe --cpu=k8

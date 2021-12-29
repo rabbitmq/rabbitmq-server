@@ -1,0 +1,99 @@
+load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlc")
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "RABBITMQ_TEST_ERLC_OPTS",
+    "assert_suites",
+    "broker_for_integration_suites",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+)
+
+APP_NAME = "rabbitmq_web_mqtt"
+
+APP_DESCRIPTION = "RabbitMQ MQTT-over-WebSockets adapter"
+
+APP_MODULE = "rabbit_web_mqtt_app"
+
+APP_ENV = """[
+	    {tcp_config, [{port, 15675}]},
+	    {ssl_config, []},
+	    {num_tcp_acceptors, 10},
+	    {num_ssl_acceptors, 10},
+	    {cowboy_opts, []},
+	    {proxy_protocol, false}
+	  ]"""
+
+BUILD_DEPS = [
+    "//deps/amqp_client:bazel_erlang_lib",
+    "@ranch//:bazel_erlang_lib",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "@cowboy//:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbitmq_mqtt:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+xref(tags = ["xref"])
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)
+
+broker_for_integration_suites()
+
+PACKAGE = "deps/rabbitmq_web_mqtt"
+
+erlc(
+    name = "test_utils",
+    srcs = glob(["test/src/*.erl"]),
+    hdrs = glob(["test/src/*.hrl"]),
+    dest = "test",
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+)
+
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "proxy_protocol_SUITE",
+        additional_beam = [":test_utils"],
+        additional_hdrs = glob(["test/src/*.hrl"]),
+        erlc_opts = [
+            "-I deps/rabbitmq_web_mqtt/test",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "system_SUITE",
+        additional_beam = [":test_utils"],
+        additional_hdrs = glob(["test/src/*.hrl"]),
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

@@ -11,16 +11,21 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
 
+import static com.rabbitmq.stream.TestUtils.ResponseConditions.ok;
+import static com.rabbitmq.stream.TestUtils.waitAtMost;
+import static com.rabbitmq.stream.TestUtils.waitUntil;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 import com.rabbitmq.stream.codec.WrapperMessageBuilder;
 import com.rabbitmq.stream.impl.Client;
+import com.rabbitmq.stream.impl.Client.ClientParameters;
+import com.rabbitmq.stream.impl.Client.Response;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
@@ -31,9 +36,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @ExtendWith(TestUtils.StreamTestInfrastructureExtension.class)
 public class FailureTest {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(FailureTest.class);
 
   TestUtils.ClientFactory cf;
   String stream;
@@ -62,8 +71,12 @@ public class FailureTest {
     Client.StreamMetadata streamMetadata = metadata.get(stream);
     assertThat(streamMetadata).isNotNull();
 
+    waitUntil(() -> client.metadata(stream).get(stream).getReplicas().size() == 2);
+
+    streamMetadata = client.metadata(stream).get(stream);
     assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
     assertThat(streamMetadata.getReplicas()).isNotEmpty();
+
     Client.Broker replica = streamMetadata.getReplicas().get(0);
     assertThat(replica.getPort()).isNotEqualTo(TestUtils.streamPortNode1());
 
@@ -79,8 +92,8 @@ public class FailureTest {
                     (publisherId, publishingId) -> confirmLatch.get().countDown()));
     String message = "all nodes available";
     messages.add(message);
+    publisher.declarePublisher((byte) 1, null, stream);
     publisher.publish(
-        stream,
         (byte) 1,
         Collections.singletonList(
             publisher.messageBuilder().addData(message.getBytes(StandardCharsets.UTF_8)).build()));
@@ -98,8 +111,8 @@ public class FailureTest {
 
       assertThat(metadataLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
-      //   wait until there's a new leader
-      TestUtils.waitAtMost(
+      // wait until there's a new leader
+      waitAtMost(
           Duration.ofSeconds(10),
           () -> {
             Client.StreamMetadata m = publisher.metadata(stream).get(stream);
@@ -109,8 +122,9 @@ public class FailureTest {
       confirmLatch.set(new CountDownLatch(1));
       message = "2 nodes available";
       messages.add(message);
+
+      publisher.declarePublisher((byte) 1, null, stream);
       publisher.publish(
-          stream,
           (byte) 1,
           Collections.singletonList(
               publisher
@@ -124,10 +138,12 @@ public class FailureTest {
     }
 
     // wait until all the replicas are there
-    TestUtils.waitAtMost(
-        Duration.ofSeconds(5),
+    waitAtMost(
+        Duration.ofSeconds(10),
         () -> {
+          LOGGER.info("Getting metadata for {}", stream);
           Client.StreamMetadata m = publisher.metadata(stream).get(stream);
+          LOGGER.info("Metadata for {} (expecting 2 replicas): {}", stream, m);
           return m.getReplicas().size() == 2;
         });
 
@@ -135,26 +151,25 @@ public class FailureTest {
     message = "all nodes are back";
     messages.add(message);
     publisher.publish(
-        stream,
         (byte) 1,
         Collections.singletonList(
             publisher.messageBuilder().addData(message.getBytes(StandardCharsets.UTF_8)).build()));
     assertThat(confirmLatch.get().await(10, TimeUnit.SECONDS)).isTrue();
     confirmLatch.set(null);
 
-    CountDownLatch consumeLatch = new CountDownLatch(2);
+    CountDownLatch consumeLatch = new CountDownLatch(messages.size());
     Set<String> bodies = ConcurrentHashMap.newKeySet();
     Client consumer =
         cf.get(
             new Client.ClientParameters()
                 .port(TestUtils.streamPortNode1())
                 .messageListener(
-                    (subscriptionId, offset, msg) -> {
+                    (subscriptionId, offset, chunkTimestamp, msg) -> {
                       bodies.add(new String(msg.getBodyAsBinary(), StandardCharsets.UTF_8));
                       consumeLatch.countDown();
                     }));
 
-    TestUtils.waitAtMost(
+    waitAtMost(
         Duration.ofSeconds(5),
         () -> {
           Client.Response response =
@@ -162,9 +177,7 @@ public class FailureTest {
           return response.isOk();
         });
     assertThat(consumeLatch.await(10, TimeUnit.SECONDS)).isTrue();
-    assertThat(bodies)
-        .hasSize(3)
-        .contains("all nodes available", "2 nodes available", "all nodes are back");
+    assertThat(bodies).hasSameSizeAs(messages).containsAll(messages);
   }
 
   @Test
@@ -211,7 +224,7 @@ public class FailureTest {
                       cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode2()));
                   // wait until there's a new leader
                   try {
-                    TestUtils.waitAtMost(
+                    waitAtMost(
                         Duration.ofSeconds(5),
                         () -> {
                           Client.StreamMetadata m = locator.metadata(stream).get(stream);
@@ -233,6 +246,7 @@ public class FailureTest {
 
                   generation.incrementAndGet();
                   published.clear();
+                  newPublisher.declarePublisher((byte) 1, null, stream);
                   publisher.set(newPublisher);
                   connected.set(true);
 
@@ -249,6 +263,7 @@ public class FailureTest {
                 .shutdownListener(shutdownListener)
                 .publishConfirmListener(publishConfirmListener));
 
+    client.declarePublisher((byte) 1, null, stream);
     publisher.set(client);
 
     AtomicBoolean keepPublishing = new AtomicBoolean(true);
@@ -270,10 +285,7 @@ public class FailureTest {
                       .build();
               try {
                 long publishingId =
-                    publisher
-                        .get()
-                        .publish(stream, (byte) 1, Collections.singletonList(message))
-                        .get(0);
+                    publisher.get().publish((byte) 1, Collections.singletonList(message)).get(0);
                 published.put(publishingId, message);
               } catch (Exception e) {
                 // keep going
@@ -307,7 +319,7 @@ public class FailureTest {
 
     Client metadataClient = cf.get(new Client.ClientParameters().port(TestUtils.streamPortNode2()));
     // wait until all the replicas are there
-    TestUtils.waitAtMost(
+    waitAtMost(
         Duration.ofSeconds(5),
         () -> {
           Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
@@ -333,7 +345,7 @@ public class FailureTest {
                     (client1, subscriptionId, offset, messageCount, dataSize) ->
                         client1.credit(subscriptionId, 1))
                 .messageListener(
-                    (subscriptionId, offset, message) -> {
+                    (subscriptionId, offset, chunkTimestamp, message) -> {
                       consumed.add(message);
                       generations.add((Long) message.getApplicationProperties().get("generation"));
                       if (consumed.size() == confirmed.size()) {
@@ -343,7 +355,7 @@ public class FailureTest {
 
     Client.Response response =
         consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
-    assertThat(response.isOk()).isTrue();
+    assertThat(response).is(ok());
 
     assertThat(consumedLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(generations).hasSize(2).contains(0L, 1L);
@@ -365,6 +377,10 @@ public class FailureTest {
     Client.StreamMetadata streamMetadata = metadata.get(stream);
     assertThat(streamMetadata).isNotNull();
 
+    waitUntil(() -> metadataClient.metadata(stream).get(stream).getReplicas().size() == 2);
+
+    metadata = metadataClient.metadata(stream);
+    streamMetadata = metadata.get(stream);
     assertThat(streamMetadata.getLeader()).isNotNull();
     assertThat(streamMetadata.getLeader().getPort()).isEqualTo(TestUtils.streamPortNode1());
 
@@ -389,6 +405,7 @@ public class FailureTest {
                 .port(streamMetadata.getLeader().getPort())
                 .publishConfirmListener(publishConfirmListener));
 
+    publisher.declarePublisher((byte) 1, null, stream);
     AtomicLong generation = new AtomicLong(0);
     AtomicLong sequence = new AtomicLong(0);
     AtomicBoolean keepPublishing = new AtomicBoolean(true);
@@ -408,7 +425,7 @@ public class FailureTest {
                     .build();
             try {
               long publishingId =
-                  publisher.publish(stream, (byte) 1, Collections.singletonList(message)).get(0);
+                  publisher.publish((byte) 1, Collections.singletonList(message)).get(0);
               published.put(publishingId, message);
             } catch (Exception e) {
               // keep going
@@ -430,7 +447,7 @@ public class FailureTest {
     Set<Long> generations = ConcurrentHashMap.newKeySet();
     Set<Long> consumedIds = ConcurrentHashMap.newKeySet();
     Client.MessageListener messageListener =
-        (subscriptionId, offset, message) -> {
+        (subscriptionId, offset, chunkTimestamp, message) -> {
           consumed.add(message);
           generations.add((Long) message.getApplicationProperties().get("generation"));
           consumedIds.add(message.getProperties().getMessageIdAsLong());
@@ -484,7 +501,7 @@ public class FailureTest {
 
     Client.Response response =
         consumer.subscribe((byte) 1, stream, OffsetSpecification.first(), 10);
-    assertThat(response.isOk()).isTrue();
+    assertThat(response).is(ok());
 
     // let's publish for a bit of time
     Thread.sleep(2000);
@@ -508,8 +525,8 @@ public class FailureTest {
     confirmedCount = confirmed.size();
 
     // wait until all the replicas are there
-    TestUtils.waitAtMost(
-        Duration.ofSeconds(5),
+    waitAtMost(
+        Duration.ofSeconds(10),
         () -> {
           Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
           return m.getReplicas().size() == 2;
@@ -522,9 +539,9 @@ public class FailureTest {
 
     keepPublishing.set(false);
 
-    assertThat(publishingLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(publishingLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
-    TestUtils.waitAtMost(Duration.ofSeconds(5), () -> consumed.size() >= confirmed.size());
+    waitAtMost(Duration.ofSeconds(10), () -> consumed.size() >= confirmed.size());
 
     assertThat(generations).hasSize(2).contains(0L, 1L);
     assertThat(consumed).hasSizeGreaterThanOrEqualTo(confirmed.size());
@@ -537,5 +554,34 @@ public class FailureTest {
     assertThat(lastMessageId).isPositive().isLessThanOrEqualTo(sequence.get());
 
     confirmedIds.forEach(confirmedId -> assertThat(consumedIds).contains(confirmedId));
+  }
+
+  @Test
+  void declarePublisherShouldNotReturnStreamDoesNotExistOnRestart() throws Exception {
+    try {
+      Host.rabbitmqctl("stop_app");
+    } finally {
+      Host.rabbitmqctl("start_app");
+    }
+    AtomicReference<Client> client = new AtomicReference<>();
+    waitUntil(
+        () -> {
+          try {
+            client.set(cf.get(new ClientParameters().port(TestUtils.streamPortNode1())));
+          } catch (Exception e) {
+
+          }
+          return client.get() != null;
+        });
+    Set<Short> responseCodes = ConcurrentHashMap.newKeySet();
+
+    waitUntil(
+        () -> {
+          Response response = client.get().declarePublisher((byte) 0, null, stream);
+          responseCodes.add(response.getResponseCode());
+          return response.isOk();
+        });
+
+    assertThat(responseCodes).doesNotContain(Constants.RESPONSE_CODE_STREAM_DOES_NOT_EXIST);
   }
 }

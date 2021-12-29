@@ -2,18 +2,18 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(dynamic_qq_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -import(quorum_queue_utils, [wait_for_messages_ready/3,
                              ra_name/1]).
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -57,27 +57,33 @@ end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config) ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
-    ClusterSize = ?config(rmq_nodes_count, Config),
-    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
-    Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-    Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Testcase},
-        {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
-        {queue_name, Q},
-        {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
-      ]),
-    Config2 = rabbit_ct_helpers:run_steps(
-                Config1,
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
-        ok ->
-            Config2;
-        Skip ->
-            end_per_testcase(Testcase, Config2),
-            Skip
+    case rabbit_ct_helpers:is_mixed_versions() andalso
+         Testcase == quorum_unaffected_after_vhost_failure of
+        true ->
+            {skip, "test case not mixed versions compatible"};
+        false ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase),
+            ClusterSize = ?config(rmq_nodes_count, Config),
+            TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
+            Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
+            Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
+            Config1 = rabbit_ct_helpers:set_config(Config, [
+                                                            {rmq_nodename_suffix, Testcase},
+                                                            {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
+                                                            {queue_name, Q},
+                                                            {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
+                                                           ]),
+            Config2 = rabbit_ct_helpers:run_steps(
+                        Config1,
+                        rabbit_ct_broker_helpers:setup_steps() ++
+                        rabbit_ct_client_helpers:setup_steps()),
+            case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
+                ok ->
+                    Config2;
+                Skip ->
+                    end_per_testcase(Testcase, Config2),
+                    Skip
+            end
     end.
 
 end_per_testcase(Testcase, Config) ->
@@ -197,7 +203,7 @@ quorum_unaffected_after_vhost_failure(Config) ->
     ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
 
 recover_follower_after_standalone_restart(Config) ->
-    case os:getenv("SECONDARY_UMBRELLA") of
+    case rabbit_ct_helpers:is_mixed_versions() of
       false ->
             %% Tests that followers can be brought up standalone after forgetting the
             %% rest of the cluster. Consensus won't be reached as there is only one node in the

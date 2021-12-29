@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(frame_SUITE).
@@ -38,7 +38,8 @@ all() ->
     header_value_with_cr,
     header_value_with_colon,
     headers_escaping_roundtrip,
-    headers_escaping_roundtrip_without_trailing_lf
+    headers_escaping_roundtrip_without_trailing_lf,
+    stream_offset_header
     ].
 
 parse_simple_frame(_) ->
@@ -161,6 +162,24 @@ header_value_with_colon(_) ->
                  #stomp_frame{ command     = "COMMAND",
                                headers     = [{"header", "val:ue"}],
                                body_iolist = []}).
+
+stream_offset_header(_) ->
+    TestCases = [
+        {{"x-stream-offset", "first"}, {longstr, <<"first">>}},
+        {{"x-stream-offset", "last"}, {longstr, <<"last">>}},
+        {{"x-stream-offset", "next"}, {longstr, <<"next">>}},
+        {{"x-stream-offset", "offset=5000"}, {long, 5000}},
+        {{"x-stream-offset", "timestamp=1000"}, {timestamp, 1000}},
+        {{"x-stream-offset", "foo"}, undefined},
+        {{"some-header", "some value"}, undefined}
+    ],
+
+    lists:foreach(fun({Header, Expected}) ->
+        ?assertEqual(
+            Expected,
+            rabbit_stomp_frame:stream_offset_header(#stomp_frame{headers = [Header]}, undefined)
+            )
+    end, TestCases).
 
 test_frame_serialization(Expected, TrailingLF) ->
     {ok, Frame, _} = parse(Expected),

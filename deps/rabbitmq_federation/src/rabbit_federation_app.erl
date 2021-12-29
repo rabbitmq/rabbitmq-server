@@ -2,16 +2,18 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_federation_app).
+
+-include("rabbit_federation.hrl").
 
 -behaviour(application).
 -export([start/2, stop/1]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
-%% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
+%% http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
 
 %% All of our actual server processes are supervised by
 %% rabbit_federation_sup, which is started by a rabbit_boot_step
@@ -27,12 +29,18 @@
 -export([init/1]).
 
 start(_Type, _StartArgs) ->
-    rabbit_federation_exchange_link:go(),
-    rabbit_federation_queue_link:go(),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
+    rabbit_federation_pg:stop_scope(),
     ok.
+
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, {{one_for_one, 3, 10}, []}}.
+init([]) ->
+    Flags = #{
+        strategy  => one_for_one,
+        intensity => 3,
+        period    => 10
+    },
+    {ok, {Flags, []}}.

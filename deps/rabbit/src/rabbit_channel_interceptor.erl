@@ -2,13 +2,13 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_channel_interceptor).
 
--include("rabbit_framing.hrl").
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([init/1, intercept_in/3]).
 
@@ -29,7 +29,7 @@
 -callback init(rabbit_channel:channel()) -> interceptor_state().
 -callback intercept(original_method(), original_content(),
                     interceptor_state()) ->
-    {processed_method(), processed_content()} |
+    {processed_method(), processed_content()} | rabbit_types:amqp_error() |
     rabbit_misc:channel_or_connection_exit().
 -callback applies_to() -> list(method_name()).
 
@@ -53,8 +53,7 @@ check_no_overlap1(Sets) ->
                     case sets:size(Is) of
                         0 -> ok;
                         _ ->
-                            internal_error("Interceptor: more than one "
-                                                "module handles ~p~n", [Is])
+                            internal_error("Interceptor: more than one module handles ~p", [Is])
                       end,
                     sets:union(Set, Union)
                 end,
@@ -89,7 +88,9 @@ validate_response(Mod, M1, C1, R = {M2, C2}) ->
                                 "content iff content is provided but "
                                 "content in = ~p; content out = ~p",
                            [Mod, C1, C2])
-    end.
+    end;
+validate_response(_Mod, _M1, _C1, AMQPError = #amqp_error{}) ->
+    internal_error(AMQPError).
 
 validate_method(M, M2) ->
     rabbit_misc:method_record_type(M) =:= rabbit_misc:method_record_type(M2).
@@ -99,6 +100,12 @@ validate_content(#content{}, #content{}) -> true;
 validate_content(_, _) -> false.
 
 %% keep dialyzer happy
--spec internal_error(string(), [any()]) -> no_return().
+-spec internal_error(rabbit_types:amqp_error()) ->
+  rabbit_misc:channel_or_connection_exit().
+internal_error(AMQPError = #amqp_error{}) ->
+    rabbit_misc:protocol_error(AMQPError).
+
+-spec internal_error(string(), [any()]) ->
+  rabbit_misc:channel_or_connection_exit().
 internal_error(Format, Args) ->
     rabbit_misc:protocol_error(internal_error, Format, Args).

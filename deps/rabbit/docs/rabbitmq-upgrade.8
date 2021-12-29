@@ -1,11 +1,11 @@
 .\" vim:ft=nroff:
-.\" This Source Code Form is subject to the terms of the Mozilla Public 
+.\" This Source Code Form is subject to the terms of the Mozilla Public
 .\" License, v. 2.0. If a copy of the MPL was not distributed with this
 .\" file, You can obtain one at https://mozilla.org/MPL/2.0/.
 .\"
-.\" Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+.\" Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 .\"
-.Dd September 28, 2019
+.Dd June 19, 2021
 .Dt RABBITMQ-UPGRADE 8
 .Os "RabbitMQ Server"
 .Sh NAME
@@ -92,6 +92,27 @@ Displays general help and commands supported by
 .It Cm post_upgrade
 .Pp
 Runs post-upgrade tasks. In the current version, it performs the rebalance of mirrored and quorum queues across all nodes in the cluster.
+.\" ------------------------------------
+.It Cm await_online_quorum_plus_one
+.Pp
+Waits for all quorum queues to have an above minimum online quorum.
+This makes sure that no queues would lose their quorum if the target node is shut down.
+.\" ------------------------------------
+.It Cm drain
+.Pp
+Puts the node in maintenance mode. Such nodes will not serve any
+client traffic or considered for hosting any queue leader replicas.
+.Pp
+To learn more, see the
+.Lk https://www.rabbitmq.com/upgrade.html#maintenance-mode "RabbitMQ Upgrade guide"
+.\" ------------------------------------
+.It Cm revive
+.Pp
+Puts the node out of maintenance and into regular operating mode.
+Such nodes will again serve client traffic and considered for queue leader replica placement.
+.Pp
+To learn more, see the
+.Lk https://www.rabbitmq.com/upgrade.html#maintenance-mode "RabbitMQ Upgrade guide"
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
 .\" ------------------------------------------------------------------

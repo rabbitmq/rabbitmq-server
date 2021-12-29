@@ -2,12 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_auth_cache_ets_segmented_stateless).
 -behaviour(gen_server).
 -behaviour(rabbit_auth_cache).
+
+-include("rabbit_auth_backend_cache.hrl").
 
 -export([start_link/1,
          get/1, put/3, delete/1]).
@@ -90,7 +92,7 @@ segment(Expiration, SegmentSize) ->
     End.
 
 add_segment(Segment) ->
-    gen_server:call(?MODULE, {add_segment, Segment}).
+    gen_server:call(?MODULE, {add_segment, Segment}, ?CACHE_OPERATION_TIMEOUT).
 
 do_add_segment(Segment) ->
     case ets:lookup(?SEGMENT_TABLE, Segment) of

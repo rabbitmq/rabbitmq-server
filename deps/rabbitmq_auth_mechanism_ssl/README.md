@@ -63,6 +63,33 @@ or from an existing amqps connection with commands like:
 rabbitmqctl list_connections peer_cert_subject
 ```
 
+#### Subject Alternative Name
+
+To extract username from a Subject Alternative Name (SAN) field, a few
+settings need to be configured. Since a certificate can have more than
+one SAN field and they can represent identities of different types,
+the type and the index of the field to use must be provided.
+
+For example, to use the first SAN value of type DNS:
+
+``` ini
+auth_mechanisms.1 = EXTERNAL
+
+ssl_cert_login_from      = subject_alternative_name
+ssl_cert_login_san_type  = dns
+ssl_cert_login_san_index = 0
+```
+
+Or of type email:
+
+``` ini
+auth_mechanisms.1 = EXTERNAL
+
+ssl_cert_login_from      = subject_alternative_name
+ssl_cert_login_san_type  = email
+ssl_cert_login_san_index = 0
+```
+
 #### Common Name
 
 To use the Common Name instead, set `rabbit.ssl_cert_login_from` to `common_name`:
@@ -79,8 +106,28 @@ the internal node database by default but could include other
 backends if so configured.
 
 
+## Usage for MQTT Clients
+
+To use this plugin with MQTT clients, set `mqtt.ssl_cert_login` to `true`:
+
+``` ini
+# It makes no sense to allow or expect anonymous client connections
+# with certificate-based authentication 
+mqtt.allow_anonymous = false
+
+# require the peer to provide a certificate, enforce certificate exchange
+ssl_options.verify = verify_peer
+ssl_options.fail_if_no_peer_cert = true
+
+# allow MQTT connections to compute their name from client certificate's CN
+# (for simplicity: CN has been deprecated in favor of SAN for a long time)
+mqtt.ssl_cert_login = true
+ssl_cert_login_from = common_name
+```
+
+
 ## Copyright & License
 
-(c) 2007-2020 VMware, Inc. or its affiliates.
+(c) 2007-2021 VMware, Inc. or its affiliates.
 
 Released under the same license as RabbitMQ.

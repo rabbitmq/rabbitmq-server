@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_shovel_dyn_worker_sup).
@@ -17,6 +17,18 @@
 -define(SUPERVISOR, ?MODULE).
 
 start_link(Name, Config) ->
+    ShovelParameter = rabbit_shovel_util:get_shovel_parameter(Name),
+    maybe_start_link(ShovelParameter, Name, Config).
+
+maybe_start_link(not_found, _Name, _Config) ->
+    %% See rabbitmq/rabbitmq-server#2655.
+    %% All dynamic shovels require that their associated parameter is present.
+    %% If not, this shovel has been deleted and stale child spec information
+    %% may still reside in the supervisor.
+    %%
+    %% We return 'ignore' to ensure that the child is not [re-]added in such case.
+    ignore;
+maybe_start_link(_, Name, Config) ->
     supervisor2:start_link(?MODULE, [Name, Config]).
 
 %%----------------------------------------------------------------------------
@@ -40,7 +52,6 @@ init([Name, Config0]) ->
         %% reconnect-delay = 0 means "do not reconnect"
         _                                  -> temporary
     end,
-
     {ok, {{one_for_one, 1, ?MAX_WAIT},
           [{Name,
             {rabbit_shovel_worker, start_link, [dynamic, Name, Config]},

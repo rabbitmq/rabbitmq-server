@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_amqp1_0_reader).
@@ -84,7 +84,7 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
-conserve_resources(Pid, Source, Conserve) ->
+conserve_resources(Pid, Source, {_, Conserve, _}) ->
     Pid ! {conserve_resources, Source, Conserve},
     ok.
 
@@ -104,8 +104,12 @@ recvloop(Deb, State = #v1{connection_state = blocked}) ->
     mainloop(Deb, State);
 recvloop(Deb, State = #v1{sock = Sock, recv_len = RecvLen, buf_len = BufLen})
   when BufLen < RecvLen ->
-    ok = rabbit_net:setopts(Sock, [{active, once}]),
-    mainloop(Deb, State#v1{pending_recv = true});
+    case rabbit_net:setopts(Sock, [{active, once}]) of
+        ok ->
+            mainloop(Deb, State#v1{pending_recv = true});
+        {error, Reason} ->
+            throw({inet_error, Reason})
+    end;
 recvloop(Deb, State = #v1{recv_len = RecvLen, buf = Buf, buf_len = BufLen}) ->
     {Data, Rest} = split_binary(case Buf of
                                     [B] -> B;
@@ -204,7 +208,7 @@ switch_callback(State, Callback, Length) ->
 terminate(Reason, State) when ?IS_RUNNING(State) ->
     {normal, handle_exception(State, 0,
                               {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                               "Connection forced: ~p~n", [Reason]})};
+                               "Connection forced: ~p", [Reason]})};
 terminate(_Reason, State) ->
     {force, State}.
 
@@ -247,7 +251,7 @@ handle_dependent_exit(ChPid, Reason, State) ->
         {Channel, uncontrolled} ->
             {RealReason, Trace} = Reason,
             R = {?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                 "Session error: ~p~n~p~n", [RealReason, Trace]},
+                 "Session error: ~p~n~p", [RealReason, Trace]},
             maybe_close(handle_exception(control_throttle(State), Channel, R))
     end.
 
@@ -275,13 +279,13 @@ error_frame(Condition, Fmt, Args) ->
 
 handle_exception(State = #v1{connection_state = closed}, Channel,
                  #'v1_0.error'{description = {utf8, Desc}}) ->
-    rabbit_log_connection:error("AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
+    rabbit_log_connection:error("Error on AMQP 1.0 connection ~p (~p), channel ~p:~n~p",
         [self(), closed, Channel, Desc]),
     State;
 handle_exception(State = #v1{connection_state = CS}, Channel,
                  ErrorFrame = #'v1_0.error'{description = {utf8, Desc}})
   when ?IS_RUNNING(State) orelse CS =:= closing ->
-    rabbit_log_connection:error("AMQP 1.0 connection ~p (~p), channel ~p - error:~n~p~n",
+    rabbit_log_connection:error("Error on AMQP 1.0 connection ~p (~p), channel ~p:~n~p",
         [self(), CS, Channel, Desc]),
     %% TODO: session errors shouldn't force the connection to close
     State1 = close_connection(State),
@@ -317,11 +321,11 @@ handle_1_0_frame(Mode, Channel, Payload, State) ->
             %% section 2.8.15 in http://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-complete-v1.0-os.pdf
             handle_exception(State, 0, error_frame(
                                          ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                                         "Access for user '~s' was refused: insufficient permissions~n", [Username]));
+                                         "Access for user '~s' was refused: insufficient permissions", [Username]));
         _:Reason:Trace ->
             handle_exception(State, 0, error_frame(
                                          ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                         "Reader error: ~p~n~p~n",
+                                         "Reader error: ~p~n~p",
                                          [Reason, Trace]))
     end.
 
@@ -346,12 +350,12 @@ handle_1_0_frame0(Mode, Channel, Payload, State) ->
 parse_1_0_frame(Payload, _Channel) ->
     {PerfDesc, Rest} = amqp10_binary_parser:parse(Payload),
     Perf = amqp10_framing:decode(PerfDesc),
-    ?DEBUG("Channel ~p ->~n~p~n~s~n",
+    ?DEBUG("Channel ~p ->~n~p~n~s",
            [_Channel, amqp10_framing:pprint(Perf),
             case Rest of
                 <<>> -> <<>>;
                 _    -> rabbit_misc:format(
-                          "  followed by ~p bytes of content~n", [size(Rest)])
+                          "  followed by ~p bytes of content", [size(Rest)])
             end]),
     case Rest of
         <<>> -> Perf;
@@ -789,8 +793,8 @@ socket_info(Get, Select, #v1{sock = Sock}) ->
         {error, _} -> ''
     end.
 
-ssl_info(F, #v1{sock = Sock}) ->
-    case rabbit_net:ssl_info(Sock) of
+ssl_info(F, #v1{sock = Sock, proxy_socket = ProxySock}) ->
+    case rabbit_net:proxy_ssl_info(Sock, ProxySock) of
         nossl       -> '';
         {error, _}  -> '';
         {ok, Items} ->

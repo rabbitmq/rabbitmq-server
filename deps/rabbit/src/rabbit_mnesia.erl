@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mnesia).
@@ -69,7 +69,7 @@ init() ->
     case is_virgin_node() of
         true  ->
             rabbit_log:info("Node database directory at ~ts is empty. "
-                            "Assuming we need to join an existing cluster or initialise from scratch...~n",
+                            "Assuming we need to join an existing cluster or initialise from scratch...",
                             [dir()]),
             rabbit_peer_discovery:log_configured_backend(),
             rabbit_peer_discovery:maybe_init(),
@@ -105,21 +105,18 @@ init_with_lock(Retries, Timeout, RunPeerDiscovery) ->
     rabbit_log:debug("rabbit_peer_discovery:lock returned ~p", [LockResult]),
     case LockResult of
         not_supported ->
-            rabbit_log:info("Peer discovery backend does not support locking, falling back to randomized delay"),
-            %% See rabbitmq/rabbitmq-server#1202 for details.
-            rabbit_peer_discovery:maybe_inject_randomized_delay(),
             RunPeerDiscovery(),
             rabbit_peer_discovery:maybe_register();
-        {error, _Reason} ->
-            timer:sleep(Timeout),
-            init_with_lock(Retries - 1, Timeout, RunPeerDiscovery);
         {ok, Data} ->
             try
                 RunPeerDiscovery(),
                 rabbit_peer_discovery:maybe_register()
             after
                 rabbit_peer_discovery:unlock(Data)
-            end
+            end;
+        {error, _Reason} ->
+            timer:sleep(Timeout),
+            init_with_lock(Retries - 1, Timeout, RunPeerDiscovery)
     end.
 
 -spec run_peer_discovery() -> ok | {[node()], node_type()}.
@@ -155,7 +152,7 @@ run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
                 e(invalid_cluster_nodes_conf)
         end,
     DiscoveredNodes = lists:usort(DiscoveredNodes0),
-    rabbit_log:info("All discovered existing cluster peers: ~s~n",
+    rabbit_log:info("All discovered existing cluster peers: ~s",
                     [rabbit_peer_discovery:format_discovered_nodes(DiscoveredNodes)]),
     Peers = nodes_excl_me(DiscoveredNodes),
     case Peers of
@@ -165,7 +162,7 @@ run_peer_discovery_with_retries(RetriesLeft, DelayInterval) ->
                             "Enabling debug logging might help troubleshoot."),
             init_db_and_upgrade([node()], disc, false, _Retry = true);
         _  ->
-            rabbit_log:info("Peer nodes we can cluster with: ~s~n",
+            rabbit_log:info("Peer nodes we can cluster with: ~s",
                 [rabbit_peer_discovery:format_discovered_nodes(Peers)]),
             join_discovered_peers(Peers, NodeType)
     end.
@@ -178,22 +175,22 @@ join_discovered_peers(TryNodes, NodeType) ->
     join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterval).
 
 join_discovered_peers_with_retries(TryNodes, _NodeType, 0, _DelayInterval) ->
-    rabbit_log:warning(
+    rabbit_log:info(
               "Could not successfully contact any node of: ~s (as in Erlang distribution). "
-               "Starting as a blank standalone node...~n",
+               "Starting as a blank standalone node...",
                 [string:join(lists:map(fun atom_to_list/1, TryNodes), ",")]),
             init_db_and_upgrade([node()], disc, false, _Retry = true);
 join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterval) ->
     case find_reachable_peer_to_cluster_with(nodes_excl_me(TryNodes)) of
         {ok, Node} ->
-            rabbit_log:info("Node '~s' selected for auto-clustering~n", [Node]),
+            rabbit_log:info("Node '~s' selected for auto-clustering", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
             init_db_and_upgrade(DiscNodes, NodeType, true, _Retry = true),
             rabbit_connection_tracking:boot(),
             rabbit_node_monitor:notify_joined_cluster();
         none ->
             RetriesLeft1 = RetriesLeft - 1,
-            rabbit_log:error("Trying to join discovered peers failed. Will retry after a delay of ~b ms, ~b retries left...",
+            rabbit_log:info("Trying to join discovered peers failed. Will retry after a delay of ~b ms, ~b retries left...",
                             [DelayInterval, RetriesLeft1]),
             timer:sleep(DelayInterval),
             join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft1, DelayInterval)
@@ -237,7 +234,7 @@ join_cluster(DiscoveryNode, NodeType) ->
                     reset_gracefully(),
 
                     %% Join the cluster
-                    rabbit_log:info("Clustering with ~p as ~p node~n",
+                    rabbit_log:info("Clustering with ~p as ~p node",
                                     [ClusterNodes, NodeType]),
                     ok = init_db_with_mnesia(ClusterNodes, NodeType,
                                              true, true, _Retry = true),
@@ -252,7 +249,7 @@ join_cluster(DiscoveryNode, NodeType) ->
             %% do we think so ourselves?
             case are_we_clustered_with(DiscoveryNode) of
                 true ->
-                    rabbit_log:info("Asked to join a cluster but already a member of it: ~p~n", [ClusterNodes]),
+                    rabbit_log:info("Asked to join a cluster but already a member of it: ~p", [ClusterNodes]),
                     {ok, already_member};
                 false ->
                     Msg = format_inconsistent_cluster_message(DiscoveryNode, node()),
@@ -269,14 +266,14 @@ join_cluster(DiscoveryNode, NodeType) ->
 
 reset() ->
     ensure_mnesia_not_running(),
-    rabbit_log:info("Resetting Rabbit~n", []),
+    rabbit_log:info("Resetting Rabbit", []),
     reset_gracefully().
 
 -spec force_reset() -> 'ok'.
 
 force_reset() ->
     ensure_mnesia_not_running(),
-    rabbit_log:info("Resetting Rabbit forcefully~n", []),
+    rabbit_log:info("Resetting Rabbit forcefully", []),
     wipe().
 
 reset_gracefully() ->
@@ -336,7 +333,7 @@ update_cluster_nodes(DiscoveryNode) ->
             %% nodes
             mnesia:delete_schema([node()]),
             rabbit_node_monitor:write_cluster_status(Status),
-            rabbit_log:info("Updating cluster nodes from ~p~n",
+            rabbit_log:info("Updating cluster nodes from ~p",
                             [DiscoveryNode]),
             init_db_with_mnesia(AllNodes, node_type(), true, true, _Retry = false);
         false ->
@@ -367,7 +364,7 @@ forget_cluster_node(Node, RemoveWhenOffline, EmitNodeDeletedEvent) ->
         {true,   true} -> e(online_node_offline_flag);
         {false, false} -> e(offline_node_no_offline_flag);
         {false,  true} -> rabbit_log:info(
-                            "Removing node ~p from cluster~n", [Node]),
+                            "Removing node ~p from cluster", [Node]),
                           case remove_node_if_mnesia_running(Node) of
                               ok when EmitNodeDeletedEvent ->
                                   rabbit_event:notify(node_deleted, [{node, Node}]),
@@ -814,7 +811,7 @@ schema_ok_or_move() ->
             %% started yet
             rabbit_log:warning("schema integrity check failed: ~p~n"
                                "moving database to backup location "
-                               "and recreating schema from scratch~n",
+                               "and recreating schema from scratch",
                                [Reason]),
             ok = move_db(),
             ok = create_schema()
@@ -848,7 +845,7 @@ move_db() ->
         ok ->
             %% NB: we cannot use rabbit_log here since it may not have
             %% been started yet
-            rabbit_log:warning("moved database from ~s to ~s~n",
+            rabbit_log:warning("moved database from ~s to ~s",
                                [MnesiaDir, BackupDir]),
             ok;
         {error, Reason} -> throw({error, {cannot_backup_mnesia,
@@ -895,7 +892,7 @@ leave_cluster(Node) ->
     end.
 
 wait_for(Condition) ->
-    rabbit_log:info("Waiting for ~p...~n", [Condition]),
+    rabbit_log:info("Waiting for ~p...", [Condition]),
     timer:sleep(1000).
 
 start_mnesia(CheckConsistency) ->
@@ -1019,6 +1016,7 @@ is_virgin_node() ->
             IgnoredFiles0 =
             [rabbit_node_monitor:cluster_status_filename(),
              rabbit_node_monitor:running_nodes_filename(),
+             rabbit_node_monitor:coordination_filename(),
              rabbit_node_monitor:default_quorum_filename(),
              rabbit_node_monitor:quorum_filename(),
              rabbit_feature_flags:enabled_feature_flags_list_file()],
@@ -1040,15 +1038,15 @@ find_reachable_peer_to_cluster_with([Node | Nodes]) ->
            end,
     case remote_node_info(Node) of
         {badrpc, _} = Reason ->
-            Fail("~p~n", [Reason]);
+            Fail("~p", [Reason]);
         %% old delegate hash check
         {_OTP, RMQ, Hash, _} when is_binary(Hash) ->
-            Fail("version ~s~n", [RMQ]);
+            Fail("version ~s", [RMQ]);
         {_OTP, _RMQ, _Protocol, {error, _} = E} ->
-            Fail("~p~n", [E]);
+            Fail("~p", [E]);
         {OTP, RMQ, Protocol, _} ->
             case check_consistency(Node, OTP, RMQ, Protocol) of
-                {error, _} -> Fail("versions ~p~n",
+                {error, _} -> Fail("versions ~p",
                                    [{OTP, RMQ}]);
                 ok         -> {ok, Node}
             end

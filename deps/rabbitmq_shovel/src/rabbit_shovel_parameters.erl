@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_shovel_parameters).
@@ -13,8 +13,9 @@
 
 -export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0, parse/3]).
+-export([obfuscate_uris_in_definition/1]).
 
--import(rabbit_misc, [pget/2, pget/3]).
+-import(rabbit_misc, [pget/2, pget/3, pset/3]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "shovel parameters"},
@@ -82,6 +83,16 @@ validate_amqp091_src(Def) ->
              ok
      end].
 
+obfuscate_uris_in_definition(Def) ->
+  SrcURIs  = get_uris(<<"src-uri">>, Def),
+  ObfuscatedSrcURIsDef = pset(<<"src-uri">>, obfuscate_uris(SrcURIs), Def),
+  DestURIs  = get_uris(<<"dest-uri">>, Def),
+  ObfuscatedDef = pset(<<"dest-uri">>, obfuscate_uris(DestURIs), ObfuscatedSrcURIsDef),
+  ObfuscatedDef.
+
+obfuscate_uris(URIs) ->
+  [credentials_obfuscation:encrypt(URI) || URI <- URIs].
+
 validate_amqp091_dest(Def) ->
     [case pget2(<<"dest-exchange">>, <<"dest-queue">>, Def) of
          zero -> ok;
@@ -116,12 +127,14 @@ amqp10_src_validation(_Def, User) ->
 
 amqp091_src_validation(_Def, User) ->
     [
-     {<<"src-uri">>,         validate_uri_fun(User), mandatory},
-     {<<"src-exchange">>,    fun rabbit_parameter_validation:binary/2,optional},
-     {<<"src-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
-     {<<"src-queue">>,       fun rabbit_parameter_validation:binary/2,optional},
-     {<<"prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
-     {<<"src-prefetch-count">>,  fun rabbit_parameter_validation:number/2,optional},
+     {<<"src-uri">>,          validate_uri_fun(User), mandatory},
+     {<<"src-exchange">>,     fun rabbit_parameter_validation:binary/2, optional},
+     {<<"src-exchange-key">>, fun rabbit_parameter_validation:binary/2, optional},
+     {<<"src-queue">>,        fun rabbit_parameter_validation:binary/2, optional},
+     {<<"src-queue-args">>,   fun validate_queue_args/2, optional},
+     {<<"src-consumer-args">>, fun validate_consumer_args/2, optional},
+     {<<"prefetch-count">>,   fun rabbit_parameter_validation:number/2, optional},
+     {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      %% a deprecated pre-3.7 setting
      {<<"delete-after">>, fun validate_delete_after/2, optional},
      %% currently used multi-protocol friend name, introduced in 3.7
@@ -150,7 +163,8 @@ amqp091_dest_validation(_Def, User) ->
     [{<<"dest-uri">>,        validate_uri_fun(User), mandatory},
      {<<"dest-exchange">>,   fun rabbit_parameter_validation:binary/2,optional},
      {<<"dest-exchange-key">>,fun rabbit_parameter_validation:binary/2,optional},
-     {<<"dest-queue">>,      fun rabbit_parameter_validation:binary/2,optional},
+     {<<"dest-queue">>,      fun rabbit_parameter_validation:amqp091_queue_name/2,optional},
+     {<<"dest-queue-args">>, fun validate_queue_args/2, optional},
      {<<"add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2,optional},
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2,optional},
@@ -205,6 +219,16 @@ validate_delete_after(_Name, N) when is_integer(N) -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~s should be number, \"never\" or \"queue-length\", actually was "
      "~p", [Name, Term]}.
+
+validate_queue_args(Name, Term0) ->
+    Term = rabbit_data_coercion:to_proplist(Term0),
+
+    rabbit_parameter_validation:proplist(Name, rabbit_amqqueue:declare_args(), Term).
+
+validate_consumer_args(Name, Term0) ->
+    Term = rabbit_data_coercion:to_proplist(Term0),
+
+    rabbit_parameter_validation:proplist(Name, rabbit_amqqueue:consume_args(), Term).
 
 validate_amqp10_map(Name, Terms0) ->
     Terms = rabbit_data_coercion:to_proplist(Terms0),
@@ -266,7 +290,7 @@ parse_dest(VHostName, ClusterName, Def, SourceHeaders) ->
     end.
 
 parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
-    Uris = get_uris(<<"dest-uri">>, Def),
+    Uris = deobfuscated_uris(<<"dest-uri">>, Def),
     Address = pget(<<"dest-address">>, Def),
     Properties =
         rabbit_data_coercion:to_proplist(
@@ -292,14 +316,15 @@ parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
      }.
 
 parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
-    DestURIs = get_uris(<<"dest-uri">>,      Def),
-    DestX    = pget(<<"dest-exchange">>,     Def, none),
-    DestXKey = pget(<<"dest-exchange-key">>, Def, none),
-    DestQ    = pget(<<"dest-queue">>,        Def, none),
+    DestURIs  = deobfuscated_uris(<<"dest-uri">>,      Def),
+    DestX     = pget(<<"dest-exchange">>,     Def, none),
+    DestXKey  = pget(<<"dest-exchange-key">>, Def, none),
+    DestQ     = pget(<<"dest-queue">>,        Def, none),
+    DestQArgs = pget(<<"dest-queue-args">>,   Def, #{}),
     DestDeclFun = fun (Conn, _Ch) ->
                       case DestQ of
                           none -> ok;
-                          _ -> ensure_queue(Conn, DestQ)
+                          _ -> ensure_queue(Conn, DestQ, rabbit_misc:to_amqp_table(DestQArgs))
                       end
               end,
     {X, Key} = case DestQ of
@@ -359,7 +384,7 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
                 }, Details).
 
 parse_amqp10_source(Def) ->
-    Uris = get_uris(<<"src-uri">>, Def),
+    Uris = deobfuscated_uris(<<"src-uri">>, Def),
     Address = pget(<<"src-address">>, Def),
     DeleteAfter = pget(<<"src-delete-after">>, Def, <<"never">>),
     PrefetchCount = pget(<<"src-prefetch-count">>, Def, 1000),
@@ -368,13 +393,16 @@ parse_amqp10_source(Def) ->
        uris => Uris,
        source_address => Address,
        delete_after => opt_b2a(DeleteAfter),
-       prefetch_count => PrefetchCount}, Headers}.
+       prefetch_count => PrefetchCount,
+       consumer_args => []}, Headers}.
 
 parse_amqp091_source(Def) ->
-    SrcURIs = get_uris(<<"src-uri">>, Def),
-    SrcX = pget(<<"src-exchange">>,Def, none),
-    SrcXKey = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
-    SrcQ = pget(<<"src-queue">>, Def, none),
+    SrcURIs  = deobfuscated_uris(<<"src-uri">>, Def),
+    SrcX     = pget(<<"src-exchange">>,Def, none),
+    SrcXKey  = pget(<<"src-exchange-key">>, Def, <<>>), %% [1]
+    SrcQ     = pget(<<"src-queue">>, Def, none),
+    SrcQArgs = pget(<<"src-queue-args">>,   Def, #{}),
+    SrcCArgs = rabbit_misc:to_amqp_table(pget(<<"src-consumer-args">>, Def, [])),
     {SrcDeclFun, Queue, DestHeaders} =
     case SrcQ of
         none -> {fun (_Conn, Ch) ->
@@ -385,7 +413,7 @@ parse_amqp091_source(Def) ->
                  end, <<>>, [{<<"src-exchange">>,     SrcX},
                              {<<"src-exchange-key">>, SrcXKey}]};
         _ -> {fun (Conn, _Ch) ->
-                      ensure_queue(Conn, SrcQ)
+                      ensure_queue(Conn, SrcQ, rabbit_misc:to_amqp_table(SrcQArgs))
               end, SrcQ, [{<<"src-queue">>, SrcQ}]}
     end,
     DeleteAfter = pget(<<"src-delete-after">>, Def,
@@ -402,7 +430,8 @@ parse_amqp091_source(Def) ->
                   resource_decl => SrcDeclFun,
                   queue => Queue,
                   delete_after => opt_b2a(DeleteAfter),
-                  prefetch_count => PrefetchCount
+                  prefetch_count => PrefetchCount,
+                  consumer_args => SrcCArgs
                  }, Details), DestHeaders}.
 
 get_uris(Key, Def) ->
@@ -412,19 +441,25 @@ get_uris(Key, Def) ->
            end,
     [binary_to_list(URI) || URI <- URIs].
 
+deobfuscated_uris(Key, Def) ->
+    ObfuscatedURIs = pget(Key, Def),
+    URIs = [credentials_obfuscation:decrypt(ObfuscatedURI) || ObfuscatedURI <- ObfuscatedURIs],
+    [binary_to_list(URI) || URI <- URIs].
+
 translate_ack_mode(<<"on-confirm">>) -> on_confirm;
 translate_ack_mode(<<"on-publish">>) -> on_publish;
 translate_ack_mode(<<"no-ack">>)     -> no_ack.
 
-ensure_queue(Conn, Queue) ->
+ensure_queue(Conn, Queue, XArgs) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     try
         amqp_channel:call(Ch, #'queue.declare'{queue   = Queue,
                                                passive = true})
     catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
             {ok, Ch2} = amqp_connection:open_channel(Conn),
-            amqp_channel:call(Ch2, #'queue.declare'{queue   = Queue,
-                                                    durable = true}),
+            amqp_channel:call(Ch2, #'queue.declare'{queue     = Queue,
+                                                    durable   = true,
+                                                    arguments = XArgs}),
             catch amqp_channel:close(Ch2)
 
     after

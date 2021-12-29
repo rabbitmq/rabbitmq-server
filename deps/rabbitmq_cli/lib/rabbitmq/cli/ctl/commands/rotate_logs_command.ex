@@ -2,10 +2,10 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.RotateLogsCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
+  alias RabbitMQ.CLI.Core.{DocGuide, ExitCodes}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -13,8 +13,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RotateLogsCommand do
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], %{node: node_name}) do
-    :rabbit_misc.rpc_call(node_name, :rabbit, :rotate_logs, [])
+  def run([], _) do
+    {
+      :error,
+      ExitCodes.exit_unavailable(),
+      "This command does not rotate logs anymore [deprecated]"
+    }
   end
   use RabbitMQ.CLI.DefaultOutput
 
@@ -28,7 +32,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.RotateLogsCommand do
 
   def help_section(), do: :node_management
 
-  def description(), do: "Instructs the RabbitMQ node to perform internal log rotation"
+  def description(), do: "Does nothing [deprecated]"
 
-  def banner(_, %{node: node_name}), do: "Rotating logs for node #{node_name} ..."
+  def banner(_, _), do: nil
 end

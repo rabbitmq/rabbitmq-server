@@ -1,0 +1,74 @@
+load("@bazel-erlang//:xref.bzl", "xref")
+load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "rabbitmq_integration_suite",
+    "rabbitmq_lib",
+)
+
+APP_NAME = "rabbitmq_shovel_management"
+
+APP_DESCRIPTION = "Management extension for the Shovel plugin"
+
+BUILD_DEPS = [
+    "//deps/amqp_client:bazel_erlang_lib",
+    "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+]
+
+DEPS = [
+    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbitmq_management:bazel_erlang_lib",
+]
+
+RUNTIME_DEPS = [
+    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbitmq_shovel:bazel_erlang_lib",
+]
+
+rabbitmq_lib(
+    app_description = APP_DESCRIPTION,
+    app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
+
+xref(tags = ["xref"])
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = "//:base_plt",
+    tags = ["dialyze"],
+)
+
+rabbitmq_home(
+    name = "broker-for-tests-home",
+    plugins = [
+        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
+        ":bazel_erlang_lib",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-tests-run",
+    home = ":broker-for-tests-home",
+)
+
+PACKAGE = "deps/rabbitmq_shovel_management"
+
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "http_SUITE",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

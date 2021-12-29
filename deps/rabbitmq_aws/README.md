@@ -34,7 +34,16 @@ The credentials values have the following precedence:
  - Environment variables
  - Credentials file
  - EC2 Instance Metadata Service
- 
+
+### EC2 Instance Metadata Service Versions
+
+There are two versions of the EC2 Instance Metadata Service (IMDS) that are available by default on EC2 instances; IMDSv1 and IMDSv2 which is protected by session authentication
+and [adds defenses against additional vulnerabilities](https://aws.amazon.com/blogs/security/defense-in-depth-open-firewalls-reverse-proxies-ssrf-vulnerabilities-ec2-instance-metadata-service/).
+AWS recommends adopting IMDSv2 and disabling IMDSv1 [by configuring the Instance Metadata Service on the EC2 instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html).
+
+By default *rabbitmq-aws* will attempt to use IMDSv2 first and will fallback to use IMDSv1 if calls to IMDSv2 fail. This behavior can be overridden
+by setting the ``aws.prefer_imdsv2`` setting to ``false``.
+
 ### Environment Variables
 
 As with the AWS CLI, the following environment variables can be used to provide 
@@ -53,7 +62,9 @@ configuration or to impact configuration behavior:
  ---------------------------------------|--------------------------------------------------------------------------------------------
  ``rabbitmq_aws:set_region/1``          | Manually specify the AWS region to make requests to.
  ``rabbitmq_aws:set_credentials/2``     | Manually specify the request credentials to use.
- ``rabbitmq_aws:refresh_credentials/0`` | Refresh the credentials from the environment, filesystem, or EC2 Instance Metadata service.
+ ``rabbitmq_aws:refresh_credentials/0`` | Refresh the credentials from the environment, filesystem, or EC2 Instance Metadata Service.
+ ``rabbitmq_aws:ensure_imdsv2_token_valid/0`` | Make sure EC2 IMDSv2 token is active and valid.
+ ``rabbitmq_aws:api_get_request/2``           | Perform an AWS service API request.
  ``rabbitmq_aws:get/2``                 | Perform a GET request to the API specifying the service and request path.
  ``rabbitmq_aws:get/3``                 | Perform a GET request specifying the service, path, and headers.
  ``rabbitmq_aws:post/4``                | Perform a POST request specifying the service, path, headers, and body.
@@ -65,7 +76,7 @@ configuration or to impact configuration behavior:
 ## Example Usage
 
 The following example assumes that you either have locally configured credentials or that
-you're using the AWS Instance Metadata service for credentials:
+you're using the EC2 Instance Metadata Service for credentials:
 
 ```erlang
 application:start(rabbitmq_aws).

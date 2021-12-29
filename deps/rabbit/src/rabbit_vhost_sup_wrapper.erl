@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2017-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2017-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% This module is a wrapper around vhost supervisor to
@@ -10,7 +10,7 @@
 
 -module(rabbit_vhost_sup_wrapper).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(supervisor2).
 -export([init/1]).

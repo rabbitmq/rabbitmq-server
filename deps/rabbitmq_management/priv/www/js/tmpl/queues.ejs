@@ -45,8 +45,8 @@
 <% if (show_column('queues', 'consumers')) { %>
     <th><%= fmt_sort('Consumers',    'consumers') %></th>
 <% } %>
-<% if (show_column('queues', 'consumer_utilisation')) { %>
-    <th><%= fmt_sort('Consumer utilisation', 'consumer_utilisation') %></th>
+<% if (show_column('queues', 'consumer_capacity')) { %>
+    <th><%= fmt_sort('Consumer capacity', 'consumer_capacity') %></th>
 <% } %>
 <% if (show_column('queues', 'state')) { %>
     <th><%= fmt_sort('State',        'state') %></th>
@@ -157,8 +157,8 @@
 <% if (show_column('queues', 'consumers')) { %>
    <td class="c"><%= fmt_string(queue.consumers) %></td>
 <% } %>
-<% if (show_column('queues', 'consumer_utilisation')) { %>
-   <td class="c"><%= fmt_percent(queue.consumer_utilisation) %></td>
+<% if (show_column('queues', 'consumer_capacity')) { %>
+   <td class="c"><%= fmt_percent(queue.consumer_capacity) %></td>
 <% } %>
 <% if (show_column('queues', 'state')) { %>
    <td class="c"><%= fmt_object_state(queue) %></td>
@@ -337,7 +337,7 @@
                 <% } %>
                 <% if (queue_type == "stream") { %>
                   <span class="argument-link" field="arguments" key="x-max-age" type="string">Max time retention</span><span class="help" id="queue-max-age"></span>
-                  | <span class="argument-link" field="arguments" key="x-max-segment-size" type="number">Max segment size</span><span class="help" id="queue-max-segment-size"></span>
+                  | <span class="argument-link" field="arguments" key="x-stream-max-segment-size-bytes" type="number">Max segment size in bytes</span><span class="help" id="queue-stream-max-segment-size-bytes"></span>
                   | <span class="argument-link" field="arguments" key="x-initial-cluster-size" type="number">Initial cluster size</span><span class="help" id="queue-initial-cluster-size"></span>
                   | <span class="argument-link" field="arguments" key="x-queue-leader-locator" type="string">Leader locator</span><span class="help" id="queue-leader-locator"></span>
                 <% } %>

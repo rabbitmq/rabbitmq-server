@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(rabbit_mgmt_metrics_collector).
 
@@ -26,7 +26,8 @@
 -import(rabbit_mgmt_data, [lookup_element/3]).
 
 -record(state, {table, interval, policies, rates_mode, lookup_queue,
-                lookup_exchange, old_aggr_stats}).
+                lookup_exchange, old_aggr_stats,
+                filter_aggregated_queue_metrics_pattern}).
 
 %% Data is stored in ETS tables:
 %% * One ETS table per metric (queue_stats, channel_stats_deliver_stats...)
@@ -59,7 +60,7 @@ reset_lookups(Table) ->
     gen_server:call(name(Table), reset_lookups, infinity).
 
 init([Table]) ->
-    {RatesMode, Policies} = load_config(),
+    {RatesMode, Policies, FilterPattern} = load_config(),
     Policy = retention_policy(Table),
     Interval = take_smaller(proplists:get_value(Policy, Policies, [])) * 1000,
     erlang:send_after(Interval, self(), collect_metrics),
@@ -70,7 +71,8 @@ init([Table]) ->
                 rates_mode = RatesMode,
                 old_aggr_stats = #{},
                 lookup_queue = fun queue_exists/1,
-                lookup_exchange = fun exchange_exists/1}}.
+                lookup_exchange = fun exchange_exists/1,
+                filter_aggregated_queue_metrics_pattern = FilterPattern}}.
 
 handle_call(reset_lookups, _From, State) ->
     {reply, ok, State#state{lookup_queue = fun queue_exists/1,
@@ -463,19 +465,19 @@ aggregate_entry({Name, Ready, Unack, Msgs, Red}, NextStats, Ops0,
                 #state{table = queue_coarse_metrics,
                        old_aggr_stats = Old,
                        policies = {BPolicies, _, GPolicies},
-                       lookup_queue = QueueFun} = State) ->
+                       lookup_queue = QueueFun,
+                       filter_aggregated_queue_metrics_pattern = Pattern} = State) ->
     Stats = ?vhost_msg_stats(Ready, Unack, Msgs),
     Diff = get_difference(Name, Stats, State),
-    Ops1 = insert_entry_ops(vhost_msg_stats, vhost(Name), true, Diff, Ops0,
-                            GPolicies),
+    Ops1 = maybe_insert_entry_ops(Name, Pattern, vhost_msg_stats, vhost(Name),
+                                  true, Diff, Ops0, GPolicies),
     Ops2 = case QueueFun(Name) of
                true ->
                    QPS =?queue_process_stats(Red),
                    O1 = insert_entry_ops(queue_process_stats, Name, false, QPS,
                                          Ops1, BPolicies),
                    QMS = ?queue_msg_stats(Ready, Unack, Msgs),
-                   insert_entry_ops(queue_msg_stats, Name, false, QMS,
-                                    O1, BPolicies);
+                   insert_entry_ops(queue_msg_stats, Name, false, QMS, O1, BPolicies);
                _ ->
                    Ops1
            end,
@@ -583,6 +585,17 @@ insert_entry_op(Table, Key, Entry, Ops) ->
                                      end, {insert_entry, Entry}, TableOps0),
     maps:put(Table, TableOps, Ops).
 
+maybe_insert_entry_ops(Name, Pattern, Table, Id, Incr, Entry, Ops, Policies) ->
+    case needs_filtering_out(Name, Pattern) of
+        true -> Ops;
+        false -> insert_entry_ops(Table, Id, Incr, Entry, Ops, Policies)
+    end.
+
+needs_filtering_out(_, undefined) ->
+    false;
+needs_filtering_out(#resource{name = Name}, Pattern) ->
+    match == re:run(Name, Pattern, [{capture, none}]).
+
 insert_entry_ops(Table, Id, Incr, Entry, Ops, Policies) ->
     lists:foldl(fun({Size, Interval}, Acc) ->
                         Key = {Id, Size, Interval, Incr},
@@ -688,7 +701,8 @@ index_table(node_node_coarse_stats, node) -> node_node_coarse_stats_node_index.
 load_config() ->
     RatesMode = rabbit_mgmt_agent_config:get_env(rates_mode),
     Policies = rabbit_mgmt_agent_config:get_env(sample_retention_policies, []),
-    {RatesMode, Policies}.
+    FilterPattern = rabbit_mgmt_agent_config:get_env(filter_aggregated_queue_metrics_pattern),
+    {RatesMode, Policies, FilterPattern}.
 
 ceil(X) when X < 0 ->
     trunc(X);

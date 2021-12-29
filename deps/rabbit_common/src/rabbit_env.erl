@@ -2,12 +2,15 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2019-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2019-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_env).
 
 -include_lib("kernel/include/file.hrl").
+-include_lib("kernel/include/logger.hrl").
+
+-include("logging.hrl").
 
 -export([get_context/0,
          get_context/1,
@@ -16,6 +19,9 @@
          get_context_after_logging_init/1,
          get_context_after_reloading_env/1,
          dbg_config/0,
+         env_vars/0,
+         has_var_been_overridden/1,
+         has_var_been_overridden/2,
          get_used_env_vars/0,
          log_process_env/0,
          log_context/1,
@@ -28,6 +34,14 @@
          value_is_yes/1]).
 -endif.
 
+%% Vary from OTP version to version.
+-ignore_xref([
+    {os, env, 0},
+    {os, list_env_vars, 0}
+]).
+%% Relies on functions only available in certain OTP versions.
+-dialyzer({nowarn_function, [env_vars/0]}).
+
 -define(USED_ENV_VARS,
         [
          "RABBITMQ_ALLOW_INPUT",
@@ -37,9 +51,13 @@
          "RABBITMQ_CONFIG_FILE",
          "RABBITMQ_CONFIG_FILES",
          "RABBITMQ_DBG",
+         "RABBITMQ_DEFAULT_PASS",
+         "RABBITMQ_DEFAULT_USER",
+         "RABBITMQ_DEFAULT_VHOST",
          "RABBITMQ_DIST_PORT",
          "RABBITMQ_ENABLED_PLUGINS",
          "RABBITMQ_ENABLED_PLUGINS_FILE",
+         "RABBITMQ_ERLANG_COOKIE",
          "RABBITMQ_FEATURE_FLAGS",
          "RABBITMQ_FEATURE_FLAGS_FILE",
          "RABBITMQ_HOME",
@@ -65,6 +83,10 @@
          "RABBITMQ_USE_LONGNAME",
          "SYS_PREFIX"
         ]).
+
+-export_type([context/0]).
+
+-type context() :: map().
 
 get_context() ->
     Context0 = get_context_before_logging_init(),
@@ -134,6 +156,10 @@ get_context_after_reloading_env(Context) ->
              fun plugins_expand_dir/1,
              fun enabled_plugins_file/1,
              fun enabled_plugins/1,
+             fun default_vhost/1,
+             fun default_user/1,
+             fun default_pass/1,
+             fun erlang_cookie/1,
              fun maybe_stop_dist_for_remote_query/1,
              fun amqp_ipaddr/1,
              fun amqp_tcp_port/1,
@@ -210,33 +236,50 @@ update_context(Context, Key, Value, Origin)
     Context#{Key => Value,
              var_origins => #{Key => Origin}}.
 
+env_vars() ->
+    case erlang:function_exported(os, list_env_vars, 0) of
+        true  -> os:list_env_vars(); %% OTP < 24
+        false -> os:env()            %% OTP >= 24
+    end.
+
+has_var_been_overridden(Var) ->
+    has_var_been_overridden(get_context(), Var).
+
+has_var_been_overridden(#{var_origins := Origins}, Var) ->
+    case maps:get(Var, Origins, default) of
+        default -> false;
+        _       -> true
+    end.
+
 get_used_env_vars() ->
     lists:filter(
       fun({Var, _}) -> var_is_used(Var) end,
-      lists:sort(os:list_env_vars())).
+      lists:sort(env_vars())).
 
 log_process_env() ->
-    rabbit_log_prelaunch:debug("Process environment:"),
+    ?LOG_DEBUG("Process environment:"),
     lists:foreach(
       fun({Var, Value}) ->
-              rabbit_log_prelaunch:debug("  - ~s = ~ts", [Var, Value])
-      end, lists:sort(os:list_env_vars())).
+              ?LOG_DEBUG("  - ~s = ~ts", [Var, Value])
+      end, lists:sort(env_vars())).
 
 log_context(Context) ->
-    rabbit_log_prelaunch:debug("Context (based on environment variables):"),
+    ?LOG_DEBUG("Context (based on environment variables):"),
     lists:foreach(
       fun(Key) ->
               Value = maps:get(Key, Context),
-              rabbit_log_prelaunch:debug("  - ~s: ~p", [Key, Value])
+              ?LOG_DEBUG("  - ~s: ~p", [Key, Value])
       end,
       lists:sort(maps:keys(Context))).
 
 context_to_app_env_vars(Context) ->
-    rabbit_log_prelaunch:debug(
-      "Setting default application environment variables:"),
+    ?LOG_DEBUG(
+      "Setting default application environment variables:",
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     Fun = fun({App, Param, Value}) ->
-                  rabbit_log_prelaunch:debug(
-                    "  - ~s:~s = ~p", [App, Param, Value]),
+                  ?LOG_DEBUG(
+                     "  - ~s:~s = ~p", [App, Param, Value],
+                     #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                   ok = application:set_env(
                          App, Param, Value, [{persistent, true}])
           end,
@@ -608,6 +651,18 @@ parse_log_levels([CategoryValue | Rest], Result) ->
         ["-color"] ->
             Result1 = Result#{color => false},
             parse_log_levels(Rest, Result1);
+        ["+json"] ->
+            Result1 = Result#{json => true},
+            parse_log_levels(Rest, Result1);
+        ["-json"] ->
+            Result1 = Result#{json => false},
+            parse_log_levels(Rest, Result1);
+        ["+single_line"] ->
+            Result1 = Result#{single_line => true},
+            parse_log_levels(Rest, Result1);
+        ["-single_line"] ->
+            Result1 = Result#{single_line => false},
+            parse_log_levels(Rest, Result1);
         [CategoryOrLevel] ->
             case parse_level(CategoryOrLevel) of
                 undefined ->
@@ -662,8 +717,14 @@ main_log_file(#{nodename := Nodename,
             File= filename:join(LogBaseDir,
                                 atom_to_list(Nodename) ++ ".log"),
             update_context(Context, main_log_file, File, default);
-        "-" ->
-            update_context(Context, main_log_file, "-", environment);
+        "-"  = Value ->
+            update_context(Context, main_log_file, Value, environment);
+        "-stderr" = Value ->
+            update_context(Context, main_log_file, Value, environment);
+        "exchange:" ++ _ = Value ->
+            update_context(Context, main_log_file, Value, environment);
+        "syslog:" ++ _ = Value ->
+            update_context(Context, main_log_file, Value, environment);
         Value ->
             File = normalize_path(Value),
             update_context(Context, main_log_file, File, environment)
@@ -1171,9 +1232,10 @@ amqp_tcp_port(Context) ->
                 update_context(Context, amqp_tcp_port, TcpPort, environment)
             catch
                 _:badarg ->
-                    rabbit_log_prelaunch:error(
-                      "Invalid value for $RABBITMQ_NODE_PORT: ~p",
-                      [TcpPortStr]),
+                    ?LOG_ERROR(
+                       "Invalid value for $RABBITMQ_NODE_PORT: ~p",
+                       [TcpPortStr],
+                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     throw({exit, ex_config})
             end
     end.
@@ -1190,9 +1252,10 @@ erlang_dist_tcp_port(#{amqp_tcp_port := AmqpTcpPort} = Context) ->
                                erlang_dist_tcp_port, TcpPort, environment)
             catch
                 _:badarg ->
-                    rabbit_log_prelaunch:error(
-                      "Invalid value for $RABBITMQ_DIST_PORT: ~p",
-                      [TcpPortStr]),
+                    ?LOG_ERROR(
+                       "Invalid value for $RABBITMQ_DIST_PORT: ~p",
+                       [TcpPortStr],
+                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     throw({exit, ex_config})
             end
     end.
@@ -1391,6 +1454,62 @@ motd_file_from_node(#{from_remote_node := Remote} = Context) ->
     end.
 
 %% -------------------------------------------------------------------
+%%
+%% RABBITMQ_DEFAULT_VHOST
+%%   Override the default virtual host.
+%%   Default: unset (i.e. <<"/">>)
+%%
+%% RABBITMQ_DEFAULT_USER
+%%   Override the default username.
+%%   Default: unset (i.e. <<"guest">>).
+%%
+%% RABBITMQ_MOTD_FILE
+%%   Override the default user's password.
+%%   Default: unset (i.e. <<"guest">>).
+
+default_vhost(Context) ->
+    case get_prefixed_env_var("RABBITMQ_DEFAULT_VHOST") of
+        false ->
+            update_context(Context, default_vhost, undefined, default);
+        Value ->
+            VHost = list_to_binary(Value),
+            update_context(Context, default_vhost, VHost, environment)
+    end.
+
+default_user(Context) ->
+    case get_prefixed_env_var("RABBITMQ_DEFAULT_USER") of
+        false ->
+            update_context(Context, default_user, undefined, default);
+        Value ->
+            Username = list_to_binary(Value),
+            update_context(Context, default_user, Username, environment)
+    end.
+
+default_pass(Context) ->
+    case get_prefixed_env_var("RABBITMQ_DEFAULT_PASS") of
+        false ->
+            update_context(Context, default_pass, undefined, default);
+        Value ->
+            Password = list_to_binary(Value),
+            update_context(Context, default_pass, Password, environment)
+    end.
+
+%% -------------------------------------------------------------------
+%%
+%% RABBITMQ_ERLANG_COOKIE
+%%   Override the on-disk Erlang cookie.
+%%   Default: unset (i.e. defaults to the content of ~/.erlang.cookie)
+
+erlang_cookie(Context) ->
+    case get_prefixed_env_var("RABBITMQ_ERLANG_COOKIE") of
+        false ->
+            update_context(Context, erlang_cookie, undefined, default);
+        Value ->
+            Cookie = list_to_atom(Value),
+            update_context(Context, erlang_cookie, Cookie, environment)
+    end.
+
+%% -------------------------------------------------------------------
 %% Loading of rabbitmq-env.conf.
 %% -------------------------------------------------------------------
 
@@ -1410,8 +1529,9 @@ load_conf_env_file(#{os_type := {unix, _},
         true ->
             case filelib:is_regular(ConfEnvFile) of
                 false ->
-                    rabbit_log_prelaunch:debug(
-                      "No $RABBITMQ_CONF_ENV_FILE (~ts)", [ConfEnvFile]),
+                    ?LOG_DEBUG(
+                       "No $RABBITMQ_CONF_ENV_FILE (~ts)", [ConfEnvFile],
+                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     Context1;
                 true ->
                     case os:find_executable("sh") of
@@ -1422,9 +1542,10 @@ load_conf_env_file(#{os_type := {unix, _},
                     end
             end;
         false ->
-            rabbit_log_prelaunch:debug(
-              "Loading of $RABBITMQ_CONF_ENV_FILE (~ts) is disabled",
-              [ConfEnvFile]),
+            ?LOG_DEBUG(
+               "Loading of $RABBITMQ_CONF_ENV_FILE (~ts) is disabled",
+               [ConfEnvFile],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             Context1
     end;
 load_conf_env_file(#{os_type := {win32, _},
@@ -1442,8 +1563,9 @@ load_conf_env_file(#{os_type := {win32, _},
         true ->
             case filelib:is_regular(ConfEnvFile) of
                 false ->
-                    rabbit_log_prelaunch:debug(
-                      "No $RABBITMQ_CONF_ENV_FILE (~ts)", [ConfEnvFile]),
+                    ?LOG_DEBUG(
+                       "No $RABBITMQ_CONF_ENV_FILE (~ts)", [ConfEnvFile],
+                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     Context1;
                 true ->
                     case os:find_executable("cmd.exe") of
@@ -1463,9 +1585,10 @@ load_conf_env_file(#{os_type := {win32, _},
                     end
             end;
         false ->
-            rabbit_log_prelaunch:debug(
-              "Loading of $RABBITMQ_CONF_ENV_FILE (~ts) is disabled",
-              [ConfEnvFile]),
+            ?LOG_DEBUG(
+               "Loading of $RABBITMQ_CONF_ENV_FILE (~ts) is disabled",
+               [ConfEnvFile],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             Context1
     end;
 load_conf_env_file(Context) ->
@@ -1487,8 +1610,9 @@ loading_conf_env_file_enabled(_) ->
 -endif.
 
 do_load_conf_env_file(#{os_type := {unix, _}} = Context, Sh, ConfEnvFile) ->
-    rabbit_log_prelaunch:debug(
-      "Sourcing $RABBITMQ_CONF_ENV_FILE: ~ts", [ConfEnvFile]),
+    ?LOG_DEBUG(
+       "Sourcing $RABBITMQ_CONF_ENV_FILE: ~ts", [ConfEnvFile],
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
 
     %% The script below sources the `CONF_ENV_FILE` file, then it shows a
     %% marker line and all environment variables.
@@ -1530,8 +1654,9 @@ do_load_conf_env_file(#{os_type := {unix, _}} = Context, Sh, ConfEnvFile) ->
     collect_conf_env_file_output(Context, Port, Marker, <<>>);
 do_load_conf_env_file(#{os_type := {win32, _}} = Context, Cmd, ConfEnvFile) ->
     %% rabbitmq/rabbitmq-common#392
-    rabbit_log_prelaunch:debug(
-      "Executing $RABBITMQ_CONF_ENV_FILE: ~ts", [ConfEnvFile]),
+    ?LOG_DEBUG(
+       "Executing $RABBITMQ_CONF_ENV_FILE: ~ts", [ConfEnvFile],
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
 
     %% The script below executes the `CONF_ENV_FILE` file, then it shows a
     %% marker line and all environment variables.
@@ -1592,17 +1717,20 @@ collect_conf_env_file_output(Context, Port, Marker, Output) ->
     end.
 
 post_port_cmd_output(#{os_type := {OSType, _}}, Output, ExitStatus) ->
-    rabbit_log_prelaunch:debug(
-      "$RABBITMQ_CONF_ENV_FILE exit status: ~b",
-      [ExitStatus]),
+    ?LOG_DEBUG(
+       "$RABBITMQ_CONF_ENV_FILE exit status: ~b",
+       [ExitStatus],
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     DecodedOutput = unicode:characters_to_list(Output),
     LineSep = case OSType of
                   win32 -> "\r\n";
                   _     -> "\n"
               end,
     Lines = string:split(string:trim(DecodedOutput), LineSep, all),
-    rabbit_log_prelaunch:debug("$RABBITMQ_CONF_ENV_FILE output:"),
-    [rabbit_log_prelaunch:debug("  ~ts", [Line]) || Line <- Lines],
+    ?LOG_DEBUG(
+       "$RABBITMQ_CONF_ENV_FILE output:~n~ts",
+       [string:join([io_lib:format("  ~ts", [Line]) || Line <- Lines], "\n")],
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     Lines.
 
 parse_conf_env_file_output(Context, _, []) ->
@@ -1622,9 +1750,10 @@ parse_conf_env_file_output1(Context, Lines) ->
               IsSet = var_is_set(Var),
               case IsUsed andalso not IsSet of
                   true ->
-                      rabbit_log_prelaunch:debug(
-                        "$RABBITMQ_CONF_ENV_FILE: re-exporting variable $~s",
-                        [Var]),
+                      ?LOG_DEBUG(
+                         "$RABBITMQ_CONF_ENV_FILE: re-exporting variable $~s",
+                         [Var],
+                         #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                       os:putenv(Var, maps:get(Var, Vars));
                   false ->
                       ok
@@ -1650,31 +1779,56 @@ parse_conf_env_file_output2([Line | Lines], Vars) ->
                     parse_conf_env_file_output2(Lines1, Vars1);
                 _ ->
                     %% Parsing failed somehow.
-                    rabbit_log_prelaunch:warning(
-                      "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~p",
-                      [Line]),
+                    ?LOG_WARNING(
+                       "Failed to parse $RABBITMQ_CONF_ENV_FILE output: ~p",
+                       [Line],
+                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     #{}
             end
     end.
 
 is_sh_set_x_output(Line) ->
-    re:run(Line, "^\\++ ", [{capture, none}]) =:= match.
+    UnicodeLine = unicode:characters_to_binary(Line),
+    re:run(UnicodeLine, "^\\++ ", [{capture, none}]) =:= match.
 
 is_sh_function(_, []) ->
     false;
 is_sh_function(Line, Lines) ->
-    re:run(Line, "\\s\\(\\)\\s*$", [{capture, none}]) =:= match
+    UnicodeLine1 = unicode:characters_to_binary(Line),
+    UnicodeLine2 = unicode:characters_to_binary(hd(Lines)),
+    re:run(UnicodeLine1, "\\s\\(\\)\\s*$", [{capture, none}]) =:= match
     andalso
-    re:run(hd(Lines), "^\\s*\\{\\s*$", [{capture, none}]) =:= match.
+    re:run(UnicodeLine2, "^\\s*\\{\\s*$", [{capture, none}]) =:= match.
 
-parse_sh_literal("'" ++ SingleQuoted, Lines, Literal) ->
+parse_sh_literal([$' | SingleQuoted], Lines, Literal) ->
     parse_single_quoted_literal(SingleQuoted, Lines, Literal);
-parse_sh_literal("\"" ++ DoubleQuoted, Lines, Literal) ->
+parse_sh_literal([$" | DoubleQuoted], Lines, Literal) ->
     parse_double_quoted_literal(DoubleQuoted, Lines, Literal);
-parse_sh_literal("$'" ++ DollarSingleQuoted, Lines, Literal) ->
+parse_sh_literal([$$, $' | DollarSingleQuoted], Lines, Literal) ->
     parse_dollar_single_quoted_literal(DollarSingleQuoted, Lines, Literal);
+parse_sh_literal([], Lines, Literal) ->
+    %% We reached the end of the literal.
+    {lists:reverse(Literal), Lines};
 parse_sh_literal(Unquoted, Lines, Literal) ->
-    {lists:reverse(Literal) ++ Unquoted, Lines}.
+    parse_unquoted_literal(Unquoted, Lines, Literal).
+
+parse_unquoted_literal([$\\], [Line | Lines], Literal) ->
+    %% The newline character is escaped: it means line continuation.
+    parse_unquoted_literal(Line, Lines, Literal);
+parse_unquoted_literal([$\\, C | Rest], Lines, Literal) ->
+    %% This is an escaped character, so we "eat" the two characters but append
+    %% only the escaped one.
+    parse_unquoted_literal(Rest, Lines, [C | Literal]);
+parse_unquoted_literal([C | _] = Rest, Lines, Literal)
+  when C =:= $' orelse C =:= $" ->
+    %% We reached the end of the unquoted literal and the beginning of a quoted
+    %% literal. Both are concatenated.
+    parse_sh_literal(Rest, Lines, Literal);
+parse_unquoted_literal([C | Rest], Lines, Literal) ->
+    parse_unquoted_literal(Rest, Lines, [C | Literal]);
+parse_unquoted_literal([], Lines, Literal) ->
+    %% We reached the end of the unquoted literal.
+    parse_sh_literal([], Lines, Literal).
 
 parse_single_quoted_literal([$' | Rest], Lines, Literal) ->
     %% We reached the closing single quote.
@@ -1687,6 +1841,14 @@ parse_single_quoted_literal([], [Line | Lines], Literal) ->
 parse_single_quoted_literal([C | Rest], Lines, Literal) ->
     parse_single_quoted_literal(Rest, Lines, [C | Literal]).
 
+parse_double_quoted_literal([$\\], [Line | Lines], Literal) ->
+    %% The newline character is escaped: it means line continuation.
+    parse_double_quoted_literal(Line, Lines, Literal);
+parse_double_quoted_literal([$\\, C | Rest], Lines, Literal)
+  when C =:= $$ orelse C =:= $` orelse C =:= $" orelse C =:= $\\ ->
+    %% This is an escaped character, so we "eat" the two characters but append
+    %% only the escaped one.
+    parse_double_quoted_literal(Rest, Lines, [C | Literal]);
 parse_double_quoted_literal([$" | Rest], Lines, Literal) ->
     %% We reached the closing double quote.
     parse_sh_literal(Rest, Lines, Literal);
@@ -1698,6 +1860,59 @@ parse_double_quoted_literal([], [Line | Lines], Literal) ->
 parse_double_quoted_literal([C | Rest], Lines, Literal) ->
     parse_double_quoted_literal(Rest, Lines, [C | Literal]).
 
+-define(IS_OCTAL(C), C >= $0 andalso C < $8).
+-define(IS_HEX(C),
+        (C >= $0 andalso C =< $9) orelse
+        (C >= $a andalso C =< $f) orelse
+        (C >= $A andalso C =< $F)).
+
+parse_dollar_single_quoted_literal([$\\, C1, C2, C3 | Rest], Lines, Literal)
+  when ?IS_OCTAL(C1) andalso ?IS_OCTAL(C2) andalso ?IS_OCTAL(C3) ->
+    %% An octal-based escaped character.
+    C = octal_to_character([C1, C2, C3]),
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]);
+parse_dollar_single_quoted_literal([$\\, $x, C1, C2 | Rest], Lines, Literal)
+  when ?IS_HEX(C1) andalso ?IS_HEX(C2) ->
+    %% A hex-based escaped character.
+    C = hex_to_character([C1, C2]),
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]);
+parse_dollar_single_quoted_literal([$\\, $u,
+                                    C1, C2, C3, C4 | Rest],
+                                   Lines, Literal)
+  when ?IS_HEX(C1) andalso ?IS_HEX(C2) andalso
+       ?IS_HEX(C3) andalso ?IS_HEX(C4) ->
+    %% A hex-based escaped character.
+    C = hex_to_character([C1, C2, C3, C4]),
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]);
+parse_dollar_single_quoted_literal([$\\, $U,
+                                    C1, C2, C3, C4,
+                                    C5, C6, C7, C8 | Rest],
+                                   Lines, Literal)
+  when ?IS_HEX(C1) andalso ?IS_HEX(C2) andalso
+       ?IS_HEX(C3) andalso ?IS_HEX(C4) andalso
+       ?IS_HEX(C5) andalso ?IS_HEX(C6) andalso
+       ?IS_HEX(C7) andalso ?IS_HEX(C8) ->
+    %% A hex-based escaped character.
+    C = hex_to_character([C1, C2, C3, C4, C5, C6, C7, C8]),
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]);
+parse_dollar_single_quoted_literal([$\\, C1 | Rest], Lines, Literal)
+  when C1 =:= $a orelse
+       C1 =:= $b orelse
+       C1 =:= $e orelse
+       C1 =:= $E orelse
+       C1 =:= $f orelse
+       C1 =:= $n orelse
+       C1 =:= $r orelse
+       C1 =:= $t orelse
+       C1 =:= $v orelse
+       C1 =:= $\\ orelse
+       C1 =:= $' orelse
+       C1 =:= $" orelse
+       C1 =:= $? ->
+    %% This is an escaped character, so we "eat" the two characters but append
+    %% only the escaped one.
+    C = esc_to_character(C1),
+    parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]);
 parse_dollar_single_quoted_literal([$'], Lines, Literal) ->
     %% We reached the closing single quote.
     {lists:reverse(Literal), Lines};
@@ -1708,6 +1923,37 @@ parse_dollar_single_quoted_literal([], [Line | Lines], Literal) ->
     parse_dollar_single_quoted_literal(Line, Lines, [$\n | Literal]);
 parse_dollar_single_quoted_literal([C | Rest], Lines, Literal) ->
     parse_dollar_single_quoted_literal(Rest, Lines, [C | Literal]).
+
+octal_to_character(List) ->
+    octal_to_character(List, 0).
+
+octal_to_character([D | Rest], C) when ?IS_OCTAL(D) ->
+    octal_to_character(Rest, C * 8 + D - $0);
+octal_to_character([], C) ->
+    C.
+
+hex_to_character(List) ->
+    hex_to_character(List, 0).
+
+hex_to_character([D | Rest], C) ->
+    hex_to_character(Rest, C * 16 + hex_to_int(D));
+hex_to_character([], C) ->
+    C.
+
+hex_to_int(C) when C >= $0 andalso C =< $9 -> C - $0;
+hex_to_int(C) when C >= $a andalso C =< $f -> 10 + C - $a;
+hex_to_int(C) when C >= $A andalso C =< $F -> 10 + C - $A.
+
+esc_to_character($a) -> 7;   % Bell
+esc_to_character($b) -> 8;   % Backspace
+esc_to_character($e) -> 27;  % Esc
+esc_to_character($E) -> 27;  % Esc
+esc_to_character($f) -> 12;  % Form feed
+esc_to_character($n) -> $\n; % Newline
+esc_to_character($r) -> 13;  % Carriage return
+esc_to_character($t) -> 9;   % Horizontal tab
+esc_to_character($v) -> 11;  % Vertical tab
+esc_to_character(C)  -> C.
 
 skip_sh_function(["}" | Lines], Vars) ->
     parse_conf_env_file_output2(Lines, Vars);

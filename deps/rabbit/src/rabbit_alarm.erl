@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 %% There are two types of alarms handled by this module:
 %%
@@ -232,7 +232,7 @@ handle_event({node_down, Node}, #alarms{alarmed_nodes = AN} = State) ->
                             error   -> []
                         end,
     {ok, lists:foldr(fun(Source, AccState) ->
-                             rabbit_log:warning("~s resource limit alarm cleared for dead node ~p~n",
+                             rabbit_log:warning("~s resource limit alarm cleared for dead node ~p",
                                                 [Source, Node]),
                              maybe_alert(fun dict_unappend/3, Node, Source, false, AccState)
                      end, State, AlarmsForDeadNode)};
@@ -284,7 +284,7 @@ maybe_alert(UpdateFun, Node, Source, WasAlertAdded,
     StillHasAlerts = lists:any(fun ({_Node, NodeAlerts}) -> lists:member(Source, NodeAlerts) end, dict:to_list(AN1)),
     case StillHasAlerts of
         true -> ok;
-        false -> rabbit_log:warning("~s resource limit alarm cleared across the cluster~n", [Source])
+        false -> rabbit_log:warning("~s resource limit alarm cleared across the cluster", [Source])
     end,
     Alert = {WasAlertAdded, StillHasAlerts, Node},
     case node() of
@@ -336,11 +336,11 @@ handle_set_alarm({file_descriptor_limit, []}, State) ->
       "********************************************************************~n"),
     {ok, State};
 handle_set_alarm(Alarm, State) ->
-    rabbit_log:warning("alarm '~p' set~n", [Alarm]),
+    rabbit_log:warning("alarm '~p' set", [Alarm]),
     {ok, State}.
 
 handle_clear_resource_alarm(Source, Node, State) ->
-    rabbit_log:warning("~s resource limit alarm cleared on node ~p~n",
+    rabbit_log:warning("~s resource limit alarm cleared on node ~p",
                        [Source, Node]),
     {ok, maybe_alert(fun dict_unappend/3, Node, Source, false, State)}.
 
@@ -348,7 +348,7 @@ handle_clear_alarm(file_descriptor_limit, State) ->
     rabbit_log:warning("file descriptor limit alarm cleared~n"),
     {ok, State};
 handle_clear_alarm(Alarm, State) ->
-    rabbit_log:warning("alarm '~p' cleared~n", [Alarm]),
+    rabbit_log:warning("alarm '~p' cleared", [Alarm]),
     {ok, State}.
 
 is_node_alarmed(Source, Node, #alarms{alarmed_nodes = AN}) ->

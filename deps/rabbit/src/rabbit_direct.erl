@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_direct).
@@ -18,8 +18,8 @@
 %% For testing only
 -export([extract_extra_auth_props/4]).
 
--include("rabbit.hrl").
--include("rabbit_misc.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_misc.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -75,7 +75,7 @@ auth_fun({Username, Password}, VHost, ExtraAuthProps) ->
 connect(Creds, VHost, Protocol, Pid, Infos) ->
     ExtraAuthProps = extract_extra_auth_props(Creds, VHost, Pid, Infos),
     AuthFun = auth_fun(Creds, VHost, ExtraAuthProps),
-    case rabbit:is_running() of
+    case rabbit_boot_state:has_reached_and_is_active(core_started) of
         true  ->
             case whereis(rabbit_direct_client_sup) of
                 undefined ->

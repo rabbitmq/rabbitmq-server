@@ -50,3 +50,11 @@ class TestTopicPermissions(base.BaseTest):
         # assert errors
         self.assertGreater(len(self.listener.errors), 0)
         self.assertIn("ACCESS_REFUSED", self.listener.errors[0]['message'])
+
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)

@@ -2,11 +2,11 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_auth_backend_internal).
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
@@ -14,12 +14,15 @@
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4]).
 
--export([add_user/3, delete_user/2, lookup_user/1, exists/1,
+-export([add_user/3, add_user/4, add_user/5, delete_user/2, lookup_user/1, exists/1,
          change_password/3, clear_password/2,
          hash_password/2, change_password_hash/2, change_password_hash/3,
          set_tags/3, set_permissions/6, clear_permissions/3,
          set_topic_permissions/6, clear_topic_permissions/3, clear_topic_permissions/4,
-         add_user_sans_validation/3, put_user/2, put_user/3]).
+         add_user_sans_validation/3, put_user/2, put_user/3,
+         update_user/5,
+         update_user_with_hash/5,
+         add_user_sans_validation/6]).
 
 -export([set_user_limits/3, clear_user_limits/3, is_over_connection_limit/1,
          is_over_channel_limit/1, get_user_limits/0, get_user_limits/1]).
@@ -38,6 +41,8 @@
 
 %% for testing
 -export([hashing_module_for_user/1, expand_topic_permission/2]).
+
+-import(rabbit_data_coercion, [to_atom/1, to_list/1, to_binary/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -195,7 +200,7 @@ validate_and_alternate_credentials(Username, Password, ActingUser, Fun) ->
         ok           ->
             Fun(Username, Password, ActingUser);
         {error, Err} ->
-            rabbit_log:error("Credential validation for '~s' failed!~n", [Username]),
+            rabbit_log:error("Credential validation for '~s' failed!", [Username]),
             {error, Err}
     end.
 
@@ -206,14 +211,56 @@ add_user(Username, Password, ActingUser) ->
     validate_and_alternate_credentials(Username, Password, ActingUser,
                                        fun add_user_sans_validation/3).
 
+-spec add_user(rabbit_types:username(), rabbit_types:password(),
+               rabbit_types:username(), [atom()]) -> 'ok' | {'error', string()}.
+
+add_user(Username, Password, ActingUser, Tags) ->
+    add_user(Username, Password, ActingUser, undefined, Tags).
+
+add_user(Username, Password, ActingUser, Limits, Tags) ->
+    validate_and_alternate_credentials(Username, Password, ActingUser,
+                                       add_user_sans_validation(Limits, Tags)).
+
 add_user_sans_validation(Username, Password, ActingUser) ->
+    add_user_sans_validation(Username, Password, ActingUser, undefined, []).
+
+add_user_sans_validation(Limits, Tags) ->
+    fun(Username, Password, ActingUser) ->
+            add_user_sans_validation(Username, Password, ActingUser, Limits, Tags)
+    end.
+
+add_user_sans_validation(Username, Password, ActingUser, Limits, Tags) ->
     rabbit_log:debug("Asked to create a new user '~s', password length in bytes: ~p", [Username, bit_size(Password)]),
     %% hash_password will pick the hashing function configured for us
     %% but we also need to store a hint as part of the record, so we
     %% retrieve it here one more time
     HashingMod = rabbit_password:hashing_mod(),
     PasswordHash = hash_password(HashingMod, Password),
-    User = internal_user:create_user(Username, PasswordHash, HashingMod),
+    User0 = internal_user:create_user(Username, PasswordHash, HashingMod),
+    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+    User1 = internal_user:set_tags(User0, ConvertedTags),
+    User = case Limits of
+               undefined -> User1;
+               Term -> internal_user:update_limits(add, User1, Term)
+           end,
+    add_user_sans_validation_in(Username, User, ConvertedTags, Limits, ActingUser).
+
+add_user_sans_validation(Username, PasswordHash, HashingAlgorithm, Tags, Limits, ActingUser) ->
+    rabbit_log:debug("Asked to create a new user '~s' with password hash", [Username]),
+    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+    HashingMod = rabbit_password:hashing_mod(),
+    User0 = internal_user:create_user(Username, PasswordHash, HashingMod),
+    User1 = internal_user:set_tags(
+              internal_user:set_password_hash(User0,
+                                              PasswordHash, HashingAlgorithm),
+              ConvertedTags),
+    User = case Limits of
+               undefined -> User1;
+               Term -> internal_user:update_limits(add, User1, Term)
+           end,
+    add_user_sans_validation_in(Username, User, ConvertedTags, Limits, ActingUser).
+
+add_user_sans_validation_in(Username, User, ConvertedTags, Limits, ActingUser) ->
     try
         R = rabbit_misc:execute_mnesia_transaction(
           fun () ->
@@ -227,17 +274,22 @@ add_user_sans_validation(Username, Password, ActingUser) ->
         rabbit_log:info("Created user '~s'", [Username]),
         rabbit_event:notify(user_created, [{name, Username},
                                            {user_who_performed_action, ActingUser}]),
+        case ConvertedTags of
+            [] -> ok;
+            _ -> notify_user_tags_set(Username, ConvertedTags, ActingUser)
+        end,
+        case Limits of
+            undefined -> ok;
+            _ -> notify_limit_set(Username, ActingUser, Limits)
+        end,
         R
     catch
         throw:{error, {user_already_exists, _}} = Error ->
             rabbit_log:warning("Failed to add user '~s': the user already exists", [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
-            throw(Error);
-        exit:Error ->
-            rabbit_log:warning("Failed to add user '~s': ~p", [Username, Error]),
-            exit(Error)
+            erlang:raise(Class, Error, Stacktrace)
     end .
 
 -spec delete_user(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
@@ -273,12 +325,9 @@ delete_user(Username, ActingUser) ->
         throw:{error, {no_such_user, _}} = Error ->
             rabbit_log:warning("Failed to delete user '~s': the user does not exist", [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
-            throw(Error);
-        exit:Error ->
-            rabbit_log:warning("Failed to delete user '~s': ~p", [Username, Error]),
-            exit(Error)
+            erlang:raise(Class, Error, Stacktrace)
     end .
 
 -spec lookup_user
@@ -321,18 +370,51 @@ change_password_sans_validation(Username, Password, ActingUser) ->
         throw:{error, {no_such_user, _}} = Error ->
             rabbit_log:warning("Failed to change password for user '~s': the user does not exist", [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to change password for user '~s': ~p", [Username, Error]),
-            throw(Error);
-        exit:Error ->
-            rabbit_log:warning("Failed to change password for user '~s': ~p", [Username, Error]),
-            exit(Error)
+            erlang:raise(Class, Error, Stacktrace)
+    end.
+
+update_user(Username, Password, Tags, Limits, ActingUser) ->
+    validate_and_alternate_credentials(Username, Password, ActingUser,
+                                       update_user_sans_validation(Tags, Limits)).
+
+update_user_sans_validation(Tags, Limits) ->
+    fun(Username, Password, ActingUser) ->
+            try
+                rabbit_log:debug("Asked to change password of user '~s', new password length in bytes: ~p", [Username, bit_size(Password)]),
+                HashingAlgorithm = rabbit_password:hashing_mod(),
+
+                rabbit_log:debug("Asked to set user tags for user '~s' to ~p", [Username, Tags]),
+
+                ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+                R = update_user_with_hash(Username,
+                                          hash_password(rabbit_password:hashing_mod(),
+                                                        Password),
+                                          HashingAlgorithm,
+                                          ConvertedTags,
+                                          Limits),
+                rabbit_log:info("Successfully changed password for user '~s'", [Username]),
+                rabbit_event:notify(user_password_changed,
+                                    [{name, Username},
+                                     {user_who_performed_action, ActingUser}]),
+
+                notify_user_tags_set(Username, ConvertedTags, ActingUser),
+                R
+            catch
+                throw:{error, {no_such_user, _}} = Error ->
+                    rabbit_log:warning("Failed to change password for user '~s': the user does not exist", [Username]),
+                    throw(Error);
+                Class:Error:Stacktrace ->
+                    rabbit_log:warning("Failed to change password for user '~s': ~p", [Username, Error]),
+                    erlang:raise(Class, Error, Stacktrace)
+            end
     end.
 
 -spec clear_password(rabbit_types:username(), rabbit_types:username()) -> 'ok'.
 
 clear_password(Username, ActingUser) ->
-    rabbit_log:info("Clearing password for '~s'~n", [Username]),
+    rabbit_log:info("Clearing password for '~s'", [Username]),
     R = change_password_hash(Username, <<"">>),
     rabbit_event:notify(user_password_cleared,
                         [{name, Username},
@@ -353,10 +435,22 @@ change_password_hash(Username, PasswordHash) ->
 
 
 change_password_hash(Username, PasswordHash, HashingAlgorithm) ->
-    update_user(Username, fun(User) ->
-                              internal_user:set_password_hash(User,
-                                  PasswordHash, HashingAlgorithm)
-                          end).
+    update_user_with_hash(Username, PasswordHash, HashingAlgorithm, [], undefined).
+
+update_user_with_hash(Username, PasswordHash, HashingAlgorithm, ConvertedTags, Limits) ->
+    update_user(Username,
+                fun(User0) ->
+                        User1 = internal_user:set_password_hash(User0,
+                                                                PasswordHash, HashingAlgorithm),
+                        User2 = case Limits of
+                                    undefined -> User1;
+                                    _         -> internal_user:update_limits(add, User1, Limits)
+                                end,
+                        case ConvertedTags of
+                            [] -> User2;
+                            _  -> internal_user:set_tags(User2, ConvertedTags)
+                        end
+                end).
 
 -spec set_tags(rabbit_types:username(), [atom()], rabbit_types:username()) -> 'ok'.
 
@@ -367,21 +461,21 @@ set_tags(Username, Tags, ActingUser) ->
         R = update_user(Username, fun(User) ->
                                      internal_user:set_tags(User, ConvertedTags)
                                   end),
-        rabbit_log:info("Successfully set user tags for user '~s' to ~p", [Username, ConvertedTags]),
-        rabbit_event:notify(user_tags_set, [{name, Username}, {tags, ConvertedTags},
-                                            {user_who_performed_action, ActingUser}]),
+        notify_user_tags_set(Username, ConvertedTags, ActingUser),
         R
     catch
         throw:{error, {no_such_user, _}} = Error ->
             rabbit_log:warning("Failed to set tags for user '~s': the user does not exist", [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to set tags for user '~s': ~p", [Username, Error]),
-            throw(Error);
-        exit:Error ->
-            rabbit_log:warning("Failed to set tags for user '~s': ~p", [Username, Error]),
-            exit(Error)
+            erlang:raise(Class, Error, Stacktrace)
     end .
+
+notify_user_tags_set(Username, ConvertedTags, ActingUser) ->
+    rabbit_log:info("Successfully set user tags for user '~s' to ~p", [Username, ConvertedTags]),
+    rabbit_event:notify(user_tags_set, [{name, Username}, {tags, ConvertedTags},
+                                        {user_who_performed_action, ActingUser}]).
 
 -spec set_permissions
         (rabbit_types:username(), rabbit_types:vhost(), regexp(), regexp(),
@@ -438,14 +532,10 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
             rabbit_log:warning("Failed to set permissions for '~s': the user does not exist",
                                [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to set permissions for '~s' in virtual host '~s': ~p",
                                [Username, VirtualHost, Error]),
-            throw(Error);
-        exit:Error ->
-            rabbit_log:warning("Failed to set permissions for '~s' in virtual host '~s': ~p",
-                               [Username, VirtualHost, Error]),
-            exit(Error)
+            erlang:raise(Class, Error, Stacktrace)
     end.
 
 -spec clear_permissions
@@ -478,14 +568,10 @@ clear_permissions(Username, VirtualHost, ActingUser) ->
             rabbit_log:warning("Failed to clear permissions for '~s': the user does not exist",
                                [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to clear permissions for '~s' in virtual host '~s': ~p",
                                [Username, VirtualHost, Error]),
-            throw(Error);
-        exit:Error ->
-            rabbit_log:warning("Failed to clear permissions for '~s' in virtual host '~s': ~p",
-                               [Username, VirtualHost, Error]),
-            exit(Error)
+            erlang:raise(Class, Error, Stacktrace)
     end.
 
 
@@ -555,14 +641,10 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
             rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s': the user does not exist.",
                                [Exchange, Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s' in virtual host '~s': ~p.",
                                [Exchange, Username, VirtualHost, Error]),
-            throw(Error);
-        exit:Error ->
-            rabbit_log:warning("Failed to set topic permissions on exchange '~s' for '~s' in virtual host '~s': ~p.",
-                               [Exchange, Username, VirtualHost, Error]),
-            exit(Error)
+            erlang:raise(Class, Error, Stacktrace)
     end .
 
 clear_topic_permissions(Username, VirtualHost, ActingUser) ->
@@ -594,14 +676,10 @@ clear_topic_permissions(Username, VirtualHost, ActingUser) ->
             rabbit_log:warning("Failed to clear topic permissions for '~s': the user does not exist",
                                [Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to clear topic permissions for '~s' in virtual host '~s': ~p",
                                [Username, VirtualHost, Error]),
-            throw(Error);
-        exit:Error ->
-            rabbit_log:warning("Failed to clear topic permissions for '~s' in virtual host '~s': ~p",
-                               [Username, VirtualHost, Error]),
-            exit(Error)
+            erlang:raise(Class, Error, Stacktrace)
     end.
 
 clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
@@ -635,14 +713,10 @@ clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
             rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s': the user does not exist",
                                [Exchange, Username]),
             throw(Error);
-        throw:Error ->
+        Class:Error:Stacktrace ->
             rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s' in virtual host '~s': ~p",
                                [Exchange, Username, VirtualHost, Error]),
-            throw(Error);
-        exit:Error ->
-            rabbit_log:warning("Failed to clear topic permissions on exchange '~s' for '~s' in virtual host '~s': ~p",
-                               [Exchange, Username, VirtualHost, Error]),
-            exit(Error)
+            erlang:raise(Class, Error, Stacktrace)
     end.
 
 put_user(User, ActingUser) -> put_user(User, undefined, ActingUser).
@@ -662,9 +736,8 @@ put_user(User, Version, ActingUser) ->
                                   true  -> [administrator];
                                   false -> []
                               end;
-                          {TagsS, _} ->
-                              [list_to_atom(string:strip(T)) ||
-                                  T <- string:tokens(binary_to_list(TagsS), ",")]
+                          {TagsVal, _} ->
+                              tag_list_from(TagsVal)
                       end,
 
     %% pre-configured, only applies to newly created users
@@ -679,13 +752,27 @@ put_user(User, Version, ActingUser) ->
                 rabbit_credential_validation:validate(Username, Password) =:= ok
         end,
 
+    Limits = case rabbit_feature_flags:is_enabled(user_limits) of
+                 false ->
+                     undefined;
+                 true ->
+                     case maps:get(limits, User, undefined) of
+                         undefined ->
+                             undefined;
+                         Term ->
+                             case validate_user_limits(Term) of
+                                 ok -> Term;
+                                 Error -> throw(Error)
+                             end
+                     end
+             end,
     case exists(Username) of
         true  ->
             case {HasPassword, HasPasswordHash} of
                 {true, false} ->
-                    update_user_password(PassedCredentialValidation, Username, Password, Tags, ActingUser);
+                    update_user_password(PassedCredentialValidation, Username, Password, Tags, Limits, ActingUser);
                 {false, true} ->
-                    update_user_password_hash(Username, PasswordHash, Tags, User, Version, ActingUser);
+                    update_user_password_hash(Username, PasswordHash, Tags, Limits, User, Version);
                 {true, true} ->
                     throw({error, both_password_and_password_hash_are_provided});
                 %% clear password, update tags if needed
@@ -696,63 +783,54 @@ put_user(User, Version, ActingUser) ->
         false ->
             case {HasPassword, HasPasswordHash} of
                 {true, false}  ->
-                    create_user_with_password(PassedCredentialValidation, Username, Password, Tags, Permissions, ActingUser);
+                    create_user_with_password(PassedCredentialValidation, Username, Password, Tags, Permissions, Limits, ActingUser);
                 {false, true}  ->
-                    create_user_with_password_hash(Username, PasswordHash, Tags, User, Version, Permissions, ActingUser);
+                    create_user_with_password_hash(Username, PasswordHash, Tags, User, Version, Permissions, Limits, ActingUser);
                 {true, true}   ->
                     throw({error, both_password_and_password_hash_are_provided});
                 {false, false} ->
                     %% this user won't be able to sign in using
                     %% a username/password pair but can be used for x509 certificate authentication,
                     %% with authn backends such as HTTP or LDAP and so on.
-                    create_user_with_password(PassedCredentialValidation, Username, <<"">>, Tags, Permissions, ActingUser)
+                    create_user_with_password(PassedCredentialValidation, Username, <<"">>, Tags, Permissions, Limits, ActingUser)
             end
     end.
 
-update_user_password(_PassedCredentialValidation = true,  Username, Password, Tags, ActingUser) ->
-    rabbit_auth_backend_internal:change_password(Username, Password, ActingUser),
-    rabbit_auth_backend_internal:set_tags(Username, Tags, ActingUser);
-update_user_password(_PassedCredentialValidation = false, _Username, _Password, _Tags, _ActingUser) ->
+update_user_password(_PassedCredentialValidation = true,  Username, Password, Tags, Limits, ActingUser) ->
+    %% change_password, set_tags and limits
+    rabbit_auth_backend_internal:update_user(Username, Password, Tags, Limits, ActingUser);
+update_user_password(_PassedCredentialValidation = false, _Username, _Password, _Tags, _Limits, _ActingUser) ->
     %% we don't log here because
     %% rabbit_auth_backend_internal will do it
     throw({error, credential_validation_failed}).
 
-update_user_password_hash(Username, PasswordHash, Tags, User, Version, ActingUser) ->
+update_user_password_hash(Username, PasswordHash, Tags, Limits, User, Version) ->
     %% when a hash this provided, credential validation
     %% is not applied
     HashingAlgorithm = hashing_algorithm(User, Version),
 
     Hash = rabbit_misc:b64decode_or_throw(PasswordHash),
-    rabbit_auth_backend_internal:change_password_hash(
-      Username, Hash, HashingAlgorithm),
-    rabbit_auth_backend_internal:set_tags(Username, Tags, ActingUser).
+    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+    rabbit_auth_backend_internal:update_user_with_hash(
+      Username, Hash, HashingAlgorithm, ConvertedTags, Limits).
 
-create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags, undefined, ActingUser) ->
-    rabbit_auth_backend_internal:add_user(Username, Password, ActingUser),
-    rabbit_auth_backend_internal:set_tags(Username, Tags, ActingUser);
-create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags, PreconfiguredPermissions, ActingUser) ->
-    rabbit_auth_backend_internal:add_user(Username, Password, ActingUser),
-    rabbit_auth_backend_internal:set_tags(Username, Tags, ActingUser),
+create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags, undefined, Limits, ActingUser) ->
+    rabbit_auth_backend_internal:add_user(Username, Password, ActingUser, Limits, Tags);
+create_user_with_password(_PassedCredentialValidation = true,  Username, Password, Tags, PreconfiguredPermissions, Limits, ActingUser) ->
+    rabbit_auth_backend_internal:add_user(Username, Password, ActingUser, Limits, Tags),
     preconfigure_permissions(Username, PreconfiguredPermissions, ActingUser);
-create_user_with_password(_PassedCredentialValidation = false, _Username, _Password, _Tags, _, _) ->
+create_user_with_password(_PassedCredentialValidation = false, _Username, _Password, _Tags, _, _, _) ->
     %% we don't log here because
     %% rabbit_auth_backend_internal will do it
     throw({error, credential_validation_failed}).
 
-create_user_with_password_hash(Username, PasswordHash, Tags, User, Version, PreconfiguredPermissions, ActingUser) ->
+create_user_with_password_hash(Username, PasswordHash, Tags, User, Version, PreconfiguredPermissions, Limits, ActingUser) ->
     %% when a hash this provided, credential validation
     %% is not applied
     HashingAlgorithm = hashing_algorithm(User, Version),
     Hash             = rabbit_misc:b64decode_or_throw(PasswordHash),
 
-    %% first we create a user with dummy credentials and no
-    %% validation applied, then we update password hash
-    TmpPassword = rabbit_guid:binary(rabbit_guid:gen_secure(), "tmp"),
-    rabbit_auth_backend_internal:add_user_sans_validation(Username, TmpPassword, ActingUser),
-
-    rabbit_auth_backend_internal:change_password_hash(
-      Username, Hash, HashingAlgorithm),
-    rabbit_auth_backend_internal:set_tags(Username, Tags, ActingUser),
+    rabbit_auth_backend_internal:add_user_sans_validation(Username, Hash, HashingAlgorithm, Tags, Limits, ActingUser),
     preconfigure_permissions(Username, PreconfiguredPermissions, ActingUser).
 
 preconfigure_permissions(_Username, undefined, _ActingUser) ->
@@ -787,8 +865,7 @@ set_user_limits(Username, Definition, ActingUser) when is_map(Definition) ->
     end.
 
 validate_parameters_and_update_limit(Username, Term, ActingUser) ->
-    case flatten_errors(rabbit_parameter_validation:proplist(
-                        <<"user-limits">>, user_limit_validation(), Term)) of
+    case validate_user_limits(Term) of
         ok ->
             update_user(Username, fun(User) ->
                                       internal_user:update_limits(add, User, Term)
@@ -797,6 +874,10 @@ validate_parameters_and_update_limit(Username, Term, ActingUser) ->
         {errors, [{Reason, Arguments}]} ->
             {error_string, rabbit_misc:format(Reason, Arguments)}
     end.
+
+validate_user_limits(Term) ->
+    flatten_errors(rabbit_parameter_validation:proplist(
+                     <<"user-limits">>, user_limit_validation(), Term)).
 
 user_limit_validation() ->
     [{<<"max-connections">>, fun rabbit_parameter_validation:integer/2, optional},
@@ -812,6 +893,11 @@ clear_user_limits(Username, LimitType, ActingUser) ->
                               internal_user:update_limits(remove, User, LimitType)
                           end),
     notify_limit_clear(Username, ActingUser).
+
+tag_list_from(Tags) when is_list(Tags) ->
+    [to_atom(string:strip(to_list(T))) || T <- Tags];
+tag_list_from(Tags) when is_binary(Tags) ->
+    [to_atom(string:strip(T)) || T <- string:tokens(to_list(Tags), ",")].
 
 flatten_errors(L) ->
     case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of

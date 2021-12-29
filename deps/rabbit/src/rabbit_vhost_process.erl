@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2017-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2017-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% This module implements a vhost identity process.
@@ -25,7 +25,7 @@
 %% use the now recommended try/catch syntax for obtaining the stack trace.
 -compile(nowarn_deprecated_function).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(TICKTIME_RATIO, 4).
 
@@ -41,7 +41,7 @@ start_link(VHost) ->
 
 init([VHost]) ->
     process_flag(trap_exit, true),
-    rabbit_log:debug("Recovering data for VHost ~p~n", [VHost]),
+    rabbit_log:debug("Recovering data for VHost ~p", [VHost]),
     try
         %% Recover the vhost data and save it to vhost registry.
         ok = rabbit_vhost:recover(VHost),

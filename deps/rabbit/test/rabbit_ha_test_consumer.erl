@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(rabbit_ha_test_consumer).
 
@@ -51,15 +51,9 @@ run(TestPid, Channel, Queue, CancelOnFailover, LowestSeen, MsgsToConsume) ->
             %% counter.
             if
                 MsgNum + 1 == LowestSeen ->
-                    error_logger:info_msg("recording ~w left ~w",
-                                          [MsgNum, MsgsToConsume]),
                     run(TestPid, Channel, Queue,
                         CancelOnFailover, MsgNum, MsgsToConsume - 1);
                 MsgNum >= LowestSeen ->
-                    error_logger:info_msg(
-                      "consumer ~p on ~p ignoring redelivered msg ~p"
-                      "lowest seen ~w~n",
-                      [self(), Channel, MsgNum, LowestSeen]),
                     true = Redelivered, %% ASSERTION
                     run(TestPid, Channel, Queue,
                         CancelOnFailover, LowestSeen, MsgsToConsume);

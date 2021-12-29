@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_web_mqtt_app).
@@ -17,7 +17,7 @@
 ]).
 
 %% Dummy supervisor - see Ulf Wiger's comment at
-%% http://erlang.2086793.n4.nabble.com/initializing-library-applications-without-processes-td2094473.html
+%% http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
 -behaviour(supervisor).
 -export([init/1]).
 
@@ -86,7 +86,8 @@ mqtt_init() ->
   ]}]),
   CowboyOpts = CowboyOpts0#{env          => #{dispatch => Routes},
                             middlewares  => [cowboy_router, rabbit_web_mqtt_middleware, cowboy_handler],
-                            proxy_header => get_env(proxy_protocol, false)},
+                            proxy_header => get_env(proxy_protocol, false),
+                            stream_handlers => [rabbit_web_mqtt_stream_handler, cowboy_stream_h]},
   case get_env(tcp_config, []) of
       []       -> ok;
       TCPConf0 -> start_tcp_listener(TCPConf0, CowboyOpts)
@@ -103,7 +104,8 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
     socket_opts => TCPConf,
     connection_type => supervisor,
     max_connections => get_max_connections(),
-    num_acceptors => get_env(num_tcp_acceptors, 10)
+    num_acceptors => get_env(num_tcp_acceptors, 10),
+    num_conns_sups => get_env(num_conns_sup, 1)
   },
   case ranch:start_listener(rabbit_networking:ranch_ref(TCPConf),
                             ranch_tcp,
@@ -115,12 +117,12 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
       {error, ErrTCP}               ->
           rabbit_log_connection:error(
               "Failed to start a WebSocket (HTTP) listener. Error: ~p,"
-              " listener settings: ~p~n",
+              " listener settings: ~p",
               [ErrTCP, TCPConf]),
           throw(ErrTCP)
   end,
   listener_started(?TCP_PROTOCOL, TCPConf),
-  rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w~n",
+  rabbit_log:info("rabbit_web_mqtt: listening for HTTP connections on ~s:~w",
                   [IpStr, Port]).
 
 start_tls_listener(TLSConf0, CowboyOpts) ->
@@ -130,7 +132,8 @@ start_tls_listener(TLSConf0, CowboyOpts) ->
     socket_opts => TLSConf,
     connection_type => supervisor,
     max_connections => get_max_connections(),
-    num_acceptors => get_env(num_ssl_acceptors, 10)
+    num_acceptors => get_env(num_ssl_acceptors, 10),
+    num_conns_sups => get_env(num_conns_sup, 1)
   },
   case ranch:start_listener(rabbit_networking:ranch_ref(TLSConf),
                             ranch_ssl,
@@ -142,12 +145,12 @@ start_tls_listener(TLSConf0, CowboyOpts) ->
       {error, ErrTLS}               ->
           rabbit_log_connection:error(
               "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~p,"
-              " listener settings: ~p~n",
+              " listener settings: ~p",
               [ErrTLS, TLSConf]),
           throw(ErrTLS)
   end,
   listener_started(?TLS_PROTOCOL, TLSConf),
-  rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w~n",
+  rabbit_log:info("rabbit_web_mqtt: listening for HTTPS connections on ~s:~w",
                   [TLSIpStr, TLSPort]).
 
 listener_started(Protocol, Listener) ->

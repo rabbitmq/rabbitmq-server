@@ -1,9 +1,0 @@
-usr/lib/rabbitmq/bin
-usr/lib/erlang/lib
-usr/sbin
-usr/share/man
-var/lib/rabbitmq/mnesia
-var/log/rabbitmq
-etc/logrotate.d
-etc/profile.d
-etc/rabbitmq

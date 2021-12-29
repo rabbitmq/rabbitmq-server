@@ -128,18 +128,33 @@
         <th>State</th>
         <td><%= fmt_object_state(queue) %></td>
       </tr>
+      <% if(queue.consumers) { %>
       <tr>
         <th>Consumers</th>
         <td><%= fmt_string(queue.consumers) %></td>
       </tr>
+      <% } else if(queue.hasOwnProperty('consumer_details')) { %>
       <tr>
-        <th>Consumer utilisation <span class="help" id="queue-consumer-utilisation"></th>
-        <td><%= fmt_percent(queue.consumer_utilisation) %></td>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumer_details.length) %></td>
       </tr>
-      <% if (is_quorum(queue) || is_stream(queue)) { %>
+      <% } %>
+      <% if (!is_stream(queue)) { %>
+      <tr>
+        <th>Consumer capacity <span class="help" id="queue-consumer-capacity"></th>
+        <td><%= fmt_percent(queue.consumer_capacity) %></td>
+      </tr>
+      <% } %>
+      <% if (is_quorum(queue)) { %>
       <tr>
         <th>Open files</th>
         <td><%= fmt_table_short(queue.open_files) %></td>
+      </tr>
+      <% } %>
+      <% if (is_stream(queue)) { %>
+      <tr>
+        <th>Readers</th>
+        <td><%= fmt_table_short(queue.readers) %></td>
       </tr>
       <% } %>
     </table>
@@ -173,10 +188,15 @@
         <td class="r">
           <%= fmt_num_thousands(queue.messages_unacknowledged) %>
         </td>
+        <% if (is_quorum(queue)) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ram) %>
         </td>
+        <% } %>
         <% if (is_classic(queue)) { %>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ram) %>
+        </td>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_persistent) %>
         </td>
@@ -186,6 +206,7 @@
         <% } %>
       </tr>
       <tr>
+        <% if (is_classic(queue) || is_quorum(queue)) { %>
         <th>
           Message body bytes
           <span class="help" id="queue-message-body-bytes"></span>
@@ -202,6 +223,7 @@
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_ram) %>
         </td>
+        <% } %>
         <% if (is_classic(queue)) { %>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_persistent) %>
@@ -248,10 +270,13 @@
 
 <% } %>
 
+<% if(!disable_stats) { %>
+<%= maybe_format_extra_queue_content(queue, extra_content) %>
+<% } %>
 
 <% if(!disable_stats) { %>
 <div class="section-hidden">
-  <h2>Consumers</h2>
+  <h2 class="updatable">Consumers (<%=(queue.consumer_details.length)%>) </h2>
   <div class="hider updatable">
 <%= format('consumers', {'mode': 'queue', 'consumers': queue.consumer_details}) %>
   </div>
@@ -259,7 +284,7 @@
 <% } %>
 
 <div class="section-hidden">
-  <h2>Bindings</h2>
+  <h2 class="updatable">Bindings (<%=(bindings.length)%>) </h2>
   <div class="hider">
     <div class="bindings-wrapper">
       <%= format('bindings', {'mode': 'queue', 'bindings': bindings}) %>
@@ -291,7 +316,7 @@
           <td>
             <select name="ackmode">
                 <option value="ack_requeue_true" selected>Nack message requeue true</option>
-                <option value="ack_requeue_false">Ack message requeue false</option>
+                <option value="ack_requeue_false">Automatic ack</option>
                 <option value="reject_requeue_true">Reject requeue true</option>
                 <option value="reject_requeue_false">Reject requeue false</option>
             </select>
@@ -350,6 +375,9 @@
       <input type="hidden" name="dest-uri" value="amqp:///<%= esc(queue.vhost) %>"/>
       <input type="hidden" name="dest-add-forward-headers" value="false"/>
       <input type="hidden" name="ack-mode" value="on-confirm"/>
+      <% if (is_stream(queue)) { %>
+        <input type="hidden" name="src-consumer-args-stream-offset" value="first"/>
+      <% } %>
       <input type="hidden" name="redirect" value="#/queues"/>
 
       <table class="form">

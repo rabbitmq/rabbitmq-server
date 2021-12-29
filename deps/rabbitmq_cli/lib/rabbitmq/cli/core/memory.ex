@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Memory do
   alias RabbitMQ.CLI.InformationUnit, as: IU
@@ -55,6 +55,12 @@ defmodule RabbitMQ.CLI.Core.Memory do
 
   def formatted_watermark(val) when is_float(val) do
     %{relative: val}
+  end
+  def formatted_watermark({:relative, val}) when is_float(val) do
+    %{relative: val}
+  end
+  def formatted_watermark(:infinity) do
+    %{relative: 1.0}
   end
   def formatted_watermark({:absolute, val}) do
     %{absolute: parse_watermark(val)}

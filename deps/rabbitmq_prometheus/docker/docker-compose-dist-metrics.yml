@@ -1,0 +1,77 @@
+# https://docs.docker.com/compose/compose-file/
+version: "3.6"
+
+# https://docs.docker.com/compose/compose-file/#networks
+networks:
+  rabbitmq-prometheus:
+
+# https://docs.docker.com/compose/compose-file/#volumes
+volumes:
+  rabbitmq-prometheus_prometheus:
+  rabbitmq-prometheus_grafana:
+
+services:
+  rmq0-dist-metrics: &rabbitmq
+    # https://network.pivotal.io/products/rabbitmq/
+    # This is a commercial edition of RabbitMQ that requires a valid Tanzu Network account
+    # Learn more: https://rabbitmq.com/tanzu
+    image: dev.registry.pivotal.io/rabbitmq/vmware-tanzu-rabbitmq:1.0.0
+    networks:
+      - "rabbitmq-prometheus"
+    ports:
+      - "15680:15672"
+      - "15700:15692"
+    # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
+    # https://en.wikipedia.org/wiki/Tcpkill
+    # https://www.digitalocean.com/community/tutorials/iptables-essentials-common-firewall-rules-and-commands#block-an-ip-address
+    cap_add:
+      - ALL
+    hostname: rmq0-dist-metrics
+    environment:
+      # RABBITMQ_ERLANG_COOKIE: rabbitmq-prometheus
+      RABBITMQ_SERVER_START_ARGS: -proto_dist inet_tcp_metrics
+      # Uncomment the following line if you want debug logs & colour
+      # RABBITMQ_LOG: debug,+color
+    volumes:
+      # This does not work that well on Windows
+      # https://github.com/rabbitmq/rabbitmq-prometheus/commit/c4b04ea9bae877ff7d22a7085475965016933d91#commitcomment-40660523
+      - ./erlang.cookie:/var/lib/rabbitmq/.erlang.cookie
+      - ./rabbitmq-dist-metrics.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq-dist-metrics-definitions.json:/etc/rabbitmq/rabbitmq-definitions.json:ro
+    # we want to simulate hitting thresholds
+    ulimits:
+      nofile:
+        soft: 2000
+        hard: 2000
+  rmq1-dist-metrics:
+    << : *rabbitmq
+    hostname: rmq1-dist-metrics
+    ports:
+      - "15681:15672"
+      - "15701:15692"
+  rmq2-dist-metrics:
+    << : *rabbitmq
+    hostname: rmq2-dist-metrics
+    ports:
+      - "15682:15672"
+      - "15702:15692"
+
+  qq:
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.15.0-ubuntu
+    networks:
+      - "rabbitmq-prometheus"
+    environment:
+      URIS: "amqp://guest:guest@rmq0-dist-metrics:5672/%2f,amqp://guest:guest@rmq1-dist-metrics:5672/%2f,amqp://guest:guest@rmq2-dist-metrics:5672/%2f"
+      CONFIRM: 50
+      QUEUE_PATTERN: "qq%d"
+      QUEUE_PATTERN_FROM: 1
+      QUEUE_PATTERN_TO: 3
+      PRODUCERS: 3
+      CONSUMERS: 3
+      QUEUE_ARGS: x-queue-type=quorum,x-max-length=1000
+      FLAG: persistent
+      AUTO_DELETE: "false"
+      RATE: 10
+      AUTOACK: "false"
+      SERVERS_STARTUP_TIMEOUT: &startup_timeout 30
+      METRICS_PROMETHEUS: "true"

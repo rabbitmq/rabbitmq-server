@@ -75,6 +75,10 @@ module Test =
         if a <> b then
             failwith (sprintf "Expected: %A\r\nGot: %A" a b)
 
+    let assertNotNull a =
+        if a = null then
+            failwith (sprintf "Null not expected")
+
     let assertTrue b =
         if not b then
             failwith (sprintf "Expected True got False!")
@@ -141,6 +145,43 @@ module Test =
             assertTrue (rtd.Header.Ttl <= 500u)
             assertEqual rtd.Properties.CorrelationId  corr
             ()
+
+    let streams uri =
+        use c = connect uri
+        let name = "streams-test"
+        let address = "/amq/queue/stream_q2"
+        let sender = SenderLink(c.Session, name + "-sender" , address)
+        //for body in sampleTypes do
+        let body = "hi"B :> obj
+
+        let corr = "correlation"
+        new Message(body,
+                    Properties = new Properties(CorrelationId = corr))
+        |> sender.Send
+        //TODO wait for settlement
+        let specs = [box("first");
+                     box("last");
+                     box("10m");
+                     box(0)]
+        for spec in specs do
+            printfn "testing streams spec %A" spec
+            let filterSet = Map()
+            filterSet.Add(Symbol "rabbitmq:stream-offset-spec", spec)
+            let source = Source(Address = address,
+                                FilterSet = filterSet)
+            let attach = Attach(Source = source)
+            let attached = new OnAttached (fun _ _ -> ())
+            let receiver = ReceiverLink(c.Session, Guid.NewGuid().ToString(), attach, attached)
+            receiver.SetCredit(100, true)
+            let rtd = receiver.Receive()
+            assertNotNull rtd
+            assertTrue (rtd.MessageAnnotations.Map.Count = 1)
+            let (result, _) =  rtd.MessageAnnotations.Map.TryGetValue("x-stream-offset")
+            assertTrue result
+            assertEqual body rtd.Body
+            assertEqual rtd.Properties.CorrelationId  corr
+            receiver.Close()
+        ()
 
     open RabbitMQ.Client
 
@@ -313,6 +354,8 @@ module Test =
               * from the common_test suite. *)
              "/amq/queue/transient_q", "/amq/queue/transient_q", "", true
              "/amq/queue/durable_q",   "/amq/queue/durable_q",   "", true
+             "/amq/queue/quorum_q",   "/amq/queue/quorum_q",   "", true
+             "/amq/queue/stream_q",   "/amq/queue/stream_q",   "", true
              "/amq/queue/autodel_q",   "/amq/queue/autodel_q",   "", true] do
 
             let rnd = Random()
@@ -475,6 +518,9 @@ let main argv =
         0
     | [AsLower "invalid_routes"; uri] ->
         invalidRoutes uri
+        0
+    | [AsLower "streams"; uri] ->
+        streams uri
         0
     | _ ->
         printfn "test %A not found. usage: <test> <uri>" argv

@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_connection_sup).
@@ -21,23 +21,30 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([start_link/4, start_keepalive_link/0]).
-
+-export([start_link/3,
+         start_keepalive_link/0]).
 -export([init/1]).
 
-
-start_link(Ref, _Sock, Transport, Opts) ->
+start_link(Ref, Transport, Opts) ->
     {ok, SupPid} = supervisor2:start_link(?MODULE, []),
-    {ok, KeepaliveSup} = supervisor2:start_child(
-        SupPid,
-        {rabbit_stream_keepalive_sup,
-            {rabbit_stream_connection_sup, start_keepalive_link, []},
-            intrinsic, infinity, supervisor, [rabbit_keepalive_sup]}),
-    {ok, ReaderPid} = supervisor2:start_child(
-        SupPid,
-        {rabbit_stream_reader,
-            {rabbit_stream_reader, start_link, [KeepaliveSup, Transport, Ref, Opts]},
-            intrinsic, ?WORKER_WAIT, worker, [rabbit_stream_reader]}),
+    {ok, KeepaliveSup} =
+        supervisor2:start_child(SupPid,
+                                {rabbit_stream_keepalive_sup,
+                                 {rabbit_stream_connection_sup,
+                                  start_keepalive_link, []},
+                                 intrinsic,
+                                 infinity,
+                                 supervisor,
+                                 [rabbit_keepalive_sup]}),
+    {ok, ReaderPid} =
+        supervisor2:start_child(SupPid,
+                                {rabbit_stream_reader,
+                                 {rabbit_stream_reader, start_link,
+                                  [KeepaliveSup, Transport, Ref, Opts]},
+                                 intrinsic,
+                                 ?WORKER_WAIT,
+                                 worker,
+                                 [rabbit_stream_reader]}),
     {ok, SupPid, ReaderPid}.
 
 start_keepalive_link() ->

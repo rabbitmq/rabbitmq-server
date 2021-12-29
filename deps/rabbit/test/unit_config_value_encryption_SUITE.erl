@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(unit_config_value_encryption_SUITE).
@@ -11,6 +11,10 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -compile(export_all).
+
+%% This cipher is listed as supported, but doesn't actually work.
+%% OTP bug: https://bugs.erlang.org/browse/ERL-1478
+-define(SKIPPED_CIPHERS, [aes_ige256]).
 
 all() ->
     [
@@ -48,7 +52,7 @@ end_per_testcase(_TC, _Config) ->
 decrypt_config(_Config) ->
     %% Take all available block ciphers.
     Hashes = rabbit_pbe:supported_hashes(),
-    Ciphers = rabbit_pbe:supported_ciphers(),
+    Ciphers = rabbit_pbe:supported_ciphers() -- ?SKIPPED_CIPHERS,
     Iterations = [1, 10, 100, 1000],
     %% Loop through all hashes, ciphers and iterations.
     _ = [begin
@@ -106,7 +110,7 @@ decrypt_start_app_file(Config) ->
 do_decrypt_start_app(Config, Passphrase) ->
     %% Configure rabbit for decrypting configuration.
     application:set_env(rabbit, config_entry_decoder, [
-        {cipher, aes_cbc256},
+        {cipher, aes_256_cbc},
         {hash, sha512},
         {iterations, 1000},
         {passphrase, Passphrase}
@@ -118,8 +122,9 @@ do_decrypt_start_app(Config, Passphrase) ->
     %% We expect a failure *after* the decrypting has been done.
     try
         rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
-    catch _:_ ->
-        ok
+    catch _:Err ->
+              ct:pal("~s: start_apps failed with ~p", [Err]),
+              ok
     end,
     %% Check if the values have been decrypted.
     {ok, Shovels} = application:get_env(rabbit_shovel_test, shovels),

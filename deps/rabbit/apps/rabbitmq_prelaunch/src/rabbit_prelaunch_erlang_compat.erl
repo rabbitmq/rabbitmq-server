@@ -1,25 +1,32 @@
 -module(rabbit_prelaunch_erlang_compat).
 
+-include_lib("kernel/include/logger.hrl").
+
+-include_lib("rabbit_common/include/logging.hrl").
+
 -export([check/1]).
 
--define(OTP_MINIMUM, "21.3").
--define(ERTS_MINIMUM, "10.3").
+-define(OTP_MINIMUM, "23.2").
+-define(ERTS_MINIMUM, "11.1").
 
 check(_Context) ->
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Erlang/OTP compatibility check =="),
+    ?LOG_DEBUG(
+       "~n== Erlang/OTP compatibility check ==", [],
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
 
     ERTSVer = erlang:system_info(version),
     OTPRel = rabbit_misc:otp_release(),
-    rabbit_log_prelaunch:debug(
-      "Requiring: Erlang/OTP ~s (ERTS ~s)", [?OTP_MINIMUM, ?ERTS_MINIMUM]),
-    rabbit_log_prelaunch:debug(
-      "Running:   Erlang/OTP ~s (ERTS ~s)", [OTPRel, ERTSVer]),
+    ?LOG_DEBUG(
+      "Requiring: Erlang/OTP ~s (ERTS ~s)~n"
+      "Running:   Erlang/OTP ~s (ERTS ~s)",
+      [?OTP_MINIMUM, ?ERTS_MINIMUM, OTPRel, ERTSVer],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
 
     case rabbit_misc:version_compare(?ERTS_MINIMUM, ERTSVer, lte) of
         true when ?ERTS_MINIMUM =/= ERTSVer ->
-            rabbit_log_prelaunch:debug(
-              "Erlang/OTP version requirement satisfied"),
+            ?LOG_DEBUG(
+              "Erlang/OTP version requirement satisfied", [],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             ok;
         true when ?ERTS_MINIMUM =:= ERTSVer andalso ?OTP_MINIMUM =< OTPRel ->
             %% When a critical regression or bug is found, a new OTP
@@ -35,7 +42,7 @@ check(_Context) ->
             "This RabbitMQ version cannot run on Erlang ~s (erts ~s): "
             "minimum required version is ~s (erts ~s)",
             Args = [OTPRel, ERTSVer, ?OTP_MINIMUM, ?ERTS_MINIMUM],
-            rabbit_log_prelaunch:error(Msg, Args),
+            ?LOG_ERROR(Msg, Args, #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
 
             %% Also print to stderr to make this more visible
             io:format(standard_error, "Error: " ++ Msg ++ "~n", Args),

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_rabbitmqadmin_SUITE).
@@ -108,6 +108,7 @@ host(Config) ->
     {ok, _} = run(Config, ["show", "overview"]),
     {ok, _} = run(Config, ["--host", "localhost", "show", "overview"]),
     {error, _, _} = run(Config, ["--host", "some-host-that-does-not-exist",
+                                 "--request-timeout", "5",
                                  "show", "overview"]).
 
 base_uri(Config) ->
@@ -116,6 +117,7 @@ base_uri(Config) ->
     {ok, _} = run(Config, ["--base-uri", "http://localhost",  "--vhost", "/", "list", "exchanges"]),
     {ok, _} = run(Config, ["--base-uri", "http://localhost/", "--vhost", "/", "list", "exchanges"]),
     {error, _, _} = run(Config, ["--base-uri", "https://some-host-that-does-not-exist:15672/",
+                                 "--request-timeout", "5",
                                  "list", "exchanges"]),
     {error, _, _} = run(Config, ["--base-uri", "http://localhost:15672/", "--vhost", "some-vhost-that-does-not-exist",
                                  "list", "exchanges"]).

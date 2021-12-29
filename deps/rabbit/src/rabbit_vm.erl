@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_vm).
@@ -231,7 +231,7 @@ conn_sups()     ->
 
 ranch_server_sups() ->
     try
-        ets:match(ranch_server, {{conns_sup, '_'}, '$1'})
+        [Pid || {_, _, Pid} <- ranch_server:get_connections_sups()]
     catch
         %% Ranch ETS table doesn't exist yet
         error:badarg  -> []
@@ -325,16 +325,17 @@ ra_type(PDict) ->
                                   info_value()).
 -type distinguisher() :: fun (([{term(), term()}]) -> atom()).
 -type distinguishers() :: [{info_key(), distinguisher()}].
+
 -spec sum_processes([process()], distinguishers(), [info_key()]) ->
-                              {[{process(), [info_item()]}], [info_item()]}.
--spec sum_processes([process()], accumulate(), distinguishers(),
-                          [info_item()]) ->
                               {[{process(), [info_item()]}], [info_item()]}.
 
 sum_processes(Names, Distinguishers, Items) ->
     sum_processes(Names, fun (_, X, Y) -> X + Y end, Distinguishers,
                   [{Item, 0} || Item <- Items]).
 
+-spec sum_processes([process()], accumulate(), distinguishers(),
+                          [info_item()]) ->
+                              {[{process(), [info_item()]}], [info_item()]}.
 %% summarize the process_info of all processes based on their
 %% '$ancestor' hierarchy, recorded in their process dictionary.
 %%

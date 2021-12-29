@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_table).
@@ -101,16 +101,16 @@ wait(TableNames, Retry) ->
 wait(TableNames, Timeout, Retries) ->
     %% We might be in ctl here for offline ops, in which case we can't
     %% get_env() for the rabbit app.
-    rabbit_log:info("Waiting for Mnesia tables for ~p ms, ~p retries left~n",
+    rabbit_log:info("Waiting for Mnesia tables for ~p ms, ~p retries left",
                     [Timeout, Retries - 1]),
     Result = case mnesia:wait_for_tables(TableNames, Timeout) of
                  ok ->
                      ok;
                  {timeout, BadTabs} ->
-                     AllNodes = rabbit_mnesia:cluster_nodes(all),
+                     AllNodes = rabbit_nodes:all(),
                      {error, {timeout_waiting_for_tables, AllNodes, BadTabs}};
                  {error, Reason} ->
-                     AllNodes = rabbit_mnesia:cluster_nodes(all),
+                     AllNodes = rabbit_nodes:all(),
                      {error, {failed_waiting_for_tables, AllNodes, Reason}}
              end,
     case {Retries, Result} of
@@ -120,7 +120,7 @@ wait(TableNames, Timeout, Retries) ->
         {1, {error, _} = Error} ->
             throw(Error);
         {_, {error, Error}} ->
-            rabbit_log:warning("Error while waiting for Mnesia tables: ~p~n", [Error]),
+            rabbit_log:warning("Error while waiting for Mnesia tables: ~p", [Error]),
             wait(TableNames, Timeout, Retries - 1)
     end.
 

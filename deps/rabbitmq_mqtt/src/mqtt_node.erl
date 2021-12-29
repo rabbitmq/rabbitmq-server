@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(mqtt_node).
 
@@ -12,6 +12,7 @@
 -define(START_TIMEOUT, 100000).
 -define(RETRY_INTERVAL, 5000).
 -define(RA_OPERATION_TIMEOUT, 60000).
+-define(RA_SYSTEM, coordination).
 
 node_id() ->
     server_id(node()).
@@ -23,7 +24,7 @@ server_id(Node) ->
     {?ID_NAME, Node}.
 
 all_node_ids() ->
-    [server_id(N) || N <- rabbit_mnesia:cluster_nodes(all),
+    [server_id(N) || N <- rabbit_nodes:all(),
                    can_participate_in_clientid_tracking(N)].
 
 start() ->
@@ -37,7 +38,7 @@ start(_Delay, AttemptsLeft) when AttemptsLeft =< 0 ->
 start(Delay, AttemptsLeft) ->
     NodeId = server_id(),
     Nodes = compatible_peer_servers(),
-    case ra_directory:uid_of(?ID_NAME) of
+    case ra_directory:uid_of(?RA_SYSTEM, ?ID_NAME) of
           undefined ->
               case Nodes of
                   [] ->
@@ -64,8 +65,8 @@ start(Delay, AttemptsLeft) ->
               end;
           _ ->
               join_peers(NodeId, Nodes),
-              ra:restart_server(NodeId),
-              ra:trigger_election(NodeId)
+              ra:restart_server(?RA_SYSTEM, NodeId),
+              ra:trigger_election(NodeId, ?RA_OPERATION_TIMEOUT)
     end,
     ok.
 
@@ -80,23 +81,22 @@ start_server() ->
     Conf = #{cluster_name => ?ID_NAME,
              id => NodeId,
              uid => UId,
-             friendly_name => ?ID_NAME,
+             friendly_name => atom_to_list(?ID_NAME),
              initial_members => Nodes,
              log_init_args => #{uid => UId},
              tick_timeout => Timeout,
              machine => {module, mqtt_machine, #{}}
     },
-    ra:start_server(Conf).
+    ra:start_server(?RA_SYSTEM, Conf).
 
 trigger_election() ->
-    ra:trigger_election(server_id()).
+    ra:trigger_election(server_id(), ?RA_OPERATION_TIMEOUT).
 
 join_peers(_NodeId, []) ->
     ok;
 join_peers(NodeId, Nodes) ->
     join_peers(NodeId, Nodes, 100).
-join_peers(_NodeId, [], _RetriesLeft) ->
-    ok;
+
 join_peers(_NodeId, _Nodes, RetriesLeft) when RetriesLeft =:= 0 ->
     rabbit_log:error("MQTT: exhausted all attempts while trying to rejoin cluster peers");
 join_peers(NodeId, Nodes, RetriesLeft) ->
@@ -119,7 +119,7 @@ leave(Node) ->
     NodeId = server_id(),
     ToLeave = server_id(Node),
     try
-        ra:leave_and_delete_server(NodeId, ToLeave)
+        ra:leave_and_delete_server(?RA_SYSTEM, NodeId, ToLeave)
     catch
         exit:{{nodedown, Node}, _} ->
             nodedown

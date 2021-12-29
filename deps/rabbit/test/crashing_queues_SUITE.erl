@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(crashing_queues_SUITE).
@@ -162,7 +162,8 @@ declare_racer_loop(Parent, Conn, Decl) ->
             try
                 case amqp_connection:open_channel(Conn) of
                     {ok, Ch} -> amqp_channel:call(Ch, Decl);
-                    closing  -> ok
+                    closing  -> ok;
+                    {error, _} -> ok
                 end
             catch
                 exit:_ ->

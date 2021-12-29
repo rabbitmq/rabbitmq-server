@@ -5,8 +5,8 @@
 -export([
          ]).
 
--include("rabbit.hrl").
--include("rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
@@ -24,6 +24,7 @@ all() ->
 all_tests() ->
     [
      ampq091_roundtrip,
+     unsupported_091_header_is_dropped,
      message_id_ulong,
      message_id_uuid,
      message_id_binary,
@@ -88,6 +89,22 @@ ampq091_roundtrip(_Config) ->
     Payload = [<<"data">>],
     test_amqp091_roundtrip(Props, Payload),
     test_amqp091_roundtrip(#'P_basic'{}, Payload),
+    ok.
+
+unsupported_091_header_is_dropped(_Config) ->
+    Props = #'P_basic'{
+                       headers = [
+                                  {<<"x-received-from">>, array, []}
+                                 ]
+                      },
+    MsgRecord0 = rabbit_msg_record:from_amqp091(Props, <<"payload">>),
+    MsgRecord = rabbit_msg_record:init(
+                  iolist_to_binary(rabbit_msg_record:to_iodata(MsgRecord0))),
+    % meck:unload(),
+    {PropsOut, <<"payload">>} = rabbit_msg_record:to_amqp091(MsgRecord),
+
+    ?assertMatch(#'P_basic'{headers = undefined}, PropsOut),
+
     ok.
 
 message_id_ulong(_Config) ->

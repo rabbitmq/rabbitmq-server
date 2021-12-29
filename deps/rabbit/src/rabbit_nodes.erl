@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_nodes).
@@ -14,6 +14,8 @@
          await_running_count/2, is_single_node_cluster/0,
          boot/0]).
 -export([persistent_cluster_id/0, seed_internal_cluster_id/0, seed_user_provided_cluster_name/0]).
+-export([all/0, all_running_with_hashes/0, target_cluster_size_hint/0, reached_target_cluster_size/0]).
+-export([lock_id/1, lock_retries/0]).
 
 -include_lib("kernel/include/inet.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -21,6 +23,14 @@
 -define(SAMPLING_INTERVAL, 1000).
 
 -define(INTERNAL_CLUSTER_ID_PARAM_NAME, internal_cluster_id).
+
+% Retries as passed to https://erlang.org/doc/man/global.html#set_lock-3
+% To understand how retries map to the timeout, read
+% https://github.com/erlang/otp/blob/d256ae477014158a49bb860b283df9c040011197/lib/kernel/src/global.erl#L2062-L2075
+% 80 corresponds to a timeout of ca 300 seconds.
+-define(DEFAULT_LOCK_RETRIES, 80).
+
+-define(DEFAULT_TARGET_CLUSTER_SIZE, 1).
 
 %%----------------------------------------------------------------------------
 %% API
@@ -72,8 +82,10 @@ is_process_running(Node, Process) ->
 -spec cluster_name() -> binary().
 
 cluster_name() ->
-    rabbit_runtime_parameters:value_global(
-      cluster_name, cluster_name_default()).
+    case rabbit_runtime_parameters:value_global(cluster_name) of 
+        not_found -> cluster_name_default();
+        Name -> Name
+    end.
 
 cluster_name_default() ->
     {ID, _} = parts(node()),
@@ -127,6 +139,9 @@ set_cluster_name(Name, Username) ->
 ensure_epmd() ->
     rabbit_nodes_common:ensure_epmd().
 
+-spec all() -> [node()].
+all() -> rabbit_mnesia:cluster_nodes(all).
+
 -spec all_running() -> [node()].
 all_running() -> rabbit_mnesia:cluster_nodes(running).
 
@@ -134,7 +149,7 @@ all_running() -> rabbit_mnesia:cluster_nodes(running).
 running_count() -> length(all_running()).
 
 -spec total_count() -> integer().
-total_count() -> length(rabbit_mnesia:cluster_nodes(all)).
+total_count() -> length(rabbit_nodes:all()).
 
 -spec is_single_node_cluster() -> boolean().
 is_single_node_cluster() ->
@@ -154,4 +169,38 @@ await_running_count_with_retries(TargetCount, Retries) ->
         false ->
             timer:sleep(?SAMPLING_INTERVAL),
             await_running_count_with_retries(TargetCount, Retries - 1)
+    end.
+
+-spec all_running_with_hashes() -> #{non_neg_integer() => node()}.
+all_running_with_hashes() ->
+    maps:from_list([{erlang:phash2(Node), Node} || Node <- all_running()]).
+
+-spec target_cluster_size_hint() -> non_neg_integer().
+target_cluster_size_hint() ->
+    cluster_formation_key_or_default(target_cluster_size_hint, ?DEFAULT_TARGET_CLUSTER_SIZE).
+
+-spec reached_target_cluster_size() -> boolean().
+reached_target_cluster_size() ->
+    running_count() >= target_cluster_size_hint().
+
+
+-spec lock_id(Node :: node()) -> {ResourceId :: string(), LockRequesterId :: node()}.
+lock_id(Node) ->
+  {cookie_hash(), Node}.
+
+-spec lock_retries() -> integer().
+lock_retries() ->
+    cluster_formation_key_or_default(internal_lock_retries, ?DEFAULT_LOCK_RETRIES).
+
+
+%%
+%% Implementation
+%%
+
+cluster_formation_key_or_default(Key, Default) ->
+    case application:get_env(rabbit, cluster_formation) of
+        {ok, PropList} ->
+          proplists:get_value(Key, PropList, Default);
+        undefined ->
+            Default
     end.

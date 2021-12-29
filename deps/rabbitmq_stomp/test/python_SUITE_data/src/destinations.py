@@ -36,10 +36,8 @@ class TestExchange(base.BaseTest):
                             ack="auto")
         self.assertListener("Expecting an error", numErrs=1)
         err = self.listener.errors[0]
-        self.assertEquals("not_found", err['headers']['message'])
-        self.assertEquals(
-            "NOT_FOUND - no exchange 'does.not.exist' in vhost '/'\n",
-            err['message'])
+        self.assertEqual("not_found", err['headers']['message'])
+        self.assertRegex(err['message'], r'^NOT_FOUND')
         time.sleep(1)
         self.assertFalse(self.conn.is_connected())
 
@@ -60,6 +58,19 @@ class TestQueue(base.BaseTest):
         destination = '/queue/test'
         self.simple_test_send_rec(destination)
 
+    def test_send_recv_header(self):
+        ''' Test sending a custom header and receiving it back '''
+        dest = '/queue/custom-header'
+        hdrs = {'x-custom-header-1': 'value1',
+                'x-custom-header-2': 'value2',
+                'custom-header-3': 'value3'}
+        self.listener.reset(1)
+        recv_hdrs = self.simple_test_send_rec(dest, headers=hdrs)
+        self.assertEqual('value1', recv_hdrs['x-custom-header-1'])
+        self.assertEqual('value2', recv_hdrs['x-custom-header-2'])
+        self.assertEqual('value3', recv_hdrs['custom-header-3'])
+
+
     def test_send_receive_in_other_conn(self):
         ''' Test send in one connection, receive in another '''
         destination = '/queue/test2'
@@ -74,7 +85,7 @@ class TestQueue(base.BaseTest):
             conn2.set_listener('', listener2)
 
             self.subscribe_dest(conn2, destination, None, ack="auto")
-            self.assertTrue(listener2.wait(10), "no receive")
+            self.assertTrue(listener2.wait_for_complete_countdown(), "no receive")
         finally:
             conn2.disconnect()
 
@@ -84,7 +95,7 @@ class TestQueue(base.BaseTest):
 
         # send
         self.conn.send(destination, "hello thar", receipt="foo")
-        self.listener.wait(3)
+        self.listener.wait_for_complete_countdown(3)
         self.conn.disconnect()
 
         # now receive
@@ -94,7 +105,7 @@ class TestQueue(base.BaseTest):
             conn2.set_listener('', listener2)
 
             self.subscribe_dest(conn2, destination, None, ack="auto")
-            self.assertTrue(listener2.wait(10), "no receive")
+            self.assertTrue(listener2.wait_for_complete_countdown(), "no receive")
         finally:
             conn2.disconnect()
 
@@ -114,10 +125,10 @@ class TestQueue(base.BaseTest):
 
             ## expect both consumers to get a message?
             self.assertTrue(listener1.wait(2))
-            self.assertEquals(1, len(listener1.messages),
+            self.assertEqual(1, len(listener1.messages),
                               "unexpected message count")
             self.assertTrue(listener2.wait(2))
-            self.assertEquals(1, len(listener2.messages),
+            self.assertEqual(1, len(listener2.messages),
                               "unexpected message count")
         finally:
             conn1.disconnect()
@@ -155,7 +166,7 @@ class TestQueue(base.BaseTest):
 
         self.assertListener("Missing messages/receipts", numMsgs=3, numRcts=2, timeout=3)
 
-        self.assertEquals(set(['a','b']), self.__gather_receipts())
+        self.assertEqual(set(['a','b']), self.__gather_receipts())
 
     def test_interleaved_receipt_no_receipt_tx(self):
         ''' Test i-leaved receipt/no receipt, no-r bracketed by r+xactions '''
@@ -179,7 +190,7 @@ class TestQueue(base.BaseTest):
         expected = set(['a', 'b'])
         missing = expected.difference(self.__gather_receipts())
 
-        self.assertEquals(set(), missing, "Missing receipts: " + str(missing))
+        self.assertEqual(set(), missing, "Missing receipts: " + str(missing))
 
     def test_interleaved_receipt_no_receipt_inverse(self):
         ''' Test i-leaved receipt/no receipt, r bracketed by no-rs '''
@@ -195,7 +206,7 @@ class TestQueue(base.BaseTest):
 
         self.assertListener("Missing messages/receipt", numMsgs=3, numRcts=1, timeout=3)
 
-        self.assertEquals(set(['a']), self.__gather_receipts())
+        self.assertEqual(set(['a']), self.__gather_receipts())
 
     def __test_send_receipt(self, destination, before, after, headers = {}):
         count = 50
@@ -211,12 +222,12 @@ class TestQueue(base.BaseTest):
                            receipt=receipt, headers=headers)
         after()
 
-        self.assertTrue(self.listener.wait(5))
+        self.assertTrue(self.listener.wait_for_complete_countdown())
 
         missing_receipts = expected_receipts.difference(
                     self.__gather_receipts())
 
-        self.assertEquals(set(), missing_receipts,
+        self.assertEqual(set(), missing_receipts,
                           "missing receipts: " + str(missing_receipts))
 
     def __gather_receipts(self):
@@ -250,11 +261,11 @@ class TestTopic(base.BaseTest):
               self.conn.send(destination, "test2")
 
               ## expect both consumers to get both messages
-              self.assertTrue(listener1.wait(5))
-              self.assertEquals(2, len(listener1.messages),
+              self.assertTrue(listener1.wait_for_complete_countdown())
+              self.assertEqual(2, len(listener1.messages),
                                 "unexpected message count")
-              self.assertTrue(listener2.wait(5))
-              self.assertEquals(2, len(listener2.messages),
+              self.assertTrue(listener2.wait_for_complete_countdown())
+              self.assertEqual(2, len(listener2.messages),
                                 "unexpected message count")
           finally:
               conn1.disconnect()
@@ -278,13 +289,13 @@ class TestTopic(base.BaseTest):
               self.conn.send(destination, message)
 
               self.assertTrue(listener1.wait(10))
-              self.assertEquals(2, len(listener1.messages),
+              self.assertEqual(2, len(listener1.messages),
                                 "unexpected message count")
               self.assertTrue(len(listener2.messages[0]['message']) == s,
                               "unexpected message size")
 
               self.assertTrue(listener2.wait(10))
-              self.assertEquals(2, len(listener2.messages),
+              self.assertEqual(2, len(listener2.messages),
                                 "unexpected message count")
           finally:
               conn1.disconnect()
@@ -292,71 +303,7 @@ class TestTopic(base.BaseTest):
 
 class TestReplyQueue(base.BaseTest):
 
-    def test_reply_queue(self):
-        ''' Test with two separate clients. Client 1 sends
-        message to a known destination with a defined reply
-        queue. Client 2 receives on known destination and replies
-        on the reply destination. Client 1 gets the reply message'''
-
-        known = '/queue/known'
-        reply = '/temp-queue/0'
-
-        ## Client 1 uses pre-supplied connection and listener
-        ## Set up client 2
-        conn2, listener2 = self.create_subscriber_connection(known)
-
-        try:
-            self.conn.send(known, "test",
-                           headers = {"reply-to": reply})
-
-            self.assertTrue(listener2.wait(5))
-            self.assertEquals(1, len(listener2.messages))
-
-            reply_to = listener2.messages[0]['headers']['reply-to']
-            self.assertTrue(reply_to.startswith('/reply-queue/'))
-
-            conn2.send(reply_to, "reply")
-            self.assertTrue(self.listener.wait(5))
-            self.assertEquals("reply", self.listener.messages[0]['message'])
-        finally:
-            conn2.disconnect()
-
-    def test_reuse_reply_queue(self):
-        ''' Test re-use of reply-to queue '''
-
-        known2 = '/queue/known2'
-        known3 = '/queue/known3'
-        reply = '/temp-queue/foo'
-
-        def respond(cntn, listna):
-            self.assertTrue(listna.wait(5))
-            self.assertEquals(1, len(listna.messages))
-            reply_to = listna.messages[0]['headers']['reply-to']
-            self.assertTrue(reply_to.startswith('/reply-queue/'))
-            cntn.send(reply_to, "reply")
-
-        ## Client 1 uses pre-supplied connection and listener
-        ## Set up clients 2 and 3
-        conn2, listener2 = self.create_subscriber_connection(known2)
-        conn3, listener3 = self.create_subscriber_connection(known3)
-        try:
-            self.listener.reset(2)
-            self.conn.send(known2, "test2",
-                           headers = {"reply-to": reply})
-            self.conn.send(known3, "test3",
-                           headers = {"reply-to": reply})
-            respond(conn2, listener2)
-            respond(conn3, listener3)
-
-            self.assertTrue(self.listener.wait(5))
-            self.assertEquals(2, len(self.listener.messages))
-            self.assertEquals("reply", self.listener.messages[0]['message'])
-            self.assertEquals("reply", self.listener.messages[1]['message'])
-        finally:
-            conn2.disconnect()
-            conn3.disconnect()
-
-    def test_perm_reply_queue(self):
+    def test_durable_known_reply_queue(self):
         '''As test_reply_queue, but with a non-temp reply queue'''
 
         known = '/queue/known'
@@ -371,15 +318,15 @@ class TestReplyQueue(base.BaseTest):
             conn1.send(known, "test",
                        headers = {"reply-to": reply})
 
-            self.assertTrue(listener2.wait(5))
-            self.assertEquals(1, len(listener2.messages))
+            self.assertTrue(listener2.wait_for_complete_countdown())
+            self.assertEqual(1, len(listener2.messages))
 
             reply_to = listener2.messages[0]['headers']['reply-to']
             self.assertTrue(reply_to == reply)
 
             conn2.send(reply_to, "reply")
-            self.assertTrue(listener1.wait(5))
-            self.assertEquals("reply", listener1.messages[0]['message'])
+            self.assertTrue(listener1.wait_for_complete_countdown())
+            self.assertEqual("reply", listener1.messages[0]['message'])
         finally:
             conn1.disconnect()
             conn2.disconnect()
@@ -403,20 +350,20 @@ class TestDurableSubscription(base.BaseTest):
         if not listener:
             listener = self.listener
 
-        self.assertTrue(listener.wait(5))
-        self.assertEquals(1, len(self.listener.receipts))
+        self.assertTrue(listener.wait_for_complete_countdown())
+        self.assertEqual(1, len(self.listener.receipts))
         if pos is not None:
-            self.assertEquals(pos, self.listener.receipts[0]['msg_no'])
+            self.assertEqual(pos, self.listener.receipts[0]['msg_no'])
 
     def __assert_message(self, msg, listener=None, pos=None):
         if not listener:
             listener = self.listener
 
-        self.assertTrue(listener.wait(5))
-        self.assertEquals(1, len(listener.messages))
-        self.assertEquals(msg, listener.messages[0]['message'])
+        self.assertTrue(listener.wait_for_complete_countdown())
+        self.assertEqual(1, len(listener.messages))
+        self.assertEqual(msg, listener.messages[0]['message'])
         if pos is not None:
-            self.assertEquals(pos, self.listener.messages[0]['msg_no'])
+            self.assertEqual(pos, self.listener.messages[0]['msg_no'])
 
     def do_test_durable_subscription(self, durability_header):
         destination = '/topic/durable'
@@ -453,8 +400,8 @@ class TestDurableSubscription(base.BaseTest):
         # resubscribe and expect no message
         self.__subscribe(destination)
         self.assertTrue(self.listener.wait(3))
-        self.assertEquals(0, len(self.listener.messages))
-        self.assertEquals(1, len(self.listener.receipts))
+        self.assertEqual(0, len(self.listener.messages))
+        self.assertEqual(1, len(self.listener.receipts))
 
     def test_durable_subscription(self):
         self.do_test_durable_subscription('durable')
@@ -477,12 +424,13 @@ class TestDurableSubscription(base.BaseTest):
 
             self.listener.reset(100)
 
+            n = 100
             # send 100 messages
-            for x in range(0, 100):
+            for x in range(0, n):
                 self.conn.send(destination, "msg" + str(x))
 
-            self.assertTrue(self.listener.wait(5))
-            self.assertEquals(100, len(self.listener.messages))
+            self.assertTrue(self.listener.wait_for_complete_countdown())
+            self.assertEqual(n, len(self.listener.messages))
         finally:
             conn2.disconnect()
 
@@ -502,20 +450,20 @@ class TestDurableSubscription(base.BaseTest):
             self.unsubscribe_dest(self.conn, destination, TestDurableSubscription.ID)
             self.unsubscribe_dest(conn2, destination, "other.id")
 
-            self.listener.reset(101)
-            listener2.reset(101) ## 100 messages and 1 receipt
+            self.listener.reset(11)
+            listener2.reset(11) ## 10 messages and 1 receipt
 
             # send 100 messages
-            for x in range(0, 100):
+            for x in range(0, 10):
                 self.conn.send(destination, "msg" + str(x))
 
             self.__subscribe(destination)
             self.__subscribe(destination, conn2, "other.id")
 
             for l in [self.listener, listener2]:
-                self.assertTrue(l.wait(20))
-                self.assertTrue(len(l.messages) >= 90)
-                self.assertTrue(len(l.messages) <= 100)
+                self.assertTrue(l.wait_for_complete_countdown())
+                self.assertTrue(len(l.messages) >= 9)
+                self.assertTrue(len(l.messages) <= 10)
 
         finally:
             conn2.disconnect()
@@ -526,11 +474,19 @@ class TestDurableSubscription(base.BaseTest):
         self.conn.send_frame('SUBSCRIBE',
             {'destination': destination, 'ack': 'auto', header: 'true'})
         self.listener.wait(3)
-        self.assertEquals(1, len(self.listener.errors))
-        self.assertEquals("Missing Header", self.listener.errors[0]['headers']['message'])
+        self.assertEqual(1, len(self.listener.errors))
+        self.assertEqual("Missing Header", self.listener.errors[0]['headers']['message'])
 
     def test_durable_subscribe_no_id(self):
         self.do_test_durable_subscribe_no_id_and_header('durable')
 
     def test_durable_subscribe_no_id_and_legacy_header(self):
         self.do_test_durable_subscribe_no_id_and_header('persistent')
+
+
+if __name__ == '__main__':
+    import test_runner
+    modules = [
+        __name__
+    ]
+    test_runner.run_unittests(modules)

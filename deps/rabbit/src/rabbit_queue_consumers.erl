@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_queue_consumers).
@@ -12,8 +12,10 @@
          send_drained/0, deliver/5, record_ack/3, subtract_acks/3,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
-         credit/6, utilisation/1, is_same/3, get_consumer/1, get/3,
+         credit/6, utilisation/1, capacity/1, is_same/3, get_consumer/1, get/3,
          consumer_tag/1, get_infos/1]).
+
+-export([deactivate_limit_fun/0]).
 
 %%----------------------------------------------------------------------------
 
@@ -221,7 +223,6 @@ deliver(FetchFun, QName, false, State = #state{consumers = Consumers}, true, Sin
                 {delivered, R} ->
                     {delivered, false, R, State};
                 undelivered ->
-                    {ChPid, Consumer} = SingleActiveConsumer,
                     Consumers1 = remove_consumer(ChPid, Consumer#consumer.tag, Consumers),
                     {undelivered, true,
                         State#state{consumers = Consumers1, use = update_use(State#state.use, inactive)}}
@@ -386,6 +387,13 @@ activate_limit_fun() ->
             C#cr{limiter = rabbit_limiter:activate(Limiter)}
     end.
 
+-spec deactivate_limit_fun()               -> cr_fun().
+
+deactivate_limit_fun() ->
+    fun (C = #cr{limiter = Limiter}) ->
+            C#cr{limiter = rabbit_limiter:deactivate(Limiter)}
+    end.
+
 -spec credit(boolean(), integer(), boolean(), ch(), rabbit_types:ctag(),
              state()) -> 'unchanged' | {'unblocked', state()}.
 
@@ -409,10 +417,13 @@ drain_mode(true)  -> drain;
 drain_mode(false) -> manual.
 
 -spec utilisation(state()) -> ratio().
+utilisation(State) ->
+    capacity(State).
 
-utilisation(#state{use = {active, Since, Avg}}) ->
+-spec capacity(state()) -> ratio().
+capacity(#state{use = {active, Since, Avg}}) ->
     use_avg(erlang:monotonic_time(micro_seconds) - Since, 0, Avg);
-utilisation(#state{use = {inactive, Since, Active, Avg}}) ->
+capacity(#state{use = {inactive, Since, Active, Avg}}) ->
     use_avg(Active, erlang:monotonic_time(micro_seconds) - Since, Avg).
 
 is_same(ChPid, ConsumerTag, {ChPid, #consumer{tag = ConsumerTag}}) ->

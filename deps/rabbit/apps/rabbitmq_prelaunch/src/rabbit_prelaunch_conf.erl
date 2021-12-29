@@ -1,9 +1,11 @@
 -module(rabbit_prelaunch_conf).
 
 -include_lib("kernel/include/file.hrl").
+-include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/zip.hrl").
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 
 -export([setup/1,
          get_config_state/0,
@@ -15,8 +17,9 @@
 -endif.
 
 setup(Context) ->
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Configuration =="),
+    ?LOG_DEBUG(
+       "\n== Configuration ==",
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
 
     %% TODO: Check if directories/files are inside Mnesia dir.
 
@@ -52,9 +55,10 @@ setup(Context) ->
                     #{config_files => ConfigFiles,
                       config_advanced_file => AdvancedConfigFile};
                 undefined when AdvancedConfigFile =/= undefined ->
-                    rabbit_log_prelaunch:warning(
+                    ?LOG_WARNING(
                       "Using RABBITMQ_ADVANCED_CONFIG_FILE: ~s",
-                      [AdvancedConfigFile]),
+                      [AdvancedConfigFile],
+                      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                     Config = load_cuttlefish_config_file(Context,
                                                          AdditionalConfigFiles,
                                                          AdvancedConfigFile),
@@ -66,10 +70,10 @@ setup(Context) ->
                     #{config_files => [],
                       config_advanced_file => undefined}
             end,
-    ok = override_with_hard_coded_critical_config(),
     ok = set_credentials_obfuscation_secret(),
-    rabbit_log_prelaunch:debug(
-      "Saving config state to application env: ~p", [State]),
+    ?LOG_DEBUG(
+      "Saving config state to application env: ~p", [State],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     store_config_state(State).
 
 store_config_state(ConfigState) ->
@@ -83,7 +87,16 @@ get_config_state() ->
 %% -------------------------------------------------------------------
 
 set_default_config() ->
-    rabbit_log_prelaunch:debug("Setting default config"),
+    ?LOG_DEBUG("Setting default config",
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    OsirisConfig =
+        case osiris_util:get_replication_configuration_from_tls_dist(
+                fun osiris_log/3) of
+            [] ->
+                [];
+            OsirisTlsReplicationConfig ->
+                [{osiris, OsirisTlsReplicationConfig}]
+        end,
     Config = [
               {ra,
                [
@@ -99,6 +112,8 @@ set_default_config() ->
                 %% goes down it is still immediately detected
                 {poll_interval, 5000}
                ]},
+              {syslog,
+               [{app_name, "rabbitmq-server"}]},
               {sysmon_handler,
                [{process_limit, 100},
                 {port_limit, 100},
@@ -107,8 +122,19 @@ set_default_config() ->
                 {heap_word_limit, 0},
                 {busy_port, false},
                 {busy_dist_port, true}]}
+                | OsirisConfig
              ],
     apply_erlang_term_based_config(Config).
+
+osiris_log(debug, Fmt, Args) ->
+    ?LOG_DEBUG(Fmt, Args,
+        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+osiris_log(warn, Fmt, Args) ->
+    ?LOG_WARNING(Fmt, Args,
+        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+osiris_log(_, Fmt, Args) ->
+    ?LOG_INFO(Fmt, Args,
+        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}).
 
 find_actual_main_config_file(#{main_config_file := File}) ->
     case filelib:is_regular(File) of
@@ -126,15 +152,18 @@ find_actual_main_config_file(#{main_config_file := File}) ->
                 true ->
                     case filelib:is_regular(NewFormatFile) of
                         true ->
-                            rabbit_log_prelaunch:warning(
+                            ?LOG_WARNING(
                               "Both old (.config) and new (.conf) format "
-                              "config files exist."),
-                            rabbit_log_prelaunch:warning(
+                              "config files exist.",
+                              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+                            ?LOG_WARNING(
                               "Using the old format config file: ~s",
-                              [OldFormatFile]),
-                            rabbit_log_prelaunch:warning(
+                              [OldFormatFile],
+                              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+                            ?LOG_WARNING(
                               "Please update your config files to the new "
-                              "format and remove the old file."),
+                              "format and remove the old file.",
+                              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                             ok;
                         false ->
                             ok
@@ -193,15 +222,18 @@ generate_config_from_cuttlefish_files(Context,
     SchemaFiles = find_cuttlefish_schemas(Context),
     case SchemaFiles of
         [] ->
-            rabbit_log_prelaunch:error(
-              "No configuration schema found~n", []),
+            ?LOG_ERROR(
+              "No configuration schema found", [],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             throw({error, no_configuration_schema_found});
         _ ->
-            rabbit_log_prelaunch:debug(
-              "Configuration schemas found:~n", []),
+            ?LOG_DEBUG(
+              "Configuration schemas found:~n", [],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             lists:foreach(
               fun(SchemaFile) ->
-                      rabbit_log_prelaunch:debug("  - ~ts", [SchemaFile])
+                      ?LOG_DEBUG("  - ~ts", [SchemaFile],
+                                 #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
               end,
               SchemaFiles),
             ok
@@ -209,37 +241,44 @@ generate_config_from_cuttlefish_files(Context,
     Schema = cuttlefish_schema:files(SchemaFiles),
 
     %% Load configuration.
-    rabbit_log_prelaunch:debug(
-      "Loading configuration files (Cuttlefish based):"),
+    ?LOG_DEBUG(
+      "Loading configuration files (Cuttlefish based):",
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     lists:foreach(
       fun(ConfigFile) ->
-              rabbit_log_prelaunch:debug("  - ~ts", [ConfigFile])
+              ?LOG_DEBUG("  - ~ts", [ConfigFile],
+                         #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
       end, ConfigFiles),
     case cuttlefish_conf:files(ConfigFiles) of
         {errorlist, Errors} ->
-            rabbit_log_prelaunch:error("Error parsing configuration:"),
+            ?LOG_ERROR("Error parsing configuration:",
+                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             lists:foreach(
               fun(Error) ->
-                      rabbit_log_prelaunch:error(
+                      ?LOG_ERROR(
                         "  - ~ts",
-                        [cuttlefish_error:xlate(Error)])
+                        [cuttlefish_error:xlate(Error)],
+                        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
               end, Errors),
-            rabbit_log_prelaunch:error(
-              "Are these files using the Cuttlefish format?"),
+            ?LOG_ERROR(
+              "Are these files using the Cuttlefish format?",
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             throw({error, failed_to_parse_configuration_file});
         Config0 ->
             %% Finalize configuration, based on the schema.
             Config = case cuttlefish_generator:map(Schema, Config0) of
                          {error, Phase, {errorlist, Errors}} ->
                              %% TODO
-                             rabbit_log_prelaunch:error(
+                             ?LOG_ERROR(
                                "Error preparing configuration in phase ~ts:",
-                               [Phase]),
+                               [Phase],
+                               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                              lists:foreach(
                                fun(Error) ->
-                                       rabbit_log_prelaunch:error(
+                                       ?LOG_ERROR(
                                          "  - ~ts",
-                                         [cuttlefish_error:xlate(Error)])
+                                         [cuttlefish_error:xlate(Error)],
+                                         #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
                                end, Errors),
                              throw(
                                {error, failed_to_prepare_configuration});
@@ -253,8 +292,9 @@ generate_config_from_cuttlefish_files(Context,
 
 find_cuttlefish_schemas(Context) ->
     Apps = list_apps(Context),
-    rabbit_log_prelaunch:debug(
-      "Looking up configuration schemas in the following applications:"),
+    ?LOG_DEBUG(
+      "Looking up configuration schemas in the following applications:",
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     find_cuttlefish_schemas(Apps, []).
 
 find_cuttlefish_schemas([App | Rest], AllSchemas) ->
@@ -264,10 +304,10 @@ find_cuttlefish_schemas([], AllSchemas) ->
     lists:sort(fun(A,B) -> A < B end, AllSchemas).
 
 list_apps(#{os_type := {win32, _}, plugins_path := PluginsPath}) ->
-    PluginsDirs = string:lexemes(PluginsPath, ";"),
+    PluginsDirs = lists:usort(string:lexemes(PluginsPath, ";")),
     list_apps1(PluginsDirs, []);
 list_apps(#{plugins_path := PluginsPath}) ->
-    PluginsDirs = string:lexemes(PluginsPath, ":"),
+    PluginsDirs = lists:usort(string:lexemes(PluginsPath, ":")),
     list_apps1(PluginsDirs, []).
 
 
@@ -281,9 +321,10 @@ list_apps1([Dir | Rest], Apps) ->
             Apps1 = lists:umerge(Apps, lists:sort(NewApps)),
             list_apps1(Rest, Apps1);
         {error, Reason} ->
-            rabbit_log_prelaunch:debug(
+            ?LOG_DEBUG(
               "Failed to list directory \"~ts\" content: ~ts",
-              [Dir, file:format_error(Reason)]),
+              [Dir, file:format_error(Reason)],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             list_apps1(Rest, Apps)
     end;
 list_apps1([], AppInfos) ->
@@ -299,17 +340,19 @@ list_schemas_in_app(App) ->
                true ->
                    case code:priv_dir(App) of
                        {error, bad_name} ->
-                           rabbit_log_prelaunch:debug(
-                             "  [ ] ~s (no readable priv dir)", [App]),
+                           ?LOG_DEBUG(
+                             "  [ ] ~s (no readable priv dir)", [App],
+                             #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                            [];
                        PrivDir ->
                            SchemaDir = filename:join([PrivDir, "schema"]),
                            do_list_schemas_in_app(App, SchemaDir)
                    end;
                Reason1 ->
-                   rabbit_log_prelaunch:debug(
+                   ?LOG_DEBUG(
                      "  [ ] ~s (failed to load application: ~p)",
-                     [App, Reason1]),
+                     [App, Reason1],
+                     #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                    []
            end,
     case Unload of
@@ -322,74 +365,95 @@ list_schemas_in_app(App) ->
 do_list_schemas_in_app(App, SchemaDir) ->
     case erl_prim_loader:list_dir(SchemaDir) of
         {ok, Files} ->
-            rabbit_log_prelaunch:debug("  [x] ~s", [App]),
+            ?LOG_DEBUG("  [x] ~s", [App],
+                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             [filename:join(SchemaDir, File)
              || [C | _] = File <- Files,
                 C =/= $.];
         error ->
-            rabbit_log_prelaunch:debug(
-              "  [ ] ~s (no readable schema dir)", [App]),
+            ?LOG_DEBUG(
+              "  [ ] ~s (no readable schema dir)", [App],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             []
     end.
 
 override_with_advanced_config(Config, undefined) ->
     Config;
 override_with_advanced_config(Config, AdvancedConfigFile) ->
-    rabbit_log_prelaunch:debug(
+    ?LOG_DEBUG(
       "Override with advanced configuration file \"~ts\"",
-      [AdvancedConfigFile]),
+      [AdvancedConfigFile],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case file:consult(AdvancedConfigFile) of
         {ok, [AdvancedConfig]} ->
             cuttlefish_advanced:overlay(Config, AdvancedConfig);
         {ok, OtherTerms} ->
-            rabbit_log_prelaunch:error(
+            ?LOG_ERROR(
               "Failed to load advanced configuration file \"~ts\", "
               "incorrect format: ~p",
-              [AdvancedConfigFile, OtherTerms]),
+              [AdvancedConfigFile, OtherTerms],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             throw({error, failed_to_parse_advanced_configuration_file});
         {error, Reason} ->
-            rabbit_log_prelaunch:error(
+            ?LOG_ERROR(
               "Failed to load advanced configuration file \"~ts\": ~ts",
-              [AdvancedConfigFile, file:format_error(Reason)]),
+              [AdvancedConfigFile, file:format_error(Reason)],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             throw({error, failed_to_read_advanced_configuration_file})
     end.
-
-override_with_hard_coded_critical_config() ->
-    rabbit_log_prelaunch:debug("Override with hard-coded critical config"),
-    Config = [
-              {ra,
-               %% Make Ra use a custom logger that dispatches to lager
-               %% instead of the default OTP logger
-               [{logger_module, rabbit_log_ra_shim}]},
-              {osiris,
-               [{logger_module, rabbit_log_osiris_shim}]}
-             ],
-    apply_erlang_term_based_config(Config).
 
 apply_erlang_term_based_config([{_, []} | Rest]) ->
     apply_erlang_term_based_config(Rest);
 apply_erlang_term_based_config([{App, Vars} | Rest]) ->
-    rabbit_log_prelaunch:debug("  Applying configuration for '~s':", [App]),
+    ?LOG_DEBUG("  Applying configuration for '~s':", [App],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok = apply_app_env_vars(App, Vars),
     apply_erlang_term_based_config(Rest);
 apply_erlang_term_based_config([]) ->
     ok.
 
 apply_app_env_vars(App, [{Var, Value} | Rest]) ->
-    rabbit_log_prelaunch:debug("    - ~s = ~p", [Var, Value]),
+    log_app_env_var(Var, Value),
     ok = application:set_env(App, Var, Value, [{persistent, true}]),
     apply_app_env_vars(App, Rest);
 apply_app_env_vars(_, []) ->
     ok.
 
+log_app_env_var(password = Var, _) ->
+    ?LOG_DEBUG("    - ~s = ********", [Var],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+log_app_env_var(Var, Value) when is_list(Value) ->
+    %% To redact sensitive entries,
+    %% e.g. {password,"********"} for stream replication over TLS
+    Redacted = redact_env_var(Value),
+    ?LOG_DEBUG("    - ~s = ~p", [Var, Redacted],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+log_app_env_var(Var, Value) ->
+    ?LOG_DEBUG("    - ~s = ~p", [Var, Value],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}).
+
+redact_env_var(Value) when is_list(Value) ->
+    redact_env_var(Value, []);
+redact_env_var(Value) ->
+    Value.
+
+redact_env_var([], Acc) ->
+    lists:reverse(Acc);
+redact_env_var([{password, _Value} | Rest], Acc) ->
+    redact_env_var(Rest, Acc ++ [{password, "********"}]);
+redact_env_var([AppVar | Rest], Acc) ->
+    redact_env_var(Rest, [AppVar | Acc]).
+
 set_credentials_obfuscation_secret() ->
-    rabbit_log_prelaunch:debug(
+    ?LOG_DEBUG(
       "Refreshing credentials obfuscation configuration from env: ~p",
-      [application:get_all_env(credentials_obfuscation)]),
+      [application:get_all_env(credentials_obfuscation)],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok = credentials_obfuscation:refresh_config(),
     CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
-    rabbit_log_prelaunch:debug(
-      "Setting credentials obfuscation secret to '~s'", [CookieBin]),
+    ?LOG_DEBUG(
+      "Setting credentials obfuscation secret to '~s'", [CookieBin],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ok = credentials_obfuscation:set_secret(CookieBin).
 
 %% -------------------------------------------------------------------
@@ -397,7 +461,8 @@ set_credentials_obfuscation_secret() ->
 %% -------------------------------------------------------------------
 
 decrypt_config(Apps) ->
-    rabbit_log_prelaunch:debug("Decoding encrypted config values (if any)"),
+    ?LOG_DEBUG("Decoding encrypted config values (if any)",
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     ConfigEntryDecoder = application:get_env(rabbit, config_entry_decoder, []),
     decrypt_config(Apps, ConfigEntryDecoder).
 
@@ -415,8 +480,9 @@ decrypt_app(App, [{Key, Value} | Tail], Algo) ->
                     {Value, Algo1} ->
                         Algo1;
                     {NewValue, Algo1} ->
-                        rabbit_log_prelaunch:debug(
-                          "Value of `~s` decrypted", [Key]),
+                        ?LOG_DEBUG(
+                          "Value of `~s` decrypted", [Key],
+                          #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
                         ok = application:set_env(App, Key, NewValue,
                                                  [{persistent, true}]),
                         Algo1
@@ -474,7 +540,8 @@ config_entry_decoder_to_algo(ConfigEntryDecoder) ->
     end.
 
 get_passphrase(ConfigEntryDecoder) ->
-    rabbit_log_prelaunch:debug("Getting encrypted config passphrase"),
+    ?LOG_DEBUG("Getting encrypted config passphrase",
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     case proplists:get_value(passphrase, ConfigEntryDecoder) of
         prompt ->
             IoDevice = get_input_iodevice(),

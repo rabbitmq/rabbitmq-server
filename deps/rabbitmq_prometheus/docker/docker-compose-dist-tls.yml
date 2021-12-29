@@ -12,12 +12,11 @@ volumes:
 
 services:
   rmq0-dist-tls: &rabbitmq
-    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq-prometheus/tags
-    image: pivotalrabbitmq/rabbitmq-prometheus:3.9.0-alpha.349-2020.06.18
+    # https://hub.docker.com/r/pivotalrabbitmq/rabbitmq/tags
+    image: pivotalrabbitmq/rabbitmq:master-otp-max
     networks:
       - "rabbitmq-prometheus"
     ports:
-      - "5676:5672"
       - "15676:15672"
       - "15696:15692"
     # https://unix.stackexchange.com/questions/71940/killing-tcp-connection-in-linux
@@ -42,25 +41,23 @@ services:
     # we want to simulate hitting thresholds
     ulimits:
       nofile:
-        soft: "2000"
-        hard: "2000"
+        soft: 2000
+        hard: 2000
   rmq1-dist-tls:
     << : *rabbitmq
     hostname: rmq1-dist-tls
     ports:
-      - "5677:5672"
       - "15677:15672"
       - "15697:15692"
   rmq2-dist-tls:
     << : *rabbitmq
     hostname: rmq2-dist-tls
     ports:
-      - "5678:5672"
       - "15678:15672"
       - "15698:15692"
   stress-dist-tls:
     # https://hub.docker.com/r/pivotalrabbitmq/perf-test/tags
-    image: &perf-test-image pivotalrabbitmq/perf-test:2.11.0-ubuntu
+    image: &perf-test-image pivotalrabbitmq/perf-test:2.15.0-ubuntu
     networks:
       - "rabbitmq-prometheus"
     environment:
@@ -79,7 +76,7 @@ services:
       METRICS_PROMETHEUS: "true"
   rabbitmq-exporter:
     # https://hub.docker.com/r/kbudde/rabbitmq-exporter/tags
-    image: kbudde/rabbitmq-exporter:v0.29.0
+    image: kbudde/rabbitmq-exporter:v1.0.0-RC9
     networks:
       - "rabbitmq-prometheus"
     environment:

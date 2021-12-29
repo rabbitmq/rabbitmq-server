@@ -38,7 +38,8 @@
          dequeue/4,
          info/2,
          state_info/1,
-         capabilities/0
+         capabilities/0,
+         notify_decorators/1
          ]).
 
 -export([delete_crashed/1,
@@ -54,11 +55,13 @@ is_enabled() -> true.
 declare(Q, Node) when ?amqqueue_is_classic(Q) ->
     QName = amqqueue:get_name(Q),
     VHost = amqqueue:get_vhost(Q),
-    Node1 = case Node of
-                {ignore_location, Node0} ->
+    Node1 = case {Node, rabbit_amqqueue:is_exclusive(Q)} of
+                {{ignore_location, Node0}, _} ->
                     Node0;
+                {_, true} ->
+                    Node;
                 _ ->
-                    case rabbit_queue_master_location_misc:get_location(Q)  of
+                    case rabbit_queue_master_location_misc:get_location(Q) of
                         {ok, Node0}  -> Node0;
                         _   -> Node
                     end
@@ -143,11 +146,11 @@ stat(Q) ->
     delegate:invoke(amqqueue:get_pid(Q),
                     {gen_server2, call, [stat, infinity]}).
 
--spec init(amqqueue:amqqueue()) -> state().
+-spec init(amqqueue:amqqueue()) -> {ok, state()}.
 init(Q) when ?amqqueue_is_classic(Q) ->
     QName = amqqueue:get_name(Q),
-    #?STATE{pid = amqqueue:get_pid(Q),
-            qref = QName}.
+    {ok, #?STATE{pid = amqqueue:get_pid(Q),
+                 qref = QName}}.
 
 -spec close(state()) -> ok.
 close(_State) ->
@@ -298,9 +301,9 @@ settlement_action(Type, QRef, MsgSeqs, Acc) ->
 deliver(Qs0, #delivery{flow = Flow,
                        msg_seq_no = MsgNo,
                        message = #basic_message{exchange_name = _Ex},
-                       confirm = _Confirm} = Delivery) ->
+                       confirm = Confirm} = Delivery) ->
     %% TODO: record master and slaves for confirm processing
-    {MPids, SPids, Qs, Actions} = qpids(Qs0, MsgNo),
+    {MPids, SPids, Qs, Actions} = qpids(Qs0, Confirm, MsgNo),
     QPids = MPids ++ SPids,
     case Flow of
         %% Here we are tracking messages sent by the rabbit_channel
@@ -360,7 +363,7 @@ purge(Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
     delegate:invoke(QPid, {gen_server2, call, [purge, infinity]}).
 
-qpids(Qs, MsgNo) ->
+qpids(Qs, Confirm, MsgNo) ->
     lists:foldl(
       fun ({Q, S0}, {MPidAcc, SPidAcc, Qs0, Actions0}) ->
               QPid = amqqueue:get_pid(Q),
@@ -368,14 +371,14 @@ qpids(Qs, MsgNo) ->
               QRef = amqqueue:get_name(Q),
               Actions = [{monitor, QPid, QRef}
                          | [{monitor, P, QRef} || P <- SPids]] ++ Actions0,
-              %% confirm record only if MsgNo isn't undefined
+              %% confirm record only if necessary
               S = case S0 of
                       #?STATE{unconfirmed = U0} ->
                           Rec = [QPid | SPids],
-                          U = case MsgNo of
-                                  undefined ->
+                          U = case Confirm of
+                                  false ->
                                       U0;
-                                  _ ->
+                                  true ->
                                       U0#{MsgNo => #msg_status{pending = Rec}}
                               end,
                           S0#?STATE{pid = QPid,
@@ -436,19 +439,14 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
         gen_server2:mcall(
           [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q, recovery),
             {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
-    [rabbit_log:error("Queue ~p failed to initialise: ~p~n",
+    [rabbit_log:error("Queue ~p failed to initialise: ~p",
                       [Pid, Error]) || {Pid, Error} <- Failures],
     [Q || {_, {new, Q}} <- Results].
 
 capabilities() ->
-    #{policies => [<<"expires">>, <<"message-ttl">>, <<"dead-letter-exchange">>,
-                   <<"dead-letter-routing-key">>, <<"max-length">>,
-                   <<"max-length-bytes">>, <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
-                   <<"max-priority">>, <<"overflow">>, <<"queue-mode">>,
-                   <<"single-active-consumer">>, <<"delivery-limit">>,
-                   <<"ha-mode">>, <<"ha-params">>, <<"ha-sync-mode">>,
-                   <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
-                   <<"queue-master-locator">>],
+    #{unsupported_policies => [ %% Stream policies
+                                <<"max-age">>, <<"stream-max-segment-size-bytes">>,
+                                <<"queue-leader-locator">>, <<"initial-cluster-size">>],
       queue_arguments => [<<"x-expires">>, <<"x-message-ttl">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
                           <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
@@ -459,6 +457,10 @@ capabilities() ->
                              <<"x-priority">>, <<"x-credit">>
                             ],
       server_named => true}.
+
+notify_decorators(Q) when ?is_amqqueue(Q) ->
+    QPid = amqqueue:get_pid(Q),
+    delegate:invoke_no_result(QPid, {gen_server2, cast, [notify_decorators]}).
 
 reject_seq_no(SeqNo, U0) ->
     reject_seq_no(SeqNo, U0, []).

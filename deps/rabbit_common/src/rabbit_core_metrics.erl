@@ -2,13 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_core_metrics).
 
 -include("rabbit_core_metrics.hrl").
 
+-export([create_table/1]).
 -export([init/0]).
 -export([terminate/0]).
 
@@ -104,9 +105,13 @@
 %%----------------------------------------------------------------------------
 %% API
 %%----------------------------------------------------------------------------
+
+create_table({Table, Type}) ->
+   ets:new(Table, [Type, public, named_table, {write_concurrency, true},
+    {read_concurrency, true}]).
+
 init() ->
-    _ = [ets:new(Table, [Type, public, named_table, {write_concurrency, true},
-                         {read_concurrency, true}])
+  _ = [create_table({Table, Type})
          || {Table, Type} <- ?CORE_TABLES ++ ?CORE_EXTRA_TABLES],
     ok.
 

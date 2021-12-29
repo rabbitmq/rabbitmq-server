@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_sharding_shard).
@@ -91,7 +91,7 @@ declare_queue(XName, Durable, N, Node) ->
     catch
         _Error:Reason ->
             rabbit_log:error("sharding failed to declare queue for exchange ~p"
-                             " - soft error:~n~p~n",
+                             " - soft error:~n~p",
                              [exchange_bin(XName), Reason]),
             error
     end.

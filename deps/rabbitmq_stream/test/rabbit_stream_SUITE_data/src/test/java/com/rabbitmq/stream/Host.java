@@ -11,7 +11,7 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+// Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 //
 
 package com.rabbitmq.stream;
@@ -94,20 +94,23 @@ public class Host {
   }
 
   public static String node1name() {
-    try {
-      return System.getProperty(
-          "node1.name", "rabbit-1@" + InetAddress.getLocalHost().getHostName());
-    } catch (UnknownHostException e) {
-      throw new RuntimeException(e);
-    }
+    return System.getProperty("node1.name", "rabbit-1@" + hostname());
   }
 
   public static String node2name() {
+    return System.getProperty("node2.name", "rabbit-2@" + hostname());
+  }
+
+  public static String hostname() {
     try {
-      return System.getProperty(
-          "node2.name", "rabbit-2@" + InetAddress.getLocalHost().getHostName());
+      return InetAddress.getLocalHost().getHostName();
     } catch (UnknownHostException e) {
-      throw new RuntimeException(e);
+      try {
+        Process process = executeCommand("hostname");
+        return capture(process.getInputStream()).trim();
+      } catch (Exception ex) {
+        throw new RuntimeException(ex);
+      }
     }
   }
 

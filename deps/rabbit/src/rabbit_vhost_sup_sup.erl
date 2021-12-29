@@ -2,12 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_vhost_sup_sup).
 
--include("rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(supervisor2).
 
@@ -79,7 +79,7 @@ stop_and_delete_vhost(VHost) ->
                 false -> ok;
                 true  ->
                     rabbit_log:info("Stopping vhost supervisor ~p"
-                                    " for vhost '~s'~n",
+                                    " for vhost '~s'",
                                     [VHostSupPid, VHost]),
                     case supervisor2:terminate_child(?MODULE, WrapperPid) of
                         ok ->

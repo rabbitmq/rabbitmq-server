@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2017-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2017-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 -module(rabbitmq_queues_cli_integration_SUITE).
 
@@ -27,7 +27,7 @@ groups() ->
     ].
 
 init_per_suite(Config) ->
-    case os:getenv("SECONDARY_UMBRELLA") of
+    case rabbit_ct_helpers:is_mixed_versions() of
         false ->
             rabbit_ct_helpers:log_environment(),
             rabbit_ct_helpers:run_setup_steps(Config);
@@ -70,15 +70,25 @@ shrink(Config) ->
     NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, 2),
     Nodename2 = ?config(nodename, NodeConfig),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Nodename2),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     %% declare a quorum queue
     QName = "shrink1",
     #'queue.declare_ok'{} = declare_qq(Ch, QName),
+    publish_confirm(Ch, QName),
     {ok, Out1} = rabbitmq_queues(Config, 0, ["shrink", Nodename2]),
     ?assertMatch(#{{"/", "shrink1"} := {2, ok}}, parse_result(Out1)),
+    %% removing a node can trigger a leader election, give this QQ some time
+    %% to do it
+    timer:sleep(1500),
     Nodename1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    publish_confirm(Ch, QName),
     {ok, Out2} = rabbitmq_queues(Config, 0, ["shrink", Nodename1]),
     ?assertMatch(#{{"/", "shrink1"} := {1, ok}}, parse_result(Out2)),
+    %% removing a node can trigger a leader election, give this QQ some time
+    %% to do it
+    timer:sleep(1500),
     Nodename0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    publish_confirm(Ch, QName),
     {ok, Out3} = rabbitmq_queues(Config, 0, ["shrink", Nodename0]),
     ?assertMatch(#{{"/", "shrink1"} := {1, error}}, parse_result(Out3)),
     ok.
@@ -87,17 +97,21 @@ grow(Config) ->
     NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, 2),
     Nodename2 = ?config(nodename, NodeConfig),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Nodename2),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     %% declare a quorum queue
     QName = "grow1",
     Args = [{<<"x-quorum-initial-group-size">>, long, 1}],
     #'queue.declare_ok'{} = declare_qq(Ch, QName, Args),
     Nodename0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    publish_confirm(Ch, QName),
     {ok, Out1} = rabbitmq_queues(Config, 0, ["grow", Nodename0, "all"]),
     ?assertMatch(#{{"/", "grow1"} := {2, ok}}, parse_result(Out1)),
+    timer:sleep(500),
     Nodename1 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    publish_confirm(Ch, QName),
     {ok, Out2} = rabbitmq_queues(Config, 0, ["grow", Nodename1, "all"]),
     ?assertMatch(#{{"/", "grow1"} := {3, ok}}, parse_result(Out2)),
-
+    publish_confirm(Ch, QName),
     {ok, Out3} = rabbitmq_queues(Config, 0, ["grow", Nodename0, "all"]),
     ?assertNotMatch(#{{"/", "grow1"} := _}, parse_result(Out3)),
     ok.
@@ -106,11 +120,13 @@ grow_invalid_node_filtered(Config) ->
     NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, 2),
     Nodename2 = ?config(nodename, NodeConfig),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Nodename2),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
     %% declare a quorum queue
     QName = "grow-err",
     Args = [{<<"x-quorum-initial-group-size">>, long, 1}],
     #'queue.declare_ok'{} = declare_qq(Ch, QName, Args),
     DummyNode = not_really_a_node@nothing,
+    publish_confirm(Ch, QName),
     {ok, Out1} = rabbitmq_queues(Config, 0, ["grow", DummyNode, "all"]),
     ?assertNotMatch(#{{"/", "grow-err"} := _}, parse_result(Out1)),
     ok.
@@ -137,3 +153,21 @@ declare_qq(Ch, Q) ->
 
 rabbitmq_queues(Config, N, Args) ->
     rabbit_ct_broker_helpers:rabbitmq_queues(Config, N, ["--silent" | Args]).
+
+publish_confirm(Ch, QName) ->
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = list_to_binary(QName)},
+                           #amqp_msg{props   = #'P_basic'{delivery_mode = 2},
+                                     payload = <<"msg">>}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    ct:pal("waiting for confirms from ~s", [QName]),
+    receive
+        #'basic.ack'{} ->
+            ct:pal("CONFIRMED! ~s", [QName]),
+            ok;
+        #'basic.nack'{} ->
+            ct:pal("NOT CONFIRMED! ~s", [QName]),
+            fail
+    after 10000 ->
+            exit(confirm_timeout)
+    end.

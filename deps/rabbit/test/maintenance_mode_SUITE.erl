@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(maintenance_mode_SUITE).
@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -24,8 +25,7 @@ groups() ->
       {cluster_size_3, [], [
           maintenance_mode_status,
           listener_suspension_status,
-          client_connection_closure,
-          classic_mirrored_queue_leadership_transfer
+          client_connection_closure
         ]},
       {quorum_queues, [], [
           quorum_queue_leadership_transfer
@@ -43,10 +43,20 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(quorum_queues, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% In a mixed 3.8/3.9 cluster, unless the 3.8 node is the
+            %% one in maintenance mode, a quorum won't be available
+            %% due to mixed ra major versions
+            {skip, "test not supported in mixed version mode"};
+        _ ->
+            rabbit_ct_helpers:set_config(Config,
+                                         [{rmq_nodes_count, 3}])
+    end;
 init_per_group(_Group, Config) ->
-    rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 3}
-      ]).
+    rabbit_ct_helpers:set_config(Config,
+                                 [{rmq_nodes_count, 3}]).
 
 end_per_group(_, Config) ->
     Config.
@@ -211,33 +221,6 @@ client_connection_closure(Config) ->
     rabbit_ct_broker_helpers:revive_node(Config, A).
 
 
-classic_mirrored_queue_leadership_transfer(Config) ->
-    [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ct:pal("Picked node ~s for maintenance tests...", [A]),
-
-    rabbit_ct_helpers:await_condition(
-        fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
-
-    PolicyPattern = <<"^cq.mirrored">>,
-    rabbit_ct_broker_helpers:set_ha_policy(Config, A, PolicyPattern, <<"all">>),
-
-    Conn = rabbit_ct_client_helpers:open_connection(Config, A),
-    {ok, Ch} = amqp_connection:open_channel(Conn),
-    QName = <<"cq.mirrored.1">>,
-    amqp_channel:call(Ch, #'queue.declare'{queue = QName, durable = true}),
-
-    ?assertEqual(1, length(rabbit_ct_broker_helpers:rpc(Config, A, rabbit_amqqueue, list_local, [<<"/">>]))),
-
-    rabbit_ct_broker_helpers:drain_node(Config, A),
-    rabbit_ct_helpers:await_condition(
-        fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
-
-    ?assertEqual(0, length(rabbit_ct_broker_helpers:rpc(Config, A, rabbit_amqqueue, list_local, [<<"/">>]))),
-
-    rabbit_ct_broker_helpers:revive_node(Config, A),
-    %% rabbit_ct_broker_helpers:set_ha_policy/4 uses pattern for policy name
-    rabbit_ct_broker_helpers:clear_policy(Config, A, PolicyPattern).
-
 quorum_queue_leadership_transfer(Config) ->
     [A | _] = Nodenames = rabbit_ct_broker_helpers:get_node_configs(
                             Config, nodename),
@@ -265,15 +248,14 @@ quorum_queue_leadership_transfer(Config) ->
                    Config, Nodenames),
     case AllTheSame of
         true ->
-            rabbit_ct_helpers:await_condition(
-              fun () ->
-                      LocalLeaders = rabbit_ct_broker_helpers:rpc(
-                                       Config, A,
-                                       rabbit_amqqueue,
-                                       list_local_leaders,
-                                       []),
-                      length(LocalLeaders) =:= 0
-              end, 20000);
+            ?awaitMatch(
+               LocalLeaders when length(LocalLeaders) == 0,
+                                 rabbit_ct_broker_helpers:rpc(
+                                   Config, A,
+                                   rabbit_amqqueue,
+                                   list_local_leaders,
+                                   []),
+                                 20000);
         false ->
             ct:pal(
               ?LOW_IMPORTANCE,

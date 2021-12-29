@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_exchange_publish).
@@ -93,6 +93,9 @@ bad({shutdown, {server_initiated_close, Code, Reason}}, ReqData, Context) ->
     rabbit_mgmt_util:bad_request_exception(Code, Reason, ReqData, Context);
 bad(rejected, ReqData, Context) ->
     Msg = "Unable to publish message. Check queue limits.",
+    rabbit_mgmt_util:bad_request_exception(rejected, Msg, ReqData, Context);
+bad({{coordinator_unavailable, _}, _}, ReqData, Context) ->
+    Msg = "Unable to publish message. Coordinator unavailable.",
     rabbit_mgmt_util:bad_request_exception(rejected, Msg, ReqData, Context).
 
 is_authorized(ReqData, Context) ->

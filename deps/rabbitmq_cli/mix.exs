@@ -11,7 +11,7 @@ defmodule RabbitMQCtl.MixfileBase do
     [
       app: :rabbitmqctl,
       version: "3.8.0-dev",
-      elixir: ">= 1.10.4 and < 1.12.0",
+      elixir: ">= 1.10.4 and < 1.13.0",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       escript: [main_module: RabbitMQCtl,
@@ -36,7 +36,6 @@ defmodule RabbitMQCtl.MixfileBase do
           :rabbit_event,
           :rabbit_file,
           :rabbit_net,
-          :rabbit_lager,
           :rabbit_log,
           :rabbit_misc,
           :rabbit_mnesia,
@@ -61,7 +60,9 @@ defmodule RabbitMQCtl.MixfileBase do
                     'rabbitmq-diagnostics': :diagnostics,
                     'rabbitmq-queues': :queues,
                     'rabbitmq-streams': :streams,
-                    'rabbitmq-upgrade': :upgrade]]
+                    'rabbitmq-upgrade': :upgrade,
+                    'rabbitmq-tanzu': :tanzu
+     ]]
     ]
     |> add_modules(Mix.env)
   end
@@ -118,12 +119,12 @@ defmodule RabbitMQCtl.MixfileBase do
   # don't have the equivalent for other methods.
   defp deps() do
     elixir_deps = [
-      {:json, "~> 1.2.0"},
-      {:csv, "~> 2.3.0"},
+      {:json, "~> 1.4.1"},
+      {:csv, "~> 2.4.0"},
       {:stdout_formatter, "~> 0.2.3"},
-      {:observer_cli, "~> 1.5.0"},
+      {:observer_cli, "~> 1.7.1"},
 
-      {:amqp, "~> 1.2.0", only: :test},
+      {:amqp, "~> 2.1.0", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},
       {:temp, "~> 0.4", only: :test},
       {:x509, "~> 0.7", only: :test}
@@ -133,8 +134,8 @@ defmodule RabbitMQCtl.MixfileBase do
       nil ->
         # rabbitmq_cli is built as a standalone Elixir application.
         [
-          {:rabbit_common, "~> 3.7.0"},
-          {:amqp_client, "~> 3.7.0", only: :test}
+          {:rabbit_common, "~> 3.8.0"},
+          {:amqp_client, "~> 3.8.0", only: :test}
         ]
       deps_dir ->
         # rabbitmq_cli is built as part of RabbitMQ.
@@ -154,18 +155,6 @@ defmodule RabbitMQCtl.MixfileBase do
           {
             :rabbit_common,
             path: Path.join(deps_dir, "rabbit_common"),
-            compile: false,
-            override: true
-          },
-          {
-            :goldrush,
-            path: Path.join(deps_dir, "goldrush"),
-            compile: false,
-            override: true
-          },
-          {
-            :lager,
-            path: Path.join(deps_dir, "lager"),
             compile: false,
             override: true
           },

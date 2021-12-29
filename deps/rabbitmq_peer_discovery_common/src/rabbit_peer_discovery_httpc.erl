@@ -4,12 +4,13 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2016-2020 VMware, Inc. or its affiliates. All rights reserved.
+%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates. All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_httpc).
 
--include("include/rabbit_peer_discovery.hrl").
+-include_lib("kernel/include/logger.hrl").
+-include("rabbit_peer_discovery.hrl").
 
 %%
 %% API
@@ -138,10 +139,10 @@ get(Scheme, Host, Port, Path, Args) ->
 %%
 get(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  rabbit_log:debug("GET ~s", [URL]),
+  ?LOG_DEBUG("GET ~s", [URL], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   HttpOpts1 = ensure_timeout(HttpOpts),
   Response = httpc:request(get, {URL, Headers}, HttpOpts1, []),
-  rabbit_log:debug("Response: ~p", [Response]),
+  ?LOG_DEBUG("Response: ~p", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   parse_response(Response).
 
 
@@ -176,10 +177,10 @@ post(Scheme, Host, Port, Path, Args, Body) ->
 %%
 post(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  rabbit_log:debug("POST ~s [~p]", [URL, Body]),
+  ?LOG_DEBUG("POST ~s [~p]", [URL, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   HttpOpts1 = ensure_timeout(HttpOpts),
   Response = httpc:request(post, {URL, Headers, ?CONTENT_JSON, Body}, HttpOpts1, []),
-  rabbit_log:debug("Response: [~p]", [Response]),
+  ?LOG_DEBUG("Response: [~p]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   parse_response(Response).
 
 
@@ -205,10 +206,10 @@ post(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
   Body :: string() | binary() | tuple().
 put(Scheme, Host, Port, Path, Args, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  rabbit_log:debug("PUT ~s [~p]", [URL, Body]),
+  ?LOG_DEBUG("PUT ~s [~p]", [URL, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   HttpOpts = ensure_timeout(),
   Response = httpc:request(put, {URL, [], ?CONTENT_URLENCODED, Body}, HttpOpts, []),
-  rabbit_log:debug("Response: [~p]", [Response]),
+  ?LOG_DEBUG("Response: [~p]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   parse_response(Response).
 
 
@@ -234,10 +235,10 @@ put(Scheme, Host, Port, Path, Args, Body) ->
   Body :: string() | binary() | tuple().
 put(Scheme, Host, Port, Path, Args, Headers, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  rabbit_log:debug("PUT ~s [~p] [~p]", [URL, Headers, Body]),
+  ?LOG_DEBUG("PUT ~s [~p] [~p]", [URL, Headers, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   HttpOpts = ensure_timeout(),
   Response = httpc:request(put, {URL, Headers, ?CONTENT_URLENCODED, Body}, HttpOpts, []),
-  rabbit_log:debug("Response: [~p]", [Response]),
+  ?LOG_DEBUG("Response: [~p]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   parse_response(Response).
 
 
@@ -258,10 +259,10 @@ delete(Scheme, Host, Port, PathSegments, Args, Body) when is_list(PathSegments) 
   delete(Scheme, Host, Port, Path, Args, Body);
 delete(Scheme, Host, Port, Path, Args, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  rabbit_log:debug("DELETE ~s [~p]", [URL, Body]),
+  ?LOG_DEBUG("DELETE ~s [~p]", [URL, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   HttpOpts = ensure_timeout(),
   Response = httpc:request(delete, {URL, [], ?CONTENT_URLENCODED, Body}, HttpOpts, []),
-  rabbit_log:debug("Response: [~p]", [Response]),
+  ?LOG_DEBUG("Response: [~p]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   parse_response(Response).
 
 
@@ -275,14 +276,18 @@ maybe_configure_proxy() ->
   Map = ?CONFIG_MODULE:config_map(?CONFIG_KEY),
   case map_size(Map) of
       0 ->
-          rabbit_log:debug("HTTP client proxy is not configured"),
+          ?LOG_DEBUG(
+             "HTTP client proxy is not configured",
+             #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
           ok;
       _ ->
           HttpProxy       = ?CONFIG_MODULE:get(http_proxy,  ?CONFIG_MAPPING, Map),
           HttpsProxy      = ?CONFIG_MODULE:get(https_proxy, ?CONFIG_MAPPING, Map),
           ProxyExclusions = ?CONFIG_MODULE:get(proxy_exclusions, ?CONFIG_MAPPING, Map),
-          rabbit_log:debug("Configured HTTP proxy: ~p, HTTPS proxy: ~p, exclusions: ~p",
-                           [HttpProxy, HttpsProxy, ProxyExclusions]),
+          ?LOG_DEBUG(
+             "Configured HTTP proxy: ~p, HTTPS proxy: ~p, exclusions: ~p",
+             [HttpProxy, HttpsProxy, ProxyExclusions],
+             #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
           maybe_set_proxy(proxy, HttpProxy, ProxyExclusions),
           maybe_set_proxy(https_proxy, HttpsProxy, ProxyExclusions),
           ok
@@ -315,9 +320,10 @@ maybe_set_proxy(Option, ProxyUrl, ProxyExclusions) ->
     UriMap ->
       Host = maps:get(host, UriMap),
       Port = maps:get(port, UriMap, 80),
-      rabbit_log:debug(
+      ?LOG_DEBUG(
         "Configuring HTTP client's ~s setting: ~p, exclusions: ~p",
-        [Option, {Host, Port}, ProxyExclusions]),
+        [Option, {Host, Port}, ProxyExclusions],
+        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
       httpc:set_option(Option, {{Host, Port}, ProxyExclusions})
   end.
 
@@ -360,9 +366,11 @@ decode_body(?CONTENT_JSON, Body) ->
         {ok, Value} ->
             Value;
         {error, Err}  ->
-            rabbit_log:error("HTTP client could not decode a JSON payload "
-                                  "(JSON parser returned an error): ~p.~n",
-                                  [Err]),
+            ?LOG_ERROR(
+               "HTTP client could not decode a JSON payload "
+               "(JSON parser returned an error): ~p.",
+               [Err],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             []
     end.
 
@@ -375,14 +383,14 @@ decode_body(?CONTENT_JSON, Body) ->
 -spec parse_response({ok, integer(), string()} | {error, any()}) -> {ok, string()} | {error, any()}.
 
 parse_response({error, Reason}) ->
-  rabbit_log:debug("HTTP error ~p", [Reason]),
+  ?LOG_DEBUG("HTTP error ~p", [Reason], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   {error, lists:flatten(io_lib:format("~p", [Reason]))};
 
 parse_response({ok, 200, Body})  -> {ok, decode_body(?CONTENT_JSON, Body)};
 parse_response({ok, 201, Body})  -> {ok, decode_body(?CONTENT_JSON, Body)};
 parse_response({ok, 204, _})     -> {ok, []};
 parse_response({ok, Code, Body}) ->
-  rabbit_log:debug("HTTP Response (~p) ~s", [Code, Body]),
+  ?LOG_DEBUG("HTTP Response (~p) ~s", [Code, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   {error, integer_to_list(Code)};
 
 parse_response({ok, {{_,200,_}, Headers, Body}}) ->
@@ -391,7 +399,7 @@ parse_response({ok,{{_,201,_}, Headers, Body}}) ->
   {ok, decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body)};
 parse_response({ok,{{_,204,_}, _, _}}) -> {ok, []};
 parse_response({ok,{{_Vsn,Code,_Reason},_,Body}}) ->
-  rabbit_log:debug("HTTP Response (~p) ~s", [Code, Body]),
+  ?LOG_DEBUG("HTTP Response (~p) ~s", [Code, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   {error, integer_to_list(Code)}.
 
 %% @private

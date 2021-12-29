@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2011-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2011-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(peer_discovery_dns_SUITE).
@@ -97,8 +97,12 @@ hostname_discovery_with_short_node_names(_) ->
 
 node_discovery_with_long_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT_RECORD_A, true),
-    ?assert(lists:member('ct_rabbit@dns.google', Result)).
+    ?assert(lists:member(list_to_atom(sname() ++ "@dns.google"), Result)).
 
 node_discovery_with_short_node_names(_) ->
     Result = rabbit_peer_discovery_dns:discover_nodes(?DISCOVERY_ENDPOINT_RECORD_A, false),
-    ?assert(lists:member(ct_rabbit@dns, Result)).
+    ?assert(lists:member(list_to_atom(sname() ++ "@dns"), Result)).
+
+sname() ->
+    [Sname | _] = string:split(atom_to_list(erlang:node()), "@"),
+    Sname.

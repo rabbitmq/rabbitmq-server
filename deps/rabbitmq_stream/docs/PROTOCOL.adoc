@@ -1,9 +1,9 @@
-= RabbitMQ Stream Protocol Reference
+= RabbitMQ Streams Protocol Reference
 
-This is the reference of the RabbitMQ stream protocol. Note the protocol
+This is the reference of the RabbitMQ Streams protocol. Note the protocol
 is still under development and is subject to change.
 
-The https://github.com/rabbitmq/rabbitmq-stream-java-client[RabbitMQ stream Java client]
+The https://github.com/rabbitmq/rabbitmq-stream-java-client[RabbitMQ Stream Java client]
 is currently the reference implementation.
 
 == Types
@@ -23,28 +23,67 @@ arrays - int32 for the length followed by the repetition of the structure, notat
 
 ```
 Frame => Size (Request | Response | Command)
-  Size => int32 (size without the 4 bytes of the size element)
+  Size => uint32 (size without the 4 bytes of the size element)
 
 Request => Key Version (CorrelationId) Content
-  Key => int16
-  Version => int16
-  CorrelationId => int32
+  Key => uint16
+  Version => uint16
+  CorrelationId => uint32
   Command => bytes // see command details below
 
 Response => Key Version CorrelationId ResponseCode
-  Key => int16
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
+  Key => uint16
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 
 Command => Key Version Content
-  Key => int16
-  Version => int16
+  Key => uint16
+  Version => uint16
   Content => bytes // see command details below
 ```
 
 Most commands are request/reply, but some commands (e.g. `Deliver`) are one-direction only and thus
-doest not contain a correlation ID.
+does not contain a correlation ID.
+
+Some responses may carry additional information than just the response code, this is specified in the command definition.
+
+Keys are uint16, but the actual value is defined on the last 15 bits, the most significant bit being
+used to make the difference between a request (0) and a response (1). Example for `subscribe`
+(key is 6):
+
+```
+0x0006 => subscribe request
+0x8006 => subscribe response
+```
+
+== Response Codes
+
+.Stream Protocol Response Codes
+|===
+|Response|Code
+
+|OK|0x01
+|Stream does not exist|0x02
+|Subscription ID already exists|0x03
+|Subscription ID does not exist|0x04
+|Stream already exists|0x05
+|Stream not available|0x06
+|SASL mechanism not supported|0x07
+|Authentication failure|0x08
+|SASL error|0x09
+|SASL challenge|0x0a
+|SASL authentication failure loopback|0x0b
+|Virtual host access failure|0x0c
+|Unknown frame|0x0d
+|Frame too large|0x0e
+|Internal error|0x0f
+|Access refused|0x10
+|Precondition failed|0x11
+|Publisher does not exist|0x12
+|No offset|0x13
+
+|===
 
 == Commands
 
@@ -52,118 +91,160 @@ doest not contain a correlation ID.
 |===
 |Command |From |Key | Expects response?
 
+|<<declarepublisher>>
+|Client
+|0x0001
+|Yes
+
 |<<publish>>
 |Client
-|0
+|0x0002
 |No
 
 |<<publishconfirm>>
 |Server
-|1
+|0x0003
 |No
+
+|<<publisherror>>
+|Server
+|0x0004
+|No
+
+|<<querypublishersequence>>
+|Client
+|0x0005
+|Yes
+
+|<<deletepublisher>>
+|Client
+|0x0006
+|Yes
 
 |<<subscribe>>
 |Client
-|2
+|0x0007
 |Yes
 
 |<<deliver>>
 |Server
-|3
+|0x0008
 |No
 
 |<<credit>>
 |Client
-|4
+|0x0009
 |No
 
-|<<unsubscribe>>
+|<<storeoffset>>
 |Client
-|5
-|Yes
-
-|<<publisherror>>
-|Server
-|6
-|No
-
-|<<metadataupdate>>
-|Server
-|7
-|No
-
-|<<metadata>>
-|Client
-|8
-|No
-
-|<<saslhandshake>>
-|Client
-|9
-|Yes
-
-|<<saslauthenticate>>
-|Client
-|10
-|Yes
-
-|<<tune>>
-|Server
-|11
-|Yes
-
-|<<open>>
-|Server
-|12
-|Yes
-
-|<<close>>
-|Client & Server
-|13
-|Yes
-
-|<<heartbeat>>
-|Client & Server
-|14
-|No
-
-|<<peerproperties>>
-|Client
-|15
-|Yes
-
-|<<commitoffset>>
-|Client
-|16
+|0x000a
 |No
 
 |<<queryoffset>>
 |Client
-|17
+|0x000b
+|Yes
+
+|<<unsubscribe>>
+|Client
+|0x000c
 |Yes
 
 |<<create>>
 |Client
-|998
+|0x000d
 |Yes
 
 |<<delete>>
 |Client
-|999
+|0x000e
+|Yes
+
+|<<metadata>>
+|Client
+|0x000f
+|Yes
+
+|<<metadataupdate>>
+|Server
+|0x0010
+|No
+
+|<<peerproperties>>
+|Client
+|0x0011
+|Yes
+
+|<<saslhandshake>>
+|Client
+|0x0012
+|Yes
+
+|<<saslauthenticate>>
+|Client
+|0x0013
+|Yes
+
+|<<tune>>
+|Server
+|0x0014
+|Yes
+
+|<<open>>
+|Client
+|0x0015
+|Yes
+
+|<<close>>
+|Client & Server
+|0x0016
+|Yes
+
+|<<heartbeat>>
+|Client & Server
+|0x0017
+|No
+
+|<<route>> (experimental)
+|Client
+|0x0018
+|Yes
+
+|<<partitions>> (experimental)
+|Client
+|0x0019
 |Yes
 |===
+
+=== DeclarePublisher
+
+```
+DeclarePublisherRequest => Key Version CorrelationId PublisherId [PublisherReference] Stream
+  Key => uint16 // 0x0001
+  Version => uint16
+  CorrelationId => uint32
+  PublisherId => uint8
+  PublisherReference => string // max 256 characters
+  Stream => string
+
+DeclarePublisherResponse => Key Version CorrelationId ResponseCode
+  Key => uint16 // 0x8001
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+```
 
 === Publish
 
 ```
-Publish => Key Version Stream PublishedMessages
-  Key => int16 // 0
-  Version => int16
-  Stream => string // the name of the stream
+Publish => Key Version PublisherId PublishedMessages
+  Key => uint16 // 0x0002
+  Version => uint16
   PublisherId => uint8
   PublishedMessages => [PublishedMessage]
   PublishedMessage => PublishingId Message
-  PublishingId => int64
+  PublishingId => uint64
   Message => bytes
 ```
 
@@ -171,272 +252,171 @@ Publish => Key Version Stream PublishedMessages
 
 ```
 PublishConfirm => Key Version PublishingIds
-  Key => int16 // 1
-  Version => int16
+  Key => uint16 // 0x0003
+  Version => uint16
   PublisherId => uint8
-  PublishingIds => [int64] // to correlate with the messages sent
-```
-
-=== Subscribe
-
-```
-Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification Credit
-  Key => int16 // 2
-  Version => int16
-  CorrelationId => int32 // correlation id to correlate the response
-  SubscriptionId => uint8 // client-supplied id to identify the subscription
-  Stream => string // the name of the stream
-  OffsetSpecification => OffsetType Offset
-  OffsetType => int16 // 0 (first), 1 (last), 2 (next), 3 (offset), 4 (timestamp)
-  Offset => uint64 (for offset) | int64 (for timestamp)
-  Credit => int16
-```
-
-=== Deliver
-
-```
-Deliver => Key Version SubscriptionId OsirisChunk
-  Key => int16 // 3
-  Version => int32
-  SubscriptionId => uint8
-  OsirisChunk => MagicVersion NumEntries NumRecords Epoch ChunkFirstOffset ChunkCrc DataLength Messages
-  MagicVersion => int8
-  NumEntries => uint16
-  NumRecords => uint32
-  Epoch => uint64
-  ChunkFirstOffset => uint64
-  ChunkCrc => int32
-  DataLength => uint32
-  Messages => [Message] // no int32 for the size for this array
-  Message => EntryTypeAndSize
-  Data => bytes
-```
-
-NB: See the https://github.com/rabbitmq/osiris/blob/348db0528986d6025b823bcf1ae0570aa63f5e25/src/osiris_log.erl#L49-L81[Osiris project]
-for details on the structure of messages.
-
-=== Credit
-
-```
-Credit => Key Version SubscriptionId Credit
-  Key => int16 // 4
-  Version => int16
-  SubscriptionId => int8
-  Credit => int16 // the number of chunks that can be sent
-
-CreditResponse => Key Version ResponseCode SubscriptionId
-  Key => int16 // 4
-  Version => int16
-  ResponseCode => int16
-  SubscriptionId => int8
-```
-
-NB: the server sent a response only in case of problem, e.g. crediting an unknown subscription.
-
-=== Unsubscribe
-
-```
-Unsubscribe => Key Version CorrelationId SubscriptionId
-  Key => int16 // 5
-  Version => int16
-  CorrelationId => int32
-  SubscriptionId => int8
+  PublishingIds => [uint64] // to correlate with the messages sent
 ```
 
 === PublishError
 
 ```
 PublishError => Key Version [PublishingError]
-  Key => int16 // 6
-  Version => int16
-  PublisherId => int8
+  Key => uint16 // 0x0004
+  Version => uint16
+  PublisherId => uint8
   PublishingError => PublishingId Code
-  PublishingId => int64
-  Code => int16 // code to identify the problem
+  PublishingId => uint64
+  Code => uint16 // code to identify the problem
 ```
 
-=== MetadataUpdate
+=== QueryPublisherSequence
 
 ```
-MetadataUpdate => Key Version MetadataInfo
-  Key => int16 // 7
-  Version => int16
-  MetadataInfo => Code Stream
-  Code => int16 // code to identify the information
-  Stream => string // the stream implied
-```
-
-=== Metadata
-
-```
-MetadataQuery => Key Version CorrelationId [Stream]
-  Key => int16 // 8
-  Version => int16
-  CorrelationId => int32
+QueryPublisherRequest => Key Version CorrelationId PublisherReference Stream
+  Key => uint16 // 0x0005
+  Version => uint16
+  CorrelationId => uint32
+  PublisherReference => string // max 256 characters
   Stream => string
 
-MetadataResponse => Key Version CorrelationId [Broker] [StreamMetadata]
-  Key => int16 // 8
-  Version => int16
-  CorrelationId => int32
-  Broker => Reference Host Port
-    Reference => int16
-    Host => string
-    Port => int32
-  StreamMetadata => StreamName LeaderReference ReplicasReferences
-     StreamName => string
-     ResponseCode => int16
-     LeaderReference => int16
-     ReplicasReferences => [int16]
+QueryPublisherResponse => Key Version CorrelationId ResponseCode Sequence
+  Key => uint16 // 0x8005
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+  Sequence => uint64
 ```
 
-=== SaslHandshake
+=== DeletePublisher
 
 ```
-SaslHandshakeRequest => Key Version CorrelationId Mechanism
-  Key => int16 // 9
-  Version => int16
-  CorrelationId => int32
+DeletePublisherRequest => Key Version CorrelationId PublisherId
+  Key => uint16 // 0x0006
+  Version => uint16
+  CorrelationId => uint32
+  PublisherId => uint8
 
-SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanism]
-  Key => int16 // 9
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
-  Mechanism => string
+DeletePublisherResponse => Key Version CorrelationId ResponseCode
+  Key => uint16 // 0x8006
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
 ```
 
-=== SaslAuthenticate
+=== Subscribe
 
 ```
-SaslAuthenticateRequest => Key Version CorrelationId Mechanism SaslOpaqueData
-  Key => int16 // 10
-  Version => int16
-  CorrelationId => int32
-  Mechanism => string
-  SaslOpaqueData => bytes
-
-SaslAuthenticateResponse => Key Version CorrelationId ResponseCode SaslOpaqueData
-  Key => int16 // 10
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
-  SaslOpaqueData => bytes
-```
-
-=== Tune
-
-```
-TuneRequest => Key Version FrameMax Heartbeat
-  Key => int16 // 11, to identify the command
-  Version => int16
-  FrameMax => int32 // in bytes, 0 means no limit
-  Heartbeat => int32 // in seconds, 0 means no heartbeat
-
-TuneResponse => TuneRequest
-```
-
-=== Open
-
-```
-OpenRequest => Key Version CorrelationId VirtualHost
-  Key => int16 // 12
-  Version => int16
-  CorrelationId => int32
-  VirtualHost => string
-
-OpenResponse => Key Version CorrelationId ResponseCode
-  Key => int16 // 12
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
-```
-
-=== Close
-
-```
-CloseRequest => Key Version CorrelationId ClosingCode ClosingReason
-  Key => int16 // 13
-  Version => int16
-  CorrelationId => int32
-  ClosingCode => int16
-  ClosingReason => string
-
-CloseResponse => Key Version CorrelationId ResponseCode
-  Key => int16 // 13
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
-```
-
-=== Heartbeat
-
-```
-Heartbeat => Key Version
-  Key => int16 // 14
-  Version => int16
-```
-
-=== PeerProperties
-
-```
-PeerPropertiesRequest => Key Version PeerProperties
-  Key => int16 // 15
-  Version => int16
-  CorrelationId => int32
-  PeerProperties => [PeerProperty]
-  PeerProperty => Key Value
-  Key => string
-  Value => string
-
-SaslAuthenticateResponse => Key Version CorrelationId ResponseCode PeerProperties
-  Key => int16 // 15
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
-  PeerProperties => [PeerProperty]
-  PeerProperty => Key Value
+Subscribe => Key Version CorrelationId SubscriptionId Stream OffsetSpecification Credit Properties
+  Key => uint16 // 0x0007
+  Version => uint16
+  CorrelationId => uint32 // correlation id to correlate the response
+  SubscriptionId => uint8 // client-supplied id to identify the subscription
+  Stream => string // the name of the stream
+  OffsetSpecification => OffsetType Offset
+  OffsetType => uint16 // 1 (first), 2 (last), 3 (next), 4 (offset), 5 (timestamp)
+  Offset => uint64 (for offset) | int64 (for timestamp)
+  Credit => uint16
+  Properties => [Property]
+  Property => Key Value
   Key => string
   Value => string
 ```
 
-=== CommitOffset
+NB: Timestamp is https://www.erlang.org/doc/apps/erts/time_correction.html#Erlang_System_Time[Erlang system time],
+milliseconds from epoch
+
+=== Deliver
 
 ```
-CommitOffset => Key Version Reference Stream Offset
-  Key => int16 // 16
-  Version => int16
-  CorrelationId => int32 // not used yet
-  Reference => string // max 256 characters
+Deliver => Key Version SubscriptionId OsirisChunk
+  Key => uint16 // 0x0008
+  Version => uint16
   SubscriptionId => uint8
-  Offset => int64
+  OsirisChunk => MagicVersion NumEntries NumRecords Epoch ChunkFirstOffset ChunkCrc DataLength Messages
+  MagicVersion => int8
+  ChunkType => int8 // 0: user, 1: tracking delta, 2: tracking snapshot
+  NumEntries => uint16
+  NumRecords => uint32
+  Timestamp => int64 // erlang system time in milliseconds, since epoch
+  Epoch => uint64
+  ChunkFirstOffset => uint64
+  ChunkCrc => int32
+  DataLength => uint32
+  TrailerLength => uint32
+  Reserved => unit32 // unused 4 bytes
+  Messages => [Message] // no int32 for the size for this array; the size is defined by NumEntries field above
+  Message => EntryTypeAndSize
+  Data => bytes
+```
+
+NB: See the https://github.com/rabbitmq/osiris/blob/f32df7563a036b1687c0208a3cb5f9e8f5cee937/src/osiris_log.erl#L101[Osiris project]
+for details on the structure of messages.
+
+=== Credit
+
+```
+Credit => Key Version SubscriptionId Credit
+  Key => uint16 // 0x0009
+  Version => uint16
+  SubscriptionId => uint8
+  Credit => uint16 // the number of chunks that can be sent
+
+CreditResponse => Key Version ResponseCode SubscriptionId
+  Key => uint16 // 0x8009
+  Version => uint16
+  ResponseCode => uint16
+  SubscriptionId => uint8
+```
+
+NB: the server sent a response only in case of problem, e.g. crediting an unknown subscription.
+
+=== StoreOffset
+
+```
+StoreOffset => Key Version Reference Stream Offset
+  Key => uint16 // 0x000a
+  Version => uint16
+  Reference => string // max 256 characters
+  Stream => string // the name of the stream
+  Offset => uint64
 ```
 
 === QueryOffset
 
 ```
 QueryOffsetRequest => Key Version CorrelationId Reference Stream
-  Key => int16 // 17
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 0x000b
+  Version => uint16
+  CorrelationId => uint32
   Reference => string // max 256 characters
   Stream => string
 
-QueryOffsetResponse => Key Version CorrelationId Reference Stream
-  Key => int16 // 17
-  Version => int16
-  CorrelationId => int32
-  ResponseCode => int16
-  Offset => int64
+QueryOffsetResponse => Key Version CorrelationId ResponseCode Offset
+  Key => uint16 // 0x800b
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+  Offset => uint64
+```
+
+=== Unsubscribe
+
+```
+Unsubscribe => Key Version CorrelationId SubscriptionId
+  Key => uint16 // 0x000c
+  Version => uint16
+  CorrelationId => uint32
+  SubscriptionId => uint8
 ```
 
 === Create
 
 ```
 Create => Key Version CorrelationId Stream Arguments
-  Key => int16 // 998
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 0x000d
+  Version => uint16
+  CorrelationId => uint32
   Stream => string
   Arguments => [Argument]
   Argument => Key Value
@@ -448,9 +428,197 @@ Create => Key Version CorrelationId Stream Arguments
 
 ```
 Delete => Key Version CorrelationId Stream
-  Key => int16 // 999
-  Version => int16
-  CorrelationId => int32
+  Key => uint16 // 0x000e
+  Version => uint16
+  CorrelationId => uint32
+  Stream => string
+```
+
+=== Metadata
+
+```
+MetadataQuery => Key Version CorrelationId [Stream]
+  Key => uint16 // 0x000f
+  Version => uint16
+  CorrelationId => uint32
+  Stream => string
+
+MetadataResponse => Key Version CorrelationId [Broker] [StreamMetadata]
+  Key => uint16 // 0x800f
+  Version => uint16
+  CorrelationId => uint32
+  Broker => Reference Host Port
+    Reference => uint16
+    Host => string
+    Port => uint32
+  StreamMetadata => StreamName LeaderReference ReplicasReferences
+     StreamName => string
+     ResponseCode => uint16
+     LeaderReference => uint16
+     ReplicasReferences => [uint16]
+```
+
+=== MetadataUpdate
+
+```
+MetadataUpdate => Key Version MetadataInfo
+  Key => uint16 // 0x0010
+  Version => uint16
+  MetadataInfo => Code Stream
+  Code => uint16 // code to identify the information
+  Stream => string // the stream implied
+```
+
+=== PeerProperties
+
+```
+PeerPropertiesRequest => Key Version PeerProperties
+  Key => uint16 // 0x0011
+  Version => uint16
+  CorrelationId => uint32
+  PeerProperties => [PeerProperty]
+  PeerProperty => Key Value
+  Key => string
+  Value => string
+
+PeerPropertiesResponse => Key Version CorrelationId ResponseCode PeerProperties
+  Key => uint16 // 0x8011
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+  PeerProperties => [PeerProperty]
+  PeerProperty => Key Value
+  Key => string
+  Value => string
+```
+
+=== SaslHandshake
+
+```
+SaslHandshakeRequest => Key Version CorrelationId Mechanism
+  Key => uint16 // 0x0012
+  Version => uint16
+  CorrelationId => uint32
+  Mechanism => string
+
+SaslHandshakeResponse => Key Version CorrelationId ResponseCode [Mechanisms]
+  Key => uint16 // 0x8012
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+  Mechanisms => [Mechanism]
+  Mechanism => string
+```
+
+=== SaslAuthenticate
+
+```
+SaslAuthenticateRequest => Key Version CorrelationId Mechanism SaslOpaqueData
+  Key => uint16 // 0x0013
+  Version => uint16
+  CorrelationId => uint32
+  Mechanism => string
+  SaslOpaqueData => bytes
+
+SaslAuthenticateResponse => Key Version CorrelationId ResponseCode SaslOpaqueData
+  Key => uint16 // 0x8013
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+  SaslOpaqueData => bytes
+```
+
+=== Tune
+
+```
+TuneRequest => Key Version FrameMax Heartbeat
+  Key => uint16 // 0x0014
+  Version => uint16
+  FrameMax => uint32 // in bytes, 0 means no limit
+  Heartbeat => uint32 // in seconds, 0 means no heartbeat
+
+TuneResponse => TuneRequest
+```
+
+=== Open
+
+```
+OpenRequest => Key Version CorrelationId VirtualHost
+  Key => uint16 // 0x0015
+  Version => uint16
+  CorrelationId => uint32
+  VirtualHost => string
+
+OpenResponse => Key Version CorrelationId ResponseCode ConnectionProperties
+  Key => uint16 // 0x8015
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+  ConnectionProperties => [ConnectionProperty]
+  ConnectionProperty => Key Value
+  Key => string
+  Value => string
+```
+
+=== Close
+
+```
+CloseRequest => Key Version CorrelationId ClosingCode ClosingReason
+  Key => uint16 // 0x0016
+  Version => uint16
+  CorrelationId => uint32
+  ClosingCode => uint16
+  ClosingReason => string
+
+CloseResponse => Key Version CorrelationId ResponseCode
+  Key => uint16 // 0x8016
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+```
+
+=== Heartbeat
+
+```
+Heartbeat => Key Version
+  Key => uint16 // 0x0017
+  Version => uint16
+```
+
+=== Route
+
+_Experimental_
+
+```
+RouteQuery => Key Version CorrelationId RoutingKey SuperStream
+  Key => uint16 // 0x0018
+  Version => uint16
+  CorrelationId => uint32
+  RoutingKey => string
+  SuperStream => string
+
+RouteResponse => Key Version CorrelationId [Stream]
+  Key => uint16 // 0x8018
+  Version => uint16
+  CorrelationId => uint32
+  Stream => string
+```
+
+=== Partitions
+
+_Experimental_
+
+```
+PartitionsQuery => Key Version CorrelationId SuperStream
+  Key => uint16 // 0x0019
+  Version => uint16
+  CorrelationId => uint32
+  SuperStream => string
+
+PartitionsResponse => Key Version CorrelationId [Stream]
+  Key => uint16 // 0x8019
+  Version => uint16
+  CorrelationId => uint32
   Stream => string
 ```
 
@@ -497,3 +665,8 @@ The client answers with a `Tune` frame with the settings he agrees on, possibly 
 from the server's suggestions.
 * Open: the client sends an `Open` frame to pick a virtual host to connect to. The server
 answers whether it accepts the access or not.
+
+== Resources
+
+- https://docs.google.com/presentation/d/1Hlv4qaWm2PRU04dVPmShP9wU7TEQEttXdsbV8P54Uvw/edit#slide=id.gdbeadf9676_0_37[RabbitMQ Streams client] : a general guide line to write a streams client
+- https://docs.google.com/presentation/d/1BFwf01LcicZ-SyxE1CycZv2gUQMPFGdtFkVuXhgkoTE/edit#slide=id.p1[RabbitMQ Streams Internals]: how the streams work internally 

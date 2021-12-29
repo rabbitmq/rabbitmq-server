@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2018-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_core_ff).
@@ -25,7 +25,7 @@
 -rabbit_feature_flag(
    {stream_queue,
     #{desc          => "Support queues of type `stream`",
-      doc_url       => "https://www.rabbitmq.com/stream-queues.html",
+      doc_url       => "https://www.rabbitmq.com/stream.html",
       stability     => stable,
       depends_on    => [quorum_queue],
       migration_fun => {?MODULE, stream_queue_migration}

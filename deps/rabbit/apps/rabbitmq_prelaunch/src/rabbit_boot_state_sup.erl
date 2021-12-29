@@ -3,7 +3,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_boot_state_sup).
@@ -18,13 +18,17 @@ start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-    SystemdSpec = #{id => rabbit_boot_state_systemd,
+    SystemdSpec = #{id => systemd,
                     start => {rabbit_boot_state_systemd, start_link, []},
                     restart => transient},
+    XtermTitlebarSpec = #{id => xterm_titlebar,
+                          start => {rabbit_boot_state_xterm_titlebar,
+                                    start_link, []},
+                          restart => transient},
     {ok, {#{strategy => one_for_one,
             intensity => 1,
             period => 5},
-          [SystemdSpec]}}.
+          [SystemdSpec, XtermTitlebarSpec]}}.
 
 -spec notify_boot_state_listeners(rabbit_boot_state:boot_state()) -> ok.
 notify_boot_state_listeners(BootState) ->

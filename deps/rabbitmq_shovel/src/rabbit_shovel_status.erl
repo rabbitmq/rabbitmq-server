@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_shovel_status).
@@ -17,8 +17,9 @@
 
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
+-define(CHECK_FREQUENCY, 60000).
 
--record(state, {}).
+-record(state, {timer}).
 -record(entry, {name, type, info, timestamp}).
 
 start_link() ->
@@ -39,7 +40,7 @@ lookup(Name) ->
 init([]) ->
     ?ETS_NAME = ets:new(?ETS_NAME,
                         [named_table, {keypos, #entry.name}, private]),
-    {ok, #state{}}.
+    {ok, ensure_timer(#state{})}.
 
 handle_call(status, _From, State) ->
     Entries = ets:tab2list(?ETS_NAME),
@@ -69,10 +70,14 @@ handle_cast({remove, Name}, State) ->
     rabbit_event:notify(shovel_worker_removed, split_name(Name)),
     {noreply, State}.
 
+handle_info(check, State) ->
+    rabbit_shovel_dyn_worker_sup_sup:cleanup_specs(),
+    {noreply, ensure_timer(State)};
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    rabbit_misc:stop_timer(State, #state.timer),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -86,3 +91,7 @@ split_status(Status) when is_atom(Status) -> [{status, Status}].
 split_name({VHost, Name})           -> [{name,  Name},
                                         {vhost, VHost}];
 split_name(Name) when is_atom(Name) -> [{name, Name}].
+
+ensure_timer(State0) ->
+    State1 = rabbit_misc:stop_timer(State0, #state.timer),
+    rabbit_misc:ensure_timer(State1, #state.timer, ?CHECK_FREQUENCY, check).

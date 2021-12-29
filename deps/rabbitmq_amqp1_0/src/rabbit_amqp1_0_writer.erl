@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_amqp1_0_writer).
@@ -192,13 +192,13 @@ call(Pid, Msg) ->
 %% Begin 1-0
 
 assemble_frame(Channel, Performative, amqp10_framing) ->
-    ?DEBUG("Channel ~p <-~n~p~n~n",
+    ?DEBUG("Channel ~p <-~n~p",
            [Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, PerfBin);
 
 assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
-    ?DEBUG("Channel ~p <-~n~p~n~n",
+    ?DEBUG("Channel ~p <-~n~p",
            [Channel, amqp10_framing:pprint(Performative)]),
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel,
@@ -211,7 +211,7 @@ assemble_frame(Channel, Performative, rabbit_amqp1_0_sasl) ->
 
 assemble_frames(Channel, Performative, Content, _FrameMax,
                 amqp10_framing) ->
-    ?DEBUG("Channel ~p <-~n~p~n  followed by ~p bytes of content~n~n",
+    ?DEBUG("Channel ~p <-~n~p~n  followed by ~p bytes of content",
            [Channel, amqp10_framing:pprint(Performative),
             iolist_size(Content)]),
     PerfBin = amqp10_framing:encode_bin(Performative),

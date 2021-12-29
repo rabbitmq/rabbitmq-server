@@ -5,6 +5,7 @@
 *.coverdata
 /ebin/
 /.erlang.mk/
+/logs/
 /rabbitmq_prelaunch.d
 /xrefr
 

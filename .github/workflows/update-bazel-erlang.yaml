@@ -1,0 +1,45 @@
+name: Update bazel-erlang
+on:
+  schedule:
+  - cron: '0 3 * * *'
+  workflow_dispatch:
+jobs:
+  update-bazel-erlang:
+    name: Update bazel-erlang
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v2.4.0
+      with:
+        path: rabbitmq-server
+    - name: CHECKOUT bazel-erlang
+      uses: actions/checkout@v2.4.0
+      with:
+        repository: rabbitmq/bazel-erlang
+        path: bazel-erlang
+    - name: DETERMINE LATEST COMMIT
+      id: find-commit
+      working-directory: bazel-erlang
+      run: |
+        echo "::set-output name=SHA::$(git rev-parse HEAD)"
+    - name: UPDATE bazel-erlang COMMIT
+      working-directory: rabbitmq-server
+      run: |
+        sudo npm install --global --silent @bazel/buildozer
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set commit "${{ steps.find-commit.outputs.SHA }}"' -:bazel-erlang)" > WORKSPACE.bazel
+        git diff
+    - name: CREATE PULL REQUEST
+      uses: peter-evans/create-pull-request@v3
+      with:
+        token: ${{ secrets.REPO_SCOPED_TOKEN }}
+        committer: GitHub <noreply@github.com>
+        author: GitHub <noreply@github.com>
+        path: rabbitmq-server
+        title: Adopt latest bazel-erlang
+        commit-message: |
+          Adopt latest bazel-erlang
+
+          - bazel-erlang@${{ steps.find-commit.outputs.SHA }}
+        branch: bump-bazel-erlang
+        delete-branch: true

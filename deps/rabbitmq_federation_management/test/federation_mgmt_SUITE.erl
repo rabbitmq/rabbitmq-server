@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(federation_mgmt_SUITE).
@@ -25,6 +25,11 @@ groups() ->
                                federation_down_links,
                                restart_link
                               ]}
+    ].
+
+suite() ->
+    [
+      {timetrap, {minutes, 5}}
     ].
 
 %% -------------------------------------------------------------------
@@ -244,7 +249,8 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     end.
 
 decode(?OK, _Headers,  ResBody) ->
-    cleanup(rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)));
+    JSON = rabbit_data_coercion:to_binary(ResBody),
+    cleanup(rabbit_json:decode(JSON));
 decode(_,    Headers, _ResBody) -> Headers.
 
 cleanup(L) when is_list(L) ->

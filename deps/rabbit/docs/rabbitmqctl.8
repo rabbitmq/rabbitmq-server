@@ -1,11 +1,11 @@
 .\" vim:ft=nroff:
-.\" This Source Code Form is subject to the terms of the Mozilla Public 
+.\" This Source Code Form is subject to the terms of the Mozilla Public
 .\" License, v. 2.0. If a copy of the MPL was not distributed with this
 .\" file, You can obtain one at https://mozilla.org/MPL/2.0/.
 .\"
-.\" Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+.\" Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 .\"
-.Dd September 28, 2019
+.Dd June 19, 2021
 .Dt RABBITMQCTL 8
 .Os "RabbitMQ Server"
 .Sh NAME
@@ -28,7 +28,13 @@
 RabbitMQ is an open source multi-protocol messaging broker.
 .Pp
 .Nm
-is a command line tool for managing a RabbitMQ server node.
+is the main command line tool for managing a RabbitMQ server node,
+together with
+.Cm rabbitmq-diagnostics
+,
+.Cm rabbitmq-upgrade
+, and others.
+.Pp
 It performs all actions by connecting to the target RabbitMQ node
 on a dedicated CLI tool communication port and authenticating
 using a shared secret (known as the cookie file).
@@ -150,20 +156,14 @@ For example, to reset the RabbitMQ node:
 .Pp
 Instructs the RabbitMQ node to perform internal log rotation.
 .Pp
-Log rotation is performed according to lager settings specified in
-configuration file.
+Log rotation is performed according to the logging settings specified in the configuration file.
+The rotation operation is asynchronous, there is no guarantee that it has completed when this command returns.
 .Pp
-Note that there is no need to call this command in case of external log
-rotation (e.g. from logrotate(8)), because lager detects renames and
-automatically reopens log files.
+Note that there is no need to call this command in case of external log rotation (e.g. from logrotate(8)).
 .Pp
-For example, this command starts internal log rotation
-process:
+For example, to initial log rotation:
 .sp
 .Dl rabbitmqctl rotate_logs
-.Pp
-Rotation is performed asynchronously, so there is no guarantee that it
-will be completed when this command returns.
 .\" ------------------------------------------------------------------
 .It Cm shutdown
 .Pp
@@ -338,7 +338,7 @@ will be lost.
 If the last node to go down is permanently lost then you should use
 .Cm forget_cluster_node Fl -offline
 in preference to this command, as it will ensure that mirrored queues
-which were mastered on the lost node get promoted.
+which had their leader replica on the lost node get promoted.
 .Pp
 For example, this will force the node not to wait for other nodes next
 time it is started:
@@ -720,7 +720,7 @@ is an administrator:
 .sp
 .Dl rabbitmqctl set_user_tags janeway administrator
 .Pp
-This has no effect when the user logs in via AMQP, but can be used to
+This has no effect when the user authenticates using a messaging protocol, but can be used to
 permit the user to manage users, virtual hosts and permissions when
 the user logs in via some other means (for example with the management
 plugin).
@@ -846,7 +846,7 @@ virtual hosts to which the user named
 .Qq janeway
 has been granted access, and the topic permissions the user has in these virtual hosts:
 .sp
-.Dl rabbitmqctl list_topic_user_permissions janeway
+.Dl rabbitmqctl list_user_topic_permissions janeway
 .\" ------------------------------------------------------------------
 .It Cm list_vhosts Op Ar vhostinfoitem ...
 .Pp
@@ -1289,11 +1289,11 @@ of the following mutually exclusive options:
 .Bl -tag -width Ds
 .It Fl -offline
 List only those durable queues that are not currently available (more
-specifically, their master node isn't).
+specifically, their leader node isn't).
 .It Fl -online
-List queues that are currently available (their master node is).
+List queues that are currently available (their leader node is).
 .It Fl -local
-List only those queues whose master process is located on the current
+List only those queues whose leader replica is located on the current
 node.
 .El
 .Pp
@@ -1392,7 +1392,7 @@ To learn more, see the
 .Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
 .It Cm synchronised_slave_pids
 If the queue is mirrored, this gives the IDs of the mirrors (follower replicas) which
-are synchronised with the master (leader). To learn more, see the
+are in sync with the leader replica. To learn more, see the
 .Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
 .It Cm state
 The state of the queue.
@@ -1424,8 +1424,8 @@ each queue of the virtual host named
 .Pp
 Tests queues to respond within timeout. Lists those which did not respond
 .Pp
-For example, this command lists only those unresponsive queues whose master process
-is located on the current node.
+For example, this command lists only those unresponsive queues whose leader replica
+is hosted on the target node.
 .Sp
 .Dl rabbitmqctl list_unresponsive_queues --local name
 .\" ------------------------------------------------------------------
@@ -1912,7 +1912,7 @@ none
 .Pp
 Example:
 .Sp
-.Dl rabbitmqctl log_level debug
+.Dl rabbitmqctl set_log_level debug
 .\" ------------------------------------------------------------------
 .It Cm set_vm_memory_high_watermark Ar fraction
 .Bl -tag -width Ds
@@ -1957,6 +1957,10 @@ Enables a feature flag on the target node.
 Example:
 .Sp
 .Dl rabbitmqctl enable_feature_flag quorum_queue
+.Pp
+You can also enable all feature flags by specifying "all":
+.Sp
+.Dl rabbitmqctl enable_feature_flag "all"
 .\" ------------------------------------------------------------------
 .It Cm list_feature_flags Op Ar column ...
 .Pp

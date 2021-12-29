@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(tcp_listener).
@@ -44,7 +44,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {on_startup, on_shutdown, label, ip, port}).
+-record(state, {on_shutdown, label, ip, port}).
 
 %%----------------------------------------------------------------------------
 
@@ -63,14 +63,17 @@ start_link(IPAddress, Port,
 
 %%--------------------------------------------------------------------
 
-init({IPAddress, Port, {M,F,A} = OnStartup, OnShutdown, Label}) ->
+init({IPAddress, Port, {M, F, A}, OnShutdown, Label}) ->
     process_flag(trap_exit, true),
-    error_logger:info_msg(
-      "started ~s on ~s:~p~n",
-      [Label, rabbit_misc:ntoab(IPAddress), Port]),
+    logger:info("started ~s on ~s:~p", [Label, rabbit_misc:ntoab(IPAddress), Port]),
     apply(M, F, A ++ [IPAddress, Port]),
-    {ok, #state{on_startup = OnStartup, on_shutdown = OnShutdown,
-                label = Label, ip=IPAddress, port=Port}}.
+    State0 = #state{
+        on_shutdown = OnShutdown,
+        label = Label,
+        ip = IPAddress,
+        port = Port
+    },
+    {ok, obfuscate_state(State0)}.
 
 handle_call(_Request, _From, State) ->
     {noreply, State}.
@@ -81,10 +84,23 @@ handle_cast(_Msg, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, #state{on_shutdown = {M,F,A}, label=Label, ip=IPAddress, port=Port}) ->
-    error_logger:info_msg("stopped ~s on ~s:~p~n",
-                          [Label, rabbit_misc:ntoab(IPAddress), Port]),
-    apply(M, F, A ++ [IPAddress, Port]).
+terminate(_Reason, #state{on_shutdown = OnShutdown, label = Label, ip = IPAddress, port = Port}) ->
+    logger:info("stopped ~s on ~s:~p", [Label, rabbit_misc:ntoab(IPAddress), Port]),
+    try
+        OnShutdown(IPAddress, Port)
+    catch _:Error ->
+        logger:error("Failed to stop ~s on ~s:~p: ~p",
+                     [Label, rabbit_misc:ntoab(IPAddress), Port, Error])
+    end.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+obfuscate_state(#state{on_shutdown = OnShutdown} = State) ->
+    {M, F, A} = OnShutdown,
+    State#state{
+        %% avoids arguments from being logged in case of an exception
+        on_shutdown = fun(IPAddress, Port) ->
+          apply(M, F, A ++ [IPAddress, Port])
+        end
+    }.

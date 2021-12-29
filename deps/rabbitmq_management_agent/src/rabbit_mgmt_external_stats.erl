@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_external_stats).
@@ -66,7 +66,7 @@ get_used_fd(State0) ->
         end
     catch
         _:Error ->
-            State2 = log_fd_error("Could not infer the number of file handles used: ~p~n", [Error], State0),
+            State2 = log_fd_error("Could not infer the number of file handles used: ~p", [Error], State0),
             {State2, 0}
     end.
 
@@ -89,7 +89,7 @@ get_used_fd({unix, BSD}, State0)
         UsedFd = length(lists:filter(F, string:tokens(Output, "\n"))),
         {State0, UsedFd}
     catch _:Error:Stacktrace ->
-              State1 = log_fd_error("Could not parse fstat output:~n~s~n~p~n",
+              State1 = log_fd_error("Could not parse fstat output:~n~s~n~p",
                                     [Output, {Error, Stacktrace}], State0),
               {State1, 0}
     end;
@@ -100,7 +100,7 @@ get_used_fd({unix, _}, State0) ->
     Res = os:cmd(Cmd),
     case string:right(Res, 7) of
         "failed\n" ->
-            State1 = log_fd_error("Could not obtain lsof output~n", [], State0),
+            State1 = log_fd_error("Could not obtain lsof output", [], State0),
             {State1, 0};
         _ ->
             UsedFd = string:words(Res, $\n) - 1,
@@ -170,7 +170,7 @@ get_used_fd({win32, _}, State0) ->
                "handle.exe /accepteula -s -p " ++ os:getpid() ++ " 2> nul"),
     case Handle of
         [] ->
-            State1 = log_fd_error("Could not find handle.exe, please install from sysinternals~n", [], State0),
+            State1 = log_fd_error("Could not find handle.exe, please install from sysinternals", [], State0),
             {State1, 0};
         _  ->
             case find_files_line(string:tokens(Handle, "\r\n")) of
@@ -178,7 +178,7 @@ get_used_fd({win32, _}, State0) ->
                     State1 = log_fd_error("handle.exe output did not contain "
                                           "a line beginning with '  File ', unable "
                                           "to determine used file descriptor "
-                                          "count: ~p~n", [Handle], State0),
+                                          "count: ~p", [Handle], State0),
                     {State1, 0};
                 UsedFd ->
                     {State0, UsedFd}

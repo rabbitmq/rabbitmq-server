@@ -2,18 +2,22 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_prelaunch_enabled_plugins_file).
 
+-include_lib("kernel/include/logger.hrl").
+
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 
 -export([setup/1]).
 
 setup(Context) ->
-    rabbit_log_prelaunch:debug(""),
-    rabbit_log_prelaunch:debug("== Enabled plugins file =="),
+    ?LOG_DEBUG(
+       "~n== Enabled plugins file ==", [],
+       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     update_enabled_plugins_file(Context).
 
 %% -------------------------------------------------------------------
@@ -33,21 +37,28 @@ do_update_enabled_plugins_file(#{enabled_plugins_file := File}, List) ->
     SortedList = lists:usort(List),
     case SortedList of
         [] ->
-            rabbit_log_prelaunch:debug("Marking all plugins as disabled");
+            ?LOG_DEBUG(
+               "Marking all plugins as disabled", [],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
         _ ->
-            rabbit_log_prelaunch:debug(
-              "Marking the following plugins as enabled:"),
-            [rabbit_log_prelaunch:debug("  - ~s", [P]) || P <- SortedList]
+            ?LOG_DEBUG(
+              lists:flatten(["Marking the following plugins as enabled:",
+                             ["~n  - ~s" || _ <- SortedList]]),
+              SortedList,
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
     end,
     Content = io_lib:format("~p.~n", [SortedList]),
     case file:write_file(File, Content) of
         ok ->
-            rabbit_log_prelaunch:debug("Wrote plugins file: ~ts", [File]),
+            ?LOG_DEBUG(
+               "Wrote plugins file: ~ts", [File],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             ok;
         {error, Reason} ->
-            rabbit_log_prelaunch:error(
+            ?LOG_ERROR(
               "Failed to update enabled plugins file \"~ts\" "
               "from $RABBITMQ_ENABLED_PLUGINS: ~ts",
-              [File, file:format_error(Reason)]),
+              [File, file:format_error(Reason)],
+              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             throw({error, failed_to_update_enabled_plugins_file})
     end.

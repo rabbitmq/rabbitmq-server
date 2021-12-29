@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_util).
@@ -15,6 +15,7 @@
          is_authorized_user/4,
          is_authorized_monitor/2, is_authorized_policies/2,
          is_authorized_vhost_visible/2,
+         is_authorized_vhost_visible_for_monitoring/2,
          is_authorized_global_parameters/2]).
 
 -export([bad_request/3, bad_request_exception/4, internal_server_error/4,
@@ -116,6 +117,15 @@ is_authorized_vhost_visible(ReqData, Context) ->
                   fun(#user{tags = Tags} = User) ->
                           is_admin(Tags) orelse user_matches_vhost_visible(ReqData, User)
                   end).
+
+is_authorized_vhost_visible_for_monitoring(ReqData, Context) ->
+  is_authorized(ReqData, Context,
+    <<"User not authorised to access virtual host">>,
+    fun(#user{tags = Tags} = User) ->
+      is_admin(Tags)
+          orelse is_monitor(Tags)
+          orelse user_matches_vhost_visible(ReqData, User)
+    end).
 
 disable_stats(ReqData) ->
     MgmtOnly = case qs_val(<<"disable_stats">>, ReqData) of
@@ -280,7 +290,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun) ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, http),
             rabbit_log:warning("HTTP access denied: ~s",
                                [rabbit_misc:format(Msg, Args)]),
-            not_authorised(<<"Login failed">>, ReqData, Context)
+            not_authenticated(<<"Login failed">>, ReqData, Context)
     end.
 
 vhost_from_headers(ReqData) ->
@@ -726,7 +736,12 @@ a2b(B)                 -> B.
 bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
 
+not_authenticated(Reason, ReqData, Context) ->
+    ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
+    halt_response(401, not_authorized, Reason, ReqData1, Context).
+
 not_authorised(Reason, ReqData, Context) ->
+    %% TODO: consider changing to 403 in 4.0
     halt_response(401, not_authorised, Reason, ReqData, Context).
 
 not_found(Reason, ReqData, Context) ->
@@ -953,6 +968,7 @@ with_channel(VHost, ReqData,
                                  virtual_host = VHost},
     case amqp_connection:start(Params) of
         {ok, Conn} ->
+            _ = erlang:link(Conn),
             {ok, Ch} = amqp_connection:open_channel(Conn),
             try
                 Fun(Ch)
@@ -973,6 +989,7 @@ with_channel(VHost, ReqData,
                        ServerClose =:= server_initiated_hard_close ->
                     bad_request_exception(Code, Reason, ReqData, Context)
             after
+            erlang:unlink(Conn),
             catch amqp_channel:close(Ch),
             catch amqp_connection:close(Conn)
             end;

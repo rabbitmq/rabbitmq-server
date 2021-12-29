@@ -29,6 +29,22 @@
 
 -define(INSTANCE_CREDENTIALS, "iam/security-credentials").
 -define(INSTANCE_METADATA_BASE, "latest/meta-data").
+-define(INSTANCE_ID, "instance-id").
+
+-define(TOKEN_URL, "latest/api/token").
+
+-define(METADATA_TOKEN_TTL_HEADER, "X-aws-ec2-metadata-token-ttl-seconds").
+
+% EC2 Instance Metadata service version 2 (IMDSv2) uses session-oriented authentication.
+% Instance metadata service requests are only needed for loading/refreshing credentials.
+% Long-lived EC2 IMDSv2 tokens are unnecessary. The token only needs to be valid long enough
+% to successfully load/refresh the credentials. 60 seconds is more than enough time to accomplish this.
+-define(METADATA_TOKEN_TTL_SECONDS, 60).
+
+-define(METADATA_TOKEN, "X-aws-ec2-metadata-token").
+
+-define(LINEAR_BACK_OFF_MILLIS, 500).
+-define(MAX_RETRIES, 5).
 
 -type access_key() :: nonempty_string().
 -type secret_access_key() :: nonempty_string().
@@ -41,11 +57,17 @@
 -type sc_error() :: {error, Reason :: atom()}.
 -type security_credentials() :: sc_ok() | sc_error().
 
+-record(imdsv2token, { token :: security_token() | undefined,
+                       expiration :: expiration() | undefined}).
+
+-type imdsv2token() :: #imdsv2token{}.
+
 -record(state, {access_key :: access_key() | undefined,
                 secret_access_key :: secret_access_key() | undefined,
                 expiration :: expiration() | undefined,
                 security_token :: security_token() | undefined,
                 region :: region() | undefined,
+                imdsv2_token:: imdsv2token() | undefined,
                 error :: atom() | string() | undefined}).
 -type state() :: #state{}.
 
