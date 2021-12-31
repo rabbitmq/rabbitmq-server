@@ -15,9 +15,12 @@
 -define(p_zero_or_more,true).
 
 
-
 -spec file(file:name()) -> any().
-file(Filename) -> case file:read_file(Filename) of {ok,Bin} -> parse(Bin); Err -> Err end.
+file(Filename) ->
+    case rabbit_misc:raw_read_file(Filename) of
+        {ok,Bin} -> parse(Bin);
+        Err -> Err
+    end.
 
 -spec parse(binary() | list()) -> any().
 parse(List) when is_list(List) -> parse(unicode:characters_to_binary(List));
