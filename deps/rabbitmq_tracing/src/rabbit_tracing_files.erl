@@ -37,7 +37,7 @@ full_path(Name0) ->
 %%--------------------------------------------------------------------
 
 file_info(Name) ->
-    Size = case file:read_file_info(full_path(Name)) of
+    Size = case file:read_file_info(full_path(Name), [raw]) of
                {ok, Info} ->
                    Info#file_info.size;
                {error, Error} ->
