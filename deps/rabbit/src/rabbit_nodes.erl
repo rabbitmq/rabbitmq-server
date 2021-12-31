@@ -117,11 +117,19 @@ seed_internal_cluster_id() ->
     end.
 
 seed_user_provided_cluster_name() ->
-    case application:get_env(rabbit, cluster_name) of
-        undefined -> ok;
-        {ok, Name} ->
-            rabbit_log:info("Setting cluster name to '~s' as configured", [Name]),
-            set_cluster_name(rabbit_data_coercion:to_binary(Name))
+    %% To avoid setting the cluster name repeatedly
+    case rabbit_runtime_parameters:value_global(cluster_name) of
+        not_found ->
+            case application:get_env(rabbit, cluster_name) of
+                undefined ->
+                    DftNameBin = cluster_name_default(),
+                    rabbit_log:info("Setting cluster name to '~s' as default", [DftNameBin]),
+                    set_cluster_name(DftNameBin);
+                {ok, Name} ->
+                    rabbit_log:info("Setting cluster name to '~s' as configured", [Name]),
+                    set_cluster_name(rabbit_data_coercion:to_binary(Name))
+            end;
+        _ -> ok
     end.
 
 -spec set_cluster_name(binary()) -> 'ok'.
