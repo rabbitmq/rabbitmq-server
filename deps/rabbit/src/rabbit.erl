@@ -1462,7 +1462,7 @@ motd() ->
         undefined ->
             undefined;
         File ->
-            case file:read_file(File) of
+            case rabbit_misc:raw_read_file(File) of
                 {ok, MOTD} -> string:trim(MOTD, trailing, [$\r,$\n]);
                 {error, _} -> undefined
             end
