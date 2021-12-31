@@ -38,7 +38,7 @@ serve(ReqData, Context) ->
 
 serve(Name) ->
     Path = rabbit_tracing_files:full_path(Name),
-    {ok, Content} = file:read_file(Path),
+    {ok, Content} = rabbit_misc:raw_read_file(Path),
     Content.
 
 delete_resource(ReqData, Context) ->

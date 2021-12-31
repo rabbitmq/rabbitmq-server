@@ -118,7 +118,7 @@ get_config_key(Key, Map) ->
 
 make_request() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-    {ok, Token} = file:read_file(get_config_key(k8s_token_path, M)),
+    {ok, Token} = rabbit_misc:raw_read_file(get_config_key(k8s_token_path, M)),
     Token1 = binary:replace(Token, <<"\n">>, <<>>),
     ?HTTPC_MODULE:get(
       get_config_key(k8s_scheme, M),
@@ -169,7 +169,7 @@ extract_node_list(Response) ->
 -spec base_path(events | endpoints, term()) -> string().
 base_path(Type, Args) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-    {ok, Namespace} = file:read_file(get_config_key(k8s_namespace_path, M)),
+    {ok, Namespace} = rabbit_misc:raw_read_file(get_config_key(k8s_namespace_path, M)),
     NameSpace1 = binary:replace(Namespace, <<"\n">>, <<>>),
     rabbit_peer_discovery_httpc:build_path([api, v1, namespaces, NameSpace1, Type, Args]).
 
@@ -219,9 +219,9 @@ generate_v1_event(Namespace, Name, Type, Reason, Message, Timestamp, HostName) -
 -spec send_event(term(),term(), term()) -> {ok, term()} | {error, term()}.
 send_event(Type, Reason, Message) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
-    {ok, Token} = file:read_file(get_config_key(k8s_token_path, M)),
+    {ok, Token} = rabbit_misc:raw_read_file(get_config_key(k8s_token_path, M)),
     Token1 = binary:replace(Token, <<"\n">>, <<>>),
-    {ok, NameSpace} = file:read_file(
+    {ok, NameSpace} = rabbit_misc:raw_read_file(
 			get_config_key(k8s_namespace_path, M)),
     NameSpace1 = binary:replace(NameSpace, <<"\n">>, <<>>),
 
