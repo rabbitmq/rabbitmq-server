@@ -267,7 +267,14 @@ import_case18(Config) ->
         {skip, "Should not run in mixed version environments"}
     end.
 
-import_case19(Config) -> import_invalid_file_case(Config, "failing_case19").
+import_case19(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            import_invalid_file_case(Config, "failing_case19");
+        true ->
+            %% skip the test in mixed version mode
+            {skip, "Should not run in mixed version environments"}
+    end.
 
 export_import_round_trip_case1(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
