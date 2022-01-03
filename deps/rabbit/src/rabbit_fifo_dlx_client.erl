@@ -43,44 +43,22 @@ process_command(Cmd, #state{leader = Leader} = State, Tries) ->
 
 handle_ra_event(Leader, {machine, {dlx_delivery, _} = Del}, #state{leader = Leader} = State) ->
     handle_delivery(Del, State);
-handle_ra_event(_From, Evt, State) ->
-    rabbit_log:warning("~s received unknown ra event: ~p", [?MODULE, Evt]),
+handle_ra_event(From, Evt, State) ->
+    rabbit_log:debug("Ignoring ra event ~p from ~p", [Evt, From]),
     {ok, State, []}.
 
 handle_delivery({dlx_delivery, [{FstId, _} | _] = IdMsgs},
                 #state{queue_resource = QRes,
                        last_msg_id = Prev} = State0) ->
-    %% format as a deliver action
-    {LastId, _} = lists:last(IdMsgs),
+    %% Assert that messages get delivered in order since deliveries are node local.
+    %% (In contrast to rabbit_fifo_client, we expect neither duplicate nor missing messages.)
+    %% Let it crash if this assertion is wrong.
+    FstId = Prev + 1,
+    %% Format as a deliver action.
     Del = {deliver, transform_msgs(QRes, IdMsgs)},
-    case Prev of
-        Prev when FstId =:= Prev+1 ->
-            %% expected message ID(s) got delivered
-            State = State0#state{last_msg_id = LastId},
-            {ok, State, [Del]};
-        Prev when FstId > Prev+1 ->
-            %% messages ID(s) are missing, therefore fetch all checked-out discarded messages
-            %% TODO implement as done in
-            %% https://github.com/rabbitmq/rabbitmq-server/blob/b4eb5e2cfd7f85a1681617dc489dd347fa9aac72/deps/rabbit/src/rabbit_fifo_client.erl#L732-L744
-            %% A: not needed because of local guarantees, let it crash
-            exit(not_implemented);
-        Prev when FstId =< Prev ->
-            rabbit_log:debug("dropping messages with duplicate IDs (~b to ~b) consumed from ~s",
-                             [FstId, Prev, rabbit_misc:rs(QRes)]),
-            case lists:dropwhile(fun({Id, _}) -> Id =< Prev end, IdMsgs) of
-                [] ->
-                    {ok, State0, []};
-                IdMsgs2 ->
-                    handle_delivery({dlx_delivery, IdMsgs2}, State0)
-            end;
-        _ when FstId =:= 0 ->
-            % the very first delivery
-            % TODO We init last_msg_id with -1. So, why would we ever run into this branch?
-            % A: can be a leftover
-            rabbit_log:debug("very first delivery consumed from ~s", [rabbit_misc:rs(QRes)]),
-            State = State0#state{last_msg_id = 0},
-            {ok, State, [Del]}
-    end.
+    {LastId, _} = lists:last(IdMsgs),
+    State = State0#state{last_msg_id = LastId},
+    {ok, State, [Del]}.
 
 transform_msgs(QRes, Msgs) ->
     lists:map(
