@@ -193,20 +193,14 @@ FIRST_SRCS = [
     "src/rabbit_queue_master_locator.erl",
 ]
 
-EXTRA_ERLC_OPTS = [
-    "-DINSTR_MOD=gm",
-]
-
 rabbitmq_lib(
     app_description = "RabbitMQ",
     app_env = _APP_ENV,
     app_module = APP_MODULE,
     app_name = "rabbit",
     app_registered = APP_REGISTERED,
-    erlc_opts = RABBITMQ_ERLC_OPTS + EXTRA_ERLC_OPTS,
     extra_apps = EXTRA_APPS,
     first_srcs = FIRST_SRCS,
-    test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS + EXTRA_ERLC_OPTS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
