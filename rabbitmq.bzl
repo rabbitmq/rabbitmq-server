@@ -9,6 +9,11 @@ load("@bazel-erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 
+def without(item, elements):
+    c = list(elements)
+    c.remove(item)
+    return c
+
 _LAGER_EXTRA_SINKS = [
     "rabbit_log",
     "rabbit_log_channel",
@@ -24,18 +29,18 @@ _LAGER_EXTRA_SINKS = [
     "rabbit_log_upgrade",
 ]
 
-RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
+RABBITMQ_ERLC_OPTS = without("+deterministic", DEFAULT_ERLC_OPTS) + [
     "+{parse_transform,lager_transform}",
     "+{lager_extra_sinks,[" + ",".join(_LAGER_EXTRA_SINKS) + "]}",
+    "-DINSTR_MOD=gm",
 ]
-RABBITMQ_ERLC_OPTS.remove("+deterministic")
 
-RABBITMQ_TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
+RABBITMQ_TEST_ERLC_OPTS = without("+deterministic", DEFAULT_TEST_ERLC_OPTS) + [
     "+{parse_transform,lager_transform}",
     "+{lager_extra_sinks,[" + ",".join(_LAGER_EXTRA_SINKS) + "]}",
     "+nowarn_export_all",
+    "-DINSTR_MOD=gm",
 ]
-RABBITMQ_TEST_ERLC_OPTS.remove("+deterministic")
 
 RABBITMQ_DIALYZER_OPTS = [
     "-Werror_handling",
@@ -105,8 +110,6 @@ def rabbitmq_lib(
         app_registered = [],
         app_env = "[]",
         extra_apps = [],
-        erlc_opts = RABBITMQ_ERLC_OPTS,
-        test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
         first_srcs = [],
         extra_priv = [],
         build_deps = [],
@@ -121,7 +124,10 @@ def rabbitmq_lib(
         app_env = app_env,
         extra_apps = extra_apps,
         extra_priv = extra_priv,
-        erlc_opts = erlc_opts,
+        erlc_opts = select({
+            "//:debug_build": without("+deterministic", RABBITMQ_ERLC_OPTS),
+            "//conditions:default": RABBITMQ_ERLC_OPTS,
+        }),
         first_srcs = first_srcs,
         build_deps = build_deps,
         deps = deps,
@@ -137,7 +143,10 @@ def rabbitmq_lib(
         app_env = app_env,
         extra_apps = extra_apps,
         extra_priv = extra_priv,
-        erlc_opts = test_erlc_opts,
+        erlc_opts = select({
+            "//:debug_build": without("+deterministic", RABBITMQ_TEST_ERLC_OPTS),
+            "//conditions:default": RABBITMQ_TEST_ERLC_OPTS,
+        }),
         first_srcs = first_srcs,
         build_deps = with_test_versions(build_deps),
         deps = with_test_versions(deps),
@@ -186,7 +195,10 @@ def rabbitmq_integration_suite(
         name = name,
         suite_name = name,
         tags = tags,
-        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
+        erlc_opts = select({
+            "//:debug_build": without("+deterministic", RABBITMQ_TEST_ERLC_OPTS + erlc_opts),
+            "//conditions:default": RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
+        }),
         additional_hdrs = additional_hdrs,
         additional_srcs = additional_srcs,
         data = data,
