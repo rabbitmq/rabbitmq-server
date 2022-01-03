@@ -121,9 +121,8 @@ handle_continue(QRef, undefined) ->
     {noreply, State#state{dlx_client_state = ConsumerState,
                           monitor_ref = MonitorRef}}.
 
-terminate(_Reason, _State) ->
-    %%TODO cancel timer?
-    ok.
+terminate(_Reason, State) ->
+    cancel_timer(State).
 
 handle_call(Request, From, State) ->
     rabbit_log:warning("~s received unhandled call from ~p: ~p", [?MODULE, From, Request]),
@@ -532,10 +531,12 @@ strings(QRefs) when is_list(QRefs) ->
     L1 = lists:join(", ", L0),
     lists:flatten(L1).
 
-maybe_set_timer(#state{timer = TRef} = State) when is_reference(TRef) ->
+maybe_set_timer(#state{timer = TRef} = State)
+  when is_reference(TRef) ->
     State;
 maybe_set_timer(#state{timer = undefined,
-                       pendings = Pendings} = State) when map_size(Pendings) =:= 0 ->
+                       pendings = Pendings} = State)
+  when map_size(Pendings) =:= 0 ->
     State;
 maybe_set_timer(#state{timer = undefined,
                        settle_timeout = SettleTimeout} = State) ->
@@ -543,18 +544,21 @@ maybe_set_timer(#state{timer = undefined,
     % rabbit_log:debug("set timer"),
     State#state{timer = TRef}.
 
-maybe_cancel_timer(#state{timer = undefined} = State) ->
-    State;
 maybe_cancel_timer(#state{timer = TRef,
-                          pendings = Pendings} = State) ->
-    case maps:size(Pendings) of
-        0 ->
-            erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
-            % rabbit_log:debug("cancelled timer"),
-            State#state{timer = undefined};
-        _ ->
-            State
-    end.
+                          pendings = Pendings} = State)
+  when is_reference(TRef),
+       map_size(Pendings) =:= 0 ->
+    erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
+    State#state{timer = undefined};
+maybe_cancel_timer(State) ->
+    State.
+
+cancel_timer(#state{timer = undefined} = State) ->
+    State;
+cancel_timer(#state{timer = TRef} = State)
+  when is_reference(TRef) ->
+    erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
+    State#state{timer = undefined}.
 
 %% Avoids large message contents being logged.
 format_status(_Opt, [_PDict, #state{
