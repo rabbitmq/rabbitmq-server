@@ -2807,7 +2807,9 @@ stream_r(Stream, #stream_connection{virtual_host = VHost}) ->
               virtual_host = VHost}.
 
 clean_state_after_stream_deletion_or_failure(Stream,
-                                             #stream_connection{stream_subscriptions
+                                             #stream_connection{virtual_host =
+                                                                    VirtualHost,
+                                                                stream_subscriptions
                                                                     =
                                                                     StreamSubscriptions,
                                                                 publishers =
@@ -2825,11 +2827,16 @@ clean_state_after_stream_deletion_or_failure(Stream,
     {SubscriptionsCleaned, C1, S1} =
         case stream_has_subscriptions(Stream, C0) of
             true ->
-                %% TODO notify coordinator for SAC
                 #{Stream := SubscriptionIds} = StreamSubscriptions,
-                [rabbit_stream_metrics:consumer_cancelled(self(),
-                                                          stream_r(Stream, C0),
-                                                          SubId)
+                [begin
+                     rabbit_stream_metrics:consumer_cancelled(self(),
+                                                              stream_r(Stream,
+                                                                       C0),
+                                                              SubId),
+                     #{SubId := Consumer} = Consumers,
+                     maybe_unregister_consumer(VirtualHost, Consumer,
+                                               single_active_consumer(Consumer#consumer.configuration#consumer_configuration.properties))
+                 end
                  || SubId <- SubscriptionIds],
                 {true,
                  C0#stream_connection{stream_subscriptions =

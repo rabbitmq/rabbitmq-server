@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2021-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_sac_coordinator).
@@ -94,7 +94,7 @@ apply({unregister_consumer,
       #?MODULE{groups = StreamGroups0} = State0) ->
     {State1, Effects1} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
-            error ->
+            undefined ->
                 {State0, []};
             Group0 ->
                 {Group1, Effects} =
@@ -156,54 +156,99 @@ ensure_monitors({register_consumer,
                 Monitors0,
                 Effects) ->
     GroupId = {VirtualHost, Stream, ConsumerName},
+    Groups0 = maps:get(Pid, PidsGroups0, sets:new()),
     PidsGroups1 =
-        case PidsGroups0 of
-            #{Pid := Groups} ->
-                case sets:is_element(GroupId, Groups) of
-                    true ->
-                        PidsGroups0;
-                    false ->
-                        maps:put(Pid, sets:add_element(GroupId, Groups),
-                                 PidsGroups0)
-                end;
-            _ ->
-                Gs = sets:new(),
-                maps:put(Pid, sets:add_element(GroupId, Gs), PidsGroups0)
-        end,
-    Monitors1 =
-        case Monitors0 of
-            #{Pid := {Pid, sac}} ->
-                Monitors0;
-            _ ->
-                maps:put(Pid, {Pid, sac}, Monitors0)
-        end,
-
-    {State0#?MODULE{pids_groups = PidsGroups1}, Monitors1,
+        maps:put(Pid, sets:add_element(GroupId, Groups0), PidsGroups0),
+    {State0#?MODULE{pids_groups = PidsGroups1},
+     Monitors0#{Pid => {Pid, sac}},
      [{monitor, process, Pid}, {monitor, node, node(Pid)} | Effects]};
 ensure_monitors({unregister_consumer,
                  VirtualHost,
                  Stream,
                  ConsumerName,
-                 _ConnectionPid,
+                 Pid,
                  _SubscriptionId},
-                #?MODULE{groups = StreamGroups0, pids_groups = _PidsGroups0} =
-                    _State0,
-                _Monitors,
-                _Effects) ->
-    % _GroupId = {VirtualHost, Stream, ConsumerName},
-    case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
-        undefined ->
-            %% group is gone
-            ok;
-        _Group ->
-            ok
+                #?MODULE{groups = StreamGroups0, pids_groups = PidsGroups0} =
+                    State0,
+                Monitors,
+                Effects) ->
+    GroupId = {VirtualHost, Stream, ConsumerName},
+    #{Pid := PidGroup0} = PidsGroups0,
+    PidGroup1 =
+        case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
+            undefined ->
+                %% group is gone, can be removed from the PID set
+                sets:del_element(GroupId, PidGroup0);
+            Group ->
+                %% group still exists, check if other consumers are from this PID
+                %% if yes, don't change the PID set
+                %% if no, remove group from PID set
+                case has_consumers_from_pid(Group, Pid) of
+                    true ->
+                        %% the group still depends on this PID, keep the group entry in the set
+                        PidGroup0;
+                    false ->
+                        %% the group does not depend on the PID anymore, remove the group entry from the set
+                        sets:del_element(GroupId, PidGroup0)
+                end
+        end,
+    case sets:is_empty(PidGroup1) of
+        true ->
+            %% no more groups depend on the PID
+            %% remove PID from data structure and demonitor it
+            {State0#?MODULE{pids_groups = maps:remove(Pid, PidsGroups0)},
+             maps:remove(Pid, Monitors), [{demonitor, process, Pid} | Effects]};
+        false ->
+            %% one or more groups still depend on the PID
+            {State0#?MODULE{pids_groups =
+                                maps:put(Pid, PidGroup1, PidsGroups0)},
+             Monitors, Effects}
     end;
 ensure_monitors(_, #?MODULE{} = State0, Monitors, Effects) ->
     {State0, Monitors, Effects}.
 
--spec handle_connection_down(connection_pid(), state()) -> state().
-handle_connection_down(_Pid, State) ->
-    State.
+-spec handle_connection_down(connection_pid(), state()) ->
+                                {state(), ra:effects()}.
+handle_connection_down(Pid,
+                       #?MODULE{pids_groups = PidsGroups0} = State0) ->
+    case maps:take(Pid, PidsGroups0) of
+        error ->
+            {State0, []};
+        {Groups, PidsGroups1} ->
+            State1 = State0#?MODULE{pids_groups = PidsGroups1},
+            %% iterate other the groups that this PID affects
+            sets:fold(fun({VirtualHost, Stream, ConsumerName},
+                          {#?MODULE{groups = ConsumerGroups} = S0, Eff0}) ->
+                         case lookup_group(VirtualHost,
+                                           Stream,
+                                           ConsumerName,
+                                           ConsumerGroups)
+                         of
+                             undefined -> {S0, Eff0};
+                             #group{consumers = Consumers} ->
+                                 %% iterate over the consumers of the group
+                                 %% and unregister the ones from this PID
+                                 lists:foldl(fun (#consumer{pid = P,
+                                                            subscription_id =
+                                                                SubId},
+                                                  {StateSub0, EffSub0})
+                                                     when P == Pid ->
+                                                     {StateSub1, ok, E} =
+                                                         ?MODULE:apply({unregister_consumer,
+                                                                        VirtualHost,
+                                                                        Stream,
+                                                                        ConsumerName,
+                                                                        Pid,
+                                                                        SubId},
+                                                                       StateSub0),
+                                                     {StateSub1, EffSub0 ++ E};
+                                                 (_Consumer, Acc) -> Acc
+                                             end,
+                                             {S0, Eff0}, Consumers)
+                         end
+                      end,
+                      {State1, []}, Groups)
+    end.
 
 do_register_consumer(VirtualHost,
                      Stream,
@@ -368,12 +413,12 @@ handle_consumer_removal(Group0, Consumer) ->
 notify_consumer_effect(Pid, SubId, Active) ->
     notify_consumer_effect(Pid, SubId, Active, false).
 
-notify_consumer_effect(Pid, SubId, Active, false) ->
+notify_consumer_effect(Pid, SubId, Active, false = _SteppingDown) ->
     mod_call_effect(Pid,
                     {sac,
                      {{subscription_id, SubId}, {active, Active},
                       {extra, []}}});
-notify_consumer_effect(Pid, SubId, Active, true) ->
+notify_consumer_effect(Pid, SubId, Active, true = _SteppingDown) ->
     mod_call_effect(Pid,
                     {sac,
                      {{subscription_id, SubId}, {active, Active},
@@ -402,6 +447,14 @@ add_to_group(Consumer, #group{consumers = Consumers} = Group) ->
 
 remove_from_group(Consumer, #group{consumers = Consumers} = Group) ->
     Group#group{consumers = lists:delete(Consumer, Consumers)}.
+
+has_consumers_from_pid(#group{consumers = Consumers}, Pid) ->
+    lists:any(fun (#consumer{pid = P}) when P == Pid ->
+                      true;
+                  (_) ->
+                      false
+              end,
+              Consumers).
 
 compute_active_consumer(#group{consumers = []} = Group) ->
     Group;

@@ -17,7 +17,8 @@ all() ->
     [{group, non_parallel_tests}].
 
 groups() ->
-    [{non_parallel_tests, [], [manage_super_stream, lookup_leader, partition_index]}].
+    [{non_parallel_tests, [],
+      [manage_super_stream, lookup_leader, partition_index]}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
