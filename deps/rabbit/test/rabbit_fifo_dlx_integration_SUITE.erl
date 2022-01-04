@@ -30,6 +30,7 @@ groups() ->
                         rejected,
                         delivery_limit,
                         target_queue_not_bound,
+                        target_queue_deleted,
                         dlx_missing,
                         stats,
                         drop_head_falls_back_to_at_most_once,
@@ -246,6 +247,71 @@ target_queue_not_bound(Config) ->
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{expiration = undefined},
                                                payload = Msg}},
                  amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})).
+
+%% Test that message is not lost when target queue gets deleted
+%% because dead-letter routing topology should always be respected.
+target_queue_deleted(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SourceQ = ?config(source_queue, Config),
+    TargetQ = ?config(target_queue_1, Config),
+    DLX = ?config(dead_letter_exchange, Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
+                                                     queue     = SourceQ,
+                                                     durable   = true,
+                                                     arguments = [
+                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                                                  {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
+                                                                  {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
+                                                                 ]
+                                                    }),
+    #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLX}),
+    %% Make target queue a quorum queue to provoke sending an 'eol' message to dlx worker.
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
+                                                     queue = TargetQ,
+                                                     durable   = true,
+                                                     arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]
+                                                    }),
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
+                                                  queue = TargetQ,
+                                                  exchange = DLX,
+                                                  routing_key = <<"k1">>
+                                                 }),
+    Msg1 = <<"m1">>,
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = SourceQ},
+                           #amqp_msg{props   = #'P_basic'{expiration = <<"0">>},
+                                     payload = Msg1}),
+    RaName = ra_name(SourceQ),
+    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
+                             amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}))),
+    eventually(?_assertEqual([{0, 0}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    #'queue.delete_ok'{message_count = 0} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}),
+    Msg2 = <<"m2">>,
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = SourceQ},
+                           #amqp_msg{props   = #'P_basic'{expiration = <<"0">>},
+                                     payload = Msg2}),
+    %% Message should not be lost despite deleted target queue.
+    eventually(?_assertMatch([{1, _}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    consistently(?_assertMatch([{1, _}],
+                               dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    %% Message should be delivered once target queue is recreated.
+    %% (This time we simply create a classic target queue.)
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = TargetQ}),
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
+                                                  queue = TargetQ,
+                                                  exchange = DLX,
+                                                  routing_key = <<"k1">>
+                                                 }),
+    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
+                             amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})), 500, 5),
+    eventually(?_assertEqual([{0, 0}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))).
 
 %% Test that message is not lost when configured dead-letter exchange does not exist.
 %% Once, the exchange gets declared, the message is delivered to the target queue

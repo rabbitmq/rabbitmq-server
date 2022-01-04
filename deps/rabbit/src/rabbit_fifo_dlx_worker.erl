@@ -135,25 +135,26 @@ handle_cast({queue_event, QRef, {_From, {machine, lookup_topology}}},
 handle_cast({queue_event, QRef, {From, Evt}},
             #state{queue_ref = QRef,
                    dlx_client_state = DlxState0} = State0) ->
-    %% received dead-letter messsage from source queue
-    % rabbit_log:debug("~s received queue event: ~p", [rabbit_misc:rs(QRef), E]),
+    %% received dead-letter message from source queue
     {ok, DlxState, Actions} = rabbit_fifo_dlx_client:handle_ra_event(From, Evt, DlxState0),
     State1 = State0#state{dlx_client_state = DlxState},
     State = handle_queue_actions(Actions, State1),
     {noreply, State};
 handle_cast({queue_event, QRef, Evt},
             #state{queue_type_state = QTypeState0} = State0) ->
-    %% received e.g. confirm from target queue
     case rabbit_queue_type:handle_event(QRef, Evt, QTypeState0) of
         {ok, QTypeState1, Actions} ->
+            %% received e.g. confirm from target queue
             State1 = State0#state{queue_type_state = QTypeState1},
             State = handle_queue_actions(Actions, State1),
             {noreply, State};
-        %% TODO handle as done in
-        %% https://github.com/rabbitmq/rabbitmq-server/blob/9cf18e83f279408e20430b55428a2b19156c90d7/deps/rabbit/src/rabbit_channel.erl#L771-L783
         eol ->
-            {noreply, State0};
-        {protocol_error, _Type, _Reason, _ReasonArgs} ->
+            %% Do not confirm pending messages whose target queue got deleted.
+            %% Irrespective of exchanges, queues, bindings created or deleted (actual state),
+            %% we respect the configured dead-letter routing topology (desired state).
+            QTypeState = rabbit_queue_type:remove(QRef, QTypeState0),
+            {noreply, State0#state{queue_type_state = QTypeState}};
+        {protocol_error, _Type, _Reason, _Args} ->
             {noreply, State0}
     end;
 handle_cast(settle_timeout, State0) ->
@@ -208,7 +209,6 @@ lookup_topology(#state{queue_ref = {resource, Vhost, queue, _} = QRef} = State) 
     State#state{exchange_ref = DLXRef,
                 routing_key = DLRKey}.
 
-%% https://github.com/rabbitmq/rabbitmq-server/blob/9cf18e83f279408e20430b55428a2b19156c90d7/deps/rabbit/src/rabbit_channel.erl#L2855-L2888
 handle_queue_actions(Actions, State0) ->
     lists:foldl(
       fun ({deliver, Msgs}, S0) ->
