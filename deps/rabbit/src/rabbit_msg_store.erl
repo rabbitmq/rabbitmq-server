@@ -9,7 +9,7 @@
 
 -behaviour(gen_server2).
 
--export([start_link/4, start_global_store_link/4, successfully_recovered_state/1,
+-export([start_link/5, start_global_store_link/4, successfully_recovered_state/1,
          client_init/4, client_terminate/1, client_delete_and_terminate/1,
          client_ref/1, close_all_indicated/1,
          write/3, write_flow/3, read/2, contains/2, remove/2]).
@@ -439,17 +439,17 @@
 %%----------------------------------------------------------------------------
 
 -spec start_link
-        (atom(), file:filename(), [binary()] | 'undefined',
+        (binary(), atom(), file:filename(), [binary()] | 'undefined',
          {msg_ref_delta_gen(A), A}) -> rabbit_types:ok_pid_or_error().
 
-start_link(Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
+start_link(VHost, Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
     gen_server2:start_link(?MODULE,
-                           [Type, Dir, ClientRefs, StartupFunState],
+                           [VHost, Type, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
 start_global_store_link(Type, Dir, ClientRefs, StartupFunState) when is_atom(Type) ->
     gen_server2:start_link({local, Type}, ?MODULE,
-                           [Type, Dir, ClientRefs, StartupFunState],
+                           [global, Type, Dir, ClientRefs, StartupFunState],
                            [{timeout, infinity}]).
 
 -spec successfully_recovered_state(server()) -> boolean().
@@ -714,8 +714,9 @@ clear_client(CRef, State = #msstate { cref_to_msg_ids = CTM,
 %%----------------------------------------------------------------------------
 
 
-init([Type, BaseDir, ClientRefs, StartupFunState]) ->
+init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
     process_flag(trap_exit, true),
+    pg:join({?MODULE, VHost, Type}, self()),
 
     ok = file_handle_cache:register_callback(?MODULE, set_maximum_since_use,
                                              [self()]),
