@@ -553,7 +553,7 @@ get_passphrase(ConfigEntryDecoder) ->
             io:format(IoDevice, "~n", []),
             PP;
         {file, Filename} ->
-            {ok, File} = file:read_file(Filename),
+            {ok, File} = rabbit_misc:raw_read_file(Filename),
             [PP|_] = binary:split(File, [<<"\r\n">>, <<"\n">>]),
             PP;
         PP ->

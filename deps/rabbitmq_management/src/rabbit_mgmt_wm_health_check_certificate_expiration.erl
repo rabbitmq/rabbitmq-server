@@ -127,7 +127,7 @@ read_cert(undefined) ->
 read_cert({pem, Pem}) ->
     Pem;
 read_cert(Path) ->
-    case file:read_file(Path) of
+    case rabbit_misc:raw_read_file(Path) of
         {ok, Bin} ->
             Bin;
         Err ->

@@ -36,7 +36,7 @@ load(Proplist) when is_list(Proplist) ->
         undefined -> {error, "local definition file path is not configured: local_path is not set"};
         Path      ->
             rabbit_log:debug("Asked to import definitions from a local file or directory at '~s'", [Path]),
-            case file:read_file_info(Path) of
+            case file:read_file_info(Path, [raw]) of
                 {ok, FileInfo} ->
                     %% same check is used by Cuttlefish validation, this is to be extra defensive
                     IsReadable = (element(4, FileInfo) == read) or (element(4, FileInfo) == read_write),
@@ -130,7 +130,7 @@ load_from_multiple_files([File|Rest]) ->
 
 load_from_single_file(Path) ->
     rabbit_log:debug("Will try to load definitions from a local file or directory at '~s'", [Path]),
-    case file:read_file(Path) of
+    case rabbit_misc:raw_read_file(Path) of
         {ok, Body} ->
             rabbit_log:info("Applying definitions from file at '~s'", [Path]),
             import_raw(Body);
