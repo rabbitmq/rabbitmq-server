@@ -870,7 +870,14 @@ delete_segment(Segment, State0 = #qi{ fds = OpenFds0 }) ->
             State0
     end,
     %% Then we can delete the segment file.
-    ok = file:delete(segment_file(Segment, State)),
+    case file:delete(segment_file(Segment, State)) of
+        ok -> ok;
+        %% It's possible that the file already does not exist:
+        %% following a crash, and due to rabbit_variable_queue's
+        %% poor understanding of bounds in that scenario. Also
+        %% see comment in read_from_disk/3.
+        {error, enoent} -> ok
+    end,
     State.
 
 ack_fold_fun(SeqId, {Buffer, Updates, Cache}) ->
@@ -969,21 +976,33 @@ read_from_disk(SeqIdsToRead0, State0 = #qi{ write_buffer = WriteBuffer }, Acc0) 
     {LastSeqId, SeqIdsToRead} = highest_continuous_seq_id(SeqIdsToRead0,
                                                           next_segment_boundary(FirstSeqId)),
     ReadSize = (LastSeqId - FirstSeqId + 1) * ?ENTRY_SIZE,
-    {Fd, OffsetForSeqId, State} = get_fd(FirstSeqId, State0),
-    file_handle_cache_stats:update(queue_index_read),
-    {ok, EntriesBin} = file:pread(Fd, OffsetForSeqId, ReadSize),
-    %% We cons new entries into the Acc and only reverse it when we
-    %% are completely done reading new entries.
-    Acc = parse_entries(EntriesBin, FirstSeqId, WriteBuffer, Acc0),
-    read_from_disk(SeqIdsToRead, State, Acc).
+    case get_fd(FirstSeqId, State0) of
+        {Fd, OffsetForSeqId, State} ->
+            file_handle_cache_stats:update(queue_index_read),
+            {ok, EntriesBin} = file:pread(Fd, OffsetForSeqId, ReadSize),
+            %% We cons new entries into the Acc and only reverse it when we
+            %% are completely done reading new entries.
+            Acc = parse_entries(EntriesBin, FirstSeqId, WriteBuffer, Acc0),
+            read_from_disk(SeqIdsToRead, State, Acc);
+        %% The segment file no longer exists. This is equivalent to a file
+        %% where all entries are non-existent/acked. This can happen after
+        %% a crash due to rabbit_variable_queue's understanding of bounds.
+        empty ->
+            read_from_disk(SeqIdsToRead, State0, Acc0)
+    end.
 
-get_fd(SeqId, State0) ->
+get_fd(SeqId, State0 = #qi{ segments = Segments }) ->
     SegmentEntryCount = segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
-    Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
-    State1 = reduce_fd_usage(Segment, State0),
-    {Fd, State} = get_fd_for_segment(Segment, State1),
-    {Fd, Offset, State}.
+    case maps:is_key(Segment, Segments) of
+        true ->
+            Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
+            State1 = reduce_fd_usage(Segment, State0),
+            {Fd, State} = get_fd_for_segment(Segment, State1),
+            {Fd, Offset, State};
+        false ->
+            empty
+    end.
 
 %% When recovering from a dirty shutdown, we may end up reading entries that
 %% have already been acked. We do not add them to the Acc in that case, and
