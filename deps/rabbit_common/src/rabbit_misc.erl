@@ -13,6 +13,8 @@
 -include("rabbit_framing.hrl").
 -include("rabbit_misc.hrl").
 
+-include_lib("kernel/include/file.hrl").
+
 -ifdef(TEST).
 -export([decompose_pid/1, compose_pid/4]).
 -endif.
@@ -79,6 +81,7 @@
 -export([rpc_call/4, rpc_call/5]).
 -export([get_gc_info/1]).
 -export([group_proplists_by/2]).
+-export([raw_read_file/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1222,7 +1225,7 @@ version() ->
 otp_release() ->
     File = filename:join([code:root_dir(), "releases",
                           erlang:system_info(otp_release), "OTP_VERSION"]),
-    case file:read_file(File) of
+    case raw_read_file(File) of
         {ok, VerBin} ->
             %% 17.0 or later, we need the file for the minor version
             string:strip(binary_to_list(VerBin), both, $\n);
@@ -1402,6 +1405,25 @@ rpc_call(Node, Mod, Fun, Args, Timeout) ->
 
 get_gc_info(Pid) ->
     rabbit_runtime:get_gc_info(Pid).
+
+-spec raw_read_file(Filename) -> {ok, Binary} | {error, Reason} when
+      Filename :: file:name_all(),
+      Binary :: binary(),
+      Reason :: file:posix() | badarg | terminated | system_limit.
+raw_read_file(File) ->
+    try
+        % Note: this works around the win32 file leak in file:read_file/1
+        % https://github.com/erlang/otp/issues/5527
+        {ok, FInfo} = file:read_file_info(File, [raw]),
+        {ok, Fd} = file:open(File, [read, raw, binary]),
+        try
+            file:read(Fd, FInfo#file_info.size)
+        after
+            file:close(Fd)
+        end
+    catch
+        error:{badmatch, Error} -> Error
+    end.
 
 %% -------------------------------------------------------------------------
 %% Begin copypasta from gen_server2.erl
