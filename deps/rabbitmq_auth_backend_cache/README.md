@@ -118,7 +118,7 @@ In the classic config format:
                                 {user_path,            "http://127.0.0.1:8080/auth/user"},
                                 {vhost_path,           "http://127.0.0.1:8080/auth/vhost"},
                                 {resource_path,        "http://127.0.0.1:8080/auth/resource"},
-                                {auth_http.topic_path, "http://127.0.0.1:8080/auth/topic"}
+                                {topic_path,           "http://127.0.0.1:8080/auth/topic"}
                                ]
   }
 ].
