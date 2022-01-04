@@ -1720,7 +1720,7 @@ betas_from_index_entries(List, TransientThreshold, DelsAndAcksFun, State = #vqst
                       false -> MsgStatus = m(beta_msg_status(M)),
                                HaveMsg = msg_in_ram(MsgStatus),
                                Size = msg_size(MsgStatus),
-                               case is_msg_in_pending_acks(SeqId, State) of
+                               case is_msg_in_pending_acks(SeqId, State) orelse is_msg_in_q1(SeqId, State) of
                                    false -> {?QUEUE:in_r(MsgStatus, Filtered1),
                                              NextDeliverSeqId1, Acks1,
                                              RRC + one_if(HaveMsg),
@@ -1737,6 +1737,9 @@ betas_from_index_entries(List, TransientThreshold, DelsAndAcksFun, State = #vqst
 %% unacked messages too, since if HaveMsg then the message must have
 %% been stored in the QI, thus the message must have been in
 %% qi_pending_ack, thus it must already have been in RAM.
+
+is_msg_in_q1(SeqId, #vqstate{ q1 = Q1 }) ->
+    lists:keymember(SeqId, #msg_status.seq_id, ?QUEUE:to_list(Q1)).
 
 %% We increase the next_deliver_seq_id only when the next
 %% message (next seq_id) was delivered.
@@ -2282,6 +2285,9 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                             unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(Version, IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
+    %% Unlike what the comment at the top of the file says, it is possible to
+    %% have messages in q1 that are also persisted to disk, as that is a
+    %% necessary requirement for confirms to be sent.
     {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = case ?QUEUE:is_empty(Q3) of
                  false -> State1 #vqstate { q1 = ?QUEUE:in(m(MsgStatus1), Q1) };
@@ -3535,7 +3541,8 @@ start_new_store(VHosts) ->
     %% Ensure vhost supervisor is started, so we can add vhosts to it.
     lists:map(fun(VHost) ->
         VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
-        {ok, Pid} = rabbit_msg_store:start_link(?PERSISTENT_MSG_STORE,
+        {ok, Pid} = rabbit_msg_store:start_link(VHost,
+                                                ?PERSISTENT_MSG_STORE,
                                                 VHostDir,
                                                 undefined,
                                                 ?EMPTY_START_FUN_STATE),
