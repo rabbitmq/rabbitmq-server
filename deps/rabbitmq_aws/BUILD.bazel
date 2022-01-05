@@ -1,7 +1,7 @@
-load("@bazel-erlang//:eunit.bzl", "eunit")
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
-load("//:rabbitmq.bzl", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_lib")
+load("@rules_erlang//:eunit.bzl", "eunit")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load("//:rabbitmq.bzl", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_app")
 
 APP_NAME = "rabbitmq_aws"
 
@@ -21,10 +21,10 @@ EXTRA_APPS = [
 ]
 
 BUILD_DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit_common:erlang_app",
 ]
 
-rabbitmq_lib(
+rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
@@ -35,11 +35,11 @@ rabbitmq_lib(
 
 xref(
     additional_libs = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "@credentials_obfuscation//:bazel_erlang_lib",
-        "@jsx//:bazel_erlang_lib",
-        "@ranch//:bazel_erlang_lib",
-        "@recon//:bazel_erlang_lib",
+        "//deps/rabbit_common:erlang_app",
+        "@credentials_obfuscation//:erlang_app",
+        "@jsx//:erlang_app",
+        "@ranch//:erlang_app",
+        "@recon//:erlang_app",
     ],
     tags = ["xref"],
 )
@@ -61,7 +61,7 @@ eunit(
         "+nowarn_export_all",
     ],
     runtime_deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "@meck//:bazel_erlang_lib",
+        "//deps/rabbit_common:erlang_app",
+        "@meck//:erlang_app",
     ],
 )

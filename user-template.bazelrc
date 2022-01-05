@@ -1,5 +1,5 @@
-build --@bazel-erlang//:erlang_home=/Users/rabbitmq/kerl/24.0
-build --@bazel-erlang//:erlang_version=24.0
+build --@rules_erlang//:erlang_home=/Users/rabbitmq/kerl/24.0
+build --@rules_erlang//:erlang_version=24.0
 build --//:elixir_home=/Users/rabbitmq/.kiex/elixirs/elixir-1.12.0/lib/elixir
 
 # rabbitmqctl wait shells out to 'ps', which is broken in the bazel macOS
