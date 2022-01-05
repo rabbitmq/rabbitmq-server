@@ -58,13 +58,7 @@ apply({register_consumer,
        ConnectionPid,
        SubscriptionId},
       #?MODULE{groups = StreamGroups0} = State) ->
-    %% TODO monitor connection PID to remove consumers when their connection dies
-    %% this could require some index to avoid crawling the whole data structure
-    %% this is necessary to fail over to another consumer when one dies abruptly
-    %% also, check the liveliness of each consumer whenever there's a change in the group,
-    %% to make sure to get rid of zombies
-    %%
-    %% TODO monitor streams and virtual hosts as well
+    %% FIXME monitor virtual hosts as well?
     rabbit_log:debug("New consumer ~p ~p in group ~p, partition index "
                      "is ~p",
                      [ConnectionPid,
