@@ -127,6 +127,107 @@ simple_sac_test(_) ->
 
     ok.
 
+super_stream_partition_sac_test(_) ->
+    Stream = <<"stream">>,
+    ConsumerName = <<"app">>,
+    ConnectionPid = self(),
+    GroupId = {<<"/">>, Stream, ConsumerName},
+    Command0 =
+        register_consumer_command(Stream, 1, ConsumerName, ConnectionPid, 0),
+    State0 = state(),
+    {#?STATE{groups = #{GroupId := #group{consumers = Consumers1}}} =
+         State1,
+     {ok, Active1}, Effects1} =
+        rabbit_stream_sac_coordinator:apply(Command0, State0),
+    ?assert(Active1),
+    ?assertEqual([consumer(ConnectionPid, 0, true)], Consumers1),
+    assertSendMessageEffect(ConnectionPid, 0, true, Effects1),
+
+    Command1 =
+        register_consumer_command(Stream, 1, ConsumerName, ConnectionPid, 1),
+    {#?STATE{groups = #{GroupId := #group{consumers = Consumers2}}} =
+         State2,
+     {ok, Active2}, Effects2} =
+        rabbit_stream_sac_coordinator:apply(Command1, State1),
+    %% never active on registration
+    ?assertNot(Active2),
+    %% all consumers inactive, until the former active one steps down and activates the new consumer
+    ?assertEqual([consumer(ConnectionPid, 0, false),
+                  consumer(ConnectionPid, 1, false)],
+                 Consumers2),
+    assertSendMessageSteppingDownEffect(ConnectionPid, 0, Effects2),
+
+    Command2 = activate_consumer_command(Stream, ConsumerName),
+    {#?STATE{groups = #{GroupId := #group{consumers = Consumers3}}} =
+         State3,
+     ok, Effects3} =
+        rabbit_stream_sac_coordinator:apply(Command2, State2),
+
+    %% 1 (partition index) % 2 (consumer count) = 1 (active consumer index)
+    ?assertEqual([consumer(ConnectionPid, 0, false),
+                  consumer(ConnectionPid, 1, true)],
+                 Consumers3),
+    assertSendMessageEffect(ConnectionPid, 1, true, Effects3),
+
+    Command3 =
+        register_consumer_command(Stream, 1, ConsumerName, ConnectionPid, 2),
+    {#?STATE{groups = #{GroupId := #group{consumers = Consumers4}}} =
+         State4,
+     {ok, Active4}, Effects4} =
+        rabbit_stream_sac_coordinator:apply(Command3, State3),
+    %% never active on registration
+    ?assertNot(Active4),
+    %% 1 (partition index) % 3 (consumer count) = 1 (active consumer index)
+    %% the active consumer stays the same
+    ?assertEqual([consumer(ConnectionPid, 0, false),
+                  consumer(ConnectionPid, 1, true),
+                  consumer(ConnectionPid, 2, false)],
+                 Consumers4),
+    assertEmpty(Effects4),
+
+    Command4 =
+        unregister_consumer_command(Stream, ConsumerName, ConnectionPid, 0),
+    {#?STATE{groups = #{GroupId := #group{consumers = Consumers5}}} =
+         State5,
+     ok, Effects5} =
+        rabbit_stream_sac_coordinator:apply(Command4, State4),
+    %% 1 (partition index) % 2 (consumer count) = 1 (active consumer index)
+    %% the active consumer will move from sub 1 to sub 2
+    ?assertEqual([consumer(ConnectionPid, 1, false),
+                  consumer(ConnectionPid, 2, false)],
+                 Consumers5),
+
+    assertSendMessageSteppingDownEffect(ConnectionPid, 1, Effects5),
+
+    Command5 = activate_consumer_command(Stream, ConsumerName),
+    {#?STATE{groups = #{GroupId := #group{consumers = Consumers6}}} =
+         State6,
+     ok, Effects6} =
+        rabbit_stream_sac_coordinator:apply(Command5, State5),
+
+    ?assertEqual([consumer(ConnectionPid, 1, false),
+                  consumer(ConnectionPid, 2, true)],
+                 Consumers6),
+    assertSendMessageEffect(ConnectionPid, 2, true, Effects6),
+
+    Command6 =
+        unregister_consumer_command(Stream, ConsumerName, ConnectionPid, 1),
+    {#?STATE{groups = #{GroupId := #group{consumers = Consumers7}}} =
+         State7,
+     ok, Effects7} =
+        rabbit_stream_sac_coordinator:apply(Command6, State6),
+    ?assertEqual([consumer(ConnectionPid, 2, true)], Consumers7),
+    assertEmpty(Effects7),
+
+    Command7 =
+        unregister_consumer_command(Stream, ConsumerName, ConnectionPid, 2),
+    {#?STATE{groups = Groups8}, ok, Effects8} =
+        rabbit_stream_sac_coordinator:apply(Command7, State7),
+    assertEmpty(Groups8),
+    assertEmpty(Effects8),
+
+    ok.
+
 ensure_monitors_test(_) ->
     GroupId = {<<"/">>, <<"stream">>, <<"app">>},
     Group =
@@ -280,6 +381,9 @@ unregister_consumer_command(Stream,
      ConnectionPid,
      SubId}.
 
+activate_consumer_command(Stream, ConsumerName) ->
+    {activate_consumer, <<"/">>, Stream, ConsumerName}.
+
 assertSendMessageEffect(Pid, SubId, Active, [Effect]) ->
     ?assertEqual({mod_call,
                   rabbit_stream_sac_coordinator,
@@ -288,4 +392,14 @@ assertSendMessageEffect(Pid, SubId, Active, [Effect]) ->
                    {sac,
                     {{subscription_id, SubId}, {active, Active},
                      {extra, []}}}]},
+                 Effect).
+
+assertSendMessageSteppingDownEffect(Pid, SubId, [Effect]) ->
+    ?assertEqual({mod_call,
+                  rabbit_stream_sac_coordinator,
+                  send_message,
+                  [Pid,
+                   {sac,
+                    {{subscription_id, SubId}, {active, false},
+                     {extra, [{stepping_down, true}]}}}]},
                  Effect).
