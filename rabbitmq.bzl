@@ -1,11 +1,11 @@
 load(
-    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "@rules_erlang//:bazel_erlang_lib.bzl",
     "DEFAULT_ERLC_OPTS",
     "DEFAULT_TEST_ERLC_OPTS",
     "erlang_lib",
     "test_erlang_lib",
 )
-load("@bazel-erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
+load("@rules_erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 

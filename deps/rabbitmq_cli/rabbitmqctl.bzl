@@ -1,6 +1,6 @@
-load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
+load("@rules_erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
 load(
-    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "@rules_erlang//:bazel_erlang_lib.bzl",
     "BEGINS_WITH_FUN",
     "ErlangLibInfo",
     "QUERY_ERL_VERSION",
@@ -155,8 +155,8 @@ rabbitmqctl = rule(
     attrs = {
         "srcs": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [ErlangLibInfo]),
-        "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
-        "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
+        "_erlang_version": attr.label(default = "@rules_erlang//:erlang_version"),
+        "_erlang_home": attr.label(default = "@rules_erlang//:erlang_home"),
         "_elixir_home": attr.label(default = "//:elixir_home"),
     },
     executable = True,

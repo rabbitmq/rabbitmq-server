@@ -1,5 +1,5 @@
-load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
+load("@rules_erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
+load("@rules_erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "path_join")
 load("//:elixir_home.bzl", "ElixirHomeProvider")
 
 def _impl(ctx):
@@ -38,8 +38,8 @@ def _impl(ctx):
 elixir = rule(
     implementation = _impl,
     attrs = {
-        "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
-        "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
+        "_erlang_version": attr.label(default = "@rules_erlang//:erlang_version"),
+        "_erlang_home": attr.label(default = "@rules_erlang//:erlang_home"),
         "_elixir_home": attr.label(default = "//:elixir_home"),
     },
 )

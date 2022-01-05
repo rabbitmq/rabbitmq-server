@@ -1,5 +1,5 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "flat_deps", "path_join")
-load("@bazel-erlang//:ct.bzl", "additional_file_dest_relative_path")
+load("@rules_erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "flat_deps", "path_join")
+load("@rules_erlang//:ct.bzl", "additional_file_dest_relative_path")
 
 RabbitmqHomeInfo = provider(
     doc = "An assembled RABBITMQ_HOME dir",

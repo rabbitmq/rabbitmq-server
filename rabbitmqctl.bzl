@@ -1,4 +1,4 @@
-load("@bazel-erlang//:erlang_home.bzl", "ErlangVersionProvider")
+load("@rules_erlang//:erlang_home.bzl", "ErlangVersionProvider")
 load(":rabbitmq_home.bzl", "RabbitmqHomeInfo", "rabbitmq_home_short_path")
 
 def _impl(ctx):
@@ -25,7 +25,7 @@ def _impl(ctx):
 rabbitmqctl = rule(
     implementation = _impl,
     attrs = {
-        "_erlang_version": attr.label(default = "@bazel-erlang//:erlang_version"),
+        "_erlang_version": attr.label(default = "@rules_erlang//:erlang_version"),
         "home": attr.label(providers = [RabbitmqHomeInfo]),
     },
     executable = True,

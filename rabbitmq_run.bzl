@@ -1,6 +1,6 @@
-load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "path_join")
-load("@bazel-erlang//:ct.bzl", "sanitize_sname")
+load("@rules_erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
+load("@rules_erlang//:bazel_erlang_lib.bzl", "path_join")
+load("@rules_erlang//:ct.bzl", "sanitize_sname")
 load(":rabbitmq_home.bzl", "RabbitmqHomeInfo", "rabbitmq_home_short_path")
 
 def _impl(ctx):
@@ -32,7 +32,7 @@ rabbitmq_run = rule(
             default = Label("//:scripts/bazel/rabbitmq-run.sh"),
             allow_single_file = True,
         ),
-        "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
+        "_erlang_home": attr.label(default = "@rules_erlang//:erlang_home"),
         "home": attr.label(providers = [RabbitmqHomeInfo]),
     },
     executable = True,

@@ -1,6 +1,6 @@
-load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider")
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "flat_deps", "path_join")
-load("@bazel-erlang//:ct.bzl", "additional_file_dest_relative_path")
+load("@rules_erlang//:erlang_home.bzl", "ErlangHomeProvider")
+load("@rules_erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "flat_deps", "path_join")
+load("@rules_erlang//:ct.bzl", "additional_file_dest_relative_path")
 load(
     ":rabbitmq_home.bzl",
     "RABBITMQ_HOME_ATTRS",
@@ -195,6 +195,6 @@ def _versioned_rabbitmq_home_impl(ctx):
 versioned_rabbitmq_home = rule(
     implementation = _versioned_rabbitmq_home_impl,
     attrs = dict(RABBITMQ_HOME_ATTRS.items() + {
-        "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
+        "_erlang_home": attr.label(default = "@rules_erlang//:erlang_home"),
     }.items()),
 )

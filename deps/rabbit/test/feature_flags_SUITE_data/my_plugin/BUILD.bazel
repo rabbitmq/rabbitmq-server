@@ -1,4 +1,4 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+load("@rules_erlang//:bazel_erlang_lib.bzl", "erlang_lib")
 
 DEPS = [
     "//deps/rabbit_common:bazel_erlang_lib",
