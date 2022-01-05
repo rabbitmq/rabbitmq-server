@@ -1720,7 +1720,7 @@ betas_from_index_entries(List, TransientThreshold, DelsAndAcksFun, State = #vqst
                       false -> MsgStatus = m(beta_msg_status(M)),
                                HaveMsg = msg_in_ram(MsgStatus),
                                Size = msg_size(MsgStatus),
-                               case is_msg_in_pending_acks(SeqId, State) orelse is_msg_in_q1(SeqId, State) of
+                               case is_msg_in_pending_acks(SeqId, State) of
                                    false -> {?QUEUE:in_r(MsgStatus, Filtered1),
                                              NextDeliverSeqId1, Acks1,
                                              RRC + one_if(HaveMsg),
@@ -1737,9 +1737,6 @@ betas_from_index_entries(List, TransientThreshold, DelsAndAcksFun, State = #vqst
 %% unacked messages too, since if HaveMsg then the message must have
 %% been stored in the QI, thus the message must have been in
 %% qi_pending_ack, thus it must already have been in RAM.
-
-is_msg_in_q1(SeqId, #vqstate{ q1 = Q1 }) ->
-    lists:keymember(SeqId, #msg_status.seq_id, ?QUEUE:to_list(Q1)).
 
 %% We increase the next_deliver_seq_id only when the next
 %% message (next seq_id) was delivered.
@@ -1805,7 +1802,7 @@ init(QueueVsn, IsDurable, IndexMod, IndexState, StoreState, DeltaCount, DeltaByt
                 false -> d(#delta { start_seq_id = LowSeqId,
                                     count        = DeltaCount1,
                                     transient    = 0,
-                                    end_seq_id   = HiSeqId })
+                                    end_seq_id   = NextSeqId })
             end,
     Now = erlang:monotonic_time(),
     IoBatchSize = rabbit_misc:get_env(rabbit, msg_store_io_batch_size,
