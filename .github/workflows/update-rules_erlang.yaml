@@ -1,11 +1,11 @@
-name: Update bazel-erlang
+name: Update rules_erlang
 on:
   schedule:
   - cron: '0 3 * * *'
   workflow_dispatch:
 jobs:
-  update-bazel-erlang:
-    name: Update bazel-erlang
+  update-rules_erlang:
+    name: Update rules_erlang
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -13,21 +13,21 @@ jobs:
       uses: actions/checkout@v2.4.0
       with:
         path: rabbitmq-server
-    - name: CHECKOUT bazel-erlang
+    - name: CHECKOUT rules_erlang
       uses: actions/checkout@v2.4.0
       with:
-        repository: rabbitmq/bazel-erlang
-        path: bazel-erlang
+        repository: rabbitmq/rules_erlang
+        path: rules_erlang
     - name: DETERMINE LATEST COMMIT
       id: find-commit
-      working-directory: bazel-erlang
+      working-directory: rules_erlang
       run: |
         echo "::set-output name=SHA::$(git rev-parse HEAD)"
-    - name: UPDATE bazel-erlang COMMIT
+    - name: UPDATE rules_erlang COMMIT
       working-directory: rabbitmq-server
       run: |
         sudo npm install --global --silent @bazel/buildozer
-        echo "$(cat WORKSPACE.bazel | npx buildozer 'set commit "${{ steps.find-commit.outputs.SHA }}"' -:bazel-erlang)" > WORKSPACE.bazel
+        echo "$(cat WORKSPACE.bazel | npx buildozer 'set commit "${{ steps.find-commit.outputs.SHA }}"' -:rules_erlang)" > WORKSPACE.bazel
         git diff
     - name: CREATE PULL REQUEST
       uses: peter-evans/create-pull-request@v3
@@ -36,10 +36,10 @@ jobs:
         committer: GitHub <noreply@github.com>
         author: GitHub <noreply@github.com>
         path: rabbitmq-server
-        title: Adopt latest bazel-erlang
+        title: Adopt latest rules_erlang
         commit-message: |
-          Adopt latest bazel-erlang
+          Adopt latest rules_erlang
 
-          - bazel-erlang@${{ steps.find-commit.outputs.SHA }}
-        branch: bump-bazel-erlang
+          - rules_erlang@${{ steps.find-commit.outputs.SHA }}
+        branch: bump-rules_erlang
         delete-branch: true

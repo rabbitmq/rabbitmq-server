@@ -51,8 +51,8 @@ jobs:
           build:rbe-git --host_platform=//:erlang_git_platform
           build:rbe-git --platforms=//:erlang_git_platform
           build:rbe-git --extra_execution_platforms=//:erlang_git_platform
-          build:rbe-git --@bazel-erlang//:erlang_home=/usr/local/lib/erlang
-          build:rbe-git --@bazel-erlang//:erlang_version=25
+          build:rbe-git --@rules_erlang//:erlang_home=/usr/local/lib/erlang
+          build:rbe-git --@rules_erlang//:erlang_version=25
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3

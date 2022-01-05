@@ -58,14 +58,15 @@ load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
 rules_pkg_dependencies()
 
 git_repository(
-    name = "bazel-erlang",
-    commit = "d62a13548b3d1e5bd2830f42e3f3933ae17db3cb",
-    remote = "https://github.com/rabbitmq/bazel-erlang.git",
+    name = "rules_erlang",
+    branch = "v2",
+    # commit = "d62a13548b3d1e5bd2830f42e3f3933ae17db3cb",
+    remote = "https://github.com/rabbitmq/rules_erlang.git",
 )
 
-load("@bazel-erlang//:bazel_erlang.bzl", "bazel_erlang_deps")
+load("@rules_erlang//:rules_erlang.bzl", "rules_erlang_dependencies")
 
-bazel_erlang_deps()
+rules_erlang_dependencies()
 
 load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
 
@@ -84,7 +85,7 @@ pkg_zip(
     name = "inet_tcp_proxy_ez",
     package_dir = "inet_tcp_proxy/ebin",
     srcs = [
-        "@inet_tcp_proxy//:bazel_erlang_lib",
+        "@inet_tcp_proxy//:erlang_app",
     ],
     package_file_name = "inet_tcp_proxy.ez",
     visibility = ["//visibility:public"],

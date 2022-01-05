@@ -1,6 +1,6 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
-erlang_lib(
+erlang_app(
     app_name = "inet_tcp_proxy_dist",
     app_version = "0.1.0",
     app_description = "Erlang distribution proxy to simulate network failures",
