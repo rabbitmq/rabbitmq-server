@@ -16,7 +16,7 @@ jobs:
     - name: CHECKOUT bazel-erlang
       uses: actions/checkout@v2.4.0
       with:
-        repository: rabbitmq/rules_erlang
+        repository: rabbitmq/bazel-erlang
         path: bazel-erlang
     - name: DETERMINE LATEST COMMIT
       id: find-commit

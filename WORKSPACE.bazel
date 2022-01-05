@@ -60,7 +60,7 @@ rules_pkg_dependencies()
 git_repository(
     name = "bazel-erlang",
     commit = "d62a13548b3d1e5bd2830f42e3f3933ae17db3cb",
-    remote = "https://github.com/rabbitmq/rules_erlang.git",
+    remote = "https://github.com/rabbitmq/bazel-erlang.git",
 )
 
 load("@bazel-erlang//:bazel_erlang.bzl", "bazel_erlang_deps")

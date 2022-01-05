@@ -9,7 +9,7 @@ RabbitMQ, Tier1 plugins included, is a large codebase. The developer experience 
 
 More importantly, RabbitMQ's test suite is large and takes hours if run on a single machine. Bazel allows tests to be run in parallel on a large number of remote workers if needed, and furthermore uses cached test results when branches of the codebase remain unchanged.
 
-Bazel does not provide built in Erlang or Elixir support, nor is there an available library of bazel rules. Therefore, we have defined our own rules in https://github.com/rabbitmq/rules_erlang. Elixir compilation is handled as a special case within this repository. To use these rules, the location of your Erlang and Elixir installations must be indicated to the build (see below).
+Bazel does not provide built in Erlang or Elixir support, nor is there an available library of bazel rules. Therefore, we have defined our own rules in https://github.com/rabbitmq/bazel-erlang. Elixir compilation is handled as a special case within this repository. To use these rules, the location of your Erlang and Elixir installations must be indicated to the build (see below).
 
 While most of work for running tests happens in Bazel, the suite still makes use of some external tools for commands, notably gnu `make` and `openssl`. Ideally we could bring all of these tools under bazel, so that the only tool needed would be `bazel` or `bazelisk`, but that will take some time.
 
