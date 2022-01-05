@@ -1,4 +1,4 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+load("@rules_erlang//:bazel_erlang_lib.bzl", "erlang_lib")
 
 erlang_lib(
     app_name = "trust_store_http",

@@ -1,6 +1,6 @@
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
-load("@bazel-erlang//:dialyze.bzl", "plt")
-load("@bazel-erlang//:shell.bzl", "shell")
+load("@rules_erlang//:dialyze.bzl", "plt")
+load("@rules_erlang//:shell.bzl", "shell")
 load("elixir_home.bzl", "elixir_home")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")

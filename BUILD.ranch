@@ -1,4 +1,4 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc",
+load("@rules_erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc",
 "DEFAULT_ERLC_OPTS")
 
 FIRST_SRCS = [
