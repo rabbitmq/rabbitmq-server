@@ -40,10 +40,6 @@
           %% TODO Reason is already stored in first x-death header of #content.properties.#'P_basic'.headers
           %% So, we could remove this convenience field and lookup the 1st header when redelivering.
           reason :: rabbit_fifo_dlx:reason(),
-          %%
-          %%TODO instead of using 'unsettled' and 'settled' fields, use rabbit_confirms because it handles many to one logic
-          %% in a generic way. Its API might need to be modified though if it is targeted only towards channel.
-          %%
           %% target queues for which publisher confirm has not been received yet
           unsettled = [] :: [rabbit_amqqueue:name()],
           %% target queues for which publisher confirm was received
@@ -92,7 +88,7 @@
 
 % -type state() :: #state{}.
 
-%%TODO add metrics like global counters for messages routed, delivered, etc.
+%%TODO Add metrics like global counters for messages routed, delivered, etc. by adding a new counter in seshat.
 
 start_link(QRef) ->
     gen_server:start_link(?MODULE, QRef, [{hibernate_after, ?HIBERNATE_AFTER}]).
@@ -470,6 +466,11 @@ redeliver0(#pending{consumed_msg_id = ConsumedMsgId,
                              },
     %% Field 'mandatory' is set to false because our module checks on its own whether the message is routable.
     Delivery = rabbit_basic:delivery(_Mandatory = false, _Confirm = true, BasicMsg, OutSeq),
+    %%TODO Filter such that we re-delivery only to classic queues and NEW quorum / stream queues.
+    %% This is required because quorum and stream queue clients have their own re-send mechanisms
+    %% and we don't want to re-send on 2 levels ending up with many duplicate messages.
+    %% (Take care to not delete old messages in this case such that we'll receive acks from target quorum and stream
+    %% queues.)
     RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
     %% Do not re-deliver to queues for which we already received a publisher confirm.
     RouteToQs1 = RouteToQs0 -- Settled,

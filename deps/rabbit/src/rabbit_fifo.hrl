@@ -127,6 +127,8 @@
 
 -type milliseconds() :: non_neg_integer().
 
+-type dead_letter_handler() :: option({at_most_once, applied_mfa()} | at_least_once).
+
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
          % out of order enqueues - sorted list
@@ -144,7 +146,7 @@
         {name :: atom(),
          resource :: rabbit_types:r('queue'),
          release_cursor_interval :: option({non_neg_integer(), non_neg_integer()}),
-         dead_letter_handler :: option({at_most_once, applied_mfa()} | at_least_once),
+         dead_letter_handler :: dead_letter_handler(),
          become_leader_handler :: option(applied_mfa()),
          overflow_strategy = drop_head :: drop_head | reject_publish,
          max_length :: option(non_neg_integer()),
@@ -230,7 +232,7 @@
 
 -type config() :: #{name := atom(),
                     queue_resource := rabbit_types:r('queue'),
-                    dead_letter_handler => option({at_most_once, applied_mfa()} | at_least_once),
+                    dead_letter_handler => dead_letter_handler(),
                     become_leader_handler => applied_mfa(),
                     release_cursor_interval => non_neg_integer(),
                     max_length => non_neg_integer(),

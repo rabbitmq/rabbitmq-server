@@ -81,7 +81,8 @@ all_tests() ->
      dlx_05,
      dlx_06,
      dlx_07,
-     dlx_08
+     dlx_08,
+     dlx_09
      % single_active_ordering_02
     ].
 
@@ -1185,7 +1186,7 @@ dlx_05(_Config) ->
     ?assert(snapshots_prop(Config, Commands)),
     ok.
 
-% Test that after recovery we can differentiate between index messge and (prefix) disk message
+% Test that after recovery we can differentiate between index message and (prefix) disk message
 dlx_06(_Config) ->
     C1Pid = c:pid(0,883,1),
     C1 = {<<>>, C1Pid},
@@ -1287,6 +1288,28 @@ dlx_08(_Config) ->
                 rabbit_fifo:make_discard(C1, [9]),
                 rabbit_fifo_dlx:make_settle([1]),
                 rabbit_fifo_dlx:make_settle([2])
+               ],
+    Config = config(?FUNCTION_NAME, undefined, undefined, false, undefined, undefined, undefined,
+                    reject_publish, at_least_once),
+    ?assert(snapshots_prop(Config, Commands)),
+    ok.
+
+dlx_09(_Config) ->
+    C1Pid = c:pid(0,883,1),
+    C1 = {<<>>, C1Pid},
+    E = c:pid(0,176,1),
+    Commands = [
+                make_checkout(C1, {auto,2,simple_prefetch}),
+                make_enqueue(E,1,msg(<<>>)),
+                %% 0 in checkout
+                make_enqueue(E,2,msg(<<>>)),
+                %% 0,1 in checkout
+                rabbit_fifo:make_return(C1, [0]),
+                %% 1,2 in checkout
+                rabbit_fifo:make_discard(C1, [1]),
+                %% 2 in checkout, 1 in discards
+                rabbit_fifo:make_discard(C1, [2])
+                %% 1,2 in discards
                ],
     Config = config(?FUNCTION_NAME, undefined, undefined, false, undefined, undefined, undefined,
                     reject_publish, at_least_once),
