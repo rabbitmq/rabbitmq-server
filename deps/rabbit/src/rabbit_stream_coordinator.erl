@@ -1528,9 +1528,9 @@ find_leader(Members) ->
     end.
 
 select_leader(Offsets) ->
-    [{Node, _} | _] = lists:sort(fun({_, {Ao, E}}, {_, {Bo, E}}) ->
+    [{Node, _} | _] = lists:sort(fun({_, {E, Ao}}, {_, {E, Bo}}) ->
                                          Ao >= Bo;
-                                    ({_, {_, Ae}}, {_, {_, Be}}) ->
+                                    ({_, {Ae, _}}, {_, {Be, _}}) ->
                                          Ae >= Be;
                                     ({_, empty}, _) ->
                                          false;
