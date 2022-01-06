@@ -376,7 +376,6 @@ stats(Config) ->
                                                                   {<<"x-dead-letter-exchange">>, longstr, DLX},
                                                                   {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
                                                                   {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
-                                                                  {<<"x-max-in-memory-length">>, long, 1},
                                                                   {<<"x-overflow">>, longstr, <<"reject-publish">>},
                                                                   {<<"x-queue-type">>, longstr, <<"quorum">>}
                                                                  ]
@@ -405,11 +404,7 @@ stats(Config) ->
                     %% 16 bytes (=8msgs*2bytes) should be in discards queue
                     discard_message_bytes := 16,
                     %% 10 msgs in total
-                    num_messages := 10,
-                    %% 1 msg (=x-max-in-memory-length) should be in-memory
-                    num_in_memory_ready_messages := 1,
-                    %% 2 bytes (1msg) should be in-memory
-                    in_memory_message_bytes := 2
+                    num_messages := 10
                    }],
                  dirty_query([Server], RaName, fun rabbit_fifo:overview/1)),
     %% Fix dead-letter toplology misconfiguration.
@@ -429,9 +424,7 @@ stats(Config) ->
                     discard_checkout_message_bytes := 0,
                     num_discarded := 0,
                     discard_message_bytes := 0,
-                    num_messages := 0,
-                    num_in_memory_ready_messages := 0,
-                    in_memory_message_bytes := 0
+                    num_messages := 0
                    }],
                  dirty_query([Server], RaName, fun rabbit_fifo:overview/1)),
     [?assertMatch({#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{expiration = undefined},
