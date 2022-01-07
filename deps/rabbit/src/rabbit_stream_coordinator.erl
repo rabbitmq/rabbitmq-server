@@ -1527,16 +1527,16 @@ find_leader(Members) ->
             {undefined, Replicas}
     end.
 
-select_leader(Offsets) ->
-    [{Node, _} | _] = lists:sort(fun({_, {Ao, E}}, {_, {Bo, E}}) ->
+select_leader(EpochOffsets) ->
+    [{Node, _} | _] = lists:sort(fun({_, {E, Ao}}, {_, {E, Bo}}) ->
                                          Ao >= Bo;
-                                    ({_, {_, Ae}}, {_, {_, Be}}) ->
+                                    ({_, {Ae, _}}, {_, {Be, _}}) ->
                                          Ae >= Be;
                                     ({_, empty}, _) ->
                                          false;
                                     (_, {_, empty}) ->
                                          true
-                                 end, Offsets),
+                                 end, EpochOffsets),
     Node.
 
 maybe_sleep({{nodedown, _}, _}) ->
