@@ -9,14 +9,15 @@
 %% '$m' stand for 'memory'.
 -define(PREFIX_MEM_MSG_TAG, '$m').
 
--define(DISK_MSG(Header), [Header | ?DISK_MSG_TAG]).
--define(MSG(Header, RawMsg), [Header | RawMsg]).
+% -define(DISK_MSG(Header), [Header | ?DISK_MSG_TAG]).
+-define(DISK_MSG(Header), Header).
+% -define(MSG(Header, RawMsg), [Header | RawMsg]).
 -define(INDEX_MSG(Index, Msg), [Index | Msg]).
--define(PREFIX_MEM_MSG(Header), [Header | ?PREFIX_MEM_MSG_TAG]).
+% -define(PREFIX_MEM_MSG(Header), [Header | ?PREFIX_MEM_MSG_TAG]).
 
-% -define(PREFIX_DISK_MSG_TAG, '$prefix_disk').
-% -define(PREFIX_DISK_MSG(Header), [?PREFIX_DISK_MSG_TAG | Header]).
-% -define(PREFIX_DISK_MSG(Header), ?DISK_MSG(Header)).
+-define(IS_HEADER(H),
+          when is_integer(H) orelse
+               (is_map(H) andalso is_map_key(size, H))).
 
 -type option(T) :: undefined | T.
 
@@ -47,17 +48,17 @@
 %%         Value is determined by per-queue or per-message message TTL.
 %% If it only contains the size it can be condensed to an integer only
 
--type msg() :: ?MSG(msg_header(), raw_msg()) |
-               ?DISK_MSG(msg_header()) |
-               ?PREFIX_MEM_MSG(msg_header()).
+-type msg() :: %%?MSG(msg_header(), raw_msg()) |
+               ?DISK_MSG(msg_header()).
+               % ?PREFIX_MEM_MSG(msg_header()).
 %% message with a header map.
 
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type indexed_msg() :: ?INDEX_MSG(ra:index(), msg()).
+-type indexed_msg() :: ?INDEX_MSG(ra:index(), msg_header()).
 
--type prefix_msg() :: {'$prefix_msg', msg_header()}.
+% -type prefix_msg() :: {'$prefix_msg', msg_header()}.
 
 -type delivery_msg() :: {msg_id(), {msg_header(), term()}}.
 %% A tuple consisting of the message id and the headered message.
