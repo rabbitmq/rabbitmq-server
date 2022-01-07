@@ -438,6 +438,8 @@ apply(Meta, {nodeup, Node} = Cmd,
                   end, {Streams0, Effects0}, Streams0),
     return(Meta, State#?MODULE{monitors = Monitors,
                                streams = Streams}, ok, Effects);
+apply(Meta, {machine_version, _From, _To}, State) ->
+    return(Meta, State, ok, []);
 apply(Meta, UnkCmd, State) ->
     rabbit_log:debug("~s: unknown command ~W",
                      [?MODULE, UnkCmd, 10]),
