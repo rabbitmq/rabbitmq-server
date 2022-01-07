@@ -1131,6 +1131,7 @@ delete_replica_leader(_) ->
 
 meta(N) when is_integer(N) ->
     #{index => N,
+      machine_version => 1,
       system_time => N + 1000}.
 
 started_stream(StreamId, LeaderPid, ReplicaPids) ->
