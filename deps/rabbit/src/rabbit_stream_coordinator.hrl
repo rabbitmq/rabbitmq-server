@@ -11,7 +11,7 @@
                     atom() => term()}.
 -type monitor_role() :: member | listener.
 -type queue_ref() :: rabbit_types:r(queue).
--type tail() :: {osiris:offset(), osiris:epoch()} | empty.
+-type tail() :: {osiris:epoch(), osiris:offset()} | empty.
 
 -record(member,
         {state = {down, 0} :: {down, osiris:epoch()}
