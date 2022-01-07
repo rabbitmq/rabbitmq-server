@@ -81,6 +81,7 @@ end_per_testcase(_TestCase, _Config) ->
 
 test_init(Name) ->
     init(#{name => Name,
+           max_in_memory_length => 0,
            queue_resource => rabbit_misc:r("/", queue,
                                            atom_to_binary(Name, utf8)),
            release_cursor_interval => 0}).
@@ -94,8 +95,9 @@ enq_enq_checkout_test(_) ->
         apply(meta(3),
               rabbit_fifo:make_checkout(Cid, {once, 2, simple_prefetch}, #{}),
               State2),
+    ct:pal("~p", [Effects]),
     ?ASSERT_EFF({monitor, _, _}, Effects),
-    ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, Effects),
+    ?ASSERT_EFF({log, [1,2], _Fun, _Local}, Effects),
     ok.
 
 credit_enq_enq_checkout_settled_credit_test(_) ->
@@ -105,14 +107,11 @@ credit_enq_enq_checkout_settled_credit_test(_) ->
     {State3, _, Effects} =
         apply(meta(3), rabbit_fifo:make_checkout(Cid, {auto, 1, credited}, #{}), State2),
     ?ASSERT_EFF({monitor, _, _}, Effects),
-    Deliveries = lists:filter(fun ({send_msg, _, {delivery, _, _}, _}) -> true;
-                                  (_) -> false
-                              end, Effects),
-    ?assertEqual(1, length(Deliveries)),
+    ?ASSERT_EFF({log, [1], _Fun, _Local}, Effects),
     %% settle the delivery this should _not_ result in further messages being
     %% delivered
     {State4, SettledEffects} = settle(Cid, 4, 1, State3),
-    ?assertEqual(false, lists:any(fun ({send_msg, _, {delivery, _, _}, _}) ->
+    ?assertEqual(false, lists:any(fun ({log, _, _, _}) ->
                                           true;
                                       (_) -> false
                                   end, SettledEffects)),
@@ -120,9 +119,9 @@ credit_enq_enq_checkout_settled_credit_test(_) ->
     %% delivery count is (1)
     {State5, CreditEffects} = credit(Cid, 5, 1, 1, false, State4),
     % ?debugFmt("CreditEffects  ~p ~n~p", [CreditEffects, State4]),
-    ?ASSERT_EFF({send_msg, _, {delivery, _, _}, _}, CreditEffects),
+    ?ASSERT_EFF({log, [2], _, _}, CreditEffects),
     {_State6, FinalEffects} = enq(6, 3, third, State5),
-    ?assertEqual(false, lists:any(fun ({send_msg, _, {delivery, _, _}, _}) ->
+    ?assertEqual(false, lists:any(fun ({log, _, _, _}) ->
                                           true;
                                       (_) -> false
                                   end, FinalEffects)),
@@ -157,18 +156,17 @@ credit_and_drain_test(_) ->
         apply(meta(3), rabbit_fifo:make_checkout(Cid, {auto, 0, credited}, #{}),
               State2),
 
-    ?ASSERT_NO_EFF({send_msg, _, {delivery, _, _}}, CheckEffs),
+    ?ASSERT_NO_EFF({log, _, _, _}, CheckEffs),
     {State4, {multi, [{send_credit_reply, 0},
                       {send_drained, {?FUNCTION_NAME, 2}}]},
     Effects} = apply(meta(4), rabbit_fifo:make_credit(Cid, 4, 0, true), State3),
     ?assertMatch(#rabbit_fifo{consumers = #{Cid := #consumer{credit = 0,
-                                                       delivery_count = 4}}},
+                                                             delivery_count = 4}}},
                  State4),
 
-    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}},
-                                             {_, {_, second}}]}, _}, Effects),
+    ?ASSERT_EFF({log, [1, 2], _, _}, Effects),
     {_State5, EnqEffs} = enq(5, 2, third, State4),
-    ?ASSERT_NO_EFF({send_msg, _, {delivery, _, _}}, EnqEffs),
+    ?ASSERT_NO_EFF({log, _, _, _}, EnqEffs),
     ok.
 
 
@@ -190,8 +188,10 @@ enq_enq_deq_deq_settle_test(_) ->
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     % get returns a reply value
-    {State3, {dequeue, {0, {_, first}}, 1},
-     [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _}, {monitor, _, _}]} =
+    {State3, '$ra_no_reply',
+     [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
+      {log, [1], _},
+      {monitor, _, _}]} =
         apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
               State2),
     {_State4, {dequeue, empty}} =
