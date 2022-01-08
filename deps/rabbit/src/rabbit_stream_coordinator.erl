@@ -16,7 +16,9 @@
          state_enter/2,
          init_aux/1,
          handle_aux/6,
-         tick/2]).
+         tick/2,
+         version/0,
+         which_module/1]).
 
 -export([recover/0,
          add_replica/2,
@@ -311,6 +313,11 @@ all_coord_members() ->
     Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
     [{?MODULE, Node} || Node <- [node() | Nodes]].
 
+version() -> 1.
+
+which_module(_) ->
+    ?MODULE.
+
 init(_Conf) ->
     #?MODULE{}.
 
@@ -320,7 +327,7 @@ apply(#{index := _Idx} = Meta0, {_CmdTag, StreamId, #{}} = Cmd,
       #?MODULE{streams = Streams0,
                monitors = Monitors0} = State0) ->
     Stream0 = maps:get(StreamId, Streams0, undefined),
-    Meta = maps:without([term, machine_version], Meta0),
+    Meta = maps:without([term], Meta0),
     case filter_command(Meta, Cmd, Stream0) of
         ok ->
             Stream1 = update_stream(Meta, Cmd, Stream0),
@@ -431,6 +438,8 @@ apply(Meta, {nodeup, Node} = Cmd,
                   end, {Streams0, Effects0}, Streams0),
     return(Meta, State#?MODULE{monitors = Monitors,
                                streams = Streams}, ok, Effects);
+apply(Meta, {machine_version, _From, _To}, State) ->
+    return(Meta, State, ok, []);
 apply(Meta, UnkCmd, State) ->
     rabbit_log:debug("~s: unknown command ~W",
                      [?MODULE, UnkCmd, 10]),
@@ -1038,7 +1047,8 @@ update_stream0(#{system_time := _Ts},
             %% epochs?
             Stream0
     end;
-update_stream0(#{system_time := _Ts},
+update_stream0(#{system_time := _Ts,
+                 machine_version := MachineVersion},
                {member_stopped, _StreamId,
                 #{node := Node,
                   index := Idx,
@@ -1087,15 +1097,15 @@ update_stream0(#{system_time := _Ts},
 
             Members1 = Members0#{Node => Member},
 
-            Offsets = [{N, T}
-                       || #member{state = {stopped, E, T},
-                                  target = running,
-                                  node = N} <- maps:values(Members1),
-                          E == Epoch],
-            case is_quorum(length(Nodes), length(Offsets)) of
+            EpochOffsets = [{N, T}
+                            || #member{state = {stopped, E, T},
+                                       target = running,
+                                       node = N} <- maps:values(Members1),
+                               E == Epoch],
+            case is_quorum(length(Nodes), length(EpochOffsets)) of
                 true ->
                     %% select leader
-                    NewWriterNode = select_leader(Offsets),
+                    NewWriterNode = select_leader(MachineVersion, EpochOffsets),
                     NextEpoch = Epoch + 1,
                     Members = maps:map(
                                 fun (N, #member{state = {stopped, E, _}} = M)
@@ -1525,7 +1535,9 @@ find_leader(Members) ->
             {undefined, Replicas}
     end.
 
-select_leader(Offsets) ->
+select_leader(0, EpochOffsets) ->
+    %% this is the version 0 faulty version of this code,
+    %% retained for versioning
     [{Node, _} | _] = lists:sort(fun({_, {Ao, E}}, {_, {Bo, E}}) ->
                                          Ao >= Bo;
                                     ({_, {_, Ae}}, {_, {_, Be}}) ->
@@ -1534,7 +1546,19 @@ select_leader(Offsets) ->
                                          false;
                                     (_, {_, empty}) ->
                                          true
-                                 end, Offsets),
+                                 end, EpochOffsets),
+    Node;
+select_leader(_Version, EpochOffsets) ->
+    [{Node, _} | _] = lists:sort(
+                        fun({_, {Epoch, OffsetA}}, {_, {Epoch, OffsetB}}) ->
+                                OffsetA >= OffsetB;
+                           ({_, {EpochA, _}}, {_, {EpochB, _}}) ->
+                                EpochA >= EpochB;
+                           ({_, empty}, _) ->
+                                false;
+                           (_, {_, empty}) ->
+                                true
+                        end, EpochOffsets),
     Node.
 
 maybe_sleep({{nodedown, _}, _}) ->
