@@ -253,13 +253,9 @@ get_disk_free(Dir, {win32, _}) ->
                 _ -> exit(could_not_determine_disk_free)
             end;
         DriveLetter ->
-            case win32_get_disk_free_fsutil(DriveLetter) of
-                {ok, Free0} -> Free0;
-                error ->
-                    case win32_get_disk_free_pwsh(DriveLetter) of
-                        {ok, Free1} -> Free1;
-                        _ -> exit(could_not_determine_disk_free)
-                    end
+            case catch win32_get_disk_free_pwsh(DriveLetter) of
+                {ok, Free1} -> Free1;
+                _PwshNotOk -> exit(could_not_determine_disk_free)
             end
     end.
 
@@ -279,30 +275,6 @@ win32_get_drive_letter([DriveLetter, $:, $/ | _]) when
 win32_get_drive_letter(_) ->
     error.
 
-win32_get_disk_free_fsutil(DriveLetter) when
-      (DriveLetter >= $a andalso DriveLetter =< $z) orelse
-      (DriveLetter >= $A andalso DriveLetter =< $Z) ->
-    % DriveLetter $c
-    FsutilCmd = "fsutil.exe volume diskfree " ++ [DriveLetter] ++ ":",
-
-    % C:\windows\system32>fsutil volume diskfree c:
-    % Total free bytes        :   812,733,878,272 (756.9 GB)
-    % Total bytes             : 1,013,310,287,872 (943.7 GB)
-    % Total quota free bytes  :   812,733,878,272 (756.9 GB)
-    case run_cmd(FsutilCmd) of
-        {error, timeout} ->
-            error;
-        FsutilResult ->
-            case string:slice(FsutilResult, 0, 5) of
-                "Error" ->
-                    error;
-                "Total" ->
-                    FirstLine = hd(string:tokens(FsutilResult, "\r\n")),
-                    {match, [FreeStr]} = re:run(FirstLine, "(\\d+,?)+", [{capture, first, list}]),
-                    {ok, list_to_integer(lists:flatten(string:tokens(FreeStr, ",")))}
-            end
-    end.
-
 win32_get_disk_free_pwsh(DriveLetter) when
       (DriveLetter >= $a andalso DriveLetter =< $z) orelse
       (DriveLetter >= $A andalso DriveLetter =< $Z) ->
@@ -311,10 +283,9 @@ win32_get_disk_free_pwsh(DriveLetter) when
     case run_cmd(PoshCmd) of
         {error, timeout} ->
             error;
-        PoshResultStr ->
+        PoshResult ->
             % Note: remove \r\n
-            PoshResult = string:slice(PoshResultStr, 0, length(PoshResultStr) - 2),
-            {ok, list_to_integer(PoshResult)}
+            {ok, list_to_integer(string:trim(PoshResult))}
     end.
 
 win32_get_disk_free_dir(Dir) ->
