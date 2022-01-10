@@ -176,11 +176,15 @@ enq_enq_deq_test(_) ->
     {State1, _} = enq(1, 1, first, test_init(test)),
     {State2, _} = enq(2, 2, second, State1),
     % get returns a reply value
-    NumReady = 1,
-    {_State3, {dequeue, {0, {_, first}}, NumReady},
-     [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _}, {monitor, _, _}]} =
+    % NumReady = 1,
+    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
+    {_State3, _,
+     [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
+      {log, [1], Fun},
+      {monitor, _, _}]} =
         apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
               State2),
+    ct:pal("Out ~p", [Fun([Msg1])]),
     ok.
 
 enq_enq_deq_deq_settle_test(_) ->
@@ -203,9 +207,10 @@ enq_enq_checkout_get_settled_test(_) ->
     Cid = {?FUNCTION_NAME, self()},
     {State1, _} = enq(1, 1, first, test_init(test)),
     % get returns a reply value
-    {State2, {dequeue, {0, {_, first}}, _}, _Effs} =
+    {State2, _, Effs} =
         apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}),
               State1),
+    ?ASSERT_EFF({log, [1], _}, Effs),
     ?assertEqual(0, rabbit_fifo:query_messages_total(State2)),
     ok.
 
@@ -222,8 +227,9 @@ untracked_enq_deq_test(_) ->
     {State1, _, _} = apply(meta(1),
                            rabbit_fifo:make_enqueue(undefined, undefined, first),
                            State0),
-    {_State2, {dequeue, {0, {_, first}}, _}, _} =
+    {_State2, _, Effs} =
         apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State1),
+    ?ASSERT_EFF({log, [1], _}, Effs),
     ok.
 
 release_cursor_test(_) ->
@@ -244,10 +250,12 @@ checkout_enq_settle_test(_) ->
               {monitor, _, _} | _]} = check(Cid, 1, test_init(test)),
     {State2, Effects0} = enq(2, 1,  first, State1),
     ct:pal("Effects0 ~p", [Effects0]),
-    ?ASSERT_EFF({send_msg, _,
-                 {delivery, ?FUNCTION_NAME,
-                  [{0, {_, first}}]}, _},
-                Effects0),
+    %% TODO: this should go back to a send_msg effect after optimisation
+    ?ASSERT_EFF({log, [2], _, _}, Effects0),
+    % ?ASSERT_EFF({send_msg, _,
+    %              {delivery, ?FUNCTION_NAME,
+    %               [{0, {_, first}}]}, _},
+    %             Effects0),
     {State3, [_Inactive]} = enq(3, 2, second, State2),
     {_, _Effects} = settle(Cid, 4, 0, State3),
     % the release cursor is the smallest raft index that does not
@@ -255,46 +263,16 @@ checkout_enq_settle_test(_) ->
     % ?ASSERT_EFF({release_cursor, 2, _}, Effects),
     ok.
 
-%% this should not be needed anymore as we don't hold pending messages
-% out_of_order_enqueue_test(_) ->
-%     Cid = {?FUNCTION_NAME, self()},
-%     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
-%               {monitor, _, _} | _]} = check_n(Cid, 5, 5, test_init(test)),
-%     {State2, Effects2} = enq(2, 1, first, State1),
-%     ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
-%     % assert monitor was set up
-%     ?ASSERT_EFF({monitor, _, _}, Effects2),
-%     % enqueue seq num 3 and 4 before 2
-%     {State3, Effects3} = enq(3, 3, third, State2),
-%     ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects3),
-%     {State4, Effects4} = enq(4, 4, fourth, State3),
-%     % assert no further deliveries where made
-%     ?assertNoEffect({send_msg, _, {delivery, _, _}, _}, Effects4),
-%     {_State5, Effects5} = enq(5, 2, second, State4),
-%     % assert two deliveries were now made
-%     ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, second}},
-%                                                {_, {_, third}},
-%                                                {_, {_, fourth}}]}, _},
-%                 Effects5),
-%     ok.
-
-% out_of_order_first_enqueue_test(_) ->
-%     Cid = {?FUNCTION_NAME, self()},
-%     {State1, _} = check_n(Cid, 5, 5, test_init(test)),
-%     {_State2, Effects2} = enq(2, 10, first, State1),
-%     ?ASSERT_EFF({monitor, process, _}, Effects2),
-%     ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}, _},
-%                     Effects2),
-%     ok.
-
 duplicate_enqueue_test(_) ->
     Cid = {<<"duplicate_enqueue_test">>, self()},
     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
               {monitor, _, _} | _]} = check_n(Cid, 5, 5, test_init(test)),
     {State2, Effects2} = enq(2, 1, first, State1),
-    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
+    ?ASSERT_EFF({log, [2], _, _}, Effects2),
+    % ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
     {_State3, Effects3} = enq(3, 1, first, State2),
-    ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects3),
+    ?ASSERT_NO_EFF({log, [_], _, _}, Effects3),
+    % ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects3),
     ok.
 
 return_test(_) ->
@@ -314,6 +292,7 @@ return_dequeue_delivery_limit_test(_) ->
     Init = init(#{name => test,
                   queue_resource => rabbit_misc:r("/", queue,
                                                   atom_to_binary(test, utf8)),
+                  max_in_memory_length => 0,
                   release_cursor_interval => 0,
                   delivery_limit => 1}),
     {State0, _} = enq(1, 1, msg, Init),
@@ -321,11 +300,12 @@ return_dequeue_delivery_limit_test(_) ->
     Cid = {<<"cid">>, self()},
     Cid2 = {<<"cid2">>, self()},
 
-    {State1, {MsgId1, _}} = deq(2, Cid, unsettled, State0),
+    Msg = rabbit_fifo:make_enqueue(self(), 1, msg),
+    {State1, {MsgId1, _}} = deq(2, Cid, unsettled, Msg, State0),
     {State2, _, _} = apply(meta(4), rabbit_fifo:make_return(Cid, [MsgId1]),
                            State1),
 
-    {State3, {MsgId2, _}} = deq(2, Cid2, unsettled, State2),
+    {State3, {MsgId2, _}} = deq(2, Cid2, unsettled, Msg, State2),
     {State4, _, _} = apply(meta(4), rabbit_fifo:make_return(Cid2, [MsgId2]),
                            State3),
     ?assertMatch(#{num_messages := 0}, rabbit_fifo:overview(State4)),
@@ -343,10 +323,16 @@ return_checked_out_test(_) ->
     {State0, [_, _]} = enq(1, 1, first, test_init(test)),
     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
               _Monitor,
-              {send_msg, _, {delivery, _, [{MsgId, _}]}, _},
+              {log, [1], Fun, _},
               {aux, active} | _ ]} = check_auto(Cid, 2, State0),
+
+    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
+
+    [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun([Msg1]),
     % returning immediately checks out the same message again
-    {_, ok, [{send_msg, _, {delivery, _, [{_, _}]}, _},
+    {_, ok, [
+             {log, [1], _, _},
+             % {send_msg, _, {delivery, _, [{_, _}]}, _},
              {aux, active}]} =
         apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
     ok.
@@ -357,16 +343,21 @@ return_checked_out_limit_test(_) ->
                   queue_resource => rabbit_misc:r("/", queue,
                                                   atom_to_binary(test, utf8)),
                   release_cursor_interval => 0,
+                  max_in_memory_length => 0,
                   delivery_limit => 1}),
+    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
     {State0, [_, _]} = enq(1, 1, first, Init),
     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
               _Monitor,
-              {send_msg, _, {delivery, _, [{MsgId, _}]}, _},
+              {log, [1], Fun1, _},
               {aux, active} | _ ]} = check_auto(Cid, 2, State0),
+    [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun1([Msg1]),
     % returning immediately checks out the same message again
-    {State2, ok, [{send_msg, _, {delivery, _, [{MsgId2, _}]}, _},
+    {State2, ok, [
+                  {log, [1], Fun2, _},
                   {aux, active}]} =
         apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
+    [{send_msg, _, {delivery, _, [{MsgId2, _}]}, _}] = Fun2([Msg1]),
     {#rabbit_fifo{} = State, ok, [_ReleaseEff]} =
         apply(meta(4), rabbit_fifo:make_return(Cid, [MsgId2]), State2),
     ?assertEqual(0, rabbit_fifo:query_messages_total(State)),
@@ -374,21 +365,24 @@ return_checked_out_limit_test(_) ->
 
 return_auto_checked_out_test(_) ->
     Cid = {<<"cid">>, self()},
+    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
     {State00, [_, _]} = enq(1, 1, first, test_init(test)),
     {State0, [_]} = enq(2, 2, second, State00),
     % it first active then inactive as the consumer took on but cannot take
     % any more
     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
               _Monitor,
-              {send_msg, _, {delivery, _, [{MsgId, _}]}, _},
+              {log, [1], Fun1, _},
               {aux, active},
               {aux, inactive}
              ]} = check_auto(Cid, 2, State0),
+    [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun1([Msg1]),
     % return should include another delivery
     {_State2, _, Effects} = apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
-    ?ASSERT_EFF({send_msg, _,
-                 {delivery, _, [{_, {#{delivery_count := 1}, first}}]}, _},
-                Effects),
+    [{log, [1], Fun2, _} | _] = Effects,
+
+    [{send_msg, _, {delivery, _, [{_MsgId2, {#{delivery_count := 1}, first}}]}, _}]
+    = Fun2([Msg1]),
     ok.
 
 cancelled_checkout_empty_queue_test(_) ->
@@ -399,7 +393,6 @@ cancelled_checkout_empty_queue_test(_) ->
     {State2, _, Effects} = apply(meta(3), rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
     ?assertEqual(0, map_size(State2#rabbit_fifo.consumers)),
     ?assertEqual(0, priority_queue:len(State2#rabbit_fifo.service_queue)),
-    ct:pal("Effs: ~p", [Effects]),
     ?ASSERT_EFF({release_cursor, _, _}, Effects),
     ok.
 
@@ -407,21 +400,21 @@ cancelled_checkout_out_test(_) ->
     Cid = {<<"cid">>, self()},
     {State00, [_, _]} = enq(1, 1, first, test_init(test)),
     {State0, [_]} = enq(2, 2, second, State00),
-    {State1, _} = check_auto(Cid, 2, State0),
+    {State1, _} = check_auto(Cid, 3, State0),%% prefetch of 1
     % cancelled checkout should not return pending messages to queue
-    {State2, _, _} = apply(meta(3), rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
+    {State2, _, _} = apply(meta(4), rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
     ?assertEqual(1, lqueue:len(State2#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State2#rabbit_fifo.returns)),
     ?assertEqual(0, priority_queue:len(State2#rabbit_fifo.service_queue)),
 
     {State3, {dequeue, empty}} =
-        apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State2),
+        apply(meta(5), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State2),
     %% settle
     {State4, ok, _} =
-        apply(meta(4), rabbit_fifo:make_settle(Cid, [0]), State3),
+        apply(meta(6), rabbit_fifo:make_settle(Cid, [0]), State3),
 
-    {_State, {dequeue, {_, {_, second}}, _}, _} =
-        apply(meta(5), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State4),
+    {_State, _, [_, {log, [2], _Fun} | _]} =
+        apply(meta(7), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State4),
     ok.
 
 down_with_noproc_consumer_returns_unsettled_test(_) ->
@@ -466,10 +459,11 @@ down_with_noconnection_marks_suspect_and_node_is_monitored_test(_) ->
 down_with_noconnection_returns_unack_test(_) ->
     Pid = spawn(fun() -> ok end),
     Cid = {<<"down_with_noconnect">>, Pid},
+    Msg = rabbit_fifo:make_enqueue(self(), 1, second),
     {State0, _} = enq(1, 1, second, test_init(test)),
     ?assertEqual(1, lqueue:len(State0#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State0#rabbit_fifo.returns)),
-    {State1, {_, _}} = deq(2, Cid, unsettled, State0),
+    {State1, {_, _}} = deq(2, Cid, unsettled, Msg, State0),
     ?assertEqual(0, lqueue:len(State1#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State1#rabbit_fifo.returns)),
     {State2a, _, _} = apply(meta(3), {down, Pid, noconnection}, State1),
@@ -495,31 +489,33 @@ discarded_message_without_dead_letter_handler_is_removed_test(_) ->
     Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
     {State0, [_, _]} = enq(1, 1, first, test_init(test)),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
-    ?ASSERT_EFF({send_msg, _,
-                 {delivery, _, [{0, {_, first}}]}, _},
-                Effects1),
+    ?ASSERT_EFF({log, [1], _Fun, _}, Effects1),
     {_State2, _, Effects2} = apply(meta(1),
                                    rabbit_fifo:make_discard(Cid, [0]), State1),
-    ?assertNoEffect({send_msg, _,
-                     {delivery, _, [{0, {_, first}}]}, _},
-                    Effects2),
+    ?ASSERT_NO_EFF({log, [1], _Fun, _}, Effects2),
     ok.
 
 discarded_message_with_dead_letter_handler_emits_log_effect_test(_) ->
-    Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
+    Cid = {<<"cid1">>, self()},
     State00 = init(#{name => test,
                      queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
+                     max_in_memory_length => 0,
                      dead_letter_handler =>
                      {at_most_once, {somemod, somefun, [somearg]}}}),
+    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
     {State0, [_, _]} = enq(1, 1, first, State00),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
-    ?ASSERT_EFF({send_msg, _,
-                 {delivery, _, [{0, {_, first}}]}, _},
-                Effects1),
+    ?ASSERT_EFF({log, [1], _, _}, Effects1),
     {_State2, _, Effects2} = apply(meta(1), rabbit_fifo:make_discard(Cid, [0]), State1),
     % assert mod call effect with appended reason and message
-    ?ASSERT_EFF({log, _RaftIdxs, _}, Effects2),
+    {value, {log, [1], Fun}} = lists:search(fun (E) -> element(1, E) == log end,
+                                            Effects2),
+    [{mod_call,somemod,somefun,[somearg,[{rejected,first}]]}] = Fun([Msg1]),
     ok.
+
+get_log_eff(Effs) ->
+    {value, Log} = lists:search(fun (E) -> element(1, E) == log end, Effs),
+    Log.
 
 mixed_send_msg_and_log_effects_are_correctly_ordered_test(_) ->
     Cid = {cid(?FUNCTION_NAME), self()},
@@ -531,10 +527,15 @@ mixed_send_msg_and_log_effects_are_correctly_ordered_test(_) ->
                       {somemod, somefun, [somearg]}}}),
     %% enqueue two messages
     {State0, _} = enq(1, 1, first, State00),
+    Msg2 = rabbit_fifo:make_enqueue(self(), 2, snd),
     {State1, _} = enq(2, 2, snd, State0),
 
     {_State2, Effects1} = check_n(Cid, 3, 10, State1),
     ct:pal("Effects ~w", [Effects1]),
+    {log, [2], Fun, _} = get_log_eff(Effects1),
+    ct:pal("OUT ~p",[Fun([Msg2])]),
+    [{send_msg, _, {delivery, _Cid, [{0,{0,first}},{1,{0,snd}}]},
+      [local,ra_event]}] = Fun([Msg2]),
     %% in this case we expect no send_msg effect as any in memory messages
     %% should be weaved into the send_msg effect emitted by the log effect
     %% later. hence this is all we can assert on
@@ -546,10 +547,13 @@ mixed_send_msg_and_log_effects_are_correctly_ordered_test(_) ->
 tick_test(_) ->
     Cid = {<<"c">>, self()},
     Cid2 = {<<"c2">>, self()},
+
+    Msg1 = rabbit_fifo:make_enqueue(self(), 1, <<"fst">>),
+    Msg2 = rabbit_fifo:make_enqueue(self(), 2, <<"snd">>),
     {S0, _} = enq(1, 1, <<"fst">>, test_init(?FUNCTION_NAME)),
     {S1, _} = enq(2, 2, <<"snd">>, S0),
-    {S2, {MsgId, _}} = deq(3, Cid, unsettled, S1),
-    {S3, {_, _}} = deq(4, Cid2, unsettled, S2),
+    {S2, {MsgId, _}} = deq(3, Cid, unsettled, Msg1, S1),
+    {S3, {_, _}} = deq(4, Cid2, unsettled, Msg2, S2),
     {S4, _, _} = apply(meta(5), rabbit_fifo:make_return(Cid, [MsgId]), S3),
 
     [{mod_call, rabbit_quorum_queue, handle_tick,
@@ -574,7 +578,7 @@ delivery_query_returns_deliveries_test(_) ->
     Entries = lists:zip(Indexes, Commands),
     {State, _Effects} = run_log(test_init(help), Entries),
     % 3 deliveries are returned
-    [{0, {_, one}}] = rabbit_fifo:get_checked_out(Cid, 0, 0, State),
+    [{0, {_, _}}] = rabbit_fifo:get_checked_out(Cid, 0, 0, State),
     [_, _, _] = rabbit_fifo:get_checked_out(Cid, 1, 3, State),
     ok.
 
@@ -639,9 +643,9 @@ purge_test(_) ->
     {State2, {purge, 1}, _} = apply(meta(2), rabbit_fifo:make_purge(), State1),
     {State3, _} = enq(3, 2, second, State2),
     % get returns a reply value
-    {_State4, {dequeue, {0, {_, second}}, _},
-     [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _}, {monitor, _, _}]} =
+    {_State4, _, Effs} =
         apply(meta(4), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}), State3),
+    ?ASSERT_EFF({log, [3], _}, Effs),
     ok.
 
 purge_with_checkout_test(_) ->
@@ -1311,6 +1315,7 @@ register_enqueuer_test(_) ->
                     queue_resource => rabbit_misc:r("/", queue,
                         atom_to_binary(?FUNCTION_NAME, utf8)),
                     max_length => 2,
+                    max_in_memory_length => 0,
                     overflow_strategy => reject_publish}),
     %% simply registering should be ok when we're below limit
     Pid1 = test_util:fake_pid(node()),
@@ -1335,20 +1340,23 @@ register_enqueuer_test(_) ->
 
 
     %% remove two messages this should make the queue fall below the 0.8 limit
-    {State7, {dequeue, _, _}, _Efx7} =
+    {State7, _, Efx7} =
         apply(meta(7),
               rabbit_fifo:make_checkout(<<"a">>, {dequeue, settled}, #{}), State6),
-    ct:pal("Efx7 ~p", [_Efx7]),
-    {State8, {dequeue, _, _}, Efx8} =
+    ?ASSERT_EFF({log, [_], _}, Efx7),
+    % ct:pal("Efx7 ~p", [_Efx7]),
+    {State8, _, Efx8} =
         apply(meta(8),
               rabbit_fifo:make_checkout(<<"a">>, {dequeue, settled}, #{}), State7),
-    ct:pal("Efx8 ~p", [Efx8]),
+    ?ASSERT_EFF({log, [_], _}, Efx8),
+    % ct:pal("Efx8 ~p", [Efx8]),
     %% validate all registered enqueuers are notified of overflow state
     ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid1, Efx8),
     ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid2, Efx8),
-    {_State9, {dequeue, _, _}, Efx9} =
+    {_State9, _, Efx9} =
         apply(meta(9),
               rabbit_fifo:make_checkout(<<"a">>, {dequeue, settled}, #{}), State8),
+    ?ASSERT_EFF({log, [_], _}, Efx9),
     ?ASSERT_NO_EFF({send_msg, P, go, [ra_event]}, P == Pid1, Efx9),
     ?ASSERT_NO_EFF({send_msg, P, go, [ra_event]}, P == Pid2, Efx9),
     ok.
@@ -1358,6 +1366,7 @@ reject_publish_purge_test(_) ->
                     queue_resource => rabbit_misc:r("/", queue,
                         atom_to_binary(?FUNCTION_NAME, utf8)),
                     max_length => 2,
+                    max_in_memory_length => 0,
                     overflow_strategy => reject_publish}),
     %% simply registering should be ok when we're below limit
     Pid1 = test_util:fake_pid(node()),
@@ -1372,10 +1381,11 @@ reject_publish_purge_test(_) ->
     ok.
 
 reject_publish_applied_after_limit_test(_) ->
+    QName = rabbit_misc:r("/", queue, atom_to_binary(?FUNCTION_NAME, utf8)),
     InitConf = #{name => ?FUNCTION_NAME,
-                    queue_resource => rabbit_misc:r("/", queue,
-                        atom_to_binary(?FUNCTION_NAME, utf8))
-                   },
+                 max_in_memory_length => 0,
+                 queue_resource => QName
+                },
     State0 = init(InitConf),
     %% simply registering should be ok when we're below limit
     Pid1 = test_util:fake_pid(node()),
@@ -1387,10 +1397,10 @@ reject_publish_applied_after_limit_test(_) ->
     ?ASSERT_NO_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
     %% apply new config
     Conf = #{name => ?FUNCTION_NAME,
-             queue_resource => rabbit_misc:r("/", queue,
-                                             atom_to_binary(?FUNCTION_NAME, utf8)),
+             queue_resource => QName,
              max_length => 2,
              overflow_strategy => reject_publish,
+             max_in_memory_length => 0,
              dead_letter_handler => undefined
             },
     {State5, ok, Efx1} = apply(meta(5), rabbit_fifo:make_update_config(Conf), State4),
@@ -1458,11 +1468,15 @@ enq(Idx, MsgSeq, Msg, State) ->
     strip_reply(
         apply(meta(Idx), rabbit_fifo:make_enqueue(self(), MsgSeq, Msg), State)).
 
-deq(Idx, Cid, Settlement, State0) ->
-    {State, {dequeue, {MsgId, Msg}, _}, _} =
+deq(Idx, Cid, Settlement, Msg, State0) ->
+    {State, _, Effs} =
         apply(meta(Idx),
               rabbit_fifo:make_checkout(Cid, {dequeue, Settlement}, #{}),
               State0),
+    {value, {log, [_Idx], Fun}} = lists:search(fun(E) -> element(1, E) == log end, Effs),
+    [{reply, _From,
+      {wrap_reply, {dequeue, {MsgId, _}, _}}}] = Fun([Msg]),
+
     {State, {MsgId, Msg}}.
 
 check_n(Cid, Idx, N, State) ->
@@ -1696,10 +1710,10 @@ query_peek_test(_) ->
     ?assertEqual({error, no_message_at_pos}, rabbit_fifo:query_peek(1, State0)),
     {State1, _} = enq(1, 1, first, State0),
     {State2, _} = enq(2, 2, second, State1),
-    ?assertMatch({ok, [_, _ | first]}, rabbit_fifo:query_peek(1, State1)),
+    ?assertMatch({ok, [1, _ | _]}, rabbit_fifo:query_peek(1, State1)),
     ?assertEqual({error, no_message_at_pos}, rabbit_fifo:query_peek(2, State1)),
-    ?assertMatch({ok, [_, _ | first]}, rabbit_fifo:query_peek(1, State2)),
-    ?assertMatch({ok, [_, _ | second]}, rabbit_fifo:query_peek(2, State2)),
+    ?assertMatch({ok, [1, _ | _]}, rabbit_fifo:query_peek(1, State2)),
+    ?assertMatch({ok, [2, _ | _]}, rabbit_fifo:query_peek(2, State2)),
     ?assertEqual({error, no_message_at_pos}, rabbit_fifo:query_peek(3, State2)),
     ok.
 
