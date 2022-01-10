@@ -36,7 +36,7 @@
           %% This rabbit_fifo_dlx_worker does not have the concept of delivery tags because it settles (acks)
           %% message IDs directly back to the queue (and there is no AMQP consumer).
           consumed_msg_id :: non_neg_integer(),
-          content :: rabbit_types:decoded_content(),
+          delivery :: rabbit_types:delivery(),
           %% TODO Reason is already stored in first x-death header of #content.properties.#'P_basic'.headers
           %% So, we could remove this convenience field and lookup the 1st header when redelivering.
           reason :: rabbit_fifo_dlx:reason(),
@@ -249,8 +249,7 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
                pendings = Pendings,
                exchange_ref = DLXRef,
                routing_key = RKey} = State0) ->
-    #basic_message{content = Content, routing_keys = RKeys} = Msg =
-    rabbit_dead_letter:make_msg(ConsumedMsg, Reason, DLXRef, RKey, ConsumedQRef),
+    #basic_message{routing_keys = RKeys} = Msg = rabbit_dead_letter:make_msg(ConsumedMsg, Reason, DLXRef, RKey, ConsumedQRef),
     %% Field 'mandatory' is set to false because our module checks on its own whether the message is routable.
     Delivery = rabbit_basic:delivery(_Mandatory = false, _Confirm = true, Msg, OutSeq),
     TargetQs = case DLX of
@@ -306,7 +305,7 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
     Pend0 = #pending{
                consumed_msg_id = ConsumedMsgId,
                consumed_at = Now,
-               content = Content,
+               delivery = Delivery,
                reason = Reason
               },
     case TargetQs of
@@ -410,8 +409,8 @@ redeliver_messsages(#state{pendings = Pendings,
                       end, State, Pendings)
     end.
 
-redeliver(#pending{content = Content} = Pend, DLX, OldOutSeq,
-          #state{routing_key = undefined} = State) ->
+redeliver(#pending{delivery = #delivery{message = #basic_message{content = Content}}} = Pend,
+          DLX, OutSeq, #state{routing_key = undefined} = State) ->
     %% No dead-letter-routing-key defined for source quorum queue.
     %% Therefore use all of messages's original routing keys (which can include CC and BCC recipients).
     %% This complies with the behaviour of the rabbit_dead_letter module.
@@ -421,59 +420,30 @@ redeliver(#pending{content = Content} = Pend, DLX, OldOutSeq,
     {array, [{table, MostRecentDeath}|_]} = rabbit_misc:table_lookup(Headers, <<"x-death">>),
     {<<"routing-keys">>, array, Routes0} = lists:keyfind(<<"routing-keys">>, 1, MostRecentDeath),
     Routes = [Route || {longstr, Route} <- Routes0],
-    redeliver0(Pend, DLX, Routes, OldOutSeq, State);
-redeliver(Pend, DLX, OldOutSeq, #state{routing_key = DLRKey} = State) ->
-    redeliver0(Pend, DLX, [DLRKey], OldOutSeq, State).
+    redeliver0(Pend, DLX, Routes, OutSeq, State);
+redeliver(Pend, DLX, OutSeq, #state{routing_key = DLRKey} = State) ->
+    redeliver0(Pend, DLX, [DLRKey], OutSeq, State).
 
-%% Quorum queues maintain their own Raft sequene number mapping to the message sequence number (= Raft correlation ID).
-%% So, they would just send us a 'settled' queue action containing the correct message sequence number.
-%%
-%% Classic queues however maintain their state by mapping the message sequence number to pending and confirmed queues.
-%% While re-using the same message sequence number could work there as well, it just gets unnecssary complicated when
-%% different target queues settle two separate deliveries referring to the same message sequence number (and same basic message).
-%%
-%% Therefore, to keep things simple, create a brand new delivery, store it in our state and forget about the old delivery and
-%% sequence number.
-%%
-%% If a sequene number gets settled after settle_timeout, we can't map it anymore to the #pending{}. Hence, we ignore it.
-%%
-%% This can lead to issues when settle_timeout is too low and time to settle takes too long.
-%% For example, if settle_timeout is set to only 10 seconds, but settling a message takes always longer than 10 seconds
-%% (e.g. due to extremly slow hypervisor disks that ran out of credit), we will re-deliver the same message all over again
-%% leading to many duplicates in the target queue without ever acking the message back to the source discards queue.
-%%
-%% Therefore, set settle_timeout reasonably high (e.g. 2 minutes).
-%%
 %% TODO do not log per message?
 redeliver0(#pending{consumed_msg_id = ConsumedMsgId,
-                    content = Content,
-                    unsettled = Unsettled,
+                    delivery = #delivery{message = BasicMsg} = Delivery0,
+                    unsettled = Unsettled0,
                     settled = Settled,
                     publish_count = PublishCount,
                     reason = Reason} = Pend0,
-           DLX, DLRKeys, OldOutSeq,
-           #state{next_out_seq = OutSeq,
-                  queue_ref = QRef,
+           DLX, DLRKeys, OutSeq,
+           #state{queue_ref = QRef,
                   pendings = Pendings0,
                   exchange_ref = DLXRef,
                   settle_timeout = SettleTimeout} = State0) when is_list(DLRKeys) ->
-    BasicMsg = #basic_message{exchange_name = DLXRef,
-                              routing_keys  = DLRKeys,
-                              %% BCC Header was already stripped previously
-                              content       = Content,
-                              id            = rabbit_guid:gen(),
-                              is_persistent = rabbit_basic:is_message_persistent(Content)
-                             },
-    %% Field 'mandatory' is set to false because our module checks on its own whether the message is routable.
-    Delivery = rabbit_basic:delivery(_Mandatory = false, _Confirm = true, BasicMsg, OutSeq),
-    %%TODO Filter such that we re-delivery only to classic queues and NEW quorum / stream queues.
-    %% This is required because quorum and stream queue clients have their own re-send mechanisms
-    %% and we don't want to re-send on 2 levels ending up with many duplicate messages.
-    %% (Take care to not delete old messages in this case such that we'll receive acks from target quorum and stream
-    %% queues.)
+    Delivery = Delivery0#delivery{message = BasicMsg#basic_message{exchange_name = DLXRef,
+                                                                   routing_keys  = DLRKeys}},
     RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
-    %% Do not re-deliver to queues for which we already received a publisher confirm.
-    RouteToQs1 = RouteToQs0 -- Settled,
+    %% Do not redeliver message to a target queue
+    %% 1. for which we already received a publisher confirm, or
+    %% 2. whose queue client redelivers on our behalf.
+    Unsettled = RouteToQs0 -- Settled,
+    RouteToQs1 = Unsettled -- clients_redeliver(Unsettled0),
     {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, BasicMsg, RouteToQs1),
     Prefix = io_lib:format("Message has not received required publisher confirm(s). "
                            "Received confirm from: [~s]. "
@@ -482,8 +452,8 @@ redeliver0(#pending{consumed_msg_id = ConsumedMsgId,
                            "message_sequence_number=~b "
                            "consumed_message_sequence_number=~b "
                            "publish_count=~b.",
-                           [strings(Settled), strings(Unsettled), SettleTimeout,
-                            OldOutSeq, ConsumedMsgId, PublishCount]),
+                           [strings(Settled), strings(Unsettled0), SettleTimeout,
+                            OutSeq, ConsumedMsgId, PublishCount]),
     case {RouteToQs, Cycles, Settled} of
         {[], [], []} ->
             rabbit_log:warning("~s Failed to re-deliver this message because no queue is bound "
@@ -518,12 +488,10 @@ redeliver0(#pending{consumed_msg_id = ConsumedMsgId,
             end,
             Pend = Pend0#pending{publish_count = PublishCount + 1,
                                  last_published_at = os:system_time(millisecond),
+                                 delivery = Delivery,
                                  %% override 'unsettled' because topology could have changed
-                                 unsettled = RouteToQs},
-            Pendings1 = maps:remove(OldOutSeq, Pendings0),
-            Pendings = maps:put(OutSeq, Pend, Pendings1),
-            State = State0#state{next_out_seq = OutSeq + 1,
-                                 pendings = Pendings},
+                                 unsettled = Unsettled},
+            State = State0#state{pendings = maps:update(OutSeq, Pend, Pendings0)},
             deliver_to_queues(Delivery, RouteToQs, State)
     end.
 
@@ -596,3 +564,19 @@ format_pending(#pending{consumed_msg_id = ConsumedMsgId,
       publish_count => PublishCount,
       last_published_at => LastPublishedAt,
       consumed_at => ConsumedAt}.
+
+%% Returns queues whose queue clients take care of redelivering messages.
+clients_redeliver(QNames) ->
+    Qs = lists:filter(fun(Q) ->
+                              case amqqueue:get_type(Q) of
+                                  rabbit_quorum_queue ->
+                                      %% If Raft command (#enqueue{}) does not get applied
+                                      %% rabbit_fifo_client will resend.
+                                      true;
+                                  rabbit_stream_queue ->
+                                      true;
+                                  _ ->
+                                      false
+                              end
+                      end, rabbit_amqqueue:lookup_many(QNames)),
+    lists:map(fun amqqueue:get_name/1, Qs).
