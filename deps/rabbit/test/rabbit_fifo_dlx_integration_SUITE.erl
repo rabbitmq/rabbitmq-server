@@ -94,17 +94,23 @@ init_per_testcase(Testcase, Config) ->
                                             {dead_letter_exchange, <<Q/binary, "_dlx">>},
                                             {target_queue_1, <<Q/binary, "_target_1">>},
                                             {target_queue_2, <<Q/binary, "_target_2">>},
-                                            {target_queue_3, <<Q/binary, "_target_3">>}
+                                            {target_queue_3, <<Q/binary, "_target_3">>},
+                                            {target_queue_4, <<Q/binary, "_target_4">>},
+                                            {target_queue_5, <<Q/binary, "_target_5">>},
+                                            {target_queue_6, <<Q/binary, "_target_6">>}
                                            ]),
     rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
-    #'queue.delete_ok'{message_count = 0} = amqp_channel:call(Ch, #'queue.delete'{queue = ?config(source_queue, Config)}),
-    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = ?config(target_queue_1, Config)}),
-    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = ?config(target_queue_2, Config)}),
-    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = ?config(target_queue_3, Config)}),
+    delete_queue(Ch, ?config(source_queue, Config)),
+    delete_queue(Ch, ?config(target_queue_1, Config)),
+    delete_queue(Ch, ?config(target_queue_2, Config)),
+    delete_queue(Ch, ?config(target_queue_3, Config)),
+    delete_queue(Ch, ?config(target_queue_4, Config)),
+    delete_queue(Ch, ?config(target_queue_5, Config)),
+    delete_queue(Ch, ?config(target_queue_6, Config)),
     #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = ?config(dead_letter_exchange, Config)}),
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
@@ -117,24 +123,16 @@ declare_topology(Config, AdditionalQArgs) ->
     SourceQ = ?config(source_queue, Config),
     TargetQ = ?config(target_queue_1, Config),
     DLX = ?config(dead_letter_exchange, Config),
-    QArgs = [
-             {<<"x-dead-letter-exchange">>, longstr, DLX},
-             {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
-             {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
-             {<<"x-overflow">>, longstr, <<"reject-publish">>},
-             {<<"x-queue-type">>, longstr, <<"quorum">>}
-            ],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = SourceQ,
-                                                     durable   = true,
-                                                     arguments = lists:keymerge(1, AdditionalQArgs, QArgs)}),
+    declare_queue(Ch, SourceQ, lists:keymerge(1, AdditionalQArgs,
+                                              [{<<"x-dead-letter-exchange">>, longstr, DLX},
+                                               {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
+                                               {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                               {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                               {<<"x-queue-type">>, longstr, <<"quorum">>}
+                                              ])),
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLX}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = TargetQ}),
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
-                                                  queue = TargetQ,
-                                                  exchange = DLX,
-                                                  routing_key = <<"k1">>
-                                                 }),
+    declare_queue(Ch, TargetQ, []),
+    bind_queue(Ch, TargetQ, DLX, <<"k1">>),
     {Server, Ch, SourceQ, TargetQ}.
 
 %% Test that at-least-once dead-lettering works for message dead-lettered due to message TTL.
@@ -208,19 +206,15 @@ target_queue_not_bound(Config) ->
     SourceQ = ?config(source_queue, Config),
     TargetQ = ?config(target_queue_1, Config),
     DLX = ?config(dead_letter_exchange, Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = SourceQ,
-                                                     durable   = true,
-                                                     arguments = [
-                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
-                                                                  {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
-                                                                  {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
-                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>},
-                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
-                                                                 ]
-                                                    }),
+    declare_queue(Ch, SourceQ, [
+                                {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
+                               ]),
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLX}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = TargetQ}),
+    declare_queue(Ch, TargetQ, []),
     Msg = <<"msg">>,
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = SourceQ},
@@ -234,11 +228,7 @@ target_queue_not_bound(Config) ->
     consistently(?_assertMatch([{1, _}],
                                dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
     %% Fix dead-letter toplology misconfiguration.
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
-                                                  queue = TargetQ,
-                                                  exchange = DLX,
-                                                  routing_key = <<"k1">>
-                                                 }),
+    bind_queue(Ch, TargetQ, DLX, <<"k1">>),
     %% Binding from target queue to DLX is now present.
     %% Therefore, message should be delivered to target queue and acked to source queue.
     eventually(?_assertEqual([{0, 0}],
@@ -256,29 +246,17 @@ target_queue_deleted(Config) ->
     SourceQ = ?config(source_queue, Config),
     TargetQ = ?config(target_queue_1, Config),
     DLX = ?config(dead_letter_exchange, Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = SourceQ,
-                                                     durable   = true,
-                                                     arguments = [
-                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
-                                                                  {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
-                                                                  {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
-                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>},
-                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
-                                                                 ]
-                                                    }),
+    declare_queue(Ch, SourceQ, [
+                                {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
+                               ]),
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLX}),
     %% Make target queue a quorum queue to provoke sending an 'eol' message to dlx worker.
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue = TargetQ,
-                                                     durable   = true,
-                                                     arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]
-                                                    }),
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
-                                                  queue = TargetQ,
-                                                  exchange = DLX,
-                                                  routing_key = <<"k1">>
-                                                 }),
+    declare_queue(Ch, TargetQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    bind_queue(Ch, TargetQ, DLX, <<"k1">>),
     Msg1 = <<"m1">>,
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = SourceQ},
@@ -302,12 +280,8 @@ target_queue_deleted(Config) ->
                                dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
     %% Message should be delivered once target queue is recreated.
     %% (This time we simply create a classic target queue.)
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = TargetQ}),
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
-                                                  queue = TargetQ,
-                                                  exchange = DLX,
-                                                  routing_key = <<"k1">>
-                                                 }),
+    declare_queue(Ch, TargetQ, []),
+    bind_queue(Ch, TargetQ, DLX, <<"k1">>),
     eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
                              amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})), 500, 5),
     eventually(?_assertEqual([{0, 0}],
@@ -322,18 +296,14 @@ dlx_missing(Config) ->
     SourceQ = ?config(source_queue, Config),
     TargetQ = ?config(target_queue_1, Config),
     DLX = ?config(dead_letter_exchange, Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = SourceQ,
-                                                     durable   = true,
-                                                     arguments = [
-                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
-                                                                  {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
-                                                                  {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
-                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>},
-                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
-                                                                 ]
-                                                    }),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = TargetQ}),
+    declare_queue(Ch, SourceQ, [
+                                {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
+                               ]),
+    declare_queue(Ch, TargetQ, []),
     Msg = <<"msg">>,
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = SourceQ},
@@ -347,11 +317,7 @@ dlx_missing(Config) ->
                                dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
     %% Fix dead-letter toplology misconfiguration.
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLX}),
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
-                                                  queue = TargetQ,
-                                                  exchange = DLX,
-                                                  routing_key = <<"k1">>
-                                                 }),
+    bind_queue(Ch, TargetQ, DLX, <<"k1">>),
     %% DLX is now present.
     %% Therefore, message should be delivered to target queue and acked to source queue.
     eventually(?_assertEqual([{0, 0}],
@@ -369,19 +335,15 @@ stats(Config) ->
     SourceQ = ?config(source_queue, Config),
     TargetQ = ?config(target_queue_1, Config),
     DLX = ?config(dead_letter_exchange, Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = SourceQ,
-                                                     durable   = true,
-                                                     arguments = [
-                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
-                                                                  {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
-                                                                  {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
-                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>},
-                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
-                                                                 ]
-                                                    }),
+    declare_queue(Ch, SourceQ, [
+                                {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                {<<"x-dead-letter-routing-key">>, longstr, <<"k1">>},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
+                               ]),
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLX}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = TargetQ}),
+    declare_queue(Ch, TargetQ, []),
     Msg = <<"12">>, %% 2 bytes per message
     [ok = amqp_channel:cast(Ch,
                             #'basic.publish'{routing_key = SourceQ},
@@ -408,11 +370,7 @@ stats(Config) ->
                    }],
                  dirty_query([Server], RaName, fun rabbit_fifo:overview/1)),
     %% Fix dead-letter toplology misconfiguration.
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
-                                                  queue = TargetQ,
-                                                  exchange = DLX,
-                                                  routing_key = <<"k1">>
-                                                 }),
+    bind_queue(Ch, TargetQ, DLX, <<"k1">>),
     %% Binding from target queue to DLX is now present.
     %% Therefore, all messages should be delivered to target queue and acked to source queue.
     %% Therefore, all stats should be decremented back to 0.
@@ -438,16 +396,12 @@ drop_head_falls_back_to_at_most_once(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     SourceQ = ?config(source_queue, Config),
     DLX = ?config(dead_letter_exchange, Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = SourceQ,
-                                                     durable   = true,
-                                                     arguments = [
-                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
-                                                                  {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
-                                                                  {<<"x-overflow">>, longstr, <<"drop-head">>},
-                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
-                                                                 ]
-                                                    }),
+    declare_queue(Ch, SourceQ, [
+                                {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"drop-head">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
+                               ]),
     consistently(
       ?_assertMatch(
          [_, {active, 0}, _, _],
@@ -460,15 +414,11 @@ switch_strategy(Config) ->
     SourceQ = ?config(source_queue, Config),
     RaName = ra_name(SourceQ),
     DLX = ?config(dead_letter_exchange, Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = SourceQ,
-                                                     durable   = true,
-                                                     arguments = [
-                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
-                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>},
-                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
-                                                                 ]
-                                                    }),
+    declare_queue(Ch, SourceQ, [
+                                {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
+                               ]),
     %% default strategy is at-most-once
     assert_active_dlx_workers(0, Config, Server),
     ok = rabbit_ct_broker_helpers:set_policy(Config, Server, <<"my-policy">>, SourceQ, <<"queues">>,
@@ -510,16 +460,20 @@ switch_strategy(Config) ->
 %%
 %% Lesson learnt by writing this test:
 %% If there are multiple target queues, messages will not be sent to target non-mirrored classic queues
-%% it their host node is temporarily down because these queues get (temporarily) deleted. See:
+%% (even if durable) when their host node is temporarily down because these queues get (temporarily) deleted. See:
 %% https://github.com/rabbitmq/rabbitmq-server/blob/cf76b479300b767b8ea450293d096cbf729ed734/deps/rabbit/src/rabbit_amqqueue.erl#L1955-L1964
 many_target_queues(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
     SourceQ = ?config(source_queue, Config),
     RaName = ra_name(SourceQ),
     TargetQ1 = ?config(target_queue_1, Config),
     TargetQ2 = ?config(target_queue_2, Config),
     TargetQ3 = ?config(target_queue_3, Config),
+    TargetQ4 = ?config(target_queue_4, Config),
+    TargetQ5 = ?config(target_queue_5, Config),
+    TargetQ6 = ?config(target_queue_6, Config),
     DLX = ?config(dead_letter_exchange, Config),
     DLRKey = <<"k1">>,
     %% Create topology:
@@ -527,51 +481,43 @@ many_target_queues(Config) ->
     %% * target non-mirrored classic queue on node 1
     %% * target quorum queue with 3 replicas
     %% * target stream queue with 3 replicas
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = SourceQ,
-                                                     durable   = true,
-                                                     arguments = [
-                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
-                                                                  {<<"x-dead-letter-routing-key">>, longstr, DLRKey},
-                                                                  {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
-                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>},
-                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>},
-                                                                  {<<"x-quorum-initial-group-size">>, long, 1}
-                                                                 ]
-                                                    }),
+    %% * target mirrored classic queue with 3 replicas (leader on node 1)
+    %% * target mirrored classic queue with 1 replica (leader on node 2)
+    %% * target mirrored classic queue with 3 replica (leader on node 2)
+    declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, DLX},
+                                {<<"x-dead-letter-routing-key">>, longstr, DLRKey},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>},
+                                {<<"x-quorum-initial-group-size">>, long, 1}
+                               ]),
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLX}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = TargetQ1}),
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
-                                                  queue = TargetQ1,
-                                                  exchange = DLX,
-                                                  routing_key = DLRKey
-                                                 }),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = TargetQ2,
-                                                     durable   = true,
-                                                     arguments = [
-                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>},
-                                                                  {<<"x-quorum-initial-group-size">>, long, 3}
-                                                                 ]
-                                                    }),
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
-                                                  queue = TargetQ2,
-                                                  exchange = DLX,
-                                                  routing_key = DLRKey
-                                                 }),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = TargetQ3,
-                                                     durable   = true,
-                                                     arguments = [
-                                                                  {<<"x-queue-type">>, longstr, <<"stream">>},
-                                                                  {<<"x-initial-cluster-size">>, long, 3}
-                                                                 ]
-                                                    }),
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{
-                                                  queue = TargetQ3,
-                                                  exchange = DLX,
-                                                  routing_key = DLRKey
-                                                 }),
+    declare_queue(Ch, TargetQ1, []),
+    bind_queue(Ch, TargetQ1, DLX, DLRKey),
+    declare_queue(Ch, TargetQ2, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                 {<<"x-quorum-initial-group-size">>, long, 3}
+                                ]),
+    bind_queue(Ch, TargetQ2, DLX, DLRKey),
+    declare_queue(Ch, TargetQ3, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-initial-cluster-size">>, long, 3}
+                                ]),
+    bind_queue(Ch, TargetQ3, DLX, DLRKey),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server1, <<"mirror-q4">>, TargetQ4, <<"queues">>,
+                                             [{<<"ha-mode">>, <<"all">>},
+                                              {<<"queue-master-locator">>, <<"client-local">>}]),
+    declare_queue(Ch, TargetQ4, []),
+    bind_queue(Ch, TargetQ4, DLX, DLRKey),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server1, <<"mirror-q5">>, TargetQ5, <<"queues">>,
+                                             [{<<"ha-mode">>, <<"exactly">>},
+                                              {<<"ha-params">>, 1},
+                                              {<<"queue-master-locator">>, <<"client-local">>}]),
+    declare_queue(Ch2, TargetQ5, []),
+    bind_queue(Ch2, TargetQ5, DLX, DLRKey),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server1, <<"mirror-q6">>, TargetQ6, <<"queues">>,
+                                             [{<<"ha-mode">>, <<"all">>},
+                                              {<<"queue-master-locator">>, <<"client-local">>}]),
+    declare_queue(Ch2, TargetQ6, []),
+    bind_queue(Ch2, TargetQ6, DLX, DLRKey),
     Msg1 = <<"m1">>,
     ok = amqp_channel:cast(Ch,
                            #'basic.publish'{routing_key = SourceQ},
@@ -603,6 +549,12 @@ many_target_queues(Config) ->
     after 2000 ->
               exit(deliver_timeout)
     end,
+    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
+                             amqp_channel:call(Ch, #'basic.get'{queue = TargetQ4}))),
+    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
+                             amqp_channel:call(Ch2, #'basic.get'{queue = TargetQ5}))),
+    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
+                             amqp_channel:call(Ch2, #'basic.get'{queue = TargetQ6}))),
     eventually(?_assertEqual([{0, 0}],
                              dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1))),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server3),
@@ -623,9 +575,6 @@ many_target_queues(Config) ->
                  amqp_channel:call(Ch, #'basic.get'{queue = TargetQ1})),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server3),
-    %%TODO By end of this test, there will be many duplicate dead-letter messages in the target quorum queue and
-    %% target stream queue since both their queue clients and rabbit_fifo_dlx_worker re-try.
-    %% Possible solution is to have rabbit_fifo_dlx_worker only resend for classic target queues?
     eventually(?_assertEqual([{0, 0}],
                              dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 6),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
@@ -636,7 +585,14 @@ many_target_queues(Config) ->
             ok
     after 0 ->
               exit(deliver_timeout)
-    end.
+    end,
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ4})),
+    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
+                             amqp_channel:call(Ch, #'basic.get'{queue = TargetQ5}))),
+    %%TODO why is the 1st message (m1) a duplicate?
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
+                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ6}), 2, 200).
 
 %% Test that there is a single active rabbit_fifo_dlx_worker that is co-located with the quorum queue leader.
 single_dlx_worker(Config) ->
@@ -644,16 +600,12 @@ single_dlx_worker(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     SourceQ = ?config(source_queue, Config),
     DLX = ?config(dead_letter_exchange, Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{
-                                                     queue     = SourceQ,
-                                                     durable   = true,
-                                                     arguments = [
-                                                                  {<<"x-dead-letter-exchange">>, longstr, DLX},
-                                                                  {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
-                                                                  {<<"x-overflow">>, longstr, <<"reject-publish">>},
-                                                                  {<<"x-queue-type">>, longstr, <<"quorum">>}
-                                                                 ]
-                                                    }),
+    declare_queue(Ch, SourceQ, [
+                                {<<"x-dead-letter-exchange">>, longstr, DLX},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
+                               ]),
     ?assertMatch(
        [[_, {active, 1}, _, _],
         [_, {active, 0}, _, _],
@@ -688,6 +640,24 @@ assert_active_dlx_workers(N, Config, Server) ->
     ?assertMatch(
        [_, {active, N}, _, _],
        rabbit_ct_broker_helpers:rpc(Config, Server, supervisor, count_children, [rabbit_fifo_dlx_sup], 1000)).
+
+declare_queue(Channel, Queue, Args) ->
+    #'queue.declare_ok'{} = amqp_channel:call(Channel, #'queue.declare'{
+                                                          queue     = Queue,
+                                                          durable   = true,
+                                                          arguments = Args
+                                                         }).
+
+bind_queue(Channel, Queue, Exchange, RoutingKey) ->
+    #'queue.bind_ok'{} = amqp_channel:call(Channel, #'queue.bind'{
+                                                       queue = Queue,
+                                                       exchange = Exchange,
+                                                       routing_key = RoutingKey
+                                                      }).
+
+delete_queue(Channel, Queue) ->
+    %% We implicitly test here that we don't end up with duplicate messages.
+    #'queue.delete_ok'{message_count = 0} = amqp_channel:call(Channel, #'queue.delete'{queue = Queue}).
 
 %%TODO move to rabbitmq_ct_helpers/include/rabbit_assert.hrl
 consistently(TestObj) ->
