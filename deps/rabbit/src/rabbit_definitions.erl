@@ -257,15 +257,26 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
         concurrent_for_all(permissions,        ActingUser, Map, fun add_permission/2),
         concurrent_for_all(topic_permissions,  ActingUser, Map, fun add_topic_permission/2),
 
-        concurrent_for_all(queues,             ActingUser, Map, fun add_queue/2),
         concurrent_for_all(exchanges,          ActingUser, Map, fun add_exchange/2),
-        concurrent_for_all(bindings,           ActingUser, Map, fun add_binding/2),
 
         sequential_for_all(global_parameters,  ActingUser, Map, fun add_global_parameter/2),
         %% importing policies concurrently can be unsafe as queues will be getting
         %% potentially out of order notifications of applicable policy changes
         sequential_for_all(policies,           ActingUser, Map, fun add_policy/2),
         sequential_for_all(parameters,         ActingUser, Map, fun add_parameter/2),
+
+        rabbit_nodes:if_reached_target_cluster_size(
+            fun() ->
+                concurrent_for_all(queues,   ActingUser, Map, fun add_queue/2),
+                concurrent_for_all(bindings, ActingUser, Map, fun add_binding/2)
+            end,
+
+            fun() ->
+                rabbit_log:info("There are fewer than target cluster size (~d) nodes online,"
+                                " skipping queue and binding import from definitions",
+                                [rabbit_nodes:target_cluster_size_hint()])
+            end
+        ),
 
         SuccessFun(),
         ok
@@ -284,14 +295,24 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_binary(VHost) ->
     try
         validate_limits(Map, VHost),
 
-        concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
         concurrent_for_all(exchanges,  ActingUser, Map, VHost, fun add_exchange/3),
-        concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
-
         sequential_for_all(parameters, ActingUser, Map, VHost, fun add_parameter/3),
         %% importing policies concurrently can be unsafe as queues will be getting
         %% potentially out of order notifications of applicable policy changes
         sequential_for_all(policies,   ActingUser, Map, VHost, fun add_policy/3),
+
+        rabbit_nodes:if_reached_target_cluster_size(
+            fun() ->
+                concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
+                concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3)
+            end,
+
+            fun() ->
+                rabbit_log:info("There are fewer than target cluster size (~d) nodes online,"
+                                " skipping queue and binding import from definitions",
+                                [rabbit_nodes:target_cluster_size_hint()])
+            end
+        ),
 
         SuccessFun()
     catch {error, E} -> {error, format(E)};
@@ -310,14 +331,24 @@ apply_defs(Map, ActingUser, SuccessFun, ErrorFun, VHost) ->
     try
         validate_limits(Map, VHost),
 
-        concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
-        concurrent_for_all(exchanges,  ActingUser, Map, VHost, fun add_exchange/3),
         concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3),
-
         sequential_for_all(parameters, ActingUser, Map, VHost, fun add_parameter/3),
         %% importing policies concurrently can be unsafe as queues will be getting
         %% potentially out of order notifications of applicable policy changes
         sequential_for_all(policies,   ActingUser, Map, VHost, fun add_policy/3),
+
+        rabbit_nodes:if_reached_target_cluster_size(
+            fun() ->
+                concurrent_for_all(queues,     ActingUser, Map, VHost, fun add_queue/3),
+                concurrent_for_all(bindings,   ActingUser, Map, VHost, fun add_binding/3)
+            end,
+
+            fun() ->
+                rabbit_log:info("There are fewer than target cluster size (~d) nodes online,"
+                                " skipping queue and binding import from definitions",
+                                [rabbit_nodes:target_cluster_size_hint()])
+            end
+        ),
 
         SuccessFun()
     catch {error, E} -> ErrorFun(format(E));
