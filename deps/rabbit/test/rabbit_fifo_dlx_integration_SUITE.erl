@@ -32,6 +32,7 @@ groups() ->
                         target_queue_not_bound,
                         target_queue_deleted,
                         dlx_missing,
+                        cycle,
                         stats,
                         drop_head_falls_back_to_at_most_once,
                         switch_strategy
@@ -198,7 +199,7 @@ assert_dlx_headers(Headers, Reason, SourceQ) ->
     end.
 
 %% Test that message is not lost despite no route from dead-letter exchange to target queue.
-%% Once, the route becomes available, the message is delivered to the target queue
+%% Once the route becomes available, the message is delivered to the target queue
 %% and acked to the source quorum queue.
 target_queue_not_bound(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -288,7 +289,7 @@ target_queue_deleted(Config) ->
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))).
 
 %% Test that message is not lost when configured dead-letter exchange does not exist.
-%% Once, the exchange gets declared, the message is delivered to the target queue
+%% Once the exchange gets declared, the message is delivered to the target queue
 %% and acked to the source quorum queue.
 dlx_missing(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -322,11 +323,48 @@ dlx_missing(Config) ->
     %% Therefore, message should be delivered to target queue and acked to source queue.
     eventually(?_assertEqual([{0, 0}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)),
-               500, 10),
+               500, 8),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{expiration = undefined},
                                                payload = Msg}},
                  amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})).
 
+%% Test that message is not lost when it cycles.
+%% Once the cycle is resolved, the message is delivered to the target queue and acked to
+%% the source quorum queue.
+cycle(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SourceQ = ?config(source_queue, Config),
+    TargetQ = ?config(target_queue_1, Config),
+    declare_queue(Ch, SourceQ, [
+                                {<<"x-dead-letter-exchange">>, longstr, <<"">>},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
+                               ]),
+    Msg = <<"msg">>,
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = SourceQ},
+                           #amqp_msg{props   = #'P_basic'{expiration = <<"0">>},
+                                     payload = Msg}),
+    RaName = ra_name(SourceQ),
+    %% Message cycled when it was dead-lettered:
+    %% source queue -> default exchange -> source queue
+    %% Therefore, 1 message should be kept in discards queue.
+    eventually(?_assertMatch([{1, _}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    consistently(?_assertMatch([{1, _}],
+                               dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    %% Fix the cycle such that dead-lettering flows like this:
+    %% source queue -> default exchange -> target queue
+    declare_queue(Ch, TargetQ, []),
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, <<"my-policy">>, SourceQ, <<"queues">>,
+                                             [{<<"dead-letter-routing-key">>, TargetQ}]),
+    eventually(?_assertEqual([{0, 0}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)),
+               500, 8),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})).
 
 %% Test that rabbit_fifo_dlx tracks statistics correctly.
 stats(Config) ->
