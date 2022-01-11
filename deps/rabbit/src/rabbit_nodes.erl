@@ -14,7 +14,8 @@
          await_running_count/2, is_single_node_cluster/0,
          boot/0]).
 -export([persistent_cluster_id/0, seed_internal_cluster_id/0, seed_user_provided_cluster_name/0]).
--export([all/0, all_running_with_hashes/0, target_cluster_size_hint/0, reached_target_cluster_size/0]).
+-export([all/0, all_running_with_hashes/0, target_cluster_size_hint/0, reached_target_cluster_size/0,
+         if_reached_target_cluster_size/2]).
 -export([lock_id/1, lock_retries/0]).
 
 -include_lib("kernel/include/inet.hrl").
@@ -82,7 +83,7 @@ is_process_running(Node, Process) ->
 -spec cluster_name() -> binary().
 
 cluster_name() ->
-    case rabbit_runtime_parameters:value_global(cluster_name) of 
+    case rabbit_runtime_parameters:value_global(cluster_name) of
         not_found -> cluster_name_default();
         Name -> Name
     end.
@@ -183,6 +184,16 @@ target_cluster_size_hint() ->
 reached_target_cluster_size() ->
     running_count() >= target_cluster_size_hint().
 
+-spec if_reached_target_cluster_size(ConditionSatisfiedFun :: fun(), ConditionNotSatisfiedFun :: fun()) -> boolean().
+if_reached_target_cluster_size(ConditionSatisfiedFun, ConditionNotSatisfiedFun) ->
+    case reached_target_cluster_size() of
+        true ->
+            ConditionSatisfiedFun(),
+            true;
+        false ->
+            ConditionNotSatisfiedFun(),
+            false
+    end.
 
 -spec lock_id(Node :: node()) -> {ResourceId :: string(), LockRequesterId :: node()}.
 lock_id(Node) ->
