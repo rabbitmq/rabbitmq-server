@@ -54,6 +54,7 @@ jobs:
 
           for remote build execution (RBE) with BuildBuddy
         labels: |
+          backport-v3.10.x
           backport-v3.9.x
           backport-v3.8.x
         branch: bump-rbe-${{ matrix.short_version }}
