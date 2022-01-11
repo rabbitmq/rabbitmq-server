@@ -83,7 +83,8 @@
           %% redelivering messages for which not all publisher confirms were received.
           %% If there are no pending messages, this timer will eventually be cancelled to allow
           %% this worker to hibernate.
-          timer :: undefined | reference()
+          timer :: undefined | reference(),
+          logged = #{} :: map()
          }).
 
 % -type state() :: #state{}.
@@ -121,7 +122,7 @@ terminate(_Reason, State) ->
     cancel_timer(State).
 
 handle_call(Request, From, State) ->
-    rabbit_log:warning("~s received unhandled call from ~p: ~p", [?MODULE, From, Request]),
+    rabbit_log:info("~s received unhandled call from ~p: ~p", [?MODULE, From, Request]),
     {noreply, State}.
 
 handle_cast({queue_event, QRef, {_From, {machine, lookup_topology}}},
@@ -157,7 +158,7 @@ handle_cast(settle_timeout, State0) ->
     State = State0#state{timer = undefined},
     redeliver_and_ack(State);
 handle_cast(Request, State) ->
-    rabbit_log:warning("~s received unhandled cast ~p", [?MODULE, Request]),
+    rabbit_log:info("~s received unhandled cast ~p", [?MODULE, Request]),
     {noreply, State}.
 
 redeliver_and_ack(State0) ->
@@ -189,7 +190,7 @@ handle_info({'DOWN', _MRef, process, QPid, Reason},
             end,
     {noreply, State};
 handle_info(Info, State) ->
-    rabbit_log:warning("~s received unhandled info ~p", [?MODULE, Info]),
+    rabbit_log:info("~s received unhandled info ~p", [?MODULE, Info]),
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -217,31 +218,25 @@ handle_queue_actions(Actions, State0) ->
           ({rejected, QRef, MsgSeqNos}, S0) ->
               rabbit_log:debug("Ignoring rejected messages ~p from ~s", [MsgSeqNos, rabbit_misc:rs(QRef)]),
               S0;
-          ({queue_down, QRef}, S0) ->
+          ({queue_down, _QRef}, S0) ->
               %% target classic queue is down, but not deleted
-              rabbit_log:debug("Ignoring DOWN from ~s", [rabbit_misc:rs(QRef)]),
               S0
       end, State0, Actions).
 
-handle_deliver(Msgs, #state{queue_ref = QRef} = State) when is_list(Msgs) ->
-    DLX = lookup_dlx(State),
+handle_deliver(Msgs, #state{queue_ref = QRef} = State0)
+  when is_list(Msgs) ->
+    {DLX, State} = lookup_dlx(State0),
     lists:foldl(fun({_QRef, MsgId, Msg, Reason}, S) ->
                         forward(Msg, MsgId, QRef, DLX, Reason, S)
                 end, State, Msgs).
 
-lookup_dlx(#state{exchange_ref = DLXRef,
-                  queue_ref = QRef}) ->
+lookup_dlx(#state{exchange_ref = DLXRef} = State0) ->
     case rabbit_exchange:lookup(DLXRef) of
         {error, not_found} ->
-            rabbit_log:warning("Cannot forward any dead-letter messages from source quorum ~s because its configured "
-                               "dead-letter-exchange ~s does not exist. "
-                               "Either create the configured dead-letter-exchange or re-configure "
-                               "the dead-letter-exchange policy for the source quorum queue to prevent "
-                               "dead-lettered messages from piling up in the source quorum queue.",
-                               [rabbit_misc:rs(QRef), rabbit_misc:rs(DLXRef)]),
-            not_found;
+            State = log_missing_dlx_once(State0),
+            {not_found, State};
         {ok, X} ->
-            X
+            {X, State0}
     end.
 
 forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
@@ -250,58 +245,25 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
                exchange_ref = DLXRef,
                routing_key = RKey} = State0) ->
     #basic_message{routing_keys = RKeys} = Msg = rabbit_dead_letter:make_msg(ConsumedMsg, Reason, DLXRef, RKey, ConsumedQRef),
-    %% Field 'mandatory' is set to false because our module checks on its own whether the message is routable.
+    %% Field 'mandatory' is set to false because we check ourselves whether the message is routable.
     Delivery = rabbit_basic:delivery(_Mandatory = false, _Confirm = true, Msg, OutSeq),
-    TargetQs = case DLX of
-                   not_found ->
-                       [];
-                   _ ->
-                       RouteToQs = rabbit_exchange:route(DLX, Delivery),
-                       case rabbit_dead_letter:detect_cycles(Reason, Msg, RouteToQs) of
-                           {[], []} ->
-                               rabbit_log:warning("Cannot deliver message with sequence number ~b "
-                                                  "(for consumed message sequence number ~b) "
-                                                  "because no queue is bound to dead-letter ~s with routing keys ~p.",
-                                                  [OutSeq, ConsumedMsgId, rabbit_misc:rs(DLXRef), RKeys]),
-                               [];
-                           {Qs, []} ->
-                               %% the "normal" case, i.e. no dead-letter-topology misconfiguration
-                               Qs;
-                           {[], Cycles} ->
-                               %%TODO introduce structured logging in rabbit_log by using type logger:report
-                               rabbit_log:warning("Cannot route to any queues. Detected dead-letter queue cycles. "
-                                                  "Fix the dead-letter routing topology to prevent dead-letter messages from "
-                                                  "piling up in source quorum queue. "
-                                                  "outgoing_sequene_number=~b "
-                                                  "consumed_message_sequence_number=~b "
-                                                  "consumed_queue=~s "
-                                                  "dead_letter_exchange=~s "
-                                                  "effective_dead_letter_routing_keys=~p "
-                                                  "routed_to_queues=~s "
-                                                  "dead_letter_queue_cycles=~p",
-                                                  [OutSeq, ConsumedMsgId, rabbit_misc:rs(ConsumedQRef),
-                                                   rabbit_misc:rs(DLXRef), RKeys, strings(RouteToQs), Cycles]),
-                               [];
-                           {Qs, Cycles} ->
-                               rabbit_log:warning("Detected dead-letter queue cycles. "
-                                                  "Fix the dead-letter routing topology. "
-                                                  "outgoing_sequene_number=~b "
-                                                  "consumed_message_sequence_number=~b "
-                                                  "consumed_queue=~s "
-                                                  "dead_letter_exchange=~s "
-                                                  "effective_dead_letter_routing_keys=~p "
-                                                  "routed_to_queues_desired=~s "
-                                                  "routed_to_queues_effective=~s "
-                                                  "dead_letter_queue_cycles=~p",
-                                                  [OutSeq, ConsumedMsgId, rabbit_misc:rs(ConsumedQRef),
-                                                   rabbit_misc:rs(DLXRef), RKeys, strings(RouteToQs), strings(Qs), Cycles]),
-                               %% Ignore the target queues resulting in cycles.
-                               %% We decide it's good enough to deliver to only routable target queues.
-                               Qs
-                       end
-               end,
+    {TargetQs, State3} = case DLX of
+                             not_found ->
+                                 {[], State0};
+                             _ ->
+                                 RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
+                                 {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, Msg, RouteToQs0),
+                                 State1 = log_cycles(Cycles, RKeys, State0),
+                                 State2 = case RouteToQs of
+                                              [] ->
+                                                  log_no_route_once(State1);
+                                              _ ->
+                                                  State1
+                                          end,
+                                 {RouteToQs, State2}
+                         end,
     Now = os:system_time(millisecond),
-    State1 = State0#state{next_out_seq = OutSeq + 1},
+    State4 = State3#state{next_out_seq = OutSeq + 1},
     Pend0 = #pending{
                consumed_msg_id = ConsumedMsgId,
                consumed_at = Now,
@@ -311,15 +273,13 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
     case TargetQs of
         [] ->
             %% We can't deliver this message since there is no target queue we can route to.
-            %% Under no circumstances should we drop a message with dead-letter-strategy at-least-once.
-            %% We buffer this message and retry to send every settle_timeout milliseonds
-            %% (until the user has fixed the dead-letter routing topology).
-            State1#state{pendings = maps:put(OutSeq, Pend0, Pendings)};
+            %% We buffer this message and retry to send every settle_timeout milliseonds.
+            State4#state{pendings = maps:put(OutSeq, Pend0, Pendings)};
         _ ->
             Pend = Pend0#pending{publish_count = 1,
                                  last_published_at = Now,
                                  unsettled = TargetQs},
-            State = State1#state{pendings = maps:put(OutSeq, Pend, Pendings)},
+            State = State4#state{pendings = maps:put(OutSeq, Pend, Pendings)},
             deliver_to_queues(Delivery, TargetQs, State)
     end.
 
@@ -340,14 +300,13 @@ deliver_to_queues(Delivery, RouteToQNames, #state{queue_type_state = QTypeState0
     State = State0#state{queue_type_state = QTypeState2},
     handle_queue_actions(Actions, State).
 
-handle_settled(QRef, MsgSeqs, #state{pendings = Pendings0,
-                                     settle_timeout = SettleTimeout} = State) ->
+handle_settled(QRef, MsgSeqs, #state{pendings = Pendings0} = State) ->
     Pendings = lists:foldl(fun (MsgSeq, P0) ->
-                                   handle_settled0(QRef, MsgSeq, SettleTimeout, P0)
+                                   handle_settled0(QRef, MsgSeq, P0)
                            end, Pendings0, MsgSeqs),
     State#state{pendings = Pendings}.
 
-handle_settled0(QRef, MsgSeq, SettleTimeout, Pendings) ->
+handle_settled0(QRef, MsgSeq, Pendings) ->
     case maps:find(MsgSeq, Pendings) of
         {ok, #pending{unsettled = Unset0, settled = Set0} = Pend0} ->
             Unset = lists:delete(QRef, Unset0),
@@ -355,9 +314,9 @@ handle_settled0(QRef, MsgSeq, SettleTimeout, Pendings) ->
             Pend = Pend0#pending{unsettled = Unset, settled = Set},
             maps:update(MsgSeq, Pend, Pendings);
         error ->
-            rabbit_log:warning("Ignoring publisher confirm for sequence number ~b "
-                               "from target dead letter ~s after settle timeout of ~bms.",
-                               [MsgSeq, rabbit_misc:rs(QRef), SettleTimeout]),
+            rabbit_log:info("Ignoring publisher confirm for sequence number ~b "
+                            "from target dead letter ~s",
+                            [MsgSeq, rabbit_misc:rs(QRef)]),
             Pendings
     end.
 
@@ -387,14 +346,13 @@ maybe_ack(#state{pendings = Pendings0,
 %% Re-deliver messages that timed out waiting on publisher confirm and
 %% messages that got never sent due to routing topology misconfiguration.
 redeliver_messsages(#state{pendings = Pendings,
-                           settle_timeout = SettleTimeout} = State) ->
-    case lookup_dlx(State) of
-        not_found ->
+                           settle_timeout = SettleTimeout} = State0) ->
+    case lookup_dlx(State0) of
+        {not_found, State} ->
             %% Configured dead-letter-exchange does (still) not exist.
-            %% Warning got already logged.
             %% Keep the same Pendings in our state until user creates or re-configures the dead-letter-exchange.
             State;
-        DLX ->
+        {DLX, State} ->
             Now = os:system_time(millisecond),
             maps:fold(fun(OutSeq, #pending{last_published_at = LastPub} = Pend, S0)
                             when LastPub + SettleTimeout =< Now ->
@@ -424,18 +382,15 @@ redeliver(#pending{delivery = #delivery{message = #basic_message{content = Conte
 redeliver(Pend, DLX, OutSeq, #state{routing_key = DLRKey} = State) ->
     redeliver0(Pend, DLX, [DLRKey], OutSeq, State).
 
-%% TODO do not log per message?
-redeliver0(#pending{consumed_msg_id = ConsumedMsgId,
-                    delivery = #delivery{message = BasicMsg} = Delivery0,
+redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
                     unsettled = Unsettled0,
                     settled = Settled,
                     publish_count = PublishCount,
                     reason = Reason} = Pend0,
            DLX, DLRKeys, OutSeq,
-           #state{queue_ref = QRef,
-                  pendings = Pendings0,
-                  exchange_ref = DLXRef,
-                  settle_timeout = SettleTimeout} = State0) when is_list(DLRKeys) ->
+           #state{pendings = Pendings0,
+                  exchange_ref = DLXRef} = State0)
+  when is_list(DLRKeys) ->
     Delivery = Delivery0#delivery{message = BasicMsg#basic_message{exchange_name = DLXRef,
                                                                    routing_keys  = DLRKeys}},
     RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
@@ -445,47 +400,11 @@ redeliver0(#pending{consumed_msg_id = ConsumedMsgId,
     Unsettled = RouteToQs0 -- Settled,
     RouteToQs1 = Unsettled -- clients_redeliver(Unsettled0),
     {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, BasicMsg, RouteToQs1),
-    Prefix = io_lib:format("Message has not received required publisher confirm(s). "
-                           "Received confirm from: [~s]. "
-                           "Did not receive confirm from: [~s]. "
-                           "timeout=~bms "
-                           "message_sequence_number=~b "
-                           "consumed_message_sequence_number=~b "
-                           "publish_count=~b.",
-                           [strings(Settled), strings(Unsettled0), SettleTimeout,
-                            OutSeq, ConsumedMsgId, PublishCount]),
-    case {RouteToQs, Cycles, Settled} of
-        {[], [], []} ->
-            rabbit_log:warning("~s Failed to re-deliver this message because no queue is bound "
-                               "to dead-letter ~s with routing keys ~p.",
-                               [Prefix, rabbit_misc:rs(DLXRef), DLRKeys]),
-            State0;
-        {[], [], [_|_]} ->
-            rabbit_log:debug("~s Routes changed dynamically so that this message does not need to be routed "
-                             "to any queue anymore. This message will be acknowledged to the source ~s.",
-                             [Prefix, rabbit_misc:rs(QRef)]),
-            State0;
-        {[], [_|_], []} ->
-            rabbit_log:warning("~s Failed to re-deliver this message because dead-letter queue cycles "
-                               "got detected: ~p",
-                               [Prefix, Cycles]),
-            State0;
-        {[], [_|_], [_|_]} ->
-            rabbit_log:warning("~s Dead-letter queue cycles detected: ~p. "
-                               "This message will nevertheless be acknowledged to the source ~s "
-                               "because it received at least one publisher confirm.",
-                               [Prefix, Cycles, rabbit_misc:rs(QRef)]),
-            State0;
+    State1 = log_cycles(Cycles, DLRKeys, State0),
+    case RouteToQs of
+        [] ->
+            State1;
         _ ->
-            case Cycles of
-                [] ->
-                    rabbit_log:debug("~s Re-delivering this message to ~s",
-                                     [Prefix, strings(RouteToQs)]);
-                [_|_] ->
-                    rabbit_log:warning("~s Dead-letter queue cycles detected: ~p. "
-                                       "Re-delivering this message only to ~s",
-                                       [Prefix, Cycles, strings(RouteToQs)])
-            end,
             Pend = Pend0#pending{publish_count = PublishCount + 1,
                                  last_published_at = os:system_time(millisecond),
                                  delivery = Delivery,
@@ -495,10 +414,21 @@ redeliver0(#pending{consumed_msg_id = ConsumedMsgId,
             deliver_to_queues(Delivery, RouteToQs, State)
     end.
 
-strings(QRefs) when is_list(QRefs) ->
-    L0 = lists:map(fun rabbit_misc:rs/1, QRefs),
-    L1 = lists:join(", ", L0),
-    lists:flatten(L1).
+%% Returns queues whose queue clients take care of redelivering messages.
+clients_redeliver(QNames) ->
+    Qs = lists:filter(fun(Q) ->
+                              case amqqueue:get_type(Q) of
+                                  rabbit_quorum_queue ->
+                                      %% If Raft command (#enqueue{}) does not get applied
+                                      %% rabbit_fifo_client will resend.
+                                      true;
+                                  rabbit_stream_queue ->
+                                      true;
+                                  _ ->
+                                      false
+                              end
+                      end, rabbit_amqqueue:lookup_many(QNames)),
+    lists:map(fun amqqueue:get_name/1, Qs).
 
 maybe_set_timer(#state{timer = TRef} = State)
   when is_reference(TRef) ->
@@ -510,7 +440,6 @@ maybe_set_timer(#state{timer = undefined,
 maybe_set_timer(#state{timer = undefined,
                        settle_timeout = SettleTimeout} = State) ->
     TRef = erlang:send_after(SettleTimeout, self(), {'$gen_cast', settle_timeout}),
-    % rabbit_log:debug("set timer"),
     State#state{timer = TRef}.
 
 maybe_cancel_timer(#state{timer = TRef,
@@ -529,7 +458,6 @@ cancel_timer(#state{timer = TRef} = State)
     erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
     State#state{timer = undefined}.
 
-%% Avoids large message contents being logged.
 format_status(_Opt, [_PDict, #state{
                                 queue_ref = QueueRef,
                                 exchange_ref = ExchangeRef,
@@ -538,7 +466,9 @@ format_status(_Opt, [_PDict, #state{
                                 queue_type_state = QueueTypeState,
                                 pendings = Pendings,
                                 next_out_seq = NextOutSeq,
-                                timer = Timer
+                                settle_timeout = SettleTimeout,
+                                timer = Timer,
+                                logged = Logged
                                }]) ->
     S = #{queue_ref => QueueRef,
           exchange_ref => ExchangeRef,
@@ -547,10 +477,13 @@ format_status(_Opt, [_PDict, #state{
           queue_type_state => QueueTypeState,
           pendings => maps:map(fun(_, P) -> format_pending(P) end, Pendings),
           next_out_seq => NextOutSeq,
-          timer_is_active => Timer =/= undefined},
+          settle_timeout => SettleTimeout,
+          timer_is_active => Timer =/= undefined,
+          logged => Logged},
     [{data, [{"State", S}]}].
 
 format_pending(#pending{consumed_msg_id = ConsumedMsgId,
+                        delivery = _DoNotLogLargeBinary,
                         reason = Reason,
                         unsettled = Unsettled,
                         settled = Settled,
@@ -565,18 +498,53 @@ format_pending(#pending{consumed_msg_id = ConsumedMsgId,
       last_published_at => LastPublishedAt,
       consumed_at => ConsumedAt}.
 
-%% Returns queues whose queue clients take care of redelivering messages.
-clients_redeliver(QNames) ->
-    Qs = lists:filter(fun(Q) ->
-                              case amqqueue:get_type(Q) of
-                                  rabbit_quorum_queue ->
-                                      %% If Raft command (#enqueue{}) does not get applied
-                                      %% rabbit_fifo_client will resend.
-                                      true;
-                                  rabbit_stream_queue ->
-                                      true;
-                                  _ ->
-                                      false
-                              end
-                      end, rabbit_amqqueue:lookup_many(QNames)),
-    lists:map(fun amqqueue:get_name/1, Qs).
+log_missing_dlx_once(#state{exchange_ref = SameDlx,
+                            logged = #{missing_dlx := SameDlx}} = State) ->
+    State;
+log_missing_dlx_once(#state{exchange_ref = DlxResource,
+                            queue_ref = QueueResource,
+                            logged = Logged} = State) ->
+    rabbit_log:warning("Cannot forward any dead-letter messages from source quorum ~s because "
+                       "its configured dead-letter-exchange ~s does not exist. "
+                       "Either create the configured dead-letter-exchange or re-configure "
+                       "the dead-letter-exchange policy for the source quorum queue to prevent "
+                       "dead-lettered messages from piling up in the source quorum queue. "
+                       "This message will not be logged again.",
+                       [rabbit_misc:rs(QueueResource), rabbit_misc:rs(DlxResource)]),
+    State#state{logged = maps:put(missing_dlx, DlxResource, Logged)}.
+
+log_no_route_once(#state{exchange_ref = SameDlx,
+                         routing_key = SameRoutingKey,
+                         logged = #{no_route := {SameDlx, SameRoutingKey}}} = State) ->
+    State;
+log_no_route_once(#state{queue_ref = QueueResource,
+                         exchange_ref = DlxResource,
+                         routing_key = RoutingKey,
+                         logged = Logged} = State) ->
+    rabbit_log:warning("Cannot forward any dead-letter messages from source quorum ~s "
+                       "with configured dead-letter-exchange ~s and configured "
+                       "dead-letter-routing-key '~s'. This can happen either if the dead-letter "
+                       "routing topology is misconfigured (for example no queue bound to "
+                       "dead-letter-exchange or wrong dead-letter-routing-key configured) or if "
+                       "non-mirrored classic queues are bound whose host node is down. "
+                       "Fix this issue to prevent dead-lettered messages from piling up "
+                       "in the source quorum queue. "
+                       "This message will not be logged again.",
+                       [rabbit_misc:rs(QueueResource), rabbit_misc:rs(DlxResource), RoutingKey]),
+    State#state{logged = maps:put(no_route, {DlxResource, RoutingKey}, Logged)}.
+
+log_cycles(Cycles, RoutingKeys, State) ->
+    lists:foldl(fun(Cycle, S) -> log_cycle_once(Cycle, RoutingKeys, S) end, State, Cycles).
+
+log_cycle_once(Queues, _, #state{logged = Logged} = State)
+  when is_map_key({cycle, Queues}, Logged) ->
+    State;
+log_cycle_once(Queues, RoutingKeys, #state{exchange_ref = DlxResource,
+                                           queue_ref = QueueResource,
+                                           logged = Logged} = State) ->
+    rabbit_log:warning("Dead-letter queues cycle detected for source quorum ~s "
+                       "with dead-letter exchange ~s and routing keys ~p: ~p "
+                       "This message will not be logged again.",
+                       [rabbit_misc:rs(QueueResource), rabbit_misc:rs(DlxResource),
+                        RoutingKeys, Queues]),
+    State#state{logged = maps:put({cycle, Queues}, true, Logged)}.
