@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - v3.10.x
       - v3.9.x
       - v3.8.x
       - bump-rbe-image-*
