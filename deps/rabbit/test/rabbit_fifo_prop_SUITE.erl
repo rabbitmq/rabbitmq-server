@@ -1667,10 +1667,7 @@ enqueue_gen(Pid) ->
     enqueue_gen(Pid, 10, 1).
 
 enqueue_gen(Pid, _Enq, _Del) ->
-    ?LET(E, {enqueue, Pid, enqueue,
-             % frequency([{Enq, enqueue},
-             %            {Del, delay}]),
-             msg_gen()}, E).
+    ?LET(E, {enqueue, Pid, enqueue, msg_gen()}, E).
 
 %% It's fair to assume that every message enqueued is a #basic_message.
 %% That's what the channel expects and what rabbit_quorum_queue invokes rabbit_fifo_client with.
@@ -1908,7 +1905,8 @@ run_snapshot_test(Conf, Commands, Invariant) ->
 run_snapshot_test0(Conf, Commands) ->
     run_snapshot_test0(Conf, Commands, fun (_) -> true end).
 
-run_snapshot_test0(Conf, Commands, Invariant) ->
+run_snapshot_test0(Conf0, Commands, Invariant) ->
+    Conf = Conf0#{max_in_memory_length => 0},
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     {State0, Effects} = run_log(test_init(Conf), Entries, Invariant),

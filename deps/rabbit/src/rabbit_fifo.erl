@@ -268,18 +268,18 @@ apply(#{index := Idx} = Meta,
           when is_map_key(MsgId, Checked0) ->
             %% construct an index message with the current raft index
             %% and update delivery count before adding it to the message queue
-            ?INDEX_MSG(_, ?MSG(Header, _)) = IdxMsg0 =
+            ?INDEX_MSG(_, ?MSG(Header, _)) =
                 update_msg_header(delivery_count, fun incr/1, 1, ?INDEX_MSG(Idx, Msg)),
 
             State0 = add_bytes_return(Header, State00),
-            {State1, IdxMsg} =
-                case evaluate_memory_limit(Header, State0) of
-                    true ->
-                        % indexed message with header map
-                        {State0, ?INDEX_MSG(Idx, ?DISK_MSG(Header))};
-                    false ->
-                        {add_in_memory_counts(Header, State0), IdxMsg0}
-                end,
+            {State1, IdxMsg} = {State0, ?INDEX_MSG(Idx, ?DISK_MSG(Header))},
+                % case evaluate_memory_limit(Header, State0) of
+                %     true ->
+                %         % indexed message with header map
+                %         {State0, ?INDEX_MSG(Idx, ?DISK_MSG(Header))};
+                %     false ->
+                %         {add_in_memory_counts(Header, State0), IdxMsg0}
+                % end,
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked0),
                                 credit = increase_credit(Con0, 1)},
             State2 = update_or_remove_sub(
@@ -1448,16 +1448,20 @@ enqueue(RaftIdx, Ts, RawMsg, #?MODULE{messages = Messages} = State0) ->
     %% when the next required key is added
     Header0 = message_size(RawMsg),
     Header = maybe_set_msg_ttl(RawMsg, Ts, Header0, State0),
-    {State1, Msg} =
-        case evaluate_memory_limit(Header, State0) of
-            true ->
-                % indexed message with header map
-                {State0,
-                 ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header))};
-            false ->
-                {add_in_memory_counts(Header, State0),
-                 ?INDEX_MSG(RaftIdx, ?MSG(Header, RawMsg))}
-        end,
+    %% TODO: enqueue as in memory message if there are no ready messages
+    %% and there are consumers with credit available.
+    %% I.e. the message will be immedately delivered so no benefit
+    %% in reading it back from the log
+    {State1, Msg} = {State0, ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header))},
+        % case evaluate_memory_limit(Header, State0) of
+        %     true ->
+        %         % indexed message with header map
+        %         {State0,
+        %          ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header))};
+        %     false ->
+        %         {add_in_memory_counts(Header, State0),
+        %          ?INDEX_MSG(RaftIdx, ?MSG(Header, RawMsg))}
+        % end,
     State = add_bytes_enqueue(Header, State1),
     State#?MODULE{messages = lqueue:in(Msg, Messages)}.
 
@@ -1739,21 +1743,21 @@ return_one(Meta, MsgId, Msg0,
         _ ->
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked)},
 
-            {RtnMsg, State1} = case is_disk_msg(Msg) of
-                                   true ->
-                                       {Msg, State0};
-                                   false ->
-                                       case evaluate_memory_limit(Header, State0) of
-                                           true ->
-                                               {to_disk_msg(Msg), State0};
-                                           false ->
-                                               {Msg, add_in_memory_counts(Header, State0)}
-                                       end
-                               end,
+            % {RtnMsg, State1} = case is_disk_msg(Msg) of
+            %                        true ->
+            %                            {Msg, State0};
+            %                        false ->
+            %                            case evaluate_memory_limit(Header, State0) of
+            %                                true ->
+            %                                    {to_disk_msg(Msg), State0};
+            %                                false ->
+            %                                    {Msg, add_in_memory_counts(Header, State0)}
+            %                            end
+            %                    end,
             {add_bytes_return(
                Header,
-               State1#?MODULE{consumers = Consumers#{ConsumerId => Con},
-                              returns = lqueue:in(RtnMsg, Returns)}),
+               State0#?MODULE{consumers = Consumers#{ConsumerId => Con},
+                              returns = lqueue:in(Msg, Returns)}),
              Effects0}
     end.
 
@@ -2232,62 +2236,57 @@ maybe_queue_consumer(ConsumerId, #consumer{credit = Credit} = Con,
 
 %% creates a dehydrated version of the current state to be cached and
 %% potentially used to for a snaphot at a later point
-dehydrate_state(#?MODULE{msg_bytes_in_memory = 0,
-                         cfg = #cfg{max_in_memory_length = 0},
-                         consumers = Consumers,
+dehydrate_state(#?MODULE{cfg = #cfg{},
                          dlx = DlxState} = State) ->
     % no messages are kept in memory, no need to
     % overly mutate the current state apart from removing indexes and cursors
     State#?MODULE{
              ra_indexes = rabbit_fifo_index:empty(),
-             consumers = maps:map(fun (_, C) ->
-                                          dehydrate_consumer(C)
-                                  end, Consumers),
              release_cursors = lqueue:new(),
-             dlx = rabbit_fifo_dlx:dehydrate(DlxState)};
-dehydrate_state(#?MODULE{messages = Messages,
-                         consumers = Consumers,
-                         returns = Returns,
-                         prefix_msgs = {PRCnt, PrefRet0, PPCnt, PrefMsg0},
-                         waiting_consumers = Waiting0,
-                         dlx = DlxState} = State) ->
-    RCnt = lqueue:len(Returns),
-    %% TODO: optimise this function as far as possible
-    PrefRet1 = lists:foldr(fun (M, Acc) ->
-                                   [dehydrate_message(M) | Acc]
-                           end, [], lqueue:to_list(Returns)),
-    PrefRet = PrefRet0 ++ PrefRet1,
-    PrefMsgsSuff = dehydrate_messages(Messages),
-    %% prefix messages are not populated in normal operation only after
-    %% recovering from a snapshot
-    PrefMsgs = PrefMsg0 ++ PrefMsgsSuff,
-    Waiting = [{Cid, dehydrate_consumer(C)} || {Cid, C} <- Waiting0],
-    State#?MODULE{messages = lqueue:new(),
-                  ra_indexes = rabbit_fifo_index:empty(),
-                  release_cursors = lqueue:new(),
-                  consumers = maps:map(fun (_, C) ->
-                                               dehydrate_consumer(C)
-                                       end, Consumers),
-                  returns = lqueue:new(),
-                  prefix_msgs = {PRCnt + RCnt, PrefRet,
-                                 PPCnt + lqueue:len(Messages), PrefMsgs},
-                  waiting_consumers = Waiting,
-                  dlx = rabbit_fifo_dlx:dehydrate(DlxState)}.
+             dlx = rabbit_fifo_dlx:dehydrate(DlxState)}.
+% dehydrate_state(#?MODULE{messages = Messages,
+%                          consumers = Consumers,
+%                          returns = Returns,
+%                          prefix_msgs = {PRCnt, PrefRet0, PPCnt, PrefMsg0},
+%                          waiting_consumers = Waiting0,
+%                          dlx = DlxState} = State) ->
+%     RCnt = lqueue:len(Returns),
+%     %% TODO: optimise this function as far as possible
+%     PrefRet1 = lists:foldr(fun (M, Acc) ->
+%                                    [dehydrate_message(M) | Acc]
+%                            end, [], lqueue:to_list(Returns)),
+%     PrefRet = PrefRet0 ++ PrefRet1,
+%     PrefMsgsSuff = dehydrate_messages(Messages),
+%     %% prefix messages are not populated in normal operation only after
+%     %% recovering from a snapshot
+%     PrefMsgs = PrefMsg0 ++ PrefMsgsSuff,
+%     Waiting = [{Cid, dehydrate_consumer(C)} || {Cid, C} <- Waiting0],
+%     State#?MODULE{messages = lqueue:new(),
+%                   ra_indexes = rabbit_fifo_index:empty(),
+%                   release_cursors = lqueue:new(),
+%                   consumers = maps:map(fun (_, C) ->
+%                                                dehydrate_consumer(C)
+%                                        end, Consumers),
+%                   returns = lqueue:new(),
+%                   prefix_msgs = {PRCnt + RCnt, PrefRet,
+%                                  PPCnt + lqueue:len(Messages), PrefMsgs},
+%                   waiting_consumers = Waiting,
+%                   dlx = rabbit_fifo_dlx:dehydrate(DlxState)}.
 
-dehydrate_messages(Msgs0)  ->
-    {OutRes, Msgs} = lqueue:out(Msgs0),
-    case OutRes of
-        {value, Msg} ->
-            [dehydrate_message(Msg) | dehydrate_messages(Msgs)];
-        empty ->
-            []
-    end.
+% dehydrate_messages(Msgs0)  ->
+%     {OutRes, Msgs} = lqueue:out(Msgs0),
+%     case OutRes of
+%         {value, Msg} ->
+%             [dehydrate_message(Msg) | dehydrate_messages(Msgs)];
+%         empty ->
+%             []
+%     end.
 
-dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
-    Checked = maps:map(fun (_, M) ->
-                               dehydrate_message(M)
-                       end, Checked0),
-    Con#consumer{checked_out = Checked}.
+% dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
+%     Checked = maps:map(fun (_, M) ->
+%                                dehydrate_message(M)
+%                        end, Checked0),
+%     Con#consumer{checked_out = Checked}.
 
 dehydrate_message(?PREFIX_MEM_MSG(_) = M) ->
     M;
@@ -2411,12 +2410,12 @@ add_bytes_return(Header,
     State#?MODULE{msg_bytes_checkout = Checkout - Size,
                   msg_bytes_enqueue = Enqueue + Size}.
 
-add_in_memory_counts(Header,
-                     #?MODULE{msg_bytes_in_memory = InMemoryBytes,
-                              msgs_ready_in_memory = InMemoryCount} = State) ->
-    Size = get_header(size, Header),
-    State#?MODULE{msg_bytes_in_memory = InMemoryBytes + Size,
-                  msgs_ready_in_memory = InMemoryCount + 1}.
+% add_in_memory_counts(Header,
+%                      #?MODULE{msg_bytes_in_memory = InMemoryBytes,
+%                               msgs_ready_in_memory = InMemoryCount} = State) ->
+%     Size = get_header(size, Header),
+%     State#?MODULE{msg_bytes_in_memory = InMemoryBytes + Size,
+%                   msgs_ready_in_memory = InMemoryCount + 1}.
 
 subtract_in_memory_counts(Header,
                           #?MODULE{msg_bytes_in_memory = InMemoryBytes,
