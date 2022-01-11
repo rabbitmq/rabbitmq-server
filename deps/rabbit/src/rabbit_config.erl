@@ -41,7 +41,7 @@ get_advanced_config() ->
 -spec config_files() -> [config_location()].
 config_files() ->
     ConfFiles = [filename:absname(File) || File <- get_confs(),
-                                           filelib:is_regular(File)],
+                                           rabbit_misc:is_regular_file(File)],
     AdvancedFiles = case get_advanced_config() of
                         none -> [];
                         FileName -> [filename:absname(FileName)]
