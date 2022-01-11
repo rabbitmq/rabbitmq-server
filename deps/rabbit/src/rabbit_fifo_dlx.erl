@@ -92,7 +92,7 @@ apply(_, {dlx, #settle{msg_ids = MsgIds}}, at_least_once,
                                    msg_bytes_checkout = BytesCheckout,
                                    ra_indexes = Indexes0} = S) ->
                               Indexes = case Msg of
-                                            ?INDEX_MSG(I, ?MSG(_,_))
+                                            ?INDEX_MSG(I, _)
                                               when is_integer(I) ->
                                                 rabbit_fifo_index:delete(I, Indexes0);
                                             _ ->
@@ -156,8 +156,8 @@ discard(Msgs, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
                                       fun (?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
                                               {enqueue, _, _, Msg} = maps:get(RaftIdx, Lookup),
                                               {true, {Reason, Msg}};
-                                          (?INDEX_MSG(_, ?MSG(_Header, Msg))) ->
-                                              {true, {Reason, Msg}};
+                                          % (?INDEX_MSG(_, ?MSG(_Header, Msg))) ->
+                                          %     {true, {Reason, Msg}};
                                           (_IgnorePrefixMessage) ->
                                               false
                                       end, Msgs),
@@ -173,7 +173,7 @@ discard(Msgs, Reason, at_least_once, State0)
                                 D = lqueue:in({Reason, Msg}, D0),
                                 B = B0 + size_in_bytes(Msg),
                                 I = case Msg of
-                                        ?INDEX_MSG(Idx, ?MSG(_,_))
+                                        ?INDEX_MSG(Idx, _)
                                           when is_integer(Idx) ->
                                             rabbit_fifo_index:append(Idx, I0);
                                         _ ->
@@ -206,11 +206,11 @@ checkout0({success, MsgId, {Reason, ?INDEX_MSG(Idx, ?DISK_MSG(Header))}, State},
     DelMsg = {Idx, {Reason, MsgId, Header}},
     SendAcc = {InMemMsgs, [DelMsg|LogMsgs]},
     checkout0(checkout_one(State), SendAcc);
-checkout0({success, MsgId, {Reason, ?INDEX_MSG(Idx, ?MSG(Header, Msg))}, State}, {InMemMsgs, LogMsgs})
-  when is_integer(Idx) ->
-    DelMsg = {MsgId, {Reason, Header, Msg}},
-    SendAcc = {[DelMsg|InMemMsgs], LogMsgs},
-    checkout0(checkout_one(State), SendAcc);
+% checkout0({success, MsgId, {Reason, ?INDEX_MSG(Idx, ?MSG(Header, Msg))}, State}, {InMemMsgs, LogMsgs})
+%   when is_integer(Idx) ->
+%     DelMsg = {MsgId, {Reason, Header, Msg}},
+%     SendAcc = {[DelMsg|InMemMsgs], LogMsgs},
+%     checkout0(checkout_one(State), SendAcc);
 checkout0({success, _MsgId, {_Reason, ?TUPLE(_, _)}, State}, SendAcc) ->
     %% This is a prefix message which means we are recovering from a snapshot.
     %% We know:

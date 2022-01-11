@@ -526,16 +526,16 @@ mixed_send_msg_and_log_effects_are_correctly_ordered_test(_) ->
                      {at_most_once,
                       {somemod, somefun, [somearg]}}}),
     %% enqueue two messages
+    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
     {State0, _} = enq(1, 1, first, State00),
     Msg2 = rabbit_fifo:make_enqueue(self(), 2, snd),
     {State1, _} = enq(2, 2, snd, State0),
 
     {_State2, Effects1} = check_n(Cid, 3, 10, State1),
     ct:pal("Effects ~w", [Effects1]),
-    {log, [2], Fun, _} = get_log_eff(Effects1),
-    ct:pal("OUT ~p",[Fun([Msg2])]),
+    {log, [1, 2], Fun, _} = get_log_eff(Effects1),
     [{send_msg, _, {delivery, _Cid, [{0,{0,first}},{1,{0,snd}}]},
-      [local,ra_event]}] = Fun([Msg2]),
+      [local,ra_event]}] = Fun([Msg1, Msg2]),
     %% in this case we expect no send_msg effect as any in memory messages
     %% should be weaved into the send_msg effect emitted by the log effect
     %% later. hence this is all we can assert on
@@ -1649,13 +1649,17 @@ queue_ttl_test(_) ->
     [{mod_call, rabbit_quorum_queue, spawn_deleter, [QName]}]
         = rabbit_fifo:tick(Now + 2500, S1Deq),
     %% Enqueue message,
-    {E1, _, _} = apply(meta(2, Now),
-                       rabbit_fifo:make_enqueue(self(), 1, msg1), S0),
+    Msg = rabbit_fifo:make_enqueue(self(), 1, msg1),
+    {E1, _, _} = apply(meta(2, Now), Msg, S0),
     Deq = {<<"deq1">>, self()},
-    {E2, {dequeue, {MsgId, _}, _}, _} =
+    {E2, _, Effs2} =
         apply(meta(3, Now),
               rabbit_fifo:make_checkout(Deq, {dequeue, unsettled}, #{}),
               E1),
+
+    {log, [2], Fun2} = get_log_eff(Effs2),
+    [{reply, _From,
+      {wrap_reply, {dequeue, {MsgId, _}, _}}}] = Fun2([Msg]),
     {E3, _, _} = apply(meta(3, Now + 1000),
                        rabbit_fifo:make_settle(Deq, [MsgId]), E2),
     [{mod_call, _, handle_tick, _}] = rabbit_fifo:tick(Now + 1500, E3),
@@ -1710,10 +1714,10 @@ query_peek_test(_) ->
     ?assertEqual({error, no_message_at_pos}, rabbit_fifo:query_peek(1, State0)),
     {State1, _} = enq(1, 1, first, State0),
     {State2, _} = enq(2, 2, second, State1),
-    ?assertMatch({ok, [1, _ | _]}, rabbit_fifo:query_peek(1, State1)),
+    ?assertMatch({ok, [1 | _]}, rabbit_fifo:query_peek(1, State1)),
     ?assertEqual({error, no_message_at_pos}, rabbit_fifo:query_peek(2, State1)),
-    ?assertMatch({ok, [1, _ | _]}, rabbit_fifo:query_peek(1, State2)),
-    ?assertMatch({ok, [2, _ | _]}, rabbit_fifo:query_peek(2, State2)),
+    ?assertMatch({ok, [1 | _]}, rabbit_fifo:query_peek(1, State2)),
+    ?assertMatch({ok, [2 | _]}, rabbit_fifo:query_peek(2, State2)),
     ?assertEqual({error, no_message_at_pos}, rabbit_fifo:query_peek(3, State2)),
     ok.
 
