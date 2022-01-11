@@ -81,6 +81,7 @@
 -export([get_gc_info/1]).
 -export([group_proplists_by/2]).
 -export([raw_read_file/1]).
+-export([is_regular_file/1]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -1419,6 +1420,16 @@ raw_read_file(File) ->
         end
     catch
         error:{badmatch, Error} -> Error
+    end.
+
+-spec is_regular_file(Name) -> boolean() when
+      Name :: file:filename_all().
+is_regular_file(Name) ->
+    % Note: this works around the win32 file leak in file:read_file/1
+    % https://github.com/erlang/otp/issues/5527
+    case file:read_file_info(Name, [raw]) of
+        {ok, #file_info{type=regular}} -> true;
+        _ -> false
     end.
 
 %% -------------------------------------------------------------------------
