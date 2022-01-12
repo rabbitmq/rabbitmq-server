@@ -25,7 +25,7 @@
          code_change/3, format_status/2]).
 
 %%TODO make configurable via cuttlefish?
--define(DEFAULT_PREFETCH, 100).
+-define(DEFAULT_PREFETCH, 1000).
 -define(DEFAULT_SETTLE_TIMEOUT, 120_000).
 -define(HIBERNATE_AFTER, 180_000).
 
