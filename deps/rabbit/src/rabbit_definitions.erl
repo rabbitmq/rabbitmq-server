@@ -272,7 +272,7 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
             end,
 
             fun() ->
-                rabbit_log:info("There are fewer than target cluster size (~d) nodes online,"
+                rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
                                 " skipping queue and binding import from definitions",
                                 [rabbit_nodes:target_cluster_size_hint()])
             end
@@ -308,7 +308,7 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_binary(VHost) ->
             end,
 
             fun() ->
-                rabbit_log:info("There are fewer than target cluster size (~d) nodes online,"
+                rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
                                 " skipping queue and binding import from definitions",
                                 [rabbit_nodes:target_cluster_size_hint()])
             end
@@ -344,7 +344,7 @@ apply_defs(Map, ActingUser, SuccessFun, ErrorFun, VHost) ->
             end,
 
             fun() ->
-                rabbit_log:info("There are fewer than target cluster size (~d) nodes online,"
+                rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
                                 " skipping queue and binding import from definitions",
                                 [rabbit_nodes:target_cluster_size_hint()])
             end
