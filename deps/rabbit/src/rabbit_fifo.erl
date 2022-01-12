@@ -1459,7 +1459,7 @@ enqueue(RaftIdx, Ts, RawMsg, #?MODULE{messages = Messages} = State0) ->
     %% and there are consumers with credit available.
     %% I.e. the message will be immedately delivered so no benefit
     %% in reading it back from the log
-    {State1, Msg} = {State0, ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header))},
+    Msg = ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)),
         % case evaluate_memory_limit(Header, State0) of
         %     true ->
         %         % indexed message with header map
@@ -1469,7 +1469,7 @@ enqueue(RaftIdx, Ts, RawMsg, #?MODULE{messages = Messages} = State0) ->
         %         {add_in_memory_counts(Header, State0),
         %          ?INDEX_MSG(RaftIdx, ?MSG(Header, RawMsg))}
         % end,
-    State = add_bytes_enqueue(Header, State1),
+    State = add_bytes_enqueue(Header, State0),
     State#?MODULE{messages = lqueue:in(Msg, Messages)}.
 
 maybe_set_msg_ttl(#basic_message{content = #content{properties = none}},
