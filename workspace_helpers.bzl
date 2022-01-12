@@ -242,6 +242,12 @@ erlang_lib(
         sha256 = "5721c6b6d50122d8f68cccac712caa1231f97894bab779eff5ff0f886cb44648",
     )
 
+    hex_pm_bazel_erlang_lib(
+        name = "redbug",
+        version = "2.0.7",
+        sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
+    )
+
     github_bazel_erlang_lib(
         name = "seshat",
         org = "rabbitmq",

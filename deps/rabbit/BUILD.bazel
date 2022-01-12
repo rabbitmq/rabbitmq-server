@@ -156,6 +156,7 @@ RUNTIME_DEPS = [
     "@observer_cli//:bazel_erlang_lib",
     "@osiris//:bazel_erlang_lib",
     "@recon//:bazel_erlang_lib",
+    "@redbug//:bazel_erlang_lib",
     "@seshat//:bazel_erlang_lib",
     "@sysmon_handler//:bazel_erlang_lib",
     "@systemd//:bazel_erlang_lib",
