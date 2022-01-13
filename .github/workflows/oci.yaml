@@ -50,7 +50,7 @@ jobs:
           echo "::set-output name=elixir::$(yq eval '.elixir' $FILE)"
 
       - name: Set up Erlang & Elixir
-        uses: erlef/setup-beam@v1.9
+        uses: erlef/setup-beam@v1.10
         with:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
