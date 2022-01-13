@@ -52,6 +52,12 @@
     config = no_config :: list(),
 
     %% Channels.
+    %%
+    %% We set consumers to 'true' when there had been consumers, even if they
+    %% were closed or cancelled, because there can be a race condition between
+    %% the cancelling and the message going back to the queue, and the test
+    %% suite getting messages via basic.get.
+    consumers = false :: boolean(),
     channels = #{} :: #{pid() => #{consumer := none | binary(), confirms := boolean()}}
 }).
 
@@ -347,7 +353,7 @@ next_state(St=#cq{q=Q, received=Received}, Msg, {call, _, cmd_channel_basic_get,
     St#cq{q=delete_message(Q, Msg), received=[Msg|Received]};
 next_state(St=#cq{channels=Channels}, Tag, {call, _, cmd_channel_consume, [_, Ch]}) ->
     ChInfo = maps:get(Ch, Channels),
-    St#cq{channels=Channels#{Ch => ChInfo#{consumer => Tag}}};
+    St#cq{consumers=true, channels=Channels#{Ch => ChInfo#{consumer => Tag}}};
 next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_cancel, [_, Ch]}) ->
     ChInfo = maps:get(Ch, Channels),
     St#cq{channels=Channels#{Ch => ChInfo#{consumer => none}}};
@@ -561,11 +567,10 @@ postcondition(St, {call, _, cmd_channel_receive_and_reject, _}, Msg) ->
     restarted_and_uncertain_publish_status(St, Msg) orelse
     crashed_and_previously_received(St, Msg).
 
-has_consumers(#cq{channels=Channels}) ->
-    maps:fold(fun
-        (_, #{consumer := none}, Acc) -> Acc;
-        (_, _, _) -> true
-    end, false, Channels).
+%% This function returns 'true' when there was a consumer at some point
+%% even if consumers were recently cancelled or closed.
+has_consumers(#cq{consumers=Consumers}) ->
+    Consumers.
 
 queue_has_channel(#cq{q=Q}, Ch) ->
     maps:is_key(Ch, Q).
