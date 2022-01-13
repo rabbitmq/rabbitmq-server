@@ -69,10 +69,10 @@
           routing_key,
           dlx_client_state :: undefined | rabbit_fifo_dlx_client:state(),
           queue_type_state :: undefined | rabbit_queue_type:state(),
-          %% Consumed messages for which we have not received all publisher confirms yet.
-          %% Therefore, they have not been ACKed yet to the consumer queue.
-          %% This buffer contains at most PREFETCH pending messages at any given point in time.
+          %% Consumed messages for which we are awaiting publisher confirms.
           pendings = #{} :: #{OutSeq :: non_neg_integer() => #pending{}},
+          %% Consumed message IDs for which we received all publisher confirms.
+          settled_ids = [] :: [non_neg_integer()],
           %% next publisher confirm delivery tag sequence number
           next_out_seq = 1,
           %% If no publisher confirm was received for at least settle_timeout milliseconds, message will be redelivered.
@@ -163,9 +163,7 @@ handle_cast(Request, State) ->
 
 redeliver_and_ack(State0) ->
     State1 = redeliver_messsages(State0),
-    %% Routes could have been changed dynamically.
-    %% If a publisher confirm timed out for a target queue to which we now don't route anymore, ack the message.
-    State2 = maybe_ack(State1),
+    State2 = ack(State1),
     State = maybe_set_timer(State2),
     {noreply, State}.
 
@@ -213,7 +211,7 @@ handle_queue_actions(Actions, State0) ->
               maybe_set_timer(S1);
           ({settled, QRef, MsgSeqs}, S0) ->
               S1 = handle_settled(QRef, MsgSeqs, S0),
-              S2 = maybe_ack(S1),
+              S2 = ack(S1),
               maybe_cancel_timer(S2);
           ({rejected, QRef, MsgSeqNos}, S0) ->
               rabbit_log:debug("Ignoring rejected messages ~p from ~s", [MsgSeqNos, rabbit_misc:rs(QRef)]),
@@ -300,48 +298,36 @@ deliver_to_queues(Delivery, RouteToQNames, #state{queue_type_state = QTypeState0
     State = State0#state{queue_type_state = QTypeState2},
     handle_queue_actions(Actions, State).
 
-handle_settled(QRef, MsgSeqs, #state{pendings = Pendings0} = State) ->
-    Pendings = lists:foldl(fun (MsgSeq, P0) ->
-                                   handle_settled0(QRef, MsgSeq, P0)
-                           end, Pendings0, MsgSeqs),
-    State#state{pendings = Pendings}.
+handle_settled(QRef, MsgSeqs, State) ->
+    lists:foldl(fun (MsgSeq, S) ->
+                        handle_settled0(QRef, MsgSeq, S)
+                end, State, MsgSeqs).
 
-handle_settled0(QRef, MsgSeq, Pendings) ->
+handle_settled0(QRef, MsgSeq, #state{pendings = Pendings,
+                                     settled_ids = SettledIds} = State) ->
     case maps:find(MsgSeq, Pendings) of
-        {ok, #pending{unsettled = Unset0, settled = Set0} = Pend0} ->
-            Unset = lists:delete(QRef, Unset0),
-            Set = [QRef | Set0],
-            Pend = Pend0#pending{unsettled = Unset, settled = Set},
-            maps:update(MsgSeq, Pend, Pendings);
+        {ok, #pending{unsettled = [QRef],
+                      consumed_msg_id = ConsumedId}} ->
+            State#state{pendings = maps:remove(MsgSeq, Pendings),
+                        settled_ids = [ConsumedId | SettledIds]};
+        {ok, #pending{unsettled = Unsettled, settled = Settled} = Pend0} ->
+            Pend = Pend0#pending{unsettled = lists:delete(QRef, Unsettled),
+                                 settled = [QRef | Settled]},
+            State#state{pendings = maps:update(MsgSeq, Pend, Pendings)};
         error ->
             rabbit_log:info("Ignoring publisher confirm for sequence number ~b "
                             "from target dead letter ~s",
                             [MsgSeq, rabbit_misc:rs(QRef)]),
-            Pendings
+            State
     end.
 
-maybe_ack(#state{pendings = Pendings0,
-                 dlx_client_state = DlxState0} = State) ->
-    Settled = maps:filter(fun(_OutSeq, #pending{unsettled = [], settled = [_|_]}) ->
-                                  %% Ack because there is at least one target queue and all
-                                  %% target queues settled (i.e. combining publisher confirm
-                                  %% and mandatory flag semantics).
-                                  true;
-                             (_, _) ->
-                                  false
-                          end, Pendings0),
-    case maps:size(Settled) of
-        0 ->
-            %% nothing to ack
-            State;
-        _ ->
-            Ids = lists:map(fun(#pending{consumed_msg_id = Id}) -> Id end, maps:values(Settled)),
-            {ok, DlxState} = rabbit_fifo_dlx_client:settle(Ids, DlxState0),
-            SettledOutSeqs = maps:keys(Settled),
-            Pendings = maps:without(SettledOutSeqs, Pendings0),
-            State#state{pendings = Pendings,
-                        dlx_client_state = DlxState}
-    end.
+ack(#state{settled_ids = []} = State) ->
+    State;
+ack(#state{settled_ids = Ids,
+           dlx_client_state = DlxState0} = State) ->
+    {ok, DlxState} = rabbit_fifo_dlx_client:settle(Ids, DlxState0),
+    State#state{settled_ids = [],
+                dlx_client_state = DlxState}.
 
 %% Re-deliver messages that timed out waiting on publisher confirm and
 %% messages that got never sent due to routing topology misconfiguration.
@@ -386,32 +372,43 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
                     unsettled = Unsettled0,
                     settled = Settled,
                     publish_count = PublishCount,
-                    reason = Reason} = Pend0,
+                    reason = Reason,
+                    consumed_msg_id = ConsumedId} = Pend0,
            DLX, DLRKeys, OutSeq,
-           #state{pendings = Pendings0,
+           #state{pendings = Pendings,
+                  settled_ids = SettledIds,
                   exchange_ref = DLXRef} = State0)
   when is_list(DLRKeys) ->
     Delivery = Delivery0#delivery{message = BasicMsg#basic_message{exchange_name = DLXRef,
                                                                    routing_keys  = DLRKeys}},
     RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
-    %% Do not redeliver message to a target queue
-    %% 1. for which we already received a publisher confirm, or
-    %% 2. whose queue client redelivers on our behalf.
-    Unsettled = RouteToQs0 -- Settled,
-    RouteToQs1 = Unsettled -- clients_redeliver(Unsettled0),
-    {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, BasicMsg, RouteToQs1),
-    State1 = log_cycles(Cycles, DLRKeys, State0),
-    case RouteToQs of
-        [] ->
-            State1;
+    case {RouteToQs0, Settled} of
+        {[], [_|_]} ->
+            %% Routes changed dynamically so that we don't await any publisher confirms anymore.
+            %% Since we also received at least once publisher confirm (mandatory flag semantics),
+            %% we can ack the messasge to the source quorum queue.
+            State0#state{pendings = maps:remove(OutSeq, Pendings),
+                         settled_ids = [ConsumedId | SettledIds]};
         _ ->
-            Pend = Pend0#pending{publish_count = PublishCount + 1,
-                                 last_published_at = os:system_time(millisecond),
-                                 delivery = Delivery,
-                                 %% override 'unsettled' because topology could have changed
-                                 unsettled = Unsettled},
-            State = State0#state{pendings = maps:update(OutSeq, Pend, Pendings0)},
-            deliver_to_queues(Delivery, RouteToQs, State)
+            %% Do not redeliver message to a target queue
+            %% 1. for which we already received a publisher confirm, or
+            Unsettled = RouteToQs0 -- Settled,
+            %% 2. whose queue client redelivers on our behalf.
+            RouteToQs1 = Unsettled -- clients_redeliver(Unsettled0),
+            {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, BasicMsg, RouteToQs1),
+            State1 = log_cycles(Cycles, DLRKeys, State0),
+            case RouteToQs of
+                [] ->
+                    State1;
+                _ ->
+                    Pend = Pend0#pending{publish_count = PublishCount + 1,
+                                         last_published_at = os:system_time(millisecond),
+                                         delivery = Delivery,
+                                         %% override 'unsettled' because topology could have changed
+                                         unsettled = Unsettled},
+                    State = State0#state{pendings = maps:update(OutSeq, Pend, Pendings)},
+                    deliver_to_queues(Delivery, RouteToQs, State)
+            end
     end.
 
 %% Returns queues whose queue clients take care of redelivering messages.
@@ -465,6 +462,7 @@ format_status(_Opt, [_PDict, #state{
                                 dlx_client_state = DlxClientState,
                                 queue_type_state = QueueTypeState,
                                 pendings = Pendings,
+                                settled_ids = SettledIds,
                                 next_out_seq = NextOutSeq,
                                 settle_timeout = SettleTimeout,
                                 timer = Timer,
@@ -476,6 +474,7 @@ format_status(_Opt, [_PDict, #state{
           dlx_client_state => rabbit_fifo_dlx_client:overview(DlxClientState),
           queue_type_state => QueueTypeState,
           pendings => maps:map(fun(_, P) -> format_pending(P) end, Pendings),
+          settled_ids => SettledIds,
           next_out_seq => NextOutSeq,
           settle_timeout => SettleTimeout,
           timer_is_active => Timer =/= undefined,
