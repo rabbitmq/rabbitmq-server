@@ -154,6 +154,12 @@ fun(Conf) ->
     end
 end}.
 
+{mapping, "definitions.checksum.use_checksum", "rabbit.definitions.use_checksum", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.checksum.checksum_algorithm", "rabbit.definitions.checksum_algorithm", [
+    {datatype, {enum, [sha, sha224, sha256, sha384, sha512]}}]}.
+
 %% Load definitions from a remote URL over HTTPS. See
 %% https://www.rabbitmq.com/management.html#load-definitions
 {mapping, "definitions.https.url", "rabbit.definitions.url",
