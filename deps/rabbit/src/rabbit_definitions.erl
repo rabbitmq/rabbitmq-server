@@ -19,7 +19,8 @@
 ]).
 %% import
 -export([import_raw/1, import_raw/2, import_parsed/1, import_parsed/2,
-         apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5]).
+         apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5,
+         should_use_checksum/0, checksum_algorithm/0]).
 
 -export([all_definitions/0]).
 -export([
@@ -231,6 +232,27 @@ atomise_map_keys(Decoded) ->
     maps:fold(fun(K, V, Acc) ->
         Acc#{rabbit_data_coercion:to_atom(K, utf8) => V}
               end, Decoded, Decoded).
+
+-spec should_use_checksum() -> boolean().
+should_use_checksum() ->
+    case application:get_env(rabbit, definitions) of
+        undefined   -> false;
+        {ok, none}  -> false;
+        {ok, []}    -> false;
+        {ok, Proplist} ->
+            pget(use_checksum, Proplist, false)
+    end.
+
+-spec checksum_algorithm() -> {ok, crypto:sha1() | crypto:sha2()}.
+checksum_algorithm() ->
+    case application:get_env(rabbit, definitions) of
+        undefined   -> undefined;
+        {ok, none}  -> undefined;
+        {ok, []}    -> undefined;
+        {ok, Proplist} ->
+            pget(checksum_algorithm, Proplist, sha256)
+    end.
+
 
 -spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username()) -> 'ok' | {error, term()}.
 
