@@ -107,8 +107,8 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "gen_batch_server",
-        version = "0.8.6",
-        sha256 = "b78679349168f27d7047f3283c9d766760b234d98c762aca9a1907f4ee3fd406",
+        version = "0.8.7",
+        # sha256 = "b78679349168f27d7047f3283c9d766760b234d98c762aca9a1907f4ee3fd406",
     )
 
     hex_pm_erlang_app(
@@ -211,7 +211,7 @@ erlang_app(
 
     git_repository(
         name = "ra",
-        branch = "main",
+        branch = "fan-in-tweaks",
         remote = "https://github.com/rabbitmq/ra.git",
     )
 
