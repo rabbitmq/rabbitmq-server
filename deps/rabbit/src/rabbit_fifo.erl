@@ -780,7 +780,8 @@ update_waiting_consumer_status(Node,
      end || {{_, Pid} = ConsumerId, Consumer} <- WaitingConsumers,
      Consumer#consumer.status =/= cancelled].
 
--spec state_enter(ra_server:ra_state(), state()) -> ra_machine:effects().
+-spec state_enter(ra_server:ra_state() | eol, state()) ->
+    ra_machine:effects().
 state_enter(RaState, #?MODULE{cfg = #cfg{dead_letter_handler = DLH,
                                          resource = QRes},
                               dlx = DlxState} = State) ->

@@ -106,17 +106,17 @@ handle_continue(QRef, undefined) ->
     SettleTimeout = application:get_env(rabbit,
                                         dead_letter_worker_publisher_confirm_timeout_ms,
                                         ?DEFAULT_SETTLE_TIMEOUT),
-    State = lookup_topology(#state{queue_ref = QRef,
-                                   queue_type_state = rabbit_queue_type:init(),
-                                   settle_timeout = SettleTimeout}),
     {ok, Q} = rabbit_amqqueue:lookup(QRef),
     {ClusterName, _MaybeOldLeaderNode} = amqqueue:get_pid(Q),
     {ok, ConsumerState} = rabbit_fifo_dlx_client:checkout(QRef,
                                                           {ClusterName, node()},
                                                           Prefetch),
-    MonitorRef = erlang:monitor(process, ClusterName),
-    {noreply, State#state{dlx_client_state = ConsumerState,
-                          monitor_ref = MonitorRef}}.
+    {noreply, lookup_topology(#state{queue_ref = QRef,
+                                     queue_type_state = rabbit_queue_type:init(),
+                                     settle_timeout = SettleTimeout,
+                                     dlx_client_state = ConsumerState,
+                                     monitor_ref = erlang:monitor(process, ClusterName)
+                                    })}.
 
 terminate(_Reason, State) ->
     cancel_timer(State).
