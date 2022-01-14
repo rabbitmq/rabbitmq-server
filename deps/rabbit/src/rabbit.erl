@@ -374,7 +374,10 @@ run_prelaunch_second_phase() ->
 
     ?LOG_DEBUG("Starting Ra Systems"),
     Default = ra_system:default_config(),
-    Quorum = Default#{name => quorum_queues},
+    Quorum = Default#{name => quorum_queues,
+                      wal_garbage_collect => false,
+                      wal_min_heap_size => 20000000
+                      },
     CoordDataDir = filename:join([rabbit_mnesia:dir(), "coordination", node()]),
     Coord = Default#{name => coordination,
                      data_dir => CoordDataDir,
@@ -386,6 +389,8 @@ run_prelaunch_second_phase() ->
     Quorum2 = Default#{name => quorum_queues_2,
                        data_dir => Quorum2Dir ,
                        wal_data_dir =>  Quorum2Dir,
+                       wal_garbage_collect => false,
+                       wal_min_heap_size => 20000000,
                        names => ra_system:derive_names(quorum_queues_2)},
 
     {ok, _} = ra_system:start(Quorum),
