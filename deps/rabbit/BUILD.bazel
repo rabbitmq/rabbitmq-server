@@ -342,6 +342,8 @@ suites = [
         deps = [
             "@proper//:bazel_erlang_lib",
         ],
+        shard_count = 4,
+        sharding_method = "case",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
