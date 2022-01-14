@@ -48,7 +48,7 @@ init_per_suite(Config0) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config0, {rabbit, [{quorum_tick_interval, 1000},
                                    {dead_letter_worker_consumer_prefetch, 2},
-                                   {dead_letter_worker_publisher_confirm_timeout_ms, 1000}
+                                   {dead_letter_worker_publisher_confirm_timeout, 1000}
                                   ]}),
     Config2 = rabbit_ct_helpers:merge_app_env(
                 Config1, {aten, [{poll_interval, 1000}]}),

@@ -32,8 +32,7 @@
 -type protocol() :: {dlx, #checkout{} | #settle{}}.
 -type state() :: #?MODULE{}.
 -export_type([state/0,
-              protocol/0,
-              reason/0]).
+              protocol/0]).
 
 -spec init() -> state().
 init() ->
@@ -274,7 +273,7 @@ delivery_effects(CPid, {InMemMsgs, IdxMsgs0}) ->
               [{send_msg, CPid, {dlx_delivery, Msgs}, [ra_event]}]
       end}].
 
--spec state_enter(ra_server:ra_state(), rabbit_types:r('queue'), dead_letter_handler(), state()) ->
+-spec state_enter(ra_server:ra_state() | eol, rabbit_types:r('queue'), dead_letter_handler(), state()) ->
     ra_machine:effects().
 state_enter(leader, QRes, at_least_once, State) ->
     ensure_worker_started(QRes, State),
