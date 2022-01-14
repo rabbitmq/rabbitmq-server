@@ -58,8 +58,15 @@ with_vhost_store(VHost, Type, Fun) ->
 
 vhost_store_pid(VHost, Type) ->
     case pg:get_local_members({rabbit_msg_store, VHost, Type}) of
-        [] -> no_pid;
-        [Pid|_] -> Pid
+        [] ->
+            %% Fall back to using the supervisor (sometimes necessary on queue startup).
+            {ok, VHostSup} = rabbit_vhost_sup_sup:get_vhost_sup(VHost),
+            case supervisor2:find_child(VHostSup, Type) of
+                [Pid] -> Pid;
+                []    -> no_pid
+            end;
+        [Pid|_] ->
+            Pid
     end.
 
 successfully_recovered_state(VHost, Type) ->
