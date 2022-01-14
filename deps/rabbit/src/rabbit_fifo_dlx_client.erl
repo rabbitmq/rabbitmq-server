@@ -9,14 +9,24 @@
           last_msg_id :: non_neg_integer() | -1
          }).
 -type state() :: #state{}.
--export_type([state/0]).
+-type action() :: {deliver, [{rabbit_amqqueue:name(),
+                              MsgId :: non_neg_integer(),
+                              rabbit_types:message(),
+                              rabbit_dead_letter:reason()}]}.
+-type actions() :: [action()].
+-export_type([state/0,
+              actions/0]).
 
+-spec settle([non_neg_integer()], state()) ->
+    {ok, state()}.
 settle(MsgIds, #state{leader = Leader} = State)
   when is_list(MsgIds) ->
     Cmd = rabbit_fifo_dlx:make_settle(MsgIds),
     ra:pipeline_command(Leader, Cmd),
     {ok, State}.
 
+-spec checkout(rabbit_amqqueue:name(), ra:server_id(), non_neg_integer()) ->
+    {ok, state()} | {error, ra_command_failed}.
 checkout(QResource, Leader, NumUnsettled) ->
     Cmd = rabbit_fifo_dlx:make_checkout(self(), NumUnsettled),
     State = #state{queue_resource = QResource,
@@ -41,6 +51,8 @@ process_command(Cmd, #state{leader = Leader} = State, Tries) ->
             process_command(Cmd, State, Tries - 1)
     end.
 
+-spec handle_ra_event(ra:server_id(), term(), state()) ->
+    {ok, state(), actions()}.
 handle_ra_event(Leader, {machine, {dlx_delivery, _} = Del}, #state{leader = Leader} = State) ->
     handle_delivery(Del, State);
 handle_ra_event(From, Evt, State) ->
@@ -66,6 +78,7 @@ transform_msgs(QRes, Msgs) ->
               {QRes, MsgId, Msg, Reason}
       end, Msgs).
 
+-spec overview(state()) -> map().
 overview(#state{leader = Leader,
                 last_msg_id = LastMsgId}) ->
     #{leader => Leader,
