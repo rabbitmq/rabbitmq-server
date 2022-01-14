@@ -24,9 +24,6 @@
          handle_cast/2, handle_call/3, handle_info/2,
          code_change/3, format_status/2]).
 
-%%TODO make configurable via cuttlefish?
--define(DEFAULT_PREFETCH, 1000).
--define(DEFAULT_SETTLE_TIMEOUT, 120_000).
 -define(HIBERNATE_AFTER, 180_000).
 
 -record(pending, {
@@ -39,7 +36,7 @@
           delivery :: rabbit_types:delivery(),
           %% TODO Reason is already stored in first x-death header of #content.properties.#'P_basic'.headers
           %% So, we could remove this convenience field and lookup the 1st header when redelivering.
-          reason :: rabbit_fifo_dlx:reason(),
+          reason :: rabbit_dead_letter:reason(),
           %% target queues for which publisher confirm has not been received yet
           unsettled = [] :: [rabbit_amqqueue:name()],
           %% target queues for which publisher confirm was received
@@ -67,8 +64,8 @@
           exchange_ref,
           %% configured (x-)dead-letter-routing-key of source queue
           routing_key,
-          dlx_client_state :: undefined | rabbit_fifo_dlx_client:state(),
-          queue_type_state :: undefined | rabbit_queue_type:state(),
+          dlx_client_state :: rabbit_fifo_dlx_client:state(),
+          queue_type_state :: rabbit_queue_type:state(),
           %% Consumed messages for which we are awaiting publisher confirms.
           pendings = #{} :: #{OutSeq :: non_neg_integer() => #pending{}},
           %% Consumed message IDs for which we received all publisher confirms.
@@ -87,25 +84,25 @@
           logged = #{} :: map()
          }).
 
-% -type state() :: #state{}.
+-type state() :: #state{}.
 
 %%TODO Add metrics like global counters for messages routed, delivered, etc. by adding a new counter in seshat.
 
 start_link(QRef) ->
     gen_server:start_link(?MODULE, QRef, [{hibernate_after, ?HIBERNATE_AFTER}]).
 
-% -spec init(rabbit_amqqueue:name()) ->
-%     {ok, undefined, {continue, rabbit_amqqueue:name()}}}.
+-spec init(rabbit_amqqueue:name()) ->
+    {ok, undefined, {continue, rabbit_amqqueue:name()}}.
 init(QRef) ->
     {ok, undefined, {continue, QRef}}.
 
+-spec handle_continue(rabbit_amqqueue:name(), undefined) ->
+    {noreply, state()}.
 handle_continue(QRef, undefined) ->
-    Prefetch = application:get_env(rabbit,
-                                   dead_letter_worker_consumer_prefetch,
-                                   ?DEFAULT_PREFETCH),
-    SettleTimeout = application:get_env(rabbit,
-                                        dead_letter_worker_publisher_confirm_timeout_ms,
-                                        ?DEFAULT_SETTLE_TIMEOUT),
+    {ok, Prefetch} = application:get_env(rabbit,
+                                         dead_letter_worker_consumer_prefetch),
+    {ok, SettleTimeout} = application:get_env(rabbit,
+                                              dead_letter_worker_publisher_confirm_timeout),
     {ok, Q} = rabbit_amqqueue:lookup(QRef),
     {ClusterName, _MaybeOldLeaderNode} = amqqueue:get_pid(Q),
     {ok, ConsumerState} = rabbit_fifo_dlx_client:checkout(QRef,
@@ -162,7 +159,7 @@ handle_cast(Request, State) ->
     {noreply, State}.
 
 redeliver_and_ack(State0) ->
-    State1 = redeliver_messsages(State0),
+    State1 = redeliver_messages(State0),
     State2 = ack(State1),
     State = maybe_set_timer(State2),
     {noreply, State}.
@@ -194,6 +191,7 @@ handle_info(Info, State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
+-spec lookup_topology(state()) -> state().
 lookup_topology(#state{queue_ref = {resource, Vhost, queue, _} = QRef} = State) ->
     {ok, Q} = rabbit_amqqueue:lookup(QRef),
     DLRKey = rabbit_queue_type_util:args_policy_lookup(<<"dead-letter-routing-key">>,
@@ -204,6 +202,8 @@ lookup_topology(#state{queue_ref = {resource, Vhost, queue, _} = QRef} = State) 
     State#state{exchange_ref = DLXRef,
                 routing_key = DLRKey}.
 
+-spec handle_queue_actions(rabbit_queue_type:actions() | rabbit_fifo_dlx_client:actions(), state()) ->
+    state().
 handle_queue_actions(Actions, State0) ->
     lists:foldl(
       fun ({deliver, Msgs}, S0) ->
@@ -214,7 +214,8 @@ handle_queue_actions(Actions, State0) ->
               S2 = ack(S1),
               maybe_cancel_timer(S2);
           ({rejected, QRef, MsgSeqNos}, S0) ->
-              rabbit_log:debug("Ignoring rejected messages ~p from ~s", [MsgSeqNos, rabbit_misc:rs(QRef)]),
+              rabbit_log:debug("Ignoring rejected messages ~p from ~s",
+                               [MsgSeqNos, rabbit_misc:rs(QRef)]),
               S0;
           ({queue_down, _QRef}, S0) ->
               %% target classic queue is down, but not deleted
@@ -228,6 +229,8 @@ handle_deliver(Msgs, #state{queue_ref = QRef} = State0)
                         forward(Msg, MsgId, QRef, DLX, Reason, S)
                 end, State, Msgs).
 
+-spec lookup_dlx(state()) ->
+    {rabbit_types:exchange() | not_found, state()}.
 lookup_dlx(#state{exchange_ref = DLXRef} = State0) ->
     case rabbit_exchange:lookup(DLXRef) of
         {error, not_found} ->
@@ -237,12 +240,16 @@ lookup_dlx(#state{exchange_ref = DLXRef} = State0) ->
             {X, State0}
     end.
 
+-spec forward(rabbit_types:message(), non_neg_integer(), rabbit_amqqueue:name(),
+              rabbit_types:exchange() | not_found, rabbit_dead_letter:reason(), state()) ->
+    state().
 forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
         #state{next_out_seq = OutSeq,
                pendings = Pendings,
                exchange_ref = DLXRef,
                routing_key = RKey} = State0) ->
-    #basic_message{routing_keys = RKeys} = Msg = rabbit_dead_letter:make_msg(ConsumedMsg, Reason, DLXRef, RKey, ConsumedQRef),
+    #basic_message{routing_keys = RKeys} = Msg = rabbit_dead_letter:make_msg(ConsumedMsg, Reason,
+                                                                             DLXRef, RKey, ConsumedQRef),
     %% Field 'mandatory' is set to false because we check ourselves whether the message is routable.
     Delivery = rabbit_basic:delivery(_Mandatory = false, _Confirm = true, Msg, OutSeq),
     {TargetQs, State3} = case DLX of
@@ -281,6 +288,8 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
             deliver_to_queues(Delivery, TargetQs, State)
     end.
 
+-spec deliver_to_queues(rabbit_types:delivery(), [rabbit_amqqueue:name()], state()) ->
+    state().
 deliver_to_queues(Delivery, RouteToQNames, #state{queue_type_state = QTypeState0} = State0) ->
     Qs = rabbit_amqqueue:lookup(RouteToQNames),
     {QTypeState2, Actions} = case rabbit_queue_type:deliver(Qs, Delivery, QTypeState0) of
@@ -331,8 +340,10 @@ ack(#state{settled_ids = Ids,
 
 %% Re-deliver messages that timed out waiting on publisher confirm and
 %% messages that got never sent due to routing topology misconfiguration.
-redeliver_messsages(#state{pendings = Pendings,
-                           settle_timeout = SettleTimeout} = State0) ->
+-spec redeliver_messages(state()) ->
+    state().
+redeliver_messages(#state{pendings = Pendings,
+                          settle_timeout = SettleTimeout} = State0) ->
     case lookup_dlx(State0) of
         {not_found, State} ->
             %% Configured dead-letter-exchange does (still) not exist.
@@ -412,6 +423,8 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
     end.
 
 %% Returns queues whose queue clients take care of redelivering messages.
+-spec clients_redeliver([rabbit_amqqueue:name()]) ->
+    [rabbit_amqqueue:name()].
 clients_redeliver(QNames) ->
     Qs = lists:filter(fun(Q) ->
                               case amqqueue:get_type(Q) of
