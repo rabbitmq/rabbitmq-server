@@ -1096,7 +1096,7 @@ zip_msgs_and_acks(Msgs, AckTags, Accumulator, _State) ->
                 end, Accumulator, lists:zip(Msgs, AckTags)).
 
 convert_to_lazy(State) ->
-    State1 = #vqstate { delta = Delta, q3 = Q3, len = Len } =
+    State1 = #vqstate { delta = Delta, q3 = Q3, len = Len, io_batch_size = IoBatchSize } =
         set_ram_duration_target(0, State),
     case Delta#delta.count + ?QUEUE:len(Q3) == Len of
         true ->
@@ -1113,7 +1113,10 @@ convert_to_lazy(State) ->
             %% is not in a proper state for a lazy BQ (unless all
             %% messages have been paged to disk already).
             wait_for_msg_store_credit(),
-            convert_to_lazy(resume(State1))
+            %% Setting io_batch_size to 0 forces the writing of all messages to disk.
+            %% Otherwise a few could be left in memory, including in q2.
+            State2 = resume(State1#vqstate{ io_batch_size = 0 }),
+            convert_to_lazy(State2#vqstate{ io_batch_size = IoBatchSize })
     end.
 
 wait_for_msg_store_credit() ->
