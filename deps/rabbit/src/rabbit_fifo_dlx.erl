@@ -135,7 +135,7 @@ apply(_, {dlx, #checkout{consumer = ConsumerPid,
                            msg_bytes_checkout = BytesCheckout - BytesMoved},
     {State, []};
 apply(_, Cmd, DLH, State) ->
-    rabbit_log:debug("Ignoring command ~p for dead_letter_handler ~p", Cmd, DLH),
+    rabbit_log:debug("Ignoring command ~p for dead_letter_handler ~p", [Cmd, DLH]),
     {State, []}.
 
 -spec discard([msg()], rabbit_dead_letter:reason(), dead_letter_handler(), state()) ->
