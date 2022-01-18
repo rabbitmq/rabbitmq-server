@@ -48,21 +48,17 @@ groups() ->
                        dead_letter_headers_CC_with_routing_key,
                        dead_letter_headers_first_death,
                        dead_letter_headers_first_death_route
-                      ],
+                       dead_letter_headers_first_death,
+                       dead_letter_ttl,
+                       dead_letter_routing_key_cycle_ttl,
+                       dead_letter_headers_reason_expired,
+                       dead_letter_headers_reason_expired_per_message],
     Opts = [],
     [
      {dead_letter_tests, [],
       [
-       {classic_queue, Opts, DeadLetterTests ++ [dead_letter_ttl,
-                                                       dead_letter_max_length_reject_publish_dlx,
-                                                       dead_letter_routing_key_cycle_ttl,
-                                                       dead_letter_headers_reason_expired,
-                                                       dead_letter_headers_reason_expired_per_message]},
-       {mirrored_queue, Opts, DeadLetterTests ++ [dead_letter_ttl,
-                                                        dead_letter_max_length_reject_publish_dlx,
-                                                        dead_letter_routing_key_cycle_ttl,
-                                                        dead_letter_headers_reason_expired,
-                                                        dead_letter_headers_reason_expired_per_message]},
+       {classic_queue, Opts, [dead_letter_max_length_reject_publish_dlx | DeadLetterTests]},
+       {mirrored_queue, Opts, [dead_letter_max_length_reject_publish_dlx | DeadLetterTests]},
        {quorum_queue, Opts, DeadLetterTests}
       ]}
     ].
