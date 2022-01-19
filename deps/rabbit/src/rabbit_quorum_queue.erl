@@ -26,7 +26,7 @@
 -export([credit/4]).
 -export([purge/1]).
 -export([stateless_deliver/2, deliver/3, deliver/2]).
--export([dead_letter_publish/4]).
+-export([dead_letter_publish/5]).
 -export([queue_name/1]).
 -export([cluster_state/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
@@ -1301,15 +1301,20 @@ dlh_at_most_once(Exchange, RoutingKey, QName) ->
     MFA = {?MODULE, dead_letter_publish, [DLX, RoutingKey, QName]},
     {at_most_once, MFA}.
 
-dead_letter_publish(undefined, _, _, _) ->
-    ok;
-dead_letter_publish(X, RK, QName, ReasonMsgs) ->
+dead_letter_publish(X, RK, QName, Reason, Msgs) ->
     case rabbit_exchange:lookup(X) of
         {ok, Exchange} ->
-            [rabbit_dead_letter:publish(Msg, Reason, Exchange, RK, QName)
-             || {Reason, Msg} <- ReasonMsgs];
+            lists:foreach(fun(Msg) ->
+                                  rabbit_dead_letter:publish(Msg, Reason, Exchange, RK, QName)
+                          end, Msgs),
+            rabbit_global_counters:messages_dead_lettered(Reason, ?MODULE, at_most_once, length(Msgs));
         {error, not_found} ->
-            ok
+            %% Even though dead-letter-strategy is at_most_once,
+            %% when configured dead-letter-exchange does not exist,
+            %% we increment counter for dead-letter-strategy 'disabled' because
+            %% 1. we know for certain that the message won't be delivered, and
+            %% 2. that's in line with classic queue behaviour
+            rabbit_global_counters:messages_dead_lettered(Reason, ?MODULE, disabled, length(Msgs))
     end.
 
 find_quorum_queues(VHost) ->

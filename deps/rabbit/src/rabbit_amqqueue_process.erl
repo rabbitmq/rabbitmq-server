@@ -728,10 +728,14 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
             with_dlx(
               DLX,
               fun (X) ->
+                      rabbit_global_counters:messages_dead_lettered(maxlen, rabbit_classic_queue,
+                                                                    at_most_once, 1),
                       QName = qname(State),
                       rabbit_dead_letter:publish(Message, maxlen, X, RK, QName)
               end,
-              fun () -> ok end),
+              fun () -> rabbit_global_counters:messages_dead_lettered(maxlen, rabbit_classic_queue,
+                                                                      disabled, 1)
+              end),
             %% Drop publish and nack to publisher
             send_reject_publish(Delivery, Delivered, State);
         _ ->
@@ -763,6 +767,8 @@ deliver_or_enqueue(Delivery = #delivery{message = Message,
         {undelivered, State2 = #q{ttl = 0, dlx = undefined,
                                   backing_queue_state = BQS,
                                   msg_id_to_channel   = MTC}} ->
+            rabbit_global_counters:messages_dead_lettered(expired, rabbit_classic_queue,
+                                                          disabled, 1),
             {BQS1, MTC1} = discard(Delivery, BQ, BQS, MTC, amqqueue:get_name(Q)),
             State2#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1};
         {undelivered, State2 = #q{backing_queue_state = BQS}} ->
@@ -804,6 +810,9 @@ maybe_drop_head(AlreadyDropped, State = #q{backing_queue       = BQ,
                               State#q.dlx,
                               fun (X) -> dead_letter_maxlen_msg(X, State) end,
                               fun () ->
+                                      rabbit_global_counters:messages_dead_lettered(maxlen,
+                                                                                    rabbit_classic_queue,
+                                                                                    disabled, 1),
                                       {_, BQS1} = BQ:drop(false, BQS),
                                       State#q{backing_queue_state = BQS1}
                               end));
@@ -1012,11 +1021,18 @@ drop_expired_msgs(State) ->
 drop_expired_msgs(Now, State = #q{backing_queue_state = BQS,
                                   backing_queue       = BQ }) ->
     ExpirePred = fun (#message_properties{expiry = Exp}) -> Now >= Exp end,
+    ExpirePredIncrement = fun(Properties) ->
+                                  ExpirePred(Properties) andalso
+                                  rabbit_global_counters:messages_dead_lettered(expired,
+                                                                                rabbit_classic_queue,
+                                                                                disabled,
+                                                                                1) =:= ok
+                          end,
     {Props, State1} =
         with_dlx(
           State#q.dlx,
           fun (X) -> dead_letter_expired_msgs(ExpirePred, X, State) end,
-          fun () -> {Next, BQS1} = BQ:dropwhile(ExpirePred, BQS),
+          fun () -> {Next, BQS1} = BQ:dropwhile(ExpirePredIncrement, BQS),
                     {Next, State#q{backing_queue_state = BQS1}} end),
     ensure_ttl_timer(case Props of
                          undefined                         -> undefined;
@@ -1058,6 +1074,8 @@ dead_letter_msgs(Fun, Reason, X, State = #q{dlx_routing_key     = RK,
     QName = qname(State),
     {Res, Acks1, BQS1} =
         Fun(fun (Msg, AckTag, Acks) ->
+                    rabbit_global_counters:messages_dead_lettered(Reason, rabbit_classic_queue,
+                                                                  at_most_once, 1),
                     rabbit_dead_letter:publish(Msg, Reason, X, RK, QName),
                     [AckTag | Acks]
             end, [], BQS),
@@ -1575,7 +1593,9 @@ handle_cast({reject, false, AckTags, ChPid}, State) ->
                                                dead_letter_rejected_msgs(
                                                  AckTags, X, State1)
                                        end) end,
-              fun () -> ack(AckTags, ChPid, State) end));
+              fun () -> rabbit_global_counters:messages_dead_lettered(rejected, rabbit_classic_queue,
+                                                                      disabled, length(AckTags)),
+                        ack(AckTags, ChPid, State) end));
 
 handle_cast({delete_exclusive, ConnPid}, State) ->
     log_delete_exclusive(ConnPid, State),

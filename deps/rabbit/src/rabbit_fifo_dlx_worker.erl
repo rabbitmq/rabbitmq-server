@@ -86,8 +86,6 @@
 
 -type state() :: #state{}.
 
-%%TODO Add metrics like global counters for messages routed, delivered, etc. by adding a new counter in seshat.
-
 start_link(QRef) ->
     gen_server:start_link(?MODULE, QRef, [{hibernate_after, ?HIBERNATE_AFTER}]).
 
@@ -461,12 +459,12 @@ maybe_cancel_timer(#state{timer = TRef,
 maybe_cancel_timer(State) ->
     State.
 
-cancel_timer(#state{timer = undefined} = State) ->
-    State;
 cancel_timer(#state{timer = TRef} = State)
   when is_reference(TRef) ->
     erlang:cancel_timer(TRef, [{async, true}, {info, false}]),
-    State#state{timer = undefined}.
+    State#state{timer = undefined};
+cancel_timer(State) ->
+    State.
 
 format_status(_Opt, [_PDict, #state{
                                 queue_ref = QueueRef,
