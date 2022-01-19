@@ -367,7 +367,7 @@ return_checked_out_limit_test(_) ->
     {State2, ok, [{send_msg, _, {delivery, _, [{MsgId2, _}]}, _},
                   {aux, active}]} =
         apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
-    {#rabbit_fifo{} = State, ok, [_ReleaseEff]} =
+        {#rabbit_fifo{} = State, ok, [_ModCallEffDeadLetterCounter | _ReleaseEff]} =
         apply(meta(4), rabbit_fifo:make_return(Cid, [MsgId2]), State2),
     ?assertEqual(0, rabbit_fifo:query_messages_total(State)),
     ok.

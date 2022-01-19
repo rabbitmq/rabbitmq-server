@@ -12,8 +12,9 @@
 -include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
--compile([nowarn_export_all, export_all]).
+-compile([export_all, nowarn_export_all]).
 
 -import(quorum_queue_utils, [wait_for_messages/2]).
 
@@ -53,15 +54,31 @@ groups() ->
                        dead_letter_routing_key_cycle_ttl,
                        dead_letter_headers_reason_expired,
                        dead_letter_headers_reason_expired_per_message],
-    Opts = [],
+    DisabledMetricTests = [metric_maxlen,
+                           metric_rejected,
+                           metric_expired_queue_msg_ttl,
+                           metric_expired_per_msg_msg_ttl],
+    Opts = [shuffle],
     [
-     {dead_letter_tests, [],
+     {dead_letter_tests, Opts,
       [
-       {classic_queue, Opts, [dead_letter_max_length_reject_publish_dlx | DeadLetterTests]},
-       {mirrored_queue, Opts, [dead_letter_max_length_reject_publish_dlx | DeadLetterTests]},
-       {quorum_queue, Opts, DeadLetterTests}
-      ]}
-    ].
+       {classic_queue, Opts, [{at_most_once, Opts, [dead_letter_max_length_reject_publish_dlx | DeadLetterTests]},
+                              {disabled, Opts, DisabledMetricTests}]},
+       {mirrored_queue, Opts, [{at_most_once, Opts, [dead_letter_max_length_reject_publish_dlx | DeadLetterTests]},
+                               {disabled, Opts, DisabledMetricTests}]},
+       {quorum_queue, Opts, [{at_most_once, Opts, DeadLetterTests},
+                             {disabled, Opts, DisabledMetricTests},
+                             {at_least_once, Opts, DeadLetterTests --
+                              [
+                               %% dead-letter-strategy at-least-once is incompatible with overflow drop-head
+                               dead_letter_max_length_drop_head,
+                               dead_letter_routing_key_cycle_max_length,
+                               dead_letter_headers_reason_maxlen,
+                               %% tested separately in rabbit_fifo_dlx_integration_SUITE
+                               dead_letter_missing_exchange
+                              ]}
+                            ]
+       }]}].
 
 suite() ->
     [
@@ -72,8 +89,10 @@ suite() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-init_per_suite(Config) ->
+init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
+    Config = rabbit_ct_helpers:merge_app_env(
+               Config0, {rabbit, [{dead_letter_worker_publisher_confirm_timeout, 2000}]}),
     rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_suite(Config) ->
@@ -84,19 +103,6 @@ init_per_group(classic_queue, Config) ->
       Config,
       [{queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
        {queue_durable, false}]);
-init_per_group(quorum_queue, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
-        ok ->
-            rabbit_ct_helpers:set_config(
-              Config,
-              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                             {<<"x-delivery-limit">>, long, 100},
-                             %%TODO add at-least-once tests
-                             {<<"x-dead-letter-strategy">>, longstr, <<"at-most-once">>}]},
-               {queue_durable, true}]);
-        Skip ->
-            Skip
-    end;
 init_per_group(mirrored_queue, Config) ->
     rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
         <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
@@ -105,6 +111,45 @@ init_per_group(mirrored_queue, Config) ->
                          {queue_args, [{<<"x-queue-type">>, longstr, <<"classic">>}]},
                          {queue_durable, false}]),
     rabbit_ct_helpers:run_steps(Config1, []);
+init_per_group(quorum_queue, Config) ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
+        ok ->
+            rabbit_ct_helpers:set_config(
+              Config,
+              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                             {<<"x-delivery-limit">>, long, 100}]},
+               {queue_durable, true}]);
+        Skip ->
+            Skip
+    end;
+init_per_group(at_most_once, Config) ->
+    case outer_group_name(Config) of
+        quorum_queue ->
+            QueueArgs0 = rabbit_ct_helpers:get_config(Config, queue_args),
+            QueueArgs = lists:keystore(<<"x-dead-letter-strategy">>,
+                                       1,
+                                       QueueArgs0,
+                                       {<<"x-dead-letter-strategy">>, longstr, <<"at-most-once">>}),
+            rabbit_ct_helpers:set_config(Config, {queue_args, QueueArgs});
+        _ ->
+            Config
+    end;
+init_per_group(at_least_once, Config) ->
+    case outer_group_name(Config) of
+        quorum_queue ->
+            QueueArgs0 = rabbit_ct_helpers:get_config(Config, queue_args),
+            QueueArgs1 = lists:keystore(<<"x-dead-letter-strategy">>,
+                                        1,
+                                        QueueArgs0,
+                                        {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>}),
+            QueueArgs = lists:keystore(<<"x-overflow">>,
+                                       1,
+                                       QueueArgs1,
+                                       {<<"x-overflow">>, longstr, <<"reject-publish">>}),
+            rabbit_ct_helpers:set_config(Config, {queue_args, QueueArgs});
+        _ ->
+            Config
+    end;
 init_per_group(Group, Config) ->
     case lists:member({group, Group}, all()) of
         true ->
@@ -137,12 +182,14 @@ init_per_testcase(Testcase, Config) ->
     Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
     Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
     DLXExchange = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_dlx_exchange",
-                                                            [Group, Testcase])),
+                                                               [Group, Testcase])),
+    Counters = get_global_counters(Config),
     Config1 = rabbit_ct_helpers:set_config(Config, [{dlx_exchange, DLXExchange},
                                                     {queue_name, Q},
                                                     {queue_name_dlx, Q2},
                                                     {queue_name_dlx_2, Q3},
-                                                    {policy, Policy}]),
+                                                    {policy, Policy},
+                                                    {counters, Counters}]),
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
@@ -159,7 +206,7 @@ end_per_testcase(Testcase, Config) ->
 %%
 %% Messages are dead-lettered when:
 %% 1) message is rejected with basic.reject or basic.nack with requeue=false
-%% 2) message ttl expires (not implemented in quorum queues)
+%% 2) message ttl expires
 %% 3) queue length limit is exceeded (only drop-head implemented in quorum queues)
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -201,7 +248,8 @@ dead_letter_nack(Config) ->
     consume_empty(Ch, QName),
     %% Consume the first two messages from the dead letter queue
     consume(Ch, DLXQName, [P1, P2]),
-    consume_empty(Ch, DLXQName).
+    consume_empty(Ch, DLXQName),
+    ?assertEqual(3, counted(messages_dead_lettered_rejected_total, Config)).
 
 %% 1) message is rejected with basic.nack, requeue=false and multiple=true
 dead_letter_multiple_nack(Config) ->
@@ -228,7 +276,8 @@ dead_letter_multiple_nack(Config) ->
     consume(Ch, DLXQName, [P1, P2, P3]),
     consume_empty(Ch, DLXQName),
     %% Queue is empty
-    consume_empty(Ch, QName).
+    consume_empty(Ch, QName),
+    ?assertEqual(3, counted(messages_dead_lettered_rejected_total, Config)).
 
 %% 1) message is rejected with basic.nack, requeue=true and multiple=false. Dead-lettering does not take place
 dead_letter_nack_requeue(Config) ->
@@ -257,7 +306,8 @@ dead_letter_nack_requeue(Config) ->
     consume(Ch, QName, [P3]),
     consume_empty(Ch, QName),
     %% Dead letter queue is empty
-    consume_empty(Ch, DLXQName).
+    consume_empty(Ch, DLXQName),
+    ?assertEqual(0, counted(messages_dead_lettered_rejected_total, Config)).
 
 %% 1) message is rejected with basic.nack, requeue=true and multiple=true. Dead-lettering does not take place
 dead_letter_nack_requeue_multiple(Config) ->
@@ -286,7 +336,8 @@ dead_letter_nack_requeue_multiple(Config) ->
     consume(Ch, QName, [P1, P2, P3]),
     consume_empty(Ch, QName),
     %% Dead letter queue is empty
-    consume_empty(Ch, DLXQName).
+    consume_empty(Ch, DLXQName),
+    ?assertEqual(0, counted(messages_dead_lettered_rejected_total, Config)).
 
 %% 1) message is rejected with basic.reject, requeue=false
 dead_letter_reject(Config) ->
@@ -313,7 +364,8 @@ dead_letter_reject(Config) ->
     consume_empty(Ch, DLXQName),
     %% Consume the last two from the queue
     _ = consume(Ch, QName, [P2, P3]),
-    consume_empty(Ch, QName).
+    consume_empty(Ch, QName),
+    ?assertEqual(1, counted(messages_dead_lettered_rejected_total, Config)).
 
 %% 1) Many messages are rejected. They get dead-lettered in correct order.
 dead_letter_reject_many(Config) ->
@@ -343,7 +395,8 @@ dead_letter_reject_many(Config) ->
     %% Consume all messages from dead letter queue in correct order (i.e. from payload <<1>> to <<100>>)
     wait_for_messages(Config, [[DLXQName, <<"100">>, <<"100">>, <<"0">>]]),
     _ = consume(Ch, DLXQName, Payloads),
-    consume_empty(Ch, DLXQName).
+    consume_empty(Ch, DLXQName),
+    ?assertEqual(100, counted(messages_dead_lettered_rejected_total, Config)).
 
 %% 1) Message is rejected with basic.reject, requeue=true. Dead-lettering does not take place.
 dead_letter_reject_requeue(Config) ->
@@ -369,7 +422,8 @@ dead_letter_reject_requeue(Config) ->
     _ = consume(Ch, QName, [P1, P2, P3]),
     consume_empty(Ch, QName),
     %% Dead letter is empty
-    consume_empty(Ch, DLXQName).
+    consume_empty(Ch, DLXQName),
+    ?assertEqual(0, counted(messages_dead_lettered_rejected_total, Config)).
 
 %% 2) Message ttl expires
 dead_letter_ttl(Config) ->
@@ -383,7 +437,8 @@ dead_letter_ttl(Config) ->
     publish(Ch, QName, [P1]),
     wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
     consume_empty(Ch, QName),
-    [_] = consume(Ch, DLXQName, [P1]).
+    [_] = consume(Ch, DLXQName, [P1]),
+    ?assertEqual(1, counted(messages_dead_lettered_expired_total, Config)).
 
 %% 3) The queue length limit is exceeded, message dropped is dead lettered.
 %% Default strategy: drop-head
@@ -407,7 +462,8 @@ dead_letter_max_length_drop_head(Config) ->
     %% Consume the dropped ones from the dead letter queue
     wait_for_messages(Config, [[DLXQName, <<"2">>, <<"2">>, <<"0">>]]),
     _ = consume(Ch, DLXQName, [P1, P2]),
-    consume_empty(Ch, DLXQName).
+    consume_empty(Ch, DLXQName),
+    ?assertEqual(2, counted(messages_dead_lettered_maxlen_total, Config)).
 
 %% Another strategy: reject-publish-dlx
 dead_letter_max_length_reject_publish_dlx(Config) ->
@@ -432,7 +488,8 @@ dead_letter_max_length_reject_publish_dlx(Config) ->
     %% Consume the dropped ones from the dead letter queue
     wait_for_messages(Config, [[DLXQName, <<"2">>, <<"2">>, <<"0">>]]),
     _ = consume(Ch, DLXQName, [P2, P3]),
-    consume_empty(Ch, DLXQName).
+    consume_empty(Ch, DLXQName),
+    ?assertEqual(2, counted(messages_dead_lettered_maxlen_total, Config)).
 
 %% Dead letter exchange does not have to be declared when the queue is declared, but it should
 %% exist by the time messages need to be dead-lettered; if it is missing then, the messages will
@@ -484,8 +541,9 @@ dead_letter_missing_exchange(Config) ->
     %% Consume the rejected message from the dead letter queue
     wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
     {#'basic.get_ok'{}, #amqp_msg{payload = P2}} =
-        amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
-    consume_empty(Ch, DLXQName).
+    amqp_channel:call(Ch, #'basic.get'{queue = DLXQName}),
+    consume_empty(Ch, DLXQName),
+    ?assertEqual(1, counted(messages_dead_lettered_rejected_total, Config)).
 
 %%
 %% ROUTING
@@ -520,8 +578,13 @@ dead_letter_routing_key(Config) ->
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DTag1,
                                         multiple     = false,
                                         requeue      = false}),
-    %% Both queues are empty as the message could not been routed in the dlx exchange
-    wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
+    case group_name(Config) of
+        at_most_once ->
+            %% Both queues are empty as the message could not been routed in the dlx exchange
+            wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]);
+        at_least_once ->
+            wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"0">>]])
+    end,
     consume_empty(Ch, QName),
     consume_empty(Ch, DLXQName),
     %% Bind the dlx queue with the original queue routing key
@@ -536,10 +599,17 @@ dead_letter_routing_key(Config) ->
                                         multiple     = false,
                                         requeue      = false}),
     %% Message can now be routed using the recently binded key
-    wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
-    consume(Ch, DLXQName, [P2]),
-    consume_empty(Ch, QName).
-
+    case group_name(Config) of
+        at_most_once ->
+            wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
+            consume(Ch, DLXQName, [P2]);
+        at_least_once ->
+            wait_for_messages(Config, [[DLXQName, <<"2">>, <<"2">>, <<"0">>]]),
+            consume(Ch, DLXQName, [P1, P2]),
+            ?assertEqual(2, counted(messages_dead_lettered_confirmed_total, Config))
+    end,
+    consume_empty(Ch, QName),
+    ?assertEqual(2, counted(messages_dead_lettered_rejected_total, Config)).
 
 %% 4a) If a specific routing key was not set for the queue, use routing keys added by the
 %%    CC and BCC headers
@@ -648,9 +718,10 @@ dead_letter_routing_key_cycle_max_length(Config) ->
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag}),
     %% Queue is empty, P1 has not been republished in a loop
     wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
-    consume_empty(Ch, QName).
+    consume_empty(Ch, QName),
+    ?assertEqual(1, counted(messages_dead_lettered_maxlen_total, Config)).
 
-%% 7) Message is dead lettered due to message ttl. Not yet implemented in quorum queues
+%% 7) Message is dead lettered due to message ttl.
 dead_letter_routing_key_cycle_ttl(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Args = ?config(queue_args, Config),
@@ -667,7 +738,8 @@ dead_letter_routing_key_cycle_ttl(Config) ->
     %% Publish messages
     publish(Ch, QName, [P1, P2]),
     wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
-    consume_empty(Ch, QName).
+    consume_empty(Ch, QName),
+    ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)).
 
 %% 5) Messages continue to be republished as there are manual rejections
 dead_letter_routing_key_cycle_with_reject(Config) ->
@@ -695,7 +767,8 @@ dead_letter_routing_key_cycle_with_reject(Config) ->
                                         requeue      = false}),
     %% Message its being republished
     wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    [_] = consume(Ch, QName, [P]).
+    [_] = consume(Ch, QName, [P]),
+    ?assertEqual(2, counted(messages_dead_lettered_rejected_total, Config)).
 
 %%
 %% For any given queue, a DLX can be defined by clients using the queue's arguments,
@@ -1205,6 +1278,74 @@ dead_letter_headers_first_death_route(Config) ->
     _ = consume(Ch, DLXRejectedQName, [P2]),
     consume_empty(Ch, DLXRejectedQName).
 
+metric_maxlen(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = QName,
+                                                   arguments = [{<<"x-max-length">>, long, 1},
+                                                                {<<"x-overflow">>, longstr, <<"drop-head">>} |
+                                                                ?config(queue_args, Config)],
+                                                   durable = ?config(queue_durable, Config)}),
+    %% Publish 1000 messages
+    Payloads = lists:map(fun erlang:integer_to_binary/1, lists:seq(1, 1000)),
+    publish(Ch, QName, Payloads),
+    ?awaitMatch(999, counted(messages_dead_lettered_maxlen_total, Config), 3000, 300).
+
+metric_rejected(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = QName,
+                                                   arguments = ?config(queue_args, Config),
+                                                   durable = ?config(queue_durable, Config)}),
+    %% Publish 1000 messages
+    Payloads = lists:map(fun erlang:integer_to_binary/1, lists:seq(1, 1000)),
+    publish(Ch, QName, Payloads),
+    wait_for_messages(Config, [[QName, <<"1000">>, <<"1000">>, <<"0">>]]),
+
+    %% Reject all messages using same consumer
+    amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName}, self()),
+    CTag = receive #'basic.consume_ok'{consumer_tag = C} -> C end,
+    [begin
+         receive {#'basic.deliver'{consumer_tag = CTag, delivery_tag = DTag}, #amqp_msg{payload = P}} ->
+                     amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag, requeue = false})
+         after 5000 ->
+                   amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+                   exit(timeout)
+         end
+     end || P <- Payloads],
+    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+    ?awaitMatch(1000, counted(messages_dead_lettered_rejected_total, Config), 3000, 300).
+
+metric_expired_queue_msg_ttl(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = QName,
+                                                   arguments = [{<<"x-message-ttl">>, long, 0} |
+                                                                ?config(queue_args, Config)],
+                                                   durable = ?config(queue_durable, Config)}),
+    %% Publish 1000 messages
+    Payloads = lists:map(fun erlang:integer_to_binary/1, lists:seq(1, 1000)),
+    publish(Ch, QName, Payloads),
+    ?awaitMatch(1000, counted(messages_dead_lettered_expired_total, Config), 3000, 300).
+
+metric_expired_per_msg_msg_ttl(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{queue = QName,
+                                                   arguments = ?config(queue_args, Config),
+                                                   durable = ?config(queue_durable, Config)}),
+    %% Publish 1000 messages
+    Payloads = lists:map(fun erlang:integer_to_binary/1, lists:seq(1, 1000)),
+    [amqp_channel:call(Ch, #'basic.publish'{routing_key = QName},
+                       #amqp_msg{payload = Payload,
+                                 props = #'P_basic'{expiration = <<"0">>}})
+     || Payload <- Payloads],
+    ?awaitMatch(1000, counted(messages_dead_lettered_expired_total, Config), 3000, 300).
+
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Test helpers
 %%%%%%%%%%%%%%%%%%%%%%%%
@@ -1222,8 +1363,9 @@ declare_dead_letter_queues(Ch, Config, QName, DLXQName, ExtraArgs) ->
     %% Declare queue
     DeadLetterArgs = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange},
                       {<<"x-dead-letter-routing-key">>, longstr, DLXQName}],
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName, arguments = DeadLetterArgs ++ Args ++ ExtraArgs, durable = Durable}),
-
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                                                   arguments = DeadLetterArgs ++ Args ++ ExtraArgs,
+                                                                   durable = Durable}),
     %% Declare and bind DLX queue
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXQName, durable = Durable}),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXQName,
@@ -1243,7 +1385,7 @@ publish(Ch, QName, Payloads, Headers) ->
 consume(Ch, QName, Payloads) ->
     [begin
          {#'basic.get_ok'{delivery_tag = DTag}, #amqp_msg{payload = Payload}} =
-             amqp_channel:call(Ch, #'basic.get'{queue = QName}),
+         amqp_channel:call(Ch, #'basic.get'{queue = QName}),
          DTag
      end || Payload <- Payloads].
 
@@ -1256,3 +1398,31 @@ sync_mirrors(QName, Config) ->
             rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [<<"sync_queue">>, QName]);
         _ -> ok
     end.
+
+get_global_counters(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, []).
+
+%% Returns the delta of Metric between testcase start and now.
+counted(Metric, Config) ->
+    QueueType = queue_type(outer_group_name(Config)),
+    Strategy = group_name(Config),
+    OldCounters = ?config(counters, Config),
+    Counters = get_global_counters(Config),
+    metric(QueueType, Strategy, Metric, Counters) -
+    metric(QueueType, Strategy, Metric, OldCounters).
+
+metric(QueueType, Strategy, Metric, Counters) ->
+    Metrics = maps:get([{queue_type, QueueType}, {dead_letter_strategy, Strategy}], Counters),
+    maps:get(Metric, Metrics).
+
+group_name(Config) ->
+    proplists:get_value(name, ?config(tc_group_properties, Config)).
+
+outer_group_name(Config) ->
+    [{name, Name} | _] = hd(?config(tc_group_path, Config)),
+    Name.
+
+queue_type(quorum_queue) ->
+    rabbit_quorum_queue;
+queue_type(_) ->
+    rabbit_classic_queue.

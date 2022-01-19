@@ -54,7 +54,9 @@ end_per_testcase(_TestCase, _Config) ->
 handler_undefined(_Config) ->
     S = rabbit_fifo_dlx:init(),
     Handler = undefined,
-    ?assertEqual({S, []}, rabbit_fifo_dlx:discard([make_msg(1)], because, Handler, S)),
+    ?assertEqual({S, [{mod_call, rabbit_global_counters, messages_dead_lettered,
+                       [because, rabbit_quorum_queue, disabled, 1]}]},
+                 rabbit_fifo_dlx:discard([make_msg(1)], because, Handler, S)),
     ok.
 
 handler_at_most_once(_Config) ->
@@ -74,7 +76,9 @@ discard_dlx_consumer(_Config) ->
                    discard_checkout_message_bytes => 0}, rabbit_fifo_dlx:overview(S0)),
 
     %% message without dlx consumer
-    {S1, []} = rabbit_fifo_dlx:discard([make_msg(1)], because, Handler, S0),
+    {S1, [{mod_call, rabbit_global_counters, messages_dead_lettered,
+           [because, rabbit_quorum_queue, at_least_once, 1]}]} =
+        rabbit_fifo_dlx:discard([make_msg(1)], because, Handler, S0),
     {S2, []} = rabbit_fifo_dlx:checkout(Handler, S1),
     ?assertEqual(#{num_discarded => 1,
                    num_discard_checked_out => 0,
@@ -92,7 +96,7 @@ discard_dlx_consumer(_Config) ->
     ?assertMatch([{log, [1], _}], DeliveryEffects0),
 
     %% more messages than dlx consumer's prefetch
-    {S5, []} = rabbit_fifo_dlx:discard([make_msg(3), make_msg(4)], because, Handler, S4),
+    {S5, [_ModCallGlobalCounter]} = rabbit_fifo_dlx:discard([make_msg(3), make_msg(4)], because, Handler, S4),
     {S6, DeliveryEffects1} = rabbit_fifo_dlx:checkout(Handler, S5),
     ?assertEqual(#{num_discarded => 1,
                    num_discard_checked_out => 2,
@@ -103,7 +107,9 @@ discard_dlx_consumer(_Config) ->
 
     %% dlx consumer acks messages
     Settle = rabbit_fifo_dlx:make_settle([0,1]),
-    {S7, []} = rabbit_fifo_dlx:apply(meta(5), Settle, Handler, S6),
+    {S7, [{mod_call, rabbit_global_counters, messages_dead_lettered_confirmed,
+           [rabbit_quorum_queue, at_least_once, 2]}]} =
+    rabbit_fifo_dlx:apply(meta(5), Settle, Handler, S6),
     {S8, DeliveryEffects2} = rabbit_fifo_dlx:checkout(Handler, S7),
     ?assertEqual(#{num_discarded => 0,
                    num_discard_checked_out => 1,
@@ -135,11 +141,13 @@ switch_strategies(_Config) ->
     QRes = #resource{virtual_host = <<"/">>,
                      kind = queue,
                      name = <<"blah">>},
-    Handler0 = undefined,
-    Handler1 = at_least_once,
+    application:set_env(rabbit, dead_letter_worker_consumer_prefetch, 1),
+    application:set_env(rabbit, dead_letter_worker_publisher_confirm_timeout, 1000),
     {ok, _} = rabbit_fifo_dlx_sup:start_link(),
     S0 = rabbit_fifo_dlx:init(),
 
+    Handler0 = undefined,
+    Handler1 = at_least_once,
     %% Switching from undefined to at_least_once should start dlx consumer.
     {S1, Effects} = rabbit_fifo_dlx:update_config(Handler0, Handler1, QRes, S0),
     ?assertEqual([{aux, {dlx, setup}}], Effects),
@@ -162,7 +170,9 @@ last_consumer_wins(_Config) ->
     S0 = rabbit_fifo_dlx:init(),
     Handler = at_least_once,
     Msgs = [make_msg(1), make_msg(2), make_msg(3), make_msg(4)],
-    {S1, []} = rabbit_fifo_dlx:discard(Msgs, because, Handler, S0),
+    {S1, [{mod_call, rabbit_global_counters, messages_dead_lettered,
+           [because, rabbit_quorum_queue, at_least_once, 4]}]} =
+        rabbit_fifo_dlx:discard(Msgs, because, Handler, S0),
     Checkout = rabbit_fifo_dlx:make_checkout(self(), 10),
     {S2, []} = rabbit_fifo_dlx:apply(meta(5), Checkout, Handler, S1),
     {S3, DeliveryEffects0} = rabbit_fifo_dlx:checkout(Handler, S2),

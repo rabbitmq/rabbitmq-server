@@ -101,7 +101,8 @@ apply(_, {dlx, #settle{msg_ids = MsgIds}}, at_least_once,
                                         msg_bytes_checkout = BytesCheckout - size_in_bytes(Msg),
                                         ra_indexes = Indexes}
                       end, State0, Acked),
-    {State, []};
+    {State, [{mod_call, rabbit_global_counters, messages_dead_lettered_confirmed,
+              [rabbit_quorum_queue, at_least_once, maps:size(Acked)]}]};
 apply(_, {dlx, #checkout{consumer = Pid,
                          prefetch = Prefetch}},
       at_least_once,
@@ -139,28 +140,29 @@ apply(_, Cmd, DLH, State) ->
 
 -spec discard([msg()], rabbit_dead_letter:reason(), dead_letter_handler(), state()) ->
     {state(), ra_machine:effects()}.
-discard(_, _, undefined, State) ->
-    {State, []};
-discard(Msgs, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
+discard(Msgs, Reason, undefined, State) ->
+    {State, [{mod_call, rabbit_global_counters, messages_dead_lettered,
+              [Reason, rabbit_quorum_queue, disabled, length(Msgs)]}]};
+discard(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
     RaftIdxs = lists:filtermap(
                  fun (?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
                          {true, RaftIdx};
                      (_IgnorePrefixMessage) ->
                          false
-                 end, Msgs),
+                 end, Msgs0),
     Effect = {log, RaftIdxs,
               fun (Log) ->
                       Lookup = maps:from_list(lists:zip(RaftIdxs, Log)),
-                      DeadLetters = lists:filtermap(
-                                      fun (?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
-                                              {enqueue, _, _, Msg} = maps:get(RaftIdx, Lookup),
-                                              {true, {Reason, Msg}};
-                                          (?INDEX_MSG(_, ?MSG(_Header, Msg))) ->
-                                              {true, {Reason, Msg}};
-                                          (_IgnorePrefixMessage) ->
-                                              false
-                                      end, Msgs),
-                      [{mod_call, Mod, Fun, Args ++ [DeadLetters]}]
+                      Msgs = lists:filtermap(
+                               fun (?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
+                                       {enqueue, _, _, Msg} = maps:get(RaftIdx, Lookup),
+                                       {true, Msg};
+                                   (?INDEX_MSG(_, ?MSG(_Header, Msg))) ->
+                                       {true, Msg};
+                                   (_IgnorePrefixMessage) ->
+                                       false
+                               end, Msgs0),
+                      [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
     {State, [Effect]};
 discard(Msgs, Reason, at_least_once, State0)
@@ -182,7 +184,8 @@ discard(Msgs, Reason, at_least_once, State0)
                                            msg_bytes = B,
                                            ra_indexes = I}
                         end, State0, Msgs),
-    {State, []}.
+    {State, [{mod_call, rabbit_global_counters, messages_dead_lettered,
+              [Reason, rabbit_quorum_queue, at_least_once, length(Msgs)]}]}.
 
 -spec checkout(dead_letter_handler(), state()) ->
     {state(), ra_machine:effects()}.
