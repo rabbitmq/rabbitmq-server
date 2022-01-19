@@ -87,21 +87,17 @@ stat(#?MODULE{consumer = Con,
 apply(_, {dlx, #settle{msg_ids = MsgIds}}, at_least_once,
       #?MODULE{consumer = #dlx_consumer{checked_out = Checked0}} = State0) ->
     Acked = maps:with(MsgIds, Checked0),
-    State = maps:fold(fun(MsgId, {_Rsn, Msg},
-                          #?MODULE{consumer = #dlx_consumer{checked_out = Checked} = C,
-                                   msg_bytes_checkout = BytesCheckout,
-                                   ra_indexes = Indexes0} = S) ->
-                              Indexes = case Msg of
-                                            ?INDEX_MSG(I, _)
-                                              when is_integer(I) ->
-                                                rabbit_fifo_index:delete(I, Indexes0);
-                                            _ ->
-                                                Indexes0
-                                        end,
-                              S#?MODULE{consumer = C#dlx_consumer{checked_out = maps:remove(MsgId, Checked)},
-                                        msg_bytes_checkout = BytesCheckout - size_in_bytes(Msg),
-                                        ra_indexes = Indexes}
-                      end, State0, Acked),
+    State = maps:fold(
+              fun(MsgId, {_Rsn, ?INDEX_MSG(Idx, ?DISK_MSG(_)) = Msg},
+                  #?MODULE{consumer = #dlx_consumer{checked_out = Checked} = C,
+                           msg_bytes_checkout = BytesCheckout,
+                           ra_indexes = Indexes0} = S) ->
+                      Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
+                      S#?MODULE{consumer = C#dlx_consumer{checked_out =
+                                                          maps:remove(MsgId, Checked)},
+                                msg_bytes_checkout = BytesCheckout - size_in_bytes(Msg),
+                                ra_indexes = Indexes}
+              end, State0, Acked),
     {State, []};
 apply(_, {dlx, #checkout{consumer = Pid,
                          prefetch = Prefetch}},
@@ -138,7 +134,8 @@ apply(_, Cmd, DLH, State) ->
     rabbit_log:debug("Ignoring command ~p for dead_letter_handler ~p", Cmd, DLH),
     {State, []}.
 
--spec discard([msg()], rabbit_dead_letter:reason(), dead_letter_handler(), state()) ->
+-spec discard([indexed_msg()], rabbit_dead_letter:reason(),
+              dead_letter_handler(), state()) ->
     {state(), ra_machine:effects()}.
 discard(_, _, undefined, State) ->
     {State, []};
@@ -167,18 +164,13 @@ discard(Msgs, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
 discard(Msgs, Reason, at_least_once, State0)
   when Reason =/= maxlen ->
     %%TODO delete delivery_count header to save space? It's not needed anymore.
-    State = lists:foldl(fun (Msg, #?MODULE{discards = D0,
-                                           msg_bytes = B0,
-                                           ra_indexes = I0} = S0) ->
+    State = lists:foldl(fun (?INDEX_MSG(Idx, _) = Msg,
+                             #?MODULE{discards = D0,
+                                      msg_bytes = B0,
+                                      ra_indexes = I0} = S0) ->
                                 D = lqueue:in({Reason, Msg}, D0),
                                 B = B0 + size_in_bytes(Msg),
-                                I = case Msg of
-                                        ?INDEX_MSG(Idx, _)
-                                          when is_integer(Idx) ->
-                                            rabbit_fifo_index:append(Idx, I0);
-                                        _ ->
-                                            I0
-                                    end,
+                                I = rabbit_fifo_index:append(Idx, I0),
                                 S0#?MODULE{discards = D,
                                            msg_bytes = B,
                                            ra_indexes = I}
@@ -248,8 +240,7 @@ add_bytes_checkout(Size, #?MODULE{msg_bytes = Bytes,
     State#?MODULE{msg_bytes = Bytes - Size,
                   msg_bytes_checkout = BytesCheckout + Size}.
 
-size_in_bytes(Msg) ->
-    Header = rabbit_fifo:get_msg_header(Msg),
+size_in_bytes(?INDEX_MSG(_Idx, ?DISK_MSG(Header))) ->
     rabbit_fifo:get_header(size, Header).
 
 %% returns at most one delivery effect because there is only one consumer
@@ -402,26 +393,26 @@ purge(#?MODULE{consumer = Consumer0} = State) ->
 
 -spec dehydrate(state()) ->
     state().
-dehydrate(#?MODULE{discards = Discards,
-                   consumer = Con} = State) ->
-    State#?MODULE{discards = dehydrate_messages(Discards),
-                  consumer = dehydrate_consumer(Con),
+dehydrate(#?MODULE{discards = _Discards,
+                   consumer = _Con} = State) ->
+    State#?MODULE{%%discards = dehydrate_messages(Discards),
+                  %%consumer = dehydrate_consumer(Con),
                   ra_indexes = rabbit_fifo_index:empty()}.
 
-dehydrate_messages(Discards) ->
-    L0 = lqueue:to_list(Discards),
-    L1 = lists:map(fun({_Reason, Msg}) ->
-                           {?NIL, rabbit_fifo:dehydrate_message(Msg)}
-                   end, L0),
-    lqueue:from_list(L1).
+% dehydrate_messages(Discards) ->
+%     L0 = lqueue:to_list(Discards),
+%     L1 = lists:map(fun({_Reason, Msg}) ->
+%                            {?NIL, rabbit_fifo:dehydrate_message(Msg)}
+%                    end, L0),
+%     lqueue:from_list(L1).
 
-dehydrate_consumer(#dlx_consumer{checked_out = Checked0} = Con) ->
-    Checked = maps:map(fun (_, {_, Msg}) ->
-                               {?NIL, rabbit_fifo:dehydrate_message(Msg)}
-                       end, Checked0),
-    Con#dlx_consumer{checked_out = Checked};
-dehydrate_consumer(undefined) ->
-    undefined.
+% dehydrate_consumer(#dlx_consumer{checked_out = Checked0} = Con) ->
+%     Checked = maps:map(fun (_, {_, Msg}) ->
+%                                {?NIL, rabbit_fifo:dehydrate_message(Msg)}
+%                        end, Checked0),
+%     Con#dlx_consumer{checked_out = Checked};
+% dehydrate_consumer(undefined) ->
+%     undefined.
 
 -spec normalize(state()) ->
     state().

@@ -1696,7 +1696,8 @@ checkout_gen(Pid) ->
             enq_body_fun = {0, fun ra_lib:id/1},
             config :: map(),
             log = [] :: list(),
-            down = #{} :: #{pid() => noproc | noconnection}
+            down = #{} :: #{pid() => noproc | noconnection},
+            enq_cmds = #{} :: #{ra:index() => rabbit_fifo:enqueue()}
            }).
 
 expand(Ops, Config) ->
@@ -1843,12 +1844,20 @@ handle_op({checkout_dlx, Prefetch}, #t{config = #{dead_letter_handler := at_leas
 do_apply(Cmd, #t{effects = Effs,
                  index = Index, state = S0,
                  down = Down,
+                 enq_cmds = EnqCmds0,
                  log = Log} = T) ->
     case Cmd of
-        {enqueue, Pid, _, _} when is_map_key(Pid, Down) ->
+        {enqueue, Pid, _, _Msg} when is_map_key(Pid, Down) ->
             %% down
             T;
         _ ->
+            EnqCmds = case Cmd  of
+                          {enqueue, _Pid, _, _Msg} ->
+                              EnqCmds0#{Index => Cmd};
+                          _ ->
+                              EnqCmds0
+                      end,
+
             {St, Effects} = case rabbit_fifo:apply(meta(Index), Cmd, S0) of
                                 {S, _, E} when is_list(E) ->
                                     {S, E};
@@ -1860,23 +1869,28 @@ do_apply(Cmd, #t{effects = Effs,
 
             T#t{state = St,
                 index = Index + 1,
-                effects = enq_effs(Effects, Effs),
+                enq_cmds = EnqCmds,
+                effects = enq_effs(Effects, Effs, EnqCmds),
                 log = [Cmd | Log]}
     end.
 
-enq_effs([], Q) -> Q;
-enq_effs([{send_msg, P, {delivery, CTag, Msgs}, _Opts} | Rem], Q) ->
+enq_effs([], Q, _) -> Q;
+enq_effs([{send_msg, P, {delivery, CTag, Msgs}, _Opts} | Rem], Q, Cmds) ->
     MsgIds = [I || {I, _} <- Msgs],
     %% always make settle commands by default
     %% they can be changed depending on the input event later
     Cmd = rabbit_fifo:make_settle({CTag, P}, MsgIds),
-    enq_effs(Rem, queue:in(Cmd, Q));
-enq_effs([{send_msg, _, {dlx_delivery, Msgs}, _Opts} | Rem], Q) ->
+    enq_effs(Rem, queue:in(Cmd, Q), Cmds);
+enq_effs([{log, RaIdxs, Fun, _} | Rem], Q, Cmds) ->
+    M = [maps:get(I, Cmds) || I <- RaIdxs],
+    Effs = Fun(M),
+    enq_effs(Effs ++ Rem, Q, Cmds);
+enq_effs([{send_msg, _, {dlx_delivery, Msgs}, _Opts} | Rem], Q, Cmds) ->
     MsgIds = [I || {I, _} <- Msgs],
     Cmd = rabbit_fifo_dlx:make_settle(MsgIds),
-    enq_effs(Rem, queue:in(Cmd, Q));
-enq_effs([_ | Rem], Q) ->
-    enq_effs(Rem, Q).
+    enq_effs(Rem, queue:in(Cmd, Q), Cmds);
+enq_effs([_ | Rem], Q, Cmds) ->
+    enq_effs(Rem, Q, Cmds).
 
 
 %% Utility
