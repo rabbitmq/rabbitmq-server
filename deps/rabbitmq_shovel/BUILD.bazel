@@ -1,5 +1,6 @@
-load("@rules_erlang//:xref2.bzl", "xref")
-load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load("@rules_erlang//:erlc.bzl", "erlc")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
@@ -40,11 +41,11 @@ BUILD_DEPS = [
 DEPS = [
     "//deps/amqp_client:erlang_app",
     "//deps/rabbit_common:erlang_app",
-    "//deps/rabbit:erlang_app",
 ]
 
 RUNTIME_DEPS = [
     "//deps/amqp10_client:erlang_app",
+    "//deps/rabbit:erlang_app",
 ]
 
 rabbitmq_app(

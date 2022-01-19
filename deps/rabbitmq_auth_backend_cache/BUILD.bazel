@@ -1,5 +1,5 @@
-load("@rules_erlang//:xref2.bzl", "xref")
-load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "BROKER_VERSION_REQUIREMENTS_ANY",
@@ -31,6 +31,10 @@ DEPS = [
 
 RUNTIME_DEPS = [
     "//deps/rabbit:erlang_app",
+]
+
+FIRST_SRCS = [
+    "src/rabbit_auth_cache.erl",
 ]
 
 rabbitmq_app(

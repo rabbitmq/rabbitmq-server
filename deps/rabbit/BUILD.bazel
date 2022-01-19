@@ -1,4 +1,5 @@
-load("@rules_erlang//:xref2.bzl", "xref")
+load("@rules_erlang//:erlc.bzl", "erlc")
+load("@rules_erlang//:xref.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
@@ -164,7 +165,6 @@ RUNTIME_DEPS = [
     "@observer_cli//:erlang_app",
     "@osiris//:erlang_app",
     "@recon//:erlang_app",
-    "@redbug//:erlang_app",
     "@seshat//:erlang_app",
     "@sysmon_handler//:erlang_app",
     "@systemd//:erlang_app",
@@ -191,6 +191,14 @@ EXTRA_APPS = [
     "ssl",
     "syntax_tools",
     "xmerl",
+]
+
+FIRST_SRCS = [
+    "src/rabbit_tracking.erl",
+    "src/rabbit_queue_type.erl",
+    "src/rabbit_credential_validator.erl",
+    "src/rabbit_policy_merge_strategy.erl",
+    "src/rabbit_queue_master_locator.erl",
 ]
 
 rabbitmq_app(
@@ -240,7 +248,7 @@ rabbitmq_home(
     plugins = [
         ":test_erlang_app",
         "//deps/rabbitmq_ct_client_helpers:erlang_app",
-        "@inet_tcp_proxy_dist//:erlang_app",
+        "@inet_tcp_proxy//:erlang_app",
         "@meck//:erlang_app",
     ],
 )
@@ -480,13 +488,6 @@ suites = [
             "@syslog//:erlang_app",
         ],
     ),
-    rabbitmq_suite(
-        name = "lqueue_SUITE",
-        size = "small",
-        deps = [
-            "@proper//:erlang_app",
-        ],
-    ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "maintenance_mode_SUITE",
@@ -702,37 +703,6 @@ suites = [
         ],
     ),
     rabbitmq_suite(
-        name = "rabbit_fifo_dlx_SUITE",
-        size = "small",
-        additional_hdrs = [
-            "src/rabbit_fifo.hrl",
-            "src/rabbit_fifo_dlx.hrl",
-        ],
-        deps = [
-            "//deps/rabbit_common:erlang_app",
-        ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "rabbit_fifo_dlx_integration_SUITE",
-        size = "medium",
-        additional_beam = [
-            ":test_util",
-            ":quorum_queue_utils",
-            ":quorum_queue_SUITE_beam_files",
-        ],
-        additional_hdrs = [
-            "src/rabbit_fifo.hrl",
-            "src/rabbit_fifo_dlx.hrl",
-        ],
-        runtime_deps = [
-            "@ra//:erlang_app",
-        ],
-        deps = [
-            "@proper//:erlang_app",
-        ],
-    ),
-    rabbitmq_suite(
         name = "rabbit_fifo_SUITE",
         size = "medium",
         additional_beam = [
@@ -781,12 +751,6 @@ suites = [
     ),
     rabbitmq_suite(
         name = "rabbit_stream_coordinator_SUITE",
-        deps = [
-            "//deps/rabbit_common:erlang_app",
-        ],
-    ),
-    rabbitmq_suite(
-        name = "rabbit_stream_sac_coordinator_SUITE",
         deps = [
             "//deps/rabbit_common:erlang_app",
         ],
@@ -1048,11 +1012,6 @@ suites = [
         deps = [
             "//deps/rabbit_common:erlang_app",
         ],
-    ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "direct_exchange_routing_v2_SUITE",
-        size = "medium",
     ),
 ]
 

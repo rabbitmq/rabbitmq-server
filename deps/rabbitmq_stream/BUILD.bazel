@@ -1,5 +1,5 @@
-load("@rules_erlang//:xref2.bzl", "xref")
-load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
@@ -7,7 +7,6 @@ load(
     "broker_for_integration_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
-    "without",
 )
 
 APP_NAME = "rabbitmq_stream"

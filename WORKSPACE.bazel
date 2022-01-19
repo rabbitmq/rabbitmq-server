@@ -63,19 +63,20 @@ load(
     "rules_erlang_dependencies",
 )
 
-rules_erlang_dependencies()
+load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
 
-register_toolchains(
-    "//bazel/toolchains:erlang_toolchain_external",
-    "//bazel/toolchains:erlang_toolchain_23",
-    "//bazel/toolchains:erlang_toolchain_24",
-    "//bazel/toolchains:erlang_toolchain_25",
-    "//bazel/toolchains:erlang_toolchain_git_master",
-    "//bazel/toolchains:elixir_toolchain_external",
-    "//bazel/toolchains:elixir_toolchain_1_10",
-    "//bazel/toolchains:elixir_toolchain_1_12",
-    "//bazel/toolchains:elixir_toolchain_1_13",
+rules_pkg_dependencies()
+
+http_archive(
+    name = "rules_erlang",
+    sha256 = "7fd0564918537eb72294d17f5f8dc663907b16d712773b1c006e83194746a1c0",
+    strip_prefix = "rules_erlang-2.0.0",
+    urls = ["https://github.com/rabbitmq/rules_erlang/archive/refs/tags/2.0.0.zip"],
 )
+
+load("@rules_erlang//:rules_erlang.bzl", "rules_erlang_dependencies")
+
+rules_erlang_dependencies()
 
 load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
 
@@ -87,4 +88,28 @@ activemq_archive()
 
 load("//bazel/bzlmod:secondary_umbrella.bzl", "secondary_umbrella")
 
-secondary_umbrella()
+pkg_zip(
+    name = "inet_tcp_proxy_ez",
+    package_dir = "inet_tcp_proxy/ebin",
+    srcs = [
+        "@inet_tcp_proxy//:erlang_app",
+    ],
+    package_file_name = "inet_tcp_proxy.ez",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "standard_plugins",
+    srcs = glob(["*.ez"]),
+    visibility = ["//visibility:public"],
+)
+EOF
+"""
+
+http_archive(
+    name = "rabbitmq-server-generic-unix-3.8.22",
+    build_file = "@//:BUILD.package_generic_unix",
+    patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
+    strip_prefix = "rabbitmq_server-3.8.22",
+    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.22/rabbitmq-server-generic-unix-3.8.22.tar.xz"],
+)

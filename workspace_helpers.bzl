@@ -4,6 +4,8 @@ load("@rules_erlang//:github.bzl", "github_erlang_app")
 load("@rules_erlang//:hex_archive.bzl", "hex_archive")
 load("@rules_erlang//:hex_pm.bzl", "hex_pm_erlang_app")
 
+load("//:rabbitmq.bzl", "APP_VERSION")
+
 def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_erlang_app(
         name = "accept",
@@ -48,7 +50,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         sha256 = "e4175dc240a70d996156160891e1c62238ede1729e45740bdd38064dad476170",
     )
 
-    hex_pm_erlang_app(
+    github_erlang_app(
+        repo = "credentials-obfuscation",
         name = "credentials_obfuscation",
         version = "3.1.0",
         sha256 = "04884e62b1c6cdfba999d4d6b3e99bc0a59d5e439517bc5c01767255afb7b778",
@@ -167,7 +170,7 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         ],
     )
 
-    hex_pm_erlang_app(
+    github_erlang_app(
         name = "prometheus",
         version = "4.8.2",
         deps = [
@@ -216,7 +219,7 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
     )
 
-    hex_pm_erlang_app(
+    github_erlang_app(
         name = "seshat",
         version = "0.3.2",
     )

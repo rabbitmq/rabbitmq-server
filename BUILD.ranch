@@ -1,7 +1,8 @@
 load("@rules_erlang//:app_file.bzl", "app_file")
 load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
 load("@rules_erlang//:erlang_app.bzl", "DEFAULT_ERLC_OPTS")
-load("@rules_erlang//:erlang_bytecode.bzl", "erlang_bytecode")
+
+load("@rules_erlang//:erlc.bzl", "erlc")
 
 erlang_bytecode(
     name = "beam_files",
@@ -30,6 +31,8 @@ app_file(
 
 erlang_app_info(
     name = "erlang_app",
+    app_name = "ranch",
+    app = ":app_file",
     hdrs = glob(["include/**/*.hrl"]),
     app = ":app_file",
     app_name = "ranch",

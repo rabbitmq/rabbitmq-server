@@ -1,5 +1,8 @@
 load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+<<<<<<< HEAD
 load("//:rabbitmq.bzl", "BROKER_VERSION_REQUIREMENTS_ANY")
+=======
+>>>>>>> Merge pull request #3963 from rabbitmq/use-rules_erlang
 
 DEPS = [
     "//deps/rabbit_common:erlang_app",

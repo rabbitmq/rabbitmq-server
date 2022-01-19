@@ -1,7 +1,4 @@
-load(
-    "@rules_erlang//tools:erlang_toolchain.bzl",
-    "erlang_dirs",
-)
+load("@rules_erlang//:erlang_home.bzl", "ErlangHomeProvider")
 
 def _impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
@@ -35,7 +32,8 @@ plt_path: bazel-bin/deps/rabbit/.base_plt.plt
 
 erlang_ls_config = rule(
     implementation = _impl,
-    toolchains = [
-        "@rules_erlang//tools:toolchain_type",
-    ],
+
+    attrs = {
+        "_erlang_home": attr.label(default = "@rules_erlang//:erlang_home"),
+    },
 )

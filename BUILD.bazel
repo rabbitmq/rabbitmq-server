@@ -5,8 +5,7 @@ load(
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_erlang//:dialyze.bzl", "plt")
 load("@rules_erlang//:shell.bzl", "shell")
-load("@rules_erlang//:erl_eval.bzl", "erl_eval")
-load("//bazel/elixir:iex_eval.bzl", "iex_eval")
+load("elixir_home.bzl", "elixir_home")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
@@ -38,11 +37,6 @@ plt(
 
 PLUGINS = all_plugins(
     rabbitmq_workspace = "",
-)
-
-rabbitmq_home(
-    name = "broker-home",
-    plugins = PLUGINS,
 )
 
 rabbitmq_run(

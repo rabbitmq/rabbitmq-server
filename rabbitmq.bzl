@@ -1,20 +1,13 @@
 load(
-    "@rules_erlang//:erlang_bytecode.bzl",
-    "erlang_bytecode",
-)
-load(
+
     "@rules_erlang//:erlang_app.bzl",
     "DEFAULT_ERLC_OPTS",
     "DEFAULT_TEST_ERLC_OPTS",
     "erlang_app",
     "test_erlang_app",
+
 )
-load(
-    "@rules_erlang//:ct.bzl",
-    "ct_suite",
-    "ct_suite_variant",
-    _assert_suites = "assert_suites",
-)
+load("@rules_erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 
@@ -179,7 +172,7 @@ def broker_for_integration_suites(extra_plugins = []):
         plugins = [
             "//deps/rabbit:erlang_app",
             ":erlang_app",
-        ] + extra_plugins,
+        ],
         testonly = True,
     )
 
@@ -243,11 +236,15 @@ def rabbitmq_integration_suite(
             ":rabbitmq-for-tests-run",
         ] + tools,
         runtime_deps = [
-            "//bazel/elixir:erlang_app",
+            "//deps/rabbitmq_cli:elixir_app",
             "//deps/rabbitmq_cli:rabbitmqctl",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
-        deps = extra_deps + deps,
+        deps = [
+            "//deps/amqp_client:erlang_app",
+            "//deps/rabbit_common:erlang_app",
+            "//deps/rabbitmq_ct_helpers:erlang_app",
+        ] + deps,
         **kwargs
     )
 
@@ -282,11 +279,15 @@ def rabbitmq_integration_suite(
             "@rabbitmq-server-generic-unix-3.10//:rabbitmq-run",
         ] + tools,
         runtime_deps = [
-            "//bazel/elixir:erlang_app",
+            "//deps/rabbitmq_cli:elixir_app",
             "//deps/rabbitmq_cli:rabbitmqctl",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
-        deps = extra_deps + deps,
+        deps = [
+            "//deps/amqp_client:erlang_app",
+            "//deps/rabbit_common:erlang_app",
+            "//deps/rabbitmq_ct_helpers:erlang_app",
+        ] + deps,
         **kwargs
     )
 
