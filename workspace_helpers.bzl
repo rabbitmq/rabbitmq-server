@@ -170,7 +170,7 @@ erlang_app(
 
     git_repository(
         name = "osiris",
-        branch = "use-rules_erlang",
+        branch = "main",
         remote = "https://github.com/rabbitmq/osiris.git",
     )
 
@@ -211,7 +211,7 @@ erlang_app(
 
     git_repository(
         name = "ra",
-        branch = "use-rules_erlang",
+        branch = "main",
         remote = "https://github.com/rabbitmq/ra.git",
     )
 
