@@ -1,11 +1,8 @@
-load(
-    "@bazel-erlang//:bazel_erlang_lib.bzl",
-    "app_file",
-    "bazel_erlang_lib",
-    "erlc",
-)
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:app_file.bzl", "app_file")
+load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
+load("@rules_erlang//:erlc.bzl", "erlc")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "APP_VERSION",
@@ -52,7 +49,7 @@ genrule(
 APP_NAME = "amqp10_common"
 
 BUILD_DEPS = [
-    "@lager//:bazel_erlang_lib",
+    "@lager//:erlang_app",
 ]
 
 app_file(
@@ -72,8 +69,8 @@ erlc(
     deps = BUILD_DEPS,
 )
 
-bazel_erlang_lib(
-    name = "bazel_erlang_lib",
+erlang_app_info(
+    name = "erlang_app",
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     app = ":app_file",
     app_name = APP_NAME,
@@ -90,8 +87,8 @@ erlc(
     deps = BUILD_DEPS,
 )
 
-bazel_erlang_lib(
-    name = "test_bazel_erlang_lib",
+erlang_app_info(
+    name = "test_erlang_app",
     testonly = True,
     hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
     app = ":app_file",

@@ -1,12 +1,12 @@
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
     "assert_suites",
+    "rabbitmq_app",
     "rabbitmq_integration_suite",
-    "rabbitmq_lib",
     "rabbitmq_suite",
 )
 
@@ -21,11 +21,11 @@ EXTRA_APPS = [
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "@lager//:bazel_erlang_lib",
+    "//deps/rabbit_common:erlang_app",
+    "@lager//:erlang_app",
 ]
 
-rabbitmq_lib(
+rabbitmq_app(
     app_description = "RabbitMQ AMQP Client",
     app_env = APP_ENV,
     app_module = "amqp_client",
@@ -43,7 +43,7 @@ rabbitmq_lib(
 
 xref(
     additional_libs = [
-        "@ranch//:bazel_erlang_lib",
+        "@ranch//:erlang_app",
     ],
     tags = ["xref"],
 )
@@ -62,7 +62,7 @@ dialyze(
 rabbitmq_home(
     name = "broker-for-tests-home",
     plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
+        "//deps/rabbit:erlang_app",
     ],
 )
 
@@ -77,17 +77,17 @@ suites = [
         name = "system_SUITE",
         size = "large",
         runtime_deps = [
-            "@meck//:bazel_erlang_lib",
+            "@meck//:erlang_app",
         ],
     ),
     rabbitmq_suite(
         name = "unit_SUITE",
         size = "small",
         runtime_deps = [
-            "//deps/rabbit:bazel_erlang_lib",
+            "//deps/rabbit:erlang_app",
         ],
         deps = [
-            "//deps/rabbit_common:bazel_erlang_lib",
+            "//deps/rabbit_common:erlang_app",
         ],
     ),
 ]

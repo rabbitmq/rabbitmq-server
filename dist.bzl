@@ -1,6 +1,7 @@
-load("@bazel-erlang//:erlang_home.bzl", "ErlangHomeProvider")
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "flat_deps", "path_join")
-load("@bazel-erlang//:ct.bzl", "additional_file_dest_relative_path")
+load("@rules_erlang//:erlang_home.bzl", "ErlangHomeProvider")
+load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
+load("@rules_erlang//:util.bzl", "path_join")
+load("@rules_erlang//:ct.bzl", "additional_file_dest_relative_path")
 load(
     ":rabbitmq_home.bzl",
     "RABBITMQ_HOME_ATTRS",
@@ -12,7 +13,7 @@ load(
 
 def _collect_licenses_impl(ctx):
     srcs = ctx.files.srcs + flatten([
-        d[ErlangLibInfo].license_files
+        d[ErlangAppInfo].license_files
         for d in flat_deps(ctx.attr.deps)
     ])
 
@@ -42,7 +43,7 @@ collect_licenses = rule(
     implementation = _collect_licenses_impl,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
-        "deps": attr.label_list(providers = [ErlangLibInfo]),
+        "deps": attr.label_list(providers = [ErlangAppInfo]),
     },
 )
 
@@ -76,21 +77,21 @@ def _plugins_dir(ctx, plugins):
     commands = ["set -euo pipefail", ""]
 
     for plugin in plugins:
-        lib_info = plugin[ErlangLibInfo]
+        lib_info = plugin[ErlangAppInfo]
         app_file = _app_file(lib_info)
         extract_version = _extract_version(app_file.path)
         commands.append("PLUGIN_VERSION=$({erlang_home}/bin/{extract_version})".format(erlang_home = erlang_home, extract_version = extract_version))
 
         commands.append(
             "echo \"Assembling {lib_name}-$PLUGIN_VERSION...\"".format(
-                lib_name = lib_info.lib_name,
+                lib_name = lib_info.app_name,
             ),
         )
 
         commands.append(
             "mkdir -p {plugins_dir}/{lib_name}-$PLUGIN_VERSION/include".format(
                 plugins_dir = plugins_dir.path,
-                lib_name = lib_info.lib_name,
+                lib_name = lib_info.app_name,
             ),
         )
         for f in lib_info.include:
@@ -98,7 +99,7 @@ def _plugins_dir(ctx, plugins):
                 "cp {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION/include/{dest}".format(
                     src = f.path,
                     plugins_dir = plugins_dir.path,
-                    lib_name = lib_info.lib_name,
+                    lib_name = lib_info.app_name,
                     dest = f.basename,
                 ),
             )
@@ -107,18 +108,18 @@ def _plugins_dir(ctx, plugins):
         commands.append(
             "mkdir -p {plugins_dir}/{lib_name}-$PLUGIN_VERSION/ebin".format(
                 plugins_dir = plugins_dir.path,
-                lib_name = lib_info.lib_name,
+                lib_name = lib_info.app_name,
             ),
         )
         for f in lib_info.beam:
             if f.is_directory:
                 if f.basename != "ebin":
-                    fail("{} contains a directory in 'beam' that is not an ebin dir".format(lib_info.lib_name))
+                    fail("{} contains a directory in 'beam' that is not an ebin dir".format(lib_info.app_name))
                 commands.append(
                     "cp -R {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION".format(
                         src = f.path,
                         plugins_dir = plugins_dir.path,
-                        lib_name = lib_info.lib_name,
+                        lib_name = lib_info.app_name,
                     ),
                 )
             else:
@@ -126,7 +127,7 @@ def _plugins_dir(ctx, plugins):
                     "cp {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION/ebin/{dest}".format(
                         src = f.path,
                         plugins_dir = plugins_dir.path,
-                        lib_name = lib_info.lib_name,
+                        lib_name = lib_info.app_name,
                         dest = f.basename,
                     ),
                 )
@@ -138,7 +139,7 @@ def _plugins_dir(ctx, plugins):
                 "mkdir -p $(dirname {plugins_dir}/{lib_name}-$PLUGIN_VERSION/{dest}) && cp {src} {plugins_dir}/{lib_name}-$PLUGIN_VERSION/{dest}".format(
                     src = f.path,
                     plugins_dir = plugins_dir.path,
-                    lib_name = lib_info.lib_name,
+                    lib_name = lib_info.app_name,
                     dest = p,
                 ),
             )
@@ -191,9 +192,18 @@ def _versioned_rabbitmq_home_impl(ctx):
         ),
     ]
 
-versioned_rabbitmq_home = rule(
+versioned_rabbitmq_home_private = rule(
     implementation = _versioned_rabbitmq_home_impl,
     attrs = dict(RABBITMQ_HOME_ATTRS.items() + {
-        "_erlang_home": attr.label(default = "@bazel-erlang//:erlang_home"),
+        "_erlang_home": attr.label(default = "@rules_erlang//:erlang_home"),
     }.items()),
 )
+
+def versioned_rabbitmq_home(**kwargs):
+    versioned_rabbitmq_home_private(
+        is_windows = select({
+            "@bazel_tools//src/conditions:host_windows": True,
+            "//conditions:default": False,
+        }),
+        **kwargs
+    )

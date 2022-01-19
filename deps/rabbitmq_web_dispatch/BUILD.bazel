@@ -1,5 +1,5 @@
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
@@ -7,8 +7,8 @@ load(
     "APP_VERSION",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
+    "rabbitmq_app",
     "rabbitmq_integration_suite",
-    "rabbitmq_lib",
     "rabbitmq_suite",
 )
 
@@ -23,16 +23,16 @@ EXTRA_APPS = [
 ]
 
 BUILD_DEPS = [
-    "@lager//:bazel_erlang_lib",
+    "@lager//:erlang_app",
 ]
 
 DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "@cowboy//:bazel_erlang_lib",
+    "//deps/rabbit:erlang_app",
+    "//deps/rabbit_common:erlang_app",
+    "@cowboy//:erlang_app",
 ]
 
-rabbitmq_lib(
+rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
@@ -60,8 +60,8 @@ rabbitmq_home(
     name = "broker-for-tests-home",
     testonly = True,
     plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
-        ":test_bazel_erlang_lib",
+        "//deps/rabbit:erlang_app",
+        ":test_erlang_app",
     ],
 )
 

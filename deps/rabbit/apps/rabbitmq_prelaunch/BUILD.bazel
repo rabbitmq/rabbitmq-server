@@ -1,6 +1,6 @@
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze")
-load("//:rabbitmq.bzl", "APP_VERSION", "rabbitmq_lib")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze")
+load("//:rabbitmq.bzl", "APP_VERSION", "rabbitmq_app")
 
 APP_NAME = "rabbitmq_prelaunch"
 
@@ -11,11 +11,11 @@ APP_DESCRIPTION = "RabbitMQ prelaunch setup"
 APP_MODULE = "rabbit_prelaunch_app"
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "@lager//:bazel_erlang_lib",
+    "//deps/rabbit_common:erlang_app",
+    "@lager//:erlang_app",
 ]
 
-rabbitmq_lib(
+rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
@@ -25,8 +25,8 @@ rabbitmq_lib(
 
 xref(
     additional_libs = [
-        "@cuttlefish//:bazel_erlang_lib",
-        "@ranch//:bazel_erlang_lib",
+        "@cuttlefish//:erlang_app",
+        "@ranch//:erlang_app",
     ],
     tags = ["xref"],
 )
