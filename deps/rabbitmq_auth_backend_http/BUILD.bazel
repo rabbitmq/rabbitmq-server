@@ -1,12 +1,12 @@
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
+    "rabbitmq_app",
     "rabbitmq_integration_suite",
-    "rabbitmq_lib",
     "rabbitmq_suite",
 )
 
@@ -29,15 +29,15 @@ EXTRA_APPS = [
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
+    "//deps/rabbit_common:erlang_app",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/amqp_client:bazel_erlang_lib",
+    "//deps/rabbit:erlang_app",
+    "//deps/amqp_client:erlang_app",
 ]
 
-rabbitmq_lib(
+rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_module = APP_MODULE,
@@ -73,10 +73,10 @@ suites = [
             "test/auth_http_mock.erl",
         ],
         runtime_deps = [
-            "@cowboy//:bazel_erlang_lib",
+            "@cowboy//:erlang_app",
         ],
         deps = [
-            "//deps/rabbit_common:bazel_erlang_lib",
+            "//deps/rabbit_common:erlang_app",
         ],
     ),
     rabbitmq_integration_suite(
