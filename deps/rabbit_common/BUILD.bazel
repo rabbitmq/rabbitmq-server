@@ -1,11 +1,8 @@
-load(
-    "@bazel-erlang//:bazel_erlang_lib.bzl",
-    "app_file",
-    "bazel_erlang_lib",
-    "erlc",
-)
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
+load("@rules_erlang//:app_file.bzl", "app_file")
+load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
+load("@rules_erlang//:erlc.bzl", "erlc")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "APP_VERSION",
@@ -62,9 +59,9 @@ genrule(
 DEPS = []
 
 RUNTIME_DEPS = [
-    "@jsx//:bazel_erlang_lib",
-    "@recon//:bazel_erlang_lib",
-    "@credentials_obfuscation//:bazel_erlang_lib",
+    "@jsx//:erlang_app",
+    "@recon//:erlang_app",
+    "@credentials_obfuscation//:erlang_app",
 ]
 
 APP_NAME = "rabbit_common"
@@ -124,8 +121,8 @@ erlc(
     deps = DEPS,
 )
 
-bazel_erlang_lib(
-    name = "bazel_erlang_lib",
+erlang_app_info(
+    name = "erlang_app",
     hdrs = HDRS,
     app = ":app_file",
     app_name = APP_NAME,
@@ -164,8 +161,8 @@ erlc(
     deps = DEPS,
 )
 
-bazel_erlang_lib(
-    name = "test_bazel_erlang_lib",
+erlang_app_info(
+    name = "test_erlang_app",
     testonly = True,
     hdrs = HDRS,
     app = ":app_file",
@@ -180,7 +177,7 @@ bazel_erlang_lib(
 
 xref(
     additional_libs = [
-        "@ranch//:bazel_erlang_lib",
+        "@ranch//:erlang_app",
     ],
     tags = ["xref"],
 )
@@ -205,7 +202,7 @@ suites = [
         name = "rabbit_env_SUITE",
         size = "small",
         deps = [
-            "@proper//:bazel_erlang_lib",
+            "@proper//:erlang_app",
         ],
     ),
     rabbitmq_suite(
@@ -223,8 +220,8 @@ suites = [
             "test/gen_server2_test_server.erl",
         ],
         deps = [
-            "@credentials_obfuscation//:bazel_erlang_lib",
-            "@proper//:bazel_erlang_lib",
+            "@credentials_obfuscation//:erlang_app",
+            "@proper//:erlang_app",
         ],
     ),
     rabbitmq_suite(

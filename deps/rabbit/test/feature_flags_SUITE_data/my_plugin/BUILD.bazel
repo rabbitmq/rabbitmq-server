@@ -1,11 +1,11 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbit_common:erlang_app",
+    "//deps/rabbit:erlang_app",
 ]
 
-erlang_lib(
+erlang_app(
     app_description = "Plugin to test feature flags",
     app_name = "my_plugin",
     app_version = "1.0.0",
