@@ -25,18 +25,18 @@ all() ->
 
 groups() ->
     [
-     {single_node, [], [
-                        expired,
-                        rejected,
-                        delivery_limit,
-                        target_queue_not_bound,
-                        target_queue_deleted,
-                        dlx_missing,
-                        cycle,
-                        stats,
-                        drop_head_falls_back_to_at_most_once,
-                        switch_strategy
-                       ]},
+     {single_node, [shuffle], [
+                               expired,
+                               rejected,
+                               delivery_limit,
+                               target_queue_not_bound,
+                               target_queue_deleted,
+                               dlx_missing,
+                               cycle,
+                               stats,
+                               drop_head_falls_back_to_at_most_once,
+                               switch_strategy
+                              ]},
      {cluster_size_3, [], [
                            many_target_queues,
                            single_dlx_worker
@@ -89,16 +89,19 @@ merge_app_env(Config) ->
 
 init_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-    Q = rabbit_data_coercion:to_binary(Testcase),
+    T = rabbit_data_coercion:to_binary(Testcase),
+    Counters = get_global_counters(Config1),
     Config2 = rabbit_ct_helpers:set_config(Config1,
-                                           [{source_queue, <<Q/binary, "_source">>},
-                                            {dead_letter_exchange, <<Q/binary, "_dlx">>},
-                                            {target_queue_1, <<Q/binary, "_target_1">>},
-                                            {target_queue_2, <<Q/binary, "_target_2">>},
-                                            {target_queue_3, <<Q/binary, "_target_3">>},
-                                            {target_queue_4, <<Q/binary, "_target_4">>},
-                                            {target_queue_5, <<Q/binary, "_target_5">>},
-                                            {target_queue_6, <<Q/binary, "_target_6">>}
+                                           [{source_queue, <<T/binary, "_source">>},
+                                            {dead_letter_exchange, <<T/binary, "_dlx">>},
+                                            {target_queue_1, <<T/binary, "_target_1">>},
+                                            {target_queue_2, <<T/binary, "_target_2">>},
+                                            {target_queue_3, <<T/binary, "_target_3">>},
+                                            {target_queue_4, <<T/binary, "_target_4">>},
+                                            {target_queue_5, <<T/binary, "_target_5">>},
+                                            {target_queue_6, <<T/binary, "_target_6">>},
+                                            {policy, <<T/binary, "_policy">>},
+                                            {counters, Counters}
                                            ]),
     rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
 
@@ -149,7 +152,9 @@ expired(Config) ->
     ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg}},
                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
                 1000),
-    assert_dlx_headers(Headers, <<"expired">>, SourceQ).
+    assert_dlx_headers(Headers, <<"expired">>, SourceQ),
+    ?assertEqual(1, counted(messages_dead_lettered_expired_total, Config)),
+    eventually(?_assertEqual(1, counted(messages_dead_lettered_confirmed_total, Config))).
 
 %% Test that at-least-once dead-lettering works for message dead-lettered due to rejected by consumer.
 rejected(Config) ->
@@ -164,7 +169,9 @@ rejected(Config) ->
     ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
                 1000),
-    assert_dlx_headers(Headers, <<"rejected">>, SourceQ).
+    assert_dlx_headers(Headers, <<"rejected">>, SourceQ),
+    ?assertEqual(1, counted(messages_dead_lettered_rejected_total, Config)),
+    eventually(?_assertEqual(1, counted(messages_dead_lettered_confirmed_total, Config))).
 
 %% Test that at-least-once dead-lettering works for message dead-lettered due to delivery-limit exceeded.
 delivery_limit(Config) ->
@@ -179,7 +186,9 @@ delivery_limit(Config) ->
     ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
                 1000),
-    assert_dlx_headers(Headers, <<"delivery_limit">>, SourceQ).
+    assert_dlx_headers(Headers, <<"delivery_limit">>, SourceQ),
+    ?assertEqual(1, counted(messages_dead_lettered_delivery_limit_total, Config)),
+    eventually(?_assertEqual(1, counted(messages_dead_lettered_confirmed_total, Config))).
 
 assert_dlx_headers(Headers, Reason, SourceQ) ->
     ?assertEqual({longstr, Reason}, rabbit_misc:table_lookup(Headers, <<"x-first-death-reason">>)),
@@ -228,6 +237,8 @@ target_queue_not_bound(Config) ->
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
     consistently(?_assertMatch([{1, _}],
                                dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    ?assertEqual(1, counted(messages_dead_lettered_expired_total, Config)),
+    ?assertEqual(0, counted(messages_dead_lettered_confirmed_total, Config)),
     %% Fix dead-letter toplology misconfiguration.
     bind_queue(Ch, TargetQ, DLX, <<"k1">>),
     %% Binding from target queue to DLX is now present.
@@ -237,7 +248,9 @@ target_queue_not_bound(Config) ->
                500, 10),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{expiration = undefined},
                                                payload = Msg}},
-                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})).
+                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})),
+    ?assertEqual(1, counted(messages_dead_lettered_expired_total, Config)),
+    eventually(?_assertEqual(1, counted(messages_dead_lettered_confirmed_total, Config))).
 
 %% Test that message is not lost when target queue gets deleted
 %% because dead-letter routing topology should always be respected.
@@ -286,7 +299,9 @@ target_queue_deleted(Config) ->
     eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
                              amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})), 500, 5),
     eventually(?_assertEqual([{0, 0}],
-                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))).
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)),
+    ?assertEqual(2, counted(messages_dead_lettered_confirmed_total, Config)).
 
 %% Test that message is not lost when configured dead-letter exchange does not exist.
 %% Once the exchange gets declared, the message is delivered to the target queue
@@ -326,7 +341,9 @@ dlx_missing(Config) ->
                500, 8),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{expiration = undefined},
                                                payload = Msg}},
-                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})).
+                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})),
+    ?assertEqual(1, counted(messages_dead_lettered_expired_total, Config)),
+    eventually(?_assertEqual(1, counted(messages_dead_lettered_confirmed_total, Config))).
 
 %% Test that message is not lost when it cycles.
 %% Once the cycle is resolved, the message is delivered to the target queue and acked to
@@ -336,6 +353,7 @@ cycle(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     SourceQ = ?config(source_queue, Config),
     TargetQ = ?config(target_queue_1, Config),
+    PolicyName = ?config(policy, Config),
     declare_queue(Ch, SourceQ, [
                                 {<<"x-dead-letter-exchange">>, longstr, <<"">>},
                                 {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
@@ -358,13 +376,17 @@ cycle(Config) ->
     %% Fix the cycle such that dead-lettering flows like this:
     %% source queue -> default exchange -> target queue
     declare_queue(Ch, TargetQ, []),
-    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, <<"my-policy">>, SourceQ, <<"queues">>,
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, PolicyName,
+                                             SourceQ, <<"queues">>,
                                              [{<<"dead-letter-routing-key">>, TargetQ}]),
     eventually(?_assertEqual([{0, 0}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)),
                500, 8),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg}},
-                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})).
+                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, Server, PolicyName),
+    ?assertEqual(1, counted(messages_dead_lettered_expired_total, Config)),
+    eventually(?_assertEqual(1, counted(messages_dead_lettered_confirmed_total, Config))).
 
 %% Test that rabbit_fifo_dlx tracks statistics correctly.
 stats(Config) ->
@@ -407,6 +429,8 @@ stats(Config) ->
                     num_messages := 10
                    }],
                  dirty_query([Server], RaName, fun rabbit_fifo:overview/1)),
+    ?assertEqual(10, counted(messages_dead_lettered_expired_total, Config)),
+    ?assertEqual(0, counted(messages_dead_lettered_confirmed_total, Config)),
     %% Fix dead-letter toplology misconfiguration.
     bind_queue(Ch, TargetQ, DLX, <<"k1">>),
     %% Binding from target queue to DLX is now present.
@@ -425,7 +449,8 @@ stats(Config) ->
                  dirty_query([Server], RaName, fun rabbit_fifo:overview/1)),
     [?assertMatch({#'basic.get_ok'{}, #amqp_msg{props = #'P_basic'{expiration = undefined},
                                                 payload = Msg}},
-                  amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})) || _ <- lists:seq(1, 10)].
+                  amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})) || _ <- lists:seq(1, 10)],
+    ?assertEqual(10, counted(messages_dead_lettered_confirmed_total, Config)).
 
 %% Test that configuring overflow (default) drop-head will fall back to
 %% dead-letter-strategy at-most-once despite configuring at-least-once.
@@ -452,6 +477,7 @@ switch_strategy(Config) ->
     SourceQ = ?config(source_queue, Config),
     RaName = ra_name(SourceQ),
     DLX = ?config(dead_letter_exchange, Config),
+    PolicyName = ?config(policy, Config),
     declare_queue(Ch, SourceQ, [
                                 {<<"x-dead-letter-exchange">>, longstr, DLX},
                                 {<<"x-overflow">>, longstr, <<"reject-publish">>},
@@ -459,7 +485,8 @@ switch_strategy(Config) ->
                                ]),
     %% default strategy is at-most-once
     assert_active_dlx_workers(0, Config, Server),
-    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, <<"my-policy">>, SourceQ, <<"queues">>,
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, PolicyName,
+                                             SourceQ, <<"queues">>,
                                              [{<<"dead-letter-strategy">>, <<"at-least-once">>}]),
     assert_active_dlx_workers(1, Config, Server),
     [ok = amqp_channel:cast(Ch,
@@ -479,7 +506,8 @@ switch_strategy(Config) ->
             num_messages := 5
            }],
          dirty_query([Server], RaName, fun rabbit_fifo:overview/1))),
-    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, <<"my-policy">>, SourceQ, <<"queues">>,
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, PolicyName,
+                                             SourceQ, <<"queues">>,
                                              [{<<"dead-letter-strategy">>, <<"at-most-once">>}]),
     assert_active_dlx_workers(0, Config, Server),
     ?assertMatch(
@@ -490,7 +518,10 @@ switch_strategy(Config) ->
           discard_message_bytes := 0,
           num_messages := 0
          }],
-       dirty_query([Server], RaName, fun rabbit_fifo:overview/1)).
+       dirty_query([Server], RaName, fun rabbit_fifo:overview/1)),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, Server, PolicyName),
+    ?assertEqual(5, counted(messages_dead_lettered_expired_total, Config)),
+    ?assertEqual(0, counted(messages_dead_lettered_confirmed_total, Config)).
 
 %% Test that
 %% 1. Message is only acked to source queue once publisher confirms got received from **all** target queues.
@@ -630,7 +661,9 @@ many_target_queues(Config) ->
                              amqp_channel:call(Ch, #'basic.get'{queue = TargetQ5}))),
     %%TODO why is the 1st message (m1) a duplicate?
     ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
-                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ6}), 2, 200).
+                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ6}), 2, 200),
+    ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)),
+    ?assertEqual(2, counted(messages_dead_lettered_confirmed_total, Config)).
 
 %% Test that there is a single active rabbit_fifo_dlx_worker that is co-located with the quorum queue leader.
 single_dlx_worker(Config) ->
@@ -728,3 +761,17 @@ eventually({Line, Assertion} = TestObj, PollInterval, PollCount) ->
             timer:sleep(PollInterval),
             eventually(TestObj, PollInterval, PollCount - 1)
     end.
+
+get_global_counters(Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, []).
+
+%% Returns the delta of Metric between testcase start and now.
+counted(Metric, Config) ->
+    OldCounters = ?config(counters, Config),
+    Counters = get_global_counters(Config),
+    metric(Metric, Counters) -
+    metric(Metric, OldCounters).
+
+metric(Metric, Counters) ->
+    Metrics = maps:get([{queue_type, rabbit_quorum_queue}, {dead_letter_strategy, at_least_once}], Counters),
+    maps:get(Metric, Metrics).
