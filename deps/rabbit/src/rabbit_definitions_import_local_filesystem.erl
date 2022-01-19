@@ -14,6 +14,7 @@
     load/1,
     %% classic arguments specific to this source
     load/2,
+    load_with_hashing/3,
     location/0
 ]).
 
@@ -55,6 +56,14 @@ load(Proplist) when is_list(Proplist) ->
 
 load(IsDir, Path) ->
     load_from_local_path(IsDir, Path).
+
+load_with_hashing(Defs, undefined = _Hash, _Algo) when is_list(Defs) ->
+    load(Defs);
+load_with_hashing(Defs, PreviousHash, Algo) ->
+    case rabbit_definitions_hashing:hash(Algo, Defs) of
+        PreviousHash -> ok;
+        _            -> load(Defs)
+    end.
 
 location() ->
     case location_from_classic_option() of
