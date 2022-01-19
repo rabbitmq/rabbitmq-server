@@ -1,14 +1,14 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
-erlang_lib(
+erlang_app(
     app_name = "rabbitmq_ct_helpers",
     app_version = "master",
-    deps = [
-        "@proper//:bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
-    ],
     extra_priv = [
         "tools/tls-certs/Makefile",
         "tools/tls-certs/openssl.cnf.in",
+    ],
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+        "@proper//:erlang_app",
     ],
 )

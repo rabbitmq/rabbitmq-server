@@ -1,6 +1,6 @@
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
-load("@bazel-erlang//:dialyze.bzl", "plt")
-load("@bazel-erlang//:shell.bzl", "shell")
+load("@rules_erlang//:dialyze.bzl", "plt")
+load("@rules_erlang//:shell.bzl", "shell")
 load("elixir_home.bzl", "elixir_home")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
@@ -10,7 +10,15 @@ load(":dist.bzl", "collect_licenses", "versioned_rabbitmq_home")
 
 exports_files([
     "scripts/bazel/rabbitmq-run.sh",
+    "scripts/bazel/rabbitmq-run.bat",
 ])
+
+config_setting(
+    name = "debug_build",
+    values = {
+        "compilation_mode": "dbg",
+    },
+)
 
 # This allows us to
 # `bazel build //my/target \
@@ -43,63 +51,45 @@ plt(
 rabbitmq_home(
     name = "broker-home",
     plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
-        "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
-        "//deps/rabbitmq_auth_backend_cache:bazel_erlang_lib",
-        "//deps/rabbitmq_auth_backend_http:bazel_erlang_lib",
-        "//deps/rabbitmq_auth_backend_ldap:bazel_erlang_lib",
-        "//deps/rabbitmq_auth_backend_oauth2:bazel_erlang_lib",
-        "//deps/rabbitmq_auth_mechanism_ssl:bazel_erlang_lib",
-        "//deps/rabbitmq_consistent_hash_exchange:bazel_erlang_lib",
-        "//deps/rabbitmq_event_exchange:bazel_erlang_lib",
-        "//deps/rabbitmq_federation:bazel_erlang_lib",
-        "//deps/rabbitmq_federation_management:bazel_erlang_lib",
-        "//deps/rabbitmq_jms_topic_exchange:bazel_erlang_lib",
-        "//deps/rabbitmq_management:bazel_erlang_lib",
-        "//deps/rabbitmq_mqtt:bazel_erlang_lib",
-        "//deps/rabbitmq_peer_discovery_aws:bazel_erlang_lib",
-        "//deps/rabbitmq_peer_discovery_consul:bazel_erlang_lib",
-        "//deps/rabbitmq_peer_discovery_etcd:bazel_erlang_lib",
-        "//deps/rabbitmq_peer_discovery_k8s:bazel_erlang_lib",
-        "//deps/rabbitmq_prometheus:bazel_erlang_lib",
-        "//deps/rabbitmq_random_exchange:bazel_erlang_lib",
-        "//deps/rabbitmq_recent_history_exchange:bazel_erlang_lib",
-        "//deps/rabbitmq_sharding:bazel_erlang_lib",
-        "//deps/rabbitmq_shovel:bazel_erlang_lib",
-        "//deps/rabbitmq_shovel_management:bazel_erlang_lib",
-        "//deps/rabbitmq_stomp:bazel_erlang_lib",
-        "//deps/rabbitmq_stream:bazel_erlang_lib",
-        "//deps/rabbitmq_stream_management:bazel_erlang_lib",
-        "//deps/rabbitmq_top:bazel_erlang_lib",
-        "//deps/rabbitmq_tracing:bazel_erlang_lib",
-        "//deps/rabbitmq_trust_store:bazel_erlang_lib",
-        "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
-        "//deps/rabbitmq_web_mqtt:bazel_erlang_lib",
-        "//deps/rabbitmq_web_stomp:bazel_erlang_lib",
-    ],
-)
-
-rabbitmq_home(
-    name = "broker-for-cli-tests-home",
-    testonly = True,
-    plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
-        "//deps/rabbitmq_federation:bazel_erlang_lib",
-        "//deps/rabbitmq_stomp:bazel_erlang_lib",
-        "//deps/amqp_client:bazel_erlang_lib",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_amqp1_0:erlang_app",
+        "//deps/rabbitmq_auth_backend_cache:erlang_app",
+        "//deps/rabbitmq_auth_backend_http:erlang_app",
+        "//deps/rabbitmq_auth_backend_ldap:erlang_app",
+        "//deps/rabbitmq_auth_backend_oauth2:erlang_app",
+        "//deps/rabbitmq_auth_mechanism_ssl:erlang_app",
+        "//deps/rabbitmq_consistent_hash_exchange:erlang_app",
+        "//deps/rabbitmq_event_exchange:erlang_app",
+        "//deps/rabbitmq_federation:erlang_app",
+        "//deps/rabbitmq_federation_management:erlang_app",
+        "//deps/rabbitmq_jms_topic_exchange:erlang_app",
+        "//deps/rabbitmq_management:erlang_app",
+        "//deps/rabbitmq_mqtt:erlang_app",
+        "//deps/rabbitmq_peer_discovery_aws:erlang_app",
+        "//deps/rabbitmq_peer_discovery_consul:erlang_app",
+        "//deps/rabbitmq_peer_discovery_etcd:erlang_app",
+        "//deps/rabbitmq_peer_discovery_k8s:erlang_app",
+        "//deps/rabbitmq_prometheus:erlang_app",
+        "//deps/rabbitmq_random_exchange:erlang_app",
+        "//deps/rabbitmq_recent_history_exchange:erlang_app",
+        "//deps/rabbitmq_sharding:erlang_app",
+        "//deps/rabbitmq_shovel:erlang_app",
+        "//deps/rabbitmq_shovel_management:erlang_app",
+        "//deps/rabbitmq_stomp:erlang_app",
+        "//deps/rabbitmq_stream:erlang_app",
+        "//deps/rabbitmq_stream_management:erlang_app",
+        "//deps/rabbitmq_top:erlang_app",
+        "//deps/rabbitmq_tracing:erlang_app",
+        "//deps/rabbitmq_trust_store:erlang_app",
+        "//deps/rabbitmq_web_dispatch:erlang_app",
+        "//deps/rabbitmq_web_mqtt:erlang_app",
+        "//deps/rabbitmq_web_stomp:erlang_app",
     ],
 )
 
 rabbitmq_run(
     name = "rabbitmq-run",
     home = ":broker-home",
-    visibility = ["//visibility:public"],
-)
-
-rabbitmq_run(
-    name = "rabbitmq-for-cli-tests-run",
-    testonly = True,
-    home = ":broker-for-cli-tests-home",
     visibility = ["//visibility:public"],
 )
 

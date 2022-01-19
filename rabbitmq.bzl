@@ -1,15 +1,26 @@
 load(
-    "@bazel-erlang//:bazel_erlang_lib.bzl",
+    "@rules_erlang//:erlang_app.bzl",
     "DEFAULT_ERLC_OPTS",
     "DEFAULT_TEST_ERLC_OPTS",
-    "erlang_lib",
-    "test_erlang_lib",
+    "erlang_app",
+    "test_erlang_app",
 )
-load("@bazel-erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
+load("@rules_erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 
-RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS
+def without(item, elements):
+    c = list(elements)
+    c.remove(item)
+    return c
+
+STARTS_BACKGROUND_BROKER_TAG = "starts-background-broker"
+
+MIXED_VERSION_CLUSTER_TAG = "mixed-version-cluster"
+
+RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
+    "-DINSTR_MOD=gm",
+]
 
 RABBITMQ_TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
     "+nowarn_export_all",
@@ -23,46 +34,46 @@ RABBITMQ_DIALYZER_OPTS = [
 APP_VERSION = "3.9.0"
 
 ALL_PLUGINS = [
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
-    "//deps/rabbitmq_auth_backend_cache:bazel_erlang_lib",
-    "//deps/rabbitmq_auth_backend_http:bazel_erlang_lib",
-    "//deps/rabbitmq_auth_backend_ldap:bazel_erlang_lib",
-    "//deps/rabbitmq_auth_backend_oauth2:bazel_erlang_lib",
-    "//deps/rabbitmq_auth_mechanism_ssl:bazel_erlang_lib",
-    "//deps/rabbitmq_consistent_hash_exchange:bazel_erlang_lib",
-    "//deps/rabbitmq_event_exchange:bazel_erlang_lib",
-    "//deps/rabbitmq_federation:bazel_erlang_lib",
-    "//deps/rabbitmq_federation_management:bazel_erlang_lib",
-    "//deps/rabbitmq_jms_topic_exchange:bazel_erlang_lib",
-    "//deps/rabbitmq_management:bazel_erlang_lib",
-    "//deps/rabbitmq_mqtt:bazel_erlang_lib",
-    "//deps/rabbitmq_peer_discovery_aws:bazel_erlang_lib",
-    "//deps/rabbitmq_peer_discovery_consul:bazel_erlang_lib",
-    "//deps/rabbitmq_peer_discovery_etcd:bazel_erlang_lib",
-    "//deps/rabbitmq_peer_discovery_k8s:bazel_erlang_lib",
-    "//deps/rabbitmq_prometheus:bazel_erlang_lib",
-    "//deps/rabbitmq_random_exchange:bazel_erlang_lib",
-    "//deps/rabbitmq_recent_history_exchange:bazel_erlang_lib",
-    "//deps/rabbitmq_sharding:bazel_erlang_lib",
-    "//deps/rabbitmq_shovel:bazel_erlang_lib",
-    "//deps/rabbitmq_shovel_management:bazel_erlang_lib",
-    "//deps/rabbitmq_stomp:bazel_erlang_lib",
-    "//deps/rabbitmq_stream:bazel_erlang_lib",
-    "//deps/rabbitmq_stream_management:bazel_erlang_lib",
-    "//deps/rabbitmq_top:bazel_erlang_lib",
-    "//deps/rabbitmq_tracing:bazel_erlang_lib",
-    "//deps/rabbitmq_trust_store:bazel_erlang_lib",
-    "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
-    "//deps/rabbitmq_web_mqtt:bazel_erlang_lib",
-    "//deps/rabbitmq_web_stomp:bazel_erlang_lib",
+    "//deps/rabbit:erlang_app",
+    "//deps/rabbitmq_amqp1_0:erlang_app",
+    "//deps/rabbitmq_auth_backend_cache:erlang_app",
+    "//deps/rabbitmq_auth_backend_http:erlang_app",
+    "//deps/rabbitmq_auth_backend_ldap:erlang_app",
+    "//deps/rabbitmq_auth_backend_oauth2:erlang_app",
+    "//deps/rabbitmq_auth_mechanism_ssl:erlang_app",
+    "//deps/rabbitmq_consistent_hash_exchange:erlang_app",
+    "//deps/rabbitmq_event_exchange:erlang_app",
+    "//deps/rabbitmq_federation:erlang_app",
+    "//deps/rabbitmq_federation_management:erlang_app",
+    "//deps/rabbitmq_jms_topic_exchange:erlang_app",
+    "//deps/rabbitmq_management:erlang_app",
+    "//deps/rabbitmq_mqtt:erlang_app",
+    "//deps/rabbitmq_peer_discovery_aws:erlang_app",
+    "//deps/rabbitmq_peer_discovery_consul:erlang_app",
+    "//deps/rabbitmq_peer_discovery_etcd:erlang_app",
+    "//deps/rabbitmq_peer_discovery_k8s:erlang_app",
+    "//deps/rabbitmq_prometheus:erlang_app",
+    "//deps/rabbitmq_random_exchange:erlang_app",
+    "//deps/rabbitmq_recent_history_exchange:erlang_app",
+    "//deps/rabbitmq_sharding:erlang_app",
+    "//deps/rabbitmq_shovel:erlang_app",
+    "//deps/rabbitmq_shovel_management:erlang_app",
+    "//deps/rabbitmq_stomp:erlang_app",
+    "//deps/rabbitmq_stream:erlang_app",
+    "//deps/rabbitmq_stream_management:erlang_app",
+    "//deps/rabbitmq_top:erlang_app",
+    "//deps/rabbitmq_tracing:erlang_app",
+    "//deps/rabbitmq_trust_store:erlang_app",
+    "//deps/rabbitmq_web_dispatch:erlang_app",
+    "//deps/rabbitmq_web_mqtt:erlang_app",
+    "//deps/rabbitmq_web_stomp:erlang_app",
 ]
 
 LABELS_WITH_TEST_VERSIONS = [
-    "//deps/amqp10_common:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbit/apps/rabbitmq_prelaunch:bazel_erlang_lib",
+    "//deps/amqp10_common:erlang_app",
+    "//deps/rabbit_common:erlang_app",
+    "//deps/rabbit:erlang_app",
+    "//deps/rabbit/apps/rabbitmq_prelaunch:erlang_app",
 ]
 
 def all_plugins(rabbitmq_workspace = "@rabbitmq-server"):
@@ -72,12 +83,12 @@ def with_test_versions(deps):
     r = []
     for d in deps:
         if d in LABELS_WITH_TEST_VERSIONS:
-            r.append(d.replace(":bazel_erlang_lib", ":test_bazel_erlang_lib"))
+            r.append(d.replace(":erlang_app", ":test_erlang_app"))
         else:
             r.append(d)
     return r
 
-def rabbitmq_lib(
+def rabbitmq_app(
         app_name = "",
         app_version = APP_VERSION,
         app_description = "",
@@ -92,7 +103,7 @@ def rabbitmq_lib(
         build_deps = [],
         deps = [],
         runtime_deps = []):
-    erlang_lib(
+    erlang_app(
         app_name = app_name,
         app_version = app_version,
         app_description = app_description,
@@ -108,7 +119,7 @@ def rabbitmq_lib(
         runtime_deps = runtime_deps,
     )
 
-    test_erlang_lib(
+    test_erlang_app(
         app_name = app_name,
         app_version = app_version,
         app_description = app_description,
@@ -138,8 +149,8 @@ def broker_for_integration_suites():
     rabbitmq_home(
         name = "broker-for-tests-home",
         plugins = [
-            "//deps/rabbit:bazel_erlang_lib",
-            ":bazel_erlang_lib",
+            "//deps/rabbit:erlang_app",
+            ":erlang_app",
         ],
     )
 
@@ -164,8 +175,11 @@ def rabbitmq_integration_suite(
     ct_suite(
         name = name,
         suite_name = name,
-        tags = tags,
-        erlc_opts = RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
+        tags = tags + [STARTS_BACKGROUND_BROKER_TAG],
+        erlc_opts = select({
+            "//:debug_build": without("+deterministic", RABBITMQ_TEST_ERLC_OPTS + erlc_opts),
+            "//conditions:default": RABBITMQ_TEST_ERLC_OPTS + erlc_opts,
+        }),
         additional_hdrs = additional_hdrs,
         additional_srcs = additional_srcs,
         data = data,
@@ -181,14 +195,14 @@ def rabbitmq_integration_suite(
             ":rabbitmq-for-tests-run",
         ] + tools,
         runtime_deps = [
-            "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+            "//deps/rabbitmq_cli:elixir_app",
             "//deps/rabbitmq_cli:rabbitmqctl",
-            "//deps/rabbitmq_ct_client_helpers:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
         deps = [
-            "//deps/amqp_client:bazel_erlang_lib",
-            "//deps/rabbit_common:bazel_erlang_lib",
-            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
+            "//deps/amqp_client:erlang_app",
+            "//deps/rabbit_common:erlang_app",
+            "//deps/rabbitmq_ct_helpers:erlang_app",
         ] + deps,
         **kwargs
     )
@@ -196,7 +210,7 @@ def rabbitmq_integration_suite(
     ct_suite_variant(
         name = name + "-mixed",
         suite_name = name,
-        tags = tags + ["mixed-version-cluster"],
+        tags = tags + [STARTS_BACKGROUND_BROKER_TAG, MIXED_VERSION_CLUSTER_TAG],
         data = data,
         test_env = dict({
             "SKIP_MAKE_TEST_DIST": "true",
@@ -212,14 +226,14 @@ def rabbitmq_integration_suite(
             "@rabbitmq-server-generic-unix-3.8.22//:rabbitmq-run",
         ] + tools,
         runtime_deps = [
-            "//deps/rabbitmq_cli:elixir_as_bazel_erlang_lib",
+            "//deps/rabbitmq_cli:elixir_app",
             "//deps/rabbitmq_cli:rabbitmqctl",
-            "//deps/rabbitmq_ct_client_helpers:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
         deps = [
-            "//deps/amqp_client:bazel_erlang_lib",
-            "//deps/rabbit_common:bazel_erlang_lib",
-            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
+            "//deps/amqp_client:erlang_app",
+            "//deps/rabbit_common:erlang_app",
+            "//deps/rabbitmq_ct_helpers:erlang_app",
         ] + deps,
         **kwargs
     )

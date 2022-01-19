@@ -1,22 +1,18 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load(
-    "@bazel_tools//tools/build_defs/repo:git.bzl",
-    "git_repository",
-    "new_git_repository",
-)
-load("@bazel-erlang//:github.bzl", "github_bazel_erlang_lib")
-load("@bazel-erlang//:hex_archive.bzl", "hex_archive")
-load("@bazel-erlang//:hex_pm.bzl", "hex_pm_bazel_erlang_lib")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
+load("@rules_erlang//:github.bzl", "github_erlang_app")
+load("@rules_erlang//:hex_archive.bzl", "hex_archive")
+load("@rules_erlang//:hex_pm.bzl", "hex_pm_erlang_app")
 load("//:rabbitmq.bzl", "APP_VERSION")
 
 def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "accept",
         version = "0.3.5",
         sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
     )
 
-    github_bazel_erlang_lib(
+    github_erlang_app(
         name = "aten",
         org = "rabbitmq",
         sha256 = "f27453bfa270538e1b48a9111206847e19a5ad51b4ded4f03fcb0184fbb555be",
@@ -24,7 +20,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         version = "0.5.7",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "base64url",
         version = "1.0.1",
         sha256 = "f9b3add4731a02a9b0410398b475b33e7566a695365237a6bdee1bb447719f5c",
@@ -37,7 +33,7 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         build_file = rabbitmq_workspace + "//:BUILD.bats",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "cowboy",
         first_srcs = [
             "src/cowboy_stream.erl",
@@ -47,18 +43,18 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         version = "2.8.0",
         sha256 = "4643e4fba74ac96d4d152c75803de6fad0b3fa5df354c71afdd6cbeeb15fac8a",
         deps = [
-            "@cowlib//:bazel_erlang_lib",
-            "@ranch//:bazel_erlang_lib",
+            "@cowlib//:erlang_app",
+            "@ranch//:erlang_app",
         ],
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "cowlib",
         version = "2.9.1",
         sha256 = "e4175dc240a70d996156160891e1c62238ede1729e45740bdd38064dad476170",
     )
 
-    github_bazel_erlang_lib(
+    github_erlang_app(
         repo = "credentials-obfuscation",
         name = "credentials_obfuscation",
         org = "rabbitmq",
@@ -67,23 +63,23 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         version = "2.4.0",
     )
 
-    github_bazel_erlang_lib(
+    github_erlang_app(
         name = "ct_helper",
         org = "extend",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "cuttlefish",
         version = "3.0.1",
         sha256 = "3feff3ae4ed1f0ca6df87ac89235068fbee9242ee85d2ac17fb1b8ce0e30f1a6",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "eetcd",
         version = "0.3.3",
         sha256 = "8fb280156ddd1b7b34d0f446c5711832385bff512c05378dcea8362f4f5060d6",
         runtime_deps = [
-            "@gun//:bazel_erlang_lib",
+            "@gun//:erlang_app",
         ],
     )
 
@@ -91,9 +87,9 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         name = "emqttc",
         urls = ["https://github.com/rabbitmq/emqttc/archive/remove-logging.zip"],
         strip_prefix = "emqttc-remove-logging",
-        build_file_content = """load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+        build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
-erlang_lib(
+erlang_app(
     app_name = "emqttc",
     erlc_opts = [
         "+warn_export_all",
@@ -103,19 +99,19 @@ erlang_lib(
 """,
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "enough",
         version = "0.1.0",
         sha256 = "0460c7abda5f5e0ea592b12bc6976b8a5c4b96e42f332059cd396525374bf9a1",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "gen_batch_server",
         version = "0.8.6",
         sha256 = "b78679349168f27d7047f3283c9d766760b234d98c762aca9a1907f4ee3fd406",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "gun",
         version = "1.3.3",
         sha256 = "3106ce167f9c9723f849e4fb54ea4a4d814e3996ae243a1c828b256e749041e0",
@@ -123,7 +119,7 @@ erlang_lib(
             "src/gun_content_handler.erl",
         ],
         runtime_deps = [
-            "@cowlib//:bazel_erlang_lib",
+            "@cowlib//:erlang_app",
         ],
         erlc_opts = [
             "+debug_info",
@@ -140,7 +136,7 @@ erlang_lib(
         urls = ["https://github.com/rabbitmq/inet_tcp_proxy/archive/master.zip"],
     )
 
-    github_bazel_erlang_lib(
+    github_erlang_app(
         name = "jose",
         repo = "erlang-jose",
         org = "potatosalad",
@@ -155,30 +151,38 @@ erlang_lib(
         sha256 = "7816f39d00655f2605cfac180755e97e268dba86c2f71037998ff63792ca727b",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "jsx",
         version = "3.1.0",
         sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
     )
 
-    github_bazel_erlang_lib(
+    github_erlang_app(
         name = "meck",
         org = "eproxus",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "observer_cli",
         version = "1.7.1",
         sha256 = "4ccafaaa2ce01b85ddd14591f4d5f6731b4e13b610a70fb841f0701178478280",
     )
 
-    git_repository(
+    # v1.2.3 of osiris still assumes bazel-erlang, so we import it via rules_erlang here
+    github_erlang_app(
         name = "osiris",
-        tag = "v1.2.3",
-        remote = "https://github.com/rabbitmq/osiris.git",
+        org = "rabbitmq",
+        ref = "refs/tags/v1.2.3",
+        version = "1.2.3",
+        deps = [
+            "@gen_batch_server//:erlang_app",
+        ],
+        runtime_deps = [
+            "@seshat//:erlang_app",
+        ],
     )
 
-    github_bazel_erlang_lib(
+    github_erlang_app(
         name = "prometheus",
         repo = "prometheus.erl",
         org = "deadtrickster",
@@ -191,11 +195,11 @@ erlang_lib(
             "src/prometheus_metric.erl",
         ],
         deps = [
-            "@quantile_estimator//:bazel_erlang_lib",
+            "@quantile_estimator//:erlang_app",
         ],
     )
 
-    github_bazel_erlang_lib(
+    github_erlang_app(
         name = "proper",
         first_srcs = [
             "src/vararg.erl",
@@ -204,7 +208,7 @@ erlang_lib(
         org = "manopapad",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "quantile_estimator",
         version = "0.2.1",
         erlc_opts = [
@@ -213,7 +217,7 @@ erlang_lib(
         sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "ra",
         version = "2.0.3",
         sha256 = "0b159c7da28fc581042f462f51b042b3fed244cdaa2b2061e6430ba6d12a3972",
@@ -222,10 +226,10 @@ erlang_lib(
             "src/ra_snapshot.erl",
         ],
         deps = [
-            "@gen_batch_server//:bazel_erlang_lib",
+            "@gen_batch_server//:erlang_app",
         ],
         runtime_deps = [
-            "@aten//:bazel_erlang_lib",
+            "@aten//:erlang_app",
         ],
     )
 
@@ -236,19 +240,19 @@ erlang_lib(
         build_file = rabbitmq_workspace + "//:BUILD.ranch",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "recon",
         version = "2.5.1",
         sha256 = "5721c6b6d50122d8f68cccac712caa1231f97894bab779eff5ff0f886cb44648",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "redbug",
         version = "2.0.7",
         sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
     )
 
-    github_bazel_erlang_lib(
+    github_erlang_app(
         name = "seshat",
         org = "rabbitmq",
         ref = "0.1.0",
@@ -260,13 +264,13 @@ erlang_lib(
         sha256 = "fd20039322eabed814d0dfe75743652846007ec93faae3e141c9602c21152b14",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "stdout_formatter",
         version = "0.2.4",
         sha256 = "51f1df921b0477275ea712763042155dbc74acc75d9648dbd54985c45c913b29",
     )
 
-    github_bazel_erlang_lib(
+    github_erlang_app(
         name = "syslog",
         org = "schlagert",
         sha256 = "01c31c31d4d28e564da0660bdb69725ba37173fca5b3228829b8f3f416f9e486",
@@ -277,18 +281,18 @@ erlang_lib(
         ],
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "sysmon_handler",
         version = "1.3.0",
         sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
     )
 
-    hex_pm_bazel_erlang_lib(
+    hex_pm_erlang_app(
         name = "systemd",
         version = "0.6.1",
         sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
         deps = [
-            "@enough//:bazel_erlang_lib",
+            "@enough//:erlang_app",
         ],
     )
 
