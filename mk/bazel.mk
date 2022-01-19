@@ -8,8 +8,8 @@ $(BAZELISK):
 endif
 
 define USER_BAZELRC
-build --@bazel-erlang//:erlang_home=$(shell dirname $$(dirname $$(which erl)))
-build --@bazel-erlang//:erlang_version=$(shell erl -eval '{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell)
+build --@rules_erlang//:erlang_home=$(shell dirname $$(dirname $$(which erl)))
+build --@rules_erlang//:erlang_version=$(shell erl -eval '{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), io:fwrite(Version), halt().' -noshell)
 build --//:elixir_home=$(shell dirname $$(dirname $$(which iex)))/lib/elixir
 
 # rabbitmqctl wait shells out to 'ps', which is broken in the bazel macOS

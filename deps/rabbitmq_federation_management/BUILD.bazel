@@ -1,12 +1,12 @@
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
+    "rabbitmq_app",
     "rabbitmq_integration_suite",
-    "rabbitmq_lib",
 )
 
 APP_NAME = "rabbitmq_federation_management"
@@ -16,21 +16,21 @@ APP_DESCRIPTION = "RabbitMQ Federation Management"
 APP_MODULE = "rabbit_federation_app"
 
 BUILD_DEPS = [
-    "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+    "//deps/rabbitmq_management_agent:erlang_app",
 ]
 
 DEPS = [
-    "//deps/rabbitmq_management:bazel_erlang_lib",
+    "//deps/rabbitmq_management:erlang_app",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/amqp_client:bazel_erlang_lib",
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbitmq_federation:bazel_erlang_lib",
+    "//deps/amqp_client:erlang_app",
+    "//deps/rabbit_common:erlang_app",
+    "//deps/rabbit:erlang_app",
+    "//deps/rabbitmq_federation:erlang_app",
 ]
 
-rabbitmq_lib(
+rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_module = APP_MODULE,
     app_name = APP_NAME,
