@@ -1,12 +1,12 @@
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
+    "rabbitmq_app",
     "rabbitmq_integration_suite",
-    "rabbitmq_lib",
 )
 
 APP_NAME = "rabbitmq_tracing"
@@ -22,20 +22,20 @@ APP_ENV = """[
 	  ]"""
 
 BUILD_DEPS = [
-    "//deps/amqp_client:bazel_erlang_lib",
-    "//deps/rabbitmq_management_agent:bazel_erlang_lib",
+    "//deps/amqp_client:erlang_app",
+    "//deps/rabbitmq_management_agent:erlang_app",
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbitmq_management:bazel_erlang_lib",
+    "//deps/rabbit_common:erlang_app",
+    "//deps/rabbitmq_management:erlang_app",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbit:erlang_app",
 ]
 
-rabbitmq_lib(
+rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_module = APP_MODULE,

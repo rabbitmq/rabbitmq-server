@@ -1,10 +1,10 @@
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
-    "rabbitmq_lib",
+    "rabbitmq_app",
     "rabbitmq_suite",
 )
 
@@ -12,7 +12,7 @@ APP_NAME = "rabbitmq_stream_common"
 
 APP_DESCRIPTION = "RabbitMQ Stream Common"
 
-rabbitmq_lib(
+rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
 )

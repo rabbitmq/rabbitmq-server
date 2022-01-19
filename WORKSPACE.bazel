@@ -58,15 +58,15 @@ load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
 rules_pkg_dependencies()
 
 http_archive(
-    name = "bazel-erlang",
-    sha256 = "d9211837a9ab9b007ea802532758cf3b465291bd4d610eb9bbc310875524d488",
-    strip_prefix = "rules_erlang-d62a13548b3d1e5bd2830f42e3f3933ae17db3cb",
-    urls = ["https://github.com/rabbitmq/rules_erlang/archive/d62a13548b3d1e5bd2830f42e3f3933ae17db3cb.zip"],
+    name = "rules_erlang",
+    sha256 = "7fd0564918537eb72294d17f5f8dc663907b16d712773b1c006e83194746a1c0",
+    strip_prefix = "rules_erlang-2.0.0",
+    urls = ["https://github.com/rabbitmq/rules_erlang/archive/refs/tags/2.0.0.zip"],
 )
 
-load("@bazel-erlang//:bazel_erlang.bzl", "bazel_erlang_deps")
+load("@rules_erlang//:rules_erlang.bzl", "rules_erlang_dependencies")
 
-bazel_erlang_deps()
+rules_erlang_dependencies()
 
 load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
 
@@ -85,7 +85,7 @@ pkg_zip(
     name = "inet_tcp_proxy_ez",
     package_dir = "inet_tcp_proxy/ebin",
     srcs = [
-        "@inet_tcp_proxy//:bazel_erlang_lib",
+        "@inet_tcp_proxy//:erlang_app",
     ],
     package_file_name = "inet_tcp_proxy.ez",
     visibility = ["//visibility:public"],
