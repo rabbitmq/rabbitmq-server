@@ -167,7 +167,7 @@
              queue_states,
              tick_timer,
              publishing_mode = false :: boolean(),
-             obsolete_deliver_tags = []
+             obsolete_delivery_tags = []
             }).
 
 -define(QUEUE, lqueue).
@@ -1340,9 +1340,9 @@ handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple     = Multiple},
               _, State = #ch{unacked_message_q = UAMQ, tx = Tx,
-                             obsolete_deliver_tags = ODTags}) ->
+                             obsolete_delivery_tags = ODTags}) ->
     {Acked, Remaining, ODTags1} = collect_acks(UAMQ, DeliveryTag, Multiple, ODTags),
-    State1 = State#ch{unacked_message_q = Remaining, obsolete_deliver_tags = ODTags1},
+    State1 = State#ch{unacked_message_q = Remaining, obsolete_delivery_tags = ODTags1},
     {noreply, case Tx of
                   none         -> {State2, Actions} = ack(Acked, State1),
                                   handle_queue_actions(Actions, State2);
@@ -1877,7 +1877,7 @@ handle_consuming_queue_down_or_eol(QName,
               end
       end, State#ch{queue_consumers = maps:remove(QName, QCons),
             unacked_message_q = UAMQ1,
-            obsolete_deliver_tags = ObsoleteDeliverTags}, ConsumerTags).
+            obsolete_delivery_tags = ObsoleteDeliverTags}, ConsumerTags).
 
 %% [0] There is a slight danger here that if a queue is deleted and
 %% then recreated again the reconsume will succeed even though it was
@@ -1968,9 +1968,9 @@ basic_return(#basic_message{exchange_name = ExchangeName,
            Content).
 
 reject(DeliveryTag, Requeue, Multiple,
-       State = #ch{unacked_message_q = UAMQ, tx = Tx, obsolete_deliver_tags = ODTags}) ->
+       State = #ch{unacked_message_q = UAMQ, tx = Tx, obsolete_delivery_tags = ODTags}) ->
     {Acked, Remaining, ODTags1} = collect_acks(UAMQ, DeliveryTag, Multiple, ODTags),
-    State1 = State#ch{unacked_message_q = Remaining, obsolete_deliver_tags = ODTags1},
+    State1 = State#ch{unacked_message_q = Remaining, obsolete_delivery_tags = ODTags1},
     {noreply, case Tx of
                   none ->
                       {State2, Actions} = internal_reject(Requeue, Acked, State1#ch.limiter, State1),
