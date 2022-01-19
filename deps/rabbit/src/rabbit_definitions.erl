@@ -20,7 +20,7 @@
 %% import
 -export([import_raw/1, import_raw/2, import_parsed/1, import_parsed/2,
          apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5,
-         should_use_checksum/0, checksum_algorithm/0]).
+         should_use_hashing/0]).
 
 -export([all_definitions/0]).
 -export([
@@ -185,7 +185,14 @@ maybe_load_definitions_from_pluggable_source(App, Key) ->
                 ModOrAlias ->
                     Mod = normalize_backend_module(ModOrAlias),
                     rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
-                    Mod:load(Proplist)
+                    case should_use_hashing() of
+                        false ->
+                            Mod:load(Proplist);
+                        true ->
+                            Hash = rabbit_definitions_hashing:stored_hash(),
+                            Algo = rabbit_definitions_hashing:hashing_algorithm(),
+                            Mod:load_with_hashing(Proplist, Hash, Algo)
+                    end
             end
     end.
 
@@ -233,24 +240,14 @@ atomise_map_keys(Decoded) ->
         Acc#{rabbit_data_coercion:to_atom(K, utf8) => V}
               end, Decoded, Decoded).
 
--spec should_use_checksum() -> boolean().
-should_use_checksum() ->
+-spec should_use_hashing() -> boolean().
+should_use_hashing() ->
     case application:get_env(rabbit, definitions) of
         undefined   -> false;
         {ok, none}  -> false;
         {ok, []}    -> false;
         {ok, Proplist} ->
-            pget(use_checksum, Proplist, false)
-    end.
-
--spec checksum_algorithm() -> {ok, crypto:sha1() | crypto:sha2()}.
-checksum_algorithm() ->
-    case application:get_env(rabbit, definitions) of
-        undefined   -> undefined;
-        {ok, none}  -> undefined;
-        {ok, []}    -> undefined;
-        {ok, Proplist} ->
-            pget(checksum_algorithm, Proplist, sha256)
+            pget(use_hashing, Proplist, false)
     end.
 
 
@@ -263,9 +260,6 @@ apply_defs(Map, ActingUser) ->
                 SuccessFun :: fun(() -> 'ok')) -> 'ok'  | {error, term()};
                 (Map :: #{atom() => any()}, ActingUser :: rabbit_types:username(),
                 VHost :: vhost:name()) -> 'ok'  | {error, term()}.
-
-apply_defs(Map, ActingUser, VHost) when is_binary(VHost) ->
-    apply_defs(Map, ActingUser, fun () -> ok end, VHost);
 
 apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
     Version = maps:get(rabbitmq_version, Map, maps:get(rabbit_version, Map, undefined)),
