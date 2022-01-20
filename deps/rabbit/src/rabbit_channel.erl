@@ -1853,13 +1853,14 @@ delete_uamq_queue_down_or_eol(QName, UAMQ, UAMQRet, ObsoleteDeliverTags) ->
 
 handle_consuming_queue_down_or_eol(QName,
                                    State = #ch{queue_consumers = QCons,
-                                       unacked_message_q = UAMQ}) ->
+                                       unacked_message_q = UAMQ,
+                                       obsolete_delivery_tags = ODTags}) ->
     ConsumerTags = case maps:find(QName, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
     %% Delete the UAMQ of old QPId
-    {UAMQ1, ObsoleteDeliverTags} = delete_uamq_queue_down_or_eol(QName, UAMQ, ?QUEUE:new(), []),
+    {UAMQ1, ODTags1} = delete_uamq_queue_down_or_eol(QName, UAMQ, ?QUEUE:new(), ODTags),
     gb_sets:fold(
       fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
               case queue_down_consumer_action(CTag, CMap) of
@@ -1877,7 +1878,7 @@ handle_consuming_queue_down_or_eol(QName,
               end
       end, State#ch{queue_consumers = maps:remove(QName, QCons),
             unacked_message_q = UAMQ1,
-            obsolete_delivery_tags = ObsoleteDeliverTags}, ConsumerTags).
+            obsolete_delivery_tags = ODTags1}, ConsumerTags).
 
 %% [0] There is a slight danger here that if a queue is deleted and
 %% then recreated again the reconsume will succeed even though it was
