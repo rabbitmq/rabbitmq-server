@@ -5,12 +5,19 @@ load("elixir_home.bzl", "elixir_home")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
-load(":rabbitmq.bzl", "ALL_PLUGINS", "APP_VERSION")
+load(":rabbitmq.bzl", "APP_VERSION", "all_plugins")
 load(":dist.bzl", "collect_licenses", "versioned_rabbitmq_home")
 
 exports_files([
     "scripts/bazel/rabbitmq-run.sh",
 ])
+
+config_setting(
+    name = "debug_build",
+    values = {
+        "compilation_mode": "dbg",
+    },
+)
 
 # This allows us to
 # `bazel build //my/target \
@@ -42,41 +49,7 @@ plt(
 
 rabbitmq_home(
     name = "broker-home",
-    plugins = [
-        "//deps/rabbit:bazel_erlang_lib",
-        "//deps/rabbitmq_amqp1_0:bazel_erlang_lib",
-        "//deps/rabbitmq_auth_backend_cache:bazel_erlang_lib",
-        "//deps/rabbitmq_auth_backend_http:bazel_erlang_lib",
-        "//deps/rabbitmq_auth_backend_ldap:bazel_erlang_lib",
-        "//deps/rabbitmq_auth_backend_oauth2:bazel_erlang_lib",
-        "//deps/rabbitmq_auth_mechanism_ssl:bazel_erlang_lib",
-        "//deps/rabbitmq_consistent_hash_exchange:bazel_erlang_lib",
-        "//deps/rabbitmq_event_exchange:bazel_erlang_lib",
-        "//deps/rabbitmq_federation:bazel_erlang_lib",
-        "//deps/rabbitmq_federation_management:bazel_erlang_lib",
-        "//deps/rabbitmq_jms_topic_exchange:bazel_erlang_lib",
-        "//deps/rabbitmq_management:bazel_erlang_lib",
-        "//deps/rabbitmq_mqtt:bazel_erlang_lib",
-        "//deps/rabbitmq_peer_discovery_aws:bazel_erlang_lib",
-        "//deps/rabbitmq_peer_discovery_consul:bazel_erlang_lib",
-        "//deps/rabbitmq_peer_discovery_etcd:bazel_erlang_lib",
-        "//deps/rabbitmq_peer_discovery_k8s:bazel_erlang_lib",
-        "//deps/rabbitmq_prometheus:bazel_erlang_lib",
-        "//deps/rabbitmq_random_exchange:bazel_erlang_lib",
-        "//deps/rabbitmq_recent_history_exchange:bazel_erlang_lib",
-        "//deps/rabbitmq_sharding:bazel_erlang_lib",
-        "//deps/rabbitmq_shovel:bazel_erlang_lib",
-        "//deps/rabbitmq_shovel_management:bazel_erlang_lib",
-        "//deps/rabbitmq_stomp:bazel_erlang_lib",
-        "//deps/rabbitmq_stream:bazel_erlang_lib",
-        "//deps/rabbitmq_stream_management:bazel_erlang_lib",
-        "//deps/rabbitmq_top:bazel_erlang_lib",
-        "//deps/rabbitmq_tracing:bazel_erlang_lib",
-        "//deps/rabbitmq_trust_store:bazel_erlang_lib",
-        "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
-        "//deps/rabbitmq_web_mqtt:bazel_erlang_lib",
-        "//deps/rabbitmq_web_stomp:bazel_erlang_lib",
-    ],
+    plugins = all_plugins(rabbitmq_workspace = ""),
 )
 
 rabbitmq_home(
@@ -105,7 +78,6 @@ rabbitmq_run(
 
 # Allow us to `bazel run broker`
 # for the equivalent of `make run-broker`
-# (though it as of yet includes no plugins)
 rabbitmq_run_command(
     name = "broker",
     rabbitmq_run = ":rabbitmq-run",
@@ -131,7 +103,7 @@ rabbitmqctl(
 
 shell(
     name = "repl",
-    deps = ALL_PLUGINS,
+    deps = all_plugins(rabbitmq_workspace = ""),
 )
 
 collect_licenses(
@@ -143,12 +115,12 @@ collect_licenses(
             "LICENSE.txt",
         ],
     ),
-    deps = ALL_PLUGINS,
+    deps = all_plugins(rabbitmq_workspace = ""),
 )
 
 versioned_rabbitmq_home(
     name = "dist-home",
-    plugins = ALL_PLUGINS,
+    plugins = all_plugins(rabbitmq_workspace = ""),
 )
 
 pkg_tar(
