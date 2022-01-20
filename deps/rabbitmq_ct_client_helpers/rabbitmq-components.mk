@@ -119,8 +119,16 @@ dep_lager = hex 3.8.0
 dep_prometheus = git https://github.com/deadtrickster/prometheus.erl.git master
 dep_ra = git https://github.com/rabbitmq/ra.git master
 dep_ranch = hex 1.7.1
+<<<<<<< HEAD
 dep_recon = hex 2.5.1
+<<<<<<< HEAD
 dep_redbug = hex 2.0.7
+=======
+=======
+dep_recon = hex 2.5.2
+dep_redbug = hex 2.0.7
+>>>>>>> 59e211d97e (Support Elixir 1.13)
+>>>>>>> 9ee012ab0f (Support Elixir 1.13)
 dep_observer_cli = hex 1.5.4
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0

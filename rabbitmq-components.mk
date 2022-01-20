@@ -118,8 +118,16 @@ dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
 dep_prometheus = git https://github.com/deadtrickster/prometheus.erl 06425c21a39c1564164f1cc3fe5bdfa8b23b1f78
 dep_ra = hex 2.0.3
 dep_ranch = hex 2.1.0
+<<<<<<< HEAD
 dep_recon = hex 2.5.1
+<<<<<<< HEAD
 dep_redbug = hex 2.0.7
+=======
+=======
+dep_recon = hex 2.5.2
+dep_redbug = hex 2.0.7
+>>>>>>> 59e211d97e (Support Elixir 1.13)
+>>>>>>> 9ee012ab0f (Support Elixir 1.13)
 dep_observer_cli = hex 1.7.1
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
