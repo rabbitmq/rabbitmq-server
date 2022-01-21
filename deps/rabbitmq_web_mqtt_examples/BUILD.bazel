@@ -1,9 +1,9 @@
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
-    "rabbitmq_lib",
+    "rabbitmq_app",
 )
 
 APP_NAME = "rabbitmq_web_mqtt_examples"
@@ -17,13 +17,13 @@ APP_ENV = """[
 	  ]"""
 
 RUNTIME_DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
-    "//deps/rabbitmq_web_dispatch:bazel_erlang_lib",
-    "//deps/rabbitmq_web_mqtt:bazel_erlang_lib",
+    "//deps/rabbit_common:erlang_app",
+    "//deps/rabbit:erlang_app",
+    "//deps/rabbitmq_web_dispatch:erlang_app",
+    "//deps/rabbitmq_web_mqtt:erlang_app",
 ]
 
-rabbitmq_lib(
+rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_module = APP_MODULE,

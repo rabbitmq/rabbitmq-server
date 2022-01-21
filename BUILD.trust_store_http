@@ -1,6 +1,6 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "erlang_lib")
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
-erlang_lib(
+erlang_app(
     app_name = "trust_store_http",
     app_description = "Trust store HTTP server",
     app_module = "trust_store_http_app",
@@ -9,7 +9,7 @@ erlang_lib(
         "ssl",
     ],
     deps = [
-        "@cowboy//:bazel_erlang_lib",
-        "@jsx//:bazel_erlang_lib",
+        "@cowboy//:erlang_app",
+        "@jsx//:erlang_app",
     ],
 )
