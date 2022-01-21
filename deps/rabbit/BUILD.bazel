@@ -634,6 +634,7 @@ suites = [
             ":quorum_queue_utils",
         ],
         flaky = True,
+        shard_count = 6,
     ),
     rabbitmq_integration_suite(
         PACKAGE,
