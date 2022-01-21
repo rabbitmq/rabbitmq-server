@@ -1,5 +1,7 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "app_file", "bazel_erlang_lib", "erlc",
-"DEFAULT_ERLC_OPTS")
+load("@rules_erlang//:app_file.bzl", "app_file")
+load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
+load("@rules_erlang//:erlang_app.bzl", "DEFAULT_ERLC_OPTS")
+load("@rules_erlang//:erlc.bzl", "erlc")
 
 FIRST_SRCS = [
     "src/ranch_transport.erl",
@@ -36,8 +38,8 @@ app_file(
     modules = [":first_beam_files", ":beam_files"],
 )
 
-bazel_erlang_lib(
-    name = "bazel_erlang_lib",
+erlang_app_info(
+    name = "erlang_app",
     app_name = "ranch",
     app = ":app_file",
     hdrs = glob(["include/**/*.hrl"]),

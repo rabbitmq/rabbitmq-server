@@ -1,5 +1,6 @@
-load("@bazel-erlang//:bazel_erlang_lib.bzl", "ErlangLibInfo", "flat_deps", "path_join")
-load("@bazel-erlang//:ct.bzl", "additional_file_dest_relative_path")
+load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
+load("@rules_erlang//:util.bzl", "path_join")
+load("@rules_erlang//:ct.bzl", "additional_file_dest_relative_path")
 
 RabbitmqHomeInfo = provider(
     doc = "An assembled RABBITMQ_HOME dir",
@@ -10,13 +11,10 @@ RabbitmqHomeInfo = provider(
 
 def _copy_script(ctx, script):
     dest = ctx.actions.declare_file(path_join(ctx.label.name, "sbin", script.basename))
-    args = ctx.actions.args()
-    args.add_all([script, dest])
-    ctx.actions.run(
-        inputs = [script],
-        outputs = [dest],
-        executable = "cp",
-        arguments = [args],
+    ctx.actions.expand_template(
+        template = script,
+        output = dest,
+        substitutions = {},
     )
     return dest
 
@@ -30,11 +28,11 @@ def link_escript(ctx, escript):
     return s
 
 def _plugins_dir_links(ctx, plugin):
-    lib_info = plugin[ErlangLibInfo]
+    lib_info = plugin[ErlangAppInfo]
     plugin_path = path_join(
         ctx.label.name,
         "plugins",
-        lib_info.lib_name,
+        lib_info.app_name,
     )
 
     links = []
@@ -73,7 +71,7 @@ def _plugins_dir_links(ctx, plugin):
 def unique_versions(plugins):
     erlang_versions = []
     for plugin in plugins:
-        erlang_version = plugin[ErlangLibInfo].erlang_version
+        erlang_version = plugin[ErlangAppInfo].erlang_version
         if not erlang_version in erlang_versions:
             erlang_versions.append(erlang_version)
     return erlang_versions
@@ -88,7 +86,11 @@ def _impl(ctx):
     if len(erlang_versions) > 1:
         fail("plugins do not have a unified erlang version", erlang_versions)
 
-    scripts = [_copy_script(ctx, script) for script in ctx.files._scripts]
+    if not ctx.attr.is_windows:
+        source_scripts = ctx.files._scripts
+    else:
+        source_scripts = ctx.files._scripts_windows
+    scripts = [_copy_script(ctx, script) for script in source_scripts]
 
     rabbitmq_ctl_copies = [
         "rabbitmq-diagnostics",
@@ -104,10 +106,10 @@ def _impl(ctx):
 
     rabbitmqctl = None
     for script in scripts:
-        if script.basename == "rabbitmqctl":
+        if script.basename == ("rabbitmqctl" if not ctx.attr.is_windows else "rabbitmqctl.bat"):
             rabbitmqctl = script
     if rabbitmqctl == None:
-        fail("could not find rabbitmqct among", scripts)
+        fail("could not find rabbitmqctl among", scripts)
 
     return [
         RabbitmqHomeInfo(
@@ -131,14 +133,36 @@ RABBITMQ_HOME_ATTRS = {
         ],
         allow_files = True,
     ),
+    "_scripts_windows": attr.label_list(
+        default = [
+            "//deps/rabbit:scripts/rabbitmq-defaults.bat",
+            "//deps/rabbit:scripts/rabbitmq-diagnostics.bat",
+            "//deps/rabbit:scripts/rabbitmq-env.bat",
+            "//deps/rabbit:scripts/rabbitmq-plugins.bat",
+            "//deps/rabbit:scripts/rabbitmq-queues.bat",
+            "//deps/rabbit:scripts/rabbitmq-server.bat",
+            "//deps/rabbit:scripts/rabbitmqctl.bat",
+        ],
+        allow_files = True,
+    ),
     "_rabbitmqctl_escript": attr.label(default = "//deps/rabbitmq_cli:rabbitmqctl"),
-    "plugins": attr.label_list(providers = [ErlangLibInfo]),
+    "is_windows": attr.bool(mandatory = True),
+    "plugins": attr.label_list(providers = [ErlangAppInfo]),
 }
 
-rabbitmq_home = rule(
+rabbitmq_home_private = rule(
     implementation = _impl,
     attrs = RABBITMQ_HOME_ATTRS,
 )
+
+def rabbitmq_home(**kwargs):
+    rabbitmq_home_private(
+        is_windows = select({
+            "@bazel_tools//src/conditions:host_windows": True,
+            "//conditions:default": False,
+        }),
+        **kwargs
+    )
 
 def _dirname(p):
     return p.rpartition("/")[0]

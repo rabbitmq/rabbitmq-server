@@ -1,12 +1,12 @@
-load("@bazel-erlang//:xref.bzl", "xref")
-load("@bazel-erlang//:dialyze.bzl", "dialyze", "plt")
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
+    "rabbitmq_app",
     "rabbitmq_integration_suite",
-    "rabbitmq_lib",
     "rabbitmq_suite",
 )
 
@@ -19,20 +19,20 @@ EXTRA_APPS = [
 ]
 
 BUILD_DEPS = [
-    "@lager//:bazel_erlang_lib",
+    "@lager//:erlang_app",
 ]
 
 DEPS = [
-    "//deps/rabbit_common:bazel_erlang_lib",
-    "//deps/rabbitmq_peer_discovery_common:bazel_erlang_lib",
+    "//deps/rabbit_common:erlang_app",
+    "//deps/rabbitmq_peer_discovery_common:erlang_app",
 ]
 
 RUNTIME_DEPS = [
-    "//deps/rabbitmq_aws:bazel_erlang_lib",
-    "//deps/rabbit:bazel_erlang_lib",
+    "//deps/rabbitmq_aws:erlang_app",
+    "//deps/rabbit:erlang_app",
 ]
 
-rabbitmq_lib(
+rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_name = APP_NAME,
     build_deps = BUILD_DEPS,
@@ -81,14 +81,14 @@ suites = [
             "external",
         ],
         deps = [
-            "//deps/rabbitmq_ct_helpers:bazel_erlang_lib",
+            "//deps/rabbitmq_ct_helpers:erlang_app",
         ],
     ),
     rabbitmq_suite(
         name = "unit_SUITE",
         size = "small",
         runtime_deps = [
-            "@meck//:bazel_erlang_lib",
+            "@meck//:erlang_app",
         ],
     ),
 ]

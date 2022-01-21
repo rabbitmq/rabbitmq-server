@@ -1,10 +1,13 @@
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
 load(":elixir.bzl", "elixir")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
+load("//:rabbitmq.bzl", "STARTS_BACKGROUND_BROKER_TAG")
 
 # This rule simply exposes elixir as a runtime lib for tests in erlang
 elixir(
-    name = "elixir_as_bazel_erlang_lib",
+    name = "elixir_app",
     visibility = ["//visibility:public"],
 )
 
@@ -18,10 +21,28 @@ rabbitmqctl(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "@goldrush//:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
+        "//deps/rabbit_common:erlang_app",
+        "@goldrush//:erlang_app",
+        "@lager//:erlang_app",
     ],
+)
+
+rabbitmq_home(
+    name = "broker-for-cli-tests-home",
+    testonly = True,
+    plugins = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_federation:erlang_app",
+        "//deps/rabbitmq_stomp:erlang_app",
+        "//deps/amqp_client:erlang_app",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-cli-tests-run",
+    testonly = True,
+    home = ":broker-for-cli-tests-home",
+    visibility = ["//visibility:public"],
 )
 
 rabbitmqctl_test(
@@ -34,12 +55,14 @@ rabbitmqctl_test(
         "test/**/*.exs",
     ]),
     data = glob(["test/fixtures/**/*"]),
-    rabbitmq_run = "//:rabbitmq-for-cli-tests-run",
+    flaky = True,
+    rabbitmq_run = ":rabbitmq-for-cli-tests-run",
+    tags = [STARTS_BACKGROUND_BROKER_TAG],
     deps = [
-        "//deps/amqp_client:bazel_erlang_lib",
-        "//deps/rabbit:bazel_erlang_lib",
-        "//deps/rabbit_common:bazel_erlang_lib",
-        "@goldrush//:bazel_erlang_lib",
-        "@lager//:bazel_erlang_lib",
+        "//deps/amqp_client:erlang_app",
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbit_common:erlang_app",
+        "@goldrush//:erlang_app",
+        "@lager//:erlang_app",
     ],
 )
