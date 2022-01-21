@@ -1737,6 +1737,21 @@ empty_dequeue_should_emit_release_cursor_test(_) ->
     ?ASSERT_EFF({release_cursor, _, _}, Effects),
     ok.
 
+expire_message_should_emit_release_cursor_test(_) ->
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
+             release_cursor_interval => 0,
+             msg_ttl => 1},
+    S0 = rabbit_fifo:init(Conf),
+    Msg = #basic_message{content = #content{properties = none,
+                                            payload_fragments_rev = []}},
+    {S1, ok, _} = apply(meta(1, 100), rabbit_fifo:make_enqueue(self(), 1, Msg), S0),
+    {_S, ok, Effs} = apply(meta(2, 101),
+                           rabbit_fifo:make_enqueue(self(), 2, Msg),
+                           S1),
+    ?ASSERT_EFF({release_cursor, 1, _}, Effs),
+    ok.
+
 %% Utility
 
 init(Conf) -> rabbit_fifo:init(Conf).
