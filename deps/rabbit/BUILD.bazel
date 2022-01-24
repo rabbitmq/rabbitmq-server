@@ -726,7 +726,7 @@ suites = [
             "src/rabbit_fifo_dlx.hrl",
         ],
         deps = [
-            "//deps/rabbit_common:bazel_erlang_lib",
+            "//deps/rabbit_common:erlang_app",
         ],
     ),
     rabbitmq_integration_suite(
@@ -743,10 +743,10 @@ suites = [
             "src/rabbit_fifo_dlx.hrl",
         ],
         runtime_deps = [
-            "@ra//:bazel_erlang_lib",
+            "@ra//:erlang_app",
         ],
         deps = [
-            "@proper//:bazel_erlang_lib",
+            "@proper//:erlang_app",
         ],
     ),
     rabbitmq_suite(
