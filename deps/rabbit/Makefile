@@ -123,7 +123,7 @@ define PROJECT_ENV
 	    {tracking_execution_timeout, 15000},
 	    {stream_messages_soft_limit, 256},
         {track_auth_attempt_source, false},
-        {dead_letter_worker_consumer_prefetch, 1000},
+        {dead_letter_worker_consumer_prefetch, 32},
         {dead_letter_worker_publisher_confirm_timeout, 120000}
 	  ]
 endef
