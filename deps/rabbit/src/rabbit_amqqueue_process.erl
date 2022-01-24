@@ -489,7 +489,7 @@ init_queue_version(Version0, State = #q {backing_queue = BQ,
     %% policy might have been deleted, for example, and we want
     %% the queue to go back to v1.
     Version = case Version0 of
-        undefined -> rabbit_misc:get_env(rabbit, variable_queue_default_version, 1);
+        undefined -> rabbit_misc:get_env(rabbit, classic_queue_default_version, 1);
         _ -> Version0
     end,
     BQS1 = BQ:set_queue_version(Version, BQS),
