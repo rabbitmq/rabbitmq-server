@@ -624,7 +624,7 @@ process_recovery_terms(Terms) ->
 queue_version(Q) ->
     Resolve = fun(_, ArgVal) -> ArgVal end,
     case rabbit_queue_type_util:args_policy_lookup(<<"queue-version">>, Resolve, Q) of
-        undefined -> rabbit_misc:get_env(rabbit, variable_queue_default_version, 1);
+        undefined -> rabbit_misc:get_env(rabbit, classic_queue_default_version, 1);
         Vsn when is_integer(Vsn) -> Vsn;
         Vsn -> binary_to_integer(Vsn)
     end.

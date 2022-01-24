@@ -127,11 +127,11 @@ init_per_group1(backing_queue_tests, Config) ->
     end;
 init_per_group1(backing_queue_v1, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-      application, set_env, [rabbit, variable_queue_default_version, 1]),
+      application, set_env, [rabbit, classic_queue_default_version, 1]),
     Config;
 init_per_group1(backing_queue_v2, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-      application, set_env, [rabbit, variable_queue_default_version, 2]),
+      application, set_env, [rabbit, classic_queue_default_version, 2]),
     Config;
 init_per_group1(backing_queue_embed_limit_0, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -182,7 +182,7 @@ end_per_group1(Group, Config)
 when   Group =:= backing_queue_v1
 orelse Group =:= backing_queue_v2 ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0,
-      application, unset_env, [rabbit, variable_queue_default_version]),
+      application, unset_env, [rabbit, classic_queue_default_version]),
     Config;
 end_per_group1(Group, Config)
 when   Group =:= backing_queue_embed_limit_0
@@ -549,7 +549,7 @@ bq_queue_index(Config) ->
       ?MODULE, bq_queue_index1, [Config]).
 
 index_mod() ->
-    case application:get_env(rabbit, variable_queue_default_version) of
+    case application:get_env(rabbit, classic_queue_default_version) of
         {ok, 1} -> rabbit_queue_index;
         {ok, 2} -> rabbit_classic_queue_index_v2
     end.
