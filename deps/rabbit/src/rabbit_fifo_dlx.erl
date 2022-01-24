@@ -178,17 +178,8 @@ discard(Msgs, Reason, at_least_once, State0)
 
 -spec checkout(dead_letter_handler(), state()) ->
     {state(), ra_machine:effects()}.
-checkout(at_least_once, #?MODULE{consumer = undefined,
-                                 discards = Discards} = State) ->
-    case lqueue:is_empty(Discards) of
-        true ->
-            ok;
-        false ->
-            rabbit_log:warning("there are dead-letter messages but no dead-letter consumer")
-    end,
-    {State, []};
-checkout(at_least_once, State0) ->
-    checkout0(checkout_one(State0), {[],[]});
+checkout(at_least_once, #?MODULE{consumer = #dlx_consumer{}} = State) ->
+    checkout0(checkout_one(State), {[],[]});
 checkout(_, State) ->
     {State, []}.
 
