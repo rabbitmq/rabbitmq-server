@@ -43,6 +43,7 @@ jobs:
         ERL_PATH="$(which erl)"
         IEX_PATH="$(which iex)"
         cat << EOF >> user.bazelrc
+          startup --output_user_root=C:/tmp
           startup --windows_enable_symlinks
           build --enable_runfiles
 
@@ -62,4 +63,10 @@ jobs:
 
         bazelisk info release
     - name: RUN TESTS
-      run: bazelisk test //... --config=buildbuddy --test_tag_filters=-exclusive,-aws,-bats,-starts-background-broker --build_tests_only --verbose_failures
+      shell: cmd
+      run: |
+        bazelisk test //... ^
+          --config=buildbuddy ^
+          --test_tag_filters=-aws,-bats,-starts-background-broker ^
+          --build_tests_only ^
+          --verbose_failures
