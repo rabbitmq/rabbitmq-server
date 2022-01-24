@@ -1558,30 +1558,28 @@ return(#{index := IncomingRaftIdx} = Meta, ConsumerId, Returned,
 % used to process messages that are finished
 complete(Meta, ConsumerId, DiscardedMsgIds,
          #consumer{checked_out = Checked} = Con0,
-         #?MODULE{messages_total = Tot} = State0) ->
+         #?MODULE{ra_indexes = Indexes0,
+                  msg_bytes_checkout = BytesCheckout,
+                  messages_total = Tot} = State0) ->
     %% credit_mode = simple_prefetch should automatically top-up credit
     %% as messages are simple_prefetch or otherwise returned
     Discarded = maps:with(DiscardedMsgIds, Checked),
     DiscardedMsgs = maps:values(Discarded),
-    Len = length(DiscardedMsgs),
+    Len = map_size(Discarded),
     Con = Con0#consumer{checked_out = maps:without(DiscardedMsgIds, Checked),
                         credit = increase_credit(Con0, Len)},
     State1 = update_or_remove_sub(Meta, ConsumerId, Con, State0),
-    State2 = lists:foldl(fun(Msg, Acc) ->
-                                 add_bytes_settle(
-                                   get_msg_header(Msg), Acc)
-                         end, State1, DiscardedMsgs),
-    State = State2#?MODULE{messages_total = Tot - Len},
-    delete_indexes(DiscardedMsgs, State).
-
-delete_indexes(Msgs, #?MODULE{ra_indexes = Indexes0} = State) ->
-    %% TODO: optimise by passing a list to rabbit_fifo_index
+    SettledSize = lists:foldl(fun(Msg, Acc) ->
+                                      get_header(size, get_msg_header(Msg)) + Acc
+                              end, 0, DiscardedMsgs),
     Indexes = lists:foldl(fun (?INDEX_MSG(I, _), Acc) when is_integer(I) ->
                                   rabbit_fifo_index:delete(I, Acc);
                               (_, Acc) ->
                                   Acc
-                          end, Indexes0, Msgs),
-    State#?MODULE{ra_indexes = Indexes}.
+                          end, Indexes0, DiscardedMsgs),
+    State1#?MODULE{ra_indexes = Indexes,
+                   msg_bytes_checkout = BytesCheckout - SettledSize,
+                   messages_total = Tot - Len}.
 
 increase_credit(#consumer{lifetime = once,
                           credit = Credit}, _) ->
@@ -1670,19 +1668,8 @@ update_header(Key, UpdateFun, Default, Header)
 update_header(Key, UpdateFun, Default, Header) ->
     maps:update_with(Key, UpdateFun, Default, Header).
 
-% get_msg_header(Key, ?INDEX_MSG(_Idx, ?MSG(Header, _Body))) ->
-%     get_header(Key, Header);
-% get_msg_header(Key, ?DISK_MSG(Header)) ->
-%     get_header(Key, Header);
-% get_msg_header(Key, ?PREFIX_MEM_MSG(Header)) ->
-%     get_header(Key, Header).
-
 get_msg_header(?INDEX_MSG(_Idx, ?DISK_MSG(Header))) ->
     Header.
-% get_msg_header(?DISK_MSG(Header)) ->
-%     Header;
-% get_msg_header(?PREFIX_MEM_MSG(Header)) ->
-%     Header.
 
 get_header(size, Header)
   when is_integer(Header) ->
@@ -1768,7 +1755,8 @@ checkout(#{index := Index} = Meta,
                 {true, {MaxActivePriority, IsEmpty}} ->
                     NotifyEffect = notify_decorators_effect(QName, MaxActivePriority,
                                                             IsEmpty),
-                    update_smallest_raft_index(Index, State, [NotifyEffect | Effects]);
+                    update_smallest_raft_index(Index, State,
+                                               [NotifyEffect | Effects]);
                 false ->
                     update_smallest_raft_index(Index, State, Effects)
             end
@@ -1778,10 +1766,12 @@ checkout0(Meta, {success, ConsumerId, MsgId,
                  ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)), ExpiredMsg, State, Effects},
           SendAcc0) when is_integer(RaftIdx) ->
     DelMsg = {RaftIdx, {MsgId, Header}},
-    SendAcc = maps:update_with(ConsumerId,
-                               fun (LogMsgs) ->
-                                       [DelMsg | LogMsgs]
-                               end, [DelMsg], SendAcc0),
+    SendAcc = case maps:get(ConsumerId, SendAcc0, undefined) of
+                  undefined ->
+                      SendAcc0#{ConsumerId => [DelMsg]};
+                  LogMsgs ->
+                      SendAcc0#{ConsumerId => [DelMsg | LogMsgs]}
+              end,
     checkout0(Meta, checkout_one(Meta, ExpiredMsg, State, Effects), SendAcc);
 checkout0(_Meta, {Activity, ExpiredMsg, State0, Effects0}, SendAcc) ->
     Effects1 = case Activity of
