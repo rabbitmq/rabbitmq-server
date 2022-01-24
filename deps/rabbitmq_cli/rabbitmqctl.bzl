@@ -87,6 +87,18 @@ if ! beginswith "{erlang_version}" "$V"; then
 fi
 
 export DEPS_DIR={mix_deps_dir}
+
+# mix can error on windows regarding permissions for a symlink at this path
+# deps/rabbitmq_cli/rabbitmqctl_mix/_build/dev/lib/rabbit_common/ebin
+# so instead we'll try skip that
+mkdir -p _build/dev/lib/rabbit_common
+mkdir _build/dev/lib/rabbit_common/include
+cp ${{DEPS_DIR}}/rabbit_common/include/* \\
+    _build/dev/lib/rabbit_common/include
+mkdir _build/dev/lib/rabbit_common/ebin
+cp ${{DEPS_DIR}}/rabbit_common/ebin/* \\
+    _build/dev/lib/rabbit_common/ebin
+
 export ERL_COMPILER_OPTIONS=deterministic
 "{elixir_home}"/bin/mix local.hex --force
 "{elixir_home}"/bin/mix local.rebar --force
