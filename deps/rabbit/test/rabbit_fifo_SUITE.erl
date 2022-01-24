@@ -251,11 +251,11 @@ checkout_enq_settle_test(_) ->
     {State2, Effects0} = enq(2, 1,  first, State1),
     ct:pal("Effects0 ~p", [Effects0]),
     %% TODO: this should go back to a send_msg effect after optimisation
-    ?ASSERT_EFF({log, [2], _, _}, Effects0),
-    % ?ASSERT_EFF({send_msg, _,
-    %              {delivery, ?FUNCTION_NAME,
-    %               [{0, {_, first}}]}, _},
-    %             Effects0),
+    % ?ASSERT_EFF({log, [2], _, _}, Effects0),
+    ?ASSERT_EFF({send_msg, _,
+                 {delivery, ?FUNCTION_NAME,
+                  [{0, {_, first}}]}, _},
+                Effects0),
     {State3, [_Inactive]} = enq(3, 2, second, State2),
     {_, _Effects} = settle(Cid, 4, 0, State3),
     % the release cursor is the smallest raft index that does not
@@ -268,11 +268,10 @@ duplicate_enqueue_test(_) ->
     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
               {monitor, _, _} | _]} = check_n(Cid, 5, 5, test_init(test)),
     {State2, Effects2} = enq(2, 1, first, State1),
-    ?ASSERT_EFF({log, [2], _, _}, Effects2),
-    % ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
+    % ?ASSERT_EFF({log, [2], _, _}, Effects2),
+    ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
     {_State3, Effects3} = enq(3, 1, first, State2),
     ?ASSERT_NO_EFF({log, [_], _, _}, Effects3),
-    % ?assertNoEffect({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects3),
     ok.
 
 return_test(_) ->
@@ -1737,6 +1736,7 @@ checkout_priority_test(_) ->
                                         #{args => []}),
               S1),
     {S3, E3} = enq(1, 1, first, S2),
+    ct:pal("E3 ~p ~p", [E3, self()]),
     ?ASSERT_EFF({send_msg, P, {delivery, _, _}, _}, P == self(), E3),
     {S4, E4} = enq(2, 2, second, S3),
     ?ASSERT_EFF({send_msg, P, {delivery, _, _}, _}, P == self(), E4),
