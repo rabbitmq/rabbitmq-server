@@ -266,7 +266,8 @@ apply(#{index := Idx} = Meta,
                msg = _Msg},
       #?MODULE{consumers = Cons0,
                messages = Messages,
-               ra_indexes = Indexes0} = State00) ->
+               ra_indexes = Indexes0,
+               enqueue_count = EnqCount} = State00) ->
     case Cons0 of
         #{ConsumerId := #consumer{checked_out = Checked0} = Con0}
           when is_map_key(MsgId, Checked0) ->
@@ -284,13 +285,9 @@ apply(#{index := Idx} = Meta,
                        ConsumerId,
                        Con,
                        State0#?MODULE{ra_indexes = rabbit_fifo_index:delete(OldIdx, Indexes0),
-                                      messages = lqueue:in(IdxMsg, Messages)}),
-
-            %% We have to increment the enqueue counter to ensure release cursors
-            %% are generated
-            State3 = incr_enqueue_count(State2),
-
-            {State, Ret, Effs} = checkout(Meta, State0, State3, []),
+                                      messages = lqueue:in(IdxMsg, Messages),
+                                      enqueue_count = EnqCount + 1}),
+            {State, Ret, Effs} = checkout(Meta, State0, State2, []),
             update_smallest_raft_index(Idx, Ret,
                                        maybe_store_dehydrated_state(Idx,  State),
                                        Effs);
@@ -1403,8 +1400,7 @@ apply_enqueue(#{index := RaftIdx,
                 system_time := Ts} = Meta, From, Seq, RawMsg, State0) ->
     case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, [], State0) of
         {ok, State1, Effects1} ->
-            State2 = incr_enqueue_count(incr_total(State1)),
-            {State, ok, Effects} = checkout(Meta, State0, State2, Effects1, false),
+            {State, ok, Effects} = checkout(Meta, State0, State1, Effects1, false),
             {maybe_store_dehydrated_state(RaftIdx, State), ok, Effects};
         {out_of_sequence, State, Effects} ->
             {State, not_enqueued, Effects};
@@ -1415,18 +1411,8 @@ apply_enqueue(#{index := RaftIdx,
 decr_total(#?MODULE{messages_total = Tot} = State) ->
     State#?MODULE{messages_total = Tot - 1}.
 
-incr_total(#?MODULE{messages_total = Tot} = State) ->
-    State#?MODULE{messages_total = Tot + 1}.
-
 drop_head(#?MODULE{ra_indexes = Indexes0} = State0, Effects) ->
     case take_next_msg(State0) of
-        % {?PREFIX_MEM_MSG(Header), State1} ->
-        %     State2 = subtract_in_memory_counts(Header,
-        %                                        add_bytes_drop(Header, State1)),
-        %     {decr_total(State2), Effects};
-        % {?DISK_MSG(Header), State1} ->
-        %     State2 = add_bytes_drop(Header, State1),
-        %     {decr_total(State2), Effects};
         {?INDEX_MSG(Idx, ?DISK_MSG(Header)) = IdxMsg, State1} ->
             Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
             State2 = State1#?MODULE{ra_indexes = Indexes},
@@ -1439,27 +1425,27 @@ drop_head(#?MODULE{ra_indexes = Indexes0} = State0, Effects) ->
             {State0, Effects}
     end.
 
-enqueue(RaftIdx, Ts, RawMsg, #?MODULE{messages = Messages} = State0) ->
-    %% the initial header is an integer only - it will get expanded to a map
-    %% when the next required key is added
-    Header0 = message_size(RawMsg),
-    Header = maybe_set_msg_ttl(RawMsg, Ts, Header0, State0),
-    %% TODO: enqueue as in memory message if there are no ready messages
-    %% and there are consumers with credit available.
-    %% I.e. the message will be immedately delivered so no benefit
-    %% in reading it back from the log
-    Msg = ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)),
-        % case evaluate_memory_limit(Header, State0) of
-        %     true ->
-        %         % indexed message with header map
-        %         {State0,
-        %          ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header))};
-        %     false ->
-        %         {add_in_memory_counts(Header, State0),
-        %          ?INDEX_MSG(RaftIdx, ?MSG(Header, RawMsg))}
-        % end,
-    State = add_bytes_enqueue(Header, State0),
-    State#?MODULE{messages = lqueue:in(Msg, Messages)}.
+% enqueue(RaftIdx, Ts, RawMsg, #?MODULE{messages = Messages} = State0) ->
+%     %% the initial header is an integer only - it will get expanded to a map
+%     %% when the next required key is added
+%     Header0 = message_size(RawMsg),
+%     Header = maybe_set_msg_ttl(RawMsg, Ts, Header0, State0),
+%     %% TODO: enqueue as in memory message if there are no ready messages
+%     %% and there are consumers with credit available.
+%     %% I.e. the message will be immedately delivered so no benefit
+%     %% in reading it back from the log
+%     Msg = ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)),
+%         % case evaluate_memory_limit(Header, State0) of
+%         %     true ->
+%         %         % indexed message with header map
+%         %         {State0,
+%         %          ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header))};
+%         %     false ->
+%         %         {add_in_memory_counts(Header, State0),
+%         %          ?INDEX_MSG(RaftIdx, ?MSG(Header, RawMsg))}
+%         % end,
+%     State = add_bytes_enqueue(Header, State0),
+%     State#?MODULE{messages = lqueue:in(Msg, Messages)}.
 
 maybe_set_msg_ttl(#basic_message{content = #content{properties = none}},
                   _, Header,
@@ -1497,29 +1483,29 @@ update_expiry_header(RaCmdTs, TTL, Header) ->
 update_expiry_header(ExpiryTs, Header) ->
     update_header(expiry, fun(Ts) -> Ts end, ExpiryTs, Header).
 
-incr_enqueue_count(#?MODULE{enqueue_count = EC,
-                            cfg = #cfg{release_cursor_interval = {_Base, C}}
-                            } = State0) when EC >= C ->
-    %% this will trigger a dehydrated version of the state to be stored
-    %% at this raft index for potential future snapshot generation
-    %% Q: Why don't we just stash the release cursor here?
-    %% A: Because it needs to be the very last thing we do and we
-    %% first needs to run the checkout logic.
-    State0#?MODULE{enqueue_count = 0};
-incr_enqueue_count(#?MODULE{enqueue_count = C} = State) ->
-    State#?MODULE{enqueue_count = C + 1}.
+% eval_enqueue_count(#?MODULE{enqueue_count = EC,
+%                             cfg = #cfg{release_cursor_interval = {_Base, C}}
+%                             } = State0) when EC >= C ->
+%     %% this will trigger a dehydrated version of the state to be stored
+%     %% at this raft index for potential future snapshot generation
+%     %% Q: Why don't we just stash the release cursor here?
+%     %% A: Because it needs to be the very last thing we do and we
+%     %% first needs to run the checkout logic.
+%     State0#?MODULE{enqueue_count = 0};
+% eval_enqueue_count(#?MODULE{} = State) ->
+%     State.
+%     % State#?MODULE{enqueue_count = C + 1}.
 
 maybe_store_dehydrated_state(RaftIdx,
                              #?MODULE{cfg =
-                                      #cfg{release_cursor_interval = {Base, _}}
-                                      = Cfg,
-                                      ra_indexes = _Indexes,
-                                      enqueue_count = 0,
-                                      release_cursors = Cursors0} = State0) ->
+                                      #cfg{release_cursor_interval = {Base, C}} = Cfg,
+                                      enqueue_count = EC,
+                                      release_cursors = Cursors0} = State0)
+  when EC >= C ->
     case messages_total(State0) of
         0 ->
             %% message must have been immediately dropped
-            State0;
+            State0#?MODULE{enqueue_count = 0};
         Total ->
             Interval = case Base of
                            0 -> 0;
@@ -1531,25 +1517,39 @@ maybe_store_dehydrated_state(RaftIdx,
             Dehydrated = dehydrate_state(State),
             Cursor = {release_cursor, RaftIdx, Dehydrated},
             Cursors = lqueue:in(Cursor, Cursors0),
-            State#?MODULE{release_cursors = Cursors}
+            State#?MODULE{enqueue_count = 0,
+                          release_cursors = Cursors}
     end;
 maybe_store_dehydrated_state(_RaftIdx, State) ->
     State.
 
-maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg, Effects, State0) ->
+maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg, Effects,
+              #?MODULE{msg_bytes_enqueue = Enqueue,
+                       enqueue_count = EnqCount,
+                       messages = Messages,
+                       messages_total = Total} = State0) ->
     % direct enqueue without tracking
-    State = enqueue(RaftIdx, Ts, RawMsg, State0),
+    Size = message_size(RawMsg),
+    Header = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
+    Msg = ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)),
+    State = State0#?MODULE{msg_bytes_enqueue = Enqueue + Size,
+                           enqueue_count = EnqCount + 1,
+                           messages_total = Total + 1,
+                           messages = lqueue:in(Msg, Messages)
+                          },
     {ok, State, Effects};
 maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
               #?MODULE{msg_bytes_enqueue = Enqueue,
+                       enqueue_count = EnqCount,
                        enqueuers = Enqueuers0,
-                       messages = Messages} = State0) ->
+                       messages = Messages,
+                       messages_total = Total} = State0) ->
 
     case maps:get(From, Enqueuers0, undefined) of
         undefined ->
             State1 = State0#?MODULE{enqueuers = Enqueuers0#{From => #enqueuer{}}},
             {Res, State, Effects} = maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo,
-                                                 RawMsg, Effects0, State1),
+                                                  RawMsg, Effects0, State1),
             {Res, State, [{monitor, process, From} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
@@ -1558,6 +1558,8 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
             Msg = ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
             State = State0#?MODULE{msg_bytes_enqueue = Enqueue + Size,
+                                   enqueue_count = EnqCount + 1,
+                                   messages_total = Total + 1,
                                    messages = lqueue:in(Msg, Messages),
                                    enqueuers = Enqueuers0#{From => Enq}},
             {ok, State, Effects0};
