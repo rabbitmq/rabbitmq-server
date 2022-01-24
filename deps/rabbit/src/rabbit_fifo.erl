@@ -1373,7 +1373,8 @@ activate_next_consumer(#?MODULE{consumers = Cons,
 
 
 
-maybe_return_all(#{system_time := Ts} = Meta, ConsumerId, Consumer, S0, Effects0, Reason) ->
+maybe_return_all(#{system_time := Ts} = Meta, ConsumerId, Consumer, S0,
+                 Effects0, Reason) ->
     case Reason of
         consumer_cancel ->
             {update_or_remove_sub(Meta, ConsumerId,
@@ -1513,11 +1514,19 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
             Header = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
             Msg = ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
+            MsgCache = case can_immediately_deliver(State0) of
+                           true ->
+                               {RaftIdx, RawMsg};
+                           false ->
+                               undefined
+                       end,
             State = State0#?MODULE{msg_bytes_enqueue = Enqueue + Size,
                                    enqueue_count = EnqCount + 1,
                                    messages_total = Total + 1,
                                    messages = lqueue:in(Msg, Messages),
-                                   enqueuers = Enqueuers0#{From => Enq}},
+                                   enqueuers = Enqueuers0#{From => Enq},
+                                   msg_cache = MsgCache
+                                  },
             {ok, State, Effects0};
         #enqueuer{next_seqno = Next}
           when MsgSeqNo > Next ->
@@ -1721,20 +1730,6 @@ return_one(Meta, MsgId, Msg0,
              Effects0}
     end.
 
-% is_disk_msg(?INDEX_MSG(RaftIdx, ?DISK_MSG(_))) when is_integer(RaftIdx) ->
-%     true;
-% is_disk_msg(?DISK_MSG(_)) ->
-%     true;
-% is_disk_msg(_) ->
-%     false.
-
-% to_disk_msg(?INDEX_MSG(RaftIdx, ?DISK_MSG(_)) = Msg) when is_integer(RaftIdx) ->
-%     Msg;
-% to_disk_msg(?INDEX_MSG(RaftIdx, ?MSG(Header, _))) when is_integer(RaftIdx) ->
-%     ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header));
-% to_disk_msg(?PREFIX_MEM_MSG(Header)) ->
-%     ?DISK_MSG(Header).
-
 return_all(Meta, #?MODULE{consumers = Cons} = State0, Effects0, ConsumerId,
            #consumer{checked_out = Checked} = Con) ->
     State = State0#?MODULE{consumers = Cons#{ConsumerId => Con}},
@@ -1751,9 +1746,11 @@ checkout(#{index := Index} = Meta,
          State0, Effects0, HandleConsumerChanges) ->
     {#?MODULE{cfg = #cfg{dead_letter_handler = DLH},
               dlx = DlxState0} = State1, ExpiredMsg, Effects1} =
-    checkout0(Meta, checkout_one(Meta, false, State0, Effects0), #{}),
+        checkout0(Meta, checkout_one(Meta, false, State0, Effects0), #{}),
     {DlxState, DlxDeliveryEffects} = rabbit_fifo_dlx:checkout(DLH, DlxState0),
-    State2 = State1#?MODULE{dlx = DlxState},
+    %% TODO: only update dlx state if it has changed?
+    State2 = State1#?MODULE{msg_cache = undefined, %% by this time the cache should be used
+                            dlx = DlxState},
     Effects2 = DlxDeliveryEffects ++ Effects1,
     {State, DroppedMsg, Effects} = evaluate_limit(Index, false, OldState, State2, Effects2),
     case {DroppedMsg, ExpiredMsg} of
@@ -1782,33 +1779,17 @@ checkout0(Meta, {success, ConsumerId, MsgId,
           SendAcc0) when is_integer(RaftIdx) ->
     DelMsg = {RaftIdx, {MsgId, Header}},
     SendAcc = maps:update_with(ConsumerId,
-                               fun ({InMem, LogMsgs}) ->
-                                       {InMem, [DelMsg | LogMsgs]}
-                               end, {[], [DelMsg]}, SendAcc0),
+                               fun (LogMsgs) ->
+                                       [DelMsg | LogMsgs]
+                               end, [DelMsg], SendAcc0),
     checkout0(Meta, checkout_one(Meta, ExpiredMsg, State, Effects), SendAcc);
-% checkout0(Meta, {success, ConsumerId, MsgId,
-%                  ?INDEX_MSG(Idx, ?MSG(Header, Msg)), State, Effects},
-%           SendAcc0) when is_integer(Idx) ->
-%     DelMsg = {MsgId, {Header, Msg}},
-%     SendAcc = maps:update_with(ConsumerId,
-%                                fun ({InMem, LogMsgs}) ->
-%                                        {[DelMsg | InMem], LogMsgs}
-%                                end, {[DelMsg], []}, SendAcc0),
-%     checkout0(Meta, checkout_one(Meta, State, Effects), SendAcc);
-% checkout0(Meta, {success, _ConsumerId, _MsgId, ?TUPLE(_, _), State, Effects},
-%           SendAcc) ->
-%     %% Do not append delivery effect for prefix messages.
-%     %% Prefix messages do not exist anymore, but they still go through the
-%     %% normal checkout flow to derive correct consumer states
-%     %% after recovery and will still be settled or discarded later on.
-%     checkout0(Meta, checkout_one(Meta, State, Effects), SendAcc);
 checkout0(_Meta, {Activity, ExpiredMsg, State0, Effects0}, SendAcc) ->
     Effects1 = case Activity of
                    nochange ->
-                       append_delivery_effects(Effects0, SendAcc);
+                       append_delivery_effects(Effects0, SendAcc, State0);
                    inactive ->
                        [{aux, inactive}
-                        | append_delivery_effects(Effects0, SendAcc)]
+                        | append_delivery_effects(Effects0, SendAcc, State0)]
                end,
     {State0, ExpiredMsg, lists:reverse(Effects1)}.
 
@@ -1864,51 +1845,23 @@ evaluate_limit(Index, Result, BeforeState,
             {State0, Result, Effects0}
     end.
 
-% evaluate_memory_limit(_Header,
-%                       #?MODULE{cfg = #cfg{max_in_memory_length = undefined,
-%                                           max_in_memory_bytes = undefined}}) ->
-%     false;
-% evaluate_memory_limit(#{size := Size}, State) ->
-%     evaluate_memory_limit(Size, State);
-% evaluate_memory_limit(Header,
-%                       #?MODULE{cfg = #cfg{max_in_memory_length = MaxLength,
-%                                           max_in_memory_bytes = MaxBytes},
-%                                msg_bytes_in_memory = Bytes,
-%                                msgs_ready_in_memory = Length}) ->
-%     Size = get_header(size, Header),
-%     (Length >= MaxLength) orelse ((Bytes + Size) > MaxBytes).
-
-append_delivery_effects(Effects0, AccMap) when map_size(AccMap) == 0 ->
+append_delivery_effects(Effects0, AccMap, _State) when map_size(AccMap) == 0 ->
     %% does this ever happen?
     Effects0;
-append_delivery_effects(Effects0, AccMap) ->
+append_delivery_effects(Effects0, AccMap, State) ->
     [{aux, active} |
-     maps:fold(fun (C, {InMemMsgs, DiskMsgs}, Ef) ->
-                       [delivery_effect(C, lists:reverse(DiskMsgs), InMemMsgs) | Ef]
+     maps:fold(fun (C, DiskMsgs, Ef) when is_list(DiskMsgs) ->
+                       [delivery_effect(C, lists:reverse(DiskMsgs), State) | Ef]
                end, Effects0, AccMap)
     ].
 
-%% next message is determined as follows:
-%% First we check if there are are prefex returns
-%% Then we check if there are current returns
-%% then we check prefix msgs
-%% then we check current messages
-%%
-%% When we return it is always done to the current return queue
-%% for both prefix messages and current messages
-% take_next_msg(#?MODULE{prefix_msgs = {NumR, [Msg | Rem],
-%                                       NumP, P}} = State) ->
-%     %% there are prefix returns, these should be served first
-%     {Msg, State#?MODULE{prefix_msgs = {NumR-1, Rem, NumP, P}}};
 take_next_msg(#?MODULE{returns = Returns0,
                        messages = Messages0,
                        ra_indexes = Indexes0
-                       % prefix_msgs = {NumR, R, NumP, P}
                       } = State) ->
     case lqueue:out(Returns0) of
         {{value, NextMsg}, Returns} ->
             {NextMsg, State#?MODULE{returns = Returns}};
-        % {empty, _} when P == [] ->
         {empty, _} ->
             case lqueue:out(Messages0) of
                 {empty, _} ->
@@ -1919,41 +1872,22 @@ take_next_msg(#?MODULE{returns = Returns0,
                     {IndexMsg, State#?MODULE{messages = Messages,
                                              ra_indexes = Indexes}}
             end
-        % {empty, _} ->
-        %     case P of
-        %         [?PREFIX_MEM_MSG(_Header) = Msg | Rem] ->
-        %             {Msg, State#?MODULE{prefix_msgs = {NumR, R, NumP-1, Rem}}};
-        %         [?DISK_MSG(_Header) = Msg | Rem] ->
-        %             {Msg, State#?MODULE{prefix_msgs = {NumR, R, NumP-1, Rem}}}
-        %     end
     end.
 
-% peek_next_msg(#?MODULE{prefix_msgs = {_NumR, [Msg | _],
-%                                       _NumP, _P}}) ->
-%     %% there are prefix returns, these should be served first
-%     {value, Msg};
 peek_next_msg(#?MODULE{returns = Returns0,
-                       messages = Messages0
-                       % prefix_msgs = {_NumR, _R, _NumP, P}
-                      }) ->
+                       messages = Messages0}) ->
     case lqueue:peek(Returns0) of
         {value, _} = Msg ->
             Msg;
         empty ->
             lqueue:peek(Messages0)
-        % empty ->
-        %     case P of
-        %         [?PREFIX_MEM_MSG(_Header) = Msg | _] ->
-        %             {value, Msg};
-        %         [?DISK_MSG(_Header) = Msg | _] ->
-        %             {value, Msg}
-        %     end
     end.
 
-% delivery_effect({CTag, CPid}, [], InMemMsgs) ->
-%     {send_msg, CPid, {delivery, CTag, lists:reverse(InMemMsgs)},
-%      [local, ra_event]};
-delivery_effect({CTag, CPid}, IdxMsgs, []) -> %% InMemMsgs
+delivery_effect({CTag, CPid}, [{Idx, {MsgId, Header}}],
+                #?MODULE{msg_cache = {Idx, RawMsg}}) ->
+    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
+     [local, ra_event]};
+delivery_effect({CTag, CPid}, IdxMsgs, _State) ->
     {RaftIdxs, Data} = lists:unzip(IdxMsgs),
     {log, RaftIdxs,
      fun(Log) ->
@@ -1984,8 +1918,8 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
     %% Before checking out any messsage to any consumer,
     %% first remove all expired messages from the head of the queue.
     {ExpiredMsg, #?MODULE{service_queue = SQ0,
-                       messages = Messages0,
-                       consumers = Cons0} = InitState, Effects1} =
+                          messages = Messages0,
+                          consumers = Cons0} = InitState, Effects1} =
         expire_msgs(Ts, ExpiredMsg0, InitState0, Effects0),
 
     case priority_queue:out(SQ0) of
@@ -2003,11 +1937,14 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                             %% NB: these retry cases introduce the "queue list reversal"
                             %% inefficiency but this is a rare thing to happen
                             %% so should not need optimising
-                            checkout_one(Meta, ExpiredMsg, InitState#?MODULE{service_queue = SQ1}, Effects1);
+                            checkout_one(Meta, ExpiredMsg,
+                                         InitState#?MODULE{service_queue = SQ1}, Effects1);
                         #consumer{status = cancelled} ->
-                            checkout_one(Meta, ExpiredMsg, InitState#?MODULE{service_queue = SQ1}, Effects1);
+                            checkout_one(Meta, ExpiredMsg,
+                                         InitState#?MODULE{service_queue = SQ1}, Effects1);
                         #consumer{status = suspected_down} ->
-                            checkout_one(Meta, ExpiredMsg, InitState#?MODULE{service_queue = SQ1}, Effects1);
+                            checkout_one(Meta, ExpiredMsg,
+                                         InitState#?MODULE{service_queue = SQ1}, Effects1);
                         #consumer{checked_out = Checked0,
                                   next_msg_id = Next,
                                   credit = Credit,
@@ -2022,14 +1959,16 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                                        State0#?MODULE{service_queue = SQ1}),
                             Header = get_msg_header(ConsumerMsg),
                             State = add_bytes_checkout(Header, State1),
-                            {success, ConsumerId, Next, ConsumerMsg, ExpiredMsg, State, Effects1}
+                            {success, ConsumerId, Next, ConsumerMsg, ExpiredMsg,
+                             State, Effects1}
                     end;
                 empty ->
                     {nochange, ExpiredMsg, InitState, Effects1}
             end;
         {{value, _ConsumerId}, SQ1} ->
             %% consumer did not exist but was queued, recurse
-            checkout_one(Meta, ExpiredMsg, InitState#?MODULE{service_queue = SQ1}, Effects1);
+            checkout_one(Meta, ExpiredMsg,
+                         InitState#?MODULE{service_queue = SQ1}, Effects1);
         {empty, _} ->
             % Effects = timer_effect(Ts, InitState, Effects1),
             case lqueue:len(Messages0) of
@@ -2176,7 +2115,7 @@ maybe_queue_consumer(ConsumerId, #consumer{credit = Credit} = Con,
                      ServiceQueue0) ->
     case Credit > 0 of
         true ->
-            % consumerect needs service - check if already on service queue
+            % consumer needs service - check if already on service queue
             uniq_queue_in(ConsumerId, Con, ServiceQueue0);
         false ->
             ServiceQueue0
@@ -2188,64 +2127,16 @@ dehydrate_state(#?MODULE{cfg = #cfg{},
                          dlx = DlxState} = State) ->
     % no messages are kept in memory, no need to
     % overly mutate the current state apart from removing indexes and cursors
-    State#?MODULE{
-             ra_indexes = rabbit_fifo_index:empty(),
-             release_cursors = lqueue:new(),
-             dlx = rabbit_fifo_dlx:dehydrate(DlxState)}.
-% dehydrate_state(#?MODULE{messages = Messages,
-%                          consumers = Consumers,
-%                          returns = Returns,
-%                          prefix_msgs = {PRCnt, PrefRet0, PPCnt, PrefMsg0},
-%                          waiting_consumers = Waiting0,
-%                          dlx = DlxState} = State) ->
-%     RCnt = lqueue:len(Returns),
-%     %% TODO: optimise this function as far as possible
-%     PrefRet1 = lists:foldr(fun (M, Acc) ->
-%                                    [dehydrate_message(M) | Acc]
-%                            end, [], lqueue:to_list(Returns)),
-%     PrefRet = PrefRet0 ++ PrefRet1,
-%     PrefMsgsSuff = dehydrate_messages(Messages),
-%     %% prefix messages are not populated in normal operation only after
-%     %% recovering from a snapshot
-%     PrefMsgs = PrefMsg0 ++ PrefMsgsSuff,
-%     Waiting = [{Cid, dehydrate_consumer(C)} || {Cid, C} <- Waiting0],
-%     State#?MODULE{messages = lqueue:new(),
-%                   ra_indexes = rabbit_fifo_index:empty(),
-%                   release_cursors = lqueue:new(),
-%                   consumers = maps:map(fun (_, C) ->
-%                                                dehydrate_consumer(C)
-%                                        end, Consumers),
-%                   returns = lqueue:new(),
-%                   prefix_msgs = {PRCnt + RCnt, PrefRet,
-%                                  PPCnt + lqueue:len(Messages), PrefMsgs},
-%                   waiting_consumers = Waiting,
-%                   dlx = rabbit_fifo_dlx:dehydrate(DlxState)}.
+    State#?MODULE{ra_indexes = rabbit_fifo_index:empty(),
+                  release_cursors = lqueue:new(),
+                  enqueue_count = 0,
+                  msg_cache = undefined,
+                  dlx = rabbit_fifo_dlx:dehydrate(DlxState)}.
 
-% dehydrate_messages(Msgs0)  ->
-%     {OutRes, Msgs} = lqueue:out(Msgs0),
-%     case OutRes of
-%         {value, Msg} ->
-%             [dehydrate_message(Msg) | dehydrate_messages(Msgs)];
-%         empty ->
-%             []
-%     end.
-
-% dehydrate_consumer(#consumer{checked_out = Checked0} = Con) ->
-%     Checked = maps:map(fun (_, M) ->
-%                                dehydrate_message(M)
-%                        end, Checked0),
-%     Con#consumer{checked_out = Checked}.
-
-% dehydrate_message(?PREFIX_MEM_MSG(_) = M) ->
-%     M;
-% dehydrate_message(?DISK_MSG(_) = M) ->
-%     M;
 dehydrate_message(?INDEX_MSG(_Idx, ?DISK_MSG(_Header) = Msg)) ->
     %% Use disk msgs directly as prefix messages.
     %% This avoids memory allocation since we do not convert.
     Msg.
-% dehydrate_message(?INDEX_MSG(Idx, ?MSG(Header, _))) when is_integer(Idx) ->
-%     ?PREFIX_MEM_MSG(Header).
 
 %% make the state suitable for equality comparison
 normalize(#?MODULE{ra_indexes = _Indexes,
@@ -2328,10 +2219,10 @@ make_purge_nodes(Nodes) ->
 make_update_config(Config) ->
     #update_config{config = Config}.
 
-add_bytes_enqueue(Header,
-                  #?MODULE{msg_bytes_enqueue = Enqueue} = State) ->
-    Size = get_header(size, Header),
-    State#?MODULE{msg_bytes_enqueue = Enqueue + Size}.
+% add_bytes_enqueue(Header,
+%                   #?MODULE{msg_bytes_enqueue = Enqueue} = State) ->
+%     Size = get_header(size, Header),
+%     State#?MODULE{msg_bytes_enqueue = Enqueue + Size}.
 
 add_bytes_drop(Header,
                #?MODULE{msg_bytes_enqueue = Enqueue} = State) ->
@@ -2517,6 +2408,17 @@ make_requeue(ConsumerId, Notify, [{MsgId, ?INDEX_MSG(Idx, ?TUPLE(Header, Msg))} 
                   | Acc]);
 make_requeue(_ConsumerId, _Notify, [], []) ->
     [].
+
+
+can_immediately_deliver(#?MODULE{service_queue = SQ,
+                                 consumers = Consumers} = State) ->
+    case messages_ready(State) of
+        0 when map_size(Consumers) > 0 ->
+            %% TODO: check consumers actually have credit
+            priority_queue:is_empty(SQ) == false;
+        _ ->
+            false
+    end.
 
 incr(I) ->
     I + 1.

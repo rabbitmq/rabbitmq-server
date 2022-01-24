@@ -227,7 +227,7 @@
          msg_bytes_in_memory = 0 :: non_neg_integer(),
          msgs_ready_in_memory = 0 :: non_neg_integer(),
          last_active :: undefined | non_neg_integer(),
-         unused_1,
+         msg_cache :: undefined | {ra:index(), raw_msg()},
          unused_2
         }).
 
