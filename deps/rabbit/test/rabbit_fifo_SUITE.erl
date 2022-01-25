@@ -249,14 +249,13 @@ checkout_enq_settle_test(_) ->
     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
               {monitor, _, _} | _]} = check(Cid, 1, test_init(test)),
     {State2, Effects0} = enq(2, 1,  first, State1),
-    ct:pal("Effects0 ~p", [Effects0]),
     %% TODO: this should go back to a send_msg effect after optimisation
     % ?ASSERT_EFF({log, [2], _, _}, Effects0),
     ?ASSERT_EFF({send_msg, _,
                  {delivery, ?FUNCTION_NAME,
                   [{0, {_, first}}]}, _},
                 Effects0),
-    {State3, [_Inactive]} = enq(3, 2, second, State2),
+    {State3, _} = enq(3, 2, second, State2),
     {_, _Effects} = settle(Cid, 4, 0, State3),
     % the release cursor is the smallest raft index that does not
     % contribute to the state of the application
@@ -312,27 +311,28 @@ return_dequeue_delivery_limit_test(_) ->
 
 return_non_existent_test(_) ->
     Cid = {<<"cid">>, self()},
-    {State0, [_, _Inactive]} = enq(1, 1, second, test_init(test)),
+    {State0, _} = enq(1, 1, second, test_init(test)),
     % return non-existent
     {_State2, _} = apply(meta(3), rabbit_fifo:make_return(Cid, [99]), State0),
     ok.
 
 return_checked_out_test(_) ->
     Cid = {<<"cid">>, self()},
-    {State0, [_, _]} = enq(1, 1, first, test_init(test)),
+    {State0, _} = enq(1, 1, first, test_init(test)),
     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
               _Monitor,
-              {log, [1], Fun, _},
-              {aux, active} | _ ]} = check_auto(Cid, 2, State0),
+              {log, [1], Fun, _}
+              | _ ]
+    } = check_auto(Cid, 2, State0),
 
     Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
 
     [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun([Msg1]),
     % returning immediately checks out the same message again
     {_, ok, [
-             {log, [1], _, _},
+             {log, [1], _, _}
              % {send_msg, _, {delivery, _, [{_, _}]}, _},
-             {aux, active}]} =
+            ]} =
         apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
     ok.
 
@@ -345,16 +345,16 @@ return_checked_out_limit_test(_) ->
                   max_in_memory_length => 0,
                   delivery_limit => 1}),
     Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
-    {State0, [_, _]} = enq(1, 1, first, Init),
+    {State0, _} = enq(1, 1, first, Init),
     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
               _Monitor,
-              {log, [1], Fun1, _},
-              {aux, active} | _ ]} = check_auto(Cid, 2, State0),
+              {log, [1], Fun1, _}
+              | _ ]} = check_auto(Cid, 2, State0),
     [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun1([Msg1]),
     % returning immediately checks out the same message again
     {State2, ok, [
-                  {log, [1], Fun2, _},
-                  {aux, active}]} =
+                  {log, [1], Fun2, _}
+                 ]} =
         apply(meta(3), rabbit_fifo:make_return(Cid, [MsgId]), State1),
     [{send_msg, _, {delivery, _, [{MsgId2, _}]}, _}] = Fun2([Msg1]),
     {#rabbit_fifo{} = State, ok, _} =
@@ -365,15 +365,13 @@ return_checked_out_limit_test(_) ->
 return_auto_checked_out_test(_) ->
     Cid = {<<"cid">>, self()},
     Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
-    {State00, [_, _]} = enq(1, 1, first, test_init(test)),
-    {State0, [_]} = enq(2, 2, second, State00),
+    {State00, _} = enq(1, 1, first, test_init(test)),
+    {State0, _} = enq(2, 2, second, State00),
     % it first active then inactive as the consumer took on but cannot take
     % any more
     {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
               _Monitor,
-              {log, [1], Fun1, _},
-              {aux, active},
-              {aux, inactive}
+              {log, [1], Fun1, _}
              ]} = check_auto(Cid, 2, State0),
     [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun1([Msg1]),
     % return should include another delivery
@@ -397,8 +395,8 @@ cancelled_checkout_empty_queue_test(_) ->
 
 cancelled_checkout_out_test(_) ->
     Cid = {<<"cid">>, self()},
-    {State00, [_, _]} = enq(1, 1, first, test_init(test)),
-    {State0, [_]} = enq(2, 2, second, State00),
+    {State00, _} = enq(1, 1, first, test_init(test)),
+    {State0, _} = enq(2, 2, second, State00),
     {State1, _} = check_auto(Cid, 3, State0),%% prefetch of 1
     % cancelled checkout should not return pending messages to queue
     {State2, _, _} = apply(meta(4), rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
@@ -418,7 +416,7 @@ cancelled_checkout_out_test(_) ->
 
 down_with_noproc_consumer_returns_unsettled_test(_) ->
     Cid = {<<"down_consumer_returns_unsettled_test">>, self()},
-    {State0, [_, _]} = enq(1, 1, second, test_init(test)),
+    {State0, _} = enq(1, 1, second, test_init(test)),
     {State1, [_, {monitor, process, Pid} | _]} = check(Cid, 2, State0),
     {State2, _, _} = apply(meta(3), {down, Pid, noproc}, State1),
     {_State, Effects} = check(Cid, 4, State2),
@@ -486,7 +484,7 @@ down_with_noproc_enqueuer_is_cleaned_up_test(_) ->
 
 discarded_message_without_dead_letter_handler_is_removed_test(_) ->
     Cid = {<<"completed_consumer_yields_demonitor_effect_test">>, self()},
-    {State0, [_, _]} = enq(1, 1, first, test_init(test)),
+    {State0, _} = enq(1, 1, first, test_init(test)),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
     ?ASSERT_EFF({log, [1], _Fun, _}, Effects1),
     {_State2, _, Effects2} = apply(meta(1),
@@ -502,7 +500,7 @@ discarded_message_with_dead_letter_handler_emits_log_effect_test(_) ->
                      dead_letter_handler =>
                      {at_most_once, {somemod, somefun, [somearg]}}}),
     Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
-    {State0, [_, _]} = enq(1, 1, first, State00),
+    {State0, _} = enq(1, 1, first, State00),
     {State1, Effects1} = check_n(Cid, 2, 10, State0),
     ?ASSERT_EFF({log, [1], _, _}, Effects1),
     {_State2, _, Effects2} = apply(meta(1), rabbit_fifo:make_discard(Cid, [0]), State1),
@@ -1215,7 +1213,7 @@ active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_co
 
     {State2, _, Effects2} = apply(meta(2), {down, Pid1, noconnection}, State1),
     % one monitor and one consumer status update (deactivated)
-    ?assertEqual(4, length(Effects2)),
+    ?assertEqual(3, length(Effects2)),
 
     {_, _, Effects3} = apply(meta(3), {nodeup, node(self())}, State2),
     % for each consumer: 1 effect to monitor the consumer PID
