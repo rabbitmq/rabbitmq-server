@@ -683,8 +683,15 @@ init_dirty(CleanShutdown, ContainsCheckFun, State, Context) ->
                    CountAcc + UnackedCount,
                    BytesAcc + UnackedBytes, DirtyCount + Dirty}
           end, {Segments, 0, 0, 0}, all_segment_nums(State1)),
-    State2 = maybe_flush_journal(State1 #qistate { segments = Segments1,
-                                                   dirty_count = DirtyCount }),
+    %% We force flush the journal to avoid getting into a bad state
+    %% when the node gets shut down immediately after init. It takes
+    %% a few restarts for the problem to materialize itself, with
+    %% at least one message published, followed by the process crashing,
+    %% followed by a recovery that is dirty due to term mismatch in the
+    %% message store, followed by two clean recoveries. This last
+    %% recovery fails with a crash.
+    State2 = flush_journal(State1 #qistate { segments = Segments1,
+                                             dirty_count = DirtyCount }),
     case Context of
         convert ->
             {Count, Bytes, State2};
@@ -789,6 +796,7 @@ recover_segment(ContainsCheckFun, CleanShutdown,
               {MsgOrId, MsgProps} = parse_pub_record_body(Bin, MsgBin),
               {recover_message(ContainsCheckFun(MsgOrId), CleanShutdown,
                                Del, RelSeq, SegmentAndDirtyCount, MaxJournal),
+               %% @todo If the message is dropped we shouldn't add the size?
                Bytes + case IsPersistent of
                            true  -> MsgProps#message_properties.size;
                            false -> 0
