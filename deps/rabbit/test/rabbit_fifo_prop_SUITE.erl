@@ -1368,7 +1368,7 @@ max_length_prop(Conf0, Commands) ->
                         #{num_ready_messages := MsgReady} = rabbit_fifo:overview(S),
                         MsgReady =< MaxLen
                 end,
-    try run_log(test_init(Conf), Entries, Invariant) of
+    try run_log(test_init(Conf), Entries, Invariant, rabbit_fifo) of
         {_State, _Effects} ->
             true;
         _ ->
@@ -1414,7 +1414,7 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
                         map_size(Up) =< 1
                 end,
 
-    try run_log(test_init(Conf), Entries, Invariant) of
+    try run_log(test_init(Conf), Entries, Invariant, rabbit_fifo) of
         {_State, Effects} when ValidateOrder ->
             %% validate message ordering
             lists:foldl(fun ({send_msg, Pid, {delivery, Tag, Msgs}, ra_event},
@@ -1438,7 +1438,7 @@ messages_total_prop(Conf0, Commands) ->
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
-    run_log(InitState, Entries, messages_total_invariant()),
+    run_log(InitState, Entries, messages_total_invariant(), rabbit_fifo),
     true.
 
 messages_total_invariant() ->
@@ -1923,7 +1923,7 @@ run_snapshot_test0(Conf0, Commands, Invariant) ->
     Conf = Conf0#{max_in_memory_length => 0},
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
-    {State0, Effects} = run_log(test_init(Conf), Entries, Invariant),
+    {State0, Effects} = run_log(test_init(Conf), Entries, Invariant, rabbit_fifo),
     State = rabbit_fifo:normalize(State0),
     Cursors = [ C || {release_cursor, _, _} = C <- Effects],
 
@@ -1933,7 +1933,7 @@ run_snapshot_test0(Conf0, Commands, Invariant) ->
                                        (_) -> false
                                     end, Entries),
          % ct:pal("release_cursor: ~b from ~w~n", [SnapIdx, element(1, hd_or(Filtered))]),
-         {S0, _} = run_log(SnapState, Filtered, Invariant),
+         {S0, _} = run_log(SnapState, Filtered, Invariant, rabbit_fifo),
          S = rabbit_fifo:normalize(S0),
          % assert log can be restored from any release cursor index
          case S of
@@ -1962,9 +1962,9 @@ prefixes(Source, N, Acc) ->
     prefixes(Source, N+1, [X | Acc]).
 
 run_log(InitState, Entries) ->
-    run_log(InitState, Entries, fun(_) -> true end).
+    run_log(InitState, Entries, fun(_) -> true end, rabbit_fifo).
 
-run_log(InitState, Entries, InvariantFun) ->
+run_log(InitState, Entries, InvariantFun, FifoMod) ->
     Invariant = fun(E, S) ->
                        case InvariantFun(S) of
                            true -> ok;
@@ -1974,7 +1974,7 @@ run_log(InitState, Entries, InvariantFun) ->
                 end,
 
     lists:foldl(fun ({Idx, E}, {Acc0, Efx0}) ->
-                        case rabbit_fifo:apply(meta(Idx), E, Acc0) of
+                        case FifoMod:apply(meta(Idx), E, Acc0) of
                             {Acc, _, Efx} when is_list(Efx) ->
                                 Invariant(E, Acc),
                                 {Acc, Efx0 ++ Efx};

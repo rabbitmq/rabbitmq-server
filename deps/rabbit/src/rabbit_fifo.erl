@@ -1857,6 +1857,8 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
     %% first remove all expired messages from the head of the queue.
     {ExpiredMsg, #?MODULE{service_queue = SQ0,
                           messages = Messages0,
+                          msg_bytes_checkout = BytesCheckout,
+                          msg_bytes_enqueue = BytesEnqueue,
                           consumers = Cons0} = InitState, Effects1} =
         expire_msgs(Ts, ExpiredMsg0, InitState0, Effects0),
 
@@ -1889,11 +1891,12 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                                                 next_msg_id = Next + 1,
                                                 credit = Credit - 1,
                                                 delivery_count = DelCnt + 1},
-                            State1 = update_or_remove_sub(
+                            Size = get_header(size, get_msg_header(ConsumerMsg)),
+                            State = update_or_remove_sub(
                                        Meta, ConsumerId, Con,
-                                       State0#?MODULE{service_queue = SQ1}),
-                            Header = get_msg_header(ConsumerMsg),
-                            State = add_bytes_checkout(Header, State1),
+                                       State0#?MODULE{service_queue = SQ1,
+                                                      msg_bytes_checkout = BytesCheckout + Size,
+                                                      msg_bytes_enqueue = BytesEnqueue - Size}),
                             {success, ConsumerId, Next, ConsumerMsg, ExpiredMsg,
                              State, Effects1}
                     end;
@@ -2152,13 +2155,6 @@ add_bytes_drop(Header,
     Size = get_header(size, Header),
     State#?MODULE{msg_bytes_enqueue = Enqueue - Size}.
 
-
-add_bytes_checkout(Header,
-                   #?MODULE{msg_bytes_checkout = Checkout,
-                            msg_bytes_enqueue = Enqueue } = State) ->
-    Size = get_header(size, Header),
-    State#?MODULE{msg_bytes_checkout = Checkout + Size,
-                  msg_bytes_enqueue = Enqueue - Size}.
 
 add_bytes_return(Header,
                  #?MODULE{msg_bytes_checkout = Checkout,
