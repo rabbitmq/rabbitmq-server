@@ -507,7 +507,7 @@ postcondition(St, {call, _, cmd_basic_get_msg, _}, empty) ->
     %% in transit. We only check whether there are channels as a result,
     %% because messages may be in the process of being rejected following
     %% a consumer cancel.
-    has_channels(St) orelse
+    has_consumers(St) orelse
     %% Due to the asynchronous nature of publishing it may be
     %% possible to have published a message but an immediate basic.get
     %% on a separate channel cannot retrieve it. In that case we accept
