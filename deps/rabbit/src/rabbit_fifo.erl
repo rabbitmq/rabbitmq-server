@@ -156,8 +156,6 @@ update_config(Conf, State) ->
     Overflow = maps:get(overflow_strategy, Conf, drop_head),
     MaxLength = maps:get(max_length, Conf, undefined),
     MaxBytes = maps:get(max_bytes, Conf, undefined),
-    MaxMemoryLength = maps:get(max_in_memory_length, Conf, undefined),
-    MaxMemoryBytes = maps:get(max_in_memory_bytes, Conf, undefined),
     DeliveryLimit = maps:get(delivery_limit, Conf, undefined),
     Expires = maps:get(expires, Conf, undefined),
     MsgTTL = maps:get(msg_ttl, Conf, undefined),
@@ -171,15 +169,12 @@ update_config(Conf, State) ->
     RCISpec = {RCI, RCI},
 
     LastActive = maps:get(created, Conf, undefined),
-    MaxMemoryBytes = maps:get(max_in_memory_bytes, Conf, undefined),
     State#?MODULE{cfg = Cfg#cfg{release_cursor_interval = RCISpec,
                                 dead_letter_handler = DLH,
                                 become_leader_handler = BLH,
                                 overflow_strategy = Overflow,
                                 max_length = MaxLength,
                                 max_bytes = MaxBytes,
-                                max_in_memory_length = MaxMemoryLength,
-                                max_in_memory_bytes = MaxMemoryBytes,
                                 consumer_strategy = ConsumerStrategy,
                                 delivery_limit = DeliveryLimit,
                                 expires = Expires,
@@ -440,10 +435,8 @@ apply(#{index := Index}, #purge{},
                             messages = lqueue:new(),
                             messages_total = Tot - NumReady,
                             returns = lqueue:new(),
-                            msg_bytes_enqueue = 0,
-                            prefix_msgs = {0, [], 0, []},
-                            msg_bytes_in_memory = 0,
-                            msgs_ready_in_memory = 0},
+                            msg_bytes_enqueue = 0
+                           },
     Effects0 = [garbage_collection],
     Reply = {purge, NumReady + NumDlx},
     {State, _, Effects} = evaluate_limit(Index, false, State0,
@@ -538,12 +531,7 @@ apply(#{system_time := Ts} = Meta, {down, Pid, noconnection},
     % comes back, then re-issue all monitors and discover the final fate of
     % these processes
 
-    Effects = case maps:size(State#?MODULE.consumers) of
-                  0 ->
-                      [{aux, inactive}, {monitor, node, Node}];
-                  _ ->
-                      [{monitor, node, Node}]
-              end ++ Effects1,
+    Effects = [{monitor, node, Node} | Effects1],
     checkout(Meta, State0, State#?MODULE{enqueuers = Enqs,
                                          last_active = Ts}, Effects);
 apply(Meta, {down, Pid, _Info}, State0) ->
@@ -639,6 +627,9 @@ convert_v1_to_v2(V1State) ->
                                      lqueue:in(convert_msg(Msg), Acc)
                              end, lqueue:new(), ReturnsV1),
 
+    %% TODO: prefix message need to be turned into disk msgs and added
+    %% to messages and returns respectively
+        % prefix_msgs = rabbit_fifo_v1:get_field(prefix_msgs, V1State),
     ConsumersV2 = maps:map(
                     fun (_, #consumer{checked_out = Ch} = C) ->
                             C#consumer{
@@ -680,8 +671,6 @@ convert_v1_to_v2(V1State) ->
                max_bytes = rabbit_fifo_v1:get_cfg_field(max_bytes, V1State),
                consumer_strategy = rabbit_fifo_v1:get_cfg_field(consumer_strategy, V1State),
                delivery_limit = rabbit_fifo_v1:get_cfg_field(delivery_limit, V1State),
-               max_in_memory_length = rabbit_fifo_v1:get_cfg_field(max_in_memory_length, V1State),
-               max_in_memory_bytes = rabbit_fifo_v1:get_cfg_field(max_in_memory_bytes, V1State),
                expires = rabbit_fifo_v1:get_cfg_field(expires, V1State)
               },
 
@@ -700,8 +689,6 @@ convert_v1_to_v2(V1State) ->
         msg_bytes_enqueue = rabbit_fifo_v1:get_field(msg_bytes_enqueue, V1State),
         msg_bytes_checkout = rabbit_fifo_v1:get_field(msg_bytes_checkout, V1State),
         waiting_consumers = rabbit_fifo_v1:get_field(waiting_consumers, V1State),
-        msg_bytes_in_memory = 0,
-        msgs_ready_in_memory = 0,
         last_active = rabbit_fifo_v1:get_field(last_active, V1State)
        }.
 
@@ -852,8 +839,6 @@ overview(#?MODULE{consumers = Cons,
                   enqueuers = Enqs,
                   release_cursors = Cursors,
                   enqueue_count = EnqCount,
-                  msgs_ready_in_memory = InMemReady,
-                  msg_bytes_in_memory = InMemBytes,
                   msg_bytes_enqueue = EnqueueBytes,
                   msg_bytes_checkout = CheckoutBytes,
                   cfg = Cfg,
@@ -865,8 +850,6 @@ overview(#?MODULE{consumers = Cons,
              max_length => Cfg#cfg.max_length,
              max_bytes => Cfg#cfg.max_bytes,
              consumer_strategy => Cfg#cfg.consumer_strategy,
-             max_in_memory_length => Cfg#cfg.max_in_memory_length,
-             max_in_memory_bytes => Cfg#cfg.max_in_memory_bytes,
              expires => Cfg#cfg.expires,
              msg_ttl => Cfg#cfg.msg_ttl,
              delivery_limit => Cfg#cfg.delivery_limit
@@ -877,14 +860,14 @@ overview(#?MODULE{consumers = Cons,
                  num_checked_out => num_checked_out(State),
                  num_enqueuers => maps:size(Enqs),
                  num_ready_messages => messages_ready(State),
-                 num_in_memory_ready_messages => InMemReady,
+                 num_in_memory_ready_messages => 0, %% backwards compat
                  num_messages => messages_total(State),
                  num_release_cursors => lqueue:len(Cursors),
                  release_cursors => [{I, messages_total(S)} || {_, I, S} <- lqueue:to_list(Cursors)],
                  release_cursor_enqueue_counter => EnqCount,
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
-                 in_memory_message_bytes => InMemBytes,
+                 in_memory_message_bytes => 0, %% backwards compat
                  smallest_raft_index => smallest_raft_index(State)},
     DlxOverview = rabbit_fifo_dlx:overview(DlxState),
     maps:merge(Overview, DlxOverview).
@@ -1174,9 +1157,8 @@ query_single_active_consumer(_) ->
 query_stat(#?MODULE{consumers = Consumers} = State) ->
     {messages_ready(State), maps:size(Consumers)}.
 
-query_in_memory_usage(#?MODULE{msg_bytes_in_memory = Bytes,
-                               msgs_ready_in_memory = Length}) ->
-    {Length, Bytes}.
+query_in_memory_usage(#?MODULE{ }) ->
+    {0, 0}.
 
 query_stat_dlx(#?MODULE{dlx = DlxState}) ->
     rabbit_fifo_dlx:stat(DlxState).
@@ -1223,12 +1205,8 @@ messages_ready(#?MODULE{messages = M,
                         returns = R}) ->
     lqueue:len(M) + lqueue:len(R) + RCnt + PCnt.
 
-messages_total(#?MODULE{messages = _M,
-                        messages_total = Total,
-                        ra_indexes = _Indexes,
-                        prefix_msgs = _,
+messages_total(#?MODULE{messages_total = Total,
                         dlx = DlxState}) ->
-    % lqueue:len(M) + rabbit_fifo_index:size(Indexes) + RCnt + PCnt.
     {DlxTotal, _} = rabbit_fifo_dlx:stat(DlxState),
     Total + DlxTotal;
 %% release cursors might be old state (e.g. after recent upgrade)
@@ -1329,13 +1307,7 @@ cancel_consumer0(Meta, ConsumerId,
             %% in line with what classic queues do (from an external point of
             %% view)
             Effects = cancel_consumer_effects(ConsumerId, S, Effects2),
-
-            case maps:size(S#?MODULE.consumers) of
-                0 ->
-                    {S, [{aux, inactive} | Effects]};
-                _ ->
-                    {S, Effects}
-            end;
+            {S, Effects};
         _ ->
             %% already removed: do nothing
             {S0, Effects0}
@@ -1365,7 +1337,7 @@ activate_next_consumer(#?MODULE{consumers = Cons,
                                                              single_active, Effects0),
                     {State, Effects};
                 [] ->
-                    {State0, [{aux, inactive} | Effects0]}
+                    {State0, Effects0}
             end;
         _ ->
                     {State0, Effects0}
@@ -1588,7 +1560,7 @@ increase_credit(#consumer{lifetime = once,
 increase_credit(#consumer{lifetime = auto,
                           credit_mode = credited,
                           credit = Credit}, _) ->
-    %% credit_mode: credit also doesn't automatically increment credit
+    %% credit_mode: `credited' also doesn't automatically increment credit
     Credit;
 increase_credit(#consumer{credit = Current}, Credit) ->
     Current + Credit.
@@ -1657,10 +1629,6 @@ find_next_cursor(Smallest, Cursors0, Potential) ->
 
 update_msg_header(Key, Fun, Def, ?INDEX_MSG(Idx, ?DISK_MSG(Header))) ->
     ?INDEX_MSG(Idx, ?DISK_MSG(update_header(Key, Fun, Def, Header))).
-% update_msg_header(Key, Fun, Def, ?DISK_MSG(Header)) ->
-%     ?DISK_MSG(update_header(Key, Fun, Def, Header)).
-% update_msg_header(Key, Fun, Def, ?PREFIX_MEM_MSG(Header)) ->
-%     ?PREFIX_MEM_MSG(update_header(Key, Fun, Def, Header)).
 
 update_header(Key, UpdateFun, Default, Header)
   when is_integer(Header) ->
@@ -1698,18 +1666,6 @@ return_one(Meta, MsgId, Msg0,
             {State, DlxEffects ++ Effects0};
         _ ->
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked)},
-
-            % {RtnMsg, State1} = case is_disk_msg(Msg) of
-            %                        true ->
-            %                            {Msg, State0};
-            %                        false ->
-            %                            case evaluate_memory_limit(Header, State0) of
-            %                                true ->
-            %                                    {to_disk_msg(Msg), State0};
-            %                                false ->
-            %                                    {Msg, add_in_memory_counts(Header, State0)}
-            %                            end
-            %                    end,
             {add_bytes_return(
                Header,
                State0#?MODULE{consumers = Consumers#{ConsumerId => Con},
@@ -1773,15 +1729,9 @@ checkout0(Meta, {success, ConsumerId, MsgId,
                       SendAcc0#{ConsumerId => [DelMsg | LogMsgs]}
               end,
     checkout0(Meta, checkout_one(Meta, ExpiredMsg, State, Effects), SendAcc);
-checkout0(_Meta, {Activity, ExpiredMsg, State0, Effects0}, SendAcc) ->
-    Effects1 = case Activity of
-                   nochange ->
-                       append_delivery_effects(Effects0, SendAcc, State0);
-                   inactive ->
-                       [{aux, inactive}
-                        | append_delivery_effects(Effects0, SendAcc, State0)]
-               end,
-    {State0, ExpiredMsg, lists:reverse(Effects1)}.
+checkout0(_Meta, {_Activity, ExpiredMsg, State0, Effects0}, SendAcc) ->
+    Effects = append_delivery_effects(Effects0, SendAcc, State0),
+    {State0, ExpiredMsg, lists:reverse(Effects)}.
 
 evaluate_limit(_Index, Result, _BeforeState,
                #?MODULE{cfg = #cfg{max_length = undefined,
@@ -1839,11 +1789,9 @@ append_delivery_effects(Effects0, AccMap, _State) when map_size(AccMap) == 0 ->
     %% does this ever happen?
     Effects0;
 append_delivery_effects(Effects0, AccMap, State) ->
-    [{aux, active} |
      maps:fold(fun (C, DiskMsgs, Ef) when is_list(DiskMsgs) ->
                        [delivery_effect(C, lists:reverse(DiskMsgs), State) | Ef]
-               end, Effects0, AccMap)
-    ].
+               end, Effects0, AccMap).
 
 take_next_msg(#?MODULE{returns = Returns0,
                        messages = Messages0,
@@ -1924,9 +1872,6 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
                             %% no credit but was still on queue
                             %% can happen when draining
                             %% recurse without consumer on queue
-                            %% NB: these retry cases introduce the "queue list reversal"
-                            %% inefficiency but this is a rare thing to happen
-                            %% so should not need optimising
                             checkout_one(Meta, ExpiredMsg,
                                          InitState#?MODULE{service_queue = SQ1}, Effects1);
                         #consumer{status = cancelled} ->
@@ -1960,7 +1905,6 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
             checkout_one(Meta, ExpiredMsg,
                          InitState#?MODULE{service_queue = SQ1}, Effects1);
         {empty, _} ->
-            % Effects = timer_effect(Ts, InitState, Effects1),
             case lqueue:len(Messages0) of
                 0 ->
                     {nochange, ExpiredMsg, InitState, Effects1};
@@ -1975,15 +1919,9 @@ expire_msgs(RaCmdTs, Result, State, Effects) ->
     %% Therefore, first queue:peek/1 to check whether we need to queue:out/1
     %% because the latter can be much slower than the former.
     case peek_next_msg(State) of
-        % {value, ?DISK_MSG(#{expiry := Expiry} = Header)}
-        %   when RaCmdTs >= Expiry ->
-        %     expire(RaCmdTs, Header, State, Effects);
         {value, ?INDEX_MSG(_Idx, ?DISK_MSG(#{expiry := Expiry} = Header))}
           when RaCmdTs >= Expiry ->
             expire(RaCmdTs, Header, State, Effects);
-        % {value, ?PREFIX_MEM_MSG(#{expiry := Expiry} = Header)}
-        %   when RaCmdTs >= Expiry ->
-        %     expire(RaCmdTs, Header, State, Effects);
         _ ->
             {Result, State, Effects}
     end.
@@ -2209,11 +2147,6 @@ make_purge_nodes(Nodes) ->
 make_update_config(Config) ->
     #update_config{config = Config}.
 
-% add_bytes_enqueue(Header,
-%                   #?MODULE{msg_bytes_enqueue = Enqueue} = State) ->
-%     Size = get_header(size, Header),
-%     State#?MODULE{msg_bytes_enqueue = Enqueue + Size}.
-
 add_bytes_drop(Header,
                #?MODULE{msg_bytes_enqueue = Enqueue} = State) ->
     Size = get_header(size, Header),
@@ -2227,11 +2160,6 @@ add_bytes_checkout(Header,
     State#?MODULE{msg_bytes_checkout = Checkout + Size,
                   msg_bytes_enqueue = Enqueue - Size}.
 
-% add_bytes_settle(Header,
-                 % #?MODULE{msg_bytes_checkout = Checkout} = State) ->
-    % Size = get_header(size, Header),
-    % State#?MODULE{msg_bytes_checkout = Checkout - Size}.
-
 add_bytes_return(Header,
                  #?MODULE{msg_bytes_checkout = Checkout,
                           msg_bytes_enqueue = Enqueue} = State) ->
@@ -2239,27 +2167,9 @@ add_bytes_return(Header,
     State#?MODULE{msg_bytes_checkout = Checkout - Size,
                   msg_bytes_enqueue = Enqueue + Size}.
 
-% add_in_memory_counts(Header,
-%                      #?MODULE{msg_bytes_in_memory = InMemoryBytes,
-%                               msgs_ready_in_memory = InMemoryCount} = State) ->
-%     Size = get_header(size, Header),
-%     State#?MODULE{msg_bytes_in_memory = InMemoryBytes + Size,
-%                   msgs_ready_in_memory = InMemoryCount + 1}.
-
-% subtract_in_memory_counts(Header,
-%                           #?MODULE{msg_bytes_in_memory = InMemoryBytes,
-%                                    msgs_ready_in_memory = InMemoryCount} = State) ->
-%     Size = get_header(size, Header),
-%     State#?MODULE{msg_bytes_in_memory = InMemoryBytes - Size,
-%                   msgs_ready_in_memory = InMemoryCount - 1}.
-
 message_size(#basic_message{content = Content}) ->
     #content{payload_fragments_rev = PFR} = Content,
     iolist_size(PFR);
-% message_size(?PREFIX_MEM_MSG(Header)) ->
-%     get_header(size, Header);
-% message_size(Header) ?IS_HEADER(Header) ->
-%     get_header(size, Header);
 message_size(B) when is_binary(B) ->
     byte_size(B);
 message_size(Msg) ->

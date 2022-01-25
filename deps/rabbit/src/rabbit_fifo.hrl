@@ -156,8 +156,6 @@
          consumer_strategy = competing :: consumer_strategy(),
          %% the maximum number of unsuccessful delivery attempts permitted
          delivery_limit :: option(non_neg_integer()),
-         max_in_memory_length :: option(non_neg_integer()),
-         max_in_memory_bytes :: option(non_neg_integer()),
          expires :: undefined | milliseconds(),
          msg_ttl :: undefined | milliseconds(),
          unused_1,
@@ -224,8 +222,6 @@
          %% waiting consumers, one is picked active consumer is cancelled or dies
          %% used only when single active consumer is on
          waiting_consumers = [] :: [{consumer_id(), consumer()}],
-         msg_bytes_in_memory = 0 :: non_neg_integer(),
-         msgs_ready_in_memory = 0 :: non_neg_integer(),
          last_active :: undefined | non_neg_integer(),
          msg_cache :: undefined | {ra:index(), raw_msg()},
          unused_2
