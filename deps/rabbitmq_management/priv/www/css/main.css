@@ -121,7 +121,9 @@ div.colour-key { float: left; width: 10px; height: 10px; margin: 3px 5px 0 0;}
 div.memory-info { float: left; padding: 10px 10px 0 0; }
 button.memory-button { margin-top: 10px; }
 
-div.memory_queue  { background: #bd4688; }
+div.memory_classic  { background: #512E5F; }
+div.memory_quorum  { background: #9B59B6; }
+div.memory_stream  { background: #D7BDE2; }
 div.memory_binary { background: url(../img/bg-binary.png); }
 div.memory_conn   { background: #dada66; }
 div.memory_proc   { background: #6abf59; }
@@ -129,7 +131,9 @@ div.memory_table  { background: #6679da; }
 div.memory_system { background: #999; }
 div.memory_unused { background: #955; }
 
-div.memory-bar div.memory_queue  { border-right: solid 1px #eb50a6; }
+div.memory-bar div.memory_classic  { border-right: solid 1px #bbb; }
+div.memory-bar div.memory_quorum  { border-right: solid 1px #bbb; }
+div.memory-bar div.memory_stream  { border-right: solid 1px #bbb; }
 div.memory-bar div.memory_binary { border-right: solid 1px #eb50a6; }
 div.memory-bar div.memory_conn   { border-right: solid 1px #ebeb8d; }
 div.memory-bar div.memory_proc   { border-right: solid 1px #79da66; }
