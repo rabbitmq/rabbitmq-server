@@ -1,18 +1,8 @@
 name: Test Windows
 on:
-  push:
-    paths:
-      - 'deps/**'
-      - 'scripts/**'
-      - Makefile
-      - plugins.mk
-      - rabbitmq-components.mk
-      - .bazelrc
-      - .bazelversion
-      - BUILD.*
-      - '*.bzl'
-      - '*.bazel'
-      - .github/workflows/test-windows.yaml
+  schedule:
+  - cron: '0 2 * * *'
+  workflow_dispatch:
 jobs:
   test:
     name: Test Windows
