@@ -2227,10 +2227,10 @@ add_bytes_checkout(Header,
     State#?MODULE{msg_bytes_checkout = Checkout + Size,
                   msg_bytes_enqueue = Enqueue - Size}.
 
-add_bytes_settle(Header,
-                 #?MODULE{msg_bytes_checkout = Checkout} = State) ->
-    Size = get_header(size, Header),
-    State#?MODULE{msg_bytes_checkout = Checkout - Size}.
+% add_bytes_settle(Header,
+                 % #?MODULE{msg_bytes_checkout = Checkout} = State) ->
+    % Size = get_header(size, Header),
+    % State#?MODULE{msg_bytes_checkout = Checkout - Size}.
 
 add_bytes_return(Header,
                  #?MODULE{msg_bytes_checkout = Checkout,
