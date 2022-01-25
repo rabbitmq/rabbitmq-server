@@ -178,18 +178,31 @@ enqueue(_Correlation, _Msg,
     {reject_publish, State};
 enqueue(Correlation, Msg,
         #state{slow = Slow,
+               pending = Pending,
                queue_status = go,
-               cfg = #cfg{block_handler = BlockFun}} = State0) ->
-    Node = pick_server(State0),
-    {Next, State1} = next_enqueue_seq(State0),
+               next_seq = Seq0,
+               next_enqueue_seq = Next,
+               cfg = #cfg{soft_limit = SftLmt,
+                          block_handler = BlockFun}} = State0) ->
+    Server = pick_server(State0),
     % by default there is no correlation id
     Cmd = rabbit_fifo:make_enqueue(self(), Next, Msg),
-    case send_command(Node, Correlation, Cmd, low, State1) of
-        {slow, State} when not Slow ->
+    Seq = Seq0 + 1,
+    ok = ra:pipeline_command(Server, Cmd, Seq, low),
+    Tag = case map_size(Pending) >= SftLmt of
+              true -> slow;
+              false -> ok
+          end,
+    State = State0#state{pending = Pending#{Seq => {Correlation, Cmd}},
+                         next_seq = Seq,
+                         next_enqueue_seq = Next + 1,
+                         slow = Tag == slow},
+    case Tag of
+        slow when not Slow ->
             BlockFun(),
             {slow, set_timer(State)};
-        Any ->
-            Any
+        _ ->
+            {ok, State}
     end.
 
 %% @doc Enqueues a message.
@@ -272,11 +285,7 @@ add_delivery_count_header(Msg, _Count) ->
 settle(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_server(State0),
     Cmd = rabbit_fifo:make_settle(consumer_id(ConsumerTag), MsgIds),
-    case send_command(Node, undefined, Cmd, normal, State0) of
-        {_, S} ->
-            % turn slow into ok for this function
-            {S, []}
-    end;
+    {send_command(Node, undefined, Cmd, normal, State0), []};
 settle(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -304,8 +313,7 @@ return(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_server(State0),
     % TODO: make rabbit_fifo return support lists of message ids
     Cmd = rabbit_fifo:make_return(consumer_id(ConsumerTag), MsgIds),
-    {_Tag, State1} = send_command(Node, undefined, Cmd, normal, State0),
-    {State1, []};
+    {send_command(Node, undefined, Cmd, normal, State0), []};
 return(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -333,11 +341,7 @@ return(ConsumerTag, [_|_] = MsgIds,
 discard(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_server(State0),
     Cmd = rabbit_fifo:make_discard(consumer_id(ConsumerTag), MsgIds),
-    case send_command(Node, undefined, Cmd, normal, State0) of
-        {_, S} ->
-            % turn slow into ok for this function
-            {S, []}
-    end;
+    {send_command(Node, undefined, Cmd, normal, State0), []};
 discard(ConsumerTag, [_|_] = MsgIds,
         #state{unsent_commands = Unsent0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -424,11 +428,7 @@ credit(ConsumerTag, Credit, Drain,
     Node = pick_server(State0),
     Cmd = rabbit_fifo:make_credit(ConsumerId, Credit,
                                   C#consumer.last_msg_id + 1, Drain),
-    case send_command(Node, undefined, Cmd, normal, State0) of
-        {_, S} ->
-            % turn slow into ok for this function
-            {S, []}
-    end.
+    {send_command(Node, undefined, Cmd, normal, State0), []}.
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
 %%
@@ -579,11 +579,8 @@ handle_ra_event(From, {applied, Seqs},
             Node = pick_server(State2),
             %% send all the settlements and returns
             State = lists:foldl(fun (C, S0) ->
-                                        case send_command(Node, undefined,
-                                                          C, normal, S0) of
-                                            {T, S} when T =/= error ->
-                                                S
-                                        end
+                                        send_command(Node, undefined, C,
+                                                     normal, S0)
                                 end, State2, Commands),
             UnblockFun(),
             {ok, State, Actions};
@@ -854,36 +851,37 @@ sorted_servers(#state{leader = Leader,
 next_seq(#state{next_seq = Seq} = State) ->
     {Seq, State#state{next_seq = Seq + 1}}.
 
-next_enqueue_seq(#state{next_enqueue_seq = Seq} = State) ->
-    {Seq, State#state{next_enqueue_seq = Seq + 1}}.
-
 consumer_id(ConsumerTag) ->
     {ConsumerTag, self()}.
 
 send_command(Server, Correlation, Command, _Priority,
              #state{pending = Pending,
-                    cfg = #cfg{soft_limit = SftLmt}} = State0)
+                    next_seq = Seq0,
+                    cfg = #cfg{soft_limit = SftLmt}} = State)
   when element(1, Command) == return ->
     %% returns are sent to the aux machine for pre-evaluation
-    {Seq, State} = next_seq(State0),
+    Seq = Seq0 + 1,
     ok = ra:cast_aux_command(Server, {Command, Seq, self()}),
-    Tag = case maps:size(Pending) >= SftLmt of
+    Tag = case map_size(Pending) >= SftLmt of
               true -> slow;
               false -> ok
           end,
-    {Tag, State#state{pending = Pending#{Seq => {Correlation, Command}},
-                      slow = Tag == slow}};
+    State#state{pending = Pending#{Seq => {Correlation, Command}},
+                next_seq = Seq,
+                slow = Tag == slow};
 send_command(Server, Correlation, Command, Priority,
              #state{pending = Pending,
-                    cfg = #cfg{soft_limit = SftLmt}} = State0) ->
-    {Seq, State} = next_seq(State0),
+                    next_seq = Seq0,
+                    cfg = #cfg{soft_limit = SftLmt}} = State) ->
+    Seq = Seq0 + 1,
     ok = ra:pipeline_command(Server, Command, Seq, Priority),
-    Tag = case maps:size(Pending) >= SftLmt of
+    Tag = case map_size(Pending) >= SftLmt of
               true -> slow;
               false -> ok
           end,
-    {Tag, State#state{pending = Pending#{Seq => {Correlation, Command}},
-                      slow = Tag == slow}}.
+    State#state{pending = Pending#{Seq => {Correlation, Command}},
+                next_seq = Seq,
+                slow = Tag == slow}.
 
 
 resend_command(Node, Correlation, Command,
