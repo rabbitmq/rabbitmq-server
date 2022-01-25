@@ -107,6 +107,61 @@ end_per_group(classic_queue_tests, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+%% $ make -C deps/rabbit test-build
+%% $ erl -pa deps/rabbit/test
+%% > classic_queue_SUITE:instrs_to_manual([[{init,...},...]]).
+%% Paste into do_manual/1.
+%% Enable manual as the only test in groups/0.
+%% $ make -C deps/rabbit ct-classic_queue
+instrs_to_manual([Instrs]) ->
+    io:format("~ndo_manual(Config) ->~n~n"),
+    lists:foreach(fun
+        ({init, CQ}) ->
+            #cq{name=Name, mode=Mode, version=Version} = CQ,
+            io:format("    St0 = #cq{name=~0p, mode=~0p, version=~0p,~n"
+                      "              config=minimal_config(Config)},~n~n",
+                      [Name, Mode, Version]);
+        ({set, {var,Var}, {call, ?MODULE, cmd_setup_queue, _}}) ->
+            Res = "Res" ++ integer_to_list(Var),
+            PrevSt = "St" ++ integer_to_list(Var - 1),
+            St = "St" ++ integer_to_list(Var),
+            io:format("    ~s = cmd_setup_queue(~s),~n"
+                      "    ~s = ~s#cq{amq=~s},~n~n",
+                      [Res, PrevSt, St, PrevSt, Res]);
+        ({set, {var,Var}, {call, ?MODULE, Cmd, [#cq{}|Args]}}) ->
+            Res = "Res" ++ integer_to_list(Var),
+            PrevSt = "St" ++ integer_to_list(Var - 1),
+            St = "St" ++ integer_to_list(Var),
+            ExtraArgs = [[", ", case A of
+                                    {var,V} -> "Res" ++ integer_to_list(V);
+                                    _ -> io_lib:format("~0p", [A])
+                                end] || A <- Args],
+            io:format("    ~s = ~s(~s~s),~n"
+                      "    true = postcondition(~s, {call, undefined, ~s, [~s~s]}, ~s),~n"
+                      "    ~s = next_state(~s, ~s, {call, undefined, ~s, [~s~s]}),~n~n",
+                      [Res, Cmd, PrevSt, ExtraArgs,
+                       PrevSt, Cmd, PrevSt, ExtraArgs, Res,
+                       St, PrevSt, Res, Cmd, PrevSt, ExtraArgs]);
+        ({set, {var,Var}, {call, ?MODULE, Cmd, Args}}) ->
+            Res = "Res" ++ integer_to_list(Var),
+            PrevSt = "St" ++ integer_to_list(Var - 1),
+            St = "St" ++ integer_to_list(Var),
+            ExtraArgs = case lists:flatten([[", ", case A of
+                                                       {var,V} -> "Res" ++ integer_to_list(V);
+                                                       _ -> io_lib:format("~0p", [A])
+                                                   end] || A <- Args]) of
+                "" -> "";
+                ", " ++ ExtraArgs0 -> ExtraArgs0
+            end,
+            io:format("    ~s = ~s(~s),~n"
+                      "    true = postcondition(~s, {call, undefined, ~s, [~s]}, ~s),~n"
+                      "    ~s = next_state(~s, ~s, {call, undefined, ~s, [~s]}),~n~n",
+                      [Res, Cmd, ExtraArgs,
+                       PrevSt, Cmd, ExtraArgs, Res,
+                       St, PrevSt, Res, Cmd, ExtraArgs])
+    end, Instrs),
+    io:format("    true.~n").
+
 manual(Config) ->
     %% This is where tracing of client processes
     %% (amqp_channel, amqp_selective_consumer)
@@ -114,17 +169,14 @@ manual(Config) ->
     true = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, do_manual, [Config]).
 
+%% Tips to help reproduce an issue:
+%% - See instrs_to_manual/1 to automatically obtain code to put in this function.
+%% - Do the commands after cmd_setup_queue in a loop.
+%% - Add some timer:sleep(1) or longer between commands if delays are necessary.
+%% - If a shrunk set of commands isn't good enough, the original might.
+%% - Removing some steps can help understand the sequence of events leading to the problem.
 do_manual(Config) ->
-    InitialState = #cq{name=?FUNCTION_NAME, mode=default, version=1,
-                       config=minimal_config(Config)},
-    AMQ0 = cmd_setup_queue(InitialState),
-    State = InitialState#cq{amq=AMQ0},
-    true = is_record(State, cq),
-    %% This is where tracing of server processes
-    %% should be added if necessary.
-    %%
-    %% Insert commands here to reproduce the issue.
-    true.
+    Config =:= Config.
 
 classic_queue_v1(Config) ->
     true = rabbit_ct_broker_helpers:rpc(Config, 0,
