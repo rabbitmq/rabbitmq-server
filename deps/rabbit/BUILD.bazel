@@ -340,7 +340,7 @@ suites = [
         name = "classic_queue_SUITE",
         size = "large",
         deps = [
-            "@proper//:bazel_erlang_lib",
+            "@proper//:erlang_app",
         ],
         shard_count = 4,
         sharding_method = "case",
