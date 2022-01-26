@@ -170,7 +170,7 @@
         {cfg :: #cfg{},
          % unassigned messages
          messages = lqueue:new() :: lqueue:lqueue(indexed_msg()),
-         % defines the next message id
+         %
          messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
          returns = lqueue:new() :: lqueue:lqueue(term()),
@@ -178,43 +178,23 @@
          % reset to 0 when release_cursor gets stored
          enqueue_count = 0 :: non_neg_integer(),
          % a map containing all the live processes that have ever enqueued
-         % a message to this queue as well as a cached value of the smallest
-         % ra_index of all pending enqueues
+         % a message to this queue
          enqueuers = #{} :: #{pid() => #enqueuer{}},
-         % master index of all enqueue raft indexes including pending
-         % enqueues
+         % index of all messages that have been delivered at least once
+         % used to work out the smallest live raft index
          % rabbit_fifo_index can be slow when calculating the smallest
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
-         %% A release cursor is essentially a snapshot without message bodies
-         %% (aka. "dehydrated state") taken at time T in order to truncate
-         %% the log at some point in the future when all messages that were enqueued
-         %% up to time T have been removed (e.g. consumed, dead-lettered, or dropped).
-         %% This concept enables snapshots to not contain any message bodies.
-         %% Advantage: Smaller snapshots are sent between Ra nodes.
+         %% A release cursor is essentially a snapshot for a past raft index
          %% Working assumption: Messages are consumed in a FIFO-ish order because
          %% the log is truncated only until the oldest message.
          release_cursors = lqueue:new() :: lqueue:lqueue({release_cursor,
                                                           ra:index(), #rabbit_fifo{}}),
          % consumers need to reflect consumer state at time of snapshot
-         % needs to be part of snapshot
          consumers = #{} :: #{consumer_id() => consumer()},
          % consumers that require further service are queued here
-         % needs to be part of snapshot
          service_queue = priority_queue:new() :: priority_queue:q(),
-         %% This is a special field that is only used for snapshots
-         %% It represents the queued messages at the time the
-         %% dehydrated snapshot state was cached.
-         %% As release_cursors are only emitted for raft indexes where all
-         %% prior messages no longer contribute to the current state we can
-         %% replace all message payloads with their sizes (to be used for
-         %% overflow calculations).
-         %% This is done so that consumers are still served in a deterministic
-         %% order on recovery.
-         %% TODO Remove this field and store prefix messages in-place. This will
-         %% simplify the checkout logic.
-         prefix_msgs = {0, [], 0, []} :: prefix_msgs(),
          %% state for at-least-once dead-lettering
          dlx = rabbit_fifo_dlx:init() :: rabbit_fifo_dlx:state(),
          msg_bytes_enqueue = 0 :: non_neg_integer(),

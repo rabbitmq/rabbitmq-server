@@ -602,41 +602,53 @@ apply(_Meta, Cmd, State) ->
     rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
-convert_msg({RaftIdx, {Header, empty}}) ->
+convert_msg({RaftIdx, {Header, empty}}) when is_integer(RaftIdx) ->
     ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header));
 convert_msg({RaftIdx, {Header, _Msg}}) when is_integer(RaftIdx) ->
     ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header));
 convert_msg({'$empty_msg', Header}) ->
     %% dummy index
-    ?INDEX_MSG(0, ?DISK_MSG(Header));
+    ?INDEX_MSG(undefined, ?DISK_MSG(Header));
 convert_msg({'$prefix_msg', Header}) ->
     %% dummy index
-    ?INDEX_MSG(0, ?DISK_MSG(Header)).
+    ?INDEX_MSG(undefined, ?DISK_MSG(Header));
+convert_msg({Header, empty}) ->
+    convert_msg(Header);
+convert_msg(Header)
+  when is_integer(Header) orelse
+       is_map_key(size, Header) ->
+    ?INDEX_MSG(undefined, ?DISK_MSG(Header)).
 
 convert_v1_to_v2(V1State) ->
     IndexesV1 = rabbit_fifo_v1:get_field(ra_indexes, V1State),
     ReturnsV1 = rabbit_fifo_v1:get_field(returns, V1State),
     MessagesV1 = rabbit_fifo_v1:get_field(messages, V1State),
-    % EnqueuersV1 = rabbit_fifo_v1:get_field(enqueuers, V1State),
     ConsumersV1 = rabbit_fifo_v1:get_field(consumers, V1State),
     %% remove all raft idx in messages from index
+    {_, PrefMsgs, _, PrefReturns} = rabbit_fifo_v1:get_field(prefix_msgs, V1State),
+    V2PrefMsgs = lists:foldl(fun(Hdr, Acc) ->
+                                     lqueue:in(convert_msg(Hdr), Acc)
+                             end, lqueue:new(), PrefMsgs),
+    V2PrefReturns = lists:foldl(fun(Hdr, Acc) ->
+                                        lqueue:in(convert_msg(Hdr), Acc)
+                                end, lqueue:new(), PrefReturns),
     MessagesV2 = lqueue:foldl(fun ({_, IdxMsg}, Acc) ->
                                       lqueue:in(convert_msg(IdxMsg), Acc)
-                              end, lqueue:new(), MessagesV1),
+                              end, V2PrefMsgs, MessagesV1),
     ReturnsV2 = lqueue:foldl(fun ({_SeqId, Msg}, Acc) ->
                                      lqueue:in(convert_msg(Msg), Acc)
-                             end, lqueue:new(), ReturnsV1),
+                             end, V2PrefReturns, ReturnsV1),
 
-    %% TODO: prefix message need to be turned into disk msgs and added
-    %% to messages and returns respectively
-        % prefix_msgs = rabbit_fifo_v1:get_field(prefix_msgs, V1State),
     ConsumersV2 = maps:map(
                     fun (_, #consumer{checked_out = Ch} = C) ->
                             C#consumer{
-                              checked_out = maps:map(
-                                              fun (_, {_SeqId, IdxMsg}) ->
-                                                      convert_msg(IdxMsg)
-                                              end, Ch)}
+                              checked_out =
+                                  maps:map(
+                                    fun (_, {Tag, _} = Msg) when is_atom(Tag) ->
+                                            convert_msg(Msg);
+                                        (_, {_Seq, Msg}) ->
+                                            convert_msg(Msg)
+                                    end, Ch)}
                     end, ConsumersV1),
 
     %% The (old) format of dead_letter_handler in RMQ < v3.10 is:
@@ -685,7 +697,6 @@ convert_v1_to_v2(V1State) ->
         release_cursors = rabbit_fifo_v1:get_field(release_cursors, V1State),
         consumers = ConsumersV2,
         service_queue = rabbit_fifo_v1:get_field(service_queue, V1State),
-        prefix_msgs = rabbit_fifo_v1:get_field(prefix_msgs, V1State),
         msg_bytes_enqueue = rabbit_fifo_v1:get_field(msg_bytes_enqueue, V1State),
         msg_bytes_checkout = rabbit_fifo_v1:get_field(msg_bytes_checkout, V1State),
         waiting_consumers = rabbit_fifo_v1:get_field(waiting_consumers, V1State),
@@ -771,8 +782,7 @@ state_enter0(leader, #?MODULE{consumers = Cons,
                               waiting_consumers = WaitingConsumers,
                               cfg = #cfg{name = Name,
                                          resource = Resource,
-                                         become_leader_handler = BLH},
-                              prefix_msgs = {0, [], 0, []}
+                                         become_leader_handler = BLH}
                              } = State,
              Effects0) ->
     TimerEffs = timer_effect(erlang:system_time(millisecond), State, Effects0),
@@ -863,7 +873,7 @@ overview(#?MODULE{consumers = Cons,
                  num_in_memory_ready_messages => 0, %% backwards compat
                  num_messages => messages_total(State),
                  num_release_cursors => lqueue:len(Cursors),
-                 release_cursors => [{I, messages_total(S)} || {_, I, S} <- lqueue:to_list(Cursors)],
+                 release_cursors => [I || {_, I, _} <- lqueue:to_list(Cursors)],
                  release_cursor_enqueue_counter => EnqCount,
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
@@ -1201,21 +1211,20 @@ usage(Name) when is_atom(Name) ->
 %%% Internal
 
 messages_ready(#?MODULE{messages = M,
-                        prefix_msgs = {RCnt, _R, PCnt, _P},
                         returns = R}) ->
-    lqueue:len(M) + lqueue:len(R) + RCnt + PCnt.
+    lqueue:len(M) + lqueue:len(R).
 
 messages_total(#?MODULE{messages_total = Total,
                         dlx = DlxState}) ->
     {DlxTotal, _} = rabbit_fifo_dlx:stat(DlxState),
-    Total + DlxTotal;
+    Total + DlxTotal.
 %% release cursors might be old state (e.g. after recent upgrade)
-messages_total(State) ->
-    try
-        rabbit_fifo_v1:query_messages_total(State)
-    catch _:_ ->
-              rabbit_fifo_v0:query_messages_total(State)
-    end.
+% messages_total(State) ->
+%     try
+%         rabbit_fifo_v1:query_messages_total(State)
+%     catch _:_ ->
+%               rabbit_fifo_v0:query_messages_total(State)
+%     end.
 
 update_use({inactive, _, _, _} = CUInfo, inactive) ->
     CUInfo;
@@ -2317,4 +2326,4 @@ can_immediately_deliver(#?MODULE{service_queue = SQ,
     end.
 
 incr(I) ->
-    I + 1.
+   I + 1.
