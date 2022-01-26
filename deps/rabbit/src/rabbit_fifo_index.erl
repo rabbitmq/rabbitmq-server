@@ -41,24 +41,29 @@ append(Key,
        #?MODULE{data = Data,
                 smallest = Smallest,
                 largest = Largest} = State)
-  when Key > Largest orelse
-       Largest =:= undefined ->
+  when is_integer(Key) andalso
+       (Key > Largest orelse
+        Largest =:= undefined) ->
     State#?MODULE{data = maps:put(Key, ?NIL, Data),
                   smallest = ra_lib:default(Smallest, Key),
                   largest = Key};
 append(Key,
        #?MODULE{data = Data,
                 largest = Largest,
-                smallest = Smallest} = State) ->
+                smallest = Smallest} = State)
+  when is_integer(Key) ->
     State#?MODULE{data = maps:put(Key, ?NIL, Data),
                   smallest = min(Key, ra_lib:default(Smallest, Key)),
                   largest = max(Key, ra_lib:default(Largest, Key))
-                  }.
+                  };
+append(undefined, State) ->
+    State.
 
--spec delete(Index :: integer(), state()) -> state().
+-spec delete(Index :: integer() | undefined, state()) -> state().
 delete(Smallest, #?MODULE{data = Data0,
                           largest = Largest,
-                          smallest = Smallest} = State) ->
+                          smallest = Smallest} = State)
+  when is_integer(Smallest) ->
     Data = maps:remove(Smallest, Data0),
     case find_next(Smallest + 1, Largest, Data) of
         undefined ->
