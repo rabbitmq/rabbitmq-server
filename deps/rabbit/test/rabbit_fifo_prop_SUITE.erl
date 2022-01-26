@@ -1470,17 +1470,15 @@ messages_total_invariant() ->
     end.
 
 upgrade_prop(Conf0, Commands) ->
-    Conf = Conf0#{release_cursor_interval => 1},
+    Conf = Conf0#{release_cursor_interval => 0},
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init_v1(Conf),
     [begin
          {PreEntries, PostEntries} = lists:split(SplitPos, Entries),
          %% run log v1
-         V1 = lists:foldl(
-                fun ({Idx, E}, Acc0) ->
-                        element(1, rabbit_fifo_v1:apply(meta(Idx), E, Acc0))
-                end, InitState, PreEntries),
+         {V1, _V1Effs} = run_log(InitState, PreEntries, fun (_) -> true end,
+                                 rabbit_fifo_v1),
 
          %% perform conversion
          #rabbit_fifo{} = V2 = element(1, rabbit_fifo:apply(meta(length(PreEntries) + 1),
@@ -1506,6 +1504,33 @@ upgrade_prop(Conf0, Commands) ->
          %% check we can run the post entries from the converted state
          run_log(V2, PostEntries)
      end || SplitPos <- lists:seq(1, length(Entries))],
+
+    {_, V1Effs} = run_log(InitState, Entries, fun (_) -> true end,
+                          rabbit_fifo_v1),
+    [begin
+         % ct:pal("V1 ~p", [RCS]),
+         Res = rabbit_fifo:apply(meta(Idx + 1), {machine_version, 1, 2}, RCS) ,
+         % ct:pal("V2 ~p", [Res]),
+         #rabbit_fifo{} = V2 = element(1, Res),
+         %% assert invariants
+         Fields = [num_messages,
+                   num_ready_messages,
+                   smallest_raft_index,
+                   num_enqueuers,
+                   num_consumers,
+                   enqueue_message_bytes,
+                   checkout_message_bytes
+                  ],
+         V1Overview = maps:with(Fields, rabbit_fifo_v1:overview(RCS)),
+         V2Overview = maps:with(Fields, rabbit_fifo:overview(V2)),
+         case V1Overview == V2Overview of
+             true -> ok;
+             false ->
+                 ct:pal("upgrade_prop failed expected~n~p~nGot:~n~p",
+                        [V1Overview, V2Overview]),
+                 ?assertEqual(V1Overview, V2Overview)
+         end
+     end || {release_cursor, Idx, RCS} <- V1Effs],
     true.
 
 %% single active consumer ordering invariant:
@@ -1685,7 +1710,7 @@ checkout_cancel_gen(Pid) ->
 
 checkout_gen(Pid) ->
     %% pid, tag, prefetch
-    ?LET(C, {checkout, {binary(), Pid}, choose(1, 100)}, C).
+    ?LET(C, {checkout, {binary(), Pid}, choose(1, 10)}, C).
 
 -record(t, {state :: rabbit_fifo:state(),
             index = 1 :: non_neg_integer(), %% raft index
