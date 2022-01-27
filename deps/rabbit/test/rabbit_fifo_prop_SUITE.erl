@@ -1444,11 +1444,10 @@ messages_total_prop(Conf0, Commands) ->
 messages_total_invariant() ->
     fun(#rabbit_fifo{messages = M,
                      consumers = C,
-                     prefix_msgs = {PTot, _, RTot, _},
                      returns = R,
                      dlx = #rabbit_fifo_dlx{discards = D,
                                             consumer = DlxCon}} = S) ->
-            Base = lqueue:len(M) + lqueue:len(R) + PTot + RTot,
+            Base = lqueue:len(M) + lqueue:len(R),
             Tot0 = maps:fold(fun (_, #consumer{checked_out = Ch}, Acc) ->
                                      Acc + map_size(Ch)
                             end, Base, C),
