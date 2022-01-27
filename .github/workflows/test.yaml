@@ -13,6 +13,8 @@ on:
       - '*.bzl'
       - '*.bazel'
       - .github/workflows/test.yaml
+  pull_request:
+    types: [opened, reopened]
 jobs:
   test:
     name: Test
