@@ -31,8 +31,8 @@
      stream(),
      consumer_name(),
      connection_pid(),
-     subscription_id() |
-     {activate_consumer, vhost(), stream(), consumer_name()}}.
+     subscription_id()} |
+    {activate_consumer, vhost(), stream(), consumer_name()}.
 -opaque state() :: #?MODULE{}.
 
 -export_type([state/0,
@@ -42,7 +42,8 @@
          init_state/0,
          send_message/2,
          ensure_monitors/4,
-         handle_connection_down/2]).
+         handle_connection_down/2,
+         consumer_groups/2]).
 
 -spec init_state() -> state().
 init_state() ->
@@ -136,6 +137,25 @@ apply({activate_consumer, VirtualHost, Stream, ConsumerName},
     StreamGroups1 =
         update_groups(VirtualHost, Stream, ConsumerName, G, StreamGroups0),
     {State0#?MODULE{groups = StreamGroups1}, ok, Eff}.
+
+-spec consumer_groups(binary(), state()) -> {ok, [term()]}.
+consumer_groups(VirtualHost, #?MODULE{groups = Groups}) ->
+    Res = maps:fold(fun ({VH, Stream, Reference},
+                         #group{consumers = Consumers,
+                                partition_index = PartitionIndex},
+                         Acc)
+                            when VH == VirtualHost ->
+                            [[{stream, Stream},
+                              {reference, Reference},
+                              {partition_index, PartitionIndex},
+                              {consumers, length(Consumers)}]
+                             | Acc];
+                        (_GroupId, _Group, Acc) ->
+                            Acc
+                    end,
+                    [], Groups),
+
+    {ok, lists:reverse(Res)}.
 
 -spec ensure_monitors(command(), state(), map(), ra:effects()) ->
                          {state(), map(), ra:effects()}.

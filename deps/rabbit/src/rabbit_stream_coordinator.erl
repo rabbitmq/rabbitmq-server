@@ -45,7 +45,10 @@
          state/0]).
 
 %% Single Active Consumer API
--export([register_consumer/6, unregister_consumer/5, activate_consumer/3]).
+-export([register_consumer/6,
+         unregister_consumer/5,
+         activate_consumer/3,
+         consumer_groups/1]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "Restart stream coordinator"},
@@ -303,6 +306,23 @@ unregister_consumer(VirtualHost,
 activate_consumer(VirtualHost, Stream, ConsumerName) ->
     {ok, Res, _} = process_command({sac, {activate_consumer, VirtualHost, Stream, ConsumerName}}),
     Res.
+
+-spec consumer_groups(binary()) -> {ok, [term()]}.
+consumer_groups(VirtualHost) ->
+    case ra:local_query({?MODULE, node()},
+                         fun(#?MODULE{single_active_consumer = SacState}) ->
+          rabbit_stream_sac_coordinator:consumer_groups(VirtualHost, SacState)
+                         end) of
+        {ok, {_, Result}, _} ->
+            Result;
+        {error, noproc} ->
+            %% not started yet, so no groups
+            {ok, []};
+        {error, _} = Err ->
+            Err;
+        {timeout, _} ->
+            {error, timeout}
+    end.
 
 process_command(Cmd) ->
     Servers = ensure_coordinator_started(),
