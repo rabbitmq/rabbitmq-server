@@ -266,7 +266,6 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
                                  {RouteToQs, State2}
                          end,
     Now = os:system_time(millisecond),
-    State4 = State3#state{next_out_seq = OutSeq + 1},
     Pend0 = #pending{
                consumed_msg_id = ConsumedMsgId,
                consumed_at = Now,
@@ -277,12 +276,14 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
         [] ->
             %% We can't deliver this message since there is no target queue we can route to.
             %% We buffer this message and retry to send every settle_timeout milliseonds.
-            State4#state{pendings = maps:put(OutSeq, Pend0, Pendings)};
+            State3#state{next_out_seq = OutSeq + 1,
+                         pendings = maps:put(OutSeq, Pend0, Pendings)};
         _ ->
             Pend = Pend0#pending{publish_count = 1,
                                  last_published_at = Now,
                                  unsettled = TargetQs},
-            State = State4#state{pendings = maps:put(OutSeq, Pend, Pendings)},
+            State = State3#state{next_out_seq = OutSeq + 1,
+                                 pendings = maps:put(OutSeq, Pend, Pendings)},
             deliver_to_queues(Delivery, TargetQs, State)
     end.
 
