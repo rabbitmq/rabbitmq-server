@@ -80,7 +80,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
   end
 
   def output({:ok, qlen}, _options) do
-    {:ok, "Queue was successfully deleted with #{qlen} messages"}
+    {:ok, "Queue was successfully deleted with #{qlen} ready messages"}
   end
 
   ## Use default output for all non-special case outputs
