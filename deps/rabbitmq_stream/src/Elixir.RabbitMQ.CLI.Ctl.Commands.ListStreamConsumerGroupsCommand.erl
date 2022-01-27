@@ -19,7 +19,11 @@
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
--ignore_xref([{'Elixir.RabbitMQ.CLI.DefaultOutput', output, 1}]).
+-ignore_xref([{'Elixir.RabbitMQ.CLI.DefaultOutput', output, 1},
+              {'Elixir.RabbitMQ.CLI.Ctl.InfoKeys', prepare_info_keys, 1},
+              {'Elixir.RabbitMQ.CLI.Ctl.InfoKeys', validate_info_keys, 2},
+              {'Elixir.Enum', join, 2}]).
+
 
 -export([formatter/0,
          scopes/0,
