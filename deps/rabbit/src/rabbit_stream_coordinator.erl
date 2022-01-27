@@ -310,9 +310,9 @@ activate_consumer(VirtualHost, Stream, ConsumerName) ->
 -spec consumer_groups(binary()) -> {ok, [term()]}.
 consumer_groups(VirtualHost) ->
     case ra:local_query({?MODULE, node()},
-                         fun(#?MODULE{single_active_consumer = SacState}) ->
-          rabbit_stream_sac_coordinator:consumer_groups(VirtualHost, SacState)
-                         end) of
+                        fun(#?MODULE{single_active_consumer = SacState}) ->
+                                rabbit_stream_sac_coordinator:consumer_groups(VirtualHost, SacState)
+                        end) of
         {ok, {_, Result}, _} ->
             Result;
         {error, noproc} ->
