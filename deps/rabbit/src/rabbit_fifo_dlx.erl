@@ -210,25 +210,23 @@ checkout_one(#?MODULE{consumer = #dlx_consumer{checked_out = Checked,
   when map_size(Checked) >= Prefetch ->
     State;
 checkout_one(#?MODULE{discards = Discards0,
+                      msg_bytes = Bytes,
+                      msg_bytes_checkout = BytesCheckout,
                       consumer = #dlx_consumer{checked_out = Checked0,
                                                next_msg_id = Next} = Con0} = State0) ->
     case lqueue:out(Discards0) of
         {{value, {_, Msg} = ReasonMsg}, Discards} ->
             Checked = maps:put(Next, ReasonMsg, Checked0),
-            State1 = State0#?MODULE{discards = Discards,
-                                    consumer = Con0#dlx_consumer{checked_out = Checked,
-                                                                 next_msg_id = Next + 1}},
-            Bytes = size_in_bytes(Msg),
-            State = add_bytes_checkout(Bytes, State1),
+            Size = size_in_bytes(Msg),
+            State = State0#?MODULE{discards = Discards,
+                                   msg_bytes = Bytes - Size,
+                                   msg_bytes_checkout = BytesCheckout + Size,
+                                   consumer = Con0#dlx_consumer{checked_out = Checked,
+                                                                next_msg_id = Next + 1}},
             {success, Next, ReasonMsg, State};
         {empty, _} ->
             State0
     end.
-
-add_bytes_checkout(Size, #?MODULE{msg_bytes = Bytes,
-                                  msg_bytes_checkout = BytesCheckout} = State) ->
-    State#?MODULE{msg_bytes = Bytes - Size,
-                  msg_bytes_checkout = BytesCheckout + Size}.
 
 size_in_bytes(?INDEX_MSG(_Idx, ?DISK_MSG(Header))) ->
     rabbit_fifo:get_header(size, Header).
