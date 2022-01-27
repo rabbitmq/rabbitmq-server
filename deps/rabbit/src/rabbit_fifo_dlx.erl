@@ -329,20 +329,23 @@ update_config(at_least_once, at_least_once, _, State) ->
 update_config(SameDLH, SameDLH, _, State) ->
     {State, []};
 update_config(OldDLH, NewDLH, QRes, State0) ->
-    rabbit_log:debug("Switching dead_letter_handler from ~p to ~p for ~s",
-                     [OldDLH, NewDLH, rabbit_misc:rs(QRes)]),
-    {State, Effects} = switch_from(OldDLH, QRes, State0),
-    switch_to(NewDLH, State, Effects).
+    LogOnLeader = {mod_call, rabbit_log, debug,
+                   ["Switching dead_letter_handler from ~p to ~p for ~s",
+                    [OldDLH, NewDLH, rabbit_misc:rs(QRes)]]},
+    {State1, Effects0} = switch_from(OldDLH, QRes, State0),
+    {State, Effects} = switch_to(NewDLH, State1, Effects0),
+    {State, [LogOnLeader|Effects]}.
 
 -spec switch_from(Old :: dead_letter_handler(), rabbit_types:r('queue'), state()) ->
     {state(), ra_machine:effects()}.
 switch_from(at_least_once, QRes, State) ->
-    %% switch from at-least-once to some other strategy
+    %% Switch from at-least-once to some other strategy.
     ensure_worker_terminated(State),
     {Num, Bytes} = stat(State),
-    rabbit_log:info("Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~s",
-                    [Num, Bytes, rabbit_misc:rs(QRes)]),
-    {init(), []};
+    %% Log only on leader.
+    {init(), [{mod_call, rabbit_log, info,
+               ["Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~s",
+                [Num, Bytes, rabbit_misc:rs(QRes)]]}]};
 switch_from(_, _, State) ->
     {State, []}.
 
