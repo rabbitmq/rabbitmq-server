@@ -327,20 +327,27 @@ list_publishers_run(Config) ->
     ok.
 
 list_consumer_groups_merge_defaults(_Config) ->
-    {[], #{vhost := <<"/">>}} =
+    DefaultItems =
+        [rabbit_data_coercion:to_binary(Item)
+         || Item <- ?CONSUMER_GROUP_INFO_ITEMS],
+    {DefaultItems, #{verbose := false, vhost := <<"/">>}} =
         ?COMMAND_LIST_CONSUMER_GROUPS:merge_defaults([], #{}),
 
-    {[], #{vhost := <<"test">>}} =
-        ?COMMAND_LIST_CONSUMER_GROUPS:merge_defaults([],
-                                                     #{vhost => <<"test">>}),
-    ok.
+    {[<<"other_key">>], #{verbose := true, vhost := <<"/">>}} =
+        ?COMMAND_LIST_CONSUMER_GROUPS:merge_defaults([<<"other_key">>],
+                                                     #{verbose => true}),
+
+    {[<<"other_key">>], #{verbose := false, vhost := <<"/">>}} =
+        ?COMMAND_LIST_CONSUMER_GROUPS:merge_defaults([<<"other_key">>],
+                                                     #{verbose => false}).
 
 list_consumer_groups_run(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Opts =
         #{node => Node,
           timeout => 10000,
-          vhost => <<"/">>},
+          vhost => <<"/">>,
+          verbose => true},
 
     %% No connections, no consumers
     {ok, []} = ?COMMAND_LIST_CONSUMER_GROUPS:run([], Opts),

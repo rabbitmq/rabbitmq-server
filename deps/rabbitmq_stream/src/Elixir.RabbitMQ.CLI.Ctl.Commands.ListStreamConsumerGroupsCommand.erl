@@ -23,8 +23,10 @@
 
 -export([formatter/0,
          scopes/0,
+         switches/0,
          aliases/0,
          usage/0,
+         usage_additional/0,
          usage_doc_guides/0,
          banner/2,
          validate/2,
@@ -35,10 +37,13 @@
          help_section/0]).
 
 formatter() ->
-    'Elixir.RabbitMQ.CLI.Formatters.Table'.
+    'Elixir.RabbitMQ.CLI.Formatters.PrettyTable'.
 
 scopes() ->
     [ctl, diagnostics, streams].
+
+switches() ->
+    [{verbose, boolean}].
 
 aliases() ->
     [{'V', verbose}].
@@ -50,26 +55,54 @@ description() ->
 help_section() ->
     {plugin, stream}.
 
-validate(_Args, _Opts) ->
-    ok.
+validate(Args, _) ->
+    case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
+                                                               ?CONSUMER_GROUP_INFO_ITEMS)
+    of
+        {ok, _} ->
+            ok;
+        Error ->
+            Error
+    end.
 
+merge_defaults([], Opts) ->
+    merge_defaults([rabbit_data_coercion:to_binary(Item)
+                    || Item <- ?CONSUMER_GROUP_INFO_ITEMS],
+                   Opts);
 merge_defaults(Args, Opts) ->
-    {Args, maps:merge(#{vhost => <<"/">>}, Opts)}.
+    {Args, maps:merge(#{verbose => false, vhost => <<"/">>}, Opts)}.
 
 usage() ->
-    <<"list_stream_consumer_groups [--vhost <vhost>]">>.
+    <<"list_stream_consumer_groups [--vhost <vhost> "
+      "[<column> ...]">>.
+
+usage_additional() ->
+    Prefix = <<" must be one of ">>,
+    InfoItems =
+        'Elixir.Enum':join(
+            lists:usort(?CONSUMER_GROUP_INFO_ITEMS), <<", ">>),
+    [{<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}].
 
 usage_doc_guides() ->
     [?STREAM_GUIDE_URL].
 
-run(_Args,
+run(Args,
     #{node := NodeName,
       vhost := VHost,
-      timeout := Timeout}) ->
+      timeout := Timeout,
+      verbose := Verbose}) ->
+    InfoKeys =
+        case Verbose of
+            true ->
+                ?CONSUMER_GROUP_INFO_ITEMS;
+            false ->
+                'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
+        end,
+
     rabbit_misc:rpc_call(NodeName,
                          rabbit_stream_coordinator,
                          consumer_groups,
-                         [VHost],
+                         [VHost, InfoKeys],
                          Timeout).
 
 banner(_, _) ->

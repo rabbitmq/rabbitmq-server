@@ -48,7 +48,7 @@
 -export([register_consumer/6,
          unregister_consumer/5,
          activate_consumer/3,
-         consumer_groups/1]).
+         consumer_groups/2]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "Restart stream coordinator"},
@@ -307,11 +307,12 @@ activate_consumer(VirtualHost, Stream, ConsumerName) ->
     {ok, Res, _} = process_command({sac, {activate_consumer, VirtualHost, Stream, ConsumerName}}),
     Res.
 
--spec consumer_groups(binary()) -> {ok, [term()]}.
-consumer_groups(VirtualHost) ->
+-spec consumer_groups(binary(), [atom()]) -> {ok, [term()]}.
+consumer_groups(VirtualHost, InfoKeys) ->
     case ra:local_query({?MODULE, node()},
                         fun(#?MODULE{single_active_consumer = SacState}) ->
-                                rabbit_stream_sac_coordinator:consumer_groups(VirtualHost, SacState)
+                                rabbit_stream_sac_coordinator:consumer_groups(
+                                  VirtualHost, InfoKeys, SacState)
                         end) of
         {ok, {_, Result}, _} ->
             Result;

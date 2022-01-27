@@ -111,4 +111,8 @@
   messages_errored
   ]).
 
+-define(CONSUMER_GROUP_INFO_ITEMS, [
+    stream, reference, partition_index, consumers
+                                   ]).
+
 -define(STREAM_GUIDE_URL, <<"https://rabbitmq.com/stream.html">>).
