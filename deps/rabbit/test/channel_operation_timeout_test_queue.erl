@@ -213,6 +213,11 @@ delete_crashed(Q) ->
 
 purge(State = #vqstate { qi_pending_ack= QPA }) ->
     maybe_delay(QPA),
+    rabbit_variable_queue:purge(State);
+%% For v3.9.x and below because the state has changed.
+purge(State) ->
+    QPA = element(10, State),
+    maybe_delay(QPA),
     rabbit_variable_queue:purge(State).
 
 purge_acks(State) ->
@@ -252,6 +257,11 @@ ack(List, State) ->
 
 requeue(AckTags, #vqstate { qi_pending_ack = QPA } = State) ->
     maybe_delay(QPA),
+    rabbit_variable_queue:requeue(AckTags, State);
+%% For v3.9.x and below because the state has changed.
+requeue(AckTags, State) ->
+    QPA = element(10, State),
+    maybe_delay(QPA),
     rabbit_variable_queue:requeue(AckTags, State).
 
 ackfold(MsgFun, Acc, State, AckTags) ->
@@ -261,6 +271,11 @@ fold(Fun, Acc, State) ->
     rabbit_variable_queue:fold(Fun, Acc, State).
 
 len(#vqstate { qi_pending_ack = QPA } = State) ->
+    maybe_delay(QPA),
+    rabbit_variable_queue:len(State);
+%% For v3.9.x and below because the state has changed.
+len(State) ->
+    QPA = element(10, State),
     maybe_delay(QPA),
     rabbit_variable_queue:len(State).
 
