@@ -14,13 +14,15 @@
     hashing_algorithm/0,
     hash/1,
     hash/2,
-    stored_hash/0,
-    store_hash/1,
-    store_hash/2
+    stored_global_hash/0,
+    store_global_hash/1,
+    store_global_hash/2,
+    store_vhost_specific_hash/3
 ]).
 
 -define(DEFAULT_HASHING_ALGORITHM, sha256).
--define(GLOBAL_RUNTIME_PARAMETER_KEY, definitions_hash).
+-define(GLOBAL_RUNTIME_PARAMETER_KEY, imported_definition_hash_value).
+-define(RUNTIME_PARAMETER_COMPONENT, imported_definition_hash_value).
 
 %%
 %% API
@@ -44,19 +46,24 @@ hash(Value) ->
 hash(Algo, Value) ->
     crypto:hash(Algo, term_to_binary(Value)).
 
--spec stored_hash() -> binary() | undefined.
-stored_hash() ->
+-spec stored_global_hash() -> binary() | undefined.
+stored_global_hash() ->
     case rabbit_runtime_parameters:lookup_global(?GLOBAL_RUNTIME_PARAMETER_KEY) of
         not_found -> undefined;
         undefined -> undefined;
         Proplist  -> pget(value, Proplist)
     end.
 
--spec store_hash(Value :: term()) -> ok.
-store_hash(Value0) ->
-    store_hash(Value0, ?INTERNAL_USER).
+-spec store_global_hash(Value :: term()) -> ok.
+store_global_hash(Value) ->
+    store_global_hash(Value, ?INTERNAL_USER).
 
--spec store_hash(Value :: term(), Username :: rabbit_types:username()) -> ok.
-store_hash(Value0, Username) ->
+-spec store_global_hash(Value0 :: term(), Username :: rabbit_types:username()) -> ok.
+store_global_hash(Value0, Username) ->
     Value = rabbit_data_coercion:to_binary(Value0),
     rabbit_runtime_parameters:set_global(?GLOBAL_RUNTIME_PARAMETER_KEY, Value, Username).
+
+-spec store_vhost_specific_hash(Value0 :: term(), VirtualHost :: vhost:name(), Username :: rabbit_types:username()) -> ok.
+store_vhost_specific_hash(VirtualHost, Value0, Username) ->
+    Value = rabbit_data_coercion:to_binary(Value0),
+    rabbit_runtime_parameters:set(VirtualHost, ?RUNTIME_PARAMETER_COMPONENT, <<"hash_value">>, Value, Username).

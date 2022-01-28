@@ -19,6 +19,7 @@
 ]).
 %% import
 -export([import_raw/1, import_raw/2, import_parsed/1, import_parsed/2,
+         import_parsed_with_hashing/1, import_parsed_with_hashing/2,
          apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5,
          should_use_hashing/0]).
 
@@ -102,6 +103,51 @@ import_parsed(Body0, VHost) ->
     Body = atomise_map_keys(Body0),
     apply_defs(Body, ?INTERNAL_USER, fun() -> ok end, VHost).
 
+
+-spec import_parsed_with_hashing(Defs :: #{any() => any()} | list()) -> ok | {error, term()}.
+import_parsed_with_hashing(Body0) when is_list(Body0) ->
+    import_parsed(maps:from_list(Body0));
+import_parsed_with_hashing(Body0) when is_map(Body0) ->
+    rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
+    case should_use_hashing() of
+        false ->
+            import_parsed(Body0);
+        true  ->
+            Body         = atomise_map_keys(Body0),
+            PreviousHash = rabbit_definitions_hashing:stored_global_hash(),
+            Algo         = rabbit_definitions_hashing:hashing_algorithm(),
+            case rabbit_definitions_hashing:hash(Algo, Body) of
+                PreviousHash -> ok;
+                Other        ->
+                    Result = apply_defs(Body, ?INTERNAL_USER),
+                    rabbit_definitions_hashing:store_global_hash(Other),
+                    Result
+            end
+    end.
+
+-spec import_parsed_with_hashing(Defs :: #{any() => any() | list()}, VHost :: vhost:name()) -> ok | {error, term()}.
+import_parsed_with_hashing(Body0, VHost) when is_list(Body0) ->
+    import_parsed(maps:from_list(Body0), VHost);
+import_parsed_with_hashing(Body0, VHost) ->
+    rabbit_log:info("Asked to import definitions for virtual host '~s'. Acting user: ~s", [?INTERNAL_USER, VHost]),
+
+    case should_use_hashing() of
+        false ->
+            import_parsed(Body0, VHost);
+        true  ->
+            Body = atomise_map_keys(Body0),
+            PreviousHash = rabbit_definitions_hashing:stored_vhost_specific_hash(VHost),
+            Algo         = rabbit_definitions_hashing:hashing_algorithm(),
+            case rabbit_definitions_hashing:hash(Algo, Body) of
+                PreviousHash -> ok;
+                Other        ->
+                    Result = apply_defs(Body, ?INTERNAL_USER, fun() -> ok end, VHost),
+                    rabbit_definitions_hashing:store_vhost_specific_hash(VHost, Other, ?INTERNAL_USER),
+                    Result
+            end
+    end.
+
+
 -spec all_definitions() -> map().
 all_definitions() ->
     Xs = list_exchanges(),
@@ -170,7 +216,25 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
         {ok, none} -> ok;
         {ok, Path} ->
             IsDir = filelib:is_dir(Path),
-            rabbit_definitions_import_local_filesystem:load(IsDir, Path)
+            Mod = rabbit_definitions_import_local_filesystem,
+
+            case should_use_hashing() of
+                false ->
+                    rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
+                    Mod:load(IsDir, Path);
+                true ->
+                    rabbit_log:debug("Will use module ~s to import definitions (if definition file/directory has changed)", [Mod]),
+                    CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
+                    rabbit_log:info("Previously stored hash value of imported definitions: ~p...", [rabbit_misc:hexify(CurrentHash)]),
+                    Algo = rabbit_definitions_hashing:hashing_algorithm(),
+                    case Mod:load_with_hashing(IsDir, Path, CurrentHash, Algo) of
+                        CurrentHash ->
+                            rabbit_log:info("Hash value of imported definitions matches current contents");
+                        UpdatedHash ->
+                            rabbit_log:debug("Hash value of imported definitions has changed to ~p", [rabbit_misc:hexify(CurrentHash)]),
+                            rabbit_definitions_hashing:store_global_hash(UpdatedHash)
+                    end
+            end
     end.
 
 maybe_load_definitions_from_pluggable_source(App, Key) ->
@@ -184,14 +248,22 @@ maybe_load_definitions_from_pluggable_source(App, Key) ->
                     {error, "definition import source is configured but definitions.import_backend is not set"};
                 ModOrAlias ->
                     Mod = normalize_backend_module(ModOrAlias),
-                    rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
                     case should_use_hashing() of
                         false ->
+                            rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
                             Mod:load(Proplist);
                         true ->
-                            Hash = rabbit_definitions_hashing:stored_hash(),
+                            rabbit_log:debug("Will use module ~s to import definitions (if definition file/directory/source has changed)", [Mod]),
+                            CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
+                            rabbit_log:info("Previously stored hash value of imported definitions: ~s...", [rabbit_misc:hexify(CurrentHash)]),
                             Algo = rabbit_definitions_hashing:hashing_algorithm(),
-                            Mod:load_with_hashing(Proplist, Hash, Algo)
+                            case Mod:load_with_hashing(Proplist, CurrentHash, Algo) of
+                                CurrentHash ->
+                                    rabbit_log:info("Hash value of imported definitions matches current contents");
+                                UpdatedHash ->
+                                    rabbit_log:debug("Hash value of imported definitions has changed to ~s...", [rabbit_misc:hexify(CurrentHash)]),
+                                    rabbit_definitions_hashing:store_global_hash(UpdatedHash)
+                            end
                     end
             end
     end.
