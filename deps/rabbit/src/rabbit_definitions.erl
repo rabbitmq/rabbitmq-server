@@ -21,7 +21,7 @@
 -export([import_raw/1, import_raw/2, import_parsed/1, import_parsed/2,
          import_parsed_with_hashing/1, import_parsed_with_hashing/2,
          apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5,
-         should_use_hashing/0]).
+         should_skip_if_unchanged/0]).
 
 -export([all_definitions/0]).
 -export([
@@ -109,7 +109,7 @@ import_parsed_with_hashing(Body0) when is_list(Body0) ->
     import_parsed(maps:from_list(Body0));
 import_parsed_with_hashing(Body0) when is_map(Body0) ->
     rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
-    case should_use_hashing() of
+    case should_skip_if_unchanged() of
         false ->
             import_parsed(Body0);
         true  ->
@@ -131,7 +131,7 @@ import_parsed_with_hashing(Body0, VHost) when is_list(Body0) ->
 import_parsed_with_hashing(Body0, VHost) ->
     rabbit_log:info("Asked to import definitions for virtual host '~s'. Acting user: ~s", [?INTERNAL_USER, VHost]),
 
-    case should_use_hashing() of
+    case should_skip_if_unchanged() of
         false ->
             import_parsed(Body0, VHost);
         true  ->
@@ -218,7 +218,7 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
             IsDir = filelib:is_dir(Path),
             Mod = rabbit_definitions_import_local_filesystem,
 
-            case should_use_hashing() of
+            case should_skip_if_unchanged() of
                 false ->
                     rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
                     Mod:load(IsDir, Path);
@@ -248,7 +248,7 @@ maybe_load_definitions_from_pluggable_source(App, Key) ->
                     {error, "definition import source is configured but definitions.import_backend is not set"};
                 ModOrAlias ->
                     Mod = normalize_backend_module(ModOrAlias),
-                    case should_use_hashing() of
+                    case should_skip_if_unchanged() of
                         false ->
                             rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
                             Mod:load(Proplist);
@@ -312,14 +312,14 @@ atomise_map_keys(Decoded) ->
         Acc#{rabbit_data_coercion:to_atom(K, utf8) => V}
               end, Decoded, Decoded).
 
--spec should_use_hashing() -> boolean().
-should_use_hashing() ->
+-spec should_skip_if_unchanged() -> boolean().
+should_skip_if_unchanged() ->
     case application:get_env(rabbit, definitions) of
         undefined   -> false;
         {ok, none}  -> false;
         {ok, []}    -> false;
         {ok, Proplist} ->
-            pget(use_hashing, Proplist, false)
+            pget(skip_if_unchanged, Proplist, false)
     end.
 
 
