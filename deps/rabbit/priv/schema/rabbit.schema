@@ -154,7 +154,7 @@ fun(Conf) ->
     end
 end}.
 
-{mapping, "definitions.hashing.use_hashing", "rabbit.definitions.use_hashing", [
+{mapping, "definitions.skip_if_unchanged", "rabbit.definitions.skip_if_unchanged", [
     {datatype, {enum, [true, false]}}]}.
 
 {mapping, "definitions.hashing.algorithm", "rabbit.definitions.hashing_algorithm", [
