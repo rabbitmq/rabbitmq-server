@@ -780,9 +780,9 @@ pid_to_string(Pid) when is_pid(Pid) ->
 hexify(Bin) when is_binary(Bin) ->
     iolist_to_binary([io_lib:format("~2.16.0B", [V]) || <<V:8>> <= Bin]);
 hexify(Bin) when is_list(Bin) ->
-    hexify(binary_to_list(Bin));
+    hexify(erlang:binary_to_list(Bin));
 hexify(Bin) when is_atom(Bin) ->
-    hexify(atom_to_binary(Bin)).
+    hexify(erlang:atom_to_binary(Bin)).
 
 %% inverse of above
 string_to_pid(Str) ->
