@@ -14,12 +14,13 @@
 
 start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
                                                      ClientRefs == undefined  ->
+    _ = pg:start_link(),
     case rabbit_vhost_sup_sup:get_vhost_sup(VHost) of
         {ok, VHostSup} ->
             VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
             supervisor2:start_child(VHostSup,
                                     {Type, {rabbit_msg_store, start_link,
-                                            [Type, VHostDir, ClientRefs, StartupFunState]},
+                                            [VHost, Type, VHostDir, ClientRefs, StartupFunState]},
                                      transient, ?MSG_STORE_WORKER_WAIT, worker, [rabbit_msg_store]});
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
@@ -56,10 +57,16 @@ with_vhost_store(VHost, Type, Fun) ->
     end.
 
 vhost_store_pid(VHost, Type) ->
-    {ok, VHostSup} = rabbit_vhost_sup_sup:get_vhost_sup(VHost),
-    case supervisor2:find_child(VHostSup, Type) of
-        [Pid] -> Pid;
-        []    -> no_pid
+    case pg:get_local_members({rabbit_msg_store, VHost, Type}) of
+        [] ->
+            %% Fall back to using the supervisor (sometimes necessary on queue startup).
+            {ok, VHostSup} = rabbit_vhost_sup_sup:get_vhost_sup(VHost),
+            case supervisor2:find_child(VHostSup, Type) of
+                [Pid] -> Pid;
+                []    -> no_pid
+            end;
+        [Pid|_] ->
+            Pid
     end.
 
 successfully_recovered_state(VHost, Type) ->

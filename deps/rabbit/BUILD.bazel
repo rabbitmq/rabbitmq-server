@@ -337,6 +337,16 @@ suites = [
     ),
     rabbitmq_integration_suite(
         PACKAGE,
+        name = "classic_queue_SUITE",
+        size = "large",
+        deps = [
+            "@proper//:erlang_app",
+        ],
+        shard_count = 4,
+        sharding_method = "case",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
         name = "cluster_rename_SUITE",
         size = "large",
         flaky = True,

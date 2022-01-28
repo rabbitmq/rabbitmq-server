@@ -32,4 +32,9 @@ start_link(Q, StartMode) ->
     Marker ! stop,
     {ok, SupPid, QPid}.
 
-init([]) -> {ok, {{one_for_one, 5, 10}, []}}.
+init([]) ->
+    %% This is not something we want to expose. It helps test suites
+    %% that crash queue processes on purpose and may end up crashing
+    %% the queues faster than we normally allow.
+    {Intensity, Period} = application:get_env(rabbit, amqqueue_max_restart_intensity, {5, 10}),
+    {ok, {{one_for_one, Intensity, Period}, []}}.
