@@ -158,7 +158,8 @@
          consumers_info/2,
          publishers_info/2,
          in_vhost/2]).
--export([resource_alarm/3]).
+-export([resource_alarm/3,
+         single_active_consumer/1]).
 %% gen_statem callbacks
 -export([callback_mode/0,
          terminate/3,
@@ -2650,6 +2651,7 @@ maybe_dispatch_on_subscription(Transport,
                                                    messages_consumed(ConsumerCounters1),
                                                    ConsumerOffset,
                                                    ConsumerOffsetLag,
+                                                   true,
                                                    SubscriptionProperties),
             State#stream_connection_state{consumers = Consumers1}
     end;
@@ -2668,7 +2670,8 @@ maybe_dispatch_on_subscription(_Transport,
                      "(single active consumer)",
                      [SubscriptionId]),
     #consumer{credit = Credit,
-              configuration = #consumer_configuration{offset = Offset}} =
+              configuration =
+                  #consumer_configuration{offset = Offset, active = Active}} =
         ConsumerState,
 
     rabbit_stream_metrics:consumer_created(self(),
@@ -2678,6 +2681,7 @@ maybe_dispatch_on_subscription(_Transport,
                                            0, %% messages consumed
                                            Offset,
                                            0, %% offset lag
+                                           Active,
                                            SubscriptionProperties),
     Consumers1 = Consumers#{SubscriptionId => ConsumerState},
     State#stream_connection_state{consumers = Consumers1}.
@@ -3174,11 +3178,13 @@ emit_stats(#stream_connection{publishers = Publishers} = Connection,
                                             messages_consumed(Counters),
                                             consumer_offset(Counters),
                                             consumer_i(offset_lag, Consumer),
+                                            Active,
                                             Properties)
      || #consumer{configuration =
                       #consumer_configuration{stream = S,
                                               subscription_id = Id,
                                               counters = Counters,
+                                              active = Active,
                                               properties = Properties},
                   credit = Credit} =
             Consumer

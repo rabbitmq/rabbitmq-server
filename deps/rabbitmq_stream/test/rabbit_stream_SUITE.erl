@@ -172,6 +172,7 @@ test_gc_consumers(Config) ->
                                   0,
                                   0,
                                   0,
+                                  true,
                                   #{}]),
     ?awaitMatch(0, consumer_count(Config), ?WAIT),
     ok.
