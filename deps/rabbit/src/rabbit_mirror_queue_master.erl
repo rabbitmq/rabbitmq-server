@@ -498,9 +498,14 @@ set_queue_mode(Mode, State = #state { gm                  = GM,
 set_queue_version(Version, State = #state { gm                  = GM,
                                             backing_queue       = BQ,
                                             backing_queue_state = BQS }) ->
-    ok = gm:broadcast(GM, {set_queue_version, Version}),
-    BQS1 = BQ:set_queue_version(Version, BQS),
-    State #state { backing_queue_state = BQS1 }.
+    case rabbit_feature_flags:is_enabled(classic_mirrored_queue_version) of
+        true ->
+            ok = gm:broadcast(GM, {set_queue_version, Version}),
+            BQS1 = BQ:set_queue_version(Version, BQS),
+            State #state { backing_queue_state = BQS1 };
+        false ->
+            State
+    end.
 
 zip_msgs_and_acks(Msgs, AckTags, Accumulator,
                   #state { backing_queue = BQ,
