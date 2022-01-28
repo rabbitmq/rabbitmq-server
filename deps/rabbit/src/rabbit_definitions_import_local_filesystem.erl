@@ -15,6 +15,7 @@
     %% classic arguments specific to this source
     load/2,
     load_with_hashing/3,
+    load_with_hashing/4,
     location/0
 ]).
 
@@ -52,17 +53,39 @@ load(Proplist) when is_list(Proplist) ->
                     Msg = rabbit_misc:format("local definition file '~s' does not exist or cannot be read by the node", [Path]),
                     {error, {could_not_read_defs, Msg}}
             end
-    end.
+    end;
+load(Map) when is_map(Map) ->
+    load(maps:to_list(Map)).
 
-load(IsDir, Path) ->
+load(IsDir, Path) when is_boolean(IsDir) ->
     load_from_local_path(IsDir, Path).
 
-load_with_hashing(Defs, undefined = _Hash, _Algo) when is_list(Defs) ->
-    load(Defs);
+-spec load_with_hashing(Defs :: list() | map(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
+load_with_hashing(Defs, undefined = _Hash, Algo) when is_list(Defs) ->
+    load(Defs),
+    rabbit_definitions_hashing:hash(Algo, Defs);
 load_with_hashing(Defs, PreviousHash, Algo) ->
     case rabbit_definitions_hashing:hash(Algo, Defs) of
-        PreviousHash -> ok;
-        _            -> load(Defs)
+        PreviousHash -> PreviousHash;
+        Other        ->
+            load(Defs),
+            Other
+    end.
+
+-spec load_with_hashing(IsDir :: boolean(), Path :: file:name_all(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
+load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
+    case compiled_definitions_from_local_path(IsDir, Path) of
+        %% the directory is empty or no files could be read
+        [] ->
+            rabbit_definitions_hashing:hash(Algo, undefined);
+        Defs ->
+            rabbit_log:debug("Defs: ~p", [Defs]),
+            case rabbit_definitions_hashing:hash(Algo, Defs) of
+                PreviousHash -> PreviousHash;
+                Other        ->
+                    load_from_local_path(IsDir, Path),
+                    Other
+            end
     end.
 
 location() ->
@@ -120,6 +143,36 @@ location_from_modern_option() ->
             pget(local_path, Proplist)
     end.
 
+-spec compiled_definitions_from_local_path(IsDir :: boolean(), Dir :: file:name_all()) -> [binary()] | {error, any()}.
+compiled_definitions_from_local_path(true = _IsDir, Dir) ->
+    case file:list_dir(Dir) of
+        {ok, Filenames0} ->
+            Filenames1  = lists:sort(Filenames0),
+            Filenames2  = [filename:join(Dir, F) || F <- Filenames1],
+            ReadResults = [rabbit_misc:raw_read_file(F) || F <- Filenames2],
+            Successes   = lists:filter(
+                fun ({error, _}) -> false;
+                    (_)          -> true
+                end, ReadResults),
+            [Body || {ok, Body} <- Successes];
+        {error, E} ->
+            rabbit_log:error("Could not list files in '~s', error: ~p", [Dir, E]),
+            {error, {could_not_read_defs, {Dir, E}}}
+    end;
+compiled_definitions_from_local_path(false = _IsDir, Path) ->
+    case read_file_contents(Path) of
+        {ok, Body} -> [Body];
+        {error, _} -> []
+    end.
+
+read_file_contents(Path) ->
+    case rabbit_misc:raw_read_file(Path) of
+        {ok, Body} ->
+            Body;
+        {error, E} ->
+            rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [Path, E]),
+            {error, {could_not_read_defs, {Path, E}}}
+    end.
 
 load_from_files({ok, Filenames0}, Dir) ->
     Filenames1 = lists:sort(Filenames0),
