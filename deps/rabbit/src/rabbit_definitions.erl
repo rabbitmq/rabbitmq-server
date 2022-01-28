@@ -118,10 +118,10 @@ import_parsed_with_hashing(Body0) when is_map(Body0) ->
             Algo         = rabbit_definitions_hashing:hashing_algorithm(),
             case rabbit_definitions_hashing:hash(Algo, Body) of
                 PreviousHash ->
-                    rabbit_log:debug("Submitted definition content hash matches the stored one: ~p", [rabbit_misc:hexify(PreviousHash)]),
+                    rabbit_log:info("Submitted definition content hash matches the stored one: ~s", [binary:part(rabbit_misc:hexify(PreviousHash), 0, 12)]),
                     ok;
                 Other        ->
-                    rabbit_log:debug("Submitted definition content hash: ~p, stored one: ~p", [
+                    rabbit_log:debug("Submitted definition content hash: ~s, stored one: ~s", [
                         binary:part(rabbit_misc:hexify(PreviousHash), 0, 10),
                         binary:part(rabbit_misc:hexify(Other), 0, 10)
                     ]),
@@ -146,10 +146,10 @@ import_parsed_with_hashing(Body0, VHost) ->
             Algo         = rabbit_definitions_hashing:hashing_algorithm(),
             case rabbit_definitions_hashing:hash(Algo, Body) of
                 PreviousHash ->
-                    rabbit_log:debug("Submitted definition content hash matches the stored one: ~p", [rabbit_misc:hexify(PreviousHash)]),
+                    rabbit_log:info("Submitted definition content hash matches the stored one: ~s", [binary:part(rabbit_misc:hexify(PreviousHash), 0, 12)]),
                     ok;
                 Other        ->
-                    rabbit_log:debug("Submitted definition content hash: ~p, stored one: ~p", [
+                    rabbit_log:debug("Submitted definition content hash: ~s, stored one: ~s", [
                         binary:part(rabbit_misc:hexify(PreviousHash), 0, 10),
                         binary:part(rabbit_misc:hexify(Other), 0, 10)
                     ]),
