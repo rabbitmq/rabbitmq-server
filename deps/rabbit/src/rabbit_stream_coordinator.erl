@@ -45,10 +45,11 @@
          state/0]).
 
 %% Single Active Consumer API
--export([register_consumer/6,
+-export([register_consumer/7,
          unregister_consumer/5,
          activate_consumer/3,
-         consumer_groups/2]).
+         consumer_groups/2,
+         group_consumers/4]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "Restart stream coordinator"},
@@ -281,15 +282,18 @@ register_local_member_listener(Q) when ?is_amqqueue(Q) ->
                        type => local_member}}).
 
 %% Single Active Consumer API
--spec register_consumer(binary(), binary(), integer(), binary(), pid(), integer()) -> {ok, boolean()}.
+-spec register_consumer(binary(), binary(), integer(), binary(), pid(), binary(), integer()) ->
+    {ok, boolean()}.
 register_consumer(VirtualHost,
                   Stream,
                   PartitionIndex,
                   ConsumerName,
                   ConnectionPid,
+                  Owner,
                   SubscriptionId) ->
     {ok, Res, _} = process_command({sac,
-        {register_consumer, VirtualHost, Stream, PartitionIndex, ConsumerName, ConnectionPid, SubscriptionId}}),
+        {register_consumer, VirtualHost, Stream, PartitionIndex, ConsumerName,
+            ConnectionPid, Owner, SubscriptionId}}),
     Res.
 
 -spec unregister_consumer(binary(), binary(), binary(), pid(), integer()) -> ok.
@@ -307,7 +311,7 @@ activate_consumer(VirtualHost, Stream, ConsumerName) ->
     {ok, Res, _} = process_command({sac, {activate_consumer, VirtualHost, Stream, ConsumerName}}),
     Res.
 
--spec consumer_groups(binary(), [atom()]) -> {ok, [term()]}.
+-spec consumer_groups(binary(), [atom()]) -> {ok, [term()] | {error, atom()}}.
 consumer_groups(VirtualHost, InfoKeys) ->
     case ra:local_query({?MODULE, node()},
                         fun(#?MODULE{single_active_consumer = SacState}) ->
@@ -319,6 +323,28 @@ consumer_groups(VirtualHost, InfoKeys) ->
         {error, noproc} ->
             %% not started yet, so no groups
             {ok, []};
+        {error, _} = Err ->
+            Err;
+        {timeout, _} ->
+            {error, timeout}
+    end.
+
+-spec group_consumers(binary(), binary(), binary(), [atom()]) ->
+    {ok, [term()]} | {error, atom()}.
+group_consumers(VirtualHost, Stream, Reference, InfoKeys) ->
+    case ra:local_query({?MODULE, node()},
+                        fun(#?MODULE{single_active_consumer = SacState}) ->
+                                rabbit_stream_sac_coordinator:group_consumers(
+                                  VirtualHost, Stream, Reference,
+                                  InfoKeys, SacState)
+                        end) of
+        {ok, {_, {ok, _} = Result}, _} ->
+            Result;
+        {ok, {_, {error, _} = Err}, _} ->
+            Err;
+        {error, noproc} ->
+            %% not started yet, so the group cannot exist
+            {error, not_found};
         {error, _} = Err ->
             Err;
         {timeout, _} ->

@@ -29,12 +29,15 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteSuperStreamCommand').
 -define(COMMAND_LIST_CONSUMER_GROUPS,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConsumerGroupsCommand').
+-define(COMMAND_LIST_GROUP_CONSUMERS,
+        'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand').
 
 all() ->
     [{group, list_connections},
      {group, list_consumers},
      {group, list_publishers},
      {group, list_consumer_groups},
+     {group, list_group_consumers},
      {group, super_streams}].
 
 groups() ->
@@ -47,6 +50,9 @@ groups() ->
       [list_publishers_merge_defaults, list_publishers_run]},
      {list_consumer_groups, [],
       [list_consumer_groups_merge_defaults, list_consumer_groups_run]},
+     {list_group_consumers, [],
+      [list_group_consumers_validate, list_group_consumers_merge_defaults,
+       list_group_consumers_run]},
      {super_streams, [],
       [add_super_stream_merge_defaults,
        add_super_stream_validate,
@@ -391,6 +397,112 @@ list_consumer_groups_run(Config) ->
 
     close(S, C),
     {ok, []} = ?COMMAND_LIST_CONSUMER_GROUPS:run([], Opts),
+    ok.
+
+list_group_consumers_validate(_) ->
+    ValidOpts =
+        #{vhost => <<"/">>,
+          stream => <<"s1">>,
+          reference => <<"foo">>},
+    ?assertMatch({validation_failure, not_enough_args},
+                 ?COMMAND_LIST_GROUP_CONSUMERS:validate([], #{})),
+    ?assertMatch({validation_failure, not_enough_args},
+                 ?COMMAND_LIST_GROUP_CONSUMERS:validate([],
+                                                        #{vhost =>
+                                                              <<"test">>})),
+    ?assertMatch({validation_failure, {bad_info_key, [foo]}},
+                 ?COMMAND_LIST_GROUP_CONSUMERS:validate([<<"foo">>],
+                                                        ValidOpts)),
+    ?assertMatch(ok,
+                 ?COMMAND_LIST_GROUP_CONSUMERS:validate([<<"subscription_id">>],
+                                                        ValidOpts)),
+    ?assertMatch(ok,
+                 ?COMMAND_LIST_GROUP_CONSUMERS:validate([], ValidOpts)).
+
+list_group_consumers_merge_defaults(_Config) ->
+    DefaultItems =
+        [rabbit_data_coercion:to_binary(Item)
+         || Item <- ?GROUP_CONSUMER_INFO_ITEMS],
+    {DefaultItems, #{verbose := false, vhost := <<"/">>}} =
+        ?COMMAND_LIST_GROUP_CONSUMERS:merge_defaults([], #{}),
+
+    {[<<"other_key">>], #{verbose := true, vhost := <<"/">>}} =
+        ?COMMAND_LIST_GROUP_CONSUMERS:merge_defaults([<<"other_key">>],
+                                                     #{verbose => true}),
+
+    {[<<"other_key">>], #{verbose := false, vhost := <<"/">>}} =
+        ?COMMAND_LIST_GROUP_CONSUMERS:merge_defaults([<<"other_key">>],
+                                                     #{verbose => false}).
+
+list_group_consumers_run(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Opts =
+        #{node => Node,
+          timeout => 10000,
+          vhost => <<"/">>,
+          verbose => false},
+    Args = [<<"subscription_id">>, <<"state">>],
+
+    Stream1 = <<"list_group_consumers_run_1">>,
+    ConsumerReference = <<"foo">>,
+    OptsGroup1 =
+        maps:merge(#{stream => Stream1, reference => ConsumerReference},
+                   Opts),
+
+    %% the group does not exist yet
+    {error, not_found} =
+        ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup1),
+
+    StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
+    {S, C} = start_stream_connection(StreamPort),
+    ?awaitMatch(1, connection_count(Config), ?WAIT),
+
+    SubProperties =
+        #{<<"single-active-consumer">> => <<"true">>,
+          <<"name">> => ConsumerReference},
+
+    create_stream(S, Stream1, C),
+    subscribe(S, 0, Stream1, SubProperties, C),
+    handle_consumer_update(S, C, 0),
+    subscribe(S, 1, Stream1, SubProperties, C),
+    subscribe(S, 2, Stream1, SubProperties, C),
+
+    ?awaitMatch(3, consumer_count(Config), ?WAIT),
+
+    {ok, Consumers1} =
+        ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup1),
+    ?assertEqual([[{subscription_id, 0}, {state, active}],
+                  [{subscription_id, 1}, {state, inactive}],
+                  [{subscription_id, 2}, {state, inactive}]],
+                 Consumers1),
+
+    Stream2 = <<"list_group_consumers_run_2">>,
+    OptsGroup2 =
+        maps:merge(#{stream => Stream2, reference => ConsumerReference},
+                   Opts),
+
+    create_stream(S, Stream2, C),
+    subscribe(S, 3, Stream2, SubProperties, C),
+    handle_consumer_update(S, C, 3),
+    subscribe(S, 4, Stream2, SubProperties, C),
+    subscribe(S, 5, Stream2, SubProperties, C),
+
+    ?awaitMatch(3 + 3, consumer_count(Config), ?WAIT),
+
+    {ok, Consumers2} =
+        ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup2),
+    ?assertEqual([[{subscription_id, 3}, {state, active}],
+                  [{subscription_id, 4}, {state, inactive}],
+                  [{subscription_id, 5}, {state, inactive}]],
+                 Consumers2),
+
+    delete_stream(S, Stream1, C),
+    delete_stream(S, Stream2, C),
+
+    {error, not_found} =
+        ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup2),
+
+    close(S, C),
     ok.
 
 handle_consumer_update(S, C0, SubId) ->

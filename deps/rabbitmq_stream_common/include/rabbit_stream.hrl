@@ -112,7 +112,16 @@
   ]).
 
 -define(CONSUMER_GROUP_INFO_ITEMS, [
-    stream, reference, partition_index, consumers
-                                   ]).
+  stream,
+  reference,
+  partition_index,
+  consumers
+  ]).
+
+-define(GROUP_CONSUMER_INFO_ITEMS, [
+  subscription_id,
+  connection_name,
+  state
+]).
 
 -define(STREAM_GUIDE_URL, <<"https://rabbitmq.com/stream.html">>).

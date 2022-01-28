@@ -25,6 +25,7 @@
      partition_index(),
      consumer_name(),
      connection_pid(),
+     owner(),
      subscription_id()} |
     {unregister_consumer,
      vhost(),
@@ -43,7 +44,8 @@
          send_message/2,
          ensure_monitors/4,
          handle_connection_down/2,
-         consumer_groups/3]).
+         consumer_groups/3,
+         group_consumers/5]).
 
 -spec init_state() -> state().
 init_state() ->
@@ -57,6 +59,7 @@ apply({register_consumer,
        PartitionIndex,
        ConsumerName,
        ConnectionPid,
+       Owner,
        SubscriptionId},
       #?MODULE{groups = StreamGroups0} = State) ->
     %% FIXME monitor virtual hosts as well?
@@ -78,6 +81,7 @@ apply({register_consumer,
                          PartitionIndex,
                          ConsumerName,
                          ConnectionPid,
+                         Owner,
                          SubscriptionId,
                          State#?MODULE{groups = StreamGroups1});
 apply({unregister_consumer,
@@ -168,6 +172,50 @@ consumer_groups(VirtualHost, InfoKeys, #?MODULE{groups = Groups}) ->
                     [], Groups),
     {ok, lists:reverse(Res)}.
 
+-spec group_consumers(binary(),
+                      binary(),
+                      binary(),
+                      [atom()],
+                      state()) ->
+                         {ok, [term()]} | {error, not_found}.
+group_consumers(VirtualHost,
+                Stream,
+                Reference,
+                InfoKeys,
+                #?MODULE{groups = Groups}) ->
+    GroupId = {VirtualHost, Stream, Reference},
+    case Groups of
+        #{GroupId := #group{consumers = Consumers}} ->
+            Cs = lists:foldr(fun(#consumer{subscription_id = SubId,
+                                           owner = Owner,
+                                           active = Active},
+                                 Acc) ->
+                                Record =
+                                    lists:foldr(fun (subscription_id, RecAcc) ->
+                                                        [{subscription_id,
+                                                          SubId}
+                                                         | RecAcc];
+                                                    (connection_name, RecAcc) ->
+                                                        [{connection_name,
+                                                          Owner}
+                                                         | RecAcc];
+                                                    (state, RecAcc)
+                                                        when Active ->
+                                                        [{state, active}
+                                                         | RecAcc];
+                                                    (state, RecAcc) ->
+                                                        [{state, inactive}
+                                                         | RecAcc]
+                                                end,
+                                                [], InfoKeys),
+                                [Record | Acc]
+                             end,
+                             [], Consumers),
+            {ok, Cs};
+        _ ->
+            {error, not_found}
+    end.
+
 -spec ensure_monitors(command(), state(), map(), ra:effects()) ->
                          {state(), map(), ra:effects()}.
 ensure_monitors({register_consumer,
@@ -176,6 +224,7 @@ ensure_monitors({register_consumer,
                  _PartitionIndex,
                  ConsumerName,
                  Pid,
+                 _Owner,
                  _SubscriptionId},
                 #?MODULE{pids_groups = PidsGroups0} = State0,
                 Monitors0,
@@ -280,6 +329,7 @@ do_register_consumer(VirtualHost,
                      -1,
                      ConsumerName,
                      ConnectionPid,
+                     Owner,
                      SubscriptionId,
                      #?MODULE{groups = StreamGroups0} = State) ->
     Group0 =
@@ -290,11 +340,13 @@ do_register_consumer(VirtualHost,
         case lookup_active_consumer(Group0) of
             {value, _} ->
                 #consumer{pid = ConnectionPid,
+                          owner = Owner,
                           subscription_id = SubscriptionId,
                           active = false};
             false ->
                 #consumer{pid = ConnectionPid,
                           subscription_id = SubscriptionId,
+                          owner = Owner,
                           active = true}
         end,
     Group1 = add_to_group(Consumer, Group0),
@@ -321,6 +373,7 @@ do_register_consumer(VirtualHost,
                      _,
                      ConsumerName,
                      ConnectionPid,
+                     Owner,
                      SubscriptionId,
                      #?MODULE{groups = StreamGroups0} = State) ->
     Group0 =
@@ -333,6 +386,7 @@ do_register_consumer(VirtualHost,
                 %% first consumer in the group, it's the active one
                 Consumer0 =
                     #consumer{pid = ConnectionPid,
+                              owner = Owner,
                               subscription_id = SubscriptionId,
                               active = true},
                 G1 = add_to_group(Consumer0, Group0),
@@ -342,6 +396,7 @@ do_register_consumer(VirtualHost,
                 %% whatever the current state is, the newcomer will be passive
                 Consumer0 =
                     #consumer{pid = ConnectionPid,
+                              owner = Owner,
                               subscription_id = SubscriptionId,
                               active = false},
                 G1 = add_to_group(Consumer0, Group0),

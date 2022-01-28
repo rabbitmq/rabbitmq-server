@@ -1793,7 +1793,8 @@ handle_frame_post_auth(Transport,
             {Connection0, State}
     end;
 handle_frame_post_auth(Transport,
-                       #stream_connection{socket = Socket,
+                       #stream_connection{name = ConnName,
+                                          socket = Socket,
                                           stream_subscriptions =
                                               StreamSubscriptions,
                                           virtual_host = VirtualHost,
@@ -1888,6 +1889,7 @@ handle_frame_post_auth(Transport,
                                 maybe_register_consumer(VirtualHost,
                                                         Stream,
                                                         ConsumerName,
+                                                        ConnName,
                                                         SubscriptionId,
                                                         Properties,
                                                         Sac),
@@ -2680,11 +2682,12 @@ maybe_dispatch_on_subscription(_Transport,
     Consumers1 = Consumers#{SubscriptionId => ConsumerState},
     State#stream_connection_state{consumers = Consumers1}.
 
-maybe_register_consumer(_, _, _, _, _, false = _Sac) ->
+maybe_register_consumer(_, _, _, _, _, _, false = _Sac) ->
     true;
 maybe_register_consumer(VirtualHost,
                         Stream,
                         ConsumerName,
+                        ConnectionName,
                         SubscriptionId,
                         Properties,
                         true) ->
@@ -2695,6 +2698,7 @@ maybe_register_consumer(VirtualHost,
                                                     PartitionIndex,
                                                     ConsumerName,
                                                     self(),
+                                                    ConnectionName,
                                                     SubscriptionId),
     Active.
 

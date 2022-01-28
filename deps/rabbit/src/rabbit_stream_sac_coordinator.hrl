@@ -21,9 +21,12 @@
 -type connection_pid() :: pid().
 -type subscription_id() :: byte().
 -type group_id() :: {vhost(), stream(), consumer_name()}.
+-type owner() :: binary().
 
 -record(consumer,
-        {pid :: pid(), subscription_id :: subscription_id(),
+        {pid :: pid(),
+         subscription_id :: subscription_id(),
+         owner :: owner(), %% just a label
          active :: boolean()}).
 -record(group,
         {consumers :: [#consumer{}], partition_index :: integer()}).
