@@ -117,8 +117,14 @@ import_parsed_with_hashing(Body0) when is_map(Body0) ->
             PreviousHash = rabbit_definitions_hashing:stored_global_hash(),
             Algo         = rabbit_definitions_hashing:hashing_algorithm(),
             case rabbit_definitions_hashing:hash(Algo, Body) of
-                PreviousHash -> ok;
+                PreviousHash ->
+                    rabbit_log:debug("Submitted definition content hash matches the stored one: ~p", [rabbit_misc:hexify(PreviousHash)]),
+                    ok;
                 Other        ->
+                    rabbit_log:debug("Submitted definition content hash: ~p, stored one: ~p", [
+                        binary:part(rabbit_misc:hexify(PreviousHash), 0, 10),
+                        binary:part(rabbit_misc:hexify(Other), 0, 10)
+                    ]),
                     Result = apply_defs(Body, ?INTERNAL_USER),
                     rabbit_definitions_hashing:store_global_hash(Other),
                     Result
@@ -139,8 +145,14 @@ import_parsed_with_hashing(Body0, VHost) ->
             PreviousHash = rabbit_definitions_hashing:stored_vhost_specific_hash(VHost),
             Algo         = rabbit_definitions_hashing:hashing_algorithm(),
             case rabbit_definitions_hashing:hash(Algo, Body) of
-                PreviousHash -> ok;
+                PreviousHash ->
+                    rabbit_log:debug("Submitted definition content hash matches the stored one: ~p", [rabbit_misc:hexify(PreviousHash)]),
+                    ok;
                 Other        ->
+                    rabbit_log:debug("Submitted definition content hash: ~p, stored one: ~p", [
+                        binary:part(rabbit_misc:hexify(PreviousHash), 0, 10),
+                        binary:part(rabbit_misc:hexify(Other), 0, 10)
+                    ]),
                     Result = apply_defs(Body, ?INTERNAL_USER, fun() -> ok end, VHost),
                     rabbit_definitions_hashing:store_vhost_specific_hash(VHost, Other, ?INTERNAL_USER),
                     Result
@@ -225,7 +237,7 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
                 true ->
                     rabbit_log:debug("Will use module ~s to import definitions (if definition file/directory has changed)", [Mod]),
                     CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
-                    rabbit_log:info("Previously stored hash value of imported definitions: ~p...", [rabbit_misc:hexify(CurrentHash)]),
+                    rabbit_log:info("Previously stored hash value of imported definitions: ~s...", [rabbit_misc:hexify(CurrentHash)]),
                     Algo = rabbit_definitions_hashing:hashing_algorithm(),
                     case Mod:load_with_hashing(IsDir, Path, CurrentHash, Algo) of
                         CurrentHash ->
