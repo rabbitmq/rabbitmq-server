@@ -423,7 +423,8 @@ process_args_policy(State = #q{q                   = Q,
          {<<"max-length">>,              fun res_min/2, fun init_max_length/2},
          {<<"max-length-bytes">>,        fun res_min/2, fun init_max_bytes/2},
          {<<"overflow">>,                fun res_arg/2, fun init_overflow/2},
-         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2}],
+         {<<"queue-mode">>,              fun res_arg/2, fun init_queue_mode/2},
+         {<<"queue-version">>,           fun res_arg/2, fun init_queue_version/2}],
       drop_expired_msgs(
          lists:foldl(fun({Name, Resolve, Fun}, StateN) ->
                              Fun(rabbit_queue_type_util:args_policy_lookup(Name, Resolve, Q), StateN)
@@ -479,6 +480,19 @@ init_queue_mode(undefined, State) ->
 init_queue_mode(Mode, State = #q {backing_queue = BQ,
                                   backing_queue_state = BQS}) ->
     BQS1 = BQ:set_queue_mode(binary_to_existing_atom(Mode, utf8), BQS),
+    State#q{backing_queue_state = BQS1}.
+
+init_queue_version(Version0, State = #q {backing_queue = BQ,
+                                         backing_queue_state = BQS}) ->
+    %% When the version is undefined we use the default version 1.
+    %% We want to BQ:set_queue_version in all cases because a v2
+    %% policy might have been deleted, for example, and we want
+    %% the queue to go back to v1.
+    Version = case Version0 of
+        undefined -> rabbit_misc:get_env(rabbit, classic_queue_default_version, 1);
+        _ -> Version0
+    end,
+    BQS1 = BQ:set_queue_version(Version, BQS),
     State#q{backing_queue_state = BQS1}.
 
 reply(Reply, NewState) ->
@@ -886,7 +900,7 @@ handle_ch_down(DownPid, State = #q{consumers                 = Consumers,
     %% A rabbit_channel process died. Here credit_flow will take care
     %% of cleaning up the rabbit_amqqueue_process process dictionary
     %% with regards to the credit we were tracking for the channel
-    %% process. See handle_cast({deliver, Deliver}, State) in this
+    %% process. See handle_cast({deliver, Deliver, ...}, State) in this
     %% module. In that cast function we process deliveries from the
     %% channel, which means we credit_flow:ack/1 said
     %% messages. credit_flow:ack'ing messages means we are increasing

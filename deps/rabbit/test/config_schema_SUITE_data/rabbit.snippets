@@ -785,18 +785,32 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
-   {raft_wal_max_batch_size,
-    "raft.wal_max_batch_size = 4096",
-    [{ra, [
-       {wal_max_batch_size, 4096}
-      ]}],
-    []},
+  {raft_wal_max_batch_size,
+   "raft.wal_max_batch_size = 4096",
+   [{ra, [
+      {wal_max_batch_size, 4096}
+     ]}],
+   []},
 
-    {raft_snapshot_chunk_size,
-     "raft.snapshot_chunk_size = 1000000",
-     [{ra, [
-        {snapshot_chunk_size, 1000000}
-       ]}],
-     []}
+  {raft_snapshot_chunk_size,
+   "raft.snapshot_chunk_size = 1000000",
+   [{ra, [
+      {snapshot_chunk_size, 1000000}
+     ]}],
+   []},
 
+  %%
+  %% Backing queue version
+  %%
+
+  {classic_queue_default_version_2,
+   "rabbit.classic_queue_default_version = 2",
+   [{rabbit, [
+      {classic_queue_default_version, 2}
+     ]}],
+   []},
+  {classic_queue_default_version_invalid,
+   "rabbit.classic_queue_default_version = 3",
+   [],
+   []}
 ].
