@@ -46,6 +46,7 @@
 -export([atom_to_binary/1, parse_bool/1, parse_int/1]).
 -export([pid_to_string/1, string_to_pid/1,
          pid_change_node/2, node_to_fake_pid/1]).
+-export([hexify/1]).
 -export([version_compare/2, version_compare/3]).
 -export([version_minor_equivalent/2, strict_version_minor_equivalent/2]).
 -export([dict_cons/3, orddict_cons/3, maps_cons/3, gb_trees_cons/3]).
@@ -774,6 +775,14 @@ atom_to_binary(A) ->
 pid_to_string(Pid) when is_pid(Pid) ->
     {Node, Cre, Id, Ser} = decompose_pid(Pid),
     format("<~s.~B.~B.~B>", [Node, Cre, Id, Ser]).
+
+-spec hexify(binary() | atom() | list()) -> binary().
+hexify(Bin) when is_binary(Bin) ->
+    iolist_to_binary([io_lib:format("~2.16.0B", [V]) || <<V:8>> <= Bin]);
+hexify(Bin) when is_list(Bin) ->
+    hexify(binary_to_list(Bin));
+hexify(Bin) when is_atom(Bin) ->
+    hexify(atom_to_binary(Bin)).
 
 %% inverse of above
 string_to_pid(Str) ->
