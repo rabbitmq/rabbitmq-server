@@ -7,12 +7,20 @@
 
 -module(rabbit_core_ff).
 
--export([quorum_queue_migration/3,
+-export([classic_mirrored_queue_version_migration/3,
+         quorum_queue_migration/3,
          stream_queue_migration/3,
          implicit_default_bindings_migration/3,
          virtual_host_metadata_migration/3,
          maintenance_mode_status_migration/3,
          user_limits_migration/3]).
+
+-rabbit_feature_flag(
+   {classic_mirrored_queue_version,
+    #{desc          => "Support setting version for classic mirrored queues",
+      stability     => stable,
+      migration_fun => {?MODULE, classic_mirrored_queue_version_migration}
+     }}).
 
 -rabbit_feature_flag(
    {quorum_queue,
@@ -59,6 +67,9 @@
        stability     => stable,
        migration_fun => {?MODULE, user_limits_migration}
      }}).
+
+classic_mirrored_queue_version_migration(_FeatureName, _FeatureProps, _Enable) ->
+    ok.
 
 %% -------------------------------------------------------------------
 %% Quorum queues.
