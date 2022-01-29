@@ -237,13 +237,13 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
                 true ->
                     rabbit_log:debug("Will use module ~s to import definitions (if definition file/directory has changed)", [Mod]),
                     CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
-                    rabbit_log:info("Previously stored hash value of imported definitions: ~s...", [rabbit_misc:hexify(CurrentHash)]),
+                    rabbit_log:debug("Previously stored hash value of imported definitions: ~s...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
                     Algo = rabbit_definitions_hashing:hashing_algorithm(),
                     case Mod:load_with_hashing(IsDir, Path, CurrentHash, Algo) of
                         CurrentHash ->
                             rabbit_log:info("Hash value of imported definitions matches current contents");
                         UpdatedHash ->
-                            rabbit_log:debug("Hash value of imported definitions has changed to ~p", [rabbit_misc:hexify(CurrentHash)]),
+                            rabbit_log:debug("Hash value of imported definitions has changed to ~s", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
                             rabbit_definitions_hashing:store_global_hash(UpdatedHash)
                     end
             end
@@ -267,13 +267,13 @@ maybe_load_definitions_from_pluggable_source(App, Key) ->
                         true ->
                             rabbit_log:debug("Will use module ~s to import definitions (if definition file/directory/source has changed)", [Mod]),
                             CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
-                            rabbit_log:info("Previously stored hash value of imported definitions: ~s...", [rabbit_misc:hexify(CurrentHash)]),
+                            rabbit_log:debug("Previously stored hash value of imported definitions: ~s...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
                             Algo = rabbit_definitions_hashing:hashing_algorithm(),
                             case Mod:load_with_hashing(Proplist, CurrentHash, Algo) of
                                 CurrentHash ->
                                     rabbit_log:info("Hash value of imported definitions matches current contents");
                                 UpdatedHash ->
-                                    rabbit_log:debug("Hash value of imported definitions has changed to ~s...", [rabbit_misc:hexify(CurrentHash)]),
+                                    rabbit_log:debug("Hash value of imported definitions has changed to ~s...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
                                     rabbit_definitions_hashing:store_global_hash(UpdatedHash)
                             end
                     end
