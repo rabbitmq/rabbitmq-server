@@ -36,7 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], %{node: node_name, format: format, skip_if_unchanged: skip?, timeout: timeout}) do
+  def run([], %{node: node_name, format: format, timeout: timeout}) do
     case IO.read(:stdio, :all) do
       :eof -> {:error, :not_enough_args}
       bin  ->
@@ -44,6 +44,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
           {:error, error} ->
             {:error, ExitCodes.exit_dataerr(), "Failed to deserialise input (format: #{human_friendly_format(format)}) (error: #{inspect(error)})"}
           {:ok, map} ->
+            skip? = Map.get(map, :skip_if_unchanged, false)
             fun = case skip? do
               true  -> :import_parsed_with_hashing
               false -> :import_parsed
@@ -52,7 +53,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
         end
     end
   end
-  def run([path], %{node: node_name, format: format, skip_if_unchanged: skip?, timeout: timeout}) do
+  def run([path], %{node: node_name, format: format, timeout: timeout}) do
     abs_path = Path.absname(path)
 
     case File.read(abs_path) do
@@ -63,6 +64,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
           {:error, error} ->
             {:error, ExitCodes.exit_dataerr(), "Failed to deserialise input (format: #{human_friendly_format(format)}) (error: #{inspect(error)})"}
           {:ok, map} ->
+            skip? = Map.get(map, :skip_if_unchanged, false)
             fun = case skip? do
               true  -> :import_parsed_with_hashing
               false -> :import_parsed

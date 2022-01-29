@@ -27,7 +27,7 @@ defmodule ImportDefinitionsCommandTest do
 
   test "merge_defaults: defaults to JSON for format" do
     assert @command.merge_defaults([valid_file_path()], %{}) ==
-             {[valid_file_path()], %{format: "json"}}
+             {[valid_file_path()], %{format: "json", skip_if_unchanged: false}}
   end
 
   test "merge_defaults: defaults to --silent if target is stdout" do
@@ -36,14 +36,14 @@ defmodule ImportDefinitionsCommandTest do
 
   test "merge_defaults: format is case insensitive" do
     assert @command.merge_defaults([valid_file_path()], %{format: "JSON"}) ==
-             {[valid_file_path()], %{format: "json"}}
+             {[valid_file_path()], %{format: "json", skip_if_unchanged: false}}
     assert @command.merge_defaults([valid_file_path()], %{format: "Erlang"}) ==
-             {[valid_file_path()], %{format: "erlang"}}
+             {[valid_file_path()], %{format: "erlang", skip_if_unchanged: false}}
   end
 
   test "merge_defaults: format can be overridden" do
     assert @command.merge_defaults([valid_file_path()], %{format: "erlang"}) ==
-             {[valid_file_path()], %{format: "erlang"}}
+             {[valid_file_path()], %{format: "erlang", skip_if_unchanged: false}}
   end
 
   test "validate: accepts a file path argument", context do
@@ -77,6 +77,14 @@ defmodule ImportDefinitionsCommandTest do
   @tag format: "json"
   test "run: imports definitions from a file", context do
     assert :ok == @command.run([valid_file_path()], context[:opts])
+
+    # clean up the state we've modified
+    clear_parameter("/", "federation-upstream", "up-1")
+  end
+
+  @tag format: "json"
+  test "run: imports definitions from a file when --skip-if-unchanged is provided", context do
+    assert :ok == @command.run([valid_file_path()], Map.merge(context[:opts], %{skip_if_unchanged: true}))
 
     # clean up the state we've modified
     clear_parameter("/", "federation-upstream", "up-1")
