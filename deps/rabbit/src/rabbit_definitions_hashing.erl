@@ -109,6 +109,7 @@ stored_vhost_specific_hash(VHostName) ->
 
 -spec store_global_hash(Value :: term()) -> ok.
 store_global_hash(Value) ->
+    rabbit_log:debug("Storing global imported definitions content hash, hex value: ~s", [rabbit_misc:hexify(Value)]),
     store_global_hash(Value, ?INTERNAL_USER).
 
 -spec store_global_hash(Value0 :: term(), Username :: rabbit_types:username()) -> ok.
