@@ -2,9 +2,32 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
+
+%% This module is responsible for definition import. Definition import makes
+%% it possible to seed a cluster with virtual hosts, users, permissions, policies,
+%% a messaging topology, and so on.
+%%
+%% These resources can be loaded from a local filesystem (a JSON file or a conf.d-style
+%% directory of files), an HTTPS source or any other source using a user-provided module.
+%%
+%% Definition import can be performed on node boot or at any time via CLI tools
+%% or the HTTP API. On node boot, every node performs definition import independently.
+%% However, some resource types (queues and bindings) are imported only when a certain
+%% number of nodes join the cluster. This is so that queues and their dependent
+%% objects (bindings) have enough nodes to place their replicas on.
+%%
+%% It is possible for the user to opt into skipping definition import if
+%% file/source content has not changed.
+%%
+%% See also
+%%
+%%  * rabbit.schema (core Cuttlefish schema mapping file)
+%%  * rabbit_definitions_import_local_filesystem
+%%  * rabbit_definitions_import_http
+%%  * rabbit_definitions_hashing
 -module(rabbit_definitions).
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -326,13 +349,18 @@ atomise_map_keys(Decoded) ->
 
 -spec should_skip_if_unchanged() -> boolean().
 should_skip_if_unchanged() ->
-    case application:get_env(rabbit, definitions) of
+    OptedIn = case application:get_env(rabbit, definitions) of
         undefined   -> false;
         {ok, none}  -> false;
         {ok, []}    -> false;
         {ok, Proplist} ->
             pget(skip_if_unchanged, Proplist, false)
-    end.
+    end,
+    %% if we do not take this into consideration, delayed queue import will be delayed
+    %% on nodes that join before the target cluster size is reached, and skipped
+    %% once it is
+    ReachedTargetClusterSize = rabbit_nodes:reached_target_cluster_size(),
+    OptedIn andalso ReachedTargetClusterSize.
 
 
 -spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username()) -> 'ok' | {error, term()}.
