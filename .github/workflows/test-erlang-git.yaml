@@ -41,6 +41,7 @@ jobs:
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=
 
+          build:rbe-git --config=rbe
           build:rbe-git --crosstool_top=@buildbuddy_toolchain//:toolchain
           build:rbe-git --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
           build:rbe-git --javabase=@buildbuddy_toolchain//:javabase_jdk8
