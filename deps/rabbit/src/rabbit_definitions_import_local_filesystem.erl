@@ -25,7 +25,10 @@
     load/2,
     load_with_hashing/3,
     load_with_hashing/4,
-    location/0
+    location/0,
+
+    %% tests and REPL
+    compiled_definitions_from_local_path/2
 ]).
 
 
@@ -69,29 +72,28 @@ load(Map) when is_map(Map) ->
 load(IsDir, Path) when is_boolean(IsDir) ->
     load_from_local_path(IsDir, Path).
 
--spec load_with_hashing(Defs :: list() | map(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
-load_with_hashing(Defs, undefined = _Hash, Algo) when is_list(Defs) ->
-    load(Defs),
-    rabbit_definitions_hashing:hash(Algo, Defs);
-load_with_hashing(Defs, PreviousHash, Algo) ->
-    case rabbit_definitions_hashing:hash(Algo, Defs) of
-        PreviousHash -> PreviousHash;
-        Other        ->
-            load(Defs),
-            Other
+-spec load_with_hashing(Proplist :: list() | map(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
+load_with_hashing(Proplist, PreviousHash, Algo) ->
+    case pget(local_path, Proplist, undefined) of
+        undefined -> {error, "local definition file path is not configured: local_path is not set"};
+        Path      ->
+            IsDir = filelib:is_dir(Path),
+            load_with_hashing(IsDir, Path, PreviousHash, Algo)
     end.
 
 -spec load_with_hashing(IsDir :: boolean(), Path :: file:name_all(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
 load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
+    rabbit_log:debug("Loading definitions with content hashing enabled, path: ~s, is directory?: ~p, previous hash value: ~s",
+                     [Path, IsDir, rabbit_misc:hexify(PreviousHash)]),
     case compiled_definitions_from_local_path(IsDir, Path) of
         %% the directory is empty or no files could be read
         [] ->
             rabbit_definitions_hashing:hash(Algo, undefined);
         Defs ->
-            rabbit_log:debug("Defs: ~p", [Defs]),
             case rabbit_definitions_hashing:hash(Algo, Defs) of
                 PreviousHash -> PreviousHash;
                 Other        ->
+                    rabbit_log:debug("New hash: ~s", [rabbit_misc:hexify(Other)]),
                     load_from_local_path(IsDir, Path),
                     Other
             end
@@ -170,10 +172,11 @@ compiled_definitions_from_local_path(true = _IsDir, Dir) ->
     end;
 compiled_definitions_from_local_path(false = _IsDir, Path) ->
     case read_file_contents(Path) of
-        {ok, Body} -> [Body];
+        Body       -> [Body];
         {error, _} -> []
     end.
 
+-spec read_file_contents(Path :: file:name_all()) -> binary() | {error, any()}.
 read_file_contents(Path) ->
     case rabbit_misc:raw_read_file(Path) of
         {ok, Body} ->
