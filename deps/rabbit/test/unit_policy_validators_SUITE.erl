@@ -24,6 +24,7 @@ groups() ->
           alternate_exchange,
           dead_letter_exchange,
           dead_letter_routing_key,
+          dead_letter_strategy,
           message_ttl,
           expires,
           max_length,
@@ -85,6 +86,13 @@ dead_letter_exchange(_Config) ->
 
 dead_letter_routing_key(_Config) ->
     requires_binary_value(<<"dead-letter-routing-key">>).
+
+dead_letter_strategy(_Config) ->
+    test_valid_and_invalid_values(<<"dead-letter-strategy">>,
+        %% valid values
+        [<<"at-most-once">>, <<"at-least-once">>],
+        %% invalid values
+        [<<"unknown">>, <<"dead-letter-strategy">>, <<"undefined">>]).
 
 message_ttl(_Config) ->
     requires_non_negative_integer_value(<<"message-ttl">>).
