@@ -4,6 +4,17 @@
 %%
 %% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
+
+%% This module is responsible for definition content hashing. Content hashing
+%% makes it possible for the user to opt into skipping definition import if
+%% file/source content has not changed.
+%%
+%% See also
+%%
+%%  * rabbit.schema (core Cuttlefish schema mapping file)
+%%  * rabbit_definitions
+%%  * rabbit_definitions_import_local_filesystem
+%%  * rabbit_definitions_import_http
 -module(rabbit_definitions_hashing).
 
 -behaviour(rabbit_runtime_parameter).
