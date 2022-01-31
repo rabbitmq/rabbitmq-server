@@ -340,6 +340,7 @@ assertEmpty(Data) ->
 consumer(Pid, SubId, Active) ->
     #consumer{pid = Pid,
               subscription_id = SubId,
+              owner = <<"owning connection label">>,
               active = Active}.
 
 cgroup(Consumers) ->
@@ -368,6 +369,7 @@ register_consumer_command(Stream,
      PartitionIndex,
      ConsumerName,
      ConnectionPid,
+     <<"owning connection label">>,
      SubId}.
 
 unregister_consumer_command(Stream,
