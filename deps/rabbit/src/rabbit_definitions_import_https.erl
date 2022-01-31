@@ -2,9 +2,17 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
+%% This module is responsible for loading definition from an HTTPS endpoint.
+%%
+%% See also
+%%
+%%  * rabbit.schema (core Cuttlefish schema mapping file)
+%%  * rabbit_definitions
+%%  * rabbit_definitions_import_local_filesystem
+%%  * rabbit_definitions_hashing
 -module(rabbit_definitions_import_https).
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -38,7 +46,6 @@ is_enabled() ->
     end.
 
 load(Proplist) ->
-    rabbit_log:debug("Definitions proprties: ~p", [Proplist]),
     URL = pget(url, Proplist),
     TLSOptions0 = [
         %% avoids a peer verification warning emitted by default if no certificate chain and peer verification
