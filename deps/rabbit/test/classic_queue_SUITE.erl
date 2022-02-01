@@ -895,6 +895,11 @@ cmd_channel_basic_get(St=#cq{amq=AMQ}, Ch) ->
 
 cmd_channel_consume(St=#cq{amq=AMQ}, Ch) ->
     ?DEBUG("~0p ~0p", [St, Ch]),
+    %% We register ourselves as a default consumer to avoid race conditions
+    %% when we try to cancel the channel after the server has already canceled
+    %% it, or when the server sends messages after we have canceled the channel.
+    %% This works around a limitation of the current code of the Erlang client.
+    ok = amqp_selective_consumer:register_default_consumer(Ch, self()),
     #resource{name = Name} = amqqueue:get_name(AMQ),
     Tag = integer_to_binary(erlang:unique_integer([positive])),
     #'basic.consume_ok'{} =
