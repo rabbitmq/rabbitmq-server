@@ -1,6 +1,14 @@
 name: Test
 on:
   push:
+    branches:
+      - master
+      - v3.10.x
+      - v3.9.x
+      - v3.8.x
+      - bump-otp-for-oci
+      - bump-rbe-*
+      - bump-rules_erlang
     paths:
       - 'deps/**'
       - 'scripts/**'
@@ -14,7 +22,6 @@ on:
       - '*.bazel'
       - .github/workflows/test.yaml
   pull_request:
-    types: [opened, reopened]
 jobs:
   test:
     name: Test
