@@ -280,19 +280,21 @@ command(St) ->
             {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_receive_and_ack, [St, channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_receive_and_reject, [St, channel(St)]}} %% @todo reject/discard variants?
-            %% channel ack out of order?
+            %% @todo channel ack out of order?
         ]
     end,
     weighted_union([
-        %% delete/recreate queue?
-        %% dirty_restart
-        %% change CRC configuration
+        %% @todo delete/recreate queue?
+        %% These restart the vhost or the queue.
         {100, {call, ?MODULE, cmd_restart_vhost_clean, [St]}},
         {100, {call, ?MODULE, cmd_restart_queue_dirty, [St]}},
+        %% These change internal configuration.
+        { 10, {call, ?MODULE, cmd_set_v2_check_crc32, [boolean()]}},
+        %% These set policies.
         {100, {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]}},
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
-        %% These are direct publish/basic_get(autoack)/purge.
+        %% These are direct operations using internal functions.
         {100, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean(), expiration()]}},
         {100, {call, ?MODULE, cmd_basic_get_msg, [St]}},
         {100, {call, ?MODULE, cmd_purge, [St]}},
@@ -341,6 +343,8 @@ next_state(St=#cq{q=Q, uncertain=Uncertain0}, AMQ, {call, _, cmd_restart_queue_d
         queue:to_list(ChQ) ++ Acc
     end, Uncertain0, Q),
     St#cq{amq=AMQ, q=#{}, restarted=true, crashed=true, uncertain=Uncertain};
+next_state(St, _, {call, _, cmd_set_v2_check_crc32, _}) ->
+    St;
 next_state(St, _, {call, _, cmd_set_mode, [_, Mode]}) ->
     St#cq{mode=Mode};
 next_state(St, _, {call, _, cmd_set_version, [_, Version]}) ->
@@ -491,6 +495,8 @@ postcondition(_, {call, _, cmd_restart_vhost_clean, _}, Q) ->
     element(1, Q) =:= amqqueue;
 postcondition(_, {call, _, cmd_restart_queue_dirty, _}, Q) ->
     element(1, Q) =:= amqqueue;
+postcondition(_, {call, _, cmd_set_v2_check_crc32, _}, Res) ->
+    Res =:= ok;
 postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode, [_, Mode]}, _) ->
     do_check_queue_mode(AMQ, Mode) =:= ok;
 postcondition(#cq{amq=AMQ}, {call, _, cmd_set_version, [_, Version]}, _) ->
@@ -760,6 +766,9 @@ do_wait_updated_amqqueue(Name, Pid) ->
         _ ->
             AMQ
     end.
+
+cmd_set_v2_check_crc32(Value) ->
+    application:set_env(rabbit, classic_queue_store_v2_check_crc32, Value).
 
 cmd_set_mode(St=#cq{version=Version}, Mode) ->
     ?DEBUG("~0p ~0p", [St, Mode]),
