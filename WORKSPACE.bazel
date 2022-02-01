@@ -59,7 +59,7 @@ rules_pkg_dependencies()
 
 http_archive(
     name = "rules_erlang",
-    sha256 = "d4c95e77a4fae33c70a13ebab032a00e55cca7429c44b3ce062fa6ae64662e4c",
+    sha256 = "251b22a979bbc668741097cc11faba36efa547b7e5fd6e73f50bc20fbc3c0f16",
     strip_prefix = "rules_erlang-2.1.0",
     urls = ["https://github.com/rabbitmq/rules_erlang/archive/refs/tags/2.1.0.zip"],
 )
