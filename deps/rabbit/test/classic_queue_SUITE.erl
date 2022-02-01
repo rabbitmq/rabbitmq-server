@@ -295,7 +295,7 @@ command(St) ->
         %% These are direct publish/basic_get(autoack)/purge.
         {100, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean(), expiration()]}},
         {100, {call, ?MODULE, cmd_basic_get_msg, [St]}},
-%        {100, {call, ?MODULE, cmd_purge, [St]}},
+        {100, {call, ?MODULE, cmd_purge, [St]}},
         %% These are channel-based operations.
         {300, {call, ?MODULE, cmd_channel_open, [St]}}
         |ChannelCmds
@@ -365,8 +365,16 @@ next_state(St=#cq{q=Q, received=Received}, Msg, {call, _, cmd_basic_get_msg, _})
     %% For all these reasons we remove messages regardless of where
     %% they are in the queue.
     St#cq{q=delete_message(Q, Msg), received=[Msg|Received]};
-next_state(St, _, {call, _, cmd_purge, _}) ->
-    St#cq{q=#{}};
+next_state(St=#cq{q=Q, uncertain=Uncertain0}, _, {call, _, cmd_purge, _}) ->
+    %% The status of messages that were published before a purge
+    %% is uncertain in the same way as for a vhost restart or a
+    %% queue crash, because the purge command does not go through
+    %% channels. We therefore handle it the same way as a vhost
+    %% restart, minus the AMQ change.
+    Uncertain = maps:fold(fun(_, ChQ, Acc) ->
+        queue:to_list(ChQ) ++ Acc
+    end, Uncertain0, Q),
+    St#cq{q=#{}, restarted=true, uncertain=Uncertain};
 next_state(St=#cq{channels=Channels}, Ch, {call, _, cmd_channel_open, _}) ->
     St#cq{channels=Channels#{Ch => #{consumer => none, confirms => false}}};
 next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_close, [Ch]}) ->
@@ -833,9 +841,6 @@ cmd_basic_get_msg(St=#cq{amq=AMQ}) ->
 
 cmd_purge(St=#cq{amq=AMQ}) ->
     ?DEBUG("~0p", [St]),
-    %% There may be messages in transit. We must wait for them to
-    %% be processed before purging the queue.
-%    timer:sleep(1000), %% @todo Something better.
     rabbit_amqqueue:purge(AMQ).
 
 cmd_channel_open(St=#cq{config=Config}) ->
