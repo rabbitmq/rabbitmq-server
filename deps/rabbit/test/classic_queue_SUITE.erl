@@ -318,17 +318,8 @@ channel(#cq{channels=Channels}) ->
 next_state(St, AMQ, {call, _, cmd_setup_queue, _}) ->
     St#cq{amq=AMQ};
 next_state(St=#cq{q=Q, uncertain=Uncertain0, channels=Channels0}, AMQ, {call, _, cmd_restart_vhost_clean, _}) ->
-    %% The server cancels all consumers when the vhost stops.
-    Channels = maps:map(fun
-        (_, ChInfo=#{consumer := Tag}) when is_binary(Tag) ->
-            receive #'basic.cancel'{consumer_tag = Tag} -> ok after 5000 -> error({timeout, {ChInfo, process_info(self(), messages)}}) end,
-            ChInfo#{consumer => none};
-        (_, ChInfo=#{consumer := none}) ->
-            ChInfo;
-        %% We need an additional clause for {var,integer()} tags.
-        (_, ChInfo) ->
-            ChInfo#{consumer => none}
-    end, Channels0),
+    %% Consider all consumers canceled when the vhost restarts.
+    Channels = maps:map(fun (_, ChInfo) -> ChInfo#{consumer => none} end, Channels0),
     %% The status of messages that were published before the vhost restart
     %% is uncertain, unless the channel is in confirms mode and confirms
     %% were received. We do not track them at the moment, so we instead
