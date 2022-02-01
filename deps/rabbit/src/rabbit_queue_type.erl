@@ -32,6 +32,7 @@
          credit/5,
          dequeue/5,
          fold_state/3,
+         find_name_from_pid/2,
          is_policy_applicable/2,
          is_server_named_allowed/1,
          notify_decorators/1
@@ -273,6 +274,11 @@ info(Q, Items) ->
 
 fold_state(Fun, Acc, #?STATE{ctxs = Ctxs}) ->
     maps:fold(Fun, Acc, Ctxs).
+
+%% slight hack to help provide backwards compatibility in the channel
+%% better than scanning the entire queue state
+find_name_from_pid(Pid, #?STATE{monitor_registry = Mons}) ->
+    maps:get(Pid, Mons, undefined).
 
 state_info(#ctx{state = S,
                 module = Mod}) ->
