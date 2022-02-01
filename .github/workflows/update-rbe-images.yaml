@@ -1,11 +1,11 @@
-name: Update Bazel RBE Images
+name: Update rbe-erlang-platform
 on:
   schedule:
   - cron: '0 3 * * *'
   workflow_dispatch:
 jobs:
   update-rbe-images:
-    name: Update Bazel RBE Images
+    name: Update rbe-erlang-platform
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 1

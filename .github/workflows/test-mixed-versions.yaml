@@ -6,9 +6,9 @@ on:
       - v3.10.x
       - v3.9.x
       - v3.8.x
-      - bump-rbe-image-*
       - bump-otp-for-oci
-      - bump-rabbitmq-ct-helpers
+      - bump-rbe-*
+      - bump-rules_erlang
     paths:
       - 'deps/**'
       - 'scripts/**'
@@ -21,7 +21,7 @@ on:
       - '*.bzl'
       - '*.bazel'
       - .github/workflows/test-mixed-versions.yaml
-  workflow_dispatch:
+  pull_request:
 jobs:
   test-mixed-versions:
     name: Test (Mixed Version Cluster)
