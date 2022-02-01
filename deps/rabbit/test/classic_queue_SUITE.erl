@@ -715,9 +715,9 @@ cmd_teardown_queue(St=#cq{amq=AMQ, channels=Channels}) ->
     ?DEBUG("~0p", [St]),
     %% We must close all channels since we will not be using them anymore.
     %% Otherwise we end up wasting resources and may hit per-(direct)-connection limits.
-    %% We ignore noproc errors at this step because the channel might have been closed
-    %% but the state not updated after the property test fails.
-    _ = [try cmd_channel_close(Ch) catch exit:{noproc,_} -> ok end
+    %% We ignore noproc/shutdown errors at this step because the channel might have been
+    %% closed but the state not updated after the property test fails.
+    _ = [try cmd_channel_close(Ch) catch exit:{noproc,_} -> ok; exit:{shutdown,_} -> ok end
         || Ch <- maps:keys(Channels)],
     %% Then we can delete the queue.
     rabbit_amqqueue:delete(AMQ, false, false, <<"acting-user">>),
