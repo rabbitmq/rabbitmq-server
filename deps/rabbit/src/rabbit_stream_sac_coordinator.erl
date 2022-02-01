@@ -622,5 +622,4 @@ send_message(ConnectionPid, Msg) ->
     ok.
 
 is_ff_enabled() ->
-    FeatureFlagsEnabled = rabbit_ff_registry:list(enabled),
-    maps:is_key(stream_single_active_consumer, FeatureFlagsEnabled).
+    rabbit_feature_flags:is_enabled(stream_single_active_consumer).

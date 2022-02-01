@@ -203,5 +203,7 @@ user_limits_migration(_FeatureName, _FeatureProps, is_enabled) ->
 %% Stream single active consumer.
 %% -------------------------------------------------------------------
 
-stream_single_active_consumer_migration(_FeatureName, _FeatureProps, _Enable) ->
-    ok.
+stream_single_active_consumer_migration(_FeatureName, _FeatureProps, enable) ->
+    ok;
+stream_single_active_consumer_migration(_FeatureName, _FeatureProps, is_enabled) ->
+    undefined.
