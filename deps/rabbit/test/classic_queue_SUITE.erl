@@ -288,7 +288,7 @@ command(St) ->
         %% dirty_restart
         %% change CRC configuration
         {100, {call, ?MODULE, cmd_restart_vhost_clean, [St]}},
-%        {100, {call, ?MODULE, cmd_restart_queue_dirty, [St]}},
+        {100, {call, ?MODULE, cmd_restart_queue_dirty, [St]}},
         {100, {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]}},
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
