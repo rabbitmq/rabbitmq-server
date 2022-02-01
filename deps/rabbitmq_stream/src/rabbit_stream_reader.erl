@@ -1866,81 +1866,104 @@ handle_frame_post_auth(Transport,
                             Sac = single_active_consumer(Properties),
                             ConsumerName = consumer_name(Properties),
                             %% TODO check consumer name is defined when SAC
-                            Log = case Sac of
-                                      true ->
-                                          undefined;
-                                      false ->
-                                          init_reader(ConnTransport,
-                                                      LocalMemberPid,
-                                                      QueueResource,
-                                                      SubscriptionId,
-                                                      Properties,
-                                                      OffsetSpec)
-                                  end,
+                            case {Sac, rabbit_stream_utils:is_sac_ff_enabled()}
+                            of
+                                {true, false} ->
+                                    rabbit_log:warning("Cannot create subcription ~p, stream single active "
+                                                       "consumer feature flag is not enabled",
+                                                       [SubscriptionId]),
+                                    response(Transport,
+                                             Connection,
+                                             subscribe,
+                                             CorrelationId,
+                                             ?RESPONSE_CODE_PRECONDITION_FAILED),
+                                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                                     ?PRECONDITION_FAILED,
+                                                                                     1),
+                                    {Connection, State};
+                                _ ->
+                                    Log = case Sac of
+                                              true ->
+                                                  undefined;
+                                              false ->
+                                                  init_reader(ConnTransport,
+                                                              LocalMemberPid,
+                                                              QueueResource,
+                                                              SubscriptionId,
+                                                              Properties,
+                                                              OffsetSpec)
+                                          end,
 
-                            ConsumerCounters =
-                                atomics:new(2, [{signed, false}]),
+                                    ConsumerCounters =
+                                        atomics:new(2, [{signed, false}]),
 
-                            response_ok(Transport,
-                                        Connection,
-                                        subscribe,
-                                        CorrelationId),
+                                    response_ok(Transport,
+                                                Connection,
+                                                subscribe,
+                                                CorrelationId),
 
-                            Active =
-                                maybe_register_consumer(VirtualHost,
-                                                        Stream,
-                                                        ConsumerName,
-                                                        ConnName,
-                                                        SubscriptionId,
-                                                        Properties,
-                                                        Sac),
+                                    Active =
+                                        maybe_register_consumer(VirtualHost,
+                                                                Stream,
+                                                                ConsumerName,
+                                                                ConnName,
+                                                                SubscriptionId,
+                                                                Properties,
+                                                                Sac),
 
-                            ConsumerConfiguration =
-                                #consumer_configuration{member_pid =
-                                                            LocalMemberPid,
-                                                        subscription_id =
-                                                            SubscriptionId,
-                                                        socket = Socket,
-                                                        stream = Stream,
-                                                        offset = OffsetSpec,
-                                                        counters =
-                                                            ConsumerCounters,
-                                                        properties = Properties,
-                                                        active = Active},
-                            ConsumerState =
-                                #consumer{configuration = ConsumerConfiguration,
-                                          log = Log,
-                                          credit = Credit},
+                                    ConsumerConfiguration =
+                                        #consumer_configuration{member_pid =
+                                                                    LocalMemberPid,
+                                                                subscription_id
+                                                                    =
+                                                                    SubscriptionId,
+                                                                socket = Socket,
+                                                                stream = Stream,
+                                                                offset =
+                                                                    OffsetSpec,
+                                                                counters =
+                                                                    ConsumerCounters,
+                                                                properties =
+                                                                    Properties,
+                                                                active =
+                                                                    Active},
+                                    ConsumerState =
+                                        #consumer{configuration =
+                                                      ConsumerConfiguration,
+                                                  log = Log,
+                                                  credit = Credit},
 
-                            Connection1 =
-                                maybe_monitor_stream(LocalMemberPid, Stream,
-                                                     Connection),
+                                    Connection1 =
+                                        maybe_monitor_stream(LocalMemberPid,
+                                                             Stream,
+                                                             Connection),
 
-                            State1 =
-                                maybe_dispatch_on_subscription(Transport,
-                                                               State,
-                                                               ConsumerState,
-                                                               Connection1,
-                                                               Consumers,
-                                                               Stream,
-                                                               SubscriptionId,
-                                                               Properties,
-                                                               SendFileOct,
-                                                               Sac),
-                            StreamSubscriptions1 =
-                                case StreamSubscriptions of
-                                    #{Stream := SubscriptionIds} ->
-                                        StreamSubscriptions#{Stream =>
-                                                                 [SubscriptionId]
-                                                                 ++ SubscriptionIds};
-                                    _ ->
-                                        StreamSubscriptions#{Stream =>
-                                                                 [SubscriptionId]}
-                                end,
-                            {Connection1#stream_connection{stream_subscriptions
-                                                               =
-                                                               StreamSubscriptions1},
-                             State1}
+                                    State1 =
+                                        maybe_dispatch_on_subscription(Transport,
+                                                                       State,
+                                                                       ConsumerState,
+                                                                       Connection1,
+                                                                       Consumers,
+                                                                       Stream,
+                                                                       SubscriptionId,
+                                                                       Properties,
+                                                                       SendFileOct,
+                                                                       Sac),
+                                    StreamSubscriptions1 =
+                                        case StreamSubscriptions of
+                                            #{Stream := SubscriptionIds} ->
+                                                StreamSubscriptions#{Stream =>
+                                                                         [SubscriptionId]
+                                                                         ++ SubscriptionIds};
+                                            _ ->
+                                                StreamSubscriptions#{Stream =>
+                                                                         [SubscriptionId]}
+                                        end,
+                                    {Connection1#stream_connection{stream_subscriptions
+                                                                       =
+                                                                       StreamSubscriptions1},
+                                     State1}
+                            end
                     end
             end;
         error ->

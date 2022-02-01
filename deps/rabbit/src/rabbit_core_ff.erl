@@ -13,7 +13,8 @@
          implicit_default_bindings_migration/3,
          virtual_host_metadata_migration/3,
          maintenance_mode_status_migration/3,
-         user_limits_migration/3]).
+         user_limits_migration/3,
+         stream_single_active_consumer_migration/3]).
 
 -rabbit_feature_flag(
    {classic_mirrored_queue_version,
@@ -66,6 +67,15 @@
      #{desc          => "Configure connection and channel limits for a user",
        stability     => stable,
        migration_fun => {?MODULE, user_limits_migration}
+     }}).
+
+-rabbit_feature_flag(
+   {stream_single_active_consumer,
+    #{desc          => "Single active consumer for streams",
+      doc_url       => "https://www.rabbitmq.com/stream.html",
+      stability     => stable,
+      depends_on    => [stream_queue],
+      migration_fun => {?MODULE, stream_single_active_consumer_migration}
      }}).
 
 classic_mirrored_queue_version_migration(_FeatureName, _FeatureProps, _Enable) ->
@@ -188,3 +198,10 @@ user_limits_migration(_FeatureName, _FeatureProps, enable) ->
     end;
 user_limits_migration(_FeatureName, _FeatureProps, is_enabled) ->
     mnesia:table_info(rabbit_user, attributes) =:= internal_user:fields(internal_user_v2).
+
+%% -------------------------------------------------------------------
+%% Stream single active consumer.
+%% -------------------------------------------------------------------
+
+stream_single_active_consumer_migration(_FeatureName, _FeatureProps, _Enable) ->
+    ok.

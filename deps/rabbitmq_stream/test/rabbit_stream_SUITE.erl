@@ -16,7 +16,6 @@
 
 -module(rabbit_stream_SUITE).
 
-% -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
@@ -34,7 +33,8 @@ all() ->
 
 groups() ->
     [{single_node, [],
-      [test_stream,
+      [sac_ff, %% must stay at the top, stream sac feature flag disabled for this one
+       test_stream,
        test_stream_tls,
        test_gc_consumers,
        test_gc_publishers,
@@ -71,6 +71,26 @@ init_per_group(Group, Config)
                                      {rabbitmq_ct_tls_verify, verify_none}),
     Config3 =
         rabbit_ct_helpers:set_config(Config2, {rabbitmq_stream, verify_none}),
+    %% stream sac feature flag disabled for the first test,
+    %% then enabled in the end_per_testcase function
+    ExtraSetupSteps =
+        case Group of
+            single_node ->
+                [fun(StepConfig) ->
+                    rabbit_ct_helpers:merge_app_env(StepConfig,
+                                                    {rabbit,
+                                                     [{forced_feature_flags_on_init,
+                                                       [classic_mirrored_queue_version,
+                                                        implicit_default_bindings,
+                                                        maintenance_mode_status,
+                                                        user_limits,
+                                                        virtual_host_metadata,
+                                                        quorum_queue,
+                                                        stream_queue]}]})
+                 end];
+            _ ->
+                []
+        end,
     rabbit_ct_helpers:run_setup_steps(Config3,
                                       [fun(StepConfig) ->
                                           rabbit_ct_helpers:merge_app_env(StepConfig,
@@ -84,6 +104,7 @@ init_per_group(Group, Config)
                                                                            [{connection_negotiation_step_timeout,
                                                                              500}]})
                                        end]
+                                      ++ ExtraSetupSteps
                                       ++ rabbit_ct_broker_helpers:setup_steps());
 init_per_group(cluster = Group, Config) ->
     Config1 =
@@ -116,6 +137,13 @@ end_per_group(_, Config) ->
 init_per_testcase(_TestCase, Config) ->
     Config.
 
+end_per_testcase(sac_ff, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 0,
+                                 rabbit_feature_flags,
+                                 enable,
+                                 [stream_single_active_consumer]),
+    ok;
 end_per_testcase(_Test, _Config) ->
     ok.
 
@@ -262,6 +290,41 @@ timeout_close_sent(Config) ->
         receive_commands(gen_tcp, S, C2),
     % Now, rabbit_stream_reader is in state close_sent.
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
+
+sac_ff(Config) ->
+    Port = get_stream_port(Config),
+    {ok, S} =
+        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    C = rabbit_stream_core:init(0),
+    test_peer_properties(gen_tcp, S, C),
+    test_authenticate(gen_tcp, S, C),
+    Stream = <<"stream1">>,
+    test_create_stream(gen_tcp, S, Stream, C),
+    test_declare_publisher(gen_tcp, S, 1, Stream, C),
+    ?awaitMatch(#{publishers := 1}, get_global_counters(Config), ?WAIT),
+    Body = <<"hello">>,
+    test_publish_confirm(gen_tcp, S, 1, Body, C),
+
+    SubscriptionId = 42,
+    SubCmd =
+        {request, 1,
+         {subscribe,
+          SubscriptionId,
+          Stream,
+          0,
+          10,
+          #{<<"single-active-consumer">> => <<"true">>,
+            <<"name">> => <<"foo">>}}},
+    SubscribeFrame = rabbit_stream_core:frame(SubCmd),
+    ok = gen_tcp:send(S, SubscribeFrame),
+    {Cmd, C} = receive_commands(gen_tcp, S, C),
+    ?assertMatch({response, 1,
+                  {subscribe, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd),
+    test_delete_stream(gen_tcp, S, Stream, C),
+    test_close(gen_tcp, S, C),
+    closed = wait_for_socket_close(gen_tcp, S, 10),
+    ok.
 
 consumer_count(Config) ->
     ets_count(Config, ?TABLE_CONSUMER).

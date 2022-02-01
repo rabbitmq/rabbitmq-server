@@ -27,7 +27,8 @@
          check_read_permitted/3,
          extract_stream_list/2,
          sort_partitions/1,
-         strip_cr_lf/1]).
+         strip_cr_lf/1,
+         is_sac_ff_enabled/0]).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -240,3 +241,7 @@ sort_partitions(Partitions) ->
 
 strip_cr_lf(NameBin) ->
     binary:replace(NameBin, [<<"\n">>, <<"\r">>], <<"">>, [global]).
+
+is_sac_ff_enabled() ->
+    FeatureFlagsEnabled = rabbit_ff_registry:list(enabled),
+    maps:is_key(stream_single_active_consumer, FeatureFlagsEnabled).

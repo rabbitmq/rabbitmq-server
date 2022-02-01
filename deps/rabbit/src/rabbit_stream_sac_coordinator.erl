@@ -45,7 +45,8 @@
          ensure_monitors/4,
          handle_connection_down/2,
          consumer_groups/3,
-         group_consumers/5]).
+         group_consumers/5,
+         is_ff_enabled/0]).
 
 -spec init_state() -> state().
 init_state() ->
@@ -619,3 +620,7 @@ mod_call_effect(Pid, Msg) ->
 send_message(ConnectionPid, Msg) ->
     ConnectionPid ! Msg,
     ok.
+
+is_ff_enabled() ->
+    FeatureFlagsEnabled = rabbit_ff_registry:list(enabled),
+    maps:is_key(stream_single_active_consumer, FeatureFlagsEnabled).
