@@ -1718,7 +1718,7 @@ handle_method(#'tx.commit'{}, _, #ch{tx = none}) ->
 
 handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Deliveries, Acks},
                                              limiter = Limiter}) ->
-    State1 = queue_fold(fun deliver_to_queues/2, State, Deliveries),
+    State1 = ?QUEUE:fold(fun deliver_to_queues/2, State, Deliveries),
     Rev = fun (X) -> lists:reverse(lists:sort(X)) end,
     {State2, Actions2} =
         lists:foldl(fun ({ack,     A}, {Acc, Actions}) ->
@@ -2842,12 +2842,6 @@ get_operation_timeout_and_deadline() ->
     Timeout = ?CHANNEL_OPERATION_TIMEOUT,
     Deadline =  now_millis() + Timeout,
     {Timeout, Deadline}.
-
-queue_fold(Fun, Acc, Queue) ->
-    case ?QUEUE:out(Queue) of
-        {empty, _Queue}      -> Acc;
-        {{value, Item}, Queue1} -> queue_fold(Fun, Fun(Item, Acc), Queue1)
-    end.
 
 evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
                                                    consumer_timeout = Timeout},

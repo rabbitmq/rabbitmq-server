@@ -2122,10 +2122,10 @@ fetch_by_predicate(Pred, Fun, FetchAcc,
 %% For the meaning of Fun and FetchAcc arguments see
 %% fetch_by_predicate/4 above.
 process_queue_entries(Q, Fun, FetchAcc, State = #vqstate{ next_deliver_seq_id = NextDeliverSeqId }) ->
-    ?QUEUE:foldl(fun (MsgStatus, Acc) ->
-                         process_queue_entries1(MsgStatus, Fun, Acc)
-                 end,
-                 {NextDeliverSeqId, FetchAcc, State}, Q).
+    ?QUEUE:fold(fun (MsgStatus, Acc) ->
+                        process_queue_entries1(MsgStatus, Fun, Acc)
+                end,
+                {NextDeliverSeqId, FetchAcc, State}, Q).
 
 process_queue_entries1(
   #msg_status { seq_id = SeqId } = MsgStatus,
@@ -2227,8 +2227,8 @@ purge_betas_and_deltas(DelsAndAcksFun, State = #vqstate { mode = Mode }) ->
 remove_queue_entries(Q, DelsAndAcksFun,
                      State = #vqstate{next_deliver_seq_id = NextDeliverSeqId0, msg_store_clients = MSCState}) ->
     {MsgIdsByStore, NextDeliverSeqId, Acks, State1} =
-        ?QUEUE:foldl(fun remove_queue_entries1/2,
-                     {maps:new(), NextDeliverSeqId0, [], State}, Q),
+        ?QUEUE:fold(fun remove_queue_entries1/2,
+                    {maps:new(), NextDeliverSeqId0, [], State}, Q),
     remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
     DelsAndAcksFun(NextDeliverSeqId, Acks, State1).
 
