@@ -86,9 +86,14 @@ init_per_group(Group = classic_queue_tests, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Group},
         {rmq_nodes_count, 1},
-        %% We make sure the server can handle fast-paced forced queue crashes
-        %% for the purpose of the tests.
-        {erlang_node_config, [{rabbit, [{amqqueue_max_restart_intensity, {1000000, 1}}]}]}
+        {erlang_node_config, [{rabbit, [
+            %% We make sure the server can handle fast-paced forced queue crashes
+            %% for the purpose of the tests.
+            {amqqueue_max_restart_intensity, {1000000, 1}},
+            %% We reduce the segment_entry_count values to make using multiple segments more likely.
+            {queue_index_segment_entry_count, 512},
+            {classic_queue_index_v2_segment_entry_count, 512}
+        ]}]}
       ]),
     Config2 = rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -274,7 +279,7 @@ command(St) ->
             {100, {call, ?MODULE, cmd_channel_confirm_mode, [channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_close, [channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
-            {300, {call, ?MODULE, cmd_channel_publish_many, [St, channel(St), integer(2, 10), integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
+            {300, {call, ?MODULE, cmd_channel_publish_many, [St, channel(St), integer(2, 512), integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
             {300, {call, ?MODULE, cmd_channel_wait_for_confirms, [channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
