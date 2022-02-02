@@ -34,5 +34,4 @@ keep_tracked_stream_connections(Connections) ->
                  Connections).
 
 is_feature_flag_enabled() ->
-    FeatureFlagsEnabled = rabbit_ff_registry:list(enabled),
-    maps:is_key(stream_queue, FeatureFlagsEnabled).
+    rabbit_feature_flags:is_enabled(stream_queue).
