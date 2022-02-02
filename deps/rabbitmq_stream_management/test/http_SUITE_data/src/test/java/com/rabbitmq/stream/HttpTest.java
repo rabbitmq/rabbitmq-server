@@ -572,6 +572,8 @@ public class HttpTest {
     assertThat(((Number) consumer.get("consumed")).intValue()).isEqualTo(0);
     assertThat(((Number) consumer.get("offset")).intValue()).isEqualTo(0);
     assertThat(((Number) consumer.get("subscription_id")).intValue()).isEqualTo(0);
+    assertThat(consumer.get("active")).isEqualTo(true);
+    assertThat(consumer.get("activity_status")).isEqualTo("up");
     assertThat(consumer.get("properties")).isNotNull().isEqualTo(subscriptionProperties);
 
     assertThat(connectionDetails(consumer))
