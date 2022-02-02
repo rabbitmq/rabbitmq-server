@@ -163,7 +163,9 @@ consumer_groups(VirtualHost, InfoKeys, #?MODULE{groups = Groups}) ->
                                                 (consumers, RecAcc) ->
                                                     [{consumers,
                                                       length(Consumers)}
-                                                     | RecAcc]
+                                                     | RecAcc];
+                                                (Unknown, RecAcc) ->
+                                                    [{Unknown, unknown_field} | RecAcc]
                                             end,
                                             [], InfoKeys),
                             [Record | Acc];
@@ -206,7 +208,9 @@ group_consumers(VirtualHost,
                                                          | RecAcc];
                                                     (state, RecAcc) ->
                                                         [{state, inactive}
-                                                         | RecAcc]
+                                                         | RecAcc];
+                                                (Unknown, RecAcc) ->
+                                                    [{Unknown, unknown_field} | RecAcc]
                                                 end,
                                                 [], InfoKeys),
                                 [Record | Acc]
