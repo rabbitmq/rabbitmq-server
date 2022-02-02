@@ -101,16 +101,10 @@
 -define(MB, 1048576).
 -define(LOW_LIMIT, 0.8).
 
--record(consumer,
+-record(consumer_cfg,
         {meta = #{} :: consumer_meta(),
-         checked_out = #{} :: #{msg_id() => indexed_msg()},
-         next_msg_id = 0 :: msg_id(), % part of snapshot data
-         %% max number of messages that can be sent
-         %% decremented for each delivery
-         credit = 0 : non_neg_integer(),
-         %% total number of checked out messages - ever
-         %% incremented for each delivery
-         delivery_count = 0 :: non_neg_integer(),
+         pid :: pid(),
+         tag :: consumer_tag(),
          %% the mode of how credit is incremented
          %% simple_prefetch: credit is re-filled as deliveries are settled
          %% or returned.
@@ -118,8 +112,20 @@
          %% command: `{consumer_credit, ReceiverDeliveryCount, Credit}'
          credit_mode = simple_prefetch :: credit_mode(), % part of snapshot data
          lifetime = once :: once | auto,
+         priority = 0 :: non_neg_integer()}).
+
+-record(consumer,
+        {cfg = #consumer_cfg{},
          status = up :: up | suspected_down | cancelled,
-         priority = 0 :: non_neg_integer()
+         next_msg_id = 0 :: msg_id(), % part of snapshot data
+         checked_out = #{} :: #{msg_id() => indexed_msg()},
+         %% max number of messages that can be sent
+         %% decremented for each delivery
+         credit = 0 : non_neg_integer(),
+         %% total number of checked out messages - ever
+         %% incremented for each delivery
+         delivery_count = 0 :: non_neg_integer()
+
         }).
 
 -type consumer() :: #consumer{}.
