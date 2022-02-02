@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--module(classic_queue_SUITE).
+-module(classic_queue_prop_SUITE).
 -compile(export_all).
 
 -define(NUM_TESTS, 500).
@@ -109,7 +109,7 @@ end_per_group(classic_queue_tests, Config) ->
 
 %% $ make -C deps/rabbit test-build
 %% $ erl -pa deps/rabbit/test
-%% > classic_queue_SUITE:instrs_to_manual([[{init,...},...]]).
+%% > classic_queue_prop_SUITE:instrs_to_manual([[{init,...},...]]).
 %% Paste into do_manual/1.
 %% Enable manual as the only test in groups/0.
 %% $ make -C deps/rabbit ct-classic_queue
