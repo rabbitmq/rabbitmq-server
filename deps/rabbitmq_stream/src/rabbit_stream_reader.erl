@@ -145,6 +145,7 @@
          peer_cert_issuer,
          peer_cert_subject,
          peer_cert_validity]).
+-define(UNKNOWN_FIELD, unknown_field).
 
 %% client API
 -export([start_link/4,
@@ -2819,12 +2820,7 @@ in_vhost(Pid, VHost) ->
     end.
 
 consumers_info(Pid, InfoItems) ->
-    case InfoItems -- ?CONSUMER_INFO_ITEMS of
-        [] ->
-            gen_server2:call(Pid, {consumers_info, InfoItems});
-        UnknownItems ->
-            throw({bad_argument, UnknownItems})
-    end.
+    gen_server2:call(Pid, {consumers_info, InfoItems}).
 
 consumers_infos(Items,
                 #stream_connection_state{consumers = Consumers}) ->
@@ -2859,15 +2855,12 @@ consumer_i(properties,
 consumer_i(stream,
            #consumer{configuration =
                          #consumer_configuration{stream = Stream}}) ->
-    Stream.
+    Stream;
+consumer_i(_Unknown, _) ->
+    ?UNKNOWN_FIELD.
 
 publishers_info(Pid, InfoItems) ->
-    case InfoItems -- ?PUBLISHER_INFO_ITEMS of
-        [] ->
-            gen_server2:call(Pid, {publishers_info, InfoItems});
-        UnknownItems ->
-            throw({bad_argument, UnknownItems})
-    end.
+    gen_server2:call(Pid, {publishers_info, InfoItems}).
 
 publishers_infos(Items,
                  #stream_connection{publishers = Publishers}) ->
@@ -2892,15 +2885,12 @@ publisher_i(messages_confirmed,
     messages_confirmed(Counters);
 publisher_i(messages_errored,
             #publisher{message_counters = Counters}) ->
-    messages_errored(Counters).
+    messages_errored(Counters);
+publisher_i(_Unknow, _) ->
+    ?UNKNOWN_FIELD.
 
 info(Pid, InfoItems) ->
-    case InfoItems -- ?INFO_ITEMS of
-        [] ->
-            gen_server2:call(Pid, {info, InfoItems}, infinity);
-        UnknownItems ->
-            throw({bad_argument, UnknownItems})
-    end.
+    gen_server2:call(Pid, {info, InfoItems}, infinity).
 
 infos(Items, Connection, State) ->
     [{Item, i(Item, Connection, State)} || Item <- Items].
@@ -3002,8 +2992,8 @@ i(client_properties, #stream_connection{client_properties = CP}, _) ->
     rabbit_misc:to_amqp_table(CP);
 i(connected_at, #stream_connection{connected_at = T}, _) ->
     T;
-i(Item, #stream_connection{}, _) ->
-    throw({bad_argument, Item}).
+i(_Unknown, _, _) ->
+    ?UNKNOWN_FIELD.
 
 -spec send(module(), rabbit_net:socket(), iodata()) -> ok.
 send(Transport, Socket, Data) when is_atom(Transport) ->
