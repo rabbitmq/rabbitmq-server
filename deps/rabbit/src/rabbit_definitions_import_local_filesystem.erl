@@ -45,6 +45,7 @@
 is_enabled() ->
     is_enabled_via_classic_option() or is_enabled_via_modern_option().
 
+-spec load(Proplist :: list() | map()) -> ok | {error, term()}.
 load(Proplist) when is_list(Proplist) ->
     case pget(local_path, Proplist, undefined) of
         undefined -> {error, "local definition file path is not configured: local_path is not set"};
@@ -69,6 +70,7 @@ load(Proplist) when is_list(Proplist) ->
 load(Map) when is_map(Map) ->
     load(maps:to_list(Map)).
 
+-spec load(IsDir :: boolean(), Path :: file:name_all()) -> ok | {error, term()}.
 load(IsDir, Path) when is_boolean(IsDir) ->
     load_from_local_path(IsDir, Path).
 
@@ -105,6 +107,7 @@ location() ->
         Value     -> Value
     end.
 
+-spec load_from_local_path(IsDir :: boolean(), Path :: file:name_all()) -> ok | {error, term()}.
 load_from_local_path(true, Dir) ->
     rabbit_log:info("Applying definitions from directory ~s", [Dir]),
     load_from_files(file:list_dir(Dir), Dir);
