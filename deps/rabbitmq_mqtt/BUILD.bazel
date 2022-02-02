@@ -105,6 +105,7 @@ suites = [
         additional_beam = [
             ":rabbit_auth_backend_mqtt_mock",
         ],
+        flaky = True,
         runtime_deps = [
             "@emqttc//:erlang_app",
         ],
