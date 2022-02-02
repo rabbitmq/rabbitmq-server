@@ -46,7 +46,7 @@ consumers_stats(VHost) ->
         rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db,
                                             entity_data,
                                             [VHost, ?ENTITY_CONSUMER,
-                                             fun consumers_by_vhost/1]}),
+                                             consumers_by_vhost]}),
     [V || {_, V} <- maps:to_list(Data)].
 
 publishers_stats(VHost) ->
@@ -54,7 +54,7 @@ publishers_stats(VHost) ->
         rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db,
                                             entity_data,
                                             [VHost, ?ENTITY_PUBLISHER,
-                                             fun publishers_by_vhost/1]}),
+                                             publishers_by_vhost]}),
     [V || {_, V} <- maps:to_list(Data)].
 
 connection_consumers_stats(ConnectionPid) ->
@@ -62,7 +62,7 @@ connection_consumers_stats(ConnectionPid) ->
         rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db,
                                             entity_data,
                                             [ConnectionPid, ?ENTITY_CONSUMER,
-                                             fun consumers_by_connection/1]}),
+                                             consumers_by_connection]}),
     [V || {_, V} <- maps:to_list(Data)].
 
 connection_publishers_stats(ConnectionPid) ->
@@ -70,7 +70,7 @@ connection_publishers_stats(ConnectionPid) ->
         rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db,
                                             entity_data,
                                             [ConnectionPid, ?ENTITY_PUBLISHER,
-                                             fun publishers_by_connection/1]}),
+                                             publishers_by_connection]}),
     [V || {_, V} <- maps:to_list(Data)].
 
 stream_publishers_stats(Queue) ->
@@ -78,10 +78,11 @@ stream_publishers_stats(Queue) ->
         rabbit_mgmt_db:get_data_from_nodes({rabbit_stream_mgmt_db,
                                             entity_data,
                                             [Queue, ?ENTITY_PUBLISHER,
-                                             fun publishers_by_stream/1]}),
+                                             publishers_by_stream]}),
     [V || {_, V} <- maps:to_list(Data)].
 
-entity_data(_Pid, Param, EntityType, QueryFun) ->
+entity_data(_Pid, Param, EntityType, QueryFunName) ->
+    QueryFun = map_function(QueryFunName),
     maps:from_list([begin
                         AugmentedPublisher = augment_entity(EntityType, P),
                         {P,
@@ -89,6 +90,17 @@ entity_data(_Pid, Param, EntityType, QueryFun) ->
                          ++ AugmentedPublisher}
                     end
                     || P <- QueryFun(Param)]).
+
+map_function(consumers_by_vhost) ->
+    fun consumers_by_vhost/1;
+map_function(publishers_by_vhost) ->
+    fun publishers_by_vhost/1;
+map_function(consumers_by_connection) ->
+    fun consumers_by_connection/1;
+map_function(publishers_by_connection) ->
+    fun publishers_by_connection/1;
+map_function(publishers_by_stream) ->
+    fun publishers_by_stream/1.
 
 augment_entity(?ENTITY_CONSUMER, {{Q, ConnPid, SubId}, Props}) ->
     [{queue, format_resource(Q)}, {connection, ConnPid},
