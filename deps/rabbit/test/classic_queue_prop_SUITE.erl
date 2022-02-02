@@ -274,15 +274,15 @@ command(St) ->
             {100, {call, ?MODULE, cmd_channel_confirm_mode, [channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_close, [channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), boolean(), expiration()]}},
-            {300, {call, ?MODULE, cmd_channel_publish_many, [St, channel(St), integer(1, 10), integer(0, 1024*1024), boolean(), expiration()]}},
+            {300, {call, ?MODULE, cmd_channel_publish_many, [St, channel(St), integer(2, 10), integer(0, 1024*1024), boolean(), expiration()]}},
             {300, {call, ?MODULE, cmd_channel_wait_for_confirms, [channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_receive_and_ack, [St, channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_receive_and_reject, [St, channel(St)]}},
-            {300, {call, ?MODULE, cmd_channel_receive_many_and_ack_ooo, [St, channel(St), integer(1, 10)]}},
-            {300, {call, ?MODULE, cmd_channel_receive_many_and_reject_ooo, [St, channel(St), integer(1, 10)]}}
+            {300, {call, ?MODULE, cmd_channel_receive_many_and_ack_ooo, [St, channel(St), integer(2, 10)]}},
+            {300, {call, ?MODULE, cmd_channel_receive_many_and_reject_ooo, [St, channel(St), integer(2, 10)]}}
         ]
     end,
     weighted_union([
