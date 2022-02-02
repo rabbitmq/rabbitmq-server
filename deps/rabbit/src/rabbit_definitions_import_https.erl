@@ -18,7 +18,8 @@
 
 -export([
     is_enabled/0,
-    load/1
+    load/1,
+    load_with_hashing/3
 ]).
 
 
@@ -45,21 +46,44 @@ is_enabled() ->
             end
     end.
 
+-spec load(Proplist :: list()) -> ok | {error, term()}.
 load(Proplist) ->
     URL = pget(url, Proplist),
-    TLSOptions0 = [
-        %% avoids a peer verification warning emitted by default if no certificate chain and peer verification
-        %% settings are provided: these are not essential in this particular case (client-side downloads that likely
-        %% will happen from a local trusted source)
-        {log_level, error},
-        %% use TLSv1.2 by default
-        {versions, ['tlsv1.2']}
-    ],
-    TLSOptions = pget(ssl_options, Proplist, TLSOptions0),
-    HTTPOptions = [
-        {ssl, TLSOptions}
-    ],
+    rabbit_log:info("Applying definitions from a remote URL"),
+    rabbit_log:debug("HTTPS URL: ~s", [URL]),
+    TLSOptions = tls_options_or_default(Proplist),
+    HTTPOptions = http_options(TLSOptions),
     load_from_url(URL, HTTPOptions).
+
+-spec load_with_hashing(Proplist :: list() | map(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
+load_with_hashing(Proplist, PreviousHash, Algo) ->
+    URL = pget(url, Proplist),
+    rabbit_log:info("Applying definitions from a remote URL"),
+    rabbit_log:debug("Loading definitions with content hashing enabled, HTTPS URL: ~s, previous hash value: ~s",
+                     [URL, rabbit_misc:hexify(PreviousHash)]),
+
+    TLSOptions = tls_options_or_default(Proplist),
+    HTTPOptions = http_options(TLSOptions),
+
+    case httpc_get(URL, HTTPOptions) of
+        %% 2XX
+        {ok, {{_, Code, _}, _Headers, Body}} when Code div 100 == 2 ->
+            rabbit_log:debug("Requested definitions from remote URL '~s', response code: ~b", [URL, Code]),
+            rabbit_log:debug("Requested definitions from remote URL '~s', body: ~p", [URL, Body]),
+            case rabbit_definitions_hashing:hash(Algo, Body) of
+                PreviousHash -> PreviousHash;
+                Other        ->
+                    rabbit_log:debug("New hash: ~s", [rabbit_misc:hexify(Other)]),
+                    import_raw(Body),
+                    Other
+            end;
+        {ok, {{_, Code, _}, _Headers, _Body}} when Code >= 400 ->
+            rabbit_log:debug("Requested definitions from remote URL '~s', response code: ~b", [URL, Code]),
+            {error, {could_not_read_defs, {URL, rabbit_misc:format("URL request failed with response code ~b", [Code])}}};
+        {error, Reason} ->
+            rabbit_log:error("Requested definitions from remote URL '~s', error: ~p", [URL, Reason]),
+            {error, {could_not_read_defs, {URL, Reason}}}
+    end.
 
 
 %%
@@ -67,16 +91,7 @@ load(Proplist) ->
 %%
 
 load_from_url(URL, HTTPOptions0) ->
-    inets:start(),
-    Options = [
-        {body_format, binary}
-    ],
-    HTTPOptions = HTTPOptions0 ++ [
-        {connect_timeout, 120000},
-        {autoredirect, true}
-    ],
-    rabbit_log:info("Applying definitions from remote URL"),
-    case httpc:request(get, {URL, []}, lists:usort(HTTPOptions), Options) of
+    case httpc_get(URL, HTTPOptions0) of
         %% 2XX
         {ok, {{_, Code, _}, _Headers, Body}} when Code div 100 == 2 ->
             rabbit_log:debug("Requested definitions from remote URL '~s', response code: ~b", [URL, Code]),
@@ -89,3 +104,36 @@ load_from_url(URL, HTTPOptions0) ->
             rabbit_log:error("Requested definitions from remote URL '~s', error: ~p", [URL, Reason]),
             {error, {could_not_read_defs, {URL, Reason}}}
     end.
+
+httpc_get(URL, HTTPOptions0) ->
+    inets:start(),
+    Options = [
+        {body_format, binary}
+    ],
+    HTTPOptions = HTTPOptions0 ++ [
+        {connect_timeout, 120000},
+        {autoredirect, true}
+    ],
+    httpc:request(get, {URL, []}, lists:usort(HTTPOptions), Options).
+
+http_options(TLSOptions) ->
+    HTTPOptions0 = [
+        {ssl, TLSOptions}
+    ],
+
+    HTTPOptions0 ++ [
+        {connect_timeout, 120000},
+        {autoredirect, true}
+    ].
+
+tls_options_or_default(Proplist) ->
+    TLSOptions0 = [
+        %% avoids a peer verification warning emitted by default if no certificate chain and peer verification
+        %% settings are provided: these are not essential in this particular case (client-side downloads that likely
+        %% will happen from a local trusted source)
+        {log_level, error},
+        %% use TLSv1.2 by default
+        {versions, ['tlsv1.2']}
+    ],
+    TLSOptions = pget(ssl_options, Proplist, TLSOptions0),
+    TLSOptions.
