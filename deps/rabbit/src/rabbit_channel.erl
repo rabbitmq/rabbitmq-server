@@ -742,7 +742,7 @@ handle_cast({mandatory_received, _MsgSeqNo}, State) ->
 
 handle_cast({reject_publish, _MsgSeqNo, QPid} = Evt, State) ->
     %% For backwards compatibility
-    QRef = find_queue_name_from_pid(QPid, State#ch.queue_states),
+    QRef = rabbit_queue_type:find_name_from_pid(QPid, State#ch.queue_states),
     case QRef of
         undefined ->
             %% ignore if no queue could be found for the given pid
@@ -753,7 +753,7 @@ handle_cast({reject_publish, _MsgSeqNo, QPid} = Evt, State) ->
 
 handle_cast({confirm, _MsgSeqNo, QPid} = Evt, State) ->
     %% For backwards compatibility
-    QRef = find_queue_name_from_pid(QPid, State#ch.queue_states),
+    QRef = rabbit_queue_type:find_name_from_pid(QPid, State#ch.queue_states),
     case QRef of
         undefined ->
             %% ignore if no queue could be found for the given pid
@@ -2907,30 +2907,6 @@ handle_queue_actions(Actions, #ch{} = State0) ->
               handle_consuming_queue_down_or_eol(QRef, S0)
 
       end, State0, Actions).
-
-find_queue_name_from_pid(Pid, QStates) when is_pid(Pid) ->
-    Fun = fun(K, _V, undefined) ->
-                  case rabbit_amqqueue:lookup(K) of
-                      {error, not_found} ->
-                          undefined;
-                      {ok, Q} ->
-                          Pids = get_queue_pids(Q),
-                          case lists:member(Pid, Pids) of
-                              true ->
-                                  K;
-                              false ->
-                                  undefined
-                          end
-                  end;
-             (_K, _V, Acc) ->
-                  Acc
-          end,
-    rabbit_queue_type:fold_state(Fun, undefined, QStates).
-
-get_queue_pids(Q) when ?amqqueue_is_quorum(Q) ->
-    [amqqueue:get_leader(Q)];
-get_queue_pids(Q) ->
-    [amqqueue:get_pid(Q) | amqqueue:get_slave_pids(Q)].
 
 find_queue_name_from_quorum_name(Name, QStates) ->
     Fun = fun(K, _V, undefined) ->
