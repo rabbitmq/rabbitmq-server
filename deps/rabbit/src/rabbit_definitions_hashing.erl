@@ -73,7 +73,7 @@ notify_clear(_VHost, ?RUNTIME_PARAMETER_COMPONENT, _Name, _ActingUser) ->
 
 
 
--spec hashing_algorithm() -> {ok, crypto:sha1() | crypto:sha2()}.
+-spec hashing_algorithm() -> crypto:sha1() | crypto:sha2() | undefined.
 hashing_algorithm() ->
     case application:get_env(rabbit, definitions) of
         undefined   -> undefined;
@@ -87,7 +87,9 @@ hashing_algorithm() ->
 hash(Value) ->
     crypto:hash(hashing_algorithm(), Value).
 
--spec hash(Algo :: crypto:sha1() | crypto:sha2(), Value :: term()) -> binary().
+-spec hash(Algo :: crypto:sha1() | crypto:sha2() | undefined, Value :: term()) -> binary().
+hash(undefined, Value) ->
+    hash(?DEFAULT_HASHING_ALGORITHM, Value);
 hash(Algo, Value) ->
     crypto:hash(Algo, term_to_binary(Value)).
 
@@ -95,7 +97,6 @@ hash(Algo, Value) ->
 stored_global_hash() ->
     case rabbit_runtime_parameters:lookup_global(?GLOBAL_RUNTIME_PARAMETER_KEY) of
         not_found -> undefined;
-        undefined -> undefined;
         Proplist  -> pget(value, Proplist)
     end.
 
@@ -103,7 +104,6 @@ stored_global_hash() ->
 stored_vhost_specific_hash(VHostName) ->
     case rabbit_runtime_parameters:lookup(VHostName, ?RUNTIME_PARAMETER_COMPONENT, ?PARAMETER_NAME) of
         not_found -> undefined;
-        undefined -> undefined;
         Proplist  -> pget(value, Proplist)
     end.
 
