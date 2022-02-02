@@ -274,17 +274,18 @@ command(St) ->
             {100, {call, ?MODULE, cmd_channel_confirm_mode, [channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_close, [channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), boolean(), expiration()]}},
+            {300, {call, ?MODULE, cmd_channel_publish_many, [St, channel(St), integer(1, 10), integer(0, 1024*1024), boolean(), expiration()]}},
             {300, {call, ?MODULE, cmd_channel_wait_for_confirms, [channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_receive_and_ack, [St, channel(St)]}},
-            {900, {call, ?MODULE, cmd_channel_receive_and_reject, [St, channel(St)]}} %% @todo reject/discard variants?
-            %% @todo channel ack out of order?
+            {900, {call, ?MODULE, cmd_channel_receive_and_reject, [St, channel(St)]}},
+            {300, {call, ?MODULE, cmd_channel_receive_many_and_ack_ooo, [St, channel(St), integer(1, 10)]}},
+            {300, {call, ?MODULE, cmd_channel_receive_many_and_reject_ooo, [St, channel(St), integer(1, 10)]}}
         ]
     end,
     weighted_union([
-        %% @todo delete/recreate queue?
         %% These restart the vhost or the queue.
         {100, {call, ?MODULE, cmd_restart_vhost_clean, [St]}},
         {100, {call, ?MODULE, cmd_restart_queue_dirty, [St]}},
@@ -389,6 +390,14 @@ next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_confirm_mode, [Ch
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_publish, [_, Ch|_]}) ->
     ChQ = maps:get(Ch, Q, queue:new()),
     St#cq{q=Q#{Ch => queue:in(Msg, ChQ)}};
+next_state(St=#cq{q=Q}, Msgs0, {call, _, cmd_channel_publish_many, [_, Ch|_]}) ->
+    %% We handle {var,_} specially here but it would work for cmd_channel_publish as well.
+    Msgs = case is_list(Msgs0) of
+        true -> Msgs0;
+        false -> [Msgs0]
+    end,
+    ChQ = maps:get(Ch, Q, queue:new()),
+    St#cq{q=Q#{Ch => queue:from_list(queue:to_list(ChQ) ++ Msgs)}};
 next_state(St, _, {call, _, cmd_channel_wait_for_confirms, _}) ->
     St;
 next_state(St, empty, {call, _, cmd_channel_basic_get, _}) ->
@@ -428,6 +437,15 @@ next_state(St=#cq{q=Q, acked=Acked}, Msg, {call, _, cmd_channel_receive_and_ack,
     %% because we always check acked even when crashes occurred.
     St#cq{q=delete_message(Q, Msg), acked=[Msg|Acked]};
 next_state(St, _, {call, _, cmd_channel_receive_and_reject, _}) ->
+    St;
+next_state(St=#cq{q=Q, acked=Acked}, Msgs0, {call, _, cmd_channel_receive_many_and_ack_ooo, _}) ->
+    %% We handle {var,_} specially here but it would work for cmd_channel_publish as well.
+    Msgs = case is_list(Msgs0) of
+        true -> Msgs0;
+        false -> [Msgs0]
+    end,
+    St#cq{q=lists:foldl(fun(Msg, QF) -> delete_message(QF, Msg) end, Q, Msgs), acked=Msgs ++ Acked};
+next_state(St, _, {call, _, cmd_channel_receive_many_and_reject_ooo, _}) ->
     St.
 
 %% We remove at most one message anywhere in the queue.
@@ -482,6 +500,12 @@ precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_ack, [_, 
     %% Only receive and ack when we are already consuming on this channel.
     maps:get(consumer, maps:get(Ch, Channels)) =/= none;
 precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_reject, [_, Ch]}) ->
+    %% Only receive and reject when we are already consuming on this channel.
+    maps:get(consumer, maps:get(Ch, Channels)) =/= none;
+precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_many_and_ack_ooo, [_, Ch, _]}) ->
+    %% Only receive and ack when we are already consuming on this channel.
+    maps:get(consumer, maps:get(Ch, Channels)) =/= none;
+precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_many_and_reject_ooo, [_, Ch, _]}) ->
     %% Only receive and reject when we are already consuming on this channel.
     maps:get(consumer, maps:get(Ch, Channels)) =/= none;
 precondition(_, _) ->
@@ -550,6 +574,8 @@ postcondition(_, {call, _, cmd_channel_close, _}, Res) ->
     Res =:= ok;
 postcondition(_, {call, _, cmd_channel_publish, _}, Msg) ->
     is_record(Msg, amqp_msg);
+postcondition(_, {call, _, cmd_channel_publish_many, _}, Msgs) ->
+    lists:all(fun(Msg) -> is_record(Msg, amqp_msg) end, Msgs);
 postcondition(_, {call, _, cmd_channel_wait_for_confirms, _}, Res) ->
     Res =:= true;
 postcondition(St, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
@@ -622,7 +648,21 @@ postcondition(St, {call, _, cmd_channel_receive_and_reject, _}, Msg) ->
     %% to a race condition.
     restarted_and_previously_acked(St, Msg) orelse
     restarted_and_uncertain_publish_status(St, Msg) orelse
-    crashed_and_previously_received(St, Msg).
+    crashed_and_previously_received(St, Msg);
+postcondition(St, {call, _, cmd_channel_receive_many_and_ack_ooo, _}, Msgs) ->
+    lists:all(fun(Msg) ->
+        queue_has_msg(St, Msg) orelse
+        restarted_and_previously_acked(St, Msg) orelse
+        restarted_and_uncertain_publish_status(St, Msg) orelse
+        crashed_and_previously_received(St, Msg)
+    end, Msgs);
+postcondition(St, {call, _, cmd_channel_receive_many_and_reject_ooo, _}, Msgs) ->
+    lists:all(fun(Msg) ->
+        queue_has_msg(St, Msg) orelse
+        restarted_and_previously_acked(St, Msg) orelse
+        restarted_and_uncertain_publish_status(St, Msg) orelse
+        crashed_and_previously_received(St, Msg)
+    end, Msgs).
 
 %% This function returns 'true' when there was a consumer at some point
 %% even if consumers were recently cancelled or closed.
@@ -884,6 +924,10 @@ cmd_channel_publish(St=#cq{amq=AMQ}, Ch, PayloadSize, Mandatory, Expiration) ->
                            Msg),
     Msg.
 
+cmd_channel_publish_many(St, Ch, Num, PayloadSize, Mandatory, Expiration) ->
+    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [St, Ch, Num, PayloadSize, Mandatory, Expiration]),
+    [cmd_channel_publish(St, Ch, PayloadSize, Mandatory, Expiration) || _ <- lists:seq(1, Num)].
+
 cmd_channel_wait_for_confirms(Ch) ->
     ?DEBUG("~0p", [Ch]),
     amqp_channel:wait_for_confirms(Ch, {1, second}).
@@ -944,6 +988,42 @@ cmd_channel_receive_and_reject(St=#cq{channels=Channels}, Ch) ->
             Msg
     after 0 ->
         none
+    end.
+
+cmd_channel_receive_many_and_ack_ooo(St=#cq{channels=Channels}, Ch, Num) ->
+    ?DEBUG("~0p ~0p ~0p", [St, Ch, Num]),
+    #{consumer := Tag} = maps:get(Ch, Channels),
+    do_cmd_channel_receive_many_and_ack_ooo_loop(Tag, Ch, Num, [], []).
+
+do_cmd_channel_receive_many_and_ack_ooo_loop(_, Ch, 0, TagAcc, MsgAcc) ->
+    RandomTagAcc = [T || {_, T} <- lists:sort([{rand:uniform(), T} || T <- TagAcc])],
+    _ = [amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = T}) || T <- RandomTagAcc],
+    lists:reverse(MsgAcc);
+do_cmd_channel_receive_many_and_ack_ooo_loop(Tag, Ch, Num, TagAcc, MsgAcc) ->
+    receive
+        {#'basic.deliver'{consumer_tag = Tag,
+                          delivery_tag = DeliveryTag}, Msg} ->
+            do_cmd_channel_receive_many_and_ack_ooo_loop(Tag, Ch, Num - 1, [DeliveryTag|TagAcc], [Msg|MsgAcc])
+    after 0 ->
+        do_cmd_channel_receive_many_and_ack_ooo_loop(Tag, Ch, 0, TagAcc, MsgAcc)
+    end.
+
+cmd_channel_receive_many_and_reject_ooo(St=#cq{channels=Channels}, Ch, Num) ->
+    ?DEBUG("~0p ~0p ~0p", [St, Ch, Num]),
+    #{consumer := Tag} = maps:get(Ch, Channels),
+    do_cmd_channel_receive_many_and_reject_ooo_loop(Tag, Ch, Num, [], []).
+
+do_cmd_channel_receive_many_and_reject_ooo_loop(_, Ch, 0, TagAcc, MsgAcc) ->
+    RandomTagAcc = [T || {_, T} <- lists:sort([{rand:uniform(), T} || T <- TagAcc])],
+    _ = [amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = T}) || T <- RandomTagAcc],
+    lists:reverse(MsgAcc);
+do_cmd_channel_receive_many_and_reject_ooo_loop(Tag, Ch, Num, TagAcc, MsgAcc) ->
+    receive
+        {#'basic.deliver'{consumer_tag = Tag,
+                          delivery_tag = DeliveryTag}, Msg} ->
+            do_cmd_channel_receive_many_and_reject_ooo_loop(Tag, Ch, Num - 1, [DeliveryTag|TagAcc], [Msg|MsgAcc])
+    after 0 ->
+        do_cmd_channel_receive_many_and_reject_ooo_loop(Tag, Ch, 0, TagAcc, MsgAcc)
     end.
 
 do_receive_reject_all(Ch, Tag) ->
