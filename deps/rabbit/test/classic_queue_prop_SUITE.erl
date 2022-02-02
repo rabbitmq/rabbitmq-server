@@ -273,8 +273,8 @@ command(St) ->
         true -> [
             {100, {call, ?MODULE, cmd_channel_confirm_mode, [channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_close, [channel(St)]}},
-            {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), boolean(), expiration()]}},
-            {300, {call, ?MODULE, cmd_channel_publish_many, [St, channel(St), integer(2, 10), integer(0, 1024*1024), boolean(), expiration()]}},
+            {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
+            {300, {call, ?MODULE, cmd_channel_publish_many, [St, channel(St), integer(2, 10), integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
             {300, {call, ?MODULE, cmd_channel_wait_for_confirms, [channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
@@ -296,7 +296,7 @@ command(St) ->
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
         %% These are direct operations using internal functions.
-        {100, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), boolean(), boolean(), expiration()]}},
+        {100, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), integer(1, 2), boolean(), boolean(), expiration()]}},
         {100, {call, ?MODULE, cmd_basic_get_msg, [St]}},
         {100, {call, ?MODULE, cmd_purge, [St]}},
         %% These are channel-based operations.
@@ -327,8 +327,8 @@ next_state(St=#cq{q=Q, uncertain=Uncertain0, channels=Channels0}, AMQ, {call, _,
     %% is uncertain, unless the channel is in confirms mode and confirms
     %% were received. We do not track them at the moment, so we instead
     %% move all pending messages in the 'uncertain' list. When tracking
-    %% them it would be only messages after the last confirmed message
-    %% that would end up in uncertain state.
+    %% them it would be only persistent messages after the last confirmed
+    %% message that would end up in uncertain state.
     Uncertain = maps:fold(fun(_, ChQ, Acc) ->
         queue:to_list(ChQ) ++ Acc
     end, Uncertain0, Q),
@@ -338,8 +338,8 @@ next_state(St=#cq{q=Q, uncertain=Uncertain0}, AMQ, {call, _, cmd_restart_queue_d
     %% is uncertain, unless the channel is in confirms mode and confirms
     %% were received. We do not track them at the moment, so we instead
     %% move all pending messages in the 'uncertain' list. When tracking
-    %% them it would be only messages after the last confirmed message
-    %% that would end up in uncertain state.
+    %% them it would be only persistent messages after the last confirmed
+    %% message that would end up in uncertain state.
     Uncertain = maps:fold(fun(_, ChQ, Acc) ->
         queue:to_list(ChQ) ++ Acc
     end, Uncertain0, Q),
@@ -856,11 +856,11 @@ do_set_policy(Mode, Version) ->
          {<<"queue-version">>, Version}],
         0, <<"queues">>, <<"acting-user">>).
 
-cmd_publish_msg(St=#cq{amq=AMQ}, PayloadSize, Confirm, Mandatory, Expiration) ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p", [St, PayloadSize, Confirm, Mandatory, Expiration]),
+cmd_publish_msg(St=#cq{amq=AMQ}, PayloadSize, DeliveryMode, Confirm, Mandatory, Expiration) ->
+    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [St, PayloadSize, DeliveryMode, Confirm, Mandatory, Expiration]),
     Payload = do_rand_payload(PayloadSize),
     Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
-                               <<>>, #'P_basic'{delivery_mode = 2, %% @todo different delivery_mode? more?
+                               <<>>, #'P_basic'{delivery_mode = DeliveryMode,
                                                 expiration = do_encode_expiration(Expiration)},
                                Payload),
     Delivery = #delivery{mandatory = Mandatory, sender = self(),
@@ -911,11 +911,11 @@ cmd_channel_close(Ch) ->
     %% So instead we close directly.
     amqp_channel:close(Ch).
 
-cmd_channel_publish(St=#cq{amq=AMQ}, Ch, PayloadSize, Mandatory, Expiration) ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p", [St, Ch, PayloadSize, Mandatory, Expiration]),
+cmd_channel_publish(St=#cq{amq=AMQ}, Ch, PayloadSize, DeliveryMode, Mandatory, Expiration) ->
+    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [St, Ch, PayloadSize, DeliveryMode, Mandatory, Expiration]),
     #resource{name = Name} = amqqueue:get_name(AMQ),
     Payload = do_rand_payload(PayloadSize),
-    Msg = #amqp_msg{props   = #'P_basic'{delivery_mode = 2, %% @todo different delivery_mode? more?
+    Msg = #amqp_msg{props   = #'P_basic'{delivery_mode = DeliveryMode,
                                          expiration = do_encode_expiration(Expiration)},
                     payload = Payload},
     ok = amqp_channel:call(Ch,
@@ -924,9 +924,9 @@ cmd_channel_publish(St=#cq{amq=AMQ}, Ch, PayloadSize, Mandatory, Expiration) ->
                            Msg),
     Msg.
 
-cmd_channel_publish_many(St, Ch, Num, PayloadSize, Mandatory, Expiration) ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [St, Ch, Num, PayloadSize, Mandatory, Expiration]),
-    [cmd_channel_publish(St, Ch, PayloadSize, Mandatory, Expiration) || _ <- lists:seq(1, Num)].
+cmd_channel_publish_many(St, Ch, Num, PayloadSize, DeliveryMode, Mandatory, Expiration) ->
+    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [St, Ch, Num, PayloadSize, DeliveryMode, Mandatory, Expiration]),
+    [cmd_channel_publish(St, Ch, PayloadSize, DeliveryMode, Mandatory, Expiration) || _ <- lists:seq(1, Num)].
 
 cmd_channel_wait_for_confirms(Ch) ->
     ?DEBUG("~0p", [Ch]),
