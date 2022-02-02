@@ -46,7 +46,7 @@ is_enabled() ->
             end
     end.
 
--spec load(Proplist :: list()) -> ok | {error, term()}.
+-spec load(Proplist :: list() | map()) -> ok | {error, term()}.
 load(Proplist) ->
     URL = pget(url, Proplist),
     rabbit_log:info("Applying definitions from a remote URL"),
