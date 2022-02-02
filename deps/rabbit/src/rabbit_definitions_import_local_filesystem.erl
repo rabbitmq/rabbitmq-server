@@ -172,8 +172,8 @@ compiled_definitions_from_local_path(true = _IsDir, Dir) ->
     end;
 compiled_definitions_from_local_path(false = _IsDir, Path) ->
     case read_file_contents(Path) of
-        Body       -> [Body];
-        {error, _} -> []
+        {error, _} -> [];
+        Body       -> [Body]
     end.
 
 -spec read_file_contents(Path :: file:name_all()) -> binary() | {error, any()}.
