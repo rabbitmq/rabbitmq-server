@@ -98,6 +98,8 @@
   offset,
   offset_lag,
   credits,
+  active,
+  activity_status,
   properties
   ]).
 

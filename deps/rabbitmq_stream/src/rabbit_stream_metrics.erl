@@ -49,7 +49,8 @@ consumer_created(Connection,
          {offset, Offset},
          {offset_lag, OffsetLag},
          {active, Active},
-         {activity_status, consumer_activity_status(Active, Properties)},
+         {activity_status,
+          rabbit_stream_utils:consumer_activity_status(Active, Properties)},
          {properties, Properties}],
     ets:insert(?TABLE_CONSUMER,
                {{StreamResource, Connection, SubscriptionId}, Values}),
@@ -61,8 +62,8 @@ consumer_created(Connection,
                                          StreamResource,
                                          0,
                                          Active,
-                                         consumer_activity_status(Active,
-                                                                  Properties),
+                                         rabbit_stream_utils:consumer_activity_status(Active,
+                                                                                      Properties),
                                          rabbit_misc:to_amqp_table(Properties)),
     ok.
 
@@ -85,7 +86,8 @@ consumer_updated(Connection,
          {offset, Offset},
          {offset_lag, OffsetLag},
          {active, Active},
-         {activity_status, consumer_activity_status(Active, Properties)},
+         {activity_status,
+          rabbit_stream_utils:consumer_activity_status(Active, Properties)},
          {properties, Properties}],
     ets:insert(?TABLE_CONSUMER,
                {{StreamResource, Connection, SubscriptionId}, Values}),
@@ -96,8 +98,8 @@ consumer_updated(Connection,
                                          StreamResource,
                                          0,
                                          Active,
-                                         consumer_activity_status(Active,
-                                                                  Properties),
+                                         rabbit_stream_utils:consumer_activity_status(Active,
+                                                                                      Properties),
                                          rabbit_misc:to_amqp_table(Properties)),
 
     ok.
@@ -113,17 +115,6 @@ consumer_cancelled(Connection, StreamResource, SubscriptionId) ->
                         [{consumer_tag, consumer_tag(SubscriptionId)},
                          {channel, self()}, {queue, StreamResource}]),
     ok.
-
-consumer_activity_status(Active, Properties) ->
-    case {rabbit_stream_reader:single_active_consumer(Properties), Active}
-    of
-        {false, true} ->
-            up;
-        {true, true} ->
-            single_active;
-        {true, false} ->
-            waiting
-    end.
 
 publisher_created(Connection,
                   StreamResource,

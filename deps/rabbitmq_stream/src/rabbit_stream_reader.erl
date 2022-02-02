@@ -3282,8 +3282,18 @@ consumer_i(stream,
            #consumer{configuration =
                          #consumer_configuration{stream = Stream}}) ->
     Stream;
+consumer_i(active,
+           #consumer{configuration =
+                         #consumer_configuration{active = Active}}) ->
+    Active;
+consumer_i(activity_status,
+           #consumer{configuration =
+                         #consumer_configuration{active = Active,
+                                                 properties = Properties}}) ->
+    rabbit_stream_utils:consumer_activity_status(Active, Properties);
 consumer_i(_Unknown, _) ->
     ?UNKNOWN_FIELD.
+
 
 publishers_info(Pid, InfoItems) ->
     gen_server2:call(Pid, {publishers_info, InfoItems}).
