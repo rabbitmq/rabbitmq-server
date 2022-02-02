@@ -1254,7 +1254,7 @@ single_active_cancelled_with_unacked_test(_) ->
                  State4#rabbit_fifo.consumers),
     %% C1 should be a cancelled consumer
     ?assertMatch(#{C1 := #consumer{status = cancelled,
-                                   lifetime = once,
+                                   cfg = #consumer_cfg{lifetime = once},
                                    checked_out = #{0 := _}}},
                  State4#rabbit_fifo.consumers),
     ?assertMatch([], State4#rabbit_fifo.waiting_consumers),
@@ -1336,15 +1336,18 @@ register_enqueuer_test(_) ->
     ?assertMatch(#{num_enqueuers := 3}, rabbit_fifo:overview(State6)),
 
 
+    Pid3 = test_util:fake_pid(node()),
     %% remove two messages this should make the queue fall below the 0.8 limit
     {State7, _, Efx7} =
         apply(meta(7),
-              rabbit_fifo:make_checkout(<<"a">>, {dequeue, settled}, #{}), State6),
+              rabbit_fifo:make_checkout({<<"a">>, Pid3}, {dequeue, settled}, #{}),
+              State6),
     ?ASSERT_EFF({log, [_], _}, Efx7),
     % ct:pal("Efx7 ~p", [_Efx7]),
     {State8, _, Efx8} =
         apply(meta(8),
-              rabbit_fifo:make_checkout(<<"a">>, {dequeue, settled}, #{}), State7),
+              rabbit_fifo:make_checkout({<<"a">>, Pid3}, {dequeue, settled}, #{}),
+              State7),
     ?ASSERT_EFF({log, [_], _}, Efx8),
     % ct:pal("Efx8 ~p", [Efx8]),
     %% validate all registered enqueuers are notified of overflow state
@@ -1352,7 +1355,8 @@ register_enqueuer_test(_) ->
     ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid2, Efx8),
     {_State9, _, Efx9} =
         apply(meta(9),
-              rabbit_fifo:make_checkout(<<"a">>, {dequeue, settled}, #{}), State8),
+              rabbit_fifo:make_checkout({<<"a">>, Pid3}, {dequeue, settled}, #{}),
+              State8),
     ?ASSERT_EFF({log, [_], _}, Efx9),
     ?ASSERT_NO_EFF({send_msg, P, go, [ra_event]}, P == Pid1, Efx9),
     ?ASSERT_NO_EFF({send_msg, P, go, [ra_event]}, P == Pid2, Efx9),
@@ -1562,7 +1566,7 @@ machine_version_test(_) ->
     {S1, _Effects} = rabbit_fifo_v0_SUITE:run_log(S0, Entries),
     Self = self(),
     {#rabbit_fifo{enqueuers = #{Self := #enqueuer{}},
-                  consumers = #{Cid := #consumer{priority = 0}},
+                  consumers = #{Cid := #consumer{cfg = #consumer_cfg{priority = 0}}},
                   service_queue = S,
                   messages = Msgs}, ok,
      [_|_]} = apply(meta(Idx),
@@ -1588,7 +1592,7 @@ machine_version_waiting_consumer_test(_) ->
     {S1, _Effects} = rabbit_fifo_v0_SUITE:run_log(S0, Entries),
     Self = self(),
     {#rabbit_fifo{enqueuers = #{Self := #enqueuer{}},
-                  consumers = #{Cid := #consumer{priority = 0}},
+                  consumers = #{Cid := #consumer{cfg = #consumer_cfg{priority = 0}}},
                   service_queue = S,
                   messages = Msgs}, ok, _} = apply(meta(Idx),
                                                     {machine_version, 0, 2}, S1),
@@ -1744,7 +1748,7 @@ checkout_priority_test(_) ->
 
 empty_dequeue_should_emit_release_cursor_test(_) ->
     State0 = test_init(?FUNCTION_NAME),
-    Cid = <<"basic.get1">>,
+    Cid = {<<"basic.get1">>, self()},
     {_State, {dequeue, empty}, Effects} =
         apply(meta(2, 1234),
               rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),

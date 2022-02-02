@@ -73,6 +73,11 @@
          make_garbage_collection/0
         ]).
 
+-define(SETTLE_V2, '$s').
+-define(RETURN_V2, '$r').
+-define(DISCARD_V2, '$d').
+-define(CREDIT_V2, '$c').
+
 %% command records representing all the protocol actions that are supported
 -record(enqueue, {pid :: option(pid()),
                   seq :: option(msg_seqno()),
@@ -100,6 +105,21 @@
 -record(purge_nodes, {nodes :: [node()]}).
 -record(update_config, {config :: config()}).
 -record(garbage_collection, {}).
+%% v2 alternative commands
+%% each consumer is assigned an integer index which can be used
+%% instead of the consumer id to identify the consumer
+-type consumer_idx() :: non_neg_integer().
+
+-record(?SETTLE_V2, {consumer_idx :: consumer_idx(),
+                     msg_ids :: [msg_id()]}).
+-record(?RETURN_V2, {consumer_idx :: consumer_idx(),
+                     msg_ids :: [msg_id()]}).
+-record(?DISCARD_V2, {consumer_idx :: consumer_idx(),
+                      msg_ids :: [msg_id()]}).
+-record(?CREDIT_V2, {consumer_idx :: consumer_idx(),
+                     credit :: non_neg_integer(),
+                     delivery_count :: non_neg_integer(),
+                     drain :: boolean()}).
 
 -opaque protocol() ::
     #enqueue{} |
@@ -113,7 +133,12 @@
     #purge{} |
     #purge_nodes{} |
     #update_config{} |
-    #garbage_collection{}.
+    #garbage_collection{} |
+    % v2
+    #?SETTLE_V2{} |
+    #?RETURN_V2{} |
+    #?DISCARD_V2{} |
+    #?CREDIT_V2{}.
 
 -type command() :: protocol() |
                    rabbit_fifo_dlx:protocol() |
@@ -619,11 +644,40 @@ convert_msg(Header)
        is_map_key(size, Header) ->
     ?INDEX_MSG(undefined, ?DISK_MSG(Header)).
 
+convert_consumer({ConsumerTag, Pid}, CV1) ->
+    Meta = element(2, CV1),
+    CheckedOut = element(3, CV1),
+    NextMsgId = element(4, CV1),
+    Credit = element(5, CV1),
+    DeliveryCount = element(6, CV1),
+    CreditMode = element(7, CV1),
+    LifeTime = element(8, CV1),
+    Status = element(9, CV1),
+    Priority = element(10, CV1),
+    #consumer{cfg = #consumer_cfg{tag = ConsumerTag,
+                                  pid = Pid,
+                                  meta = Meta,
+                                  credit_mode = CreditMode,
+                                  lifetime = LifeTime,
+                                  priority = Priority},
+              credit = Credit,
+              status = Status,
+              delivery_count = DeliveryCount,
+              next_msg_id = NextMsgId,
+              checked_out = maps:map(
+                              fun (_, {Tag, _} = Msg) when is_atom(Tag) ->
+                                      convert_msg(Msg);
+                                  (_, {_Seq, Msg}) ->
+                                      convert_msg(Msg)
+                              end, CheckedOut)
+             }.
+
 convert_v1_to_v2(V1State) ->
     IndexesV1 = rabbit_fifo_v1:get_field(ra_indexes, V1State),
     ReturnsV1 = rabbit_fifo_v1:get_field(returns, V1State),
     MessagesV1 = rabbit_fifo_v1:get_field(messages, V1State),
     ConsumersV1 = rabbit_fifo_v1:get_field(consumers, V1State),
+    WaitingConsumersV1 = rabbit_fifo_v1:get_field(waiting_consumers, V1State),
     %% remove all raft idx in messages from index
     {_, PrefMsgs, _, PrefReturns} = rabbit_fifo_v1:get_field(prefix_msgs, V1State),
     V2PrefMsgs = lists:foldl(fun(Hdr, Acc) ->
@@ -640,16 +694,13 @@ convert_v1_to_v2(V1State) ->
                              end, V2PrefReturns, ReturnsV1),
 
     ConsumersV2 = maps:map(
-                    fun (_, #consumer{checked_out = Ch} = C) ->
-                            C#consumer{
-                              checked_out =
-                                  maps:map(
-                                    fun (_, {Tag, _} = Msg) when is_atom(Tag) ->
-                                            convert_msg(Msg);
-                                        (_, {_Seq, Msg}) ->
-                                            convert_msg(Msg)
-                                    end, Ch)}
+                    fun (ConsumerId, CV1) ->
+                            convert_consumer(ConsumerId, CV1)
                     end, ConsumersV1),
+    WaitingConsumersV2 = lists:map(
+                           fun ({ConsumerId, CV1}) ->
+                                   {ConsumerId, convert_consumer(ConsumerId, CV1)}
+                           end, WaitingConsumersV1),
 
     %% The (old) format of dead_letter_handler in RMQ < v3.10 is:
     %%   {Module, Function, Args}
@@ -699,7 +750,7 @@ convert_v1_to_v2(V1State) ->
         service_queue = rabbit_fifo_v1:get_field(service_queue, V1State),
         msg_bytes_enqueue = rabbit_fifo_v1:get_field(msg_bytes_enqueue, V1State),
         msg_bytes_checkout = rabbit_fifo_v1:get_field(msg_bytes_checkout, V1State),
-        waiting_consumers = rabbit_fifo_v1:get_field(waiting_consumers, V1State),
+        waiting_consumers = WaitingConsumersV2,
         last_active = rabbit_fifo_v1:get_field(last_active, V1State)
        }.
 
@@ -1118,7 +1169,9 @@ query_consumers(#?MODULE{consumers = Consumers,
     FromConsumers =
         maps:fold(fun (_, #consumer{status = cancelled}, Acc) ->
                           Acc;
-                      ({Tag, Pid}, #consumer{meta = Meta} = Consumer, Acc) ->
+                      ({Tag, Pid},
+                       #consumer{cfg = #consumer_cfg{meta = Meta}} = Consumer,
+                       Acc) ->
                           {Active, ActivityStatus} =
                               ActiveActivityStatusFun({Tag, Pid}, Consumer),
                           maps:put({Tag, Pid},
@@ -1134,7 +1187,9 @@ query_consumers(#?MODULE{consumers = Consumers,
     FromWaitingConsumers =
         lists:foldl(fun ({_, #consumer{status = cancelled}}, Acc) ->
                                       Acc;
-                        ({{Tag, Pid}, #consumer{meta = Meta} = Consumer}, Acc) ->
+                        ({{Tag, Pid},
+                          #consumer{cfg = #consumer_cfg{meta = Meta}} = Consumer},
+                         Acc) ->
                             {Active, ActivityStatus} =
                                 ActiveActivityStatusFun({Tag, Pid}, Consumer),
                             maps:put({Tag, Pid},
@@ -1185,9 +1240,11 @@ query_peek(Pos, State0) when Pos > 0 ->
     end.
 
 query_notify_decorators_info(#?MODULE{consumers = Consumers} = State) ->
-    MaxActivePriority = maps:fold(fun(_, #consumer{credit = C,
-                                                   status = up,
-                                                   priority = P0}, MaxP)
+    MaxActivePriority = maps:fold(fun(_,
+                                      #consumer{credit = C,
+                                                status = up,
+                                                cfg = #consumer_cfg{priority = P0}
+                                               }, MaxP)
                                         when C > 0 ->
                                           P = -P0,
                                           case MaxP of
@@ -1294,7 +1351,8 @@ cancel_consumer(Meta, ConsumerId,
     end.
 
 consumer_update_active_effects(#?MODULE{cfg = #cfg{resource = QName}},
-                               ConsumerId, #consumer{meta = Meta},
+                               ConsumerId,
+                               #consumer{cfg = #consumer_cfg{meta = Meta}},
                                Active, ActivityStatus,
                                Effects) ->
     Ack = maps:get(ack, Meta, undefined),
@@ -1354,15 +1412,17 @@ activate_next_consumer(#?MODULE{consumers = Cons,
 
 
 
-maybe_return_all(#{system_time := Ts} = Meta, ConsumerId, Consumer, S0,
+maybe_return_all(#{system_time := Ts} = Meta, ConsumerId,
+                 #consumer{cfg = CCfg} = Consumer, S0,
                  Effects0, Reason) ->
     case Reason of
         consumer_cancel ->
-            {update_or_remove_sub(Meta, ConsumerId,
-                                  Consumer#consumer{lifetime = once,
-                                                    credit = 0,
-                                                    status = cancelled},
-                                  S0), Effects0};
+            {update_or_remove_sub(
+               Meta, ConsumerId,
+               Consumer#consumer{cfg = CCfg#consumer_cfg{lifetime = once},
+                                 credit = 0,
+                                 status = cancelled},
+               S0), Effects0};
         down ->
             {S1, Effects1} = return_all(Meta, S0, Effects0, ConsumerId, Consumer),
             {S1#?MODULE{consumers = maps:remove(ConsumerId, S1#?MODULE.consumers),
@@ -1562,12 +1622,12 @@ complete(Meta, ConsumerId, DiscardedMsgIds,
                    msg_bytes_checkout = BytesCheckout - SettledSize,
                    messages_total = Tot - Len}.
 
-increase_credit(#consumer{lifetime = once,
+increase_credit(#consumer{cfg = #consumer_cfg{lifetime = once},
                           credit = Credit}, _) ->
     %% once consumers cannot increment credit
     Credit;
-increase_credit(#consumer{lifetime = auto,
-                          credit_mode = credited,
+increase_credit(#consumer{cfg = #consumer_cfg{lifetime = auto,
+                                              credit_mode = credited},
                           credit = Credit}, _) ->
     %% credit_mode: `credited' also doesn't automatically increment credit
     Credit;
@@ -1970,19 +2030,22 @@ timer_effect(RaCmdTs, State, Effects) ->
         end,
     [{timer, expire_msgs, T} | Effects].
 
-update_or_remove_sub(_Meta, ConsumerId, #consumer{lifetime = auto,
-                                                  credit = 0} = Con,
+update_or_remove_sub(_Meta, ConsumerId,
+                     #consumer{cfg = #consumer_cfg{lifetime = auto},
+                               credit = 0} = Con,
                      #?MODULE{consumers = Cons} = State) ->
     State#?MODULE{consumers = maps:put(ConsumerId, Con, Cons)};
-update_or_remove_sub(_Meta, ConsumerId, #consumer{lifetime = auto} = Con,
+update_or_remove_sub(_Meta, ConsumerId,
+                     #consumer{cfg = #consumer_cfg{lifetime = auto}} = Con,
                      #?MODULE{consumers = Cons,
                               service_queue = ServiceQueue} = State) ->
     State#?MODULE{consumers = maps:put(ConsumerId, Con, Cons),
                   service_queue = uniq_queue_in(ConsumerId, Con, ServiceQueue)};
 update_or_remove_sub(#{system_time := Ts},
-                     ConsumerId, #consumer{lifetime = once,
-                                           checked_out = Checked,
-                                           credit = 0} = Con,
+                     ConsumerId,
+                     #consumer{cfg = #consumer_cfg{lifetime = once},
+                               checked_out = Checked,
+                               credit = 0} = Con,
                      #?MODULE{consumers = Cons} = State) ->
     case maps:size(Checked) of
         0 ->
@@ -1993,13 +2056,14 @@ update_or_remove_sub(#{system_time := Ts},
             % there are unsettled items so need to keep around
             State#?MODULE{consumers = maps:put(ConsumerId, Con, Cons)}
     end;
-update_or_remove_sub(_Meta, ConsumerId, #consumer{lifetime = once} = Con,
+update_or_remove_sub(_Meta, ConsumerId,
+                     #consumer{cfg = #consumer_cfg{lifetime = once}} = Con,
                      #?MODULE{consumers = Cons,
                               service_queue = ServiceQueue} = State) ->
     State#?MODULE{consumers = maps:put(ConsumerId, Con, Cons),
                   service_queue = uniq_queue_in(ConsumerId, Con, ServiceQueue)}.
 
-uniq_queue_in(Key, #consumer{priority = P}, Queue) ->
+uniq_queue_in(Key, #consumer{cfg = #consumer_cfg{priority = P}}, Queue) ->
     % TODO: queue:member could surely be quite expensive, however the practical
     % number of unique consumers may not be large enough for it to matter
     case priority_queue:member(Key, Queue) of
@@ -2021,35 +2085,58 @@ update_consumer(ConsumerId, Meta, Spec, Priority,
     %% single active consumer on, no one is consuming yet or
     %% the currently active consumer is the same
     update_consumer0(ConsumerId, Meta, Spec, Priority, State0);
-update_consumer(ConsumerId, Meta, {Life, Credit, Mode}, Priority,
+update_consumer({Tag, Pid} = ConsumerId, Meta, {Life, Credit, Mode}, Priority,
                 #?MODULE{cfg = #cfg{consumer_strategy = single_active},
                          waiting_consumers = WaitingConsumers0} = State0) ->
     %% single active consumer on and one active consumer already
     %% adding the new consumer to the waiting list
-    Consumer = #consumer{lifetime = Life, meta = Meta,
-                         priority = Priority,
-                         credit = Credit, credit_mode = Mode},
+    Consumer = #consumer{cfg = #consumer_cfg{tag = Tag,
+                                             pid = Pid,
+                                             lifetime = Life,
+                                             meta = Meta,
+                                             priority = Priority,
+                                             credit_mode = Mode},
+                         credit = Credit},
     WaitingConsumers1 = WaitingConsumers0 ++ [{ConsumerId, Consumer}],
     State0#?MODULE{waiting_consumers = WaitingConsumers1}.
 
-update_consumer0(ConsumerId, Meta, {Life, Credit, Mode}, Priority,
+update_consumer0({Tag, Pid} = ConsumerId, Meta, {Life, Credit, Mode}, Priority,
                  #?MODULE{consumers = Cons0,
                           service_queue = ServiceQueue0} = State0) ->
     %% TODO: this logic may not be correct for updating a pre-existing consumer
-    Init = #consumer{lifetime = Life, meta = Meta,
-                     priority = Priority,
-                     credit = Credit, credit_mode = Mode},
-    Cons = maps:update_with(ConsumerId,
-                            fun(S) ->
-                                %% remove any in-flight messages from
-                                %% the credit update
-                                N = maps:size(S#consumer.checked_out),
-                                C = max(0, Credit - N),
-                                S#consumer{lifetime = Life, credit = C}
-                            end, Init, Cons0),
-    ServiceQueue = maybe_queue_consumer(ConsumerId, maps:get(ConsumerId, Cons),
-                                        ServiceQueue0),
-    State0#?MODULE{consumers = Cons, service_queue = ServiceQueue}.
+    % Init = #consumer{lifetime = Life, meta = Meta,
+    %                  priority = Priority,
+    %                  credit = Credit, credit_mode = Mode},
+    Init = #consumer{cfg = #consumer_cfg{tag = Tag,
+                                         pid = Pid,
+                                         lifetime = Life,
+                                         meta = Meta,
+                                         priority = Priority,
+                                         credit_mode = Mode},
+                     credit = Credit},
+    Consumer = case Cons0 of
+                   #{ConsumerId := #consumer{cfg = CCfg,
+                                             checked_out = Checked} = C} ->
+                       NumChecked = map_size(Checked),
+                       NewCredit = max(0, Credit - NumChecked),
+                       C#consumer{cfg = CCfg#consumer_cfg{lifetime = Life},
+                                  credit = NewCredit};
+                   _ ->
+                       Init
+               end,
+    % Cons = maps:update_with(ConsumerId,
+    %                         fun(S) ->
+    %                             %% remove any in-flight messages from
+    %                             %% the credit update
+    %                             N = maps:size(S#consumer.checked_out),
+    %                             C = max(0, Credit - N),
+    %                             CCfg = S#consumer.cfg,
+    %                             S#consumer{cfg = CCfg#consumer_cfg{lifetime = Life},
+    %                                        credit = C}
+    %                         end, Init, Cons0),
+    ServiceQueue = maybe_queue_consumer(ConsumerId, Consumer, ServiceQueue0),
+    State0#?MODULE{consumers = Cons0#{ConsumerId => Consumer},
+                   service_queue = ServiceQueue}.
 
 maybe_queue_consumer(ConsumerId, #consumer{credit = Credit} = Con,
                      ServiceQueue0) ->
@@ -2121,7 +2208,7 @@ make_register_enqueuer(Pid) ->
 
 -spec make_checkout(consumer_id(),
                     checkout_spec(), consumer_meta()) -> protocol().
-make_checkout(ConsumerId, Spec, Meta) ->
+make_checkout({_, _} = ConsumerId, Spec, Meta) ->
     #checkout{consumer_id = ConsumerId,
               spec = Spec, meta = Meta}.
 
@@ -2218,7 +2305,9 @@ all_pids_for(Node, #?MODULE{consumers = Cons0,
 suspected_pids_for(Node, #?MODULE{consumers = Cons0,
                                   enqueuers = Enqs0,
                                   waiting_consumers = WaitingConsumers0}) ->
-    Cons = maps:fold(fun({_, P}, #consumer{status = suspected_down}, Acc)
+    Cons = maps:fold(fun({_, P},
+                         #consumer{status = suspected_down},
+                         Acc)
                            when node(P) =:= Node ->
                              [P | Acc];
                         (_, _, Acc) -> Acc
