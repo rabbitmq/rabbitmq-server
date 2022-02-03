@@ -87,7 +87,7 @@ dispatcher_add(function(sammy) {
             if (sync_delete(this, '/shovels/vhost/:vhost/:name')) {
                 go_to('#/dynamic-shovels');
             } else {
-                show_popup('warn', 'Shovel not deleted because it is not running on this node.');
+                show_popup('warn', 'Shovel was not able to be deleted');
                 return false;
             }
         });
@@ -95,7 +95,7 @@ dispatcher_add(function(sammy) {
             if (sync_delete(this, '/shovels/vhost/:vhost/:name/restart')) {
                 update();
             } else {
-                show_popup('warn', 'Shovel not restarted because it is not running on this node.');
+                show_popup('warn', 'Shovel was not able to be restarted');
                 return false;
             }
         });
