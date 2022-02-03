@@ -214,9 +214,9 @@ validate_params_user(#amqp_params_network{}, _User) ->
 
 validate_delete_after(_Name, <<"never">>)          -> ok;
 validate_delete_after(_Name, <<"queue-length">>)   -> ok;
-validate_delete_after(_Name, N) when is_integer(N) -> ok;
+validate_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
 validate_delete_after(Name,  Term) ->
-    {error, "~s should be number, \"never\" or \"queue-length\", actually was "
+    {error, "~s should be a number greater than or equal to, \"never\" or \"queue-length\", actually was "
      "~p", [Name, Term]}.
 
 validate_queue_args(Name, Term0) ->
