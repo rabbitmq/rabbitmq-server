@@ -672,7 +672,8 @@ convert_consumer({ConsumerTag, Pid}, CV1) ->
                               end, CheckedOut)
              }.
 
-convert_v1_to_v2(V1State) ->
+convert_v1_to_v2(V1State0) ->
+    V1State = rabbit_fifo_v1:enqueue_all_pending(V1State0),
     IndexesV1 = rabbit_fifo_v1:get_field(ra_indexes, V1State),
     ReturnsV1 = rabbit_fifo_v1:get_field(returns, V1State),
     MessagesV1 = rabbit_fifo_v1:get_field(messages, V1State),
@@ -702,6 +703,13 @@ convert_v1_to_v2(V1State) ->
                                    {ConsumerId, convert_consumer(ConsumerId, CV1)}
                            end, WaitingConsumersV1),
 
+
+    EnqueuersV1 = rabbit_fifo_v1:get_field(enqueuers, V1State),
+    EnqueuersV2 = maps:map(fun (_EnqPid, Enq) ->
+                                   Enq#enqueuer{unused = undefined}
+                           end, EnqueuersV1),
+
+    %% do after state conversion
     %% The (old) format of dead_letter_handler in RMQ < v3.10 is:
     %%   {Module, Function, Args}
     %% The (new) format of dead_letter_handler in RMQ >= v3.10 is:
@@ -737,22 +745,21 @@ convert_v1_to_v2(V1State) ->
                expires = rabbit_fifo_v1:get_cfg_field(expires, V1State)
               },
 
-    #?MODULE{
-        cfg = Cfg,
-        messages = MessagesV2,
-        messages_total = rabbit_fifo_v1:query_messages_total(V1State),
-        returns = ReturnsV2,
-        enqueue_count = rabbit_fifo_v1:get_field(enqueue_count, V1State),
-        enqueuers = rabbit_fifo_v1:get_field(enqueuers, V1State),
-        ra_indexes = IndexesV1,
-        release_cursors = rabbit_fifo_v1:get_field(release_cursors, V1State),
-        consumers = ConsumersV2,
-        service_queue = rabbit_fifo_v1:get_field(service_queue, V1State),
-        msg_bytes_enqueue = rabbit_fifo_v1:get_field(msg_bytes_enqueue, V1State),
-        msg_bytes_checkout = rabbit_fifo_v1:get_field(msg_bytes_checkout, V1State),
-        waiting_consumers = WaitingConsumersV2,
-        last_active = rabbit_fifo_v1:get_field(last_active, V1State)
-       }.
+    #?MODULE{cfg = Cfg,
+             messages = MessagesV2,
+             messages_total = rabbit_fifo_v1:query_messages_total(V1State),
+             returns = ReturnsV2,
+             enqueue_count = rabbit_fifo_v1:get_field(enqueue_count, V1State),
+             enqueuers = EnqueuersV2,
+             ra_indexes = IndexesV1,
+             release_cursors = rabbit_fifo_v1:get_field(release_cursors, V1State),
+             consumers = ConsumersV2,
+             service_queue = rabbit_fifo_v1:get_field(service_queue, V1State),
+             msg_bytes_enqueue = rabbit_fifo_v1:get_field(msg_bytes_enqueue, V1State),
+             msg_bytes_checkout = rabbit_fifo_v1:get_field(msg_bytes_checkout, V1State),
+             waiting_consumers = WaitingConsumersV2,
+             last_active = rabbit_fifo_v1:get_field(last_active, V1State)
+            }.
 
 purge_node(Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
