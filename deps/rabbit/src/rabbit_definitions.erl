@@ -368,9 +368,10 @@ should_skip_if_unchanged() ->
 apply_defs(Map, ActingUser) ->
     apply_defs(Map, ActingUser, fun () -> ok end).
 
+-type vhost_or_success_fun() :: vhost:name() | fun(() -> 'ok').
 -spec apply_defs(Map :: #{atom() => any()},
                  ActingUser :: rabbit_types:username(),
-                 (VHost :: vhost:name() | SuccessFun :: fun(() -> 'ok'))) -> 'ok' | {error, term()}.
+                 VHostOrSuccessFun :: vhost_or_success_fun()) -> 'ok' | {error, term()}.
 
 apply_defs(Map, ActingUser, VHost) when is_binary(VHost) ->
     apply_defs(Map, ActingUser, fun () -> ok end, VHost);
