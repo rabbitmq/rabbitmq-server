@@ -25,8 +25,6 @@
     name :: atom(),
     mode :: classic | lazy,
     version :: 1 | 2,
-    %% @todo durable?
-    %% @todo auto_delete?
 
     %% We have one queue per way of publishing messages (such as channels).
     %% We can only confirm the publish order on a per-channel level because
@@ -301,7 +299,7 @@ command(St) ->
         {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
         {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
         %% These are direct operations using internal functions.
-        {100, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), integer(1, 2), boolean(), boolean(), expiration()]}},
+        {100, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
         {100, {call, ?MODULE, cmd_basic_get_msg, [St]}},
         {100, {call, ?MODULE, cmd_purge, [St]}},
         %% These are channel-based operations.
@@ -861,17 +859,15 @@ do_set_policy(Mode, Version) ->
          {<<"queue-version">>, Version}],
         0, <<"queues">>, <<"acting-user">>).
 
-cmd_publish_msg(St=#cq{amq=AMQ}, PayloadSize, DeliveryMode, Confirm, Mandatory, Expiration) ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p", [St, PayloadSize, DeliveryMode, Confirm, Mandatory, Expiration]),
+cmd_publish_msg(St=#cq{amq=AMQ}, PayloadSize, DeliveryMode, Mandatory, Expiration) ->
+    ?DEBUG("~0p ~0p ~0p ~0p ~0p", [St, PayloadSize, DeliveryMode, Mandatory, Expiration]),
     Payload = do_rand_payload(PayloadSize),
     Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
                                <<>>, #'P_basic'{delivery_mode = DeliveryMode,
                                                 expiration = do_encode_expiration(Expiration)},
                                Payload),
     Delivery = #delivery{mandatory = Mandatory, sender = self(),
-                         %% @todo Probably need to do something about Confirm?
-                         confirm = Confirm, message = Msg,% msg_seq_no = Seq,
-                         flow = noflow},
+                         confirm = false, message = Msg, flow = noflow},
     ok = rabbit_amqqueue:deliver([AMQ], Delivery),
     {MsgProps, MsgPayload} = rabbit_basic_common:from_content(Msg#basic_message.content),
     #amqp_msg{props=MsgProps, payload=MsgPayload}.
