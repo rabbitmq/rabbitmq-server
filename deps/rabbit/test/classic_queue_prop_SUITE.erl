@@ -291,8 +291,10 @@ command(St) ->
             {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_receive_and_ack, [St, channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_receive_and_requeue, [St, channel(St)]}},
+            {900, {call, ?MODULE, cmd_channel_receive_and_discard, [St, channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_receive_many_and_ack_ooo, [St, channel(St), integer(2, 10)]}},
-            {300, {call, ?MODULE, cmd_channel_receive_many_and_requeue_ooo, [St, channel(St), integer(2, 10)]}}
+            {300, {call, ?MODULE, cmd_channel_receive_many_and_requeue_ooo, [St, channel(St), integer(2, 10)]}},
+            {300, {call, ?MODULE, cmd_channel_receive_many_and_discard_ooo, [St, channel(St), integer(2, 10)]}}
         ]
     end,
     weighted_union([
@@ -448,15 +450,27 @@ next_state(St=#cq{q=Q, acked=Acked}, Msg, {call, _, cmd_channel_receive_and_ack,
     St#cq{q=delete_message(Q, Msg), acked=[Msg|Acked]};
 next_state(St, _, {call, _, cmd_channel_receive_and_requeue, _}) ->
     St;
+next_state(St=#cq{q=Q, acked=Acked}, Msg, {call, _, cmd_channel_receive_and_discard, _}) ->
+    %% Rejecting without requeing ends up acking the message
+    %% (and possibly dead-lettering) so we handle it the same
+    %% as normal acks.
+    St#cq{q=delete_message(Q, Msg), acked=[Msg|Acked]};
 next_state(St=#cq{q=Q, acked=Acked}, Msgs0, {call, _, cmd_channel_receive_many_and_ack_ooo, _}) ->
-    %% We handle {var,_} specially here but it would work for cmd_channel_publish as well.
+    %% We handle {var,_} specially here but it would work for cmd_channel_receive_and_ack as well.
     Msgs = case is_list(Msgs0) of
         true -> Msgs0;
         false -> [Msgs0]
     end,
     St#cq{q=lists:foldl(fun(Msg, QF) -> delete_message(QF, Msg) end, Q, Msgs), acked=Msgs ++ Acked};
 next_state(St, _, {call, _, cmd_channel_receive_many_and_requeue_ooo, _}) ->
-    St.
+    St;
+next_state(St=#cq{q=Q, acked=Acked}, Msgs0, {call, _, cmd_channel_receive_many_and_discard_ooo, _}) ->
+    %% We handle {var,_} specially here but it would work for cmd_channel_receive_and_discard as well.
+    Msgs = case is_list(Msgs0) of
+        true -> Msgs0;
+        false -> [Msgs0]
+    end,
+    St#cq{q=lists:foldl(fun(Msg, QF) -> delete_message(QF, Msg) end, Q, Msgs), acked=Msgs ++ Acked}.
 
 %% We remove at most one message anywhere in the queue.
 delete_message(Qs0, Msg) ->
@@ -512,11 +526,17 @@ precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_ack, [_, 
 precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_requeue, [_, Ch]}) ->
     %% Only receive and requeue when we are already consuming on this channel.
     maps:get(consumer, maps:get(Ch, Channels)) =/= none;
+precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_discard, [_, Ch]}) ->
+    %% Only receive and discard when we are already consuming on this channel.
+    maps:get(consumer, maps:get(Ch, Channels)) =/= none;
 precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_many_and_ack_ooo, [_, Ch, _]}) ->
     %% Only receive and ack when we are already consuming on this channel.
     maps:get(consumer, maps:get(Ch, Channels)) =/= none;
 precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_many_and_requeue_ooo, [_, Ch, _]}) ->
     %% Only receive and requeue when we are already consuming on this channel.
+    maps:get(consumer, maps:get(Ch, Channels)) =/= none;
+precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_many_and_discard_ooo, [_, Ch, _]}) ->
+    %% Only receive and discard when we are already consuming on this channel.
     maps:get(consumer, maps:get(Ch, Channels)) =/= none;
 precondition(_, _) ->
     true.
@@ -659,6 +679,24 @@ postcondition(St, {call, _, cmd_channel_receive_and_requeue, _}, Msg) ->
     restarted_and_previously_acked(St, Msg) orelse
     restarted_and_uncertain_publish_status(St, Msg) orelse
     crashed_and_previously_received(St, Msg);
+postcondition(_, {call, _, cmd_channel_receive_and_discard, _}, none) ->
+    true;
+postcondition(St, {call, _, cmd_channel_receive_and_discard, _}, Msg) ->
+    %% When there are multiple active consumers we may receive
+    %% messages out of order because the commands are not running
+    %% in the same order as the messages sent to channels.
+    %%
+    %% But because messages can be pending in the mailbox this can
+    %% be the case also when we had two consumers and one was
+    %% cancelled. So we do not verify the order of messages
+    %% when using consume.
+    queue_has_msg(St, Msg) orelse
+    %% After a restart, unconfirmed messages and previously
+    %% acked messages may or may not be received again, due
+    %% to a race condition.
+    restarted_and_previously_acked(St, Msg) orelse
+    restarted_and_uncertain_publish_status(St, Msg) orelse
+    crashed_and_previously_received(St, Msg);
 postcondition(St, {call, _, cmd_channel_receive_many_and_ack_ooo, _}, Msgs) ->
     lists:all(fun(Msg) ->
         queue_has_msg(St, Msg) orelse
@@ -667,6 +705,13 @@ postcondition(St, {call, _, cmd_channel_receive_many_and_ack_ooo, _}, Msgs) ->
         crashed_and_previously_received(St, Msg)
     end, Msgs);
 postcondition(St, {call, _, cmd_channel_receive_many_and_requeue_ooo, _}, Msgs) ->
+    lists:all(fun(Msg) ->
+        queue_has_msg(St, Msg) orelse
+        restarted_and_previously_acked(St, Msg) orelse
+        restarted_and_uncertain_publish_status(St, Msg) orelse
+        crashed_and_previously_received(St, Msg)
+    end, Msgs);
+postcondition(St, {call, _, cmd_channel_receive_many_and_discard_ooo, _}, Msgs) ->
     lists:all(fun(Msg) ->
         queue_has_msg(St, Msg) orelse
         restarted_and_previously_acked(St, Msg) orelse
@@ -995,6 +1040,18 @@ cmd_channel_receive_and_requeue(St=#cq{channels=Channels}, Ch) ->
         none
     end.
 
+cmd_channel_receive_and_discard(St=#cq{channels=Channels}, Ch) ->
+    ?DEBUG("~0p ~0p", [St, Ch]),
+    #{consumer := Tag} = maps:get(Ch, Channels),
+    receive
+        {#'basic.deliver'{consumer_tag = Tag,
+                          delivery_tag = DeliveryTag}, Msg} ->
+            amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DeliveryTag, requeue=false}),
+            Msg
+    after 0 ->
+        none
+    end.
+
 cmd_channel_receive_many_and_ack_ooo(St=#cq{channels=Channels}, Ch, Num) ->
     ?DEBUG("~0p ~0p ~0p", [St, Ch, Num]),
     #{consumer := Tag} = maps:get(Ch, Channels),
@@ -1029,6 +1086,24 @@ do_cmd_channel_receive_many_and_requeue_ooo_loop(Tag, Ch, Num, TagAcc, MsgAcc) -
             do_cmd_channel_receive_many_and_requeue_ooo_loop(Tag, Ch, Num - 1, [DeliveryTag|TagAcc], [Msg|MsgAcc])
     after 0 ->
         do_cmd_channel_receive_many_and_requeue_ooo_loop(Tag, Ch, 0, TagAcc, MsgAcc)
+    end.
+
+cmd_channel_receive_many_and_discard_ooo(St=#cq{channels=Channels}, Ch, Num) ->
+    ?DEBUG("~0p ~0p ~0p", [St, Ch, Num]),
+    #{consumer := Tag} = maps:get(Ch, Channels),
+    do_cmd_channel_receive_many_and_discard_ooo_loop(Tag, Ch, Num, [], []).
+
+do_cmd_channel_receive_many_and_discard_ooo_loop(_, Ch, 0, TagAcc, MsgAcc) ->
+    RandomTagAcc = [T || {_, T} <- lists:sort([{rand:uniform(), T} || T <- TagAcc])],
+    _ = [amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = T, requeue=false}) || T <- RandomTagAcc],
+    lists:reverse(MsgAcc);
+do_cmd_channel_receive_many_and_discard_ooo_loop(Tag, Ch, Num, TagAcc, MsgAcc) ->
+    receive
+        {#'basic.deliver'{consumer_tag = Tag,
+                          delivery_tag = DeliveryTag}, Msg} ->
+            do_cmd_channel_receive_many_and_discard_ooo_loop(Tag, Ch, Num - 1, [DeliveryTag|TagAcc], [Msg|MsgAcc])
+    after 0 ->
+        do_cmd_channel_receive_many_and_discard_ooo_loop(Tag, Ch, 0, TagAcc, MsgAcc)
     end.
 
 do_receive_requeue_all(Ch, Tag) ->
