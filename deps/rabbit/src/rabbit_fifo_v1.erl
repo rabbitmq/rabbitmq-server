@@ -66,7 +66,9 @@
          make_purge/0,
          make_purge_nodes/1,
          make_update_config/1,
-         make_garbage_collection/0
+         make_garbage_collection/0,
+
+         enqueue_all_pending/1
         ]).
 
 -export([convert_v0_to_v1/1]).
@@ -591,6 +593,15 @@ purge_node(Meta, Node, State, Effects) ->
                         {S, E} = handle_down(Meta, Pid, S0),
                         {S, E0 ++ E}
                 end, {State, Effects}, all_pids_for(Node, State)).
+
+%% used by v1 -> v2 conversion code
+enqueue_all_pending(#?STATE{enqueuers = Enqs} = State) ->
+    maps:fold(fun(_, #enqueuer{pending = Pend}, Acc) ->
+                     lists:foldl(fun ({_, RIdx, RawMsg}, S) ->
+                                         enqueue(RIdx, RawMsg, S)
+                                 end, Acc, Pend)
+              end, State, Enqs).
+
 
 %% any downs that re not noconnection
 handle_down(Meta, Pid, #?STATE{consumers = Cons0,
