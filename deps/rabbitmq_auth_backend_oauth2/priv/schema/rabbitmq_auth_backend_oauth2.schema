@@ -19,17 +19,17 @@
  fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.resource_server_id", Conf))
  end}.
 
-%% Configure the plugin to also look in other fields using additional_scopes_key (maps to additional_rabbitmq_scopes in the old format)
+%% Configure the plugin to also look in other fields using additional_scopes_key (maps to extra_scopes_source in the old format)
 %%
 %% {additional_rabbitmq_scopes, <<"my_custom_scope_key">>},
 
 {mapping,
  "auth_oauth2.additional_scopes_key",
- "rabbitmq_auth_backend_oauth2.additional_rabbitmq_scopes",
+ "rabbitmq_auth_backend_oauth2.extra_scopes_source",
  [{datatype, string}]}.
 
 {translation,
- "rabbitmq_auth_backend_oauth2.additional_rabbitmq_scopes",
+ "rabbitmq_auth_backend_oauth2.extra_scopes_source",
  fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("auth_oauth2.additional_scopes_key", Conf))
  end}.
