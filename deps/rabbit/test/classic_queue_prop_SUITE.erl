@@ -49,6 +49,9 @@
     %% CT config necessary to open channels.
     config = no_config :: list(),
 
+    %% Limiter pid for calling rabbit_amqqueue:basic_get.
+    limiter :: pid(),
+
     %% Channels.
     %%
     %% We set consumers to 'true' when there had been consumers, even if they
@@ -228,23 +231,27 @@ on_output_fun() ->
 %% Properties.
 
 prop_classic_queue_v1(Config) ->
+    {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
     InitialState = #cq{name=?FUNCTION_NAME, mode=default, version=1,
-                       config=minimal_config(Config)},
+                       config=minimal_config(Config), limiter=LimiterPid},
     prop_common(InitialState).
 
 prop_lazy_queue_v1(Config) ->
+    {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
     InitialState = #cq{name=?FUNCTION_NAME, mode=lazy, version=1,
-                       config=minimal_config(Config)},
+                       config=minimal_config(Config), limiter=LimiterPid},
     prop_common(InitialState).
 
 prop_classic_queue_v2(Config) ->
+    {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
     InitialState = #cq{name=?FUNCTION_NAME, mode=default, version=2,
-                       config=minimal_config(Config)},
+                       config=minimal_config(Config), limiter=LimiterPid},
     prop_common(InitialState).
 
 prop_lazy_queue_v2(Config) ->
+    {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
     InitialState = #cq{name=?FUNCTION_NAME, mode=lazy, version=2,
-                       config=minimal_config(Config)},
+                       config=minimal_config(Config), limiter=LimiterPid},
     prop_common(InitialState).
 
 prop_common(InitialState) ->
@@ -872,12 +879,9 @@ cmd_publish_msg(St=#cq{amq=AMQ}, PayloadSize, DeliveryMode, Mandatory, Expiratio
     {MsgProps, MsgPayload} = rabbit_basic_common:from_content(Msg#basic_message.content),
     #amqp_msg{props=MsgProps, payload=MsgPayload}.
 
-cmd_basic_get_msg(St=#cq{amq=AMQ}) ->
+cmd_basic_get_msg(St=#cq{amq=AMQ, limiter=LimiterPid}) ->
     ?DEBUG("~0p", [St]),
-    %% @todo Maybe have only one per test run.
-    {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
-    %% The second argument means that we will not be sending
-    %% a ack message. @todo Maybe handle both cases.
+    %% The second argument means that we will not be sending an ack message.
     Res = rabbit_amqqueue:basic_get(AMQ, true, LimiterPid,
                                     <<"cmd_basic_get_msg">>,
                                     rabbit_queue_type:init()),
