@@ -46,7 +46,7 @@ init([Name, Config0]) ->
             %% always try to reconnect
             <<"never">>                        -> {permanent, N};
             %% this Shovel is an autodelete one
-              M when is_integer(M) andalso M > 0 -> {transient, N};
+              M when is_integer(M) andalso M >= 0 -> {transient, N};
               <<"queue-length">> -> {transient, N}
           end;
         %% reconnect-delay = 0 means "do not reconnect"
