@@ -17,7 +17,7 @@
         [
         {rabbitmq_auth_backend_oauth2, [
             {resource_server_id,<<"new_resource_server_id">>},
-            {additional_rabbitmq_scopes, <<"my_custom_scope_key">>},
+            {extra_scopes_source, <<"my_custom_scope_key">>},
             {key_config, [
             {default_key, <<"id1">>},
             {signing_keys,
