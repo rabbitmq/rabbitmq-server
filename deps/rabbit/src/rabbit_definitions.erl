@@ -368,11 +368,12 @@ should_skip_if_unchanged() ->
 apply_defs(Map, ActingUser) ->
     apply_defs(Map, ActingUser, fun () -> ok end).
 
--spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username(),
-                SuccessFun :: fun(() -> 'ok')) -> 'ok'  | {error, term()};
-                (Map :: #{atom() => any()}, ActingUser :: rabbit_types:username(),
-                VHost :: vhost:name()) -> 'ok'  | {error, term()}.
+-spec apply_defs(Map :: #{atom() => any()},
+                 ActingUser :: rabbit_types:username(),
+                 (VHost :: vhost:name() | SuccessFun :: fun(() -> 'ok'))) -> 'ok' | {error, term()}.
 
+apply_defs(Map, ActingUser, VHost) when is_binary(VHost) ->
+    apply_defs(Map, ActingUser, fun () -> ok end, VHost);
 apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
     Version = maps:get(rabbitmq_version, Map, maps:get(rabbit_version, Map, undefined)),
     try
@@ -417,7 +418,7 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
                 SuccessFun :: fun(() -> 'ok'),
                 VHost :: vhost:name()) -> 'ok' | {error, term()}.
 
-apply_defs(Map, ActingUser, SuccessFun, VHost) when is_binary(VHost) ->
+apply_defs(Map, ActingUser, SuccessFun, VHost) when is_function(SuccessFun); is_binary(VHost) ->
     rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
                     [VHost, ActingUser]),
     try
