@@ -44,6 +44,10 @@
     %% restarting the queue to only move messages into 'uncertain'
     %% when we have not received confirms.
     confirmed = [] :: list(),
+    %% We also keep track of persistent messages that were sent before
+    %% the channel entered confirm mode. These messages will not be
+    %% confirmed retroactively and must not be considered confirmed.
+    unconfirmed = [] :: list(),
     %% We must also keep some published messages around because when
     %% confirms are not used, or were not received, we are uncertain
     %% of whether the message made it to the queue or not.
@@ -406,9 +410,15 @@ next_state(St=#cq{channels=Channels}, Ch, {call, _, cmd_channel_open, _}) ->
     St#cq{channels=Channels#{Ch => #{consumer => none, confirms => false}}};
 next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_close, [Ch]}) ->
     St#cq{channels=maps:remove(Ch, Channels)};
-next_state(St=#cq{channels=Channels}, _, {call, _, cmd_channel_confirm_mode, [Ch]}) ->
+next_state(St=#cq{q=Q, unconfirmed=Unconfirmed, channels=Channels}, _, {call, _, cmd_channel_confirm_mode, [Ch]}) ->
+    %% All persistent messages sent before we enabled confirm mode will not be
+    %% confirmed retroactively. We therefore need to keep track of them to avoid
+    %% marking them as confirmed later on.
+    ChQ = maps:get(Ch, Q, queue:new()),
+    Persistent = [Msg || Msg = #amqp_msg{props=#'P_basic'{delivery_mode=2}} <- queue:to_list(ChQ)],
     ChInfo = maps:get(Ch, Channels),
-    St#cq{channels=Channels#{Ch => ChInfo#{confirms => true}}};
+    St#cq{unconfirmed=Persistent ++ Unconfirmed,
+          channels=Channels#{Ch => ChInfo#{confirms => true}}};
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_channel_publish, [_, Ch|_]}) ->
     ChQ = maps:get(Ch, Q, queue:new()),
     St#cq{q=Q#{Ch => queue:in(Msg, ChQ)}};
@@ -420,7 +430,7 @@ next_state(St=#cq{q=Q}, Msgs0, {call, _, cmd_channel_publish_many, [_, Ch|_]}) -
     end,
     ChQ = maps:get(Ch, Q, queue:new()),
     St#cq{q=Q#{Ch => queue:from_list(queue:to_list(ChQ) ++ Msgs)}};
-next_state(St=#cq{q=Q, confirmed=Confirmed}, _, {call, _, cmd_channel_wait_for_confirms, [Ch]}) ->
+next_state(St=#cq{q=Q, confirmed=Confirmed, unconfirmed=Unconfirmed}, _, {call, _, cmd_channel_wait_for_confirms, [Ch]}) ->
     %% All messages sent on the channel were confirmed. We move them
     %% to the list of confirmed messages. We might end up with
     %% duplicates in the confirmed list because we might wait
@@ -429,7 +439,7 @@ next_state(St=#cq{q=Q, confirmed=Confirmed}, _, {call, _, cmd_channel_wait_for_c
     %% message is present when the queue gets restarted.
     ChQ = maps:get(Ch, Q, queue:new()),
     %% We only keep persistent messages. Messages in Confirmed are always persistent.
-    Persistent = [Msg || Msg = #amqp_msg{props=#'P_basic'{delivery_mode=2}} <- queue:to_list(ChQ)],
+    Persistent = [Msg || Msg = #amqp_msg{props=#'P_basic'{delivery_mode=2}} <- queue:to_list(ChQ), not lists:member(Msg, Unconfirmed)],
     St#cq{confirmed=Persistent ++ Confirmed};
 next_state(St, empty, {call, _, cmd_channel_basic_get, _}) ->
     St;
