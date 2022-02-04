@@ -142,8 +142,10 @@ EOF
 case $CMD in
     run-broker)
         export RABBITMQ_ALLOW_INPUT=true
-        export RABBITMQ_CONFIG_FILE=${TEST_TMPDIR}/test.config
-        write_config_file
+        if [ -z ${RABBITMQ_CONFIG_FILE+x} ]; then
+            export RABBITMQ_CONFIG_FILE=${TEST_TMPDIR}/test.config
+            write_config_file
+        fi
         ${RABBITMQ_SCRIPTS_DIR}/rabbitmq-server
         ;;
     start-background-broker)
