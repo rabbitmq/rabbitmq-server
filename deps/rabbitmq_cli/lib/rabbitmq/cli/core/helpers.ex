@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.Helpers do
-  alias RabbitMQ.CLI.Core.{Config, NodeName}
+  alias RabbitMQ.CLI.Core.{Config, DataCoercion, NodeName}
   require Record
 
   def get_rabbit_hostname(node_name_type \\ :shortnames) do
@@ -113,6 +113,16 @@ defmodule RabbitMQ.CLI.Core.Helpers do
       ),
       :no_param
     )
+  end
+
+  def atomize_values(map, keys) do
+    Enum.reduce(map, %{},
+                fn({k, v}, acc) ->
+                  case Enum.member?(keys, k) do
+                    false -> Map.put(acc, k, v)
+                    true  -> Map.put(acc, k, DataCoercion.to_atom(v))
+                  end
+                end)
   end
 
   def apply_if_exported(mod, fun, args, default) do
