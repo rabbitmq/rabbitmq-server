@@ -3319,8 +3319,8 @@ push_betas_to_deltas(Generator, LimitFun, Q, PushState) ->
         true ->
             {Q, PushState};
         false ->
-            {value, #msg_status { seq_id = MinSeqId }} = ?QUEUE:peek(Q),
-            {value, #msg_status { seq_id = MaxSeqId }} = ?QUEUE:peek_r(Q),
+            #msg_status { seq_id = MinSeqId } = ?QUEUE:get(Q),
+            #msg_status { seq_id = MaxSeqId } = ?QUEUE:get_r(Q),
             Limit = LimitFun(MinSeqId),
             case MaxSeqId < Limit of
                 true  -> {Q, PushState};
