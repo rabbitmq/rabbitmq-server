@@ -1705,10 +1705,7 @@ take_next_msg(#?MODULE{returns = Returns,
                        prefix_msgs = {NumR, R, NumP, P}} = State) ->
     %% use peek rather than out there as the most likely case is an empty
     %% queue
-    case lqueue:peek(Returns) of
-        {value, NextMsg} ->
-            {NextMsg,
-             State#?MODULE{returns = lqueue:drop(Returns)}};
+    case lqueue:get(Returns, empty) of
         empty when P == [] ->
             case lqueue:out(Messages0) of
                 {empty, _} ->
@@ -1726,7 +1723,10 @@ take_next_msg(#?MODULE{returns = Returns,
                 Header ->
                     {{'$prefix_msg', Header},
                      State#?MODULE{prefix_msgs = {NumR, R, NumP-1, Rem}}}
-            end
+            end;
+        NextMsg ->
+            {NextMsg,
+             State#?MODULE{returns = lqueue:drop(Returns)}}
     end.
 
 delivery_effect({CTag, CPid}, [], InMemMsgs) ->
