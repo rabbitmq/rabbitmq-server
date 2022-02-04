@@ -6,11 +6,11 @@
 
 defmodule RabbitMQ.CLI.Core.Parser do
   alias RabbitMQ.CLI.{CommandBehaviour, FormatterBehaviour}
-  alias RabbitMQ.CLI.Core.{CommandModules, Config}
+  alias RabbitMQ.CLI.Core.{CommandModules, Config, Helpers}
 
   def default_switches() do
     [
-      node: :atom,
+      node: :string,
       quiet: :boolean,
       silent: :boolean,
       dry_run: :boolean,
@@ -22,17 +22,19 @@ defmodule RabbitMQ.CLI.Core.Parser do
       formatter: :string,
       printer: :string,
       file: :string,
-      script_name: :atom,
+      script_name: :string,
       rabbitmq_home: :string,
       mnesia_dir: :string,
       plugins_dir: :string,
       enabled_plugins_file: :string,
       aliases_file: :string,
-      erlang_cookie: :atom,
+      erlang_cookie: :string,
       help: :boolean,
       print_stacktrace: :boolean
     ]
   end
+
+  @atomized_options [:node, :script_name, :erlang_cookie]
 
   def default_aliases() do
     [
@@ -68,13 +70,13 @@ defmodule RabbitMQ.CLI.Core.Parser do
         {[_alias_command_name | cmd_arguments], cmd_options, cmd_invalid} =
           parse_alias(input, command_name, alias_module, alias_content, options)
 
-        {alias_module, command_name, cmd_arguments, cmd_options, cmd_invalid}
+        {alias_module, command_name, cmd_arguments, Helpers.atomize_values(cmd_options, @atomized_options), cmd_invalid}
 
       command_module when is_atom(command_module) ->
         {[^command_name | cmd_arguments], cmd_options, cmd_invalid} =
           parse_command_specific(input, command_module, options)
 
-        {command_module, command_name, cmd_arguments, cmd_options, cmd_invalid}
+        {command_module, command_name, cmd_arguments, Helpers.atomize_values(cmd_options, @atomized_options), cmd_invalid}
     end
   end
 
@@ -208,7 +210,7 @@ defmodule RabbitMQ.CLI.Core.Parser do
       )
 
     norm_options = normalize_options(options, switches) |> Map.new()
-    {args, norm_options, invalid}
+    {args, Helpers.atomize_values(norm_options, @atomized_options), invalid}
   end
 
   defp build_switches(default, command, formatter) do
