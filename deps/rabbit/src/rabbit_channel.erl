@@ -2847,16 +2847,16 @@ evaluate_consumer_timeout(State0 = #ch{cfg = #conf{channel = Channel,
                                                    consumer_timeout = Timeout},
                                        unacked_message_q = UAMQ}) ->
     Now = os:system_time(millisecond),
-    case ?QUEUE:peek(UAMQ) of
-        {value, #pending_ack{delivery_tag = ConsumerTag,
-                             delivered_at = Time}}
+    case ?QUEUE:get(UAMQ, empty) of
+        #pending_ack{delivery_tag = ConsumerTag,
+                     delivered_at = Time}
           when is_integer(Timeout)
                andalso Time < Now - Timeout ->
             rabbit_log_channel:warning("Consumer ~s on channel ~w has timed out "
                                        "waiting for delivery acknowledgement. Timeout used: ~p ms. "
                                        "This timeout value can be configured, see consumers doc guide to learn more",
                                        [rabbit_data_coercion:to_binary(ConsumerTag),
-                                       Channel, Timeout]),
+                                        Channel, Timeout]),
             Ex = rabbit_misc:amqp_error(precondition_failed,
                                         "delivery acknowledgement on channel ~w timed out. "
                                         "Timeout value used: ~p ms. "

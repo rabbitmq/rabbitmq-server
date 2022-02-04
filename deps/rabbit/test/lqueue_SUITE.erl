@@ -9,7 +9,7 @@
 -export([do/1, to_list/1, io_test/1, op_test/1, error/1, oops/1,
          prop_from_list_to_list/1, prop_from_list_length/1,
          prop_in_out/1, prop_join_fold/1, prop_fifo/1, prop_r/1,
-         deprecated_state/1, out_r_worst_case/1]).
+         deprecated_state/1, deprecated_state_empty/1, out_r_worst_case/1]).
 
 -include_lib("proper/include/proper.hrl").
 -include_lib("common_test/include/ct.hrl").
@@ -40,6 +40,7 @@ groups() ->
        prop_r,
        %% test old state to new state conversion
        deprecated_state,
+       deprecated_state_empty,
        %% tests involving lists:reverse/2
        out_r_worst_case
       ]
@@ -290,6 +291,7 @@ do_error(F, IQ) ->
     {error,badarg} = trycatch(join, [IQ, F(lqueue:new())]),
     {error,badarg} = trycatch(get, [IQ]),
     {error,badarg} = trycatch(get_r, [IQ]),
+    {error,badarg} = trycatch(get, [IQ, my_default]),
     {error,badarg} = trycatch(peek, [IQ]),
     {error,badarg} = trycatch(peek_r, [IQ]),
     ok.
@@ -528,12 +530,14 @@ prop_fifo(_Config) ->
                                    ?assertEqual(length(List), lqueue:len(Queue0)),
                                    Queue = lists:foldl(fun(E, Q0) ->
                                                                E = lqueue:get(Q0),
+                                                               E = lqueue:get(Q0, default),
                                                                {value, E} = lqueue:peek(Q0),
                                                                {{value, E}, Q} = lqueue:out(Q0),
                                                                ?assertMatch(Q, lqueue:drop(Q0)),
                                                                Q
                                                        end, Queue0, List),
                                    ?assertError(empty, lqueue:get(Queue)),
+                                   ?assertEqual(default, lqueue:get(Queue, default)),
                                    ?assertEqual(empty, lqueue:peek(Queue)),
                                    ?assertMatch({empty, Queue}, lqueue:out(Queue)),
                                    ?assertError(empty, lqueue:drop(Queue)),
@@ -577,6 +581,7 @@ deprecated_state(_Config) ->
     ?assertEqual(4, lqueue:len(OldState)),
     ?assertEqual([a,b,c,d], lqueue:to_list(OldState)),
     ?assertEqual(a, lqueue:get(OldState)),
+    ?assertEqual(a, lqueue:get(OldState, default)),
     ?assertEqual(d, lqueue:get_r(OldState)),
     ?assertEqual({value, a}, lqueue:peek(OldState)),
     ?assertEqual({value, d}, lqueue:peek_r(OldState)),
@@ -588,6 +593,25 @@ deprecated_state(_Config) ->
     ?assertEqual({3, [d,c], [b]}, lqueue:drop(OldState)),
     ?assertEqual({{value, d}, {3, [c], [a,b]}}, lqueue:out_r(OldState)),
     ?assertEqual({5, [e], [a,b,c,d]}, lqueue:join(OldState, {1, {[e], []}})).
+
+deprecated_state_empty(_Config) ->
+    OldState = {0, {[], []}},
+    ?assert(lqueue:is_empty(OldState)),
+    ?assertEqual(0, lqueue:len(OldState)),
+    ?assertEqual([], lqueue:to_list(OldState)),
+    ?assertError(empty, lqueue:get(OldState)),
+    ?assertEqual(default, lqueue:get(OldState, default)),
+    ?assertError(empty, lqueue:get_r(OldState)),
+    ?assertEqual(empty, lqueue:peek(OldState)),
+    ?assertEqual(empty, lqueue:peek_r(OldState)),
+    ?assertEqual(0, lqueue:fold(fun(E, N) when is_atom(E) -> N+1 end, 0, OldState)),
+    %% convert to new state
+    ?assertEqual({1, [e], []}, lqueue:in(e, OldState)),
+    ?assertEqual({1, [], [e]}, lqueue:in_r(e, OldState)),
+    ?assertEqual({empty, {0, [], []}}, lqueue:out(OldState)),
+    ?assertError(empty, lqueue:drop(OldState)),
+    ?assertEqual({empty, {0, [], []}}, lqueue:out_r(OldState)),
+    ?assertEqual({0, [], []}, lqueue:join(OldState, OldState)).
 
 out_r_worst_case(_Config) ->
     Q0 = lqueue:in(a, lqueue:new()),
