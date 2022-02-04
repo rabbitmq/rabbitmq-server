@@ -1484,15 +1484,12 @@ get_qs_head(Qs) ->
             end, undefined, Qs).
 
 get_q_head(Q) ->
-    get_collection_head(Q, fun ?QUEUE:is_empty/1, fun ?QUEUE:peek/1).
+    ?QUEUE:get(Q, undefined).
 
 get_pa_head(PA) ->
-    get_collection_head(PA, fun gb_trees:is_empty/1, fun gb_trees:smallest/1).
-
-get_collection_head(Col, IsEmpty, GetVal) ->
-    case IsEmpty(Col) of
+    case gb_trees:is_empty(PA) of
         false ->
-            {_, MsgStatus} = GetVal(Col),
+            {_, MsgStatus} = gb_trees:smallest(PA),
             MsgStatus;
         true  -> undefined
     end.
@@ -2842,9 +2839,9 @@ msg_from_pending_ack(SeqId, State) ->
     end.
 
 beta_limit(Q) ->
-    case ?QUEUE:peek(Q) of
-        {value, #msg_status { seq_id = SeqId }} -> SeqId;
-        empty                                   -> undefined
+    case ?QUEUE:get(Q, empty) of
+        #msg_status { seq_id = SeqId } -> SeqId;
+        empty -> undefined
     end.
 
 delta_limit(?BLANK_DELTA_PATTERN(_))              -> undefined;
