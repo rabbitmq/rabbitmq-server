@@ -7,6 +7,8 @@
 
 -module(lqueue).
 
+-compile({no_auto_import,[get/1]}).
+
 %% Most functions in lqueue were copied from OTP's queue module
 %% and amended to maintain the length of the queue.
 %% lqueue implements a subset of Erlang's queue module.
@@ -18,7 +20,7 @@
 %% Original style API
 -export([in/2, in_r/2, out/1, out_r/1]).
 %% Less garbage style API
--export([peek/1, peek_r/1, drop/1]).
+-export([get/1, get_r/1, peek/1, peek_r/1, drop/1]).
 %% Higher level API
 -export([join/2, fold/3]).
 
@@ -197,6 +199,55 @@ out_r({L, {In, Out}})
   when is_integer(L), L >= 0, is_list(In), is_list(Out) ->
     out_r({L, In, Out});
 out_r(Q) ->
+    erlang:error(badarg, [Q]).
+
+%%--------------------------------------------------------------------------
+%% Less garbage style API.
+
+%% Return the first element in the queue
+%%
+%% O(1) since the queue is supposed to be well formed
+-spec get(Q :: ?MODULE(Item)) -> Item.
+get({0, [], []} = Q) ->
+    erlang:error(empty, [Q]);
+get({L, R, F})
+  when is_integer(L), L > 0, is_list(R), is_list(F) ->
+    get(R, F);
+%% accept deprecated state
+get({L, {R, F}})
+  when is_integer(L), L >= 0, is_list(R), is_list(F) ->
+    get({L, R, F});
+get(Q) ->
+    erlang:error(badarg, [Q]).
+
+-spec get(list(), list()) -> term().
+get(R, [H|_])
+  when is_list(R) ->
+    H;
+get([H], []) ->
+    H;
+get([_|R], []) -> % malformed queue -> O(len(Q))
+    lists:last(R).
+
+%% Return the last element in the queue
+%%
+%% O(1) since the queue is supposed to be well formed
+-spec get_r(Q :: ?MODULE(Item)) -> Item.
+get_r({0, [], []} = Q) ->
+    erlang:error(empty, [Q]);
+get_r({L, [H|_], F})
+  when is_integer(L), L > 0, is_list(F) ->
+    H;
+get_r({1, [], [H]}) ->
+    H;
+get_r({L, [], [_|F]}) % malformed queue -> O(len(Q))
+  when is_integer(L), L > 0 ->
+    lists:last(F);
+%% accept deprecated state
+get_r({L, {R, F}})
+  when is_integer(L), L >= 0, is_list(R), is_list(F) ->
+    get_r({L, R, F});
+get_r(Q) ->
     erlang:error(badarg, [Q]).
 
 %% Return the first element in the queue
