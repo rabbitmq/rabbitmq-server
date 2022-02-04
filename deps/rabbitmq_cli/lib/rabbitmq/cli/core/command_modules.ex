@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Core.CommandModules do
-  alias RabbitMQ.CLI.Core.Config
+  alias RabbitMQ.CLI.Core.{Config, DataCoercion}
   alias RabbitMQ.CLI.Plugins.Helpers, as: PluginsHelpers
   alias RabbitMQ.CLI.CommandBehaviour
 
@@ -37,7 +37,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
 
   def script_scope(opts) do
     scopes = Application.get_env(:rabbitmqctl, :scopes, [])
-    scopes[Config.get_option(:script_name, opts)] || :none
+    scopes[DataCoercion.to_atom(Config.get_option(:script_name, opts))] || :none
   end
 
   def load_commands_core(scope) do
