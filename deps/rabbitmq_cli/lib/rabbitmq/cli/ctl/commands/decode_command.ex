@@ -14,11 +14,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
 
   def switches() do
     [
-      cipher: :atom,
-      hash: :atom,
+      cipher: :string,
+      hash: :string,
       iterations: :integer
     ]
   end
+  @atomized_keys [:cipher, :hash]
 
   def distribution(_), do: :none
 
@@ -28,7 +29,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
          hash: :rabbit_pbe.default_hash(),
          iterations: :rabbit_pbe.default_iterations()
        }, opts)
-    {args, with_defaults}
+    {args, Helpers.atomize_values(with_defaults, @atomized_keys)}
   end
 
   def validate(args, _) when length(args) < 2 do
