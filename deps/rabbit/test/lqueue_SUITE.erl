@@ -288,6 +288,8 @@ do_error(F, IQ) ->
     {error,badarg} = trycatch(fold, [fun(_,_) -> ok end,0,IQ]),
     {error,badarg} = trycatch(join, [F(lqueue:new()), IQ]),
     {error,badarg} = trycatch(join, [IQ, F(lqueue:new())]),
+    {error,badarg} = trycatch(get, [IQ]),
+    {error,badarg} = trycatch(get_r, [IQ]),
     {error,badarg} = trycatch(peek, [IQ]),
     {error,badarg} = trycatch(peek_r, [IQ]),
     ok.
@@ -332,6 +334,12 @@ optab() ->
                                             T = lists:reverse(R),
                                             {{value,X},{T}}
                                     end
+                            end},
+     {get,[q],       v,     fun ({[]})    -> erlang:error(empty);
+                                ({[H|_]}) -> H
+                            end},
+     {get_r,[q],     v,     fun ({[]})    -> erlang:error(empty);
+                                ({L})     -> lists:last(L)
                             end},
      {peek,[q],      v,     fun ({[]})    -> empty;
                                 ({[H|_]}) -> {value,H}
@@ -519,11 +527,13 @@ prop_fifo(_Config) ->
                                                         end, lqueue:new(), List),
                                    ?assertEqual(length(List), lqueue:len(Queue0)),
                                    Queue = lists:foldl(fun(E, Q0) ->
+                                                               E = lqueue:get(Q0),
                                                                {value, E} = lqueue:peek(Q0),
                                                                {{value, E}, Q} = lqueue:out(Q0),
                                                                ?assertMatch(Q, lqueue:drop(Q0)),
                                                                Q
                                                        end, Queue0, List),
+                                   ?assertError(empty, lqueue:get(Queue)),
                                    ?assertEqual(empty, lqueue:peek(Queue)),
                                    ?assertMatch({empty, Queue}, lqueue:out(Queue)),
                                    ?assertError(empty, lqueue:drop(Queue)),
@@ -540,10 +550,12 @@ prop_r(_Config) ->
                                                         end, lqueue:new(), List),
                                    ?assertEqual(length(List), lqueue:len(Queue0)),
                                    Queue = lists:foldl(fun(E, Q0) ->
+                                                               E = lqueue:get_r(Q0),
                                                                {value, E} = lqueue:peek_r(Q0),
                                                                {{value, E}, Q} = lqueue:out_r(Q0),
                                                                Q
                                                        end, Queue0, List),
+                                   ?assertError(empty, lqueue:get_r(Queue)),
                                    ?assertEqual(empty, lqueue:peek_r(Queue)),
                                    ?assertMatch({empty, Queue}, lqueue:out_r(Queue)),
                                    lqueue:is_empty(Queue)
@@ -564,6 +576,8 @@ deprecated_state(_Config) ->
     ?assertNot(lqueue:is_empty(OldState)),
     ?assertEqual(4, lqueue:len(OldState)),
     ?assertEqual([a,b,c,d], lqueue:to_list(OldState)),
+    ?assertEqual(a, lqueue:get(OldState)),
+    ?assertEqual(d, lqueue:get_r(OldState)),
     ?assertEqual({value, a}, lqueue:peek(OldState)),
     ?assertEqual({value, d}, lqueue:peek_r(OldState)),
     ?assertEqual(4, lqueue:fold(fun(E, N) when is_atom(E) -> N+1 end, 0, OldState)),
