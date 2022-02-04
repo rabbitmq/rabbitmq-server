@@ -39,6 +39,11 @@
     %% synchronous and as a result we may end up receiving messages twice
     %% after a queue is restarted.
     acked = [] :: list(),
+    %% We keep track of persistent messages that were confirmed and for
+    %% which we have received the publisher confirm. This is used when
+    %% restarting the queue to only move messages into 'uncertain'
+    %% when we have not received confirms.
+    confirmed = [] :: list(),
     %% We must also keep some published messages around because when
     %% confirms are not used, or were not received, we are uncertain
     %% of whether the message made it to the queue or not.
@@ -285,7 +290,7 @@ command(St) ->
             {100, {call, ?MODULE, cmd_channel_close, [channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
             {300, {call, ?MODULE, cmd_channel_publish_many, [St, channel(St), integer(2, 512), integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
-            {300, {call, ?MODULE, cmd_channel_wait_for_confirms, [channel(St)]}},
+            {900, {call, ?MODULE, cmd_channel_wait_for_confirms, [channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}},
@@ -332,30 +337,35 @@ channel(#cq{channels=Channels}) ->
 
 next_state(St, AMQ, {call, _, cmd_setup_queue, _}) ->
     St#cq{amq=AMQ};
-next_state(St=#cq{q=Q, uncertain=Uncertain0, channels=Channels0}, AMQ, {call, _, cmd_restart_vhost_clean, _}) ->
+next_state(St=#cq{q=Q0, confirmed=Confirmed, uncertain=Uncertain0, channels=Channels0}, AMQ, {call, _, cmd_restart_vhost_clean, _}) ->
     %% Consider all consumers canceled when the vhost restarts.
     Channels = maps:map(fun (_, ChInfo) -> ChInfo#{consumer => none} end, Channels0),
-    %% The status of messages that were published before the vhost restart
+    %% The status of persistent messages that were published before the vhost restart
     %% is uncertain, unless the channel is in confirms mode and confirms
-    %% were received. We do not track them at the moment, so we instead
-    %% move all pending messages in the 'uncertain' list. When tracking
-    %% them it would be only persistent messages after the last confirmed
-    %% message that would end up in uncertain state.
-    Uncertain = maps:fold(fun(_, ChQ, Acc) ->
-        queue:to_list(ChQ) ++ Acc
-    end, Uncertain0, Q),
-    St#cq{amq=AMQ, q=#{}, restarted=true, uncertain=Uncertain, channels=Channels};
-next_state(St=#cq{q=Q, uncertain=Uncertain0}, AMQ, {call, _, cmd_restart_queue_dirty, _}) ->
-    %% The status of messages that were published before the queue crash
+    %% were received.
+    {Uncertain, Q} = maps:fold(fun(Ch, ChQ, {UncertainAcc, QAcc}) ->
+        ChQL = queue:to_list(ChQ),
+        %% We only keep persistent messages because on restart the queue acks the transients.
+        %% We canceled all consumers so there is no risk of receiving a transient in transit.
+        ChQConfirmed = [Msg || Msg <- ChQL, lists:member(Msg, Confirmed)],
+        ChQUncertain = [Msg || Msg = #amqp_msg{props=#'P_basic'{delivery_mode=2}} <- ChQL, not lists:member(Msg, Confirmed)],
+        {ChQUncertain ++ UncertainAcc, QAcc#{Ch => queue:from_list(ChQConfirmed)}}
+    end, {Uncertain0, #{}}, Q0),
+    St#cq{amq=AMQ, q=Q, restarted=true, uncertain=Uncertain, channels=Channels};
+next_state(St=#cq{q=Q0, confirmed=Confirmed, uncertain=Uncertain0}, AMQ, {call, _, cmd_restart_queue_dirty, _}) ->
+    %% The status of persistent messages that were published before the queue crash
     %% is uncertain, unless the channel is in confirms mode and confirms
-    %% were received. We do not track them at the moment, so we instead
-    %% move all pending messages in the 'uncertain' list. When tracking
-    %% them it would be only persistent messages after the last confirmed
-    %% message that would end up in uncertain state.
-    Uncertain = maps:fold(fun(_, ChQ, Acc) ->
-        queue:to_list(ChQ) ++ Acc
-    end, Uncertain0, Q),
-    St#cq{amq=AMQ, q=#{}, restarted=true, crashed=true, uncertain=Uncertain};
+    %% were received.
+    {Uncertain, Q} = maps:fold(fun(Ch, ChQ, {UncertainAcc, QAcc}) ->
+        ChQL = queue:to_list(ChQ),
+        %% We only keep persistent messages because on restart the queue acks the transients.
+        ChQConfirmed = [Msg || Msg <- ChQL, lists:member(Msg, Confirmed)],
+        %% We keep both persistent and transient in Uncertain because there might
+        %% be messages in transit that will be received by consumers.
+        ChQUncertain = [Msg || Msg <- ChQL, not lists:member(Msg, Confirmed)],
+        {ChQUncertain ++ UncertainAcc, QAcc#{Ch => queue:from_list(ChQConfirmed)}}
+    end, {Uncertain0, #{}}, Q0),
+    St#cq{amq=AMQ, q=Q, restarted=true, crashed=true, uncertain=Uncertain};
 next_state(St, _, {call, _, cmd_set_v2_check_crc32, _}) ->
     St;
 next_state(St, _, {call, _, cmd_set_mode, [_, Mode]}) ->
@@ -410,8 +420,17 @@ next_state(St=#cq{q=Q}, Msgs0, {call, _, cmd_channel_publish_many, [_, Ch|_]}) -
     end,
     ChQ = maps:get(Ch, Q, queue:new()),
     St#cq{q=Q#{Ch => queue:from_list(queue:to_list(ChQ) ++ Msgs)}};
-next_state(St, _, {call, _, cmd_channel_wait_for_confirms, _}) ->
-    St;
+next_state(St=#cq{q=Q, confirmed=Confirmed}, _, {call, _, cmd_channel_wait_for_confirms, [Ch]}) ->
+    %% All messages sent on the channel were confirmed. We move them
+    %% to the list of confirmed messages. We might end up with
+    %% duplicates in the confirmed list because we might wait
+    %% for confirms multiple times before we retrieve them,
+    %% but that's okay because we only need to check that the
+    %% message is present when the queue gets restarted.
+    ChQ = maps:get(Ch, Q, queue:new()),
+    %% We only keep persistent messages. Messages in Confirmed are always persistent.
+    Persistent = [Msg || Msg = #amqp_msg{props=#'P_basic'{delivery_mode=2}} <- queue:to_list(ChQ)],
+    St#cq{confirmed=Persistent ++ Confirmed};
 next_state(St, empty, {call, _, cmd_channel_basic_get, _}) ->
     St;
 next_state(St=#cq{q=Q, received=Received}, Msg, {call, _, cmd_channel_basic_get, _}) ->
