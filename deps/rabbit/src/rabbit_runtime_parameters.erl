@@ -418,7 +418,7 @@ global_info_keys() -> [name, value].
 
 lookup_component(Component) ->
     case rabbit_registry:lookup_module(
-           runtime_parameter, list_to_atom(binary_to_list(Component))) of
+           runtime_parameter, rabbit_data_coercion:to_atom(Component)) of
         {error, not_found} -> {errors,
                                [{"component ~s not found", [Component]}]};
         {ok, Module}       -> {ok, Module}

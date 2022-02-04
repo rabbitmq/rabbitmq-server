@@ -2,9 +2,18 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
+%% This module is responsible for loading definition from a local filesystem
+%% (a JSON file or a conf.d-style directory of files).
+%%
+%% See also
+%%
+%%  * rabbit.schema (core Cuttlefish schema mapping file)
+%%  * rabbit_definitions
+%%  * rabbit_definitions_import_http
+%%  * rabbit_definitions_hashing
 -module(rabbit_definitions_import_local_filesystem).
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -14,7 +23,12 @@
     load/1,
     %% classic arguments specific to this source
     load/2,
-    location/0
+    load_with_hashing/3,
+    load_with_hashing/4,
+    location/0,
+
+    %% tests and REPL
+    compiled_definitions_from_local_path/2
 ]).
 
 
@@ -31,6 +45,7 @@
 is_enabled() ->
     is_enabled_via_classic_option() or is_enabled_via_modern_option().
 
+-spec load(Proplist :: list() | map()) -> ok | {error, term()}.
 load(Proplist) when is_list(Proplist) ->
     case pget(local_path, Proplist, undefined) of
         undefined -> {error, "local definition file path is not configured: local_path is not set"};
@@ -51,10 +66,40 @@ load(Proplist) when is_list(Proplist) ->
                     Msg = rabbit_misc:format("local definition file '~s' does not exist or cannot be read by the node", [Path]),
                     {error, {could_not_read_defs, Msg}}
             end
+    end;
+load(Map) when is_map(Map) ->
+    load(maps:to_list(Map)).
+
+-spec load(IsDir :: boolean(), Path :: file:name_all()) -> ok | {error, term()}.
+load(IsDir, Path) when is_boolean(IsDir) ->
+    load_from_local_path(IsDir, Path).
+
+-spec load_with_hashing(Proplist :: list() | map(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
+load_with_hashing(Proplist, PreviousHash, Algo) ->
+    case pget(local_path, Proplist, undefined) of
+        undefined -> {error, "local definition file path is not configured: local_path is not set"};
+        Path      ->
+            IsDir = filelib:is_dir(Path),
+            load_with_hashing(IsDir, Path, PreviousHash, Algo)
     end.
 
-load(IsDir, Path) ->
-    load_from_local_path(IsDir, Path).
+-spec load_with_hashing(IsDir :: boolean(), Path :: file:name_all(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
+load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
+    rabbit_log:debug("Loading definitions with content hashing enabled, path: ~s, is directory?: ~p, previous hash value: ~s",
+                     [Path, IsDir, rabbit_misc:hexify(PreviousHash)]),
+    case compiled_definitions_from_local_path(IsDir, Path) of
+        %% the directory is empty or no files could be read
+        [] ->
+            rabbit_definitions_hashing:hash(Algo, undefined);
+        Defs ->
+            case rabbit_definitions_hashing:hash(Algo, Defs) of
+                PreviousHash -> PreviousHash;
+                Other        ->
+                    rabbit_log:debug("New hash: ~s", [rabbit_misc:hexify(Other)]),
+                    load_from_local_path(IsDir, Path),
+                    Other
+            end
+    end.
 
 location() ->
     case location_from_classic_option() of
@@ -62,6 +107,7 @@ location() ->
         Value     -> Value
     end.
 
+-spec load_from_local_path(IsDir :: boolean(), Path :: file:name_all()) -> ok | {error, term()}.
 load_from_local_path(true, Dir) ->
     rabbit_log:info("Applying definitions from directory ~s", [Dir]),
     load_from_files(file:list_dir(Dir), Dir);
@@ -111,6 +157,37 @@ location_from_modern_option() ->
             pget(local_path, Proplist)
     end.
 
+-spec compiled_definitions_from_local_path(IsDir :: boolean(), Dir :: file:name_all()) -> [binary()] | {error, any()}.
+compiled_definitions_from_local_path(true = _IsDir, Dir) ->
+    case file:list_dir(Dir) of
+        {ok, Filenames0} ->
+            Filenames1  = lists:sort(Filenames0),
+            Filenames2  = [filename:join(Dir, F) || F <- Filenames1],
+            ReadResults = [rabbit_misc:raw_read_file(F) || F <- Filenames2],
+            Successes   = lists:filter(
+                fun ({error, _}) -> false;
+                    (_)          -> true
+                end, ReadResults),
+            [Body || {ok, Body} <- Successes];
+        {error, E} ->
+            rabbit_log:error("Could not list files in '~s', error: ~p", [Dir, E]),
+            {error, {could_not_read_defs, {Dir, E}}}
+    end;
+compiled_definitions_from_local_path(false = _IsDir, Path) ->
+    case read_file_contents(Path) of
+        {error, _} -> [];
+        Body       -> [Body]
+    end.
+
+-spec read_file_contents(Path :: file:name_all()) -> binary() | {error, any()}.
+read_file_contents(Path) ->
+    case rabbit_misc:raw_read_file(Path) of
+        {ok, Body} ->
+            Body;
+        {error, E} ->
+            rabbit_log:error("Could not read definitions from file at '~s', error: ~p", [Path, E]),
+            {error, {could_not_read_defs, {Path, E}}}
+    end.
 
 load_from_files({ok, Filenames0}, Dir) ->
     Filenames1 = lists:sort(Filenames0),
