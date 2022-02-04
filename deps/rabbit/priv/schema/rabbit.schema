@@ -148,11 +148,17 @@ fun(Conf) ->
         http             -> rabbit_definitions_import_https;
         %% accept both rabbitmq_ and rabbit_ (typical core module prefix)
         rabbitmq_definitions_import_local_filesystem -> rabbit_definitions_import_local_filesystem;
-        rabbitmq_definitions_import_local_filesystem -> rabbit_definitions_import_https;
+        rabbitmq_definitions_import_http             -> rabbit_definitions_import_https;
         %% any other value is used as is
         Module           -> Module
     end
 end}.
+
+{mapping, "definitions.skip_if_unchanged", "rabbit.definitions.skip_if_unchanged", [
+    {datatype, {enum, [true, false]}}]}.
+
+{mapping, "definitions.hashing.algorithm", "rabbit.definitions.hashing_algorithm", [
+    {datatype, {enum, [sha, sha224, sha256, sha384, sha512]}}]}.
 
 %% Load definitions from a remote URL over HTTPS. See
 %% https://www.rabbitmq.com/management.html#load-definitions

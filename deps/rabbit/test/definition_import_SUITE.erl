@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(definition_import_SUITE).
@@ -20,6 +20,7 @@ all() ->
      %% uses rabbit.definitions with import_backend set to local_filesystem
      {group, boot_time_import_using_modern_local_filesystem_source},
      {group, boot_time_import_using_public_https_source},
+     {group, skip_if_unchanged},
      {group, roundtrip},
      {group, import_on_a_running_node}
     ].
@@ -67,6 +68,12 @@ groups() ->
         {roundtrip, [], [
             export_import_round_trip_case1,
             export_import_round_trip_case2
+        ]},
+
+        {skip_if_unchanged, [], [
+            %% these all must import the same definition file
+            import_on_a_booting_node_using_skip_if_unchanged,
+            import_case5
         ]}
     ].
 
@@ -104,6 +111,22 @@ init_per_group(boot_time_import_using_modern_local_filesystem_source = Group, Co
           {definitions, [
               {import_backend, rabbit_definitions_import_local_filesystem},
               {local_path,     CasePath}
+          ]}
+      ]}),
+    rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
+%% same as the classic source semantically, uses skip_if_unchanged
+init_per_group(skip_if_unchanged = Group, Config) ->
+    CasePath = filename:join(?config(data_dir, Config), "case5.json"),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {rmq_nodename_suffix, Group},
+        {rmq_nodes_count, 1}
+      ]),
+    Config2 = rabbit_ct_helpers:merge_app_env(Config1,
+      {rabbit, [
+          {definitions, [
+              {import_backend,    rabbit_definitions_import_local_filesystem},
+              {local_path,        CasePath},
+              {skip_if_unchanged, true}
           ]}
       ]}),
     rabbit_ct_helpers:run_setup_steps(Config2, rabbit_ct_broker_helpers:setup_steps());
@@ -320,6 +343,15 @@ import_on_a_booting_node_using_modern_local_filesystem_source(Config) ->
 import_on_a_booting_node_using_public_https_source(Config) ->
     VHost = <<"bunny_testbed">>,
     %% verify that virtual host eventually starts
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
+        ok -> ok;
+        {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])
+    end.
+
+import_on_a_booting_node_using_skip_if_unchanged(Config) ->
+    %% see case5.json
+    VHost = <<"vhost2">>,
+    %% verify that vhost2 eventually starts
     case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, await_running_on_all_nodes, [VHost, 3000]) of
         ok -> ok;
         {error, timeout} -> ct:fail("virtual host ~p was not imported on boot", [VHost])

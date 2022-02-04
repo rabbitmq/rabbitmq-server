@@ -2,9 +2,32 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
+
+%% This module is responsible for definition import. Definition import makes
+%% it possible to seed a cluster with virtual hosts, users, permissions, policies,
+%% a messaging topology, and so on.
+%%
+%% These resources can be loaded from a local filesystem (a JSON file or a conf.d-style
+%% directory of files), an HTTPS source or any other source using a user-provided module.
+%%
+%% Definition import can be performed on node boot or at any time via CLI tools
+%% or the HTTP API. On node boot, every node performs definition import independently.
+%% However, some resource types (queues and bindings) are imported only when a certain
+%% number of nodes join the cluster. This is so that queues and their dependent
+%% objects (bindings) have enough nodes to place their replicas on.
+%%
+%% It is possible for the user to opt into skipping definition import if
+%% file/source content has not changed.
+%%
+%% See also
+%%
+%%  * rabbit.schema (core Cuttlefish schema mapping file)
+%%  * rabbit_definitions_import_local_filesystem
+%%  * rabbit_definitions_import_http
+%%  * rabbit_definitions_hashing
 -module(rabbit_definitions).
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -19,7 +42,9 @@
 ]).
 %% import
 -export([import_raw/1, import_raw/2, import_parsed/1, import_parsed/2,
-         apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5]).
+         import_parsed_with_hashing/1, import_parsed_with_hashing/2,
+         apply_defs/2, apply_defs/3, apply_defs/4, apply_defs/5,
+         should_skip_if_unchanged/0]).
 
 -export([all_definitions/0]).
 -export([
@@ -101,6 +126,63 @@ import_parsed(Body0, VHost) ->
     Body = atomise_map_keys(Body0),
     apply_defs(Body, ?INTERNAL_USER, fun() -> ok end, VHost).
 
+
+-spec import_parsed_with_hashing(Defs :: #{any() => any()} | list()) -> ok | {error, term()}.
+import_parsed_with_hashing(Body0) when is_list(Body0) ->
+    import_parsed(maps:from_list(Body0));
+import_parsed_with_hashing(Body0) when is_map(Body0) ->
+    rabbit_log:info("Asked to import definitions. Acting user: ~s", [?INTERNAL_USER]),
+    case should_skip_if_unchanged() of
+        false ->
+            import_parsed(Body0);
+        true  ->
+            Body         = atomise_map_keys(Body0),
+            PreviousHash = rabbit_definitions_hashing:stored_global_hash(),
+            Algo         = rabbit_definitions_hashing:hashing_algorithm(),
+            case rabbit_definitions_hashing:hash(Algo, Body) of
+                PreviousHash ->
+                    rabbit_log:info("Submitted definition content hash matches the stored one: ~s", [binary:part(rabbit_misc:hexify(PreviousHash), 0, 12)]),
+                    ok;
+                Other        ->
+                    rabbit_log:debug("Submitted definition content hash: ~s, stored one: ~s", [
+                        binary:part(rabbit_misc:hexify(PreviousHash), 0, 10),
+                        binary:part(rabbit_misc:hexify(Other), 0, 10)
+                    ]),
+                    Result = apply_defs(Body, ?INTERNAL_USER),
+                    rabbit_definitions_hashing:store_global_hash(Other),
+                    Result
+            end
+    end.
+
+-spec import_parsed_with_hashing(Defs :: #{any() => any() | list()}, VHost :: vhost:name()) -> ok | {error, term()}.
+import_parsed_with_hashing(Body0, VHost) when is_list(Body0) ->
+    import_parsed(maps:from_list(Body0), VHost);
+import_parsed_with_hashing(Body0, VHost) ->
+    rabbit_log:info("Asked to import definitions for virtual host '~s'. Acting user: ~s", [?INTERNAL_USER, VHost]),
+
+    case should_skip_if_unchanged() of
+        false ->
+            import_parsed(Body0, VHost);
+        true  ->
+            Body = atomise_map_keys(Body0),
+            PreviousHash = rabbit_definitions_hashing:stored_vhost_specific_hash(VHost),
+            Algo         = rabbit_definitions_hashing:hashing_algorithm(),
+            case rabbit_definitions_hashing:hash(Algo, Body) of
+                PreviousHash ->
+                    rabbit_log:info("Submitted definition content hash matches the stored one: ~s", [binary:part(rabbit_misc:hexify(PreviousHash), 0, 12)]),
+                    ok;
+                Other        ->
+                    rabbit_log:debug("Submitted definition content hash: ~s, stored one: ~s", [
+                        binary:part(rabbit_misc:hexify(PreviousHash), 0, 10),
+                        binary:part(rabbit_misc:hexify(Other), 0, 10)
+                    ]),
+                    Result = apply_defs(Body, ?INTERNAL_USER, fun() -> ok end, VHost),
+                    rabbit_definitions_hashing:store_vhost_specific_hash(VHost, Other, ?INTERNAL_USER),
+                    Result
+            end
+    end.
+
+
 -spec all_definitions() -> map().
 all_definitions() ->
     Xs = list_exchanges(),
@@ -169,7 +251,25 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
         {ok, none} -> ok;
         {ok, Path} ->
             IsDir = filelib:is_dir(Path),
-            rabbit_definitions_import_local_filesystem:load(IsDir, Path)
+            Mod = rabbit_definitions_import_local_filesystem,
+
+            case should_skip_if_unchanged() of
+                false ->
+                    rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
+                    Mod:load(IsDir, Path);
+                true ->
+                    Algo = rabbit_definitions_hashing:hashing_algorithm(),
+                    rabbit_log:debug("Will use module ~s to import definitions (if definition file/directory has changed, hashing algo: ~s)", [Mod, Algo]),
+                    CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
+                    rabbit_log:debug("Previously stored hash value of imported definitions: ~s...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
+                    case Mod:load_with_hashing(IsDir, Path, CurrentHash, Algo) of
+                        CurrentHash ->
+                            rabbit_log:info("Hash value of imported definitions matches current contents");
+                        UpdatedHash ->
+                            rabbit_log:debug("Hash value of imported definitions has changed to ~s", [binary:part(rabbit_misc:hexify(UpdatedHash), 0, 12)]),
+                            rabbit_definitions_hashing:store_global_hash(UpdatedHash)
+                    end
+            end
     end.
 
 maybe_load_definitions_from_pluggable_source(App, Key) ->
@@ -183,8 +283,23 @@ maybe_load_definitions_from_pluggable_source(App, Key) ->
                     {error, "definition import source is configured but definitions.import_backend is not set"};
                 ModOrAlias ->
                     Mod = normalize_backend_module(ModOrAlias),
-                    rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
-                    Mod:load(Proplist)
+                    case should_skip_if_unchanged() of
+                        false ->
+                            rabbit_log:debug("Will use module ~s to import definitions", [Mod]),
+                            Mod:load(Proplist);
+                        true ->
+                            rabbit_log:debug("Will use module ~s to import definitions (if definition file/directory/source has changed)", [Mod]),
+                            CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
+                            rabbit_log:debug("Previously stored hash value of imported definitions: ~s...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
+                            Algo = rabbit_definitions_hashing:hashing_algorithm(),
+                            case Mod:load_with_hashing(Proplist, CurrentHash, Algo) of
+                                CurrentHash ->
+                                    rabbit_log:info("Hash value of imported definitions matches current contents");
+                                UpdatedHash ->
+                                    rabbit_log:debug("Hash value of imported definitions has changed to ~s...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
+                                    rabbit_definitions_hashing:store_global_hash(UpdatedHash)
+                            end
+                    end
             end
     end.
 
@@ -232,19 +347,34 @@ atomise_map_keys(Decoded) ->
         Acc#{rabbit_data_coercion:to_atom(K, utf8) => V}
               end, Decoded, Decoded).
 
+-spec should_skip_if_unchanged() -> boolean().
+should_skip_if_unchanged() ->
+    OptedIn = case application:get_env(rabbit, definitions) of
+        undefined   -> false;
+        {ok, none}  -> false;
+        {ok, []}    -> false;
+        {ok, Proplist} ->
+            pget(skip_if_unchanged, Proplist, false)
+    end,
+    %% if we do not take this into consideration, delayed queue import will be delayed
+    %% on nodes that join before the target cluster size is reached, and skipped
+    %% once it is
+    ReachedTargetClusterSize = rabbit_nodes:reached_target_cluster_size(),
+    OptedIn andalso ReachedTargetClusterSize.
+
+
 -spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username()) -> 'ok' | {error, term()}.
 
 apply_defs(Map, ActingUser) ->
     apply_defs(Map, ActingUser, fun () -> ok end).
 
--spec apply_defs(Map :: #{atom() => any()}, ActingUser :: rabbit_types:username(),
-                SuccessFun :: fun(() -> 'ok')) -> 'ok'  | {error, term()};
-                (Map :: #{atom() => any()}, ActingUser :: rabbit_types:username(),
-                VHost :: vhost:name()) -> 'ok'  | {error, term()}.
+-type vhost_or_success_fun() :: vhost:name() | fun(() -> 'ok').
+-spec apply_defs(Map :: #{atom() => any()},
+                 ActingUser :: rabbit_types:username(),
+                 VHostOrSuccessFun :: vhost_or_success_fun()) -> 'ok' | {error, term()}.
 
 apply_defs(Map, ActingUser, VHost) when is_binary(VHost) ->
     apply_defs(Map, ActingUser, fun () -> ok end, VHost);
-
 apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
     Version = maps:get(rabbitmq_version, Map, maps:get(rabbit_version, Map, undefined)),
     try
@@ -289,7 +419,7 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
                 SuccessFun :: fun(() -> 'ok'),
                 VHost :: vhost:name()) -> 'ok' | {error, term()}.
 
-apply_defs(Map, ActingUser, SuccessFun, VHost) when is_binary(VHost) ->
+apply_defs(Map, ActingUser, SuccessFun, VHost) when is_function(SuccessFun); is_binary(VHost) ->
     rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~p, acting user: ~p",
                     [VHost, ActingUser]),
     try
