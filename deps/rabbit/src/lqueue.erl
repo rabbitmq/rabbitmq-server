@@ -84,8 +84,8 @@ len({L, R, F})
   when is_integer(L), L >= 0, is_list(R), is_list(F) ->
     L;
 %% accept deprecated state
-len({L, _Q})
-  when is_integer(L), L >= 0 ->
+len({L, {R, F}})
+  when is_integer(L), L >= 0, is_list(R), is_list(F) ->
     L;
 len(Q) ->
     erlang:error(badarg, [Q]).
