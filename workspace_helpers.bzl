@@ -213,12 +213,6 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         sha256 = "2c7523c8dee91dff41f6b3d63cba2bd49eb6d2fe5bf1eec0df7f87eb5e230e1c",
     )
 
-    hex_pm_erlang_app(
-        name = "redbug",
-        version = "2.0.7",
-        sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
-    )
-
     github_erlang_app(
         name = "seshat",
         version = "0.3.2",
