@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_manager).
@@ -324,35 +324,33 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
                       true ->
                           QState = amqqueue:get_type_state(Q),
                           #{name := StreamName} = QState,
-                          StreamMembers =
-                              case rabbit_stream_coordinator:members(StreamName)
-                              of
-                                  {ok, Members} ->
-                                      maps:fold(fun (_Node, {undefined, _Role},
-                                                     Acc) ->
-                                                        Acc;
-                                                    (LeaderNode, {_Pid, writer},
-                                                     Acc) ->
-                                                        Acc#{leader_node =>
-                                                                 LeaderNode};
-                                                    (ReplicaNode,
-                                                     {_Pid, replica}, Acc) ->
-                                                        #{replica_nodes :=
-                                                              ReplicaNodes} =
-                                                            Acc,
-                                                        Acc#{replica_nodes =>
-                                                                 ReplicaNodes
-                                                                 ++ [ReplicaNode]};
-                                                    (_Node, _, Acc) ->
-                                                        Acc
-                                                end,
-                                                #{leader_node => undefined,
-                                                  replica_nodes => []},
-                                                Members);
-                                  _ ->
-                                      {error, stream_not_found}
-                              end,
-                          {ok, StreamMembers};
+                          case rabbit_stream_coordinator:members(StreamName) of
+                              {ok, Members} ->
+                                  {ok,
+                                   maps:fold(fun (_Node, {undefined, _Role},
+                                                  Acc) ->
+                                                     Acc;
+                                                 (LeaderNode, {_Pid, writer},
+                                                  Acc) ->
+                                                     Acc#{leader_node =>
+                                                              LeaderNode};
+                                                 (ReplicaNode, {_Pid, replica},
+                                                  Acc) ->
+                                                     #{replica_nodes :=
+                                                           ReplicaNodes} =
+                                                         Acc,
+                                                     Acc#{replica_nodes =>
+                                                              ReplicaNodes
+                                                              ++ [ReplicaNode]};
+                                                 (_Node, _, Acc) ->
+                                                     Acc
+                                             end,
+                                             #{leader_node => undefined,
+                                               replica_nodes => []},
+                                             Members)};
+                              _ ->
+                                  {error, stream_not_available}
+                          end;
                       _ ->
                           {error, stream_not_found}
                   end;
