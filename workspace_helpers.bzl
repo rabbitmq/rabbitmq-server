@@ -224,8 +224,8 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "recon",
-        version = "2.5.1",
-        sha256 = "5721c6b6d50122d8f68cccac712caa1231f97894bab779eff5ff0f886cb44648",
+        version = "2.5.2",
+        sha256 = "2c7523c8dee91dff41f6b3d63cba2bd49eb6d2fe5bf1eec0df7f87eb5e230e1c",
     )
 
     github_erlang_app(
