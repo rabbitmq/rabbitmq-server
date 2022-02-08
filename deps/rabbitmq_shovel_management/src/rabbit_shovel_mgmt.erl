@@ -38,23 +38,23 @@ allowed_methods(ReqData, Context) ->
 
 resource_exists(ReqData, Context) ->
     Reply = case rabbit_mgmt_util:vhost(ReqData) of
-        not_found ->
-            false;
-        VHost ->
-            case rabbit_mgmt_util:id(name, ReqData) of
-                none -> true;
-                Name ->
-                    %% Deleting or restarting a shovel
-                    case get_shovel_node(VHost, Name, ReqData, Context) of
-                        undefined ->
-                            rabbit_log:error("Shovel with the name '~s' was not found on virtual host '~s'",
-                                             [Name, VHost]),
-                            false;
-                        _ ->
-                            true
+                not_found ->
+                    false;
+                VHost ->
+                    case rabbit_mgmt_util:id(name, ReqData) of
+                        none -> true;
+                        Name ->
+                            %% Deleting or restarting a shovel
+                            case get_shovel_node(VHost, Name, ReqData, Context) of
+                                undefined ->
+                                    rabbit_log:error("Shovel with the name '~s' was not found on virtual host '~s'",
+                                        [Name, VHost]),
+                                    false;
+                                _ ->
+                                    true
+                            end
                     end
-            end
-    end,
+            end,
     {Reply, ReqData, Context}.
 
 to_json(ReqData, Context) ->
@@ -67,20 +67,20 @@ is_authorized(ReqData, Context) ->
 delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
     VHost = rabbit_mgmt_util:id(vhost, ReqData),
     Reply = case rabbit_mgmt_util:id(name, ReqData) of
-        none ->
-            false;
-        Name ->
-            case get_shovel_node(VHost, Name, ReqData, Context) of
-                undefined -> rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
+                none ->
                     false;
-                Node ->
-                    %% We must distinguish between a delete and restart
-                    case is_restart(ReqData) of
-                        true -> restart_shovel(VHost, Name, Node);
-                        _ -> delete_shovel(VHost, Name, Node, Username)
+                Name ->
+                    case get_shovel_node(VHost, Name, ReqData, Context) of
+                        undefined -> rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
+                            false;
+                        Node ->
+                            %% We must distinguish between a delete and restart
+                            case is_restart(ReqData) of
+                                true -> restart_shovel(VHost, Name, Node);
+                                _ -> delete_shovel(VHost, Name, Node, Username)
+                            end
                     end
-            end
-    end,
+            end,
     {Reply, ReqData, Context}.
 
 %%--------------------------------------------------------------------
