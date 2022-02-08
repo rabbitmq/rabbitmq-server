@@ -56,18 +56,18 @@ get_shovel_node_shovel_different_name(_Config) ->
     Name= <<"shovelThatDoesntExist">>,
     User = #user{username="admin",tags = [administrator]},
     Node = rabbit_shovel_mgmt:get_shovel_node(VHost, Name, {}, #context{user = User}),
-    ?assertEqual(Node, undefined).
+    ?assertEqual(undefined, Node).
 
 get_shovel_node_shovel_different_vhost_name(_Config) ->
     VHost = <<"VHostThatDoesntExist">>,
     Name= <<"shovel1">>,
     User = #user{username="admin",tags = [administrator]},
     Node = rabbit_shovel_mgmt:get_shovel_node(VHost, Name, {}, #context{user = User}),
-    ?assertEqual(Node, undefined).
+    ?assertEqual(undefined, Node).
 
 get_shovel_node_shovel_found(_Config) ->
     VHost = <<"otherVhost">>,
     Name= <<"shovel2">>,
     User = #user{username="admin",tags = [administrator]},
     Node = rabbit_shovel_mgmt:get_shovel_node(VHost, Name, {}, #context{user = User}),
-    ?assertEqual(Node, 'node2').
+    ?assertEqual('node2', Node).
