@@ -539,43 +539,26 @@ precondition(#cq{channels=Channels}, {call, _, cmd_channel_confirm_mode, [Ch]}) 
 precondition(#cq{channels=Channels}, {call, _, cmd_channel_wait_for_confirms, [Ch]}) ->
     %% Only wait for confirms when they were enabled.
     maps:get(confirms, maps:get(Ch, Channels)) =:= true;
-precondition(#cq{channels=Channels}, {call, _, cmd_channel_basic_get, [_, Ch]}) ->
-    %% Using both consume and basic_get is non-deterministic.
+precondition(#cq{channels=Channels}, {call, _, Cmd, [_, Ch]}) when
+        %% Using both consume and basic_get is non-deterministic.
+        Cmd =:= cmd_channel_basic_get;
+        %% Don't consume if we are already consuming on this channel.
+        Cmd =:= cmd_channel_consume ->
     maps:get(consumer, maps:get(Ch, Channels)) =:= none;
-precondition(#cq{channels=Channels}, {call, _, cmd_channel_consume, [_, Ch]}) ->
-    %% Don't consume if we are already consuming on this channel.
-    maps:get(consumer, maps:get(Ch, Channels)) =:= none;
-precondition(#cq{channels=Channels}, {call, _, cmd_channel_cancel, [_, Ch]}) ->
-    %% Only cancel the consume when we are already consuming on this channel.
-    maps:get(consumer, maps:get(Ch, Channels)) =/= none;
-precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_ack, [_, Ch]}) ->
-    %% Only receive and ack when we are already consuming on this channel.
-    maps:get(consumer, maps:get(Ch, Channels)) =/= none;
-precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_requeue, [_, Ch]}) ->
-    %% Only receive and requeue when we are already consuming on this channel.
-    maps:get(consumer, maps:get(Ch, Channels)) =/= none;
-precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_and_discard, [_, Ch]}) ->
-    %% Only receive and discard when we are already consuming on this channel.
-    maps:get(consumer, maps:get(Ch, Channels)) =/= none;
-precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_many_and_ack_ooo, [_, Ch, _]}) ->
-    %% Only receive and ack when we are already consuming on this channel.
-    maps:get(consumer, maps:get(Ch, Channels)) =/= none;
-precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_many_and_requeue_ooo, [_, Ch, _]}) ->
-    %% Only receive and requeue when we are already consuming on this channel.
-    maps:get(consumer, maps:get(Ch, Channels)) =/= none;
-precondition(#cq{channels=Channels}, {call, _, cmd_channel_receive_many_and_discard_ooo, [_, Ch, _]}) ->
-    %% Only receive and discard when we are already consuming on this channel.
+precondition(#cq{channels=Channels}, {call, _, Cmd, [_, Ch|_]}) when
+        %% Only cancel/receive when we are already consuming on this channel.
+        Cmd =:= cmd_channel_cancel; Cmd =:= cmd_channel_receive_and_ack;
+        Cmd =:= cmd_channel_receive_and_requeue; Cmd =:= cmd_channel_receive_and_discard;
+        Cmd =:= cmd_channel_receive_many_and_ack_ooo; Cmd =:= cmd_channel_receive_many_and_requeue_ooo;
+        Cmd =:= cmd_channel_receive_many_and_discard_ooo ->
     maps:get(consumer, maps:get(Ch, Channels)) =/= none;
 precondition(_, _) ->
     true.
 
 %% Postconditions.
 
-postcondition(_, {call, _, cmd_setup_queue, _}, Q) ->
-    element(1, Q) =:= amqqueue;
-postcondition(_, {call, _, cmd_restart_vhost_clean, _}, Q) ->
-    element(1, Q) =:= amqqueue;
-postcondition(_, {call, _, cmd_restart_queue_dirty, _}, Q) ->
+postcondition(_, {call, _, Cmd, _}, Q) when
+        Cmd =:= cmd_setup_queue; Cmd =:= cmd_restart_vhost_clean; Cmd =:= cmd_restart_queue_dirty ->
     element(1, Q) =:= amqqueue;
 postcondition(_, {call, _, cmd_set_v2_check_crc32, _}, Res) ->
     Res =:= ok;
@@ -589,41 +572,8 @@ postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode_version, [Mode, Version]}, _)
     (do_check_queue_version(AMQ, Version) =:= ok);
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) ->
     is_record(Msg, amqp_msg);
-postcondition(St, {call, _, cmd_basic_get_msg, _}, empty) ->
-    %% We may get 'empty' if there are/were consumers and the messages are
-    %% in transit. We only check whether there are channels as a result,
-    %% because messages may be in the process of being requeued following
-    %% a consumer cancel.
-    has_consumers(St) orelse
-    %% Due to the asynchronous nature of publishing it may be
-    %% possible to have published a message but an immediate basic.get
-    %% on a separate channel cannot retrieve it. In that case we accept
-    %% an empty return value only if the channel we are calling
-    %% basic.get on has no messages published and not consumed.
-    not queue_has_channel(St, internal) orelse
-    %% When messages can expire they will never be removed from the
-    %% property state because we cannot know whether the message
-    %% will be received later on (it was in transit when it expired).
-    %% Therefore we accept an empty response if all messages
-    %% sent via this particular channel have an expiration.
-    queue_part_all_expired(St, internal);
-postcondition(St, {call, _, cmd_basic_get_msg, _}, Msg) ->
-    %% When there are active consumers we may receive
-    %% messages out of order because the commands are not running
-    %% in the same order as the messages sent to channels.
-    case has_consumers(St) of
-        true -> queue_has_msg(St, Msg);
-        false -> queue_head_has_msg(St, Msg)
-    end
-    orelse
-    %% After a restart, unconfirmed messages and previously
-    %% acked messages may or may not be received again, due
-    %% to a race condition.
-    restarted_and_previously_acked(St, Msg) orelse
-    restarted_and_uncertain_publish_status(St, Msg) orelse
-    crashed_and_previously_received(St, Msg);
-postcondition(_, {call, _, cmd_purge, _}, {ok, _}) ->
-    true;
+postcondition(_, {call, _, cmd_purge, _}, Res) ->
+    element(1, Res) =:= ok;
 postcondition(_, {call, _, cmd_channel_open, _}, _) ->
     true;
 postcondition(_, {call, _, cmd_channel_confirm_mode, _}, _) ->
@@ -636,8 +586,17 @@ postcondition(_, {call, _, cmd_channel_publish_many, _}, Msgs) ->
     lists:all(fun(Msg) -> is_record(Msg, amqp_msg) end, Msgs);
 postcondition(_, {call, _, cmd_channel_wait_for_confirms, _}, Res) ->
     Res =:= true;
-postcondition(St, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
-    %% We may get 'empty' if there are consumers and the messages are
+postcondition(_, {call, _, cmd_channel_consume, _}, _) ->
+    true;
+postcondition(_, {call, _, cmd_channel_cancel, _}, _) ->
+    true;
+postcondition(St, {call, _, Cmd, Args}, empty) when
+        Cmd =:= cmd_basic_get_msg; Cmd =:= cmd_channel_basic_get ->
+    Ch = case Cmd of
+        cmd_basic_get_msg -> internal;
+        cmd_channel_basic_get -> lists:nth(2, Args)
+    end,
+    %% We may get 'empty' if there are/were consumers and the messages are
     %% in transit.
     has_consumers(St) orelse
     %% Due to the asynchronous nature of publishing it may be
@@ -652,7 +611,8 @@ postcondition(St, {call, _, cmd_channel_basic_get, [_, Ch]}, empty) ->
     %% Therefore we accept an empty response if all messages
     %% sent via this particular channel have an expiration.
     queue_part_all_expired(St, Ch);
-postcondition(St, {call, _, cmd_channel_basic_get, _}, Msg) ->
+postcondition(St, {call, _, Cmd, _}, Msg) when
+        Cmd =:= cmd_basic_get_msg; Cmd =:= cmd_channel_basic_get ->
     %% When there are active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
@@ -667,13 +627,15 @@ postcondition(St, {call, _, cmd_channel_basic_get, _}, Msg) ->
     restarted_and_previously_acked(St, Msg) orelse
     restarted_and_uncertain_publish_status(St, Msg) orelse
     crashed_and_previously_received(St, Msg);
-postcondition(_, {call, _, cmd_channel_consume, _}, _) ->
+postcondition(_, {call, _, Cmd, _}, none) when
+        Cmd =:= cmd_channel_receive_and_ack;
+        Cmd =:= cmd_channel_receive_and_requeue;
+        Cmd =:= cmd_channel_receive_and_discard ->
     true;
-postcondition(_, {call, _, cmd_channel_cancel, _}, _) ->
-    true;
-postcondition(_, {call, _, cmd_channel_receive_and_ack, _}, none) ->
-    true;
-postcondition(St, {call, _, cmd_channel_receive_and_ack, _}, Msg) ->
+postcondition(St, {call, _, Cmd, _}, Msg) when
+        Cmd =:= cmd_channel_receive_and_ack;
+        Cmd =:= cmd_channel_receive_and_requeue;
+        Cmd =:= cmd_channel_receive_and_discard ->
     %% When there are multiple active consumers we may receive
     %% messages out of order because the commands are not running
     %% in the same order as the messages sent to channels.
@@ -689,57 +651,10 @@ postcondition(St, {call, _, cmd_channel_receive_and_ack, _}, Msg) ->
     restarted_and_previously_acked(St, Msg) orelse
     restarted_and_uncertain_publish_status(St, Msg) orelse
     crashed_and_previously_received(St, Msg);
-postcondition(_, {call, _, cmd_channel_receive_and_requeue, _}, none) ->
-    true;
-postcondition(St, {call, _, cmd_channel_receive_and_requeue, _}, Msg) ->
-    %% When there are multiple active consumers we may receive
-    %% messages out of order because the commands are not running
-    %% in the same order as the messages sent to channels.
-    %%
-    %% But because messages can be pending in the mailbox this can
-    %% be the case also when we had two consumers and one was
-    %% cancelled. So we do not verify the order of messages
-    %% when using consume.
-    queue_has_msg(St, Msg) orelse
-    %% After a restart, unconfirmed messages and previously
-    %% acked messages may or may not be received again, due
-    %% to a race condition.
-    restarted_and_previously_acked(St, Msg) orelse
-    restarted_and_uncertain_publish_status(St, Msg) orelse
-    crashed_and_previously_received(St, Msg);
-postcondition(_, {call, _, cmd_channel_receive_and_discard, _}, none) ->
-    true;
-postcondition(St, {call, _, cmd_channel_receive_and_discard, _}, Msg) ->
-    %% When there are multiple active consumers we may receive
-    %% messages out of order because the commands are not running
-    %% in the same order as the messages sent to channels.
-    %%
-    %% But because messages can be pending in the mailbox this can
-    %% be the case also when we had two consumers and one was
-    %% cancelled. So we do not verify the order of messages
-    %% when using consume.
-    queue_has_msg(St, Msg) orelse
-    %% After a restart, unconfirmed messages and previously
-    %% acked messages may or may not be received again, due
-    %% to a race condition.
-    restarted_and_previously_acked(St, Msg) orelse
-    restarted_and_uncertain_publish_status(St, Msg) orelse
-    crashed_and_previously_received(St, Msg);
-postcondition(St, {call, _, cmd_channel_receive_many_and_ack_ooo, _}, Msgs) ->
-    lists:all(fun(Msg) ->
-        queue_has_msg(St, Msg) orelse
-        restarted_and_previously_acked(St, Msg) orelse
-        restarted_and_uncertain_publish_status(St, Msg) orelse
-        crashed_and_previously_received(St, Msg)
-    end, Msgs);
-postcondition(St, {call, _, cmd_channel_receive_many_and_requeue_ooo, _}, Msgs) ->
-    lists:all(fun(Msg) ->
-        queue_has_msg(St, Msg) orelse
-        restarted_and_previously_acked(St, Msg) orelse
-        restarted_and_uncertain_publish_status(St, Msg) orelse
-        crashed_and_previously_received(St, Msg)
-    end, Msgs);
-postcondition(St, {call, _, cmd_channel_receive_many_and_discard_ooo, _}, Msgs) ->
+postcondition(St, {call, _, Cmd, _}, Msgs) when
+        Cmd =:= cmd_channel_receive_many_and_ack_ooo;
+        Cmd =:= cmd_channel_receive_many_and_requeue_ooo;
+        Cmd =:= cmd_channel_receive_many_and_discard_ooo ->
     lists:all(fun(Msg) ->
         queue_has_msg(St, Msg) orelse
         restarted_and_previously_acked(St, Msg) orelse
