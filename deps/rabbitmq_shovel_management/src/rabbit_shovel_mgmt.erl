@@ -11,7 +11,7 @@
 
 -export([dispatcher/0, web_ui/0]).
 -export([init/2, to_json/2, resource_exists/2, content_types_provided/2,
-         is_authorized/2, allowed_methods/2, delete_resource/2]).
+         is_authorized/2, allowed_methods/2, delete_resource/2, get_shovel_node/4]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -45,11 +45,10 @@ resource_exists(ReqData, Context) ->
                         none -> true;
                         Name ->
                             %% Deleting or restarting a shovel
-                            case rabbit_shovel_status:lookup({VHost, Name}) of
-                                not_found ->
-                                    rabbit_log:error("Shovel with the name '~s' was not found "
-                                                     "on the target node '~s' and / or virtual host '~s'",
-                                                     [Name, node(), VHost]),
+                            case get_shovel_node(VHost, Name, ReqData, Context) of
+                                undefined ->
+                                    rabbit_log:error("Shovel with the name '~s' was not found on virtual host '~s'",
+                                        [Name, VHost]),
                                     false;
                                 _ ->
                                     true
@@ -60,7 +59,7 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     rabbit_mgmt_util:reply_list(
-      filter_vhost_req(status(ReqData, Context), ReqData), ReqData, Context).
+      filter_vhost_req(rabbit_shovel_mgmt_util:status(ReqData, Context), ReqData), ReqData, Context).
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_monitor(ReqData, Context).
@@ -71,21 +70,14 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                 none ->
                     false;
                 Name ->
-                    %% We must distinguish between a delete and restart
-                    case is_restart(ReqData) of
-                        true ->
-                            case rabbit_shovel_util:restart_shovel(VHost, Name) of
-                                {error, ErrMsg} ->
-                                    rabbit_log:error("Error restarting shovel: ~s", [ErrMsg]),
-                                    false;
-                                ok -> true
-                            end;
-                        _ ->
-                            case rabbit_shovel_util:delete_shovel(VHost, Name, Username) of
-                                {error, ErrMsg} ->
-                                    rabbit_log:error("Error deleting shovel: ~s", [ErrMsg]),
-                                    false;
-                                ok -> true
+                    case get_shovel_node(VHost, Name, ReqData, Context) of
+                        undefined -> rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
+                            false;
+                        Node ->
+                            %% We must distinguish between a delete and restart
+                            case is_restart(ReqData) of
+                                true -> restart_shovel(VHost, Name, Node);
+                                _ -> delete_shovel(VHost, Name, Node, Username)
                             end
                     end
             end,
@@ -107,52 +99,28 @@ filter_vhost_req(List, ReqData) ->
                            pget(vhost, I) =:= VHost]
     end.
 
-%% Allow users to see things in the vhosts they are authorised. But
-%% static shovels do not have a vhost, so only allow admins (not
-%% monitors) to see them.
-filter_vhost_user(List, _ReqData, #context{user = User = #user{tags = Tags}}) ->
-    VHosts = rabbit_mgmt_util:list_login_vhosts_names(User, undefined),
-    [I || I <- List, case pget(vhost, I) of
-                         undefined -> lists:member(administrator, Tags);
-                         VHost     -> lists:member(VHost, VHosts)
-                     end].
-
-status(ReqData, Context) ->
-    filter_vhost_user(
-      lists:append([status(Node) || Node <- [node() | nodes()]]),
-      ReqData, Context).
-
-status(Node) ->
-    case rpc:call(Node, rabbit_shovel_status, status, [], infinity) of
-        {badrpc, {'EXIT', _}} ->
-            [];
-        Status ->
-            [format(Node, I) || I <- Status]
+restart_shovel(VHost, Name, Node) ->
+    rabbit_log:info("Calling rabbit_shovel_util:restart_shovel on Node '~s' for shovel '~s' in vhost '~s'", [Node, Name, VHost]),
+    case rpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], infinity) of
+        ok -> true;
+        {_, msg} -> rabbit_log:error(msg),
+            false
     end.
 
-format(Node, {Name, Type, Info, TS}) ->
-    [{node, Node}, {timestamp, format_ts(TS)}] ++
-        format_name(Type, Name) ++
-        format_info(Info).
+delete_shovel(VHost, Name, Node, Username) ->
+    rabbit_log:info("Calling rabbit_shovel_util:delete_shovel on Node '~s' for shovel '~s' in vhost '~s'", [Node, Name, VHost]),
+    case rpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username], infinity) of
+        ok -> true;
+        {_, msg} -> rabbit_log:error(msg),
+            false
+    end.
 
-format_name(static,  Name)          -> [{name,  Name},
-                                        {type,  static}];
-format_name(dynamic, {VHost, Name}) -> [{name,  Name},
-                                        {vhost, VHost},
-                                        {type,  dynamic}].
-
-format_info(starting) ->
-    [{state, starting}];
-
-format_info({running, Props}) ->
-    [{state, running}] ++ Props;
-
-format_info({terminated, Reason}) ->
-    [{state,  terminated},
-     {reason, print("~p", [Reason])}].
-
-format_ts({{Y, M, D}, {H, Min, S}}) ->
-    print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).
-
-print(Fmt, Val) ->
-    list_to_binary(io_lib:format(Fmt, Val)).
+get_shovel_node(VHost, Name, ReqData, Context) ->
+    AllShovels = rabbit_shovel_mgmt_util:status(ReqData, Context),
+    MatchedShovel = lists:filter(fun (Shovel) ->
+        lists:member({name, Name}, Shovel) and lists:member({vhost, VHost}, Shovel) end, AllShovels),
+    case MatchedShovel of
+        [] -> undefined;
+        ShovelData -> {_,Node}=lists:keyfind(node, 1, lists:nth(1, ShovelData)),
+            Node
+    end.
