@@ -35,7 +35,9 @@ groups() ->
                                cycle,
                                stats,
                                drop_head_falls_back_to_at_most_once,
-                               switch_strategy
+                               switch_strategy,
+                               reject_publish_max_length,
+                               reject_publish_max_length_bytes
                               ]},
      {cluster_size_3, [], [
                            many_target_queues,
@@ -522,6 +524,73 @@ switch_strategy(Config) ->
     ok = rabbit_ct_broker_helpers:clear_policy(Config, Server, PolicyName),
     ?assertEqual(5, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(0, counted(messages_dead_lettered_confirmed_total, Config)).
+
+%% Test that source quorum queue rejects messages when source quorum queue's max-length is reached.
+%% max-length should also take into account dead-lettered messages.
+reject_publish_max_length(Config) ->
+    reject_publish(Config, {<<"x-max-length">>, long, 1}).
+
+%% Test that source quorum queue rejects messages when source quorum queue's max-length-bytes is reached.
+%% max-length-bytes should also take into account dead-lettered messages.
+reject_publish_max_length_bytes(Config) ->
+    reject_publish(Config, {<<"x-max-length-bytes">>, long, 1}).
+
+reject_publish(Config, QArg) when is_tuple(QArg) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SourceQ = ?config(source_queue, Config),
+    TargetQ = ?config(target_queue_1, Config),
+    PolicyName = ?config(policy, Config),
+    %% This routing key prevents messages from being routed to target dead-letter queue.
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, PolicyName, SourceQ, <<"queues">>,
+                                             [{<<"dead-letter-routing-key">>, <<"fake">>}]),
+    declare_queue(Ch, SourceQ, [
+                                {<<"x-dead-letter-exchange">>, longstr, <<"">>},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>},
+                                {<<"x-message-ttl">>, long, 0},
+                                QArg
+                               ]),
+    declare_queue(Ch, TargetQ, []),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    ok = publish_confirm(Ch, SourceQ),
+    ok = publish_confirm(Ch, SourceQ),
+    RaName = ra_name(SourceQ),
+    eventually(?_assertMatch([{2, 2}], %% 2 messages with 1 byte each
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    %% Now, we have 2 expired messages in the source quorum queue's discards queue.
+    %% Now that we are over the limit we expect publishes to be rejected.
+    ?assertEqual(fail, publish_confirm(Ch, SourceQ)),
+    %% Fix the dead-letter routing topology.
+    ok = rabbit_ct_broker_helpers:set_policy(Config, Server, PolicyName, SourceQ, <<"queues">>,
+                                             [{<<"dead-letter-routing-key">>, TargetQ}]),
+    eventually(?_assertEqual([{0, 0}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 6),
+    %% Publish should be allowed again.
+    ok = publish_confirm(Ch, SourceQ),
+    %% Consume the 3 expired messages from the target dead-letter queue.
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})),
+    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m">>}},
+                             amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}))),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, Server, PolicyName).
+
+publish_confirm(Ch, QName) ->
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QName},
+                           #amqp_msg{payload = <<"m">>}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    receive
+        #'basic.ack'{} ->
+            ok;
+        #'basic.nack'{} ->
+            fail
+    after 2500 ->
+              ct:fail(confirm_timeout)
+    end.
 
 %% Test that
 %% 1. Message is only acked to source queue once publisher confirms got received from **all** target queues.
