@@ -1842,7 +1842,7 @@ evaluate_limit(Index, Result, BeforeState,
             Before = is_below_soft_limit(BeforeState),
             case {Before, is_below_soft_limit(State0)} of
                 {false, true} ->
-                    %% we have moved below the lower limit which
+                    %% we have moved below the lower limit
                     {Enqs, Effects} =
                     maps:fold(
                       fun (P, #enqueuer{} = E0, {Enqs, Acc})  ->
@@ -2188,17 +2188,22 @@ is_over_limit(#?MODULE{cfg = #cfg{max_length = undefined,
     false;
 is_over_limit(#?MODULE{cfg = #cfg{max_length = MaxLength,
                                   max_bytes = MaxBytes},
-                       msg_bytes_enqueue = BytesEnq} = State) ->
-    messages_ready(State) > MaxLength orelse (BytesEnq > MaxBytes).
+                       msg_bytes_enqueue = BytesEnq,
+                       dlx = DlxState} = State) ->
+    {NumDlx, BytesDlx} = rabbit_fifo_dlx:stat(DlxState),
+    (messages_ready(State) + NumDlx > MaxLength) orelse
+    (BytesEnq + BytesDlx > MaxBytes).
 
 is_below_soft_limit(#?MODULE{cfg = #cfg{max_length = undefined,
                                         max_bytes = undefined}}) ->
     false;
 is_below_soft_limit(#?MODULE{cfg = #cfg{max_length = MaxLength,
                                         max_bytes = MaxBytes},
-                            msg_bytes_enqueue = BytesEnq} = State) ->
-    is_below(MaxLength, messages_ready(State)) andalso
-    is_below(MaxBytes, BytesEnq).
+                             msg_bytes_enqueue = BytesEnq,
+                             dlx = DlxState} = State) ->
+    {NumDlx, BytesDlx} = rabbit_fifo_dlx:stat(DlxState),
+    is_below(MaxLength, messages_ready(State) + NumDlx) andalso
+    is_below(MaxBytes, BytesEnq + BytesDlx).
 
 is_below(undefined, _Num) ->
     true;
