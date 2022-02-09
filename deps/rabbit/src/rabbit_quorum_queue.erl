@@ -414,9 +414,11 @@ spawn_deleter(QName) ->
           end).
 
 spawn_notify_decorators(QName, Fun, Args) ->
-    spawn(fun () ->
-                  notify_decorators(QName, Fun, Args)
-          end).
+    %% run in ra process for now
+    notify_decorators(QName, Fun, Args).
+    % spawn(fun () ->
+    %               notify_decorators(QName, Fun, Args)
+    %       end).
 
 handle_tick(QName,
             {Name, MR, MU, M, C, MsgBytesReady, MsgBytesUnack, MsgBytesDiscard},
