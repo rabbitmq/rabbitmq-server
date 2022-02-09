@@ -1484,15 +1484,12 @@ get_qs_head(Qs) ->
             end, undefined, Qs).
 
 get_q_head(Q) ->
-    get_collection_head(Q, fun ?QUEUE:is_empty/1, fun ?QUEUE:peek/1).
+    ?QUEUE:get(Q, undefined).
 
 get_pa_head(PA) ->
-    get_collection_head(PA, fun gb_trees:is_empty/1, fun gb_trees:smallest/1).
-
-get_collection_head(Col, IsEmpty, GetVal) ->
-    case IsEmpty(Col) of
+    case gb_trees:is_empty(PA) of
         false ->
-            {_, MsgStatus} = GetVal(Col),
+            {_, MsgStatus} = gb_trees:smallest(PA),
             MsgStatus;
         true  -> undefined
     end.
@@ -2122,10 +2119,10 @@ fetch_by_predicate(Pred, Fun, FetchAcc,
 %% For the meaning of Fun and FetchAcc arguments see
 %% fetch_by_predicate/4 above.
 process_queue_entries(Q, Fun, FetchAcc, State = #vqstate{ next_deliver_seq_id = NextDeliverSeqId }) ->
-    ?QUEUE:foldl(fun (MsgStatus, Acc) ->
-                         process_queue_entries1(MsgStatus, Fun, Acc)
-                 end,
-                 {NextDeliverSeqId, FetchAcc, State}, Q).
+    ?QUEUE:fold(fun (MsgStatus, Acc) ->
+                        process_queue_entries1(MsgStatus, Fun, Acc)
+                end,
+                {NextDeliverSeqId, FetchAcc, State}, Q).
 
 process_queue_entries1(
   #msg_status { seq_id = SeqId } = MsgStatus,
@@ -2227,8 +2224,8 @@ purge_betas_and_deltas(DelsAndAcksFun, State = #vqstate { mode = Mode }) ->
 remove_queue_entries(Q, DelsAndAcksFun,
                      State = #vqstate{next_deliver_seq_id = NextDeliverSeqId0, msg_store_clients = MSCState}) ->
     {MsgIdsByStore, NextDeliverSeqId, Acks, State1} =
-        ?QUEUE:foldl(fun remove_queue_entries1/2,
-                     {maps:new(), NextDeliverSeqId0, [], State}, Q),
+        ?QUEUE:fold(fun remove_queue_entries1/2,
+                    {maps:new(), NextDeliverSeqId0, [], State}, Q),
     remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
     DelsAndAcksFun(NextDeliverSeqId, Acks, State1).
 
@@ -2842,9 +2839,9 @@ msg_from_pending_ack(SeqId, State) ->
     end.
 
 beta_limit(Q) ->
-    case ?QUEUE:peek(Q) of
-        {value, #msg_status { seq_id = SeqId }} -> SeqId;
-        empty                                   -> undefined
+    case ?QUEUE:get(Q, empty) of
+        #msg_status { seq_id = SeqId } -> SeqId;
+        empty -> undefined
     end.
 
 delta_limit(?BLANK_DELTA_PATTERN(_))              -> undefined;
@@ -3319,8 +3316,8 @@ push_betas_to_deltas(Generator, LimitFun, Q, PushState) ->
         true ->
             {Q, PushState};
         false ->
-            {value, #msg_status { seq_id = MinSeqId }} = ?QUEUE:peek(Q),
-            {value, #msg_status { seq_id = MaxSeqId }} = ?QUEUE:peek_r(Q),
+            #msg_status { seq_id = MinSeqId } = ?QUEUE:get(Q),
+            #msg_status { seq_id = MaxSeqId } = ?QUEUE:get_r(Q),
             Limit = LimitFun(MinSeqId),
             case MaxSeqId < Limit of
                 true  -> {Q, PushState};
