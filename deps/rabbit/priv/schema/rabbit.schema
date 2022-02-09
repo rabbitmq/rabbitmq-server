@@ -2120,14 +2120,14 @@ end}.
 %% Backing queue version
 %%
 
-{mapping, "rabbit.classic_queue_default_version", "rabbit.classic_queue_default_version", [
+{mapping, "classic_queue.default_version", "rabbit.classic_queue_default_version", [
   {datatype, integer},
   {validators, ["non_zero_positive_integer"]}
 ]}.
 
 {translation, "rabbit.classic_queue_default_version",
     fun(Conf) ->
-        case cuttlefish:conf_get("rabbit.classic_queue_default_version", Conf, 1) of
+        case cuttlefish:conf_get("classic_queue.default_version", Conf, 1) of
             1 -> 1;
             2 -> 2;
             _ -> cuttlefish:unset()
