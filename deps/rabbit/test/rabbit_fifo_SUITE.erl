@@ -179,8 +179,7 @@ enq_enq_deq_test(_) ->
     % NumReady = 1,
     Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
     {_State3, _,
-     [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
-      {log, [1], Fun},
+     [{log, [1], Fun},
       {monitor, _, _}]} =
         apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
               State2),
@@ -193,8 +192,7 @@ enq_enq_deq_deq_settle_test(_) ->
     {State2, _} = enq(2, 2, second, State1),
     % get returns a reply value
     {State3, '$ra_no_reply',
-     [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
-      {log, [1], _},
+     [{log, [1], _},
       {monitor, _, _}]} =
         apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}),
               State2),
@@ -246,8 +244,7 @@ release_cursor_test(_) ->
 
 checkout_enq_settle_test(_) ->
     Cid = {?FUNCTION_NAME, self()},
-    {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
-              {monitor, _, _} | _]} = check(Cid, 1, test_init(test)),
+    {State1, [{monitor, _, _} | _]} = check(Cid, 1, test_init(test)),
     {State2, Effects0} = enq(2, 1,  first, State1),
     %% TODO: this should go back to a send_msg effect after optimisation
     % ?ASSERT_EFF({log, [2], _, _}, Effects0),
@@ -264,8 +261,7 @@ checkout_enq_settle_test(_) ->
 
 duplicate_enqueue_test(_) ->
     Cid = {<<"duplicate_enqueue_test">>, self()},
-    {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
-              {monitor, _, _} | _]} = check_n(Cid, 5, 5, test_init(test)),
+    {State1, [ {monitor, _, _} | _]} = check_n(Cid, 5, 5, test_init(test)),
     {State2, Effects2} = enq(2, 1, first, State1),
     % ?ASSERT_EFF({log, [2], _, _}, Effects2),
     ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
@@ -319,8 +315,7 @@ return_non_existent_test(_) ->
 return_checked_out_test(_) ->
     Cid = {<<"cid">>, self()},
     {State0, _} = enq(1, 1, first, test_init(test)),
-    {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
-              _Monitor,
+    {State1, [_Monitor,
               {log, [1], Fun, _}
               | _ ]
     } = check_auto(Cid, 2, State0),
@@ -346,8 +341,7 @@ return_checked_out_limit_test(_) ->
                   delivery_limit => 1}),
     Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
     {State0, _} = enq(1, 1, first, Init),
-    {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
-              _Monitor,
+    {State1, [_Monitor,
               {log, [1], Fun1, _}
               | _ ]} = check_auto(Cid, 2, State0),
     [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun1([Msg1]),
@@ -369,8 +363,7 @@ return_auto_checked_out_test(_) ->
     {State0, _} = enq(2, 2, second, State00),
     % it first active then inactive as the consumer took on but cannot take
     % any more
-    {State1, [{mod_call, rabbit_quorum_queue, spawn_notify_decorators, _},
-              _Monitor,
+    {State1, [_Monitor,
               {log, [1], Fun1, _}
              ]} = check_auto(Cid, 2, State0),
     [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun1([Msg1]),
@@ -410,14 +403,14 @@ cancelled_checkout_out_test(_) ->
     {State4, ok, _} =
         apply(meta(6), rabbit_fifo:make_settle(Cid, [0]), State3),
 
-    {_State, _, [_, {log, [2], _Fun} | _]} =
+    {_State, _, [{log, [2], _Fun} | _]} =
         apply(meta(7), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State4),
     ok.
 
 down_with_noproc_consumer_returns_unsettled_test(_) ->
     Cid = {<<"down_consumer_returns_unsettled_test">>, self()},
     {State0, _} = enq(1, 1, second, test_init(test)),
-    {State1, [_, {monitor, process, Pid} | _]} = check(Cid, 2, State0),
+    {State1, [{monitor, process, Pid} | _]} = check(Cid, 2, State0),
     {State2, _, _} = apply(meta(3), {down, Pid, noproc}, State1),
     {_State, Effects} = check(Cid, 4, State2),
     ?ASSERT_EFF({monitor, process, _}, Effects),
@@ -1180,11 +1173,11 @@ active_flag_updated_when_consumer_suspected_unsuspected_test(_) ->
     {State2, _, Effects2} = apply(meta(3),
                                     {down, Pid1, noconnection}, State1),
     % 1 effect to update the metrics of each consumer (they belong to the same node), 1 more effect to monitor the node, 1 more decorators effect
-    ?assertEqual(4 + 1 + 1, length(Effects2)),
+    ?assertEqual(4 + 1, length(Effects2)),
 
     {_, _, Effects3} = apply(meta(4), {nodeup, node(self())}, State2),
     % for each consumer: 1 effect to update the metrics, 1 effect to monitor the consumer PID, 1 more decorators effect
-    ?assertEqual(4 + 4 + 1, length(Effects3)).
+    ?assertEqual(4 + 4, length(Effects3)).
 
 active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_consumer_is_on_test(_) ->
     State0 = init(#{name => ?FUNCTION_NAME,
@@ -1213,11 +1206,11 @@ active_flag_not_updated_when_consumer_suspected_unsuspected_and_single_active_co
 
     {State2, _, Effects2} = apply(meta(2), {down, Pid1, noconnection}, State1),
     % one monitor and one consumer status update (deactivated)
-    ?assertEqual(3, length(Effects2)),
+    ?assertEqual(2, length(Effects2)),
 
     {_, _, Effects3} = apply(meta(3), {nodeup, node(self())}, State2),
     % for each consumer: 1 effect to monitor the consumer PID
-    ?assertEqual(6, length(Effects3)).
+    ?assertEqual(5, length(Effects3)).
 
 single_active_cancelled_with_unacked_test(_) ->
     State0 = init(#{name => ?FUNCTION_NAME,
