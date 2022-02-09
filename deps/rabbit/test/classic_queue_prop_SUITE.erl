@@ -293,9 +293,9 @@ command(St) ->
             {100, {call, ?MODULE, cmd_channel_confirm_mode, [channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_close, [channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_publish, [St, channel(St), integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
-            {300, {call, ?MODULE, cmd_channel_publish_many, [St, channel(St), integer(2, 512), integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
+            {200, {call, ?MODULE, cmd_channel_publish_many, [St, channel(St), integer(2, 512), integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
             {900, {call, ?MODULE, cmd_channel_wait_for_confirms, [channel(St)]}},
-            {300, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
+            {200, {call, ?MODULE, cmd_channel_basic_get, [St, channel(St)]}},
             {300, {call, ?MODULE, cmd_channel_consume, [St, channel(St)]}},
             {100, {call, ?MODULE, cmd_channel_cancel, [St, channel(St)]}},
             {900, {call, ?MODULE, cmd_channel_receive_and_ack, [St, channel(St)]}},
@@ -313,13 +313,13 @@ command(St) ->
         %% These change internal configuration.
         { 10, {call, ?MODULE, cmd_set_v2_check_crc32, [boolean()]}},
         %% These set policies.
-        {100, {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]}},
-        {100, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
-        {100, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
+        { 50, {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]}},
+        { 50, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
+        { 50, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
         %% These are direct operations using internal functions.
-        {100, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
-        {100, {call, ?MODULE, cmd_basic_get_msg, [St]}},
-        {100, {call, ?MODULE, cmd_purge, [St]}},
+        { 50, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
+        { 50, {call, ?MODULE, cmd_basic_get_msg, [St]}},
+        { 10, {call, ?MODULE, cmd_purge, [St]}},
         %% These are channel-based operations.
         {300, {call, ?MODULE, cmd_channel_open, [St]}}
         |ChannelCmds
