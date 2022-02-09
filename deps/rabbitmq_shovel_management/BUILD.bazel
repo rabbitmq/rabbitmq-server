@@ -71,6 +71,10 @@ suites = [
         PACKAGE,
         name = "http_SUITE",
     ),
+    rabbitmq_suite(
+            PACKAGE,
+            name = "rabbit_shovel_mgmt_SUITE",
+    ),
 ]
 
 assert_suites(
