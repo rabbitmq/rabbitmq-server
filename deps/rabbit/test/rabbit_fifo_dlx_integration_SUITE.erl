@@ -36,8 +36,10 @@ groups() ->
                                stats,
                                drop_head_falls_back_to_at_most_once,
                                switch_strategy,
-                               reject_publish_max_length,
-                               reject_publish_max_length_bytes
+                               reject_publish_source_queue_max_length,
+                               reject_publish_source_queue_max_length_bytes,
+                               reject_publish_target_classic_queue,
+                               reject_publish_target_quorum_queue
                               ]},
      {cluster_size_3, [], [
                            many_target_queues,
@@ -527,12 +529,12 @@ switch_strategy(Config) ->
 
 %% Test that source quorum queue rejects messages when source quorum queue's max-length is reached.
 %% max-length should also take into account dead-lettered messages.
-reject_publish_max_length(Config) ->
+reject_publish_source_queue_max_length(Config) ->
     reject_publish(Config, {<<"x-max-length">>, long, 1}).
 
 %% Test that source quorum queue rejects messages when source quorum queue's max-length-bytes is reached.
 %% max-length-bytes should also take into account dead-lettered messages.
-reject_publish_max_length_bytes(Config) ->
+reject_publish_source_queue_max_length_bytes(Config) ->
     reject_publish(Config, {<<"x-max-length-bytes">>, long, 1}).
 
 reject_publish(Config, QArg) when is_tuple(QArg) ->
@@ -577,6 +579,78 @@ reject_publish(Config, QArg) when is_tuple(QArg) ->
     eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m">>}},
                              amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}))),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, Server, PolicyName).
+
+%% Test that message gets eventually delivered to target quorum queue when it gets rejected initially.
+reject_publish_target_quorum_queue(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SourceQ = ?config(source_queue, Config),
+    RaName = ra_name(SourceQ),
+    TargetQ = ?config(target_queue_1, Config),
+    declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
+                                {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>},
+                                {<<"x-message-ttl">>, long, 1}
+                               ]),
+    declare_queue(Ch, TargetQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-max-length">>, long, 1}
+                               ]),
+    Msg = <<"m">>,
+    [ok,ok,ok,ok] = [amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ}, #amqp_msg{payload = Msg})
+                     || _N <- lists:seq(1,4)],
+    %% Quorum queues reject publishes once the limit is already exceeded.
+    %% Therefore, although max-length of target queue is configured to be 1,
+    %% it will contain 2 messages before rejecting publishes.
+    %% Therefore, we expect target queue confirmed 2 messages and rejected 2 messages.
+    wait_for_messages_ready([Server], ra_name(TargetQ), 2),
+    consistently(?_assertEqual([{2, 2}],
+                               dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    %% Let's make some space in the target queue for the 2 rejected messages.
+    {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+    {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+    eventually(?_assertEqual([{0, 0}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 5),
+    {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+    {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+    ?assertEqual(4, counted(messages_dead_lettered_expired_total, Config)),
+    eventually(?_assertEqual(4, counted(messages_dead_lettered_confirmed_total, Config))).
+
+%% Test that message gets eventually delivered to target classic queue when it gets rejected initially.
+reject_publish_target_classic_queue(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SourceQ = ?config(source_queue, Config),
+    RaName = ra_name(SourceQ),
+    TargetQ = ?config(target_queue_1, Config),
+    declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
+                                {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>},
+                                {<<"x-message-ttl">>, long, 1}
+                               ]),
+    declare_queue(Ch, TargetQ, [{<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-max-length">>, long, 1}
+                               ]),
+    Msg = <<"m">>,
+    ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ}, #amqp_msg{payload = Msg}),
+    ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ}, #amqp_msg{payload = Msg}),
+    %% By now we expect target classic queue confirmed 1 message and rejected 1 message.
+    eventually(?_assertEqual([{1, 1}],
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    consistently(?_assertEqual([{1, 1}],
+                               dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)),
+    ?assertEqual(1, counted(messages_dead_lettered_confirmed_total, Config)),
+    %% Let's make space in the target queue for the rejected message.
+    {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+    eventually(?_assertEqual(2, counted(messages_dead_lettered_confirmed_total, Config)), 500, 6),
+    ?assertEqual([{0, 0}], dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)),
+    {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+    ok.
 
 publish_confirm(Ch, QName) ->
     ok = amqp_channel:cast(Ch,

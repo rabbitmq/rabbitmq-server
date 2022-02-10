@@ -24,7 +24,7 @@
          handle_cast/2, handle_call/3, handle_info/2,
          code_change/3, format_status/2]).
 
--define(HIBERNATE_AFTER, 180_000).
+-define(HIBERNATE_AFTER, 4*60*1000).
 
 -record(pending, {
           %% consumed_msg_id is not to be confused with consumer delivery tag.
@@ -34,11 +34,11 @@
           %% message IDs directly back to the queue (and there is no AMQP consumer).
           consumed_msg_id :: non_neg_integer(),
           delivery :: rabbit_types:delivery(),
-          %% TODO Reason is already stored in first x-death header of #content.properties.#'P_basic'.headers
-          %% So, we could remove this convenience field and lookup the 1st header when redelivering.
           reason :: rabbit_dead_letter:reason(),
           %% target queues for which publisher confirm has not been received yet
           unsettled = [] :: [rabbit_amqqueue:name()],
+          %% target queues for which publisher rejection was received recently
+          rejected = [] :: [rabbit_amqqueue:name()],
           %% target queues for which publisher confirm was received
           settled = [] :: [rabbit_amqqueue:name()],
           %% Number of times the message was published (i.e. rabbit_queue_type:deliver/3 invoked).
@@ -211,10 +211,8 @@ handle_queue_actions(Actions, State0) ->
               S1 = handle_settled(QRef, MsgSeqs, S0),
               S2 = ack(S1),
               maybe_cancel_timer(S2);
-          ({rejected, QRef, MsgSeqNos}, S0) ->
-              rabbit_log:debug("Ignoring rejected messages ~p from ~s",
-                               [MsgSeqNos, rabbit_misc:rs(QRef)]),
-              S0;
+          ({rejected, QRef, MsgSeqs}, S0) ->
+              handle_rejected(QRef, MsgSeqs, S0);
           ({queue_down, _QRef}, S0) ->
               %% target classic queue is down, but not deleted
               S0
@@ -226,6 +224,27 @@ handle_deliver(Msgs, #state{queue_ref = QRef} = State0)
     lists:foldl(fun({_QRef, MsgId, Msg, Reason}, S) ->
                         forward(Msg, MsgId, QRef, DLX, Reason, S)
                 end, State, Msgs).
+
+handle_rejected(QRef, MsgSeqNos, #state{pendings = Pendings0} = State)
+  when is_list(MsgSeqNos) ->
+    Pendings = lists:foldl(fun(SeqNo, Pends) ->
+                                   case maps:is_key(SeqNo, Pends) of
+                                       true ->
+                                           maps:update_with(SeqNo,
+                                                            fun(#pending{unsettled = Unsettled,
+                                                                         rejected = Rejected} = P) ->
+                                                                    P#pending{unsettled = lists:delete(QRef, Unsettled),
+                                                                              rejected = [QRef | Rejected]}
+                                                            end,
+                                                            Pends);
+                                       false ->
+                                           rabbit_log:debug("Ignoring rejection for unknown sequence number ~b "
+                                                            "from target dead letter ~s",
+                                                            [SeqNo, rabbit_misc:rs(QRef)]),
+                                           Pends
+                                   end
+                           end, Pendings0, MsgSeqNos),
+    State#state{pendings = Pendings}.
 
 -spec lookup_dlx(state()) ->
     {rabbit_types:exchange() | not_found, state()}.
@@ -315,17 +334,26 @@ handle_settled0(QRef, MsgSeq, #state{pendings = Pendings,
                                      settled_ids = SettledIds} = State) ->
     case maps:find(MsgSeq, Pendings) of
         {ok, #pending{unsettled = [QRef],
+                      rejected = [],
                       consumed_msg_id = ConsumedId}} ->
             State#state{pendings = maps:remove(MsgSeq, Pendings),
                         settled_ids = [ConsumedId | SettledIds]};
-        {ok, #pending{unsettled = Unsettled, settled = Settled} = Pend0} ->
+        {ok, #pending{unsettled = [],
+                      rejected = [QRef],
+                      consumed_msg_id = ConsumedId}} ->
+            State#state{pendings = maps:remove(MsgSeq, Pendings),
+                        settled_ids = [ConsumedId | SettledIds]};
+        {ok, #pending{unsettled = Unsettled,
+                      rejected = Rejected,
+                      settled = Settled} = Pend0} ->
             Pend = Pend0#pending{unsettled = lists:delete(QRef, Unsettled),
+                                 rejected = lists:delete(QRef, Rejected),
                                  settled = [QRef | Settled]},
             State#state{pendings = maps:update(MsgSeq, Pend, Pendings)};
         error ->
-            rabbit_log:info("Ignoring publisher confirm for sequence number ~b "
-                            "from target dead letter ~s",
-                            [MsgSeq, rabbit_misc:rs(QRef)]),
+            rabbit_log:debug("Ignoring publisher confirm for unknown sequence number ~b "
+                             "from target dead letter ~s",
+                             [MsgSeq, rabbit_misc:rs(QRef)]),
             State
     end.
 
@@ -337,8 +365,10 @@ ack(#state{settled_ids = Ids,
     State#state{settled_ids = [],
                 dlx_client_state = DlxState}.
 
-%% Re-deliver messages that timed out waiting on publisher confirm and
-%% messages that got never sent due to routing topology misconfiguration.
+%% Re-deliver messages that
+%% 1. timed out waiting on publisher confirm, or
+%% 2. got rejected by target queue, or
+%% 3. never got sent due to routing topology misconfiguration.
 -spec redeliver_messages(state()) ->
     state().
 redeliver_messages(#state{pendings = Pendings,
@@ -404,6 +434,8 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
             %% 1. for which we already received a publisher confirm, or
             Unsettled = RouteToQs0 -- Settled,
             %% 2. whose queue client redelivers on our behalf.
+            %% Note that a quorum queue client does not redeliver on our behalf if it previously
+            %% rejected the message. This is why we always redeliver rejected messages here.
             RouteToQs1 = Unsettled -- clients_redeliver(Unsettled0),
             {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, BasicMsg, RouteToQs1),
             State1 = log_cycles(Cycles, DLRKeys, State0),
@@ -414,8 +446,11 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
                     Pend = Pend0#pending{publish_count = PublishCount + 1,
                                          last_published_at = os:system_time(millisecond),
                                          delivery = Delivery,
-                                         %% override 'unsettled' because topology could have changed
-                                         unsettled = Unsettled},
+                                         %% Override 'unsettled' because topology could have changed.
+                                         unsettled = Unsettled,
+                                         %% Any target queue that rejected previously and still need
+                                         %% to be routed to is moved back to 'unsettled'.
+                                         rejected = []},
                     State = State0#state{pendings = maps:update(OutSeq, Pend, Pendings)},
                     deliver_to_queues(Delivery, RouteToQs, State)
             end
@@ -497,6 +532,7 @@ format_pending(#pending{consumed_msg_id = ConsumedMsgId,
                         delivery = _DoNotLogLargeBinary,
                         reason = Reason,
                         unsettled = Unsettled,
+                        rejected = Rejected,
                         settled = Settled,
                         publish_count = PublishCount,
                         last_published_at = LastPublishedAt,
@@ -504,6 +540,7 @@ format_pending(#pending{consumed_msg_id = ConsumedMsgId,
     #{consumed_msg_id => ConsumedMsgId,
       reason => Reason,
       unsettled => Unsettled,
+      rejected => Rejected,
       settled => Settled,
       publish_count => PublishCount,
       last_published_at => LastPublishedAt,
