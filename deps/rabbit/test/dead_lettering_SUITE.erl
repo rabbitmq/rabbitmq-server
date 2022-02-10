@@ -146,7 +146,13 @@ init_per_group(at_least_once, Config) ->
                                        1,
                                        QueueArgs1,
                                        {<<"x-overflow">>, longstr, <<"reject-publish">>}),
-            rabbit_ct_helpers:set_config(Config, {queue_args, QueueArgs});
+            Config1 = rabbit_ct_helpers:set_config(Config, {queue_args, QueueArgs}),
+            case rabbit_ct_broker_helpers:enable_feature_flag(Config1, stream_queue) of
+                ok ->
+                    Config1;
+                Skip ->
+                    Skip
+            end;
         _ ->
             Config
     end;
