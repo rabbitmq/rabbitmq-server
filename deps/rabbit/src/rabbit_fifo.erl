@@ -1886,13 +1886,13 @@ take_next_msg(#?MODULE{returns = Returns0,
             end
     end.
 
-peek_next_msg(#?MODULE{returns = Returns0,
+get_next_msg(#?MODULE{returns = Returns0,
                        messages = Messages0}) ->
-    case lqueue:peek(Returns0) of
-        {value, _} = Msg ->
-            Msg;
+    case lqueue:get(Returns0, empty) of
         empty ->
-            lqueue:peek(Messages0)
+            lqueue:get(Messages0, empty);
+        Msg ->
+            Msg
     end.
 
 delivery_effect({CTag, CPid}, [{Idx, {MsgId, Header}}],
@@ -1993,10 +1993,10 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
 %% dequeue all expired messages
 expire_msgs(RaCmdTs, Result, State, Effects) ->
     %% In the normal case, there are no expired messages.
-    %% Therefore, first queue:peek/1 to check whether we need to queue:out/1
+    %% Therefore, first lqueue:get/2 to check whether we need to lqueue:out/1
     %% because the latter can be much slower than the former.
-    case peek_next_msg(State) of
-        {value, ?INDEX_MSG(_Idx, ?DISK_MSG(#{expiry := Expiry} = Header))}
+    case get_next_msg(State) of
+        ?INDEX_MSG(_Idx, ?DISK_MSG(#{expiry := Expiry} = Header))
           when RaCmdTs >= Expiry ->
             expire(RaCmdTs, Header, State, Effects);
         _ ->
@@ -2022,8 +2022,8 @@ expire(RaCmdTs, Header, State0, Effects) ->
     expire_msgs(RaCmdTs, true, State, DlxEffects ++ Effects).
 
 timer_effect(RaCmdTs, State, Effects) ->
-    T = case peek_next_msg(State) of
-            {value, ?INDEX_MSG(_, ?DISK_MSG(#{expiry := Expiry}))}
+    T = case get_next_msg(State) of
+            ?INDEX_MSG(_, ?DISK_MSG(#{expiry := Expiry}))
               when is_number(Expiry) ->
                 %% Next message contains 'expiry' header.
                 %% (Re)set timer so that mesage will be dropped or dead-lettered on time.
@@ -2363,8 +2363,8 @@ smallest_raft_index(#?MODULE{messages = Messages,
                              ra_indexes = Indexes,
                              dlx = DlxState}) ->
     SmallestDlxRaIdx = rabbit_fifo_dlx:smallest_raft_index(DlxState),
-    SmallestMsgsRaIdx = case lqueue:peek(Messages) of
-                            {value, ?INDEX_MSG(I, _)} ->
+    SmallestMsgsRaIdx = case lqueue:get(Messages, empty) of
+                            ?INDEX_MSG(I, _) ->
                                 I;
                             _ ->
                                 undefined
