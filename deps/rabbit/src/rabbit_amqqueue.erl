@@ -1520,7 +1520,8 @@ get_queue_consumer_info(Q, ConsumerInfoKeys) ->
     [lists:zip(ConsumerInfoKeys,
                [amqqueue:get_name(Q), ChPid, CTag,
                 AckRequired, Prefetch, Active, ActivityStatus, Args]) ||
-        {ChPid, CTag, AckRequired, Prefetch, Active, ActivityStatus, Args, _} <- consumers(Q)].
+        {ChPid, CTag, AckRequired, Prefetch, Active, ActivityStatus, Args, _}
+        <- consumers(Q)].
 
 -spec stat(amqqueue:amqqueue()) ->
           {'ok', non_neg_integer(), non_neg_integer()}.
