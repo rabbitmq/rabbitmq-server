@@ -684,13 +684,12 @@ convert_v1_to_v2(V1State0) ->
     V2PrefReturns = lists:foldl(fun(Hdr, Acc) ->
                                         lqueue:in(convert_msg(Hdr), Acc)
                                 end, lqueue:new(), PrefReturns),
-    MessagesV2 = lqueue:foldl(fun ({_, IdxMsg}, Acc) ->
-                                      lqueue:in(convert_msg(IdxMsg), Acc)
-                              end, V2PrefMsgs, MessagesV1),
-    ReturnsV2 = lqueue:foldl(fun ({_SeqId, Msg}, Acc) ->
-                                     lqueue:in(convert_msg(Msg), Acc)
-                             end, V2PrefReturns, ReturnsV1),
-
+    MessagesV2 = lqueue:fold(fun ({_, IdxMsg}, Acc) ->
+                                     lqueue:in(convert_msg(IdxMsg), Acc)
+                             end, V2PrefMsgs, MessagesV1),
+    ReturnsV2 = lqueue:fold(fun ({_SeqId, Msg}, Acc) ->
+                                    lqueue:in(convert_msg(Msg), Acc)
+                            end, V2PrefReturns, ReturnsV1),
     ConsumersV2 = maps:map(
                     fun (ConsumerId, CV1) ->
                             convert_consumer(ConsumerId, CV1)
@@ -699,8 +698,6 @@ convert_v1_to_v2(V1State0) ->
                            fun ({ConsumerId, CV1}) ->
                                    {ConsumerId, convert_consumer(ConsumerId, CV1)}
                            end, WaitingConsumersV1),
-
-
     EnqueuersV1 = rabbit_fifo_v1:get_field(enqueuers, V1State),
     EnqueuersV2 = maps:map(fun (_EnqPid, Enq) ->
                                    Enq#enqueuer{unused = undefined}
