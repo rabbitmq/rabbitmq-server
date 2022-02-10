@@ -713,6 +713,63 @@ single_active_consumer_basic_get_test(_) ->
               State1),
     ok.
 
+single_active_consumer_revive_test(_) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, atom_to_binary(?FUNCTION_NAME, utf8)),
+                single_active_consumer_on => true}),
+    Cid1 = {<<"one">>, self()},
+    Cid2 = {<<"two">>, self()},
+    {S1, _} = check_auto(Cid1, 1, S0),
+    {S2, _} = check_auto(Cid2, 2, S1),
+    {S3, _} = enq(3, 1, first, S2),
+    %% cancel the active consumer whilst it has a message pending
+    {S4, _, _} = rabbit_fifo:apply(meta(4), make_checkout(Cid1, cancel, #{}), S3),
+    {S5, _} = check_auto(Cid1, 5, S4),
+
+    ct:pal("S5 ~p", [S5]),
+    ?assertEqual(1, rabbit_fifo:query_messages_checked_out(S5)),
+    ?assertEqual(1, rabbit_fifo:query_messages_total(S5)),
+    Consumers = S5#rabbit_fifo.consumers,
+    ?assertEqual(2, map_size(Consumers)),
+    Up = maps:filter(fun (_, #consumer{status = Status}) ->
+                             Status == up
+                     end, Consumers),
+    ?assertEqual(1, map_size(Up)),
+
+    %% settle message and ensure it is handled correctly
+    {S6, _} = settle(Cid1, 6, 0, S5),
+    ?assertEqual(0, rabbit_fifo:query_messages_checked_out(S6)),
+    ?assertEqual(0, rabbit_fifo:query_messages_total(S6)),
+
+    %% requeue message and check that is handled
+    {S6b, _} = return(Cid1, 6, 0, S5),
+    ?assertEqual(1, rabbit_fifo:query_messages_checked_out(S6b)),
+    ?assertEqual(1, rabbit_fifo:query_messages_total(S6b)),
+    %%
+    %% TOOD: test this but without the fallback consumer
+    %%
+    %%
+    %%
+    %% MULTI checkout should not result in multiple waiting
+    ok.
+
+single_active_consumer_revive_2_test(_) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, atom_to_binary(?FUNCTION_NAME, utf8)),
+                single_active_consumer_on => true}),
+    Cid1 = {<<"one">>, self()},
+    {S1, _} = check_auto(Cid1, 1, S0),
+    {S2, _} = enq(3, 1, first, S1),
+    %% cancel the active consumer whilst it has a message pending
+    {S3, _, _} = rabbit_fifo:apply(meta(4), make_checkout(Cid1, cancel, #{}), S2),
+    {S4, _} = check_auto(Cid1, 5, S3),
+    ?assertEqual(1, rabbit_fifo:query_consumer_count(S4)),
+    ?assertEqual(0, length(rabbit_fifo:query_waiting_consumers(S4))),
+    ?assertEqual(1, rabbit_fifo:query_messages_total(S4)),
+    ?assertEqual(1, rabbit_fifo:query_messages_checked_out(S4)),
+
+    ok.
+
 single_active_consumer_test(_) ->
     State0 = init(#{name => ?FUNCTION_NAME,
                     queue_resource => rabbit_misc:r("/", queue,
@@ -742,10 +799,10 @@ single_active_consumer_test(_) ->
     % the first registered consumer is the active one, the others are waiting
     ?assertEqual(1, map_size(State1#rabbit_fifo.consumers)),
     ?assertMatch(#{C1 := _}, State1#rabbit_fifo.consumers),
-    ?assertEqual(3, length(State1#rabbit_fifo.waiting_consumers)),
-    ?assertNotEqual(false, lists:keyfind(C2, 1, State1#rabbit_fifo.waiting_consumers)),
-    ?assertNotEqual(false, lists:keyfind(C3, 1, State1#rabbit_fifo.waiting_consumers)),
-    ?assertNotEqual(false, lists:keyfind(C4, 1, State1#rabbit_fifo.waiting_consumers)),
+    ?assertEqual(3, length(rabbit_fifo:query_waiting_consumers(State1))),
+    ?assertNotEqual(false, lists:keyfind(C2, 1, rabbit_fifo:query_waiting_consumers(State1))),
+    ?assertNotEqual(false, lists:keyfind(C3, 1, rabbit_fifo:query_waiting_consumers(State1))),
+    ?assertNotEqual(false, lists:keyfind(C4, 1, rabbit_fifo:query_waiting_consumers(State1))),
 
     % cancelling a waiting consumer
     {State2, _, Effects1} = apply(meta(2),
@@ -755,9 +812,9 @@ single_active_consumer_test(_) ->
     ?assertEqual(1, map_size(State2#rabbit_fifo.consumers)),
     ?assertMatch(#{C1 := _}, State2#rabbit_fifo.consumers),
     % the cancelled consumer has been removed from waiting consumers
-    ?assertEqual(2, length(State2#rabbit_fifo.waiting_consumers)),
-    ?assertNotEqual(false, lists:keyfind(C2, 1, State2#rabbit_fifo.waiting_consumers)),
-    ?assertNotEqual(false, lists:keyfind(C4, 1, State2#rabbit_fifo.waiting_consumers)),
+    ?assertEqual(2, length(rabbit_fifo:query_waiting_consumers(State2))),
+    ?assertNotEqual(false, lists:keyfind(C2, 1, rabbit_fifo:query_waiting_consumers(State2))),
+    ?assertNotEqual(false, lists:keyfind(C4, 1, rabbit_fifo:query_waiting_consumers(State2))),
     % there are some effects to unregister the consumer
     ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
                  cancel_consumer_handler, [_, C]}, C == C3, Effects1),
@@ -770,9 +827,9 @@ single_active_consumer_test(_) ->
     ?assertEqual(1, map_size(State3#rabbit_fifo.consumers)),
     ?assertMatch(#{C2 := _}, State3#rabbit_fifo.consumers),
     % the new active consumer is no longer in the waiting list
-    ?assertEqual(1, length(State3#rabbit_fifo.waiting_consumers)),
+    ?assertEqual(1, length(rabbit_fifo:query_waiting_consumers(State3))),
     ?assertNotEqual(false, lists:keyfind(C4, 1,
-                                         State3#rabbit_fifo.waiting_consumers)),
+                                         rabbit_fifo:query_waiting_consumers(State3))),
     %% should have a cancel consumer handler mod_call effect and
     %% an active new consumer effect
     ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
@@ -788,7 +845,7 @@ single_active_consumer_test(_) ->
     ?assertEqual(1, map_size(State4#rabbit_fifo.consumers)),
     ?assertMatch(#{C4 := _}, State4#rabbit_fifo.consumers),
     % the waiting consumer list is now empty
-    ?assertEqual(0, length(State4#rabbit_fifo.waiting_consumers)),
+    ?assertEqual(0, length(rabbit_fifo:query_waiting_consumers(State4))),
     % there are some effects to unregister the consumer and
     % to update the new active one (metrics)
     ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
@@ -803,7 +860,7 @@ single_active_consumer_test(_) ->
     % no active consumer anymore
     ?assertEqual(0, map_size(State5#rabbit_fifo.consumers)),
     % still nothing in the waiting list
-    ?assertEqual(0, length(State5#rabbit_fifo.waiting_consumers)),
+    ?assertEqual(0, length(rabbit_fifo:query_waiting_consumers(State5))),
     % there is an effect to unregister the consumer + queue inactive effect
     ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
                  cancel_consumer_handler, _}, Effects4),
@@ -840,7 +897,7 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test(_) ->
     % fell back to another consumer
     ?assertEqual(1, map_size(State2#rabbit_fifo.consumers)),
     % there are still waiting consumers
-    ?assertEqual(2, length(State2#rabbit_fifo.waiting_consumers)),
+    ?assertEqual(2, length(rabbit_fifo:query_waiting_consumers(State2))),
     % effects to unregister the consumer and
     % to update the new active one (metrics) are there
     ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
@@ -853,7 +910,7 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test(_) ->
     % fell back to another consumer
     ?assertEqual(1, map_size(State3#rabbit_fifo.consumers)),
     % no more waiting consumer
-    ?assertEqual(0, length(State3#rabbit_fifo.waiting_consumers)),
+    ?assertEqual(0, length(rabbit_fifo:query_waiting_consumers(State3))),
     % effects to cancel both consumers of this channel + effect to update the new active one (metrics)
     ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
                  cancel_consumer_handler, [_, C]}, C == C2, Effects2),
@@ -866,7 +923,7 @@ single_active_consumer_cancel_consumer_when_channel_is_down_test(_) ->
     {State4, _, Effects3} = apply(meta(4), {down, Pid3, doesnotmatter}, State3),
     % no more consumers
     ?assertEqual(0, map_size(State4#rabbit_fifo.consumers)),
-    ?assertEqual(0, length(State4#rabbit_fifo.waiting_consumers)),
+    ?assertEqual(0, length(rabbit_fifo:query_waiting_consumers(State4))),
     % there is an effect to unregister the consumer + queue inactive effect
     ?ASSERT_EFF({mod_call, rabbit_quorum_queue,
                  cancel_consumer_handler, [_, C]}, C == C4, Effects3),
@@ -904,7 +961,7 @@ single_active_returns_messages_on_noconnection_test(_) ->
     ?assertMatch([_], lqueue:to_list(State3#rabbit_fifo.returns)),
     ?assertMatch([{_, #consumer{checked_out = Checked}}]
                  when map_size(Checked) == 0,
-                      State3#rabbit_fifo.waiting_consumers),
+                      rabbit_fifo:query_waiting_consumers(State3)),
 
     ok.
 
@@ -950,8 +1007,8 @@ single_active_consumer_replaces_consumer_when_down_noconnection_test(_) ->
 
     %% the disconnected consumer has been returned to waiting
     ?assert(lists:any(fun ({C,_}) -> C =:= C1 end,
-                      State2#rabbit_fifo.waiting_consumers)),
-    ?assertEqual(2, length(State2#rabbit_fifo.waiting_consumers)),
+                      rabbit_fifo:query_waiting_consumers(State2))),
+    ?assertEqual(2, length(rabbit_fifo:query_waiting_consumers(State2))),
 
     % simulate node comes back up
     {State3, _, _} = apply(meta(2), {nodeup, node(DownPid)}, State2),
@@ -960,10 +1017,10 @@ single_active_consumer_replaces_consumer_when_down_noconnection_test(_) ->
     ?assertMatch([{C2, #consumer{status = up}}],
                  maps:to_list(State3#rabbit_fifo.consumers)),
     % the waiting consumers should be un-suspected
-    ?assertEqual(2, length(State3#rabbit_fifo.waiting_consumers)),
+    ?assertEqual(2, length(rabbit_fifo:query_waiting_consumers(State3))),
     lists:foreach(fun({_, #consumer{status = Status}}) ->
                       ?assert(Status /= suspected_down)
-                  end, State3#rabbit_fifo.waiting_consumers),
+                  end, rabbit_fifo:query_waiting_consumers(State3)),
     ok.
 
 single_active_consumer_all_disconnected_test(_) ->
@@ -1250,7 +1307,7 @@ single_active_cancelled_with_unacked_test(_) ->
                                    cfg = #consumer_cfg{lifetime = once},
                                    checked_out = #{0 := _}}},
                  State4#rabbit_fifo.consumers),
-    ?assertMatch([], State4#rabbit_fifo.waiting_consumers),
+    ?assertMatch([], rabbit_fifo:query_waiting_consumers(State4)),
 
     %% Ack both messages
     {State5, _Effects5} = settle(C1, 1, 0, State4),
@@ -1263,7 +1320,7 @@ single_active_cancelled_with_unacked_test(_) ->
     %% C1 should be gone
     ?assertNotMatch(#{C1 := _},
                     State6#rabbit_fifo.consumers),
-    ?assertMatch([], State6#rabbit_fifo.waiting_consumers),
+    ?assertMatch([], rabbit_fifo:query_waiting_consumers(State6)),
     ok.
 
 single_active_with_credited_test(_) ->
@@ -1296,7 +1353,7 @@ single_active_with_credited_test(_) ->
     ?assertMatch(#{C1 := #consumer{credit = 5}},
                  State3#rabbit_fifo.consumers),
     ?assertMatch([{C2, #consumer{credit = 4}}],
-                 State3#rabbit_fifo.waiting_consumers),
+                 rabbit_fifo:query_waiting_consumers(State3)),
     ok.
 
 
@@ -1460,7 +1517,7 @@ meta(Idx, Timestamp) ->
 
 enq(Idx, MsgSeq, Msg, State) ->
     strip_reply(
-        apply(meta(Idx), rabbit_fifo:make_enqueue(self(), MsgSeq, Msg), State)).
+        rabbit_fifo:apply(meta(Idx), rabbit_fifo:make_enqueue(self(), MsgSeq, Msg), State)).
 
 deq(Idx, Cid, Settlement, Msg, State0) ->
     {State, _, Effs} =
@@ -1499,6 +1556,9 @@ check(Cid, Idx, Num, State) ->
 
 settle(Cid, Idx, MsgId, State) ->
     strip_reply(apply(meta(Idx), rabbit_fifo:make_settle(Cid, [MsgId]), State)).
+
+return(Cid, Idx, MsgId, State) ->
+    strip_reply(apply(meta(Idx), rabbit_fifo:make_return(Cid, [MsgId]), State)).
 
 credit(Cid, Idx, Credit, DelCnt, Drain, State) ->
     strip_reply(apply(meta(Idx), rabbit_fifo:make_credit(Cid, Credit, DelCnt, Drain),
