@@ -90,11 +90,11 @@ apply(_Meta, {dlx, #settle{msg_ids = MsgIds}}, at_least_once,
                           #?MODULE{consumer = #dlx_consumer{checked_out = Checked} = C,
                                    msg_bytes_checkout = BytesCheckout,
                                    ra_indexes = Indexes0} = S) ->
-                      Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
-                      S#?MODULE{consumer = C#dlx_consumer{checked_out =
-                                                          maps:remove(MsgId, Checked)},
-                                msg_bytes_checkout = BytesCheckout - size_in_bytes(Msg),
-                                ra_indexes = Indexes}
+                              Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
+                              S#?MODULE{consumer = C#dlx_consumer{checked_out =
+                                                                  maps:remove(MsgId, Checked)},
+                                        msg_bytes_checkout = BytesCheckout - size_in_bytes(Msg),
+                                        ra_indexes = Indexes}
                       end, State0, Acked),
     {State, [{mod_call, rabbit_global_counters, messages_dead_lettered_confirmed,
               [rabbit_quorum_queue, at_least_once, maps:size(Acked)]}]};
@@ -179,20 +179,14 @@ discard(Msgs, Reason, at_least_once, State0)
 -spec checkout(dead_letter_handler(), state()) ->
     {state(), ra_machine:effects()}.
 checkout(at_least_once, #?MODULE{consumer = #dlx_consumer{}} = State) ->
-    checkout0(checkout_one(State), {[],[]});
+    checkout0(checkout_one(State), []);
 checkout(_, State) ->
     {State, []}.
 
-checkout0({success, MsgId, {Reason, ?INDEX_MSG(Idx, ?DISK_MSG(Header))}, State}, {InMemMsgs, LogMsgs})
+checkout0({success, MsgId, {Reason, ?INDEX_MSG(Idx, ?DISK_MSG(Header))}, State}, SendAcc)
   when is_integer(Idx) ->
     DelMsg = {Idx, {Reason, MsgId, Header}},
-    SendAcc = {InMemMsgs, [DelMsg|LogMsgs]},
-    checkout0(checkout_one(State), SendAcc);
-% checkout0({success, MsgId, {Reason, ?INDEX_MSG(Idx, ?MSG(Header, Msg))}, State}, {InMemMsgs, LogMsgs})
-%   when is_integer(Idx) ->
-%     DelMsg = {MsgId, {Reason, Header, Msg}},
-%     SendAcc = {[DelMsg|InMemMsgs], LogMsgs},
-%     checkout0(checkout_one(State), SendAcc);
+    checkout0(checkout_one(State), [DelMsg | SendAcc]);
 checkout0({success, _MsgId, {_Reason, ?TUPLE(_, _)}, State}, SendAcc) ->
     %% This is a prefix message which means we are recovering from a snapshot.
     %% We know:
@@ -232,24 +226,16 @@ size_in_bytes(?INDEX_MSG(_Idx, ?DISK_MSG(Header))) ->
     rabbit_fifo:get_header(size, Header).
 
 %% returns at most one delivery effect because there is only one consumer
-delivery_effects(_CPid, {[], []}) ->
+delivery_effects(_CPid, []) ->
     [];
-delivery_effects(CPid, {InMemMsgs, []}) ->
-    [{send_msg, CPid, {dlx_delivery, lists:reverse(InMemMsgs)}, [ra_event]}];
-delivery_effects(CPid, {InMemMsgs, IdxMsgs0}) ->
+delivery_effects(CPid, IdxMsgs0) ->
     IdxMsgs = lists:reverse(IdxMsgs0),
     {RaftIdxs, Data} = lists:unzip(IdxMsgs),
     [{log, RaftIdxs,
       fun(Log) ->
-              Msgs0 = lists:zipwith(fun ({enqueue, _, _, Msg}, {Reason, MsgId, Header}) ->
-                                            {MsgId, {Reason, Header, Msg}}
-                                    end, Log, Data),
-              Msgs = case InMemMsgs of
-                         [] ->
-                             Msgs0;
-                         _ ->
-                             lists:sort(InMemMsgs ++ Msgs0)
-                     end,
+              Msgs = lists:zipwith(fun ({enqueue, _, _, Msg}, {Reason, MsgId, Header}) ->
+                                           {MsgId, {Reason, Header, Msg}}
+                                   end, Log, Data),
               [{send_msg, CPid, {dlx_delivery, Msgs}, [ra_event]}]
       end}].
 
@@ -384,26 +370,8 @@ purge(#?MODULE{consumer = Consumer0} = State) ->
 
 -spec dehydrate(state()) ->
     state().
-dehydrate(#?MODULE{discards = _Discards,
-                   consumer = _Con} = State) ->
-    State#?MODULE{%%discards = dehydrate_messages(Discards),
-                  %%consumer = dehydrate_consumer(Con),
-                  ra_indexes = rabbit_fifo_index:empty()}.
-
-% dehydrate_messages(Discards) ->
-%     L0 = lqueue:to_list(Discards),
-%     L1 = lists:map(fun({_Reason, Msg}) ->
-%                            {?NIL, rabbit_fifo:dehydrate_message(Msg)}
-%                    end, L0),
-%     lqueue:from_list(L1).
-
-% dehydrate_consumer(#dlx_consumer{checked_out = Checked0} = Con) ->
-%     Checked = maps:map(fun (_, {_, Msg}) ->
-%                                {?NIL, rabbit_fifo:dehydrate_message(Msg)}
-%                        end, Checked0),
-%     Con#dlx_consumer{checked_out = Checked};
-% dehydrate_consumer(undefined) ->
-%     undefined.
+dehydrate(State) ->
+    State#?MODULE{ra_indexes = rabbit_fifo_index:empty()}.
 
 -spec normalize(state()) ->
     state().
