@@ -116,7 +116,7 @@
 
 -record(consumer,
         {cfg = #consumer_cfg{},
-         status = up :: up | suspected_down | cancelled,
+         status = up :: up | suspected_down | cancelled | waiting,
          next_msg_id = 0 :: msg_id(), % part of snapshot data
          checked_out = #{} :: #{msg_id() => indexed_msg()},
          %% max number of messages that can be sent
@@ -125,7 +125,6 @@
          %% total number of checked out messages - ever
          %% incremented for each delivery
          delivery_count = 0 :: non_neg_integer()
-
         }).
 
 -type consumer() :: #consumer{}.
