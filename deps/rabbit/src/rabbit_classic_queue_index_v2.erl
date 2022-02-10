@@ -559,7 +559,7 @@ delete_and_terminate(State = #qi { dir = Dir,
 -spec publish(rabbit_types:msg_id(), rabbit_variable_queue:seq_id(),
               rabbit_variable_queue:msg_location(),
               rabbit_types:message_properties(), boolean(),
-              non_neg_integer(), State) -> State when State::state().
+              non_neg_integer() | infinity, State) -> State when State::state().
 
 %% Because we always persist to the msg_store, the Msg(Or)Id argument
 %% here is always a binary, never a record.
@@ -802,7 +802,7 @@ get_fd_for_segment(Segment, State = #qi{ fds = OpenFds }) ->
 %% When a file has been fully acked we may also close its
 %% open FD if any and delete it.
 
--spec ack([rabbit_variable_queue:seq_id()], State) -> State when State::state().
+-spec ack([rabbit_variable_queue:seq_id()], State) -> {[non_neg_integer()], State} when State::state().
 
 %% The rabbit_variable_queue module may call this function
 %% with an empty list. Do nothing.
