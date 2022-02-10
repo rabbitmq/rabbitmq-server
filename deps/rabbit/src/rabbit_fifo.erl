@@ -2083,7 +2083,7 @@ update_consumer(Meta, {Tag, Pid} = ConsumerId, ConsumerMeta,
                        #consumer{cfg = #consumer_cfg{tag = Tag,
                                                      pid = Pid,
                                                      lifetime = Life,
-                                                     meta = Meta,
+                                                     meta = ConsumerMeta,
                                                      priority = Priority,
                                                      credit_mode = Mode},
                                  credit = Credit}
