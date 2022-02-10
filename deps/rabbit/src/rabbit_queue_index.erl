@@ -415,10 +415,6 @@ flush_delivered_cache(State = #qistate{delivered_cache = DC}) ->
     State1 = deliver(lists:reverse(DC), State),
     State1#qistate{delivered_cache = []}.
 
--spec publish(rabbit_types:msg_id(), rabbit_variable_queue:seq_id(), '_',
-              rabbit_types:message_properties(), boolean(),
-              non_neg_integer(), qistate()) -> qistate().
-
 publish(MsgOrId, SeqId, _Location, MsgProps, IsPersistent, JournalSizeHint, State) ->
     {JournalHdl, State1} =
         get_journal_handle(
@@ -497,8 +493,9 @@ flush(State)                                -> flush_journal(State).
            rabbit_variable_queue:seq_id(),
            qistate()) ->
                      {[{rabbit_types:msg_id(), rabbit_variable_queue:seq_id(),
+                        rabbit_variable_queue:msg_location(),
                         rabbit_types:message_properties(),
-                        boolean(), boolean()}], qistate()}.
+                        boolean()}], qistate()}.
 
 read(StartEnd, StartEnd, State) ->
     {[], State};
