@@ -55,7 +55,6 @@
 
          %% misc
          dehydrate_state/1,
-         dehydrate_message/1,
          normalize/1,
          get_msg_header/1,
          get_header/2,
@@ -2154,11 +2153,6 @@ dehydrate_state(#?MODULE{cfg = #cfg{},
                   enqueue_count = 0,
                   msg_cache = undefined,
                   dlx = rabbit_fifo_dlx:dehydrate(DlxState)}.
-
-dehydrate_message(?INDEX_MSG(_Idx, ?DISK_MSG(_Header) = Msg)) ->
-    %% Use disk msgs directly as prefix messages.
-    %% This avoids memory allocation since we do not convert.
-    Msg.
 
 %% make the state suitable for equality comparison
 normalize(#?MODULE{ra_indexes = _Indexes,
