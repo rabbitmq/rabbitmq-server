@@ -265,7 +265,7 @@ def config_usage():
 
   [host_ssl]
   hostname = otherhost
-  port = 15672
+  port = 15671
   username = guest
   password = guest
   ssl = True
@@ -365,7 +365,7 @@ def make_parser():
         help="connect to host HOST",
         metavar="HOST")
     add("-P", "--port", dest="port",
-        help="connect to port PORT",
+        help="connect to port PORT (use 15671 for SSL)",
         metavar="PORT")
     add("--path-prefix", dest="path_prefix",
         help="use specific URI path prefix for the RabbitMQ HTTP API. /api and operation path will be appended to it. (default: blank string)")
