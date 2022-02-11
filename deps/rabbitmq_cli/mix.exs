@@ -120,7 +120,7 @@ defmodule RabbitMQCtl.MixfileBase do
       {:json, "~> 1.4.1"},
       {:csv, "~> 2.4.0"},
       {:stdout_formatter, "~> 0.2.3"},
-      {:observer_cli, "~> 1.7.1"},
+      {:observer_cli, "~> 1.7.2"},
 
       {:amqp, "~> 2.1.0", only: :test},
       {:dialyxir, "~> 0.5", only: :test, runtime: false},

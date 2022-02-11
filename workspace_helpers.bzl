@@ -182,8 +182,8 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "observer_cli",
-        version = "1.7.1",
-        sha256 = "4ccafaaa2ce01b85ddd14591f4d5f6731b4e13b610a70fb841f0701178478280",
+        version = "1.7.2",
+        sha256 = "a1d280c112bb5443f09b63041d6c5dda39b40829db40b24fdf208e1b86dab353",
     )
 
     hex_pm_erlang_app(
