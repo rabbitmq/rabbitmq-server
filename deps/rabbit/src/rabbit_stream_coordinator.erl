@@ -341,7 +341,7 @@ apply(#{index := _Idx} = Meta0, {_CmdTag, StreamId, #{}} = Cmd,
             case Stream1 of
                 undefined ->
                     return(Meta, State0#?MODULE{streams = maps:remove(StreamId, Streams0)},
-                           Reply, []);
+                           Reply, inform_listeners_eol(Stream0));
                 _ ->
                     {Stream2, Effects0} = evaluate_stream(Meta, Stream1, []),
                     {Stream3, Effects1} = eval_listeners(Stream2, Effects0),
@@ -1239,6 +1239,18 @@ update_stream0(#{system_time := _Ts},
     Stream0#stream{conf = Conf};
 update_stream0(_Meta, _Cmd, undefined) ->
     undefined.
+
+inform_listeners_eol(#stream{target = deleted,
+                             listeners = Listeners,
+                             queue_ref = QRef
+                            }) ->
+    lists:map(fun(Pid) ->
+                      {send_msg, Pid,
+                       {queue_event, QRef, eol},
+                       cast}
+              end, maps:keys(Listeners));
+inform_listeners_eol(_) ->
+    [].
 
 eval_listeners(#stream{listeners = Listeners0,
                        queue_ref = QRef,
