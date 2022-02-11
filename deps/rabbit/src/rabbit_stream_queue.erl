@@ -406,7 +406,9 @@ handle_event({osiris_offset, _From, _Offs},
                   || {Tag, _LeaderPid, OffsetMsg} <- TagMsgs],
     {ok, State#stream_client{readers = Readers}, Deliveries};
 handle_event({stream_leader_change, Pid}, State) ->
-    {ok, update_leader_pid(Pid, State), []}.
+    {ok, update_leader_pid(Pid, State), []};
+handle_event(eol, _State) ->
+    eol.
 
 is_recoverable(Q) ->
     Node = node(),
