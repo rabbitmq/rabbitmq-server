@@ -116,8 +116,14 @@ dep_looking_glass = git https://github.com/rabbitmq/looking_glass master
 dep_prometheus = hex 4.8.1
 dep_ra = hex 1.1.8
 dep_ranch = hex 2.1.0
+<<<<<<< HEAD
 dep_recon = hex 2.5.1
 dep_observer_cli = hex 1.7.1
+=======
+dep_recon = hex 2.5.2
+dep_redbug = hex 2.0.7
+dep_observer_cli = hex 1.7.2
+>>>>>>> 699bb53f62 (Bump observer_cli to v1.7.2)
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
 
