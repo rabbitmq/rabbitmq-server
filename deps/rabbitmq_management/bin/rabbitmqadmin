@@ -257,20 +257,21 @@ def config_usage():
 
   [host_normal]
   hostname = localhost
+  # use 15671 for HTTPS
   port = 15672
   username = guest
   password = guest
   declare_vhost = / # Used as default for declare / delete only
   vhost = /         # Used as default for declare / delete / list
 
-  [host_ssl]
+  [host_https]
   hostname = otherhost
-  port = 15672
+  port = 15671
   username = guest
   password = guest
   ssl = True
-  ssl_key_file = /path/to/key.pem
-  ssl_cert_file = /path/to/cert.pem
+  ssl_key_file = /path/to/client_key.pem
+  ssl_cert_file = /path/to/client_certificate.pem
 
   # rabbitmqadmin.conf.example END
 """
