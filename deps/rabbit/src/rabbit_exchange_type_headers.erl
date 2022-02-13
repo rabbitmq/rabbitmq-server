@@ -45,10 +45,11 @@ validate_binding(_X, #binding{args = Args}) ->
     case rabbit_misc:table_lookup(Args, <<"x-match">>) of
         {longstr, <<"all">>} -> ok;
         {longstr, <<"any">>} -> ok;
+        {longstr, <<"any-with-x">>} -> ok;
         {longstr, Other}     -> {error,
                                  {binding_invalid,
                                   "Invalid x-match field value ~p; "
-                                  "expected all or any", [Other]}};
+                                  "expected all, any, or any-with-x", [Other]}};
         {Type,    Other}     -> {error,
                                  {binding_invalid,
                                   "Invalid x-match field type ~p (value ~p); "
@@ -60,7 +61,8 @@ validate_binding(_X, #binding{args = Args}) ->
 
 parse_x_match({longstr, <<"all">>}) -> all;
 parse_x_match({longstr, <<"any">>}) -> any;
-parse_x_match(_)                    -> all. %% legacy; we didn't validate
+parse_x_match({longstr, <<"any-with-x">>}) -> any_with_x;
+parse_x_match(_) -> all. %% legacy; we didn't validate
 
 %% Horrendous matching algorithm. Depends for its merge-like
 %% (linear-time) behaviour on the lists:keysort
@@ -83,14 +85,17 @@ headers_match(Args, Data) ->
 % A bit less horrendous algorithm :)
 headers_match(_, _, false, _, all) -> false;
 headers_match(_, _, _, true, any) -> true;
+headers_match(_, _, _, true, any_with_x) -> true;
 
 % No more bindings, return current state
 headers_match([], _Data, AllMatch, _AnyMatch, all) -> AllMatch;
 headers_match([], _Data, _AllMatch, AnyMatch, any) -> AnyMatch;
+headers_match([], _Data, _AllMatch, AnyMatch, any_with_x) -> AnyMatch;
 
 % Delete bindings starting with x-
 headers_match([{<<"x-", _/binary>>, _PT, _PV} | PRest], Data,
-              AllMatch, AnyMatch, MatchKind) ->
+              AllMatch, AnyMatch, MatchKind)
+  when MatchKind =/= any_with_x ->
     headers_match(PRest, Data, AllMatch, AnyMatch, MatchKind);
 
 % No more data, but still bindings, false with all
