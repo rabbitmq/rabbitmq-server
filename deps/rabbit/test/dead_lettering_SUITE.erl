@@ -13,7 +13,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
+-compile([nowarn_export_all, export_all]).
 
 -import(quorum_queue_utils, [wait_for_messages/2]).
 
@@ -45,7 +45,9 @@ groups() ->
                        dead_letter_headers_BCC,
                        dead_letter_headers_CC,
                        dead_letter_headers_CC_with_routing_key,
-                       dead_letter_headers_first_death],
+                       dead_letter_headers_first_death,
+                       dead_letter_headers_first_death_route
+                      ],
     Opts = [],
     [
      {dead_letter_tests, [],
@@ -132,12 +134,14 @@ init_per_testcase(Testcase, Config) ->
     Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
     Q = rabbit_data_coercion:to_binary(io_lib:format("~p_~p", [Group, Testcase])),
     Q2 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_2", [Group, Testcase])),
+    Q3 = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_3", [Group, Testcase])),
     Policy = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_policy", [Group, Testcase])),
     DLXExchange = rabbit_data_coercion:to_binary(io_lib:format("~p_~p_dlx_exchange",
                                                             [Group, Testcase])),
     Config1 = rabbit_ct_helpers:set_config(Config, [{dlx_exchange, DLXExchange},
                                                     {queue_name, Q},
                                                     {queue_name_dlx, Q2},
+                                                    {queue_name_dlx_2, Q3},
                                                     {policy, Policy}]),
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
@@ -145,6 +149,7 @@ end_per_testcase(Testcase, Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name, Config)}),
     amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name_dlx, Config)}),
+    amqp_channel:call(Ch, #'queue.delete'{queue = ?config(queue_name_dlx_2, Config)}),
     amqp_channel:call(Ch, #'exchange.delete'{exchange = ?config(dlx_exchange, Config)}),
     _ = rabbit_ct_broker_helpers:clear_policy(Config, 0, ?config(policy, Config)),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -1058,7 +1063,6 @@ dead_letter_headers_BCC(Config) ->
     ?assertEqual(undefined, rabbit_misc:table_lookup(Headers3, <<"BCC">>)),
     ?assertMatch({array, _}, rabbit_misc:table_lookup(Headers3, <<"x-death">>)).
 
-
 %% Three top-level headers are added for the very first dead-lettering event.
 %% They are
 %% x-first-death-reason, x-first-death-queue, x-first-death-exchange
@@ -1084,7 +1088,6 @@ dead_letter_headers_first_death(Config) ->
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXQName,
                                                              exchange    = DLXExchange,
                                                              routing_key = DLXQName}),
-
 
     %% Publish and nack a message
     P1 = <<"msg1">>,
@@ -1120,6 +1123,55 @@ dead_letter_headers_first_death(Config) ->
                  rabbit_misc:table_lookup(Headers2, <<"x-first-death-queue">>)),
     ?assertEqual({longstr, <<>>},
                  rabbit_misc:table_lookup(Headers2, <<"x-first-death-exchange">>)).
+
+%% Route dead-letter messages to different target queues according to first death reason.
+dead_letter_headers_first_death_route(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXMaxLengthQName = ?config(queue_name_dlx, Config),
+    DLXRejectedQName = ?config(queue_name_dlx_2, Config),
+    Args = ?config(queue_args, Config),
+    Durable = ?config(queue_durable, Config),
+    DLXExchange = ?config(dlx_exchange, Config),
+
+    #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange,
+                                                                         type = <<"headers">>}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                                                   arguments = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange},
+                                                                                {<<"x-max-length">>, long, 1} | Args],
+                                                                   durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXMaxLengthQName,
+                                                                   durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXRejectedQName,
+                                                                   durable = Durable}),
+    MatchAnyWithX = {<<"x-match">>, longstr, <<"any-with-x">>},
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXMaxLengthQName,
+                                                             exchange    = DLXExchange,
+                                                             arguments = [MatchAnyWithX,
+                                                                          {<<"x-first-death-reason">>, longstr, <<"maxlen">>}]
+                                                            }),
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXRejectedQName,
+                                                             exchange    = DLXExchange,
+                                                             arguments = [MatchAnyWithX,
+                                                                          {<<"x-first-death-reason">>, longstr, <<"rejected">>}]
+                                                            }),
+    P1 = <<"msg1">>,
+    P2 = <<"msg2">>,
+    %% Publish 2 messages
+    publish(Ch, QName, [P1, P2]),
+    %% The 1st message gets dropped from head of queue, dead-lettered and routed to DLXMaxLengthQName.
+    wait_for_messages(Config, [[DLXMaxLengthQName, <<"1">>, <<"1">>, <<"0">>]]),
+    _ = consume(Ch, DLXMaxLengthQName, [P1]),
+    consume_empty(Ch, DLXMaxLengthQName),
+    %% Reject the 2nd message.
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    [DTag] = consume(Ch, QName, [P2]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag,
+                                          requeue      = false}),
+    %% The 2nd message gets dead-lettered and routed to DLXRejectedQName.
+    wait_for_messages(Config, [[DLXRejectedQName, <<"1">>, <<"1">>, <<"0">>]]),
+    _ = consume(Ch, DLXRejectedQName, [P2]),
+    consume_empty(Ch, DLXRejectedQName).
 
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Test helpers
