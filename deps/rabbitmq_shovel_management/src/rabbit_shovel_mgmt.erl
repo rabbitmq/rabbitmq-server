@@ -76,8 +76,22 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                         Node ->
                             %% We must distinguish between a delete and restart
                             case is_restart(ReqData) of
-                                true -> restart_shovel(VHost, Name, Node);
-                                _ -> delete_shovel(VHost, Name, Node, Username)
+                                true ->
+                                    rabbit_log:info("Asked to restart shovel '~s' in vhost '~s' on node '~s'", [Name, VHost, Node]),
+                                    case rpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name]) of
+                                        ok -> true;
+                                        {_, msg} -> rabbit_log:error(msg),
+                                            false
+                                    end;
+
+                                _ ->
+                                    rabbit_log:info("Asked to delete shovel '~s' in vhost '~s' on node '~s'", [Name, VHost, Node]),
+                                    case rpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username]) of
+                                        ok -> true;
+                                        {_, msg} -> rabbit_log:error(msg),
+                                            false
+                                    end
+
                             end
                     end
             end,
@@ -97,22 +111,6 @@ filter_vhost_req(List, ReqData) ->
         none      -> List;
         VHost     -> [I || I <- List,
                            pget(vhost, I) =:= VHost]
-    end.
-
-restart_shovel(VHost, Name, Node) ->
-    rabbit_log:info("Calling rabbit_shovel_util:restart_shovel on Node '~s' for shovel '~s' in vhost '~s'", [Node, Name, VHost]),
-    case rpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], infinity) of
-        ok -> true;
-        {_, msg} -> rabbit_log:error(msg),
-            false
-    end.
-
-delete_shovel(VHost, Name, Node, Username) ->
-    rabbit_log:info("Calling rabbit_shovel_util:delete_shovel on Node '~s' for shovel '~s' in vhost '~s'", [Node, Name, VHost]),
-    case rpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username], infinity) of
-        ok -> true;
-        {_, msg} -> rabbit_log:error(msg),
-            false
     end.
 
 get_shovel_node(VHost, Name, ReqData, Context) ->
