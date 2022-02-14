@@ -1283,8 +1283,18 @@ dlh(undefined, _, Strategy, _, QName) ->
                        "because dead-letter-exchange is not configured.",
                        [rabbit_misc:rs(QName), Strategy]),
     undefined;
-dlh(_, _, <<"at-least-once">>, reject_publish, _) ->
-    at_least_once;
+dlh(Exchange, RoutingKey, <<"at-least-once">>, reject_publish, QName) ->
+    %% Feature flag stream_queue includes the rabbit_queue_type refactor
+    %% which is required by rabbit_fifo_dlx_worker.
+    case rabbit_feature_flags:is_enabled(stream_queue) of
+        true ->
+            at_least_once;
+        false ->
+            rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~s "
+                               "because feature flag stream_queue is disabled.",
+                               [rabbit_misc:rs(QName)]),
+            dlh_at_most_once(Exchange, RoutingKey, QName)
+    end;
 dlh(Exchange, RoutingKey, <<"at-least-once">>, drop_head, QName) ->
     rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~s "
                        "because configured dead-letter-strategy at-least-once is incompatible with "
