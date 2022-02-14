@@ -1064,7 +1064,6 @@ function publish_msg(params0) {
 
 function publish_msg0(params) {
     var path = fill_path_template('/exchanges/:vhost/:name/publish', params);
-    params['payload_encoding'] = 'string';
     params['properties'] = {};
     params['properties']['delivery_mode'] = parseInt(params['delivery_mode']);
     if (params['headers'] != '')
