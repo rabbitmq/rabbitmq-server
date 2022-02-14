@@ -60,6 +60,15 @@
           <th><label>Payload:</label></th>
           <td><textarea name="payload"></textarea></td>
         </tr>
+        <tr>
+          <th><label>Payload encoding:</label></th>
+          <td>
+            <select name="payload_encoding">
+              <option value="string" selected>String (default)</option>
+              <option value="base64">Base64</option>
+            </select>
+          </td>
+        </tr>
       </table>
       <input type="submit" value="Publish message" />
     </form>
