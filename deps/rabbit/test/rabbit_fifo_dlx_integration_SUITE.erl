@@ -596,16 +596,17 @@ reject_publish_target_quorum_queue(Config) ->
                                 {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
                                 {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
                                 {<<"x-overflow">>, longstr, <<"reject-publish">>},
-                                {<<"x-queue-type">>, longstr, <<"quorum">>},
-                                {<<"x-message-ttl">>, long, 1}
+                                {<<"x-queue-type">>, longstr, <<"quorum">>}
                                ]),
     declare_queue(Ch, TargetQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                 {<<"x-overflow">>, longstr, <<"reject-publish">>},
                                 {<<"x-max-length">>, long, 1}
                                ]),
     Msg = <<"m">>,
-    [ok,ok,ok,ok] = [amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ}, #amqp_msg{payload = Msg})
-                     || _N <- lists:seq(1,4)],
+    [ok,ok,ok,ok] = [amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ},
+                                       #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(N)},
+                                                 payload = Msg})
+                     || N <- lists:seq(1,4)],
     %% Quorum queues reject publishes once the limit is already exceeded.
     %% Therefore, although max-length of target queue is configured to be 1,
     %% it will contain 2 messages before rejecting publishes.
