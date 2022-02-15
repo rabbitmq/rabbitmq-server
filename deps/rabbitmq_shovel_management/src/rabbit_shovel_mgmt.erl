@@ -17,6 +17,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit_shovel_mgmt.hrl").
 
 dispatcher() -> [{"/shovels",        ?MODULE, []},
                  {"/shovels/:vhost", ?MODULE, []},
@@ -78,7 +79,7 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                             case is_restart(ReqData) of
                                 true ->
                                     rabbit_log:info("Asked to restart shovel '~s' in vhost '~s' on node '~s'", [Name, VHost, Node]),
-                                    case rpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name]) of
+                                    case rpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], ?SHOVEL_CALLS_TIMEOUT_MS) of
                                         ok -> true;
                                         {_, msg} -> rabbit_log:error(msg),
                                             false
@@ -86,7 +87,7 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
 
                                 _ ->
                                     rabbit_log:info("Asked to delete shovel '~s' in vhost '~s' on node '~s'", [Name, VHost, Node]),
-                                    case rpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username]) of
+                                    case rpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username], ?SHOVEL_CALLS_TIMEOUT_MS) of
                                         ok -> true;
                                         {_, msg} -> rabbit_log:error(msg),
                                             false
