@@ -295,7 +295,7 @@ returns_after_down(Config) ->
     F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
     {ok, F1} = rabbit_fifo_client:enqueue(msg1, F0),
     {_, _, F2} = process_ra_events(receive_ra_events(1, 0), F1),
-    % start a customer in a separate processes
+    % start a consumer in a separate processes
     % that exits after checkout
     Self = self(),
     _Pid = spawn(fun () ->
