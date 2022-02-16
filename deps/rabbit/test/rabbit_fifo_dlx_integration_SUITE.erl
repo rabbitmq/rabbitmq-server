@@ -43,6 +43,7 @@ groups() ->
                               ]},
      {cluster_size_3, [], [
                            many_target_queues,
+                           target_quorum_queue_delete_create,
                            single_dlx_worker
                           ]}
     ].
@@ -813,6 +814,49 @@ many_target_queues(Config) ->
                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ6}), 2, 200),
     ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(2, counted(messages_dead_lettered_confirmed_total, Config)).
+
+%% Test that all dead-lettered messages reach target quorum queue eventually
+%% when target queue is deleted and recreated with same name
+%% and when dead-letter-exchange is default exchange.
+target_quorum_queue_delete_create(Config) ->
+    [Server1, _, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    SourceQ = ?config(source_queue, Config),
+    TargetQ = ?config(target_queue_1, Config),
+    %% Create topology:
+    %% * source quorum queue with 1 replica on node 1
+    %% * target quorum queue with 3 replicas
+    declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
+                                {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>},
+                                {<<"x-quorum-initial-group-size">>, long, 1},
+                                {<<"x-message-ttl">>, long, 1}
+                               ]),
+    DeclareTargetQueue = fun() ->
+                                 declare_queue(Ch, TargetQ,
+                                               [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                                {<<"x-quorum-initial-group-size">>, long, 3}
+                                               ])
+                         end,
+    DeclareTargetQueue(),
+    [ok = amqp_channel:cast(Ch,
+                            #'basic.publish'{routing_key = SourceQ},
+                            #amqp_msg{payload = <<"msg">>})
+     || _ <- lists:seq(1, 100)], %% 100 messages in total
+    eventually(?_assertNotEqual([{0, 0}],
+                                dirty_query([Server1], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 500, 20),
+    %% Delete and recreate target queue (immediately or after some while).
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}),
+    timer:sleep(rand:uniform(500)),
+    DeclareTargetQueue(),
+    %% Expect no message to get stuck in dlx worker.
+    eventually(?_assertEqual([{0, 0}],
+                             dirty_query([Server1], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 500, 40),
+    ?assertEqual(100, counted(messages_dead_lettered_expired_total, Config)),
+    ?assertEqual(100, counted(messages_dead_lettered_confirmed_total, Config)),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}).
 
 %% Test that there is a single active rabbit_fifo_dlx_worker that is co-located with the quorum queue leader.
 single_dlx_worker(Config) ->

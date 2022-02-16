@@ -141,11 +141,7 @@ handle_cast({queue_event, QRef, Evt},
             State = handle_queue_actions(Actions, State1),
             {noreply, State};
         eol ->
-            %% Do not confirm pending messages whose target queue got deleted.
-            %% Irrespective of exchanges, queues, bindings created or deleted (actual state),
-            %% we respect the configured dead-letter routing topology (desired state).
-            QTypeState = rabbit_queue_type:remove(QRef, QTypeState0),
-            {noreply, State0#state{queue_type_state = QTypeState}};
+            remove_queue(QRef, State0);
         {protocol_error, _Type, _Reason, _Args} ->
             {noreply, State0}
     end;
@@ -173,21 +169,46 @@ handle_info({'DOWN', Ref, process, _, _},
 handle_info({'DOWN', _MRef, process, QPid, Reason},
             #state{queue_type_state = QTypeState0} = State0) ->
     %% received from target classic queue
-    State = case rabbit_queue_type:handle_down(QPid, Reason, QTypeState0) of
-                {ok, QTypeState, Actions} ->
-                    State1 = State0#state{queue_type_state = QTypeState},
-                    handle_queue_actions(Actions, State1);
-                {eol, QTypeState1, QRef} ->
-                    QTypeState = rabbit_queue_type:remove(QRef, QTypeState1),
-                    State0#state{queue_type_state = QTypeState}
-            end,
-    {noreply, State};
+    case rabbit_queue_type:handle_down(QPid, Reason, QTypeState0) of
+        {ok, QTypeState, Actions} ->
+            State = State0#state{queue_type_state = QTypeState},
+            {noreply, handle_queue_actions(Actions, State)};
+        {eol, QTypeState, QRef} ->
+            remove_queue(QRef, State0#state{queue_type_state = QTypeState})
+    end;
 handle_info(Info, State) ->
     rabbit_log:info("~s received unhandled info ~p", [?MODULE, Info]),
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+remove_queue(QRef, #state{pendings = Pendings0,
+                          queue_type_state = QTypeState0} = State) ->
+    Pendings = maps:map(fun(_Seq, #pending{unsettled = Unsettled} = Pending) ->
+                                Pending#pending{unsettled = lists:delete(QRef, Unsettled)}
+                        end, Pendings0),
+    QTypeState = rabbit_queue_type:remove(QRef, QTypeState0),
+    %% Wait for max 1s (we don't want to block the gen_server process for a longer time)
+    %% until target queue is deleted from ETS table to prevent subsequently consumed message(s)
+    %% from being routed to a deleted target queue. (If that happens for a target quorum or
+    %% stream queue and that queue gets re-created with the same name, these messages will
+    %% be stuck in our 'pendings' state.)
+    wait_for_queue_deleted(QRef, 20),
+    {noreply, State#state{pendings = Pendings,
+                          queue_type_state = QTypeState}}.
+
+wait_for_queue_deleted(QRef, 0) ->
+    rabbit_log:debug("Received deletion event for ~s but queue still exists in ETS table.",
+                     [rabbit_misc:rs(QRef)]);
+wait_for_queue_deleted(QRef, N) ->
+    case rabbit_amqqueue:lookup(QRef) of
+        {error, not_found} ->
+            ok;
+        _ ->
+            timer:sleep(50),
+            wait_for_queue_deleted(QRef, N-1)
+    end.
 
 -spec lookup_topology(state()) -> state().
 lookup_topology(#state{queue_ref = {resource, Vhost, queue, _} = QRef} = State) ->
@@ -274,8 +295,9 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
                                  {[], State0};
                              _ ->
                                  RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
-                                 {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, Msg, RouteToQs0),
+                                 {RouteToQs1, Cycles} = rabbit_dead_letter:detect_cycles(Reason, Msg, RouteToQs0),
                                  State1 = log_cycles(Cycles, RKeys, State0),
+                                 RouteToQs = rabbit_amqqueue:lookup(RouteToQs1),
                                  State2 = case RouteToQs of
                                               [] ->
                                                   log_no_route_once(State1);
@@ -300,7 +322,7 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
         _ ->
             Pend = Pend0#pending{publish_count = 1,
                                  last_published_at = Now,
-                                 unsettled = TargetQs},
+                                 unsettled = lists:map(fun amqqueue:get_name/1, TargetQs)},
             State = State3#state{next_out_seq = OutSeq + 1,
                                  pendings = maps:put(OutSeq, Pend, Pendings)},
             deliver_to_queues(Delivery, TargetQs, State)
@@ -308,18 +330,12 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
 
 -spec deliver_to_queues(rabbit_types:delivery(), [rabbit_amqqueue:name()], state()) ->
     state().
-deliver_to_queues(Delivery, RouteToQNames, #state{queue_type_state = QTypeState0} = State0) ->
-    Qs = rabbit_amqqueue:lookup(RouteToQNames),
+deliver_to_queues(Delivery, Qs, #state{queue_type_state = QTypeState0} = State0) ->
     {QTypeState2, Actions} = case rabbit_queue_type:deliver(Qs, Delivery, QTypeState0) of
                                  {ok, QTypeState1, Actions0} ->
                                      {QTypeState1, Actions0};
-                                 {error, {coordinator_unavailable, Resource}} ->
-                                     rabbit_log:warning("Cannot deliver message because stream coordinator unavailable for ~s",
-                                                        [rabbit_misc:rs(Resource)]),
-                                     {QTypeState0, []};
-                                 {error, {stream_not_found, Resource}} ->
-                                     rabbit_log:warning("Cannot deliver message because stream not found for ~s",
-                                                        [rabbit_misc:rs(Resource)]),
+                                 {error, Reason} ->
+                                     rabbit_log:info("Failed to deliver message: ~p", [Reason]),
                                      {QTypeState0, []}
                              end,
     State = State0#state{queue_type_state = QTypeState2},
@@ -422,7 +438,10 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
     Delivery = Delivery0#delivery{message = BasicMsg#basic_message{exchange_name = DLXRef,
                                                                    routing_keys  = DLRKeys}},
     RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
-    case {RouteToQs0, Settled} of
+    %% rabbit_exchange:route/2 can route to target queues that do not exist (e.g. in case of default exchange).
+    %% Therefore, filter out non-existent target queues.
+    RouteToQs1 = lists:map(fun amqqueue:get_name/1, rabbit_amqqueue:lookup(RouteToQs0)),
+    case {RouteToQs1, Settled} of
         {[], [_|_]} ->
             %% Routes changed dynamically so that we don't await any publisher confirms anymore.
             %% Since we also received at least once publisher confirm (mandatory flag semantics),
@@ -432,12 +451,12 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
         _ ->
             %% Do not redeliver message to a target queue
             %% 1. for which we already received a publisher confirm, or
-            Unsettled = RouteToQs0 -- Settled,
+            Unsettled = RouteToQs1 -- Settled,
             %% 2. whose queue client redelivers on our behalf.
             %% Note that a quorum queue client does not redeliver on our behalf if it previously
             %% rejected the message. This is why we always redeliver rejected messages here.
-            RouteToQs1 = Unsettled -- clients_redeliver(Unsettled0),
-            {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, BasicMsg, RouteToQs1),
+            RouteToQs2 = Unsettled -- clients_redeliver(Unsettled0),
+            {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, BasicMsg, RouteToQs2),
             State1 = log_cycles(Cycles, DLRKeys, State0),
             case RouteToQs of
                 [] ->
@@ -452,7 +471,7 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
                                          %% to be routed to is moved back to 'unsettled'.
                                          rejected = []},
                     State = State0#state{pendings = maps:update(OutSeq, Pend, Pendings)},
-                    deliver_to_queues(Delivery, RouteToQs, State)
+                    deliver_to_queues(Delivery, rabbit_amqqueue:lookup(RouteToQs), State)
             end
     end.
 
