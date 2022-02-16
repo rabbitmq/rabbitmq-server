@@ -248,24 +248,28 @@ handle_deliver(Msgs, #state{queue_ref = QRef} = State0)
 
 handle_rejected(QRef, MsgSeqNos, #state{pendings = Pendings0} = State)
   when is_list(MsgSeqNos) ->
-    Pendings = lists:foldl(fun(SeqNo, Pends) ->
-                                   case maps:is_key(SeqNo, Pends) of
-                                       true ->
-                                           maps:update_with(SeqNo,
-                                                            fun(#pending{unsettled = Unsettled,
-                                                                         rejected = Rejected} = P) ->
-                                                                    P#pending{unsettled = lists:delete(QRef, Unsettled),
-                                                                              rejected = [QRef | Rejected]}
-                                                            end,
-                                                            Pends);
-                                       false ->
-                                           rabbit_log:debug("Ignoring rejection for unknown sequence number ~b "
-                                                            "from target dead letter ~s",
-                                                            [SeqNo, rabbit_misc:rs(QRef)]),
-                                           Pends
-                                   end
+    Pendings = lists:foldl(fun(SeqNo, P) ->
+                                   rejected(SeqNo, [QRef], P)
                            end, Pendings0, MsgSeqNos),
     State#state{pendings = Pendings}.
+
+rejected(SeqNo, Qs, Pendings)
+  when is_list(Qs) ->
+    case maps:is_key(SeqNo, Pendings) of
+        true ->
+            maps:update_with(SeqNo,
+                             fun(#pending{unsettled = Unsettled,
+                                          rejected = Rejected} = P) ->
+                                     P#pending{unsettled = Unsettled -- Qs,
+                                               rejected = Qs ++ Rejected}
+                             end,
+                             Pendings);
+        false ->
+            rabbit_log:debug("Ignoring rejection for unknown sequence number ~b "
+                             "from target dead letter queues ~p",
+                             [SeqNo, Qs]),
+            Pendings
+    end.
 
 -spec lookup_dlx(state()) ->
     {rabbit_types:exchange() | not_found, state()}.
@@ -322,23 +326,29 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
         _ ->
             Pend = Pend0#pending{publish_count = 1,
                                  last_published_at = Now,
-                                 unsettled = lists:map(fun amqqueue:get_name/1, TargetQs)},
+                                 unsettled = queue_names(TargetQs)},
             State = State3#state{next_out_seq = OutSeq + 1,
                                  pendings = maps:put(OutSeq, Pend, Pendings)},
             deliver_to_queues(Delivery, TargetQs, State)
     end.
 
--spec deliver_to_queues(rabbit_types:delivery(), [rabbit_amqqueue:name()], state()) ->
+-spec deliver_to_queues(rabbit_types:delivery(), [amqqueue:amqqueue()], state()) ->
     state().
-deliver_to_queues(Delivery, Qs, #state{queue_type_state = QTypeState0} = State0) ->
-    {QTypeState2, Actions} = case rabbit_queue_type:deliver(Qs, Delivery, QTypeState0) of
-                                 {ok, QTypeState1, Actions0} ->
-                                     {QTypeState1, Actions0};
-                                 {error, Reason} ->
-                                     rabbit_log:info("Failed to deliver message: ~p", [Reason]),
-                                     {QTypeState0, []}
-                             end,
-    State = State0#state{queue_type_state = QTypeState2},
+deliver_to_queues(#delivery{msg_seq_no = SeqNo} = Delivery, Qs, #state{queue_type_state = QTypeState0,
+                                                                       pendings = Pendings} = State0) ->
+    {State, Actions} = case rabbit_queue_type:deliver(Qs, Delivery, QTypeState0) of
+                           {ok, QTypeState, Actions0} ->
+                               {State0#state{queue_type_state = QTypeState}, Actions0};
+                           {error, Reason} ->
+                               %% rabbit_queue_type:deliver/3 does not tell us which target queue failed.
+                               %% Therefore, reject all target queues. We need to reject them such that
+                               %% we won't rely on rabbit_fifo_client to re-deliver on behalf of us
+                               %% (and therefore preventing messages to get stuck in our 'unsettled' state).
+                               QNames = queue_names(Qs),
+                               rabbit_log:debug("Failed to deliver message with seq_no ~b to queues ~p: ~p",
+                                                [SeqNo, QNames, Reason]),
+                               {State0#state{pendings = rejected(SeqNo, QNames, Pendings)}, []}
+                       end,
     handle_queue_actions(Actions, State).
 
 handle_settled(QRef, MsgSeqs, State) ->
@@ -440,7 +450,7 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
     RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
     %% rabbit_exchange:route/2 can route to target queues that do not exist (e.g. in case of default exchange).
     %% Therefore, filter out non-existent target queues.
-    RouteToQs1 = lists:map(fun amqqueue:get_name/1, rabbit_amqqueue:lookup(RouteToQs0)),
+    RouteToQs1 = queue_names(rabbit_amqqueue:lookup(RouteToQs0)),
     case {RouteToQs1, Settled} of
         {[], [_|_]} ->
             %% Routes changed dynamically so that we don't await any publisher confirms anymore.
@@ -491,7 +501,7 @@ clients_redeliver(QNames) ->
                                       false
                               end
                       end, rabbit_amqqueue:lookup_many(QNames)),
-    lists:map(fun amqqueue:get_name/1, Qs).
+    queue_names(Qs).
 
 maybe_set_timer(#state{timer = TRef} = State)
   when is_reference(TRef) ->
@@ -520,6 +530,10 @@ cancel_timer(#state{timer = TRef} = State)
     State#state{timer = undefined};
 cancel_timer(State) ->
     State.
+
+queue_names(Qs)
+  when is_list(Qs) ->
+    lists:map(fun amqqueue:get_name/1, Qs).
 
 format_status(_Opt, [_PDict, #state{
                                 queue_ref = QueueRef,
