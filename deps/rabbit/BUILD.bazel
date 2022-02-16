@@ -493,6 +493,13 @@ suites = [
             "@syslog//:erlang_app",
         ],
     ),
+    rabbitmq_suite(
+        name = "lqueue_SUITE",
+        size = "small",
+        deps = [
+            "@proper//:erlang_app",
+        ],
+    ),
     rabbitmq_integration_suite(
         PACKAGE,
         name = "maintenance_mode_SUITE",
