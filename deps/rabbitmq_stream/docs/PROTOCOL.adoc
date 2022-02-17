@@ -14,7 +14,7 @@ uint8, uint16, uint32, uint64 - Unsigned integers (big endian order)
 
 bytes - int32 for the length followed by the bytes of content, length of -1 indicates null.
 
-string - int16 for the length followed by the bytes of content, length of -1 indicates null.
+string - int16 for the length followed by the bytes of UTF8-encoded content, length of -1 indicates null.
 
 arrays - int32 for the length followed by the repetition of the structure, notation uses [], e.g.
 [int32] for an array of int32.
