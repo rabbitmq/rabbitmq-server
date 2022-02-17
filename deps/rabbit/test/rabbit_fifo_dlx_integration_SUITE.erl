@@ -39,11 +39,11 @@ groups() ->
                                reject_publish_source_queue_max_length,
                                reject_publish_source_queue_max_length_bytes,
                                reject_publish_target_classic_queue,
-                               reject_publish_target_quorum_queue
+                               reject_publish_target_quorum_queue,
+                               target_quorum_queue_delete_create
                               ]},
      {cluster_size_3, [], [
                            many_target_queues,
-                           target_quorum_queue_delete_create,
                            single_dlx_worker
                           ]}
     ].
@@ -586,7 +586,7 @@ reject_publish(Config, QArg) when is_tuple(QArg) ->
                              amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}))),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, Server, PolicyName).
 
-%% Test that message gets eventually delivered to target quorum queue when it gets rejected initially.
+%% Test that message gets delivered to target quorum queue eventually when it gets rejected initially.
 reject_publish_target_quorum_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -604,24 +604,20 @@ reject_publish_target_quorum_queue(Config) ->
                                 {<<"x-max-length">>, long, 1}
                                ]),
     Msg = <<"m">>,
-    [ok,ok,ok,ok] = [amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ},
-                                       #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(N)},
-                                                 payload = Msg})
-                     || N <- lists:seq(1,4)],
-    %% Quorum queues reject publishes once the limit is already exceeded.
-    %% Therefore, although max-length of target queue is configured to be 1,
-    %% it will contain 2 messages before rejecting publishes.
-    %% Therefore, we expect target queue confirmed 2 messages and rejected 2 messages.
-    wait_for_messages_ready([Server], ra_name(TargetQ), 2),
-    consistently(?_assertEqual([{2, 2}],
-                               dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
-    %% Let's make some space in the target queue for the 2 rejected messages.
-    {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
-    {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+    %% Send 4 messages although target queue has max-length of 1.
+    [ok,ok,ok,ok] = [begin
+                         amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ},
+                                           #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(N)},
+                                                     payload = Msg})
+                     end || N <- lists:seq(1,4)],
+    %% Make space in target queue by consuming messages one by one
+    %% allowing for more dead-lettered messages to reach the target queue.
+    [begin
+         timer:sleep(2000),
+         {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ})
+     end || _ <- lists:seq(1,4)],
     eventually(?_assertEqual([{0, 0}],
-                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 5),
-    {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
-    {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
+                             dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
     ?assertEqual(4, counted(messages_dead_lettered_expired_total, Config)),
     eventually(?_assertEqual(4, counted(messages_dead_lettered_confirmed_total, Config))).
 
@@ -672,6 +668,51 @@ publish_confirm(Ch, QName) ->
     after 2500 ->
               ct:fail(confirm_timeout)
     end.
+
+%% Test that all dead-lettered messages reach target quorum queue eventually
+%% when target queue is deleted and recreated with same name
+%% and when dead-letter-exchange is default exchange.
+target_quorum_queue_delete_create(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    SourceQ = ?config(source_queue, Config),
+    TargetQ = ?config(target_queue_1, Config),
+    %% Create topology:
+    %% * source quorum queue with 1 replica
+    %% * target quorum queue with 1 replica
+    declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
+                                {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
+                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
+                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
+                                {<<"x-queue-type">>, longstr, <<"quorum">>},
+                                {<<"x-quorum-initial-group-size">>, long, 1},
+                                {<<"x-message-ttl">>, long, 1}
+                               ]),
+    DeclareTargetQueue = fun() ->
+                                 declare_queue(Ch, TargetQ,
+                                               [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                                {<<"x-quorum-initial-group-size">>, long, 1}
+                                               ])
+                         end,
+    DeclareTargetQueue(),
+    spawn(fun() ->
+                  [ok = amqp_channel:cast(Ch,
+                                          #'basic.publish'{routing_key = SourceQ},
+                                          #amqp_msg{payload = <<"msg">>})
+                   || _ <- lists:seq(1, 100)] %% 100 messages in total
+          end),
+    eventually(?_assertNotEqual([{0, 0}],
+                                dirty_query([Server], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 200, 100),
+    %% Delete and recreate target queue (immediately or after some while).
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}),
+    timer:sleep(rand:uniform(500)),
+    DeclareTargetQueue(),
+    %% Expect no message to get stuck in dlx worker.
+    eventually(?_assertEqual([{0, 0}],
+                             dirty_query([Server], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 1000, 60),
+    ?assertEqual(100, counted(messages_dead_lettered_expired_total, Config)),
+    ?assertEqual(100, counted(messages_dead_lettered_confirmed_total, Config)),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}).
 
 %% Test that
 %% 1. Message is only acked to source queue once publisher confirms got received from **all** target queues.
@@ -814,49 +855,6 @@ many_target_queues(Config) ->
                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ6}), 2, 200),
     ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(2, counted(messages_dead_lettered_confirmed_total, Config)).
-
-%% Test that all dead-lettered messages reach target quorum queue eventually
-%% when target queue is deleted and recreated with same name
-%% and when dead-letter-exchange is default exchange.
-target_quorum_queue_delete_create(Config) ->
-    [Server1, _, _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
-    SourceQ = ?config(source_queue, Config),
-    TargetQ = ?config(target_queue_1, Config),
-    %% Create topology:
-    %% * source quorum queue with 1 replica on node 1
-    %% * target quorum queue with 3 replicas
-    declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
-                                {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
-                                {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
-                                {<<"x-overflow">>, longstr, <<"reject-publish">>},
-                                {<<"x-queue-type">>, longstr, <<"quorum">>},
-                                {<<"x-quorum-initial-group-size">>, long, 1},
-                                {<<"x-message-ttl">>, long, 1}
-                               ]),
-    DeclareTargetQueue = fun() ->
-                                 declare_queue(Ch, TargetQ,
-                                               [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                                                {<<"x-quorum-initial-group-size">>, long, 3}
-                                               ])
-                         end,
-    DeclareTargetQueue(),
-    [ok = amqp_channel:cast(Ch,
-                            #'basic.publish'{routing_key = SourceQ},
-                            #amqp_msg{payload = <<"msg">>})
-     || _ <- lists:seq(1, 100)], %% 100 messages in total
-    eventually(?_assertNotEqual([{0, 0}],
-                                dirty_query([Server1], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 500, 20),
-    %% Delete and recreate target queue (immediately or after some while).
-    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}),
-    timer:sleep(rand:uniform(500)),
-    DeclareTargetQueue(),
-    %% Expect no message to get stuck in dlx worker.
-    eventually(?_assertEqual([{0, 0}],
-                             dirty_query([Server1], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 500, 40),
-    ?assertEqual(100, counted(messages_dead_lettered_expired_total, Config)),
-    ?assertEqual(100, counted(messages_dead_lettered_confirmed_total, Config)),
-    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}).
 
 %% Test that there is a single active rabbit_fifo_dlx_worker that is co-located with the quorum queue leader.
 single_dlx_worker(Config) ->
