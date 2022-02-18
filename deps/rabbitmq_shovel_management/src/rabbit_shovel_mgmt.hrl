@@ -5,4 +5,4 @@
 %% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
--define(SHOVEL_CALLS_TIMEOUT_MS, 5000).
+-define(SHOVEL_CALLS_TIMEOUT_MS, 25000).
