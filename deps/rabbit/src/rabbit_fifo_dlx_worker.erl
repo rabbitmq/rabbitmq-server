@@ -443,7 +443,8 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
            DLX, DLRKeys, OutSeq,
            #state{pendings = Pendings,
                   settled_ids = SettledIds,
-                  exchange_ref = DLXRef} = State0)
+                  exchange_ref = DLXRef,
+                  queue_type_state = QTypeState} = State0)
   when is_list(DLRKeys) ->
     Delivery = Delivery0#delivery{message = BasicMsg#basic_message{exchange_name = DLXRef,
                                                                    routing_keys  = DLRKeys}},
@@ -465,7 +466,7 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
             %% 2. whose queue client redelivers on our behalf.
             %% Note that a quorum queue client does not redeliver on our behalf if it previously
             %% rejected the message. This is why we always redeliver rejected messages here.
-            RouteToQs2 = Unsettled -- clients_redeliver(Unsettled0),
+            RouteToQs2 = Unsettled -- clients_redeliver(Unsettled0, QTypeState),
             {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, BasicMsg, RouteToQs2),
             State1 = log_cycles(Cycles, DLRKeys, State0),
             case RouteToQs of
@@ -486,22 +487,21 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
     end.
 
 %% Returns queues whose queue clients take care of redelivering messages.
--spec clients_redeliver([rabbit_amqqueue:name()]) ->
+-spec clients_redeliver([rabbit_amqqueue:name()], rabbit_queue_type:state()) ->
     [rabbit_amqqueue:name()].
-clients_redeliver(QNames) ->
-    Qs = lists:filter(fun(Q) ->
-                              case amqqueue:get_type(Q) of
-                                  rabbit_quorum_queue ->
-                                      %% If Raft command (#enqueue{}) does not get applied
-                                      %% rabbit_fifo_client will resend.
-                                      true;
-                                  rabbit_stream_queue ->
-                                      true;
-                                  _ ->
-                                      false
-                              end
-                      end, rabbit_amqqueue:lookup_many(QNames)),
-    queue_names(Qs).
+clients_redeliver(Qs, QTypeState) ->
+    lists:filter(fun(Q) ->
+                         case rabbit_queue_type:module(Q, QTypeState) of
+                             {ok, rabbit_quorum_queue} ->
+                                 % If #enqueue{} Raft command does not get applied
+                                 % rabbit_fifo_client will resend.
+                                 true;
+                             {ok, rabbit_stream_queue} ->
+                                 true;
+                             _ ->
+                                 false
+                         end
+                 end, Qs).
 
 maybe_set_timer(#state{timer = TRef} = State)
   when is_reference(TRef) ->
