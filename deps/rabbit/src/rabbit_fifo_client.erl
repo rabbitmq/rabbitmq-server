@@ -593,10 +593,6 @@ handle_ra_event(_, {machine, {queue_status, Status}},
     %% just set the queue status
     {ok, State#state{queue_status = Status}, []};
 handle_ra_event(Leader, {machine, leader_change},
-                #state{leader = Leader} = State) ->
-    %% leader already known
-    {ok, State, []};
-handle_ra_event(Leader, {machine, leader_change},
                 #state{leader = OldLeader} = State0) ->
     %% we need to update leader
     %% and resend any pending commands
