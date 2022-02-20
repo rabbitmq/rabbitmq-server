@@ -10,6 +10,7 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -import(quorum_queue_utils, [wait_for_messages_ready/3,
+                             wait_for_min_messages/3,
                              dirty_query/3,
                              ra_name/1]).
 -import(quorum_queue_SUITE, [publish/2,
@@ -694,24 +695,32 @@ target_quorum_queue_delete_create(Config) ->
                                                 {<<"x-quorum-initial-group-size">>, long, 1}
                                                ])
                          end,
+
+    Send100Msgs = fun() ->
+                          [ok = amqp_channel:cast(Ch,
+                                                  #'basic.publish'{routing_key = SourceQ},
+                                                  #amqp_msg{payload = <<"msg">>})
+                           || _ <- lists:seq(1, 100)]
+                  end,
     DeclareTargetQueue(),
-    spawn(fun() ->
-                  [ok = amqp_channel:cast(Ch,
-                                          #'basic.publish'{routing_key = SourceQ},
-                                          #amqp_msg{payload = <<"msg">>})
-                   || _ <- lists:seq(1, 100)] %% 100 messages in total
-          end),
-    eventually(?_assertNotEqual([{0, 0}],
-                                dirty_query([Server], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 200, 100),
+    Send100Msgs(),
     %% Delete and recreate target queue (immediately or after some while).
+    timer:sleep(rand:uniform(50)),
+    %% Log the current number of messages.
+    rabbit_ct_broker_helpers:rabbitmqctl_list(
+      Config, 0, ["list_queues", "name", "messages", "messages_ready",
+                  "messages_unacknowledged"]),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}),
-    timer:sleep(rand:uniform(500)),
+    Send100Msgs(),
+    timer:sleep(rand:uniform(200)),
     DeclareTargetQueue(),
+    Send100Msgs(),
     %% Expect no message to get stuck in dlx worker.
+    wait_for_min_messages(Config, TargetQ, 200),
     eventually(?_assertEqual([{0, 0}],
-                             dirty_query([Server], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 1000, 60),
-    ?assertEqual(100, counted(messages_dead_lettered_expired_total, Config)),
-    ?assertEqual(100, counted(messages_dead_lettered_confirmed_total, Config)),
+                             dirty_query([Server], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
+    ?assertEqual(300, counted(messages_dead_lettered_expired_total, Config)),
+    ?assertEqual(300, counted(messages_dead_lettered_confirmed_total, Config)),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}).
 
 %% Test that
