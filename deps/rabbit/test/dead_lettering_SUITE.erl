@@ -52,7 +52,8 @@ groups() ->
                        dead_letter_ttl,
                        dead_letter_routing_key_cycle_ttl,
                        dead_letter_headers_reason_expired,
-                       dead_letter_headers_reason_expired_per_message],
+                       dead_letter_headers_reason_expired_per_message,
+                       dead_letter_extra_bcc],
     DisabledMetricTests = [metric_maxlen,
                            metric_rejected,
                            metric_expired_queue_msg_ttl,
@@ -1285,6 +1286,37 @@ dead_letter_headers_first_death_route(Config) ->
     wait_for_messages(Config, [[DLXRejectedQName, <<"1">>, <<"1">>, <<"0">>]]),
     _ = consume(Ch, DLXRejectedQName, [P2]),
     consume_empty(Ch, DLXRejectedQName).
+
+%% Route dead-letter messages also to extra BCC queues of target queues.
+dead_letter_extra_bcc(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    SourceQ = ?config(queue_name, Config),
+    TargetQ = ?config(queue_name_dlx, Config),
+    ExtraBCCQ = ?config(queue_name_dlx_2, Config),
+    Durable = ?config(queue_durable, Config),
+    declare_dead_letter_queues(Ch, Config, SourceQ, TargetQ, [{<<"x-message-ttl">>, long, 0}]),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = ExtraBCCQ,
+                                                                   durable = Durable}),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set_queue_options,
+                                 [TargetQ, #{extra_bcc => ExtraBCCQ}]),
+    %% Publish message
+    P = <<"msg">>,
+    publish(Ch, SourceQ, [P]),
+    wait_for_messages(Config, [[TargetQ, <<"1">>, <<"1">>, <<"0">>],
+                               [ExtraBCCQ, <<"1">>, <<"1">>, <<"0">>]]),
+    consume_empty(Ch, SourceQ),
+    [_] = consume(Ch, TargetQ, [P]),
+    [_] = consume(Ch, ExtraBCCQ, [P]),
+    ok.
+
+set_queue_options(QName, Options) ->
+    rabbit_misc:execute_mnesia_transaction(
+      fun() ->
+              rabbit_amqqueue:update(rabbit_misc:r(<<"/">>, queue, QName),
+                                     fun(Q) ->
+                                             amqqueue:set_options(Q, Options)
+                                     end)
+      end).
 
 metric_maxlen(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
