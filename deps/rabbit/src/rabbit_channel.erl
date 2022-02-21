@@ -2221,22 +2221,18 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                                         confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
                    _RoutedToQueueNames = [QName]}, State0 = #ch{queue_states = QueueStates0}) -> %% optimisation when there is one queue
-    AllNames = case rabbit_amqqueue:lookup(QName) of
-        {ok, Q0} ->
-           case amqqueue:get_options(Q0) of
-                #{extra_bcc := BCC} -> [QName, rabbit_misc:r(QName#resource.virtual_host, queue, BCC)];
-                _                   -> [QName]
-            end;
-        _ -> []
-    end,
-    Qs = rabbit_amqqueue:lookup(AllNames),
+    {QueueNames, Qs} = case rabbit_amqqueue:lookup(QName) of
+                           {ok, Q} ->
+                               {[QName], [Q]};
+                           _ -> {[], []}
+                       end,
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
             rabbit_global_counters:messages_routed(amqp091, erlang:min(1, length(Qs))),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
             ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
-            State1 = process_routing_confirm(Confirm, AllNames, MsgSeqNo, XName, State0),
+            State1 = process_routing_confirm(Confirm, QueueNames, MsgSeqNo, XName, State0),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes
             State = handle_queue_actions(Actions, State1#ch{queue_states = QueueStates}),
@@ -2264,21 +2260,15 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                                         confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
                    RoutedToQueueNames}, State0 = #ch{queue_states = QueueStates0}) ->
-    Qs0 = rabbit_amqqueue:lookup(RoutedToQueueNames),
-    AllQueueNames = lists:map(fun amqqueue:get_name/1, Qs0),
-    AllExtraBCCs  = infer_extra_bcc(Qs0),
-    %% Collect implicit BCC targets these queues may have
-    Qs = case AllExtraBCCs of
-            []         -> Qs0;
-            ExtraNames -> Qs0 ++ rabbit_amqqueue:lookup(ExtraNames)
-         end,
+    Qs = rabbit_amqqueue:lookup(RoutedToQueueNames),
+    QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
             rabbit_global_counters:messages_routed(amqp091, length(Qs)),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
             ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
-            State1 = process_routing_confirm(Confirm, AllQueueNames,
+            State1 = process_routing_confirm(Confirm, QueueNames,
                                              MsgSeqNo, XName, State0),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes
@@ -2287,7 +2277,7 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                 fine ->
                     ?INCR_STATS(exchange_stats, XName, 1, publish),
                     [?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish)
-                     || QName <- AllQueueNames];
+                     || QName <- QueueNames];
                 _ ->
                     ok
             end,
@@ -2298,28 +2288,6 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
               "Stream coordinator unavailable for ~s",
               [rabbit_misc:rs(Resource)])
     end.
-
--spec infer_extra_bcc([amqqueue:amqqueue()]) -> [rabbit_amqqueue:name()].
-infer_extra_bcc([]) ->
-    [];
-infer_extra_bcc([Q]) ->
-    case amqqueue:get_options(Q) of
-         #{extra_bcc := BCC} ->
-             #resource{virtual_host = VHost} = amqqueue:get_name(Q),
-             [rabbit_misc:r(VHost, queue, BCC)];
-         _                   ->
-             []
-     end;
-infer_extra_bcc(Qs) ->
-    lists:foldl(fun(Q, Acc) ->
-         case amqqueue:get_options(Q) of
-             #{extra_bcc := BCC} ->
-                 #resource{virtual_host = VHost} = amqqueue:get_name(Q),
-                [rabbit_misc:r(VHost, queue, BCC) | Acc];
-             _                   ->
-                 Acc
-         end
-    end, [], Qs).
 
 process_routing_mandatory(_Mandatory = true,
                           _RoutedToQs = [],

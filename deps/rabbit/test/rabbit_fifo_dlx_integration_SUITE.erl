@@ -3,6 +3,9 @@
 %% Integration tests for at-least-once dead-lettering comprising mainly
 %% rabbit_fifo_dlx, rabbit_fifo_dlx_worker, rabbit_fifo_dlx_client
 %% rabbit_quorum_queue, rabbit_fifo.
+%%
+%% Some at-least-once dead-lettering tests can also be found in
+%% module dead_lettering_SUITE.
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -678,22 +681,16 @@ target_quorum_queue_delete_create(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     SourceQ = ?config(source_queue, Config),
     TargetQ = ?config(target_queue_1, Config),
-    %% Create topology:
-    %% * source quorum queue with 1 replica
-    %% * target quorum queue with 1 replica
     declare_queue(Ch, SourceQ, [{<<"x-dead-letter-exchange">>, longstr, <<"">>},
                                 {<<"x-dead-letter-routing-key">>, longstr, TargetQ},
                                 {<<"x-dead-letter-strategy">>, longstr, <<"at-least-once">>},
                                 {<<"x-overflow">>, longstr, <<"reject-publish">>},
                                 {<<"x-queue-type">>, longstr, <<"quorum">>},
-                                {<<"x-quorum-initial-group-size">>, long, 1},
                                 {<<"x-message-ttl">>, long, 1}
                                ]),
     DeclareTargetQueue = fun() ->
                                  declare_queue(Ch, TargetQ,
-                                               [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                                                {<<"x-quorum-initial-group-size">>, long, 1}
-                                               ])
+                                               [{<<"x-queue-type">>, longstr, <<"quorum">>}])
                          end,
 
     Send100Msgs = fun() ->
