@@ -408,20 +408,45 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
 route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
                 decorators = Decorators} = X,
       #delivery{message = #basic_message{routing_keys = RKs}} = Delivery) ->
-    case RName of
-        <<>> ->
-            RKsSorted = lists:usort(RKs),
-            [rabbit_channel:deliver_reply(RK, Delivery) ||
-                RK <- RKsSorted, virtual_reply_queue(RK)],
-            [rabbit_misc:r(VHost, queue, RK) || RK <- RKsSorted,
-                                                not virtual_reply_queue(RK)];
-        _ ->
-            Decs = rabbit_exchange_decorator:select(route, Decorators),
-            lists:usort(route1(Delivery, Decs, {[X], XName, []}))
-    end.
+    QNames = case RName of
+                 <<>> ->
+                     RKsSorted = lists:usort(RKs),
+                     [rabbit_channel:deliver_reply(RK, Delivery) ||
+                      RK <- RKsSorted, virtual_reply_queue(RK)],
+                     [rabbit_misc:r(VHost, queue, RK) || RK <- RKsSorted,
+                                                         not virtual_reply_queue(RK)];
+                 _ ->
+                     Decs = rabbit_exchange_decorator:select(route, Decorators),
+                     lists:usort(route1(Delivery, Decs, {[X], XName, []}))
+             end,
+    Qs = rabbit_amqqueue:lookup(QNames),
+    ExtraBccQNames = infer_extra_bcc(Qs),
+    ExtraBccQNames ++ QNames.
 
 virtual_reply_queue(<<"amq.rabbitmq.reply-to.", _/binary>>) -> true;
 virtual_reply_queue(_)                                      -> false.
+
+-spec infer_extra_bcc([amqqueue:amqqueue()]) -> [rabbit_amqqueue:name()].
+infer_extra_bcc([]) ->
+    [];
+infer_extra_bcc([Q]) ->
+    case amqqueue:get_options(Q) of
+        #{extra_bcc := BCC} ->
+            #resource{virtual_host = VHost} = amqqueue:get_name(Q),
+            [rabbit_misc:r(VHost, queue, BCC)];
+        _                   ->
+            []
+    end;
+infer_extra_bcc(Qs) ->
+    lists:foldl(fun(Q, Acc) ->
+                        case amqqueue:get_options(Q) of
+                            #{extra_bcc := BCC} ->
+                                #resource{virtual_host = VHost} = amqqueue:get_name(Q),
+                                [rabbit_misc:r(VHost, queue, BCC) | Acc];
+                            _                   ->
+                                Acc
+                        end
+                end, [], Qs).
 
 route1(_, _, {[], _, QNames}) ->
     QNames;
