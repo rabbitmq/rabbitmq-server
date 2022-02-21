@@ -85,6 +85,11 @@ Label `queue_type` denotes the type of queue messages were discarded from. It ca
 
 (Queue type `rabbit_stream_queue` does not dead letter messages.)
 
+Note that metrics `rabbitmq_global_messages_dead_lettered_*` with label `queue_type` set to `rabbit_quorum_queue`
+might miss some counter updates in certain failure scenarios, i.e. the reported Prometheus value could be
+slightly lower than the actual number of messages dead lettered (and confirmed).
+(This is because in the current implementation quorum queue leaders update the counters asynchronously.)
+
 Label `dead_letter_strategy` can have value
 * `disabled` if queue has no dead-letter-exchange configured or if configured dead-letter-exchange does not exist implying messages get dropped, or
 * `at_most_once` if queue's configured dead-lettered-exchange exists, or
