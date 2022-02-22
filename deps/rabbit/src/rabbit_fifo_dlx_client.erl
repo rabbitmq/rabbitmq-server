@@ -74,7 +74,7 @@ handle_delivery({dlx_delivery, [{FstId, _} | _] = IdMsgs},
 
 transform_msgs(QRes, Msgs) ->
     lists:map(
-      fun({MsgId, {Reason, _MsgHeader, Msg}}) ->
+      fun({MsgId, {Reason, Msg}}) ->
               {QRes, MsgId, Msg, Reason}
       end, Msgs).
 

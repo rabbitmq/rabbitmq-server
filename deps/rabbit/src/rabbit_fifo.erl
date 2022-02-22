@@ -635,9 +635,7 @@ convert_msg({'$prefix_msg', Header}) ->
     ?INDEX_MSG(undefined, ?DISK_MSG(Header));
 convert_msg({Header, empty}) ->
     convert_msg(Header);
-convert_msg(Header)
-  when is_integer(Header) orelse
-       is_map_key(size, Header) ->
+convert_msg(Header) when ?IS_HEADER(Header) ->
     ?INDEX_MSG(undefined, ?DISK_MSG(Header)).
 
 convert_consumer({ConsumerTag, Pid}, CV1) ->
