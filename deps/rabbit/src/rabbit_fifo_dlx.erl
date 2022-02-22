@@ -86,7 +86,7 @@ stat(#?MODULE{consumer = Con,
 apply(_Meta, {dlx, #settle{msg_ids = MsgIds}}, at_least_once,
       #?MODULE{consumer = #dlx_consumer{checked_out = Checked0}} = State0) ->
     Acked = maps:with(MsgIds, Checked0),
-    State = maps:fold(fun(MsgId, {_Rsn,?INDEX_MSG(Idx, ?DISK_MSG(_)) = Msg},
+    State = maps:fold(fun(MsgId, ?TUPLE(_Rsn, ?INDEX_MSG(Idx, ?DISK_MSG(_)) = Msg),
                           #?MODULE{consumer = #dlx_consumer{checked_out = Checked} = C,
                                    msg_bytes_checkout = BytesCheckout,
                                    ra_indexes = Indexes0} = S) ->
@@ -120,7 +120,7 @@ apply(_, {dlx, #checkout{consumer = ConsumerPid,
     Checked0 = maps:to_list(CheckedOutOldConsumer),
     Checked1 = lists:keysort(1, Checked0),
     {Discards, BytesMoved} = lists:foldr(
-                               fun({_Id, {_Reason, IdxMsg} = Msg}, {D, B}) ->
+                               fun({_Id, ?TUPLE(_Reason, IdxMsg) = Msg}, {D, B}) ->
                                        {lqueue:in_r(Msg, D), B + size_in_bytes(IdxMsg)}
                                end, {Discards0, 0}, Checked1),
     State = State0#?MODULE{consumer = #dlx_consumer{pid = ConsumerPid,
@@ -140,34 +140,32 @@ discard(Msgs, Reason, undefined, State) ->
     {State, [{mod_call, rabbit_global_counters, messages_dead_lettered,
               [Reason, rabbit_quorum_queue, disabled, length(Msgs)]}]};
 discard(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
-    RaftIdxs = lists:filtermap(
-                 fun (?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
-                         {true, RaftIdx};
-                     (_IgnorePrefixMessage) ->
-                         false
-                 end, Msgs0),
+    RaftIdxs = lists:map(fun(?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
+                                 RaftIdx
+                         end, Msgs0),
     Effect = {log, RaftIdxs,
               fun (Log) ->
                       Lookup = maps:from_list(lists:zip(RaftIdxs, Log)),
-                      Msgs = lists:filtermap(
-                               fun (?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
-                                       {enqueue, _, _, Msg} = maps:get(RaftIdx, Lookup),
-                                       {true, Msg};
-                                   (_IgnorePrefixMessage) ->
-                                       false
-                               end, Msgs0),
+                      Msgs = lists:map(fun(?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
+                                               {enqueue, _, _, Msg} = maps:get(RaftIdx, Lookup),
+                                               Msg
+                                       end, Msgs0),
                       [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
     {State, [Effect]};
 discard(Msgs, Reason, at_least_once, State0)
   when Reason =/= maxlen ->
-    %%TODO delete delivery_count header to save space? It's not needed anymore.
-    State = lists:foldl(fun (?INDEX_MSG(Idx, _) = Msg,
+    State = lists:foldl(fun (?INDEX_MSG(Idx, ?DISK_MSG(_Header)) = Msg0,
                              #?MODULE{discards = D0,
                                       msg_bytes = B0,
                                       ra_indexes = I0} = S0) ->
-                                D = lqueue:in({Reason, Msg}, D0),
-                                B = B0 + size_in_bytes(Msg),
+                                MsgSize = size_in_bytes(Msg0),
+                                %% Condense header to an integer representing the message size.
+                                %% We do not need delivery_count or expiry header fields anymore.
+                                %% This saves per-message memory usage.
+                                Msg = ?INDEX_MSG(Idx, ?DISK_MSG(MsgSize)),
+                                D = lqueue:in(?TUPLE(Reason, Msg), D0),
+                                B = B0 + MsgSize,
                                 I = rabbit_fifo_index:append(Idx, I0),
                                 S0#?MODULE{discards = D,
                                            msg_bytes = B,
@@ -183,11 +181,11 @@ checkout(at_least_once, #?MODULE{consumer = #dlx_consumer{}} = State) ->
 checkout(_, State) ->
     {State, []}.
 
-checkout0({success, MsgId, {Reason, ?INDEX_MSG(Idx, ?DISK_MSG(Header))}, State}, SendAcc)
+checkout0({success, MsgId, ?TUPLE(Reason, ?INDEX_MSG(Idx, ?DISK_MSG(_Header))), State}, SendAcc)
   when is_integer(Idx) ->
-    DelMsg = {Idx, {Reason, MsgId, Header}},
+    DelMsg = {Idx, {Reason, MsgId}},
     checkout0(checkout_one(State), [DelMsg | SendAcc]);
-checkout0({success, _MsgId, {_Reason, ?TUPLE(_, _)}, State}, SendAcc) ->
+checkout0({success, _MsgId, ?TUPLE(_Reason, ?TUPLE(_, _)), State}, SendAcc) ->
     %% This is a prefix message which means we are recovering from a snapshot.
     %% We know:
     %% 1. This message was already delivered in the past, and
@@ -209,7 +207,7 @@ checkout_one(#?MODULE{discards = Discards0,
                       consumer = #dlx_consumer{checked_out = Checked0,
                                                next_msg_id = Next} = Con0} = State0) ->
     case lqueue:out(Discards0) of
-        {{value, {_, Msg} = ReasonMsg}, Discards} ->
+        {{value, ?TUPLE(_, Msg) = ReasonMsg}, Discards} ->
             Checked = maps:put(Next, ReasonMsg, Checked0),
             Size = size_in_bytes(Msg),
             State = State0#?MODULE{discards = Discards,
@@ -233,8 +231,8 @@ delivery_effects(CPid, IdxMsgs0) ->
     {RaftIdxs, Data} = lists:unzip(IdxMsgs),
     [{log, RaftIdxs,
       fun(Log) ->
-              Msgs = lists:zipwith(fun ({enqueue, _, _, Msg}, {Reason, MsgId, Header}) ->
-                                           {MsgId, {Reason, Header, Msg}}
+              Msgs = lists:zipwith(fun ({enqueue, _, _, Msg}, {Reason, MsgId}) ->
+                                           {MsgId, {Reason, Msg}}
                                    end, Log, Data),
               [{send_msg, CPid, {dlx_delivery, Msgs}, [ra_event]}]
       end}].
