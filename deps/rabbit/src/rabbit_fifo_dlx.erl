@@ -86,7 +86,7 @@ stat(#?MODULE{consumer = Con,
 apply(_Meta, {dlx, #settle{msg_ids = MsgIds}}, at_least_once,
       #?MODULE{consumer = #dlx_consumer{checked_out = Checked0}} = State0) ->
     Acked = maps:with(MsgIds, Checked0),
-    State = maps:fold(fun(MsgId, ?TUPLE(_Rsn, ?INDEX_MSG(Idx, ?DISK_MSG(_)) = Msg),
+    State = maps:fold(fun(MsgId, ?TUPLE(_Rsn, ?MSG(Idx, _) = Msg),
                           #?MODULE{consumer = #dlx_consumer{checked_out = Checked} = C,
                                    msg_bytes_checkout = BytesCheckout,
                                    ra_indexes = Indexes0} = S) ->
@@ -133,37 +133,35 @@ apply(_, Cmd, DLH, State) ->
     rabbit_log:debug("Ignoring command ~p for dead_letter_handler ~p", [Cmd, DLH]),
     {State, []}.
 
--spec discard([indexed_msg()], rabbit_dead_letter:reason(),
+-spec discard([msg()], rabbit_dead_letter:reason(),
               dead_letter_handler(), state()) ->
     {state(), ra_machine:effects()}.
 discard(Msgs, Reason, undefined, State) ->
     {State, [{mod_call, rabbit_global_counters, messages_dead_lettered,
               [Reason, rabbit_quorum_queue, disabled, length(Msgs)]}]};
 discard(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
-    RaftIdxs = lists:map(fun(?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
-                                 RaftIdx
-                         end, Msgs0),
-    Effect = {log, RaftIdxs,
+    Idxs = [I || ?MSG(I, _) <- Msgs0],
+    Effect = {log, Idxs,
               fun (Log) ->
-                      Lookup = maps:from_list(lists:zip(RaftIdxs, Log)),
-                      Msgs = lists:map(fun(?INDEX_MSG(RaftIdx, ?DISK_MSG(_Header))) ->
-                                               {enqueue, _, _, Msg} = maps:get(RaftIdx, Lookup),
-                                               Msg
-                                       end, Msgs0),
+                      Lookup = maps:from_list(lists:zip(Idxs, Log)),
+                      Msgs = [begin
+                                  {enqueue, _, _, Msg} = maps:get(Idx, Lookup),
+                                  Msg
+                              end || ?MSG(Idx, _) <- Msgs0],
                       [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
     {State, [Effect]};
 discard(Msgs, Reason, at_least_once, State0)
   when Reason =/= maxlen ->
-    State = lists:foldl(fun (?INDEX_MSG(Idx, ?DISK_MSG(_Header)) = Msg0,
-                             #?MODULE{discards = D0,
-                                      msg_bytes = B0,
-                                      ra_indexes = I0} = S0) ->
+    State = lists:foldl(fun(?MSG(Idx, _) = Msg0,
+                            #?MODULE{discards = D0,
+                                     msg_bytes = B0,
+                                     ra_indexes = I0} = S0) ->
                                 MsgSize = size_in_bytes(Msg0),
                                 %% Condense header to an integer representing the message size.
                                 %% We do not need delivery_count or expiry header fields anymore.
                                 %% This saves per-message memory usage.
-                                Msg = ?INDEX_MSG(Idx, ?DISK_MSG(MsgSize)),
+                                Msg = ?MSG(Idx, MsgSize),
                                 D = lqueue:in(?TUPLE(Reason, Msg), D0),
                                 B = B0 + MsgSize,
                                 I = rabbit_fifo_index:append(Idx, I0),
@@ -181,7 +179,7 @@ checkout(at_least_once, #?MODULE{consumer = #dlx_consumer{}} = State) ->
 checkout(_, State) ->
     {State, []}.
 
-checkout0({success, MsgId, ?TUPLE(Reason, ?INDEX_MSG(Idx, ?DISK_MSG(_Header))), State}, SendAcc)
+checkout0({success, MsgId, ?TUPLE(Reason, ?MSG(Idx, _)), State}, SendAcc)
   when is_integer(Idx) ->
     DelMsg = {Idx, {Reason, MsgId}},
     checkout0(checkout_one(State), [DelMsg | SendAcc]);
@@ -220,7 +218,7 @@ checkout_one(#?MODULE{discards = Discards0,
             State0
     end.
 
-size_in_bytes(?INDEX_MSG(_Idx, ?DISK_MSG(Header))) ->
+size_in_bytes(?MSG(_, Header)) ->
     rabbit_fifo:get_header(size, Header).
 
 %% returns at most one delivery effect because there is only one consumer

@@ -206,7 +206,7 @@ last_consumer_wins(_Config) ->
     ok.
 
 make_msg(RaftIdx) ->
-    ?INDEX_MSG(RaftIdx, ?DISK_MSG(1)).
+    ?MSG(RaftIdx, _Bytes = 1).
 
 meta(Idx) ->
     #{index => Idx,

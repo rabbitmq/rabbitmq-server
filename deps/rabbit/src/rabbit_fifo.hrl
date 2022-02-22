@@ -1,8 +1,10 @@
 %% macros for memory optimised tuple structures
+%% [A|B] saves 1 byte compared to {A,B}
 -define(TUPLE(A, B), [A | B]).
 
--define(DISK_MSG(Header), Header).
--define(INDEX_MSG(Index, Msg), ?TUPLE(Index, Msg)).
+%% We only hold Raft index and message header in memory.
+%% Raw message data is always stored on disk.
+-define(MSG(Index, Header), ?TUPLE(Index, Header)).
 
 -define(IS_HEADER(H),
         is_integer(H) orelse
@@ -39,16 +41,13 @@
 %%         Value is determined by per-queue or per-message message TTL.
 %% If it only contains the size it can be condensed to an integer only
 
--type msg() :: ?DISK_MSG(msg_header()).
-%% message with a header map.
-
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type indexed_msg() :: tuple(ra:index(), msg_header()).
+-type msg() :: tuple(ra:index(), msg_header()).
 
--type delivery_msg() :: {msg_id(), {msg_header(), term()}}.
-%% A tuple consisting of the message id and the headered message.
+-type delivery_msg() :: {msg_id(), {msg_header(), raw_msg()}}.
+%% A tuple consisting of the message id, and the headered message.
 
 -type consumer_tag() :: binary().
 %% An arbitrary binary tag used to distinguish between different consumers
@@ -105,7 +104,7 @@
         {cfg = #consumer_cfg{},
          status = up :: up | suspected_down | cancelled | waiting,
          next_msg_id = 0 :: msg_id(), % part of snapshot data
-         checked_out = #{} :: #{msg_id() => indexed_msg()},
+         checked_out = #{} :: #{msg_id() => msg()},
          %% max number of messages that can be sent
          %% decremented for each delivery
          credit = 0 : non_neg_integer(),
@@ -161,7 +160,7 @@
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
-         messages = lqueue:new() :: lqueue:lqueue(indexed_msg()),
+         messages = lqueue:new() :: lqueue:lqueue(msg()),
          %
          messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
