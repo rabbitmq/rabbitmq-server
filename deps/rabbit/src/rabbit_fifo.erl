@@ -86,7 +86,7 @@
                   msg_id :: msg_id(),
                   index :: ra:index(),
                   header :: msg_header(),
-                  msg :: indexed_msg()}).
+                  msg :: msg()}).
 -record(register_enqueuer, {pid :: pid()}).
 -record(checkout, {consumer_id :: consumer_id(),
                    spec :: checkout_spec(),
@@ -158,7 +158,6 @@
               consumer_meta/0,
               consumer_id/0,
               client_msg/0,
-              indexed_msg/0,
               msg/0,
               msg_id/0,
               msg_seqno/0,
@@ -289,17 +288,14 @@ apply(#{index := Idx} = Meta,
     case Cons0 of
         #{ConsumerId := #consumer{checked_out = Checked0} = Con0}
           when is_map_key(MsgId, Checked0) ->
-            %% construct an index message with the current raft index
+            %% construct a message with the current raft index
             %% and update delivery count before adding it to the message queue
             Header = update_header(delivery_count, fun incr/1, 1, Header0),
-
             State0 = add_bytes_return(Header, State00),
-
-            IdxMsg = ?INDEX_MSG(Idx, ?DISK_MSG(Header)),
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked0),
                                 credit = increase_credit(Con0, 1)},
             State1 = State0#?MODULE{ra_indexes = rabbit_fifo_index:delete(OldIdx, Indexes0),
-                                    messages = lqueue:in(IdxMsg, Messages),
+                                    messages = lqueue:in(?MSG(Idx, Header), Messages),
                                     enqueue_count = EnqCount + 1},
             State2 = update_or_remove_sub(Meta, ConsumerId, Con, State1),
             {State, Ret, Effs} = checkout(Meta, State0, State2, []),
@@ -392,7 +388,7 @@ apply(#{index := Index,
             State1 = update_consumer(Meta, ConsumerId, ConsumerMeta,
                                      {once, 1, simple_prefetch}, 0,
                                      State0),
-            {success, _, MsgId, Msg, ExpiredMsg, State2, Effects0} =
+            {success, _, MsgId, ?MSG(RaftIdx, Header), ExpiredMsg, State2, Effects0} =
                 checkout_one(Meta, false, State1, []),
             {State4, Effects1} = case Settlement of
                                      unsettled ->
@@ -405,15 +401,10 @@ apply(#{index := Index,
                                                    State2),
                                          {State3, SettleEffects ++ Effects0}
                                  end,
-            {Reply, Effects2} =
-                case Msg of
-                    ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)) ->
-                        {'$ra_no_reply',
-                         [reply_log_effect(RaftIdx, MsgId, Header, Ready - 1, From) |
-                          Effects1]}
-                end,
+            Effects2 = [reply_log_effect(RaftIdx, MsgId, Header, Ready - 1, From) | Effects1],
             {State, DroppedMsg, Effects} = evaluate_limit(Index, false, State0, State4,
                                                           Effects2),
+            Reply = '$ra_no_reply',
             case {DroppedMsg, ExpiredMsg} of
                 {false, false} ->
                     {State, Reply, Effects};
@@ -441,15 +432,11 @@ apply(#{index := Index}, #purge{},
                ra_indexes = Indexes0,
                dlx = DlxState} = State0) ->
     NumReady = messages_ready(State0),
-    Indexes1 = lists:foldl(fun (?INDEX_MSG(I, _), Acc0) when is_integer(I) ->
-                                   rabbit_fifo_index:delete(I, Acc0);
-                               (_, Acc) ->
-                                   Acc
+    Indexes1 = lists:foldl(fun(?MSG(I, _), Acc0) when is_integer(I) ->
+                                   rabbit_fifo_index:delete(I, Acc0)
                            end, Indexes0, lqueue:to_list(Returns)),
-    Indexes = lists:foldl(fun (?INDEX_MSG(I, _), Acc0) when is_integer(I) ->
-                                  rabbit_fifo_index:delete(I, Acc0);
-                              (_, Acc) ->
-                                  Acc
+    Indexes = lists:foldl(fun(?MSG(I, _), Acc0) when is_integer(I) ->
+                                  rabbit_fifo_index:delete(I, Acc0)
                           end, Indexes1, lqueue:to_list(Messages)),
     {NumDlx, _} = rabbit_fifo_dlx:stat(DlxState),
     State1 = State0#?MODULE{ra_indexes = Indexes,
@@ -624,19 +611,19 @@ apply(_Meta, Cmd, State) ->
     {State, ok, []}.
 
 convert_msg({RaftIdx, {Header, empty}}) when is_integer(RaftIdx) ->
-    ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header));
+    ?MSG(RaftIdx, Header);
 convert_msg({RaftIdx, {Header, _Msg}}) when is_integer(RaftIdx) ->
-    ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header));
+    ?MSG(RaftIdx, Header);
 convert_msg({'$empty_msg', Header}) ->
     %% dummy index
-    ?INDEX_MSG(undefined, ?DISK_MSG(Header));
+    ?MSG(undefined, Header);
 convert_msg({'$prefix_msg', Header}) ->
     %% dummy index
-    ?INDEX_MSG(undefined, ?DISK_MSG(Header));
+    ?MSG(undefined, Header);
 convert_msg({Header, empty}) ->
     convert_msg(Header);
 convert_msg(Header) when ?IS_HEADER(Header) ->
-    ?INDEX_MSG(undefined, ?DISK_MSG(Header)).
+    ?MSG(undefined, Header).
 
 convert_consumer({ConsumerTag, Pid}, CV1) ->
     Meta = element(2, CV1),
@@ -681,8 +668,8 @@ convert_v1_to_v2(V1State0) ->
     V2PrefReturns = lists:foldl(fun(Hdr, Acc) ->
                                         lqueue:in(convert_msg(Hdr), Acc)
                                 end, lqueue:new(), PrefReturns),
-    MessagesV2 = lqueue:fold(fun ({_, IdxMsg}, Acc) ->
-                                     lqueue:in(convert_msg(IdxMsg), Acc)
+    MessagesV2 = lqueue:fold(fun ({_, Msg}, Acc) ->
+                                     lqueue:in(convert_msg(Msg), Acc)
                              end, V2PrefMsgs, MessagesV1),
     ReturnsV2 = lqueue:fold(fun ({_SeqId, Msg}, Acc) ->
                                     lqueue:in(convert_msg(Msg), Acc)
@@ -939,7 +926,7 @@ get_checked_out(Cid, From, To, #?MODULE{consumers = Consumers}) ->
     case Consumers of
         #{Cid := #consumer{checked_out = Checked}} ->
             [begin
-                 ?INDEX_MSG(I, ?DISK_MSG(H)) = maps:get(K, Checked),
+                 ?MSG(I, H) = maps:get(K, Checked),
                  {K, {I, H}}
              end || K <- lists:seq(From, To), maps:is_key(K, Checked)];
         _ ->
@@ -995,7 +982,7 @@ handle_aux(leader, cast, {#return{msg_ids = MsgIds,
         #{ConsumerId := #consumer{checked_out = Checked}} ->
             {Log, ToReturn} =
                 maps:fold(
-                  fun (MsgId, ?INDEX_MSG(Idx, ?DISK_MSG(Header)), {L0, Acc}) ->
+                  fun (MsgId, ?MSG(Idx, Header), {L0, Acc}) ->
                           %% it is possible this is not found if the consumer
                           %% crashed and the message got removed
                           case ra_log:fetch(Idx, L0) of
@@ -1004,8 +991,7 @@ handle_aux(leader, cast, {#return{msg_ids = MsgIds,
                                             #enqueue{msg = M} -> M;
                                             #requeue{msg = M} -> M
                                         end,
-                                  IdxMsg = ?INDEX_MSG(Idx, ?TUPLE(Header, Msg)),
-                                  {L, [{MsgId, IdxMsg} | Acc]};
+                                  {L, [{MsgId, Idx, Header, Msg} | Acc]};
                               {undefined, L} ->
                                   {L, Acc}
                           end
@@ -1069,14 +1055,14 @@ handle_aux(_RaState, {call, _From}, oldest_entry_timestamp, Aux,
 handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            Log0, MacState) ->
     case rabbit_fifo:query_peek(Pos, MacState) of
-        {ok, ?INDEX_MSG(Idx, ?DISK_MSG(Header))} ->
+        {ok, ?MSG(Idx, Header)} ->
             %% need to re-hydrate from the log
-           {{_, _, {_, _, Cmd, _}}, Log} = ra_log:fetch(Idx, Log0),
-           Msg = case Cmd of
-                     #enqueue{msg = M} -> M;
-                     #requeue{msg = M} -> M
-                 end,
-           {reply, {ok, {Header, Msg}}, Aux0, Log};
+            {{_, _, {_, _, Cmd, _}}, Log} = ra_log:fetch(Idx, Log0),
+            Msg = case Cmd of
+                      #enqueue{msg = M} -> M;
+                      #requeue{msg = M} -> M
+                  end,
+            {reply, {ok, {Header, Msg}}, Aux0, Log};
         Err ->
             {reply, Err, Aux0, Log0}
     end;
@@ -1241,9 +1227,9 @@ query_peek(Pos, State0) when Pos > 0 ->
     case take_next_msg(State0) of
         empty ->
             {error, no_message_at_pos};
-        {IdxMsg, _State}
+        {Msg, _State}
           when Pos == 1 ->
-            {ok, IdxMsg};
+            {ok, Msg};
         {_Msg, State} ->
             query_peek(Pos-1, State)
     end.
@@ -1469,13 +1455,13 @@ decr_total(#?MODULE{messages_total = Tot} = State) ->
 
 drop_head(#?MODULE{ra_indexes = Indexes0} = State0, Effects) ->
     case take_next_msg(State0) of
-        {?INDEX_MSG(Idx, ?DISK_MSG(Header)) = IdxMsg, State1} ->
+        {?MSG(Idx, Header) = Msg, State1} ->
             Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
             State2 = State1#?MODULE{ra_indexes = Indexes},
             State3 = decr_total(add_bytes_drop(Header, State2)),
             #?MODULE{cfg = #cfg{dead_letter_handler = DLH},
                      dlx = DlxState} = State = State3,
-            {_, DlxEffects} = rabbit_fifo_dlx:discard([IdxMsg], maxlen, DLH, DlxState),
+            {_, DlxEffects} = rabbit_fifo_dlx:discard([Msg], maxlen, DLH, DlxState),
             {State, DlxEffects ++ Effects};
         empty ->
             {State0, Effects}
@@ -1551,7 +1537,7 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg, Effects,
     % direct enqueue without tracking
     Size = message_size(RawMsg),
     Header = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
-    Msg = ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)),
+    Msg = ?MSG(RaftIdx, Header),
     State = State0#?MODULE{msg_bytes_enqueue = Enqueue + Size,
                            enqueue_count = EnqCount + 1,
                            messages_total = Total + 1,
@@ -1575,7 +1561,7 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg, Effects0,
             % it is the next expected seqno
             Size = message_size(RawMsg),
             Header = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
-            Msg = ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)),
+            Msg = ?MSG(RaftIdx, Header),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
             MsgCache = case can_immediately_deliver(State0) of
                            true ->
@@ -1635,10 +1621,8 @@ complete(Meta, ConsumerId, DiscardedMsgIds,
     SettledSize = lists:foldl(fun(Msg, Acc) ->
                                       get_header(size, get_msg_header(Msg)) + Acc
                               end, 0, DiscardedMsgs),
-    Indexes = lists:foldl(fun (?INDEX_MSG(I, _), Acc) when is_integer(I) ->
-                                  rabbit_fifo_index:delete(I, Acc);
-                              (_, Acc) ->
-                                  Acc
+    Indexes = lists:foldl(fun(?MSG(I, _), Acc) when is_integer(I) ->
+                                  rabbit_fifo_index:delete(I, Acc)
                           end, Indexes0, DiscardedMsgs),
     State1#?MODULE{ra_indexes = Indexes,
                    msg_bytes_checkout = BytesCheckout - SettledSize,
@@ -1718,8 +1702,8 @@ find_next_cursor(Smallest, Cursors0, Potential) ->
             {Potential, Cursors0}
     end.
 
-update_msg_header(Key, Fun, Def, ?INDEX_MSG(Idx, ?DISK_MSG(Header))) ->
-    ?INDEX_MSG(Idx, ?DISK_MSG(update_header(Key, Fun, Def, Header))).
+update_msg_header(Key, Fun, Def, ?MSG(Idx, Header)) ->
+    ?MSG(Idx, update_header(Key, Fun, Def, Header)).
 
 update_header(Key, UpdateFun, Default, Header)
   when is_integer(Header) ->
@@ -1727,7 +1711,7 @@ update_header(Key, UpdateFun, Default, Header)
 update_header(Key, UpdateFun, Default, Header) ->
     maps:update_with(Key, UpdateFun, Default, Header).
 
-get_msg_header(?INDEX_MSG(_Idx, ?DISK_MSG(Header))) ->
+get_msg_header(?MSG(_Idx, Header)) ->
     Header.
 
 get_header(size, Header)
@@ -1790,7 +1774,7 @@ checkout(#{index := Index} = Meta,
     end.
 
 checkout0(Meta, {success, ConsumerId, MsgId,
-                 ?INDEX_MSG(RaftIdx, ?DISK_MSG(Header)), ExpiredMsg, State, Effects},
+                 ?MSG(RaftIdx, Header), ExpiredMsg, State, Effects},
           SendAcc0) when is_integer(RaftIdx) ->
     DelMsg = {RaftIdx, {MsgId, Header}},
     SendAcc = case maps:get(ConsumerId, SendAcc0, undefined) of
@@ -1875,11 +1859,11 @@ take_next_msg(#?MODULE{returns = Returns0,
             case lqueue:out(Messages0) of
                 {empty, _} ->
                     empty;
-                {{value, ?INDEX_MSG(RaftIdx, _) = IndexMsg}, Messages} ->
+                {{value, ?MSG(RaftIdx, _) = Msg}, Messages} ->
                     %% add index here
                     Indexes = rabbit_fifo_index:append(RaftIdx, Indexes0),
-                    {IndexMsg, State#?MODULE{messages = Messages,
-                                             ra_indexes = Indexes}}
+                    {Msg, State#?MODULE{messages = Messages,
+                                        ra_indexes = Indexes}}
             end
     end.
 
@@ -1896,11 +1880,11 @@ delivery_effect({CTag, CPid}, [{Idx, {MsgId, Header}}],
                 #?MODULE{msg_cache = {Idx, RawMsg}}) ->
     {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
      [local, ra_event]};
-delivery_effect({CTag, CPid}, IdxMsgs, _State) ->
-    {RaftIdxs, Data} = lists:unzip(IdxMsgs),
+delivery_effect({CTag, CPid}, Msgs, _State) ->
+    {RaftIdxs, Data} = lists:unzip(Msgs),
     {log, RaftIdxs,
      fun(Log) ->
-             Msgs = lists:zipwith(
+             DelMsgs = lists:zipwith(
                       fun (#enqueue{msg = Msg},
                            {MsgId, Header}) ->
                               {MsgId, {Header, Msg}};
@@ -1908,7 +1892,7 @@ delivery_effect({CTag, CPid}, IdxMsgs, _State) ->
                            {MsgId, Header}) ->
                               {MsgId, {Header, Msg}}
                       end, Log, Data),
-             [{send_msg, CPid, {delivery, CTag, Msgs}, [local, ra_event]}]
+             [{send_msg, CPid, {delivery, CTag, DelMsgs}, [local, ra_event]}]
      end,
      {local, node(CPid)}}.
 
@@ -1993,34 +1977,31 @@ expire_msgs(RaCmdTs, Result, State, Effects) ->
     %% Therefore, first lqueue:get/2 to check whether we need to lqueue:out/1
     %% because the latter can be much slower than the former.
     case get_next_msg(State) of
-        ?INDEX_MSG(_Idx, ?DISK_MSG(#{expiry := Expiry} = Header))
+        ?MSG(_, #{expiry := Expiry})
           when RaCmdTs >= Expiry ->
-            expire(RaCmdTs, Header, State, Effects);
+            expire(RaCmdTs, State, Effects);
         _ ->
             {Result, State, Effects}
     end.
 
-expire(RaCmdTs, Header, State0, Effects) ->
-    {Msg, State1} = take_next_msg(State0),
-    #?MODULE{cfg = #cfg{dead_letter_handler = DLH},
-             dlx = DlxState0,
-             ra_indexes = Indexes0} = State2 = add_bytes_drop(Header, State1),
+expire(RaCmdTs, State0, Effects) ->
+    {?MSG(Idx, Header) = Msg,
+     #?MODULE{cfg = #cfg{dead_letter_handler = DLH},
+              dlx = DlxState0,
+              ra_indexes = Indexes0,
+              messages_total = Tot,
+              msg_bytes_enqueue = MsgBytesEnqueue} = State1} = take_next_msg(State0),
     {DlxState, DlxEffects} = rabbit_fifo_dlx:discard([Msg], expired, DLH, DlxState0),
-    State3 = State2#?MODULE{dlx = DlxState},
-    State5 = case Msg of
-                 ?INDEX_MSG(Idx, ?DISK_MSG(_Header))
-                   when is_integer(Idx) ->
-                     Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
-                     State3#?MODULE{ra_indexes = Indexes};
-                 ?DISK_MSG(_) ->
-                     State3
-             end,
-    State = decr_total(State5),
+    Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
+    State = State1#?MODULE{dlx = DlxState,
+                           ra_indexes = Indexes,
+                           messages_total = Tot - 1,
+                           msg_bytes_enqueue = MsgBytesEnqueue - get_header(size, Header)},
     expire_msgs(RaCmdTs, true, State, DlxEffects ++ Effects).
 
 timer_effect(RaCmdTs, State, Effects) ->
     T = case get_next_msg(State) of
-            ?INDEX_MSG(_, ?DISK_MSG(#{expiry := Expiry}))
+            ?MSG(_, #{expiry := Expiry})
               when is_number(Expiry) ->
                 %% Next message contains 'expiry' header.
                 %% (Re)set timer so that mesage will be dropped or dead-lettered on time.
@@ -2356,7 +2337,7 @@ smallest_raft_index(#?MODULE{messages = Messages,
                              dlx = DlxState}) ->
     SmallestDlxRaIdx = rabbit_fifo_dlx:smallest_raft_index(DlxState),
     SmallestMsgsRaIdx = case lqueue:get(Messages, empty) of
-                            ?INDEX_MSG(I, _) ->
+                            ?MSG(I, _) ->
                                 I;
                             _ ->
                                 undefined
@@ -2364,7 +2345,7 @@ smallest_raft_index(#?MODULE{messages = Messages,
     SmallestRaIdx = rabbit_fifo_index:smallest(Indexes),
     lists:min([SmallestDlxRaIdx, SmallestMsgsRaIdx, SmallestRaIdx]).
 
-make_requeue(ConsumerId, Notify, [{MsgId, ?INDEX_MSG(Idx, ?TUPLE(Header, Msg))}], Acc) ->
+make_requeue(ConsumerId, Notify, [{MsgId, Idx, Header, Msg}], Acc) ->
     lists:reverse([{append,
                     #requeue{consumer_id = ConsumerId,
                              index = Idx,
@@ -2373,7 +2354,7 @@ make_requeue(ConsumerId, Notify, [{MsgId, ?INDEX_MSG(Idx, ?TUPLE(Header, Msg))}]
                              msg = Msg},
                     Notify}
                    | Acc]);
-make_requeue(ConsumerId, Notify, [{MsgId, ?INDEX_MSG(Idx, ?TUPLE(Header, Msg))} | Rem], Acc) ->
+make_requeue(ConsumerId, Notify, [{MsgId, Idx, Header, Msg} | Rem], Acc) ->
     make_requeue(ConsumerId, Notify, Rem,
                  [{append,
                    #requeue{consumer_id = ConsumerId,
