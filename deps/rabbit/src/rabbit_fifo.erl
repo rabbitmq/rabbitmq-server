@@ -73,6 +73,10 @@
          make_garbage_collection/0
         ]).
 
+-ifdef(TEST).
+-export([update_header/4]).
+-endif.
+
 -define(SETTLE_V2, '$s').
 -define(RETURN_V2, '$r').
 -define(DISCARD_V2, '$d').
@@ -1705,21 +1709,40 @@ find_next_cursor(Smallest, Cursors0, Potential) ->
 update_msg_header(Key, Fun, Def, ?MSG(Idx, Header)) ->
     ?MSG(Idx, update_header(Key, Fun, Def, Header)).
 
+update_header(expiry, _, Expiry, Size)
+  when is_integer(Size) ->
+    ?TUPLE(Size, Expiry);
+update_header(Key, UpdateFun, Default, Size)
+  when is_integer(Size) ->
+    update_header(Key, UpdateFun, Default, #{size => Size});
+update_header(Key, UpdateFun, Default, ?TUPLE(Size, Expiry))
+  when is_integer(Size), is_integer(Expiry) ->
+    update_header(Key, UpdateFun, Default, #{size => Size,
+                                             expiry => Expiry});
 update_header(Key, UpdateFun, Default, Header)
-  when is_integer(Header) ->
-    update_header(Key, UpdateFun, Default, #{size => Header});
-update_header(Key, UpdateFun, Default, Header) ->
+  when is_map(Header), is_map_key(size, Header) ->
     maps:update_with(Key, UpdateFun, Default, Header).
 
 get_msg_header(?MSG(_Idx, Header)) ->
     Header.
 
-get_header(size, Header)
-  when is_integer(Header) ->
-    Header;
-get_header(_Key, Header) when is_integer(Header) ->
+get_header(size, Size)
+  when is_integer(Size) ->
+    Size;
+get_header(_Key, Size)
+  when is_integer(Size) ->
     undefined;
-get_header(Key, Header) when is_map(Header) ->
+get_header(size, ?TUPLE(Size, Expiry))
+  when is_integer(Size), is_integer(Expiry) ->
+    Size;
+get_header(expiry, ?TUPLE(Size, Expiry))
+  when is_integer(Size), is_integer(Expiry) ->
+    Expiry;
+get_header(_Key, ?TUPLE(Size, Expiry))
+  when is_integer(Size), is_integer(Expiry) ->
+    undefined;
+get_header(Key, Header)
+  when is_map(Header) andalso is_map_key(size, Header) ->
     maps:get(Key, Header, undefined).
 
 return_one(Meta, MsgId, Msg0,
@@ -1977,8 +2000,11 @@ expire_msgs(RaCmdTs, Result, State, Effects) ->
     %% Therefore, first lqueue:get/2 to check whether we need to lqueue:out/1
     %% because the latter can be much slower than the former.
     case get_next_msg(State) of
+        ?MSG(_, ?TUPLE(Size, Expiry))
+          when is_integer(Size), is_integer(Expiry), RaCmdTs >= Expiry ->
+            expire(RaCmdTs, State, Effects);
         ?MSG(_, #{expiry := Expiry})
-          when RaCmdTs >= Expiry ->
+          when is_integer(Expiry), RaCmdTs >= Expiry ->
             expire(RaCmdTs, State, Effects);
         _ ->
             {Result, State, Effects}
@@ -2001,10 +2027,13 @@ expire(RaCmdTs, State0, Effects) ->
 
 timer_effect(RaCmdTs, State, Effects) ->
     T = case get_next_msg(State) of
-            ?MSG(_, #{expiry := Expiry})
-              when is_number(Expiry) ->
+            ?MSG(_, ?TUPLE(Size, Expiry))
+              when is_integer(Size), is_integer(Expiry) ->
                 %% Next message contains 'expiry' header.
                 %% (Re)set timer so that mesage will be dropped or dead-lettered on time.
+                max(0, Expiry - RaCmdTs);
+            ?MSG(_, #{expiry := Expiry})
+              when is_integer(Expiry) ->
                 max(0, Expiry - RaCmdTs);
             _ ->
                 %% Next message does not contain 'expiry' header.
