@@ -159,8 +159,7 @@ discard(Msgs, Reason, at_least_once, State0)
                                      ra_indexes = I0} = S0) ->
                                 MsgSize = size_in_bytes(Msg0),
                                 %% Condense header to an integer representing the message size.
-                                %% We do not need delivery_count or expiry header fields anymore.
-                                %% This saves per-message memory usage.
+                                %% We need neither delivery_count nor expiry anymore.
                                 Msg = ?MSG(Idx, MsgSize),
                                 D = lqueue:in(?TUPLE(Reason, Msg), D0),
                                 B = B0 + MsgSize,
@@ -218,7 +217,8 @@ checkout_one(#?MODULE{discards = Discards0,
             State0
     end.
 
-size_in_bytes(?MSG(_, Header)) ->
+size_in_bytes(MSG) ->
+    Header = rabbit_fifo:get_msg_header(MSG),
     rabbit_fifo:get_header(size, Header).
 
 %% returns at most one delivery effect because there is only one consumer
