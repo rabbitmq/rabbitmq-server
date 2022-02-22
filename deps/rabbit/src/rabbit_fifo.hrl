@@ -7,7 +7,8 @@
 -define(MSG(Index, Header), ?TUPLE(Index, Header)).
 
 -define(IS_HEADER(H),
-        is_integer(H) orelse
+        (is_integer(H) andalso H >= 0) orelse
+        is_list(H) orelse
         (is_map(H) andalso is_map_key(size, H))).
 
 -type tuple(A, B) :: nonempty_improper_list(A, B).
@@ -31,15 +32,18 @@
 %% same process
 
 -type msg_header() :: msg_size() |
+                      tuple(msg_size(), milliseconds()) |
                       #{size := msg_size(),
                         delivery_count => non_neg_integer(),
                         expiry => milliseconds()}.
 %% The message header:
+%% size: The size of the message payload in bytes.
 %% delivery_count: the number of unsuccessful delivery attempts.
 %%                 A non-zero value indicates a previous attempt.
 %% expiry: Epoch time in ms when a message expires. Set during enqueue.
 %%         Value is determined by per-queue or per-message message TTL.
-%% If it only contains the size it can be condensed to an integer only
+%% If it contains only the size it can be condensed to an integer.
+%% If it contains only the size and expiry it can be condensed to an improper list.
 
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload

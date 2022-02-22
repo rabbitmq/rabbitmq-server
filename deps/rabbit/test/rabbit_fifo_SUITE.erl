@@ -1825,6 +1825,50 @@ expire_message_should_emit_release_cursor_test(_) ->
     ?ASSERT_EFF({release_cursor, 1, _}, Effs),
     ok.
 
+header_test(_) ->
+    H0 = Size = 5,
+    ?assertEqual(Size, rabbit_fifo:get_header(size, H0)),
+    ?assertEqual(undefined, rabbit_fifo:get_header(expiry, H0)),
+    ?assertEqual(undefined, rabbit_fifo:get_header(delivery_count, H0)),
+
+    H1 = rabbit_fifo:update_header(delivery_count, fun(C) -> C+1 end, 1, H0),
+    ?assertEqual(#{size => Size,
+                   delivery_count => 1}, H1),
+    ?assertEqual(Size, rabbit_fifo:get_header(size, H1)),
+    ?assertEqual(undefined, rabbit_fifo:get_header(expiry, H1)),
+    ?assertEqual(1, rabbit_fifo:get_header(delivery_count, H1)),
+
+    Expiry = 1000,
+    H2 = rabbit_fifo:update_header(expiry, fun(Ts) -> Ts end, Expiry, H0),
+    ?assertEqual([Size | Expiry], H2),
+    ?assertEqual(Size, rabbit_fifo:get_header(size, H2)),
+    ?assertEqual(Expiry, rabbit_fifo:get_header(expiry, H2)),
+    ?assertEqual(undefined, rabbit_fifo:get_header(delivery_count, H2)),
+
+    H3 = rabbit_fifo:update_header(delivery_count, fun(C) -> C+1 end, 1, H2),
+    ?assertEqual(#{size => Size,
+                   expiry => Expiry,
+                   delivery_count => 1}, H3),
+    ?assertEqual(Size, rabbit_fifo:get_header(size, H3)),
+    ?assertEqual(Expiry, rabbit_fifo:get_header(expiry, H3)),
+    ?assertEqual(1, rabbit_fifo:get_header(delivery_count, H3)),
+
+    H4 = rabbit_fifo:update_header(delivery_count, fun(C) -> C+1 end, 1, H3),
+    ?assertEqual(#{size => Size,
+                   expiry => Expiry,
+                   delivery_count => 2}, H4),
+    ?assertEqual(2, rabbit_fifo:get_header(delivery_count, H4)),
+
+    H5 = rabbit_fifo:update_header(expiry, fun(Ts) -> Ts end, Expiry, H1),
+    ?assertEqual(#{size => Size,
+                   expiry => Expiry,
+                   delivery_count => 1}, H5),
+    ?assertEqual(Size, rabbit_fifo:get_header(size, H5)),
+    ?assertEqual(Expiry, rabbit_fifo:get_header(expiry, H5)),
+    ?assertEqual(1, rabbit_fifo:get_header(delivery_count, H5)),
+    ?assertEqual(undefined, rabbit_fifo:get_header(blah, H5)),
+    ok.
+
 %% Utility
 
 init(Conf) -> rabbit_fifo:init(Conf).
