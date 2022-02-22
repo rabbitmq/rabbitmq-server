@@ -1,23 +1,14 @@
-
 %% macros for memory optimised tuple structures
 -define(TUPLE(A, B), [A | B]).
 
-%% We want short atoms since their binary representations will get
-%% persisted in a snapshot for every message.
-%% '$d' stand for 'disk'.
--define(DISK_MSG_TAG, '$d').
-%% '$m' stand for 'memory'.
--define(PREFIX_MEM_MSG_TAG, '$m').
-
-% -define(DISK_MSG(Header), [Header | ?DISK_MSG_TAG]).
 -define(DISK_MSG(Header), Header).
-% -define(MSG(Header, RawMsg), [Header | RawMsg]).
--define(INDEX_MSG(Index, Msg), [Index | Msg]).
-% -define(PREFIX_MEM_MSG(Header), [Header | ?PREFIX_MEM_MSG_TAG]).
+-define(INDEX_MSG(Index, Msg), ?TUPLE(Index, Msg)).
 
 -define(IS_HEADER(H),
-          when is_integer(H) orelse
-               (is_map(H) andalso is_map_key(size, H))).
+        is_integer(H) orelse
+        (is_map(H) andalso is_map_key(size, H))).
+
+-type tuple(A, B) :: nonempty_improper_list(A, B).
 
 -type option(T) :: undefined | T.
 
@@ -48,17 +39,13 @@
 %%         Value is determined by per-queue or per-message message TTL.
 %% If it only contains the size it can be condensed to an integer only
 
--type msg() :: %%?MSG(msg_header(), raw_msg()) |
-               ?DISK_MSG(msg_header()).
-               % ?PREFIX_MEM_MSG(msg_header()).
+-type msg() :: ?DISK_MSG(msg_header()).
 %% message with a header map.
 
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type indexed_msg() :: nonempty_improper_list(ra:index(), msg_header()).
-
-% -type prefix_msg() :: {'$prefix_msg', msg_header()}.
+-type indexed_msg() :: tuple(ra:index(), msg_header()).
 
 -type delivery_msg() :: {msg_id(), {msg_header(), term()}}.
 %% A tuple consisting of the message id and the headered message.
@@ -92,13 +79,13 @@
 % represents a partially applied module call
 
 -define(RELEASE_CURSOR_EVERY, 2048).
--define(RELEASE_CURSOR_EVERY_MAX, 3200000).
+-define(RELEASE_CURSOR_EVERY_MAX, 3_200_000).
 -define(USE_AVG_HALF_LIFE, 10000.0).
 %% an average QQ without any message uses about 100KB so setting this limit
 %% to ~10 times that should be relatively safe.
--define(GC_MEM_LIMIT_B, 2000000).
+-define(GC_MEM_LIMIT_B, 2_000_000).
 
--define(MB, 1048576).
+-define(MB, 1_048_576).
 -define(LOW_LIMIT, 0.8).
 
 -record(consumer_cfg,
