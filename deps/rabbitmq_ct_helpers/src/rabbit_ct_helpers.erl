@@ -50,7 +50,10 @@
 
     await_condition/1,
     await_condition/2,
-    await_condition_with_retries/2
+    await_condition_with_retries/2,
+
+    eventually/1, eventually/3,
+    consistently/1, consistently/3
   ]).
 
 -define(SSL_CERT_PASSWORD, "test").
@@ -1046,6 +1049,45 @@ await_condition_with_retries(ConditionFun, RetriesLeft) ->
         true ->
             ok
     end.
+
+%% Pass in any EUnit test object. Example:
+%% eventually(?_assertEqual(1, Actual))
+eventually({Line, Assertion} = TestObj)
+  when is_integer(Line), Line >= 0, is_function(Assertion, 0) ->
+    eventually(TestObj, 200, 5).
+
+eventually({Line, _}, _, 0) ->
+    erlang:error({assert_timeout_line, Line});
+eventually({Line, Assertion} = TestObj, PollInterval, PollCount)
+  when is_integer(Line), Line >= 0, is_function(Assertion, 0),
+       is_integer(PollInterval), PollInterval >= 0,
+       is_integer(PollCount), PollCount >= 0 ->
+    case catch Assertion() of
+        ok ->
+            ok;
+        Err ->
+            ct:pal(?LOW_IMPORTANCE,
+                   "Retrying in ~bms for ~b more times due to failed assertion in line ~b: ~p",
+                   [PollInterval, PollCount - 1, Line, Err]),
+            timer:sleep(PollInterval),
+            eventually(TestObj, PollInterval, PollCount - 1)
+    end.
+
+%% Pass in any EUnit test object. Example:
+%% consistently(?_assertEqual(1, Actual))
+consistently({Line, Assertion} = TestObj)
+  when is_integer(Line), Line >= 0, is_function(Assertion, 0) ->
+    consistently(TestObj, 200, 5).
+
+consistently(_, _, 0) ->
+    ok;
+consistently({Line, Assertion} = TestObj, PollInterval, PollCount)
+  when is_integer(Line), Line >= 0, is_function(Assertion, 0),
+       is_integer(PollInterval), PollInterval >= 0,
+       is_integer(PollCount), PollCount >= 0 ->
+    Assertion(),
+    timer:sleep(PollInterval),
+    consistently(TestObj, PollInterval, PollCount - 1).
 
 %% -------------------------------------------------------------------
 %% Cover-related functions.

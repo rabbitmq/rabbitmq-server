@@ -16,6 +16,9 @@
                              wait_for_min_messages/3,
                              dirty_query/3,
                              ra_name/1]).
+-import(rabbit_ct_helpers, [eventually/1,
+                            eventually/3,
+                            consistently/1]).
 -import(quorum_queue_SUITE, [publish/2,
                              consume/3]).
 
@@ -926,38 +929,6 @@ bind_queue(Channel, Queue, Exchange, RoutingKey) ->
 delete_queue(Channel, Queue) ->
     %% We implicitly test here that we don't end up with duplicate messages.
     #'queue.delete_ok'{message_count = 0} = amqp_channel:call(Channel, #'queue.delete'{queue = Queue}).
-
-%%TODO move to rabbitmq_ct_helpers/include/rabbit_assert.hrl
-consistently(TestObj) ->
-    consistently(TestObj, 200, 5).
-
-consistently(_, _, 0) ->
-    ok;
-consistently({_Line, Assertion} = TestObj, PollInterval, PollCount) ->
-    Assertion(),
-    timer:sleep(PollInterval),
-    consistently(TestObj, PollInterval, PollCount - 1).
-
-eventually(TestObj) ->
-    eventually(TestObj, 200, 5).
-
-eventually({Line, _}, _, 0) ->
-    erlang:error({assert_timeout,
-                  [{file, ?FILE},
-                   {line, ?LINE},
-                   {assertion_line, Line}
-                  ]});
-eventually({Line, Assertion} = TestObj, PollInterval, PollCount) ->
-    case catch Assertion() of
-        ok ->
-            ok;
-        Err ->
-            ct:pal(?LOW_IMPORTANCE,
-                   "Retrying in ~b ms for ~b more times in file ~s, line ~b due to failed assertion in line ~b: ~p",
-                   [PollInterval, PollCount - 1, ?FILE, ?LINE, Line, Err]),
-            timer:sleep(PollInterval),
-            eventually(TestObj, PollInterval, PollCount - 1)
-    end.
 
 get_global_counters(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, []).
