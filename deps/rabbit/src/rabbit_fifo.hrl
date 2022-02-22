@@ -56,7 +56,7 @@
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type indexed_msg() :: ?INDEX_MSG(ra:index(), msg_header()).
+-type indexed_msg() :: nonempty_improper_list(ra:index(), msg_header()).
 
 % -type prefix_msg() :: {'$prefix_msg', msg_header()}.
 
