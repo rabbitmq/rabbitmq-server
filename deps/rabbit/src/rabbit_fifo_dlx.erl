@@ -114,14 +114,14 @@ apply(_, {dlx, #checkout{consumer = ConsumerPid,
                msg_bytes_checkout = BytesCheckout} = State0) ->
     %% Since we allow only a single consumer, the new consumer replaces the old consumer.
     %% All checked out messages to the old consumer need to be returned to the discards queue
-    %% such that these messages can be (eventually) re-delivered to the new consumer.
+    %% such that these messages will be re-delivered to the new consumer.
     %% When inserting back into the discards queue, we respect the original order in which messages
     %% were discarded.
     Checked0 = maps:to_list(CheckedOutOldConsumer),
     Checked1 = lists:keysort(1, Checked0),
     {Discards, BytesMoved} = lists:foldr(
-                               fun({_Id, ?TUPLE(_Reason, IdxMsg) = Msg}, {D, B}) ->
-                                       {lqueue:in_r(Msg, D), B + size_in_bytes(IdxMsg)}
+                               fun({_Id, ?TUPLE(_, Msg) = RsnMsg}, {D, B}) ->
+                                       {lqueue:in_r(RsnMsg, D), B + size_in_bytes(Msg)}
                                end, {Discards0, 0}, Checked1),
     State = State0#?MODULE{consumer = #dlx_consumer{pid = ConsumerPid,
                                                     prefetch = Prefetch},
@@ -182,14 +182,6 @@ checkout0({success, MsgId, ?TUPLE(Reason, ?MSG(Idx, _)), State}, SendAcc)
   when is_integer(Idx) ->
     DelMsg = {Idx, {Reason, MsgId}},
     checkout0(checkout_one(State), [DelMsg | SendAcc]);
-checkout0({success, _MsgId, ?TUPLE(_Reason, ?TUPLE(_, _)), State}, SendAcc) ->
-    %% This is a prefix message which means we are recovering from a snapshot.
-    %% We know:
-    %% 1. This message was already delivered in the past, and
-    %% 2. The recovery Raft log ahead of this Raft command will defintely settle this message.
-    %% Therefore, here, we just check this message out to the consumer but do not re-deliver this message
-    %% so that we will end up with the correct and deterministic state once the whole recovery log replay is completed.
-    checkout0(checkout_one(State), SendAcc);
 checkout0(#?MODULE{consumer = #dlx_consumer{pid = Pid}} = State, SendAcc) ->
     Effects = delivery_effects(Pid, SendAcc),
     {State, Effects}.
@@ -221,17 +213,16 @@ size_in_bytes(MSG) ->
     Header = rabbit_fifo:get_msg_header(MSG),
     rabbit_fifo:get_header(size, Header).
 
-%% returns at most one delivery effect because there is only one consumer
 delivery_effects(_CPid, []) ->
     [];
-delivery_effects(CPid, IdxMsgs0) ->
-    IdxMsgs = lists:reverse(IdxMsgs0),
-    {RaftIdxs, Data} = lists:unzip(IdxMsgs),
+delivery_effects(CPid, Msgs0) ->
+    Msgs1 = lists:reverse(Msgs0),
+    {RaftIdxs, RsnIds} = lists:unzip(Msgs1),
     [{log, RaftIdxs,
       fun(Log) ->
               Msgs = lists:zipwith(fun ({enqueue, _, _, Msg}, {Reason, MsgId}) ->
                                            {MsgId, {Reason, Msg}}
-                                   end, Log, Data),
+                                   end, Log, RsnIds),
               [{send_msg, CPid, {dlx_delivery, Msgs}, [ra_event]}]
       end}].
 
@@ -376,5 +367,7 @@ normalize(#?MODULE{discards = Discards,
     State#?MODULE{discards = lqueue:from_list(lqueue:to_list(Discards)),
                   ra_indexes = rabbit_fifo_index:normalize(Indexes)}.
 
+-spec smallest_raft_index(state()) ->
+    option(non_neg_integer()).
 smallest_raft_index(#?MODULE{ra_indexes = Indexes}) ->
     rabbit_fifo_index:smallest(Indexes).

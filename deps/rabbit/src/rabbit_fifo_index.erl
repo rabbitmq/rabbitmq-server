@@ -80,10 +80,9 @@ delete(Key, #?MODULE{data = Data} = State) ->
 size(#?MODULE{data = Data}) ->
     maps:size(Data).
 
--spec smallest(state()) -> undefined | integer().
+-spec smallest(state()) -> undefined | non_neg_integer().
 smallest(#?MODULE{smallest = Smallest}) ->
     Smallest.
-
 
 -spec map(fun(), state()) -> state().
 map(F, #?MODULE{data = Data} = State) ->

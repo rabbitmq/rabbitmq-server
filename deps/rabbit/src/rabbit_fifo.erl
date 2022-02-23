@@ -51,8 +51,6 @@
          query_notify_decorators_info/1,
          usage/1,
 
-         zero/1,
-
          %% misc
          dehydrate_state/1,
          normalize/1,
@@ -209,9 +207,6 @@ update_config(Conf, State) ->
                                 msg_ttl = MsgTTL},
                   last_active = LastActive}.
 
-zero(_) ->
-    0.
-
 % msg_ids are scoped per consumer
 % ra_indexes holds all raft indexes for enqueues currently on queue
 -spec apply(ra_machine:command_meta_data(), command(), state()) ->
@@ -223,7 +218,6 @@ apply(Meta, #enqueue{pid = From, seq = Seq,
 apply(_Meta, #register_enqueuer{pid = Pid},
       #?MODULE{enqueuers = Enqueuers0,
                cfg = #cfg{overflow_strategy = Overflow}} = State0) ->
-
     State = case maps:is_key(Pid, Enqueuers0) of
                 true ->
                     %% if the enqueuer exits just echo the overflow state
@@ -247,7 +241,6 @@ apply(Meta,
                                   Con0, [], State);
         _ ->
             {State, ok}
-
     end;
 apply(Meta, #discard{msg_ids = MsgIds, consumer_id = ConsumerId},
       #?MODULE{consumers = Cons,
@@ -257,11 +250,11 @@ apply(Meta, #discard{msg_ids = MsgIds, consumer_id = ConsumerId},
         #{ConsumerId := #consumer{checked_out = Checked} = Con} ->
             % Publishing to dead-letter exchange must maintain same order as messages got rejected.
             DiscardMsgs = lists:filtermap(fun(Id) ->
-                                                  case maps:find(Id, Checked) of
-                                                      {ok, Msg} ->
-                                                          {true, Msg};
-                                                      error ->
-                                                          false
+                                                  case maps:get(Id, Checked, undefined) of
+                                                      undefined ->
+                                                          false;
+                                                      Msg ->
+                                                          {true, Msg}
                                                   end
                                           end, MsgIds),
             {DlxState, Effects} = rabbit_fifo_dlx:discard(DiscardMsgs, rejected, DLH, DlxState0),
@@ -1757,7 +1750,6 @@ return_one(Meta, MsgId, Msg0,
     Header = get_msg_header(Msg),
     case get_header(delivery_count, Header) of
         DeliveryCount when DeliveryCount > DeliveryLimit ->
-            %% TODO: don't do for prefix msgs
             {DlxState, DlxEffects} = rabbit_fifo_dlx:discard([Msg], delivery_limit, DLH, DlxState0),
             State1 = State0#?MODULE{dlx = DlxState},
             State = complete(Meta, ConsumerId, [MsgId], Con0, State1),

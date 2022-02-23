@@ -1,7 +1,4 @@
 -record(dlx_consumer,{
-          %% We don't require a consumer tag because a consumer tag is a means to distinguish
-          %% multiple consumers in the same channel. The rabbit_fifo_dlx_worker channel like process however
-          %% creates only a single consumer to this quorum queue's discards queue.
           pid :: pid(),
           prefetch :: non_neg_integer(),
           checked_out = #{} :: #{msg_id() => tuple(rabbit_dead_letter:reason(), msg())},
@@ -9,7 +6,7 @@
          }).
 
 -record(rabbit_fifo_dlx,{
-          consumer = undefined :: #dlx_consumer{} | undefined,
+          consumer :: option(#dlx_consumer{}),
           %% Queue of dead-lettered messages.
           discards = lqueue:new() :: lqueue:lqueue(tuple(rabbit_dead_letter:reason(), msg())),
           %% Raft indexes of messages in both discards queue and dlx_consumer's checked_out map
