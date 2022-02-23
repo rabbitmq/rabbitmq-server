@@ -1486,8 +1486,8 @@ command_invalid_over_channel(Config) ->
 %% command_invalid - this only applies to the network case
 command_invalid_over_channel0(Config) ->
     {ok, Connection} = new_connection(Config),
-    gen_server:cast(Connection, {method, #'basic.ack'{}, none, noflow}),
     MonitorRef = erlang:monitor(process, Connection),
+    gen_server:cast(Connection, {method, #'basic.ack'{}, none, noflow}),
     assert_down_with_error(MonitorRef, command_invalid).
 
 %% -------------------------------------------------------------------
