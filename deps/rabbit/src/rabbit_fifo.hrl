@@ -18,9 +18,6 @@
 -type raw_msg() :: term().
 %% The raw message. It is opaque to rabbit_fifo.
 
-% a queue scoped monotonically incrementing integer used to enforce order
-% in the unassigned messages map
-
 -type msg_id() :: non_neg_integer().
 %% A consumer-scoped monotonically incrementing integer included with a
 %% {@link delivery/0.}. Used to settle deliveries using
@@ -32,7 +29,7 @@
 %% same process
 
 -type msg_header() :: msg_size() |
-                      tuple(msg_size(), milliseconds()) |
+                      tuple(msg_size(), Expiry :: milliseconds()) |
                       #{size := msg_size(),
                         delivery_count => non_neg_integer(),
                         expiry => milliseconds()}.
@@ -76,7 +73,6 @@
                            prefetch => non_neg_integer(),
                            args => list()}.
 %% static meta data associated with a consumer
-
 
 -type applied_mfa() :: {module(), atom(), list()}.
 % represents a partially applied module call
@@ -133,7 +129,7 @@
          %% it is useful to have a record of when this was blocked
          %% so that we can retry sending the block effect if
          %% the publisher did not receive the initial one
-         blocked :: undefined | ra:index(),
+         blocked :: option(ra:index()),
          unused_1,
          unused_2
         }).
@@ -151,8 +147,8 @@
          consumer_strategy = competing :: consumer_strategy(),
          %% the maximum number of unsuccessful delivery attempts permitted
          delivery_limit :: option(non_neg_integer()),
-         expires :: undefined | milliseconds(),
-         msg_ttl :: undefined | milliseconds(),
+         expires :: option(milliseconds()),
+         msg_ttl :: option(milliseconds()),
          unused_1,
          unused_2
         }).
@@ -165,7 +161,6 @@
         {cfg :: #cfg{},
          % unassigned messages
          messages = lqueue:new() :: lqueue:lqueue(msg()),
-         %
          messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
          returns = lqueue:new() :: lqueue:lqueue(term()),
@@ -181,7 +176,7 @@
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
          ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
-         %% A release cursor is essentially a snapshot for a past raft index
+         %% A release cursor is essentially a snapshot for a past raft index.
          %% Working assumption: Messages are consumed in a FIFO-ish order because
          %% the log is truncated only until the oldest message.
          release_cursors = lqueue:new() :: lqueue:lqueue({release_cursor,
@@ -197,8 +192,8 @@
          %% waiting consumers, one is picked active consumer is cancelled or dies
          %% used only when single active consumer is on
          waiting_consumers = [] :: [{consumer_id(), consumer()}],
-         last_active :: undefined | non_neg_integer(),
-         msg_cache :: undefined | {ra:index(), raw_msg()},
+         last_active :: option(non_neg_integer()),
+         msg_cache :: option({ra:index(), raw_msg()}),
          unused_2
         }).
 
