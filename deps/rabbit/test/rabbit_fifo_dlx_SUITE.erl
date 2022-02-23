@@ -24,7 +24,6 @@ groups() ->
      {tests, [], [handler_undefined,
                   handler_at_most_once,
                   discard_dlx_consumer,
-                  purge,
                   switch_strategies,
                   last_consumer_wins]}
     ].
@@ -117,24 +116,6 @@ discard_dlx_consumer(_Config) ->
                    discard_checkout_message_bytes => 1}, rabbit_fifo_dlx:overview(S8)),
     ?assertMatch([{log, [4], _}], DeliveryEffects2),
     ?assertEqual({1, 1}, rabbit_fifo_dlx:stat(S8)),
-    ok.
-
-purge(_Config) ->
-    Handler = at_least_once,
-    S0 = rabbit_fifo_dlx:init(),
-    Checkout = rabbit_fifo_dlx:make_checkout(self(), 1),
-    {S1, _} = rabbit_fifo_dlx:apply(meta(1), Checkout, Handler, S0),
-    Msgs = [make_msg(2), make_msg(3)],
-    {S2, _} = rabbit_fifo_dlx:discard(Msgs, because, Handler, S1),
-    {S3, _} = rabbit_fifo_dlx:checkout(Handler, S2),
-    ?assertMatch(#{num_discarded := 1,
-                   num_discard_checked_out := 1}, rabbit_fifo_dlx:overview(S3)),
-
-    S4 = rabbit_fifo_dlx:purge(S3),
-    ?assertEqual(#{num_discarded => 0,
-                   num_discard_checked_out => 0,
-                   discard_message_bytes => 0,
-                   discard_checkout_message_bytes => 0}, rabbit_fifo_dlx:overview(S4)),
     ok.
 
 switch_strategies(_Config) ->
