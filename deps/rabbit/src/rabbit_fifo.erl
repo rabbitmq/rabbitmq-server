@@ -426,8 +426,8 @@ apply(#{index := Index}, #purge{},
       #?MODULE{messages_total = Tot,
                returns = Returns,
                messages = Messages,
-               ra_indexes = Indexes0,
-               dlx = DlxState} = State0) ->
+               ra_indexes = Indexes0
+              } = State0) ->
     NumReady = messages_ready(State0),
     Indexes1 = lists:foldl(fun(?MSG(I, _), Acc0) when is_integer(I) ->
                                    rabbit_fifo_index:delete(I, Acc0)
@@ -435,16 +435,14 @@ apply(#{index := Index}, #purge{},
     Indexes = lists:foldl(fun(?MSG(I, _), Acc0) when is_integer(I) ->
                                   rabbit_fifo_index:delete(I, Acc0)
                           end, Indexes1, lqueue:to_list(Messages)),
-    {NumDlx, _} = rabbit_fifo_dlx:stat(DlxState),
     State1 = State0#?MODULE{ra_indexes = Indexes,
-                            dlx = rabbit_fifo_dlx:purge(DlxState),
                             messages = lqueue:new(),
                             messages_total = Tot - NumReady,
                             returns = lqueue:new(),
                             msg_bytes_enqueue = 0
                            },
     Effects0 = [garbage_collection],
-    Reply = {purge, NumReady + NumDlx},
+    Reply = {purge, NumReady},
     {State, _, Effects} = evaluate_limit(Index, false, State0,
                                          State1, Effects0),
     update_smallest_raft_index(Index, Reply, State, Effects);
