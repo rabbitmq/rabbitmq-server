@@ -14,7 +14,7 @@
 
 -compile(export_all).
 
--define(TIMEOUT, 30000).
+-define(TIMEOUT, 30_000).
 
 -import(quorum_queue_utils, [wait_for_messages/2]).
 
@@ -46,6 +46,7 @@ groups() ->
                 consume_and_multiple_nack,
                 basic_cancel,
                 purge,
+                purge_no_consumer,
                 basic_recover,
                 delete_immediately_by_resource
                ],
@@ -593,6 +594,18 @@ purge(Config) ->
     wait_for_messages(Config, [[QName, <<"2">>, <<"1">>, <<"1">>]]),
     {'queue.purge_ok', 1} = amqp_channel:call(Ch, #'queue.purge'{queue = QName}),
     wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    ok.
+
+purge_no_consumer(Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    declare_queue(Ch, Config, QName),
+
+    publish(Ch, QName, [<<"msg1">>, <<"msg2">>]),
+    wait_for_messages(Config, [[QName, <<"2">>, <<"2">>, <<"0">>]]),
+    {'queue.purge_ok', 2} = amqp_channel:call(Ch, #'queue.purge'{queue = QName}),
+    wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
     rabbit_ct_client_helpers:close_channel(Ch),
     ok.
 

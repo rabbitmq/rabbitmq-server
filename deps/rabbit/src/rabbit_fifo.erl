@@ -423,21 +423,29 @@ apply(Meta, #checkout{spec = Spec, meta = ConsumerMeta,
     {State2, Effs} = activate_next_consumer(State1, []),
     checkout(Meta, State0, State2, [{monitor, process, Pid} | Effs]);
 apply(#{index := Index}, #purge{},
-      #?MODULE{messages_total = Tot,
+      #?MODULE{messages_total = Total,
                returns = Returns,
-               messages = Messages,
                ra_indexes = Indexes0
               } = State0) ->
     NumReady = messages_ready(State0),
-    Indexes1 = lists:foldl(fun(?MSG(I, _), Acc0) when is_integer(I) ->
-                                   rabbit_fifo_index:delete(I, Acc0)
-                           end, Indexes0, lqueue:to_list(Returns)),
-    Indexes = lists:foldl(fun(?MSG(I, _), Acc0) when is_integer(I) ->
-                                  rabbit_fifo_index:delete(I, Acc0)
-                          end, Indexes1, lqueue:to_list(Messages)),
+    Indexes = case Total of
+                  NumReady ->
+                      %% All messages are either in 'messages' queue or 'returns' queue.
+                      %% No message is awaiting acknowledgement.
+                      %% Optimization: empty all 'ra_indexes'.
+                      rabbit_fifo_index:empty();
+                  _ ->
+                      %% Some messages are checked out to consumers awaiting acknowledgement.
+                      %% Therefore we cannot empty all 'ra_indexes'.
+                      %% We only need to delete the indexes from the 'returns' queue because
+                      %% messages of the 'messages' queue are not part of the 'ra_indexes'.
+                      lqueue:fold(fun(?MSG(I, _), Acc) ->
+                                          rabbit_fifo_index:delete(I, Acc)
+                                  end, Indexes0, Returns)
+              end,
     State1 = State0#?MODULE{ra_indexes = Indexes,
                             messages = lqueue:new(),
-                            messages_total = Tot - NumReady,
+                            messages_total = Total - NumReady,
                             returns = lqueue:new(),
                             msg_bytes_enqueue = 0
                            },
@@ -1616,7 +1624,7 @@ complete(Meta, ConsumerId, DiscardedMsgIds,
     SettledSize = lists:foldl(fun(Msg, Acc) ->
                                       get_header(size, get_msg_header(Msg)) + Acc
                               end, 0, DiscardedMsgs),
-    Indexes = lists:foldl(fun(?MSG(I, _), Acc) when is_integer(I) ->
+    Indexes = lists:foldl(fun(?MSG(I, _), Acc) ->
                                   rabbit_fifo_index:delete(I, Acc)
                           end, Indexes0, DiscardedMsgs),
     State1#?MODULE{ra_indexes = Indexes,
@@ -2355,8 +2363,8 @@ smallest_raft_index(#?MODULE{messages = Messages,
                              ra_indexes = Indexes,
                              dlx = DlxState}) ->
     SmallestDlxRaIdx = rabbit_fifo_dlx:smallest_raft_index(DlxState),
-    SmallestMsgsRaIdx = case lqueue:get(Messages, empty) of
-                            ?MSG(I, _) ->
+    SmallestMsgsRaIdx = case lqueue:get(Messages, undefined) of
+                            ?MSG(I, _) when is_integer(I) ->
                                 I;
                             _ ->
                                 undefined
