@@ -470,10 +470,7 @@ send_health_check_pass() ->
           ok;
     %% starting with Consul 1.11, see https://github.com/hashicorp/consul/pull/11950
     {error, "404"} ->
-      ?LOG_WARNING(
-         "Consul responded to a health check with a 404 status, will "
-         "wait and try re-registering",
-         #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+      _ = rabbit_log:warning("Consul responded to a health check with a 404 status, will wait and try re-registering"),
       maybe_re_register(wait_for_list_nodes()),
       ok;
     %% prior to Consul 1.11, see https://github.com/hashicorp/consul/pull/11950
