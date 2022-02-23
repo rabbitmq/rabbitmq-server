@@ -16,7 +16,6 @@
          checkout/2,
          state_enter/4,
          handle_aux/6,
-         purge/1,
          dehydrate/1,
          normalize/1,
          stat/1,
@@ -338,22 +337,6 @@ handle_aux(leader, {dlx, setup}, Aux, QRes, at_least_once, State) ->
     Aux;
 handle_aux(_, _, Aux, _, _, _) ->
     Aux.
-
--spec purge(state()) ->
-    state().
-purge(#?MODULE{consumer = Consumer0} = State) ->
-    Consumer = case Consumer0 of
-                   undefined ->
-                       undefined;
-                   #dlx_consumer{} ->
-                       Consumer0#dlx_consumer{checked_out = #{}}
-               end,
-    State#?MODULE{discards = lqueue:new(),
-                  msg_bytes = 0,
-                  msg_bytes_checkout = 0,
-                  consumer = Consumer,
-                  ra_indexes = rabbit_fifo_index:empty()
-                 }.
 
 -spec dehydrate(state()) ->
     state().
