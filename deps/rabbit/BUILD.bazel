@@ -223,6 +223,7 @@ plt(
     name = "base_plt",
     apps = plt_apps,
     plt = "//:base_plt",
+    deps = DEPS,
 )
 
 dialyze(

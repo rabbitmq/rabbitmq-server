@@ -138,7 +138,7 @@ handle_event(cast, {unregister_session, _Session, OutgoingChannel, IncomingChann
                          incoming_channels = IncomingChannels1},
     {keep_state, State1};
 handle_event(cast, close, _StateName, State = #state{socket = Socket}) ->
-    close_socket(Socket),
+    _ = close_socket(Socket),
     {stop, normal, State#state{socket = undefined}};
 
 handle_event({call, From}, _Action, _State, _Data) ->
