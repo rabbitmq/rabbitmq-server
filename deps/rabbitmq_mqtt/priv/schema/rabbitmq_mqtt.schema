@@ -42,7 +42,7 @@ end}.
 {mapping, "mqtt.allow_anonymous", "rabbitmq_mqtt.allow_anonymous",
     [{datatype, {enum, [true, false]}}]}.
 
-%% If you have multiple chosts, specify the one to which the
+%% If you have multiple vhosts, specify the one to which the
 %% adapter connects.
 %%
 %% {vhost, <<"/">>},
@@ -256,4 +256,16 @@ fun(Conf) ->
     LingerOn = cuttlefish:conf_get("mqtt.tcp_listen_options.linger.on", Conf, false),
     LingerTimeout = cuttlefish:conf_get("mqtt.tcp_listen_options.linger.timeout", Conf, 0),
     {LingerOn, LingerTimeout}
+end}.
+
+%% Queue data type can be classic or quorum
+%%
+%%
+%% {queue_type, <<"classic">>},
+
+{mapping, "mqtt.queue_type", "rabbitmq_mqtt.queue_type", [{datatype, string}]}.
+
+{translation, "rabbitmq_mqtt.queue_type",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("mqtt.queue_type", Conf))
 end}.

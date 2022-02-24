@@ -123,11 +123,15 @@ handle_cast({close_connection, Reason},
 handle_cast(Msg, State) ->
     {stop, {mqtt_unexpected_cast, Msg}, State}.
 
+handle_info({#'basic.deliver'{}, #amqp_msg{}} = Delivery,
+    State) ->
+    %% receiving a message from a quorum queue
+    %% no delivery context
+    handle_info(erlang:insert_element(3, Delivery, undefined), State);
 handle_info({#'basic.deliver'{}, #amqp_msg{}, _DeliveryCtx} = Delivery,
             State = #state{ proc_state = ProcState }) ->
     callback_reply(State, rabbit_mqtt_processor:amqp_callback(Delivery,
                                                               ProcState));
-
 handle_info(#'basic.ack'{} = Ack, State = #state{ proc_state = ProcState }) ->
     callback_reply(State, rabbit_mqtt_processor:amqp_callback(Ack, ProcState));
 
