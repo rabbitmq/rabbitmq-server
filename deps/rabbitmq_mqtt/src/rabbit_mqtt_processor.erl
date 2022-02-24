@@ -399,7 +399,7 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                            message_id    = MsgId,
                            send_fun      = SendFun,
                            amqp2mqtt_fun = Amqp2MqttFun } = PState) ->
-    amqp_channel:notify_received(DeliveryCtx),
+    notify_received(DeliveryCtx),
     case {delivery_dup(Delivery), delivery_qos(ConsumerTag, Headers, PState)} of
         {true, {?QOS_0, ?QOS_1}} ->
             amqp_channel:cast(
@@ -784,6 +784,13 @@ delivery_mode(?QOS_0) -> 1;
 delivery_mode(?QOS_1) -> 2;
 delivery_mode(?QOS_2) -> 2.
 
+maybe_quorum(Qos1Args) ->
+ R=  case rabbit_mqtt_util:env(queue_type) of
+       <<"quorum">> -> lists:append(Qos1Args,[{<<"x-queue-type">>, longstr, <<"quorum">>}]);
+      _ -> Qos1Args
+  end,
+  R.
+
 %% different qos subscriptions are received in different queues
 %% with appropriate durability and timeout arguments
 %% this will lead to duplicate messages for overlapping subscriptions
@@ -819,7 +826,7 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
                                    %%
                                    %% see rabbitmq/rabbitmq-mqtt#37
                                    auto_delete = CleanSess,
-                                   arguments   = Qos1Args },
+                                   arguments   = maybe_quorum(Qos1Args) },
                  #'basic.consume'{ queue  = QueueQ1,
                                    no_ack = false }};
             {_, _, ?QOS_0} ->
@@ -1049,6 +1056,14 @@ check_topic_access(TopicName, Access,
                     {error, access_refused}
             end
     end.
+
+notify_received(undefined) ->
+  %% no notification for quorum queues and streams
+  ok;
+notify_received(DeliveryCtx) ->
+  %% notification for flow control
+  amqp_channel:notify_received(DeliveryCtx).
+
 
 info(consumer_tags, #proc_state{consumer_tags = Val}) -> Val;
 info(unacked_pubs, #proc_state{unacked_pubs = Val}) -> Val;
