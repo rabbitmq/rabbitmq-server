@@ -63,10 +63,11 @@ plt(
     name = "base_plt",
     apps = plt_apps,
     plt = "//:base_plt",
+    deps = DEPS,
 )
 
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_behaviours"],
     plt = ":base_plt",
     tags = ["dialyze"],
     warnings_as_errors = False,
