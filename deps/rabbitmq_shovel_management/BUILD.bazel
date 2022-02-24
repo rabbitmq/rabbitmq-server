@@ -1,5 +1,5 @@
 load("@rules_erlang//:xref.bzl", "xref")
-load("@rules_erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
@@ -40,11 +40,15 @@ rabbitmq_app(
 
 xref(tags = ["xref"])
 
+plt(
+    name = "base_plt",
+    deps = BUILD_DEPS + DEPS,
+)
+
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = "//:base_plt",
+    plt = ":base_plt",
     tags = ["dialyze"],
-    warnings_as_errors = False,
 )
 
 rabbitmq_home(

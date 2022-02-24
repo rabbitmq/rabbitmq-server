@@ -219,6 +219,7 @@ plt(
         "mnesia",
     ] + EXTRA_APPS,
     plt = "//:base_plt",
+    deps = DEPS,
 )
 
 dialyze(

@@ -9,6 +9,11 @@ load("@rules_erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 
+def without(item, elements):
+    c = list(elements)
+    c.remove(item)
+    return c
+
 _LAGER_EXTRA_SINKS = [
     "rabbit_log",
     "rabbit_log_channel",
