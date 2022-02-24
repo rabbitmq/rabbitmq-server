@@ -59,9 +59,9 @@ rules_pkg_dependencies()
 
 http_archive(
     name = "rules_erlang",
-    sha256 = "251b22a979bbc668741097cc11faba36efa547b7e5fd6e73f50bc20fbc3c0f16",
-    strip_prefix = "rules_erlang-2.1.0",
-    urls = ["https://github.com/rabbitmq/rules_erlang/archive/refs/tags/2.1.0.zip"],
+    sha256 = "faf9d4c8dda5dcac74110445fba74a7374f7c47ddd1b6e68cbd69997d6f8e1cf",
+    strip_prefix = "rules_erlang-2.2.0",
+    urls = ["https://github.com/rabbitmq/rules_erlang/archive/refs/tags/2.2.0.zip"],
 )
 
 load("@rules_erlang//:rules_erlang.bzl", "rules_erlang_dependencies")
