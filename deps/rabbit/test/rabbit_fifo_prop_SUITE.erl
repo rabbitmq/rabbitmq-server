@@ -696,7 +696,7 @@ upgrade_snapshots_scenario1(_Config) ->
                 make_enqueue(E,2,msg(<<"msg2">>)),
                 make_enqueue(E,3,msg(<<"msg3">>))],
     run_upgrade_snapshot_test(#{name => ?FUNCTION_NAME,
-                                deliver_limit => 100,
+                                delivery_limit => 100,
                                 max_length => 1,
                                 max_bytes => 100,
                                 max_in_memory_length => undefined,
@@ -717,7 +717,7 @@ upgrade_snapshots_scenario2(_Config) ->
                 make_enqueue(E,2,msg(<<"msg2">>)),
                 rabbit_fifo:make_settle(C, [0])],
     run_upgrade_snapshot_test(#{name => ?FUNCTION_NAME,
-                                deliver_limit => undefined,
+                                delivery_limit => undefined,
                                 max_length => undefined,
                                 max_bytes => undefined,
                                 max_in_memory_length => undefined,
@@ -1684,18 +1684,21 @@ log_gen_upgrade_snapshots(Size) ->
               resize(Size,
                      list(
                        frequency(
-                         %% Below commented commands make the test fail.
-                         %% Hypothesis: There are behavioural differences between v1 and v2
-                         %% which will end up in different numbers of messages.
                          [{20, enqueue_gen(oneof(EPids))},
                           {40, {input_event,
                                 frequency([{10, settle},
-                                           % {2, return},
+                                           {2, return},
                                            {2, discard},
                                            {2, requeue}
                                           ])}},
                           {2, checkout_gen(oneof(CPids))},
+                          %% v2 fixes a bug that exists in v1 where a cancelled consumer is revived.
+                          %% Therefore, there is an expected behavioural difference between v1 and v2
+                          %% and below line must be commented out.
                           % {1, checkout_cancel_gen(oneof(CPids))},
+                          %% Likewise there is a behavioural difference between v1 and v2
+                          %% when 'up' is followed by 'down' where v2 behaves correctly.
+                          %% Therefore, below line must be commented out.
                           % {1, down_gen(oneof(EPids ++ CPids))},
                           {1, nodeup_gen(Nodes)},
                           {1, purge}
@@ -2121,8 +2124,9 @@ run_upgrade_snapshot_test(Conf, Commands) ->
          case V1Overview == V2Overview of
              true -> ok;
              false ->
-                 ct:pal("property failed, expected:~n~p~ngot:~n~p",
-                        [V1Overview, V2Overview]),
+                 ct:pal("property failed, expected:~n~p~ngot:~n~p~nstate v1:~n~p~nstate v2:~n~p~n"
+                        "snapshot index: ~p",
+                        [V1Overview, V2Overview, StateV1, ?record_info(rabbit_fifo, StateV2), SnapIdx]),
                  ?assertEqual(V1Overview, V2Overview)
          end
      end || {release_cursor, SnapIdx, SnapState} <- Cursors],
