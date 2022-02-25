@@ -62,6 +62,9 @@ all_tests() ->
      scenario31,
      scenario32,
      upgrade,
+     upgrade_snapshots,
+     upgrade_snapshots_scenario1,
+     upgrade_snapshots_scenario2,
      messages_total,
      single_active,
      single_active_01,
@@ -687,6 +690,45 @@ scenario23(_Config) ->
                       Commands),
     ok.
 
+upgrade_snapshots_scenario1(_Config) ->
+    E = c:pid(0,327,1),
+    Commands = [make_enqueue(E,1,msg(<<"msg1">>)),
+                make_enqueue(E,2,msg(<<"msg2">>)),
+                make_enqueue(E,3,msg(<<"msg3">>))],
+    run_upgrade_snapshot_test(#{name => ?FUNCTION_NAME,
+                                deliver_limit => 100,
+                                max_length => 1,
+                                max_bytes => 100,
+                                max_in_memory_length => undefined,
+                                max_in_memory_bytes => undefined,
+                                overflow_strategy => drop_head,
+                                single_active_consumer_on => false,
+                                dead_letter_handler => {?MODULE, banana, []}
+                               },
+                              Commands),
+    ok.
+
+upgrade_snapshots_scenario2(_Config) ->
+    E = c:pid(0,240,0),
+    CPid = c:pid(0,242,0),
+    C = {<<>>, CPid},
+    Commands = [make_checkout(C, {auto,1,simple_prefetch}),
+                make_enqueue(E,1,msg(<<"msg1">>)),
+                make_enqueue(E,2,msg(<<"msg2">>)),
+                rabbit_fifo:make_settle(C, [0])],
+    run_upgrade_snapshot_test(#{name => ?FUNCTION_NAME,
+                                deliver_limit => undefined,
+                                max_length => undefined,
+                                max_bytes => undefined,
+                                max_in_memory_length => undefined,
+                                max_in_memory_bytes => undefined,
+                                overflow_strategy => drop_head,
+                                single_active_consumer_on => false,
+                                dead_letter_handler => {?MODULE, banana, []}
+                               },
+                              Commands),
+    ok.
+
 single_active_01(_Config) ->
     C1Pid = test_util:fake_pid(rabbit@fake_node1),
     C1 = {<<0>>, C1Pid},
@@ -904,6 +946,35 @@ upgrade(_Config) ->
                       ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
                               collect({log_size, length(O)},
                                       upgrade_prop(Config, O)))
+                      end)
+      end, [], Size).
+
+upgrade_snapshots(_Config) ->
+    Size = 500,
+    run_proper(
+      fun () ->
+              ?FORALL({Length, Bytes, DeliveryLimit, InMemoryLength, SingleActive},
+                      frequency([{5, {undefined, undefined, undefined, undefined, false}},
+                                 {5, {oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined]),
+                                      oneof([range(1, 3), undefined]),
+                                      oneof([range(1, 10), 0, undefined]),
+                                      oneof([true, false])
+                                     }}]),
+                      begin
+                          Config  = config(?FUNCTION_NAME,
+                                           Length,
+                                           Bytes,
+                                           SingleActive,
+                                           DeliveryLimit,
+                                           InMemoryLength,
+                                           undefined,
+                                           drop_head,
+                                           {?MODULE, banana, []}
+                                          ),
+                          ?FORALL(O, ?LET(Ops, log_gen_upgrade_snapshots(Size), expand(Ops, Config)),
+                                  collect({log_size, length(O)},
+                                          upgrade_snapshots_prop(Config, O)))
                       end)
       end, [], Size).
 
@@ -1483,8 +1554,11 @@ upgrade_prop(Conf0, Commands) ->
          #rabbit_fifo{} = V2 = element(1, rabbit_fifo:apply(meta(length(PreEntries) + 1),
                                                             {machine_version, 1, 2}, V1)),
          %% assert invariants
-         Fields = [num_messages,
-                   num_ready_messages,
+         %%
+         %% Note that we cannot test for num_messages because rabbit_fifo_v1:messages_total/1
+         %% relies on ra_indexes not to be empty. However ra_indexes are empty in snapshots
+         %% in which case the number of messages checked out to consumers will not be included.
+         Fields = [num_ready_messages,
                    smallest_raft_index,
                    num_enqueuers,
                    num_consumers,
@@ -1507,13 +1581,10 @@ upgrade_prop(Conf0, Commands) ->
     {_, V1Effs} = run_log(InitState, Entries, fun (_) -> true end,
                           rabbit_fifo_v1),
     [begin
-         % ct:pal("V1 ~p", [RCS]),
          Res = rabbit_fifo:apply(meta(Idx + 1), {machine_version, 1, 2}, RCS) ,
-         % ct:pal("V2 ~p", [Res]),
          #rabbit_fifo{} = V2 = element(1, Res),
          %% assert invariants
-         Fields = [num_messages,
-                   num_ready_messages,
+         Fields = [num_ready_messages,
                    smallest_raft_index,
                    num_enqueuers,
                    num_consumers,
@@ -1570,6 +1641,16 @@ snapshots_prop(Conf, Commands) ->
             false
     end.
 
+upgrade_snapshots_prop(Conf, Commands) ->
+    try run_upgrade_snapshot_test(Conf, Commands) of
+        _ -> true
+    catch
+        Err ->
+            ct:pal("Commands: ~p~nConf~p~n", [Commands, Conf]),
+            ct:pal("Err: ~p~n", [Err]),
+            false
+    end.
+
 log_gen(Size) ->
     Nodes = [node(),
              fakenode@fake,
@@ -1589,6 +1670,33 @@ log_gen(Size) ->
                           {2, checkout_gen(oneof(CPids))},
                           {1, checkout_cancel_gen(oneof(CPids))},
                           {1, down_gen(oneof(EPids ++ CPids))},
+                          {1, nodeup_gen(Nodes)},
+                          {1, purge}
+                         ]))))).
+
+log_gen_upgrade_snapshots(Size) ->
+    Nodes = [node(),
+             fakenode@fake,
+             fakenode@fake2
+            ],
+    ?LET(EPids, vector(2, pid_gen(Nodes)),
+         ?LET(CPids, vector(2, pid_gen(Nodes)),
+              resize(Size,
+                     list(
+                       frequency(
+                         %% Below commented commands make the test fail.
+                         %% Hypothesis: There are behavioural differences between v1 and v2
+                         %% which will end up in different numbers of messages.
+                         [{20, enqueue_gen(oneof(EPids))},
+                          {40, {input_event,
+                                frequency([{10, settle},
+                                           % {2, return},
+                                           {2, discard},
+                                           {2, requeue}
+                                          ])}},
+                          {2, checkout_gen(oneof(CPids))},
+                          % {1, checkout_cancel_gen(oneof(CPids))},
+                          % {1, down_gen(oneof(EPids ++ CPids))},
                           {1, nodeup_gen(Nodes)},
                           {1, purge}
                          ]))))).
@@ -1971,6 +2079,51 @@ run_snapshot_test0(Conf0, Commands, Invariant) ->
                  ct:pal("Expected~n~p~nGot:~n~p~n", [?record_info(rabbit_fifo, State),
                                                      ?record_info(rabbit_fifo, S)]),
                  ?assertEqual(State, S)
+         end
+     end || {release_cursor, SnapIdx, SnapState} <- Cursors],
+    ok.
+
+run_upgrade_snapshot_test(Conf, Commands) ->
+    ct:pal("running test with ~b commands using config ~p",
+           [length(Commands), Conf]),
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    Invariant = fun(_) -> true end,
+    %% Run the whole command log in v1 to emit release cursors.
+    {_, Effects} = run_log(test_init_v1(Conf), Entries, Invariant, rabbit_fifo_v1),
+    Cursors = [ C || {release_cursor, _, _} = C <- Effects],
+    [begin
+         %% Drop all entries below and including the snapshot.
+         FilteredV1 = lists:dropwhile(fun({X, _}) when X =< SnapIdx -> true;
+                                         (_) -> false
+                                      end, Entries),
+         %% For V2 we will apply the same commands to the snapshot state as for V1.
+         %% However, we need to increment all Raft indexes by 1 because V2
+         %% requires one additional Raft index for the conversion command from V1 to V2.
+         FilteredV2 = lists:keymap(fun(Idx) -> Idx + 1 end, 1, FilteredV1),
+         %% Recover in V1.
+         {StateV1, _} = run_log(SnapState, FilteredV1, Invariant, rabbit_fifo_v1),
+         %% Perform conversion and recover in V2.
+         Res = rabbit_fifo:apply(meta(SnapIdx + 1), {machine_version, 1, 2}, SnapState),
+         #rabbit_fifo{} = V2 = element(1, Res),
+         {StateV2, _} = run_log(V2, FilteredV2, Invariant, rabbit_fifo),
+         %% Invariant: Recovering a V1 snapshot in V1 or V2 should end up in the same
+         %% number of messages.
+         Fields = [num_messages,
+                   num_ready_messages,
+                   num_enqueuers,
+                   num_consumers,
+                   enqueue_message_bytes,
+                   checkout_message_bytes
+                  ],
+         V1Overview = maps:with(Fields, rabbit_fifo_v1:overview(StateV1)),
+         V2Overview = maps:with(Fields, rabbit_fifo:overview(StateV2)),
+         case V1Overview == V2Overview of
+             true -> ok;
+             false ->
+                 ct:pal("property failed, expected:~n~p~ngot:~n~p",
+                        [V1Overview, V2Overview]),
+                 ?assertEqual(V1Overview, V2Overview)
          end
      end || {release_cursor, SnapIdx, SnapState} <- Cursors],
     ok.
