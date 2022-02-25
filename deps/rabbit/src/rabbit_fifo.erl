@@ -664,7 +664,7 @@ convert_v1_to_v2(V1State0) ->
     ConsumersV1 = rabbit_fifo_v1:get_field(consumers, V1State),
     WaitingConsumersV1 = rabbit_fifo_v1:get_field(waiting_consumers, V1State),
     %% remove all raft idx in messages from index
-    {_, PrefMsgs, _, PrefReturns} = rabbit_fifo_v1:get_field(prefix_msgs, V1State),
+    {_, PrefReturns, _, PrefMsgs} = rabbit_fifo_v1:get_field(prefix_msgs, V1State),
     V2PrefMsgs = lists:foldl(fun(Hdr, Acc) ->
                                      lqueue:in(convert_msg(Hdr), Acc)
                              end, lqueue:new(), PrefMsgs),
