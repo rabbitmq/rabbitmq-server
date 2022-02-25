@@ -711,7 +711,6 @@ convert_v1_to_v2(V1State0) ->
                   Other
           end,
 
-    %% Then add all pending messages back into the index
     Cfg = #cfg{name = rabbit_fifo_v1:get_cfg_field(name, V1State),
                resource = rabbit_fifo_v1:get_cfg_field(resource, V1State),
                release_cursor_interval = rabbit_fifo_v1:get_cfg_field(release_cursor_interval, V1State),
@@ -726,9 +725,20 @@ convert_v1_to_v2(V1State0) ->
                expires = rabbit_fifo_v1:get_cfg_field(expires, V1State)
               },
 
+    MessagesConsumersV2 = maps:fold(fun(_ConsumerId, #consumer{checked_out = Checked}, Acc) ->
+                                            Acc + maps:size(Checked)
+                                    end, 0, ConsumersV2),
+    MessagesWaitingConsumersV2 = lists:foldl(fun({_ConsumerId, #consumer{checked_out = Checked}}, Acc) ->
+                                                     Acc + maps:size(Checked)
+                                             end, 0, WaitingConsumersV2),
+    MessagesTotal = lqueue:len(MessagesV2) +
+                    lqueue:len(ReturnsV2) +
+                    MessagesConsumersV2 +
+                    MessagesWaitingConsumersV2,
+
     #?MODULE{cfg = Cfg,
              messages = MessagesV2,
-             messages_total = rabbit_fifo_v1:query_messages_total(V1State),
+             messages_total = MessagesTotal,
              returns = ReturnsV2,
              enqueue_count = rabbit_fifo_v1:get_field(enqueue_count, V1State),
              enqueuers = EnqueuersV2,
@@ -1796,7 +1806,7 @@ checkout(#{index := Index} = Meta,
 
 checkout0(Meta, {success, ConsumerId, MsgId,
                  ?MSG(RaftIdx, Header), ExpiredMsg, State, Effects},
-          SendAcc0) when is_integer(RaftIdx) ->
+          SendAcc0) ->
     DelMsg = {RaftIdx, {MsgId, Header}},
     SendAcc = case maps:get(ConsumerId, SendAcc0, undefined) of
                   undefined ->
