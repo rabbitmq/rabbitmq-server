@@ -177,8 +177,7 @@ checkout(at_least_once, #?MODULE{consumer = #dlx_consumer{}} = State) ->
 checkout(_, State) ->
     {State, []}.
 
-checkout0({success, MsgId, ?TUPLE(Reason, ?MSG(Idx, _)), State}, SendAcc)
-  when is_integer(Idx) ->
+checkout0({success, MsgId, ?TUPLE(Reason, ?MSG(Idx, _)), State}, SendAcc) ->
     DelMsg = {Idx, {Reason, MsgId}},
     checkout0(checkout_one(State), [DelMsg | SendAcc]);
 checkout0(#?MODULE{consumer = #dlx_consumer{pid = Pid}} = State, SendAcc) ->
