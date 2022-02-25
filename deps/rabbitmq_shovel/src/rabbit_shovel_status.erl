@@ -77,7 +77,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, State) ->
-    rabbit_misc:stop_timer(State, #state.timer),
+    _ = rabbit_misc:stop_timer(State, #state.timer),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

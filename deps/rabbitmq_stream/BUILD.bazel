@@ -1,0 +1,111 @@
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "broker_for_integration_suites",
+    "rabbitmq_app",
+    "rabbitmq_integration_suite",
+    "without",
+)
+
+APP_NAME = "rabbitmq_stream"
+
+APP_DESCRIPTION = "RabbitMQ Stream"
+
+APP_MODULE = "rabbit_stream"
+
+APP_ENV = """[
+	{tcp_listeners, [5552]},
+	{num_tcp_acceptors, 10},
+	{tcp_listen_options, [{backlog,   128},
+                          {nodelay,   true}]},
+	{ssl_listeners, []},
+	{num_ssl_acceptors, 10},
+	{ssl_listen_options, []},
+	{initial_credits, 50000},
+	{credits_required_for_unblocking, 12500},
+	{frame_max, 1048576},
+	{heartbeat, 60},
+	{advertised_host, undefined},
+	{advertised_port, undefined}
+]"""
+
+BUILD_DEPS = [
+    "//deps/rabbit_common:erlang_app",
+    "//deps/rabbitmq_cli:rabbitmqctl",
+    "@ranch//:erlang_app",
+]
+
+DEPS = [
+    "//deps/rabbitmq_stream_common:erlang_app",
+    "//deps/rabbit:erlang_app",
+]
+
+rabbitmq_app(
+    app_description = APP_DESCRIPTION,
+    app_env = APP_ENV,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
+    deps = DEPS,
+)
+
+xref(tags = ["xref"])
+
+plt(
+    name = "base_plt",
+    deps = without(
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        BUILD_DEPS + DEPS,
+    ),
+)
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
+    plt = ":base_plt",
+    tags = ["dialyze"],
+    warnings_as_errors = False,
+)
+
+broker_for_integration_suites()
+
+PACKAGE = "deps/rabbitmq_stream"
+
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "commands_SUITE",
+        additional_beam = [
+            ":rabbit_stream_SUITE_beam_files",
+        ],
+        data = glob(["test/rabbit_stream_SUITE_data/**/*"]),
+        flaky = True,
+        deps = [
+            "//deps/rabbitmq_stream_common:erlang_app",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_stream_utils_SUITE",
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_stream_SUITE",
+        shard_count = 3,
+        deps = [
+            "//deps/rabbit:erlang_app",
+            "//deps/rabbitmq_stream_common:erlang_app",
+        ],
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

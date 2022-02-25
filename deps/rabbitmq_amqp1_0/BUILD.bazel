@@ -58,7 +58,7 @@ plt(
 
 dialyze(
     size = "medium",
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_behaviours"],
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
     plt = ":base_plt",
     tags = ["dialyze"],
     warnings_as_errors = False,
