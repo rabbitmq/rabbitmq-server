@@ -1235,10 +1235,14 @@ dead_letter_headers_first_death(Config) ->
     ?assertEqual({longstr, <<>>},
                  rabbit_misc:table_lookup(Headers2, <<"x-first-death-exchange">>)).
 
-%% Route dead-letter messages to different target queues according to first death reason.
+%% Test that headers exchange's x-match binding argument set to all-with-x and any-with-x
+%% works as expected. The use case being tested here:
+%% Route dead-letter messages to different target queues
+%% according to first death reason and first death queue.
 dead_letter_headers_first_death_route(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    QName = ?config(queue_name, Config),
+    QName1 = ?config(queue_name, Config),
+    QName2 = <<"dead_letter_headers_first_death_route_source_queue_2">>,
     DLXExpiredQName = ?config(queue_name_dlx, Config),
     DLXRejectedQName = ?config(queue_name_dlx_2, Config),
     Args = ?config(queue_args, Config),
@@ -1247,45 +1251,58 @@ dead_letter_headers_first_death_route(Config) ->
 
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLXExchange,
                                                                          type = <<"headers">>}),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName1,
+                                                                   arguments = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange} | Args],
+                                                                   durable = Durable}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName2,
                                                                    arguments = [{<<"x-dead-letter-exchange">>, longstr, DLXExchange} | Args],
                                                                    durable = Durable}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXExpiredQName,
                                                                    durable = Durable}),
     #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = DLXRejectedQName,
                                                                    durable = Durable}),
-    MatchAnyWithX = {<<"x-match">>, longstr, <<"any-with-x">>},
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXExpiredQName,
                                                              exchange    = DLXExchange,
-                                                             arguments = [MatchAnyWithX,
-                                                                          {<<"x-first-death-reason">>, longstr, <<"expired">>}]
+                                                             arguments = [{<<"x-match">>, longstr, <<"all-with-x">>},
+                                                                          {<<"x-first-death-reason">>, longstr, <<"expired">>},
+                                                                          {<<"x-first-death-queue">>, longstr, QName1}]
                                                             }),
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue       = DLXRejectedQName,
                                                              exchange    = DLXExchange,
-                                                             arguments = [MatchAnyWithX,
+                                                             arguments = [{<<"x-match">>, longstr, <<"any-with-x">>},
                                                                           {<<"x-first-death-reason">>, longstr, <<"rejected">>}]
                                                             }),
-    %% Send 1st message and let it expire.
+    %% Send 1st message to 1st source queue and let it expire.
     P1 = <<"msg1">>,
-    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName},
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName1},
                       #amqp_msg{payload = P1,
                                 props = #'P_basic'{expiration = <<"0">>}}),
     %% The 1st message gets dead-lettered to DLXExpiredQName.
     wait_for_messages(Config, [[DLXExpiredQName, <<"1">>, <<"1">>, <<"0">>]]),
     _ = consume(Ch, DLXExpiredQName, [P1]),
     consume_empty(Ch, DLXExpiredQName),
-    wait_for_messages(Config, [[QName, <<"0">>, <<"0">>, <<"0">>]]),
-    %% Send and reject the 2nd message.
+    wait_for_messages(Config, [[QName1, <<"0">>, <<"0">>, <<"0">>]]),
+    %% Send 2nd message to 2nd source queue and let it expire.
     P2 = <<"msg2">>,
-    publish(Ch, QName, [P2]),
-    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
-    [DTag] = consume(Ch, QName, [P2]),
+    amqp_channel:call(Ch, #'basic.publish'{routing_key = QName2},
+                      #amqp_msg{payload = P2,
+                                props = #'P_basic'{expiration = <<"0">>}}),
+    %% Send 2nd message should not be routed by the dead letter headers exchange.
+    rabbit_ct_helpers:consistently(?_assertEqual(#'basic.get_empty'{},
+                                                 amqp_channel:call(Ch, #'basic.get'{queue = DLXExpiredQName}))),
+    %% Send and reject the 3rd message.
+    P3 = <<"msg3">>,
+    publish(Ch, QName2, [P3]),
+    timer:sleep(1000),
+    [DTag] = consume(Ch, QName2, [P3]),
     amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag,
                                           requeue      = false}),
-    %% The 2nd message gets dead-lettered to DLXRejectedQName.
+    %% The 3rd message gets dead-lettered to DLXRejectedQName.
     wait_for_messages(Config, [[DLXRejectedQName, <<"1">>, <<"1">>, <<"0">>]]),
-    _ = consume(Ch, DLXRejectedQName, [P2]),
-    consume_empty(Ch, DLXRejectedQName).
+    _ = consume(Ch, DLXRejectedQName, [P3]),
+    consume_empty(Ch, DLXRejectedQName),
+    _ = amqp_channel:call(Ch, #'queue.delete'{queue = QName2}),
+    ok.
 
 %% Route dead-letter messages also to extra BCC queues of target queues.
 dead_letter_extra_bcc(Config) ->
