@@ -5,7 +5,12 @@ load(
     "erlang_app",
     "test_erlang_app",
 )
-load("@rules_erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
+load(
+    "@rules_erlang//:ct_sharded.bzl",
+    "ct_suite",
+    "ct_suite_variant",
+    _assert_suites = "assert_suites",
+)
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 
@@ -246,7 +251,4 @@ def rabbitmq_integration_suite(
     return name
 
 def assert_suites(suite_names, suite_files):
-    for f in suite_files:
-        sn = f.rpartition("/")[-1].replace(".erl", "")
-        if not sn in suite_names:
-            fail("A bazel rule has not been defined for {} (expected {} in {}".format(f, sn, suite_names))
+    _assert_suites(suite_names, suite_files)
