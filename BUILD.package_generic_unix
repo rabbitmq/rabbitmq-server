@@ -9,11 +9,11 @@ rabbitmq_package_generic_unix(
             [
                 "sbin/*",
                 "escript/*",
-                "plugins/**/*",
             ],
             exclude = ["sbin/rabbitmqctl"],
         ) + [
-            "@inet_tcp_proxy//:erlang_app",
+            "//plugins:standard_plugins",
+            "//plugins:inet_tcp_proxy_ez",
         ],
     rabbitmqctl = "sbin/rabbitmqctl",
 )
