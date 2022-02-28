@@ -105,22 +105,28 @@ merge_app_env(Config) ->
       {ra, [{min_wal_roll_over_interval, 30000}]}).
 
 init_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-    T = rabbit_data_coercion:to_binary(Testcase),
-    Counters = get_global_counters(Config1),
-    Config2 = rabbit_ct_helpers:set_config(Config1,
-                                           [{source_queue, <<T/binary, "_source">>},
-                                            {dead_letter_exchange, <<T/binary, "_dlx">>},
-                                            {target_queue_1, <<T/binary, "_target_1">>},
-                                            {target_queue_2, <<T/binary, "_target_2">>},
-                                            {target_queue_3, <<T/binary, "_target_3">>},
-                                            {target_queue_4, <<T/binary, "_target_4">>},
-                                            {target_queue_5, <<T/binary, "_target_5">>},
-                                            {target_queue_6, <<T/binary, "_target_6">>},
-                                            {policy, <<T/binary, "_policy">>},
-                                            {counters, Counters}
-                                           ]),
-    rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
+    case {Testcase, rabbit_ct_helpers:is_mixed_versions()} of
+        {single_dlx_worker, true} ->
+            {skip, "single_dlx_worker is not mixed version compatible because process "
+             "rabbit_fifo_dlx_sup does not exist in 3.9"};
+        _ ->
+            Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
+            T = rabbit_data_coercion:to_binary(Testcase),
+            Counters = get_global_counters(Config1),
+            Config2 = rabbit_ct_helpers:set_config(Config1,
+                                                   [{source_queue, <<T/binary, "_source">>},
+                                                    {dead_letter_exchange, <<T/binary, "_dlx">>},
+                                                    {target_queue_1, <<T/binary, "_target_1">>},
+                                                    {target_queue_2, <<T/binary, "_target_2">>},
+                                                    {target_queue_3, <<T/binary, "_target_3">>},
+                                                    {target_queue_4, <<T/binary, "_target_4">>},
+                                                    {target_queue_5, <<T/binary, "_target_5">>},
+                                                    {target_queue_6, <<T/binary, "_target_6">>},
+                                                    {policy, <<T/binary, "_policy">>},
+                                                    {counters, Counters}
+                                                   ]),
+            rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps())
+    end.
 
 end_per_testcase(Testcase, Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
