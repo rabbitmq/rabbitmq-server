@@ -100,9 +100,10 @@ EOF
 """
 
 http_archive(
-    name = "rabbitmq-server-generic-unix-3.8.22",
+    name = "rabbitmq-server-generic-unix-3.8",
     build_file = "@//:BUILD.package_generic_unix",
     patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
-    strip_prefix = "rabbitmq_server-3.8.22",
-    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.22/rabbitmq-server-generic-unix-3.8.22.tar.xz"],
+    sha256 = "55569e00710ae54ff2801c1bac18c0360e00ecceee2949744be1a3e2f362f4c8",
+    strip_prefix = "rabbitmq_server-3.8.27",
+    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.27/rabbitmq-server-generic-unix-3.8.27.tar.xz"],
 )
