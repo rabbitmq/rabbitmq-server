@@ -695,11 +695,6 @@ maybe_add_action(Action, Acc, State) ->
     %% anything else is assumed to be an action
     {[Action | Acc], State}.
 
-% do_resends(From, To, State) when From =< To ->
-%     lists:foldl(fun resend/2, State, lists:seq(From, To));
-% do_resends(_, _, State) ->
-%     State.
-
 % resends a command with a new sequence number
 resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
     case maps:take(OldSeq, Pending0) of

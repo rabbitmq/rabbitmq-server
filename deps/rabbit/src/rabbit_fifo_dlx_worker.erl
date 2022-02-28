@@ -1,15 +1,25 @@
-%% This module consumes from a single quroum queue's discards queue (containing dead-letttered messages)
-%% and forwards the DLX messages at least once to every target queue.
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+
+%% One rabbit_fifo_dlx_worker process exists per (source) quorum queue that has at-least-once dead lettering
+%% enabled. The rabbit_fifo_dlx_worker process is co-located on the quorum queue leader node.
+%% Its job is to consume from the quorum queue's 'discards' queue (containing dead lettered messages)
+%% and to forward each dead lettered message at least once to every target queue.
+%% This is in contrast to at-most-once semantics of rabbit_dead_letter:publish/5 which is
+%% the only option for classic queues and was the only option for quorum queues in RMQ <= v3.9
 %%
 %% Some parts of this module resemble the channel process in the sense that it needs to keep track what messages
 %% are consumed but not acked yet and what messages are published but not confirmed yet.
-%% Compared to the channel process, this module is protocol independent since it doesn't deal with AMQP clients.
+%% Compared to the channel process, this module is protocol independent since it does not deal with AMQP clients.
 %%
 %% This module consumes directly from the rabbit_fifo_dlx_client bypassing the rabbit_queue_type interface,
 %% but publishes via the rabbit_queue_type interface.
 %% While consuming via rabbit_queue_type interface would have worked in practice (by using a special consumer argument,
-%% e.g. {<<"x-internal-queue">>, longstr, <<"discards">>} ) using the rabbit_fifo_dlx_client directly provides
-%% separation of concerns making things much easier to test, to debug, and to understand.
+%% e.g. {<<"x-internal-queue">>, longstr, <<"discards">>}) using the rabbit_fifo_dlx_client directly provides
+%% separation of concerns making things easier to test, to debug, and to understand.
 
 -module(rabbit_fifo_dlx_worker).
 
@@ -55,22 +65,23 @@
          }).
 
 -record(state, {
-          %% There is one rabbit_fifo_dlx_worker per source quorum queue
-          %% (if dead-letter-strategy at-least-once is used).
+          %% source queue
           queue_ref :: rabbit_amqqueue:name(),
           %% monitors source queue
           monitor_ref :: reference(),
           %% configured (x-)dead-letter-exchange of source queue
-          exchange_ref,
+          exchange_ref :: rabbit_exchange:name() | undefined,
           %% configured (x-)dead-letter-routing-key of source queue
           routing_key,
+          %% client of source queue
           dlx_client_state :: rabbit_fifo_dlx_client:state(),
+          %% clients of target queues
           queue_type_state :: rabbit_queue_type:state(),
           %% Consumed messages for which we are awaiting publisher confirms.
           pendings = #{} :: #{OutSeq :: non_neg_integer() => #pending{}},
           %% Consumed message IDs for which we received all publisher confirms.
           settled_ids = [] :: [non_neg_integer()],
-          %% next publisher confirm delivery tag sequence number
+          %% next outgoing message sequence number
           next_out_seq = 1,
           %% If no publisher confirm was received for at least settle_timeout milliseconds, message will be redelivered.
           %% To prevent duplicates in the target queue and to ensure message will eventually be acked to the source queue,
