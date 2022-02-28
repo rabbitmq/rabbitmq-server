@@ -1,3 +1,9 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+
 -module(rabbit_fifo_dlx).
 
 -include("rabbit_fifo_dlx.hrl").
@@ -29,7 +35,7 @@
          }).
 -record(settle, {msg_ids :: [msg_id()]}).
 -type protocol() :: {dlx, #checkout{} | #settle{}}.
--type state() :: #?MODULE{}.
+-opaque state() :: #?MODULE{}.
 -export_type([state/0,
               protocol/0]).
 
@@ -37,11 +43,13 @@
 init() ->
     #?MODULE{}.
 
+-spec make_checkout(pid(), non_neg_integer()) -> protocol().
 make_checkout(Pid, NumUnsettled) ->
     {dlx, #checkout{consumer = Pid,
                     prefetch = NumUnsettled
                    }}.
 
+-spec make_settle([msg_id()]) -> protocol().
 make_settle(MessageIds) when is_list(MessageIds) ->
     {dlx, #settle{msg_ids = MessageIds}}.
 
@@ -132,8 +140,7 @@ apply(_, Cmd, DLH, State) ->
     rabbit_log:debug("Ignoring command ~p for dead_letter_handler ~p", [Cmd, DLH]),
     {State, []}.
 
--spec discard([msg()], rabbit_dead_letter:reason(),
-              dead_letter_handler(), state()) ->
+-spec discard([msg()], rabbit_dead_letter:reason(), dead_letter_handler(), state()) ->
     {state(), ra_machine:effects()}.
 discard(Msgs, Reason, undefined, State) ->
     {State, [{mod_call, rabbit_global_counters, messages_dead_lettered,
