@@ -784,9 +784,13 @@ delivery_mode(?QOS_0) -> 1;
 delivery_mode(?QOS_1) -> 2;
 delivery_mode(?QOS_2) -> 2.
 
-maybe_quorum(Qos1Args) ->
- R=  case rabbit_mqtt_util:env(queue_type) of
-       <<"quorum">> -> lists:append(Qos1Args,[{<<"x-queue-type">>, longstr, <<"quorum">>}]);
+maybe_quorum(Qos1Args, CleanSess) ->
+ R=  case {rabbit_mqtt_util:env(queue_type), CleanSess} of
+      %% it is possible to Quorum queues only if Clean Session == False
+      %% else always use Classic queues
+      %% Clean Session == True sets auto-delete to True and quorum queues
+      %% does not support auto-delete flag
+       {<<"quorum">>, false} -> lists:append(Qos1Args,[{<<"x-queue-type">>, longstr, <<"quorum">>}]);
       _ -> Qos1Args
   end,
   R.
@@ -826,7 +830,7 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
                                    %%
                                    %% see rabbitmq/rabbitmq-mqtt#37
                                    auto_delete = CleanSess,
-                                   arguments   = maybe_quorum(Qos1Args) },
+                                   arguments   = maybe_quorum(Qos1Args, CleanSess)},
                  #'basic.consume'{ queue  = QueueQ1,
                                    no_ack = false }};
             {_, _, ?QOS_0} ->
