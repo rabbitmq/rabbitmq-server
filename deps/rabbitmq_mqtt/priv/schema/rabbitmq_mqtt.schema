@@ -261,11 +261,8 @@ end}.
 %% Queue data type can be classic or quorum
 %%
 %%
-%% {queue_type, <<"classic">>},
+%% {queue_type, quorum},
 
-{mapping, "mqtt.queue_type", "rabbitmq_mqtt.queue_type", [{datatype, string}]}.
 
-{translation, "rabbitmq_mqtt.queue_type",
-fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("mqtt.queue_type", Conf))
-end}.
+{mapping, "mqtt.queue_type", "rabbitmq_mqtt.queue_type",
+    [{datatype, {enum, [classic, quorum]}}]}.

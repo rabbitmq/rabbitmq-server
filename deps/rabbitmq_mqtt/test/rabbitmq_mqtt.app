@@ -12,6 +12,7 @@
          {exchange, "amq.topic"},
          {subscription_ttl, 1800000}, % 30 min
          {prefetch, 10},
+         {queue_type, "classic"},
          {ssl_listeners, []},
          {tcp_listeners, [1883]},
          {tcp_listen_options, [{backlog,   128},
