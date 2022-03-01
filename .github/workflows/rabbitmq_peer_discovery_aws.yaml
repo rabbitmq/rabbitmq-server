@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
     - name: WAIT FOR OCI IMAGE WORKFLOW
       uses: lewagon/wait-on-check-action@v1.1.1
       with:
