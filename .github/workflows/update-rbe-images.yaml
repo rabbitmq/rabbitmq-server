@@ -21,11 +21,11 @@ jobs:
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
       with:
         path: rabbitmq-server
     - name: CHECKOUT rbe-erlang-platform REPOSITORY
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
       with:
         path: rbe-erlang-platform
         repository: rabbitmq/rbe-erlang-platform
