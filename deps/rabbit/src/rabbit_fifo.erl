@@ -380,7 +380,7 @@ apply(#{index := Index,
         _ when Exists ->
             %% a dequeue using the same consumer_id isn't possible at this point
             {State0, {dequeue, empty}};
-        Ready ->
+        _ ->
             State1 = update_consumer(Meta, ConsumerId, ConsumerMeta,
                                      {once, 1, simple_prefetch}, 0,
                                      State0),
@@ -397,8 +397,7 @@ apply(#{index := Index,
                                                        State2),
                                                  {State3, SettleEffects ++ Effects0}
                                          end,
-                    %% TODO reply Ready might be wrong if messages expired
-                    Effects2 = [reply_log_effect(RaftIdx, MsgId, Header, Ready - 1, From) | Effects1],
+                    Effects2 = [reply_log_effect(RaftIdx, MsgId, Header, messages_ready(State4), From) | Effects1],
                     {State, DroppedMsg, Effects} = evaluate_limit(Index, false, State0, State4,
                                                                   Effects2),
                     Reply = '$ra_no_reply',
