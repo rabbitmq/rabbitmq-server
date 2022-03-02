@@ -199,6 +199,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
                 {error, _} = Err ->
                     Err;
                 {ok, OffsetSpec} ->
+                    rabbit_stream_coordinator:register_local_member_listener(Q),
                     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                                          not NoAck, QName,
                                                          ConsumerPrefetchCount, false,
@@ -407,6 +408,8 @@ handle_event({osiris_offset, _From, _Offs},
     {ok, State#stream_client{readers = Readers}, Deliveries};
 handle_event({stream_leader_change, Pid}, State) ->
     {ok, update_leader_pid(Pid, State), []};
+handle_event({stream_local_member_change, _Pid}, State) ->
+    {ok, State, []};
 handle_event(eol, _State) ->
     eol.
 
