@@ -230,6 +230,21 @@ untracked_enq_deq_test(_) ->
     ?ASSERT_EFF({log, [1], _}, Effs),
     ok.
 
+enq_expire_deq_test(_) ->
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
+             msg_ttl => 0},
+    S0 = rabbit_fifo:init(Conf),
+    Msg = #basic_message{content = #content{properties = none,
+                                            payload_fragments_rev = []}},
+    {S1, ok, _} = apply(meta(1, 100), rabbit_fifo:make_enqueue(self(), 1, Msg), S0),
+    Cid = {?FUNCTION_NAME, self()},
+    {_S2, {dequeue, empty}, Effs} =
+        apply(meta(2, 101), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}), S1),
+    ?ASSERT_EFF({mod_call, rabbit_global_counters, messages_dead_lettered,
+                 [expired, rabbit_quorum_queue, disabled, 1]}, Effs),
+    ok.
+
 release_cursor_test(_) ->
     Cid = {?FUNCTION_NAME, self()},
     {State1, _} = enq(1, 1, first,  test_init(test)),
