@@ -28,8 +28,8 @@
         {sparkplug,true},
         {ssl_listeners,[]},
         {tcp_listeners,[1883]},
-        {queue_type, quorum},
         {tcp_listen_options,[{backlog,128},{nodelay,true}]},
+        {queue_type,classic},
         {proxy_protocol,false}]}],
   [rabbitmq_mqtt]},
 
@@ -103,8 +103,7 @@
    mqtt.vhost            = /
    mqtt.exchange         = amq.topic
    mqtt.subscription_ttl = undefined
-   mqtt.prefetch         = 10,
-   mqtt.queue_type = classic
+   mqtt.prefetch         = 10
    mqtt.proxy_protocol = true",
   [{rabbit,[{tcp_listeners,[5672]}]},
    {rabbitmq_mqtt,
@@ -115,7 +114,6 @@
         {exchange,<<"amq.topic">>},
         {subscription_ttl,undefined},
         {prefetch,10},
-        {queue_type,classic},
         {proxy_protocol,true}]}],
   [rabbitmq_mqtt]},
  {prefetch_retained_msg_store,
