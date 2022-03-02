@@ -24,7 +24,8 @@ groups() ->
                                 interprets_colons_in_username_if_option_not_set,
                                 get_vhosts_from_global_runtime_parameter,
                                 get_vhost,
-                                add_client_id_to_adapter_info
+                                add_client_id_to_adapter_info,
+                                quorum_configuration
                                ]}
     ].
 
@@ -209,3 +210,22 @@ clear_vhost_global_parameters() ->
         ok = mnesia:delete(rabbit_runtime_parameters, mqtt_port_to_vhost_mapping, write)
                          end,
     {atomic, ok} = mnesia:transaction(DeleteParameterFun).
+
+quorum_configuration(_Config) ->
+    MyArgs = [],
+%%  default setting with CleanSession = true of false
+    QMustBeClassic = rabbit_mqtt_processor:maybe_quorum(MyArgs, true),
+    ?assertEqual(QMustBeClassic, []),
+%%  default setting with CleanSession = true of false
+    QMustBeClassicEvenFalse = rabbit_mqtt_processor:maybe_quorum(MyArgs, false),
+    ?assertEqual(QMustBeClassicEvenFalse, []),
+    application:set_env(rabbitmq_mqtt, queue_type, quorum),
+%%  quorum setting with CleanSession  == false must me quorum
+    QMustBeQuorum = rabbit_mqtt_processor:maybe_quorum(MyArgs, false),
+    ?assertEqual(QMustBeQuorum, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+
+    %%  quorum setting with CleanSession  == true must me classic since
+    %% quorum does not support auto-delete
+    QEvenQuorumMustBeClassic = rabbit_mqtt_processor:maybe_quorum(MyArgs, true),
+    ?assertEqual(QEvenQuorumMustBeClassic, []),
+    ok.

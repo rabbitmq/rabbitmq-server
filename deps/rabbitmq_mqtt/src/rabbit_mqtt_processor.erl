@@ -14,7 +14,7 @@
 
 %% for testing purposes
 -export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2,
-         add_client_id_to_adapter_info/2]).
+         add_client_id_to_adapter_info/2, maybe_quorum/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt_frame.hrl").
@@ -784,16 +784,16 @@ delivery_mode(?QOS_0) -> 1;
 delivery_mode(?QOS_1) -> 2;
 delivery_mode(?QOS_2) -> 2.
 
-maybe_quorum(Qos1Args, CleanSess) ->
- R=  case {rabbit_mqtt_util:env(queue_type), CleanSess} of
-      %% it is possible to Quorum queues only if Clean Session == False
-      %% else always use Classic queues
-      %% Clean Session == True sets auto-delete to True and quorum queues
-      %% does not support auto-delete flag
-       {<<"quorum">>, false} -> lists:append(Qos1Args,[{<<"x-queue-type">>, longstr, <<"quorum">>}]);
-      _ -> Qos1Args
-  end,
-  R.
+maybe_quorum(Qos1Args, CleanSession) ->
+  case {rabbit_mqtt_util:env(queue_type), CleanSession} of
+    %% it is possible to Quorum queues only if Clean Session == False
+    %% else always use Classic queues
+    %% Clean Session == True sets auto-delete to True and quorum queues
+    %% does not support auto-delete flag
+     {quorum, false} -> lists:append(Qos1Args,
+        [{<<"x-queue-type">>, longstr, <<"quorum">>}]);
+    _ -> Qos1Args
+  end.
 
 %% different qos subscriptions are received in different queues
 %% with appropriate durability and timeout arguments
