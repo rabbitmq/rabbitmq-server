@@ -380,32 +380,38 @@ apply(#{index := Index,
         _ when Exists ->
             %% a dequeue using the same consumer_id isn't possible at this point
             {State0, {dequeue, empty}};
-        Ready ->
+        _ ->
             State1 = update_consumer(Meta, ConsumerId, ConsumerMeta,
                                      {once, 1, simple_prefetch}, 0,
                                      State0),
-            {success, _, MsgId, ?MSG(RaftIdx, Header), ExpiredMsg, State2, Effects0} =
-                checkout_one(Meta, false, State1, []),
-            {State4, Effects1} = case Settlement of
-                                     unsettled ->
-                                         {_, Pid} = ConsumerId,
-                                         {State2, [{monitor, process, Pid} | Effects0]};
-                                     settled ->
-                                         %% immediately settle the checkout
-                                         {State3, _, SettleEffects} =
-                                             apply(Meta, make_settle(ConsumerId, [MsgId]),
-                                                   State2),
-                                         {State3, SettleEffects ++ Effects0}
-                                 end,
-            Effects2 = [reply_log_effect(RaftIdx, MsgId, Header, Ready - 1, From) | Effects1],
-            {State, DroppedMsg, Effects} = evaluate_limit(Index, false, State0, State4,
-                                                          Effects2),
-            Reply = '$ra_no_reply',
-            case {DroppedMsg, ExpiredMsg} of
-                {false, false} ->
-                    {State, Reply, Effects};
-                _ ->
-                    update_smallest_raft_index(Index, Reply, State, Effects)
+            case checkout_one(Meta, false, State1, []) of
+                {success, _, MsgId, ?MSG(RaftIdx, Header), ExpiredMsg, State2, Effects0} ->
+                    {State4, Effects1} = case Settlement of
+                                             unsettled ->
+                                                 {_, Pid} = ConsumerId,
+                                                 {State2, [{monitor, process, Pid} | Effects0]};
+                                             settled ->
+                                                 %% immediately settle the checkout
+                                                 {State3, _, SettleEffects} =
+                                                 apply(Meta, make_settle(ConsumerId, [MsgId]),
+                                                       State2),
+                                                 {State3, SettleEffects ++ Effects0}
+                                         end,
+                    Effects2 = [reply_log_effect(RaftIdx, MsgId, Header, messages_ready(State4), From) | Effects1],
+                    {State, DroppedMsg, Effects} = evaluate_limit(Index, false, State0, State4,
+                                                                  Effects2),
+                    Reply = '$ra_no_reply',
+                    case {DroppedMsg, ExpiredMsg} of
+                        {false, false} ->
+                            {State, Reply, Effects};
+                        _ ->
+                            update_smallest_raft_index(Index, Reply, State, Effects)
+                    end;
+                {nochange, _ExpiredMsg = true, State2, Effects0} ->
+                    %% All ready messages expired.
+                    State3 = State2#?MODULE{consumers = maps:remove(ConsumerId, State2#?MODULE.consumers)},
+                    {State, _, Effects} = evaluate_limit(Index, false, State0, State3, Effects0),
+                    update_smallest_raft_index(Index, {dequeue, empty}, State, Effects)
             end
     end;
 apply(#{index := Idx} = Meta,
