@@ -261,7 +261,7 @@ end}.
 %% Queue data type can be classic or quorum
 %%
 %%
-%% {queue_type, quorum},
+%% {queue_type, classic},
 
 
 {mapping, "mqtt.queue_type", "rabbitmq_mqtt.queue_type",
