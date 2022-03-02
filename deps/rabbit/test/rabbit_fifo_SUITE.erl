@@ -12,6 +12,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit/src/rabbit_fifo.hrl").
 
 %%%===================================================================
@@ -229,6 +230,59 @@ untracked_enq_deq_test(_) ->
         apply(meta(3), rabbit_fifo:make_checkout(Cid, {dequeue, settled}, #{}), State1),
     ?ASSERT_EFF({log, [1], _}, Effs),
     ok.
+
+enq_expire_deq_test(_) ->
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => rabbit_misc:r(<<"/">>, queue, <<"test">>),
+             msg_ttl => 0},
+    S0 = rabbit_fifo:init(Conf),
+    Msg = #basic_message{content = #content{properties = none,
+                                            payload_fragments_rev = []}},
+    {S1, ok, _} = apply(meta(1, 100), rabbit_fifo:make_enqueue(self(), 1, Msg), S0),
+    Cid = {?FUNCTION_NAME, self()},
+    {_S2, {dequeue, empty}, Effs} =
+        apply(meta(2, 101), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}), S1),
+    ?ASSERT_EFF({mod_call, rabbit_global_counters, messages_dead_lettered,
+                 [expired, rabbit_quorum_queue, disabled, 1]}, Effs),
+    ok.
+
+enq_expire_enq_deq_test(_) ->
+    S0 = test_init(test),
+    %% Msg1 and Msg2 get enqueued in the same millisecond,
+    %% but only Msg1 expires immediately.
+    Msg1 = #basic_message{content = #content{properties = #'P_basic'{expiration = <<"0">>},
+                                             payload_fragments_rev = [<<"msg1">>]}},
+    Enq1 = rabbit_fifo:make_enqueue(self(), 1, Msg1),
+    {S1, ok, _} = apply(meta(1, 100), Enq1, S0),
+    Msg2 = #basic_message{content = #content{properties = none,
+                                             payload_fragments_rev = [<<"msg2">>]}},
+    Enq2 = rabbit_fifo:make_enqueue(self(), 2, Msg2),
+    {S2, ok, _} = apply(meta(2, 100), Enq2, S1),
+    Cid = {?FUNCTION_NAME, self()},
+    {_S3, _, Effs} =
+        apply(meta(3, 101), rabbit_fifo:make_checkout(Cid, {dequeue, unsettled}, #{}), S2),
+    {log, [2], Fun} = get_log_eff(Effs),
+    [{reply, _From,
+      {wrap_reply, {dequeue, {_MsgId, _HeaderMsg}, ReadyMsgCount}}}] = Fun([Enq2]),
+    ?assertEqual(0, ReadyMsgCount).
+
+enq_expire_deq_enq_enq_deq_deq_test(_) ->
+    S0 = test_init(test),
+    Msg1 = #basic_message{content = #content{properties = #'P_basic'{expiration = <<"0">>},
+                                             payload_fragments_rev = [<<"msg1">>]}},
+    {S1, ok, _} = apply(meta(1, 100), rabbit_fifo:make_enqueue(self(), 1, Msg1), S0),
+    {S2, {dequeue, empty}, _} = apply(meta(2, 101),
+                                      rabbit_fifo:make_checkout({c1, self()}, {dequeue, unsettled}, #{}), S1),
+    {S3, _} = enq(3, 2, msg2, S2),
+    {S4, _} = enq(4, 3, msg3, S3),
+    {S5, '$ra_no_reply',
+     [{log, [3], _},
+      {monitor, _, _}]} =
+    apply(meta(5), rabbit_fifo:make_checkout({c2, self()}, {dequeue, unsettled}, #{}), S4),
+    {_S6, '$ra_no_reply',
+     [{log, [4], _},
+      {monitor, _, _}]} =
+    apply(meta(6), rabbit_fifo:make_checkout({c3, self()}, {dequeue, unsettled}, #{}), S5).
 
 release_cursor_test(_) ->
     Cid = {?FUNCTION_NAME, self()},
