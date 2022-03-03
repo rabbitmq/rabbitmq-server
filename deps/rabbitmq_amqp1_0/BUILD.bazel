@@ -1,5 +1,5 @@
 load("@rules_erlang//:xref.bzl", "xref")
-load("@rules_erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
@@ -48,11 +48,19 @@ xref(
     tags = ["xref"],
 )
 
+plt(
+    name = "base_plt",
+    # this ought to include BUILD_DEPS, but not sure how to
+    # get dialyze of elixir code working yet
+    deps = DEPS,
+)
+
 dialyze(
     size = "medium",
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = "//:base_plt",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
+    plt = ":base_plt",
     tags = ["dialyze"],
+    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()

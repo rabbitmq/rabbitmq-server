@@ -120,10 +120,13 @@ defmodule HelpersTest do
     rabbitmq_home = :rabbit_misc.rpc_call(node(), :code, :lib_dir, [:rabbit])
     opts = %{plugins_dir: to_string(plugins_directory_03),
              rabbitmq_home: rabbitmq_home}
-    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, 'New project', '0.1.0'}) == false
+
+    desc = 'A mock RabbitMQ plugin to be used in tests'
+    vsn = '0.1.0'
+    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, desc, vsn}) == false
     require_rabbit_and_plugins(opts)
     Application.load(:mock_rabbitmq_plugins_03)
-    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, 'New project', '0.1.0'})
+    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_03, desc, vsn})
   end
 
   test "locate plugin without version number in filename" do
@@ -131,10 +134,13 @@ defmodule HelpersTest do
     rabbitmq_home = :rabbit_misc.rpc_call(node(), :code, :lib_dir, [:rabbit])
     opts = %{plugins_dir: to_string(plugins_directory_04),
              rabbitmq_home: rabbitmq_home}
-    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, 'New project', 'rolling'}) == false
+
+    desc = 'A mock RabbitMQ plugin to be used in tests'
+    vsn = 'rolling'
+    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, desc, vsn}) == false
     require_rabbit_and_plugins(opts)
     Application.load(:mock_rabbitmq_plugins_04)
-    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, 'New project', 'rolling'})
+    assert Enum.member?(Application.loaded_applications(), {:mock_rabbitmq_plugins_04, desc, vsn})
   end
 
 end

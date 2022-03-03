@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -55,7 +55,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
     - name: CONFIGURE BAZEL
       run: |
         cat << EOF >> user.bazelrc
@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: CHECKOUT BAZEL
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
       with:
         repository: bazelbuild/bazel
         path: bazel

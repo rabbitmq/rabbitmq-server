@@ -16,9 +16,9 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
     - name: CONFIGURE ERLANG
-      uses: erlef/setup-beam@v1
+      uses: erlef/setup-beam@v1.11
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: 1.12.3

@@ -5,7 +5,12 @@ load(
     "erlang_app",
     "test_erlang_app",
 )
-load("@rules_erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
+load(
+    "@rules_erlang//:ct_sharded.bzl",
+    "ct_suite",
+    "ct_suite_variant",
+    _assert_suites = "assert_suites",
+)
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 
@@ -226,11 +231,11 @@ def rabbitmq_integration_suite(
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
-            "RABBITMQ_RUN_SECONDARY": "$TEST_SRCDIR/rabbitmq-server-generic-unix-3.8.22/rabbitmq-run",
+            "RABBITMQ_RUN_SECONDARY": "$TEST_SRCDIR/rabbitmq-server-generic-unix-3.9/rabbitmq-run",
         }.items() + test_env.items()),
         tools = [
             ":rabbitmq-for-tests-run",
-            "@rabbitmq-server-generic-unix-3.8.22//:rabbitmq-run",
+            "@rabbitmq-server-generic-unix-3.9//:rabbitmq-run",
         ] + tools,
         runtime_deps = [
             "//deps/rabbitmq_cli:elixir_app",
@@ -248,7 +253,4 @@ def rabbitmq_integration_suite(
     return name
 
 def assert_suites(suite_names, suite_files):
-    for f in suite_files:
-        sn = f.rpartition("/")[-1].replace(".erl", "")
-        if not sn in suite_names:
-            fail("A bazel rule has not been defined for {} (expected {} in {}".format(f, sn, suite_names))
+    _assert_suites(suite_names, suite_files)

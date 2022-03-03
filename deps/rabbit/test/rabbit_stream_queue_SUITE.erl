@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_stream_queue_SUITE).
@@ -100,6 +100,7 @@ all_tests() ->
      consume_credit_out_of_order_ack,
      consume_credit_multiple_ack,
      basic_cancel,
+     receive_basic_cancel_on_queue_deletion,
      max_length_bytes,
      max_age,
      invalid_policy,
@@ -999,6 +1000,31 @@ basic_cancel(Config) ->
             exit(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+receive_basic_cancel_on_queue_deletion(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    qos(Ch, 10, false),
+    CTag = <<"basic_cancel_notification_on_queue_deletion">>,
+    subscribe(Ch, Q, false, 0, CTag),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              1 == length(filter_consumers(Config, Server, CTag))
+      end, 30000),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]),
+    receive
+        #'basic.cancel'{consumer_tag = CTag} ->
+            ok
+    after 10000 ->
+            exit(timeout)
+    end.
+
 
 filter_consumers(Config, Server, CTag) ->
     CInfo = rabbit_ct_broker_helpers:rpc(Config, Server, ets, tab2list, [consumer_created]),

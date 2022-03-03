@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
     - name: MOUNT BAZEL CACHE
       uses: actions/cache@v1
       with:
@@ -77,9 +77,9 @@ jobs:
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
     - name: CONFIGURE OTP & ELIXIR
-      uses: erlef/setup-beam@v1.10
+      uses: erlef/setup-beam@v1.11
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: 1.11.4

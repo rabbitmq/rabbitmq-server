@@ -1,5 +1,5 @@
 load("@rules_erlang//:xref.bzl", "xref")
-load("@rules_erlang//:dialyze.bzl", "dialyze")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
@@ -7,6 +7,7 @@ load(
     "broker_for_integration_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
+    "without",
 )
 
 APP_NAME = "rabbitmq_stream"
@@ -53,10 +54,19 @@ rabbitmq_app(
 
 xref(tags = ["xref"])
 
+plt(
+    name = "base_plt",
+    deps = without(
+        "//deps/rabbitmq_cli:rabbitmqctl",
+        BUILD_DEPS + DEPS,
+    ),
+)
+
 dialyze(
-    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
-    plt = "//:base_plt",
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_undefined_callbacks"],
+    plt = ":base_plt",
     tags = ["dialyze"],
+    warnings_as_errors = False,
 )
 
 broker_for_integration_suites()

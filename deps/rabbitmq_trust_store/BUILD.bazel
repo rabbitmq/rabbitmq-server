@@ -54,12 +54,14 @@ plt(
     name = "base_plt",
     apps = EXTRA_APPS,
     plt = "//:base_plt",
+    deps = DEPS,
 )
 
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
     tags = ["dialyze"],
+    warnings_as_errors = False,
 )
 
 rabbitmq_home(
