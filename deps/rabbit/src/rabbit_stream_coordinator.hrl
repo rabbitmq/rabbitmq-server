@@ -55,10 +55,10 @@
                 }).
 
 -record(rabbit_stream_coordinator, {streams = #{} :: #{stream_id() => #stream{}},
-                  monitors = #{} :: #{pid() => {stream_id(), monitor_role()}},
-                  %% not used as of v2
-                  listeners = #{} :: #{stream_id() =>
-                                       #{pid() := queue_ref()}},
-                  %% future extensibility
-                  reserved_1,
-                  reserved_2}).
+                                    monitors = #{} :: #{pid() => {stream_id(), monitor_role()}},
+                                    %% not used as of v2
+                                    listeners = #{} :: #{stream_id() =>
+                                                         #{pid() := queue_ref()}},
+                                    %% future extensibility
+                                    reserved_1,
+                                    reserved_2}).
