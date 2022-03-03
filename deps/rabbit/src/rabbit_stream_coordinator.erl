@@ -1280,11 +1280,14 @@ inform_listeners_eol(#stream{target = deleted,
                              listeners = Listeners,
                              queue_ref = QRef
                             }) ->
+    LPidsMap = maps:fold(fun({P, _}, _V, Acc) ->
+                                 Acc#{P => ok}
+                         end, #{}, Listeners),
     lists:map(fun(Pid) ->
                       {send_msg, Pid,
                        {queue_event, QRef, eol},
                        cast}
-              end, maps:keys(Listeners));
+              end, maps:keys(LPidsMap));
 inform_listeners_eol(_) ->
     [].
 
