@@ -866,15 +866,11 @@ recover(Q) ->
     {ok, Q}.
 
 check_queue_exists_in_local_node(Q) ->
-    %% FIXME use the stream coordinator to check if there's a local member
-    %% its information is always more accurate
-    Conf = amqqueue:get_type_state(Q),
-    AllNodes = [maps:get(leader_node, Conf) |
-                maps:get(replica_nodes, Conf)],
-    case lists:member(node(), AllNodes) of
-        true ->
+    #{name := StreamId} = amqqueue:get_type_state(Q),
+    case rabbit_stream_coordinator:local_pid(StreamId) of
+        {ok, Pid} when is_pid(Pid) ->
             ok;
-        false ->
+        _ ->
             {protocol_error, precondition_failed,
              "queue '~s' does not a have a replica on the local node",
              [rabbit_misc:rs(amqqueue:get_name(Q))]}
