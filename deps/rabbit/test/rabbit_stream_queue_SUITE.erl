@@ -1058,7 +1058,7 @@ keep_consuming_on_leader_restart(Config) ->
               exit(timeout)
     end,
 
-    ok.
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 leader_info(Config) ->
     Name = ?config(queue_name, Config),
