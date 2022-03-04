@@ -41,7 +41,7 @@
 -export([replay/1]).
 
 %% for testing and debugging
--export([eval_listeners/2,
+-export([eval_listeners/3,
          state/0]).
 
 -rabbit_boot_step({?MODULE,
@@ -339,7 +339,7 @@ all_coord_members() ->
     Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
     [{?MODULE, Node} || Node <- [node() | Nodes]].
 
-version() -> 1.
+version() -> 2.
 
 which_module(_) ->
     ?MODULE.
@@ -349,7 +349,8 @@ init(_Conf) ->
 
 -spec apply(map(), command(), state()) ->
     {state(), term(), ra_machine:effects()}.
-apply(#{index := _Idx} = Meta0, {_CmdTag, StreamId, #{}} = Cmd,
+apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
+      {_CmdTag, StreamId, #{}} = Cmd,
       #?MODULE{streams = Streams0,
                monitors = Monitors0} = State0) ->
     Stream0 = maps:get(StreamId, Streams0, undefined),
@@ -367,10 +368,10 @@ apply(#{index := _Idx} = Meta0, {_CmdTag, StreamId, #{}} = Cmd,
             case Stream1 of
                 undefined ->
                     return(Meta, State0#?MODULE{streams = maps:remove(StreamId, Streams0)},
-                           Reply, inform_listeners_eol(Stream0));
+                           Reply, inform_listeners_eol(MachineVersion, Stream0));
                 _ ->
                     {Stream2, Effects0} = evaluate_stream(Meta, Stream1, []),
-                    {Stream3, Effects1} = eval_listeners(Stream2, Effects0),
+                    {Stream3, Effects1} = eval_listeners(MachineVersion, Stream2, Effects0),
                     {Stream, Effects2} = eval_retention(Meta, Stream3, Effects1),
                     {Monitors, Effects} = ensure_monitors(Stream, Monitors0, Effects2),
                     return(Meta,
@@ -380,9 +381,10 @@ apply(#{index := _Idx} = Meta0, {_CmdTag, StreamId, #{}} = Cmd,
         Reply ->
             return(Meta, State0, Reply, [])
     end;
-apply(Meta, {down, Pid, Reason} = Cmd,
+apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
       #?MODULE{streams = Streams0,
-               monitors = Monitors0} = State) ->
+               monitors = Monitors0,
+               listeners = StateListeners0} = State) ->
 
     Effects0 = case Reason of
                    noconnection ->
@@ -391,7 +393,21 @@ apply(Meta, {down, Pid, Reason} = Cmd,
                        []
                end,
     case maps:take(Pid, Monitors0) of
-        {{PidStreams, listener}, Monitors} ->
+        {{StreamId, listener}, Monitors} when MachineVersion =< 1 ->
+            Listeners = case maps:take(StreamId, StateListeners0) of
+                            error ->
+                                StateListeners0;
+                            {Pids0, Listeners1} ->
+                                case maps:remove(Pid, Pids0) of
+                                    Pids when map_size(Pids) == 0 ->
+                                        Listeners1;
+                                    Pids ->
+                                        Listeners1#{StreamId => Pids}
+                                end
+                        end,
+            return(Meta, State#?MODULE{listeners = Listeners,
+                                       monitors = Monitors}, ok, Effects0);
+        {{PidStreams, listener}, Monitors} when MachineVersion >= 2 ->
             Streams = maps:fold(fun(StreamId, _, Acc) ->
                     case Acc of
                         #{StreamId := Stream = #stream{listeners = Listeners0}} ->
@@ -426,12 +442,31 @@ apply(Meta, {down, Pid, Reason} = Cmd,
         error ->
             return(Meta, State, ok, Effects0)
     end;
-apply(Meta, {register_listener, #{pid := Pid,
-                                  node := Node,
-                                  stream_id := StreamId,
-                                  type := Type}},
+apply(#{machine_version := MachineVersion} = Meta,
+      {register_listener, #{pid := Pid,
+                            stream_id := StreamId}},
       #?MODULE{streams = Streams,
-               monitors = Monitors0} = State0) ->
+               monitors = Monitors0} = State0) when MachineVersion =< 1 ->
+    case Streams of
+        #{StreamId := #stream{listeners = Listeners0} = Stream0} ->
+            Stream1 = Stream0#stream{listeners = maps:put(Pid, undefined, Listeners0)},
+            {Stream, Effects} = eval_listeners(MachineVersion, Stream1, []),
+            Monitors = maps:put(Pid, {StreamId, listener}, Monitors0),
+            return(Meta,
+                   State0#?MODULE{streams = maps:put(StreamId, Stream, Streams),
+                                  monitors = Monitors}, ok,
+                   [{monitor, process, Pid} | Effects]);
+        _ ->
+            return(Meta, State0, stream_not_found, [])
+    end;
+
+apply(#{machine_version := MachineVersion} = Meta,
+      {register_listener, #{pid := Pid,
+                            node := Node,
+                            stream_id := StreamId,
+                            type := Type}},
+      #?MODULE{streams = Streams,
+               monitors = Monitors0} = State0) when MachineVersion >= 2 ->
     case Streams of
         #{StreamId := #stream{listeners = Listeners0} = Stream0} ->
             {LKey, LValue} =
@@ -442,7 +477,7 @@ apply(Meta, {register_listener, #{pid := Pid,
                         {{Pid, member}, {Node, undefined}}
                 end,
             Stream1 = Stream0#stream{listeners = maps:put(LKey, LValue, Listeners0)},
-            {Stream, Effects} = eval_listeners(Stream1, []),
+            {Stream, Effects} = eval_listeners(MachineVersion, Stream1, []),
             {PidStreams, listener} = maps:get(Pid, Monitors0, {#{}, listener}),
             Monitors = maps:put(Pid, {PidStreams#{StreamId => ok}, listener}, Monitors0),
             return(Meta,
@@ -476,6 +511,12 @@ apply(Meta, {nodeup, Node} = Cmd,
                   end, {Streams0, Effects0}, Streams0),
     return(Meta, State#?MODULE{monitors = Monitors,
                                streams = Streams}, ok, Effects);
+apply(Meta, {machine_version, 1, 2}, State = #?MODULE{streams = Streams0}) ->
+    Streams1 = maps:fold(fun(ListPid, LeaderPid, Acc) ->
+                            Acc#{{ListPid, leader} => LeaderPid}
+                         end, #{}, Streams0),
+    return(Meta, State#?MODULE{streams = Streams1,
+                               listeners = undefined}, ok, []);
 apply(Meta, {machine_version, _From, _To}, State) ->
     return(Meta, State, ok, []);
 apply(Meta, UnkCmd, State) ->
@@ -1276,10 +1317,19 @@ update_stream0(#{system_time := _Ts},
 update_stream0(_Meta, _Cmd, undefined) ->
     undefined.
 
-inform_listeners_eol(#stream{target = deleted,
+inform_listeners_eol(MachineVersion, #stream{target = deleted,
                              listeners = Listeners,
                              queue_ref = QRef
-                            }) ->
+                            }) when MachineVersion =< 1 ->
+    lists:map(fun(Pid) ->
+                      {send_msg, Pid,
+                       {queue_event, QRef, eol},
+                       cast}
+              end, maps:keys(Listeners));
+inform_listeners_eol(MachineVersion, #stream{target = deleted,
+                             listeners = Listeners,
+                             queue_ref = QRef
+                            }) when MachineVersion >= 2 ->
     LPidsMap = maps:fold(fun({P, _}, _V, Acc) ->
                                  Acc#{P => ok}
                          end, #{}, Listeners),
@@ -1288,12 +1338,35 @@ inform_listeners_eol(#stream{target = deleted,
                        {queue_event, QRef, eol},
                        cast}
               end, maps:keys(LPidsMap));
-inform_listeners_eol(_) ->
+inform_listeners_eol(_, _) ->
     [].
 
-eval_listeners(#stream{listeners = Listeners0,
-                       queue_ref = QRef,
-                       members = Members} = Stream0, Effects0) ->
+eval_listeners(MachineVersion, #stream{listeners = Listeners0,
+                                       queue_ref = QRef,
+                                       members = Members} = Stream, Effects0) 
+  when MachineVersion =< 1 ->
+    case find_leader(Members) of
+        {#member{state = {running, _, LeaderPid}}, _} ->
+            %% a leader is running, check all listeners to see if any of them
+            %% has not been notified of the current leader pid
+            {Listeners, Effects} =
+                maps:fold(
+                  fun(_, P, Acc) when P == LeaderPid ->
+                          Acc;
+                     (LPid, _, {L, Acc}) ->
+                          {L#{LPid => LeaderPid},
+                           [{send_msg, LPid,
+                             {queue_event, QRef,
+                              {stream_leader_change, LeaderPid}},
+                             cast} | Acc]}
+                  end, {Listeners0, Effects0}, Listeners0),
+            {Stream#stream{listeners = Listeners}, Effects};
+        _ ->
+            {Stream, Effects0}
+    end;
+eval_listeners(MachineVersion, #stream{listeners = Listeners0,
+                                       queue_ref = QRef,
+                                       members = Members} = Stream0, Effects0) when MachineVersion >= 2 ->
     %% Iterating over stream listeners.
     %% Returning the new map of listeners and the effects (notification of changes)
     {Listeners1, Effects1} =

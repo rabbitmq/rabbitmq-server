@@ -75,13 +75,13 @@ apply_cmd(M, C, S) ->
     rabbit_stream_coordinator:apply(M, C, S).
 
 register_listener(Args, S) ->
-    apply_cmd(#{index => 42}, {register_listener, Args}, S).
+    apply_cmd(#{index => 42, machine_version => 2}, {register_listener, Args}, S).
 
 eval_listeners(Stream) ->
-    rabbit_stream_coordinator:eval_listeners(Stream, []).
+    rabbit_stream_coordinator:eval_listeners(2, Stream, []).
 
 down(Pid, S) ->
-    apply_cmd(#{index => 42}, {down, Pid, reason}, S).
+    apply_cmd(#{index => 42, machine_version => 2}, {down, Pid, reason}, S).
 
 
 listeners(_) ->
