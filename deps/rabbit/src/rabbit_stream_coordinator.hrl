@@ -48,7 +48,9 @@
                  conf :: osiris:config(),
                  nodes :: [node()],
                  members = #{} :: #{node() := #member{}},
-                 listeners = #{} :: #{{pid(), leader | member} := LeaderPid :: pid()} | {node(), LocalPid :: pid()},
+                 listeners = #{} :: #{pid() | %% v0 & v1
+                                      {pid(), leader | member} %% v2
+                                      := LeaderPid :: pid()} | {node(), LocalPid :: pid()},
                  reply_to :: undefined | from(),
                  mnesia = {updated, 0} :: {updated | updating, osiris:epoch()},
                  target = running :: running | deleted
@@ -57,8 +59,8 @@
 -record(rabbit_stream_coordinator, {streams = #{} :: #{stream_id() => #stream{}},
                                     monitors = #{} :: #{pid() => {stream_id(), monitor_role()}},
                                     %% not used as of v2
-                                    listeners = #{} :: #{stream_id() =>
-                                                         #{pid() := queue_ref()}},
+                                    listeners = #{} :: undefined | #{stream_id() =>
+                                                                     #{pid() := queue_ref()}},
                                     %% future extensibility
                                     reserved_1,
                                     reserved_2}).
