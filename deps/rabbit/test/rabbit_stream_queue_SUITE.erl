@@ -101,6 +101,7 @@ all_tests() ->
      consume_credit_multiple_ack,
      basic_cancel,
      receive_basic_cancel_on_queue_deletion,
+     keep_consuming_on_leader_restart,
      max_length_bytes,
      max_age,
      invalid_policy,
@@ -1025,6 +1026,71 @@ receive_basic_cancel_on_queue_deletion(Config) ->
             exit(timeout)
     end.
 
+keep_consuming_on_leader_restart(Config) ->
+    [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    publish_confirm(Ch1, Q, [<<"msg 1">>]),
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    qos(Ch2, 10, false),
+    subscribe(Ch2, Q, false, 0),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag1}, _} ->
+            ok = amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag1,
+                                                     multiple = false})
+    after 5000 ->
+              exit(timeout)
+    end,
+
+    {ok, {LeaderNode, LeaderPid}} = leader_info(Config),
+
+    kill_process(Config, LeaderNode, LeaderPid),
+
+    publish_confirm(Ch1, Q, [<<"msg 2">>]),
+
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag2}, _} ->
+            ok = amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag2,
+                                                     multiple = false})
+    after 5000 ->
+              exit(timeout)
+    end,
+
+    ok.
+
+leader_info(Config) ->
+    Name = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, Name),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_leader_info,
+                                 [QName]).
+
+get_leader_info(QName) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    QState = amqqueue:get_type_state(Q),
+    #{name := StreamName} = QState,
+    case rabbit_stream_coordinator:members(StreamName) of
+        {ok, Members} ->
+            maps:fold(fun (LeaderNode, {Pid, writer}, _Acc) ->
+                              {ok, {LeaderNode, Pid}};
+                          (_Node, _, Acc) ->
+                              Acc
+                      end,
+                      {error, not_found}, Members);
+        _ ->
+            {error, not_found}
+    end.
+
+kill_process(Config, Node, Pid) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, ?MODULE, do_kill_process,
+                                 [Pid]).
+
+do_kill_process(Pid) ->
+    exit(Pid, kill).
 
 filter_consumers(Config, Server, CTag) ->
     CInfo = rabbit_ct_broker_helpers:rpc(Config, Server, ets, tab2list, [consumer_created]),
