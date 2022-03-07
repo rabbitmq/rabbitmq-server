@@ -872,7 +872,7 @@ check_queue_exists_in_local_node(Q) ->
             ok;
         _ ->
             {protocol_error, precondition_failed,
-             "queue '~s' does not a have a replica on the local node",
+             "queue '~s' does not have a replica on the local node",
              [rabbit_misc:rs(amqqueue:get_name(Q))]}
     end.
 
