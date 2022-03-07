@@ -1483,7 +1483,7 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                       [rabbit_misc:rs(QueueName)]);
                 {error, no_local_stream_replica_available} ->
                     rabbit_misc:protocol_error(
-                      resource_error, "~s does not not have a running local replica",
+                      resource_error, "~s does not have a running local replica",
                       [rabbit_misc:rs(QueueName)])
             end;
         {ok, _} ->
