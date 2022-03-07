@@ -260,9 +260,7 @@ register_listener(Q) when ?is_amqqueue(Q)->
     #{name := StreamId} = amqqueue:get_type_state(Q),
     process_command({register_listener,
                      #{pid => self(),
-                       node => node(self()),
-                       stream_id => StreamId,
-                       type => leader}}).
+                       stream_id => StreamId}}).
 
 -spec register_local_member_listener(amqqueue:amqqueue()) ->
     {error, term()} | {ok, ok | stream_not_found, atom() | {atom(), atom()}}.
@@ -462,11 +460,22 @@ apply(#{machine_version := MachineVersion} = Meta,
 
 apply(#{machine_version := MachineVersion} = Meta,
       {register_listener, #{pid := Pid,
-                            node := Node,
-                            stream_id := StreamId,
-                            type := Type}},
+                            stream_id := StreamId} = Args},
       #?MODULE{streams = Streams,
                monitors = Monitors0} = State0) when MachineVersion >= 2 ->
+    Node = case Args of
+               #{node := N} ->
+                   N;
+               _ ->
+                   node(Pid)
+           end,
+    Type = case Args of
+               #{type := T} ->
+                   T;
+               _ ->
+                   leader
+           end,
+
     case Streams of
         #{StreamId := #stream{listeners = Listeners0} = Stream0} ->
             {LKey, LValue} =
