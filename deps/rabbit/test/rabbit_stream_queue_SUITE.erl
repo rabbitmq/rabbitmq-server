@@ -192,9 +192,24 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-    Q = rabbit_data_coercion:to_binary(Testcase),
+init_per_testcase(TestCase, Config)
+  when TestCase == receive_basic_cancel_on_queue_deletion
+       orelse TestCase == keep_consuming_on_leader_restart ->
+    ClusterSize = ?config(rmq_nodes_count, Config),
+    case {rabbit_ct_helpers:is_mixed_versions(), ClusterSize} of
+        {true, 2} ->
+            %% These 2 tests fail because the leader can be the lower version,
+            %% which does not have the fix.
+            {skip, "not tested in mixed-version cluster and cluster size = 2"};
+        _ ->
+            init_test_case(TestCase, Config)
+    end;
+init_per_testcase(TestCase, Config) ->
+    init_test_case(TestCase, Config).
+
+init_test_case(TestCase, Config) ->
+    Config1 = rabbit_ct_helpers:testcase_started(Config, TestCase),
+    Q = rabbit_data_coercion:to_binary(TestCase),
     Config2 = rabbit_ct_helpers:set_config(Config1, [{queue_name, Q}]),
     rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
 
