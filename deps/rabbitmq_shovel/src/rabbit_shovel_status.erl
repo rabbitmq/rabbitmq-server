@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_shovel_status).
@@ -10,7 +10,8 @@
 
 -export([start_link/0]).
 
--export([report/3, remove/1, status/0, lookup/1]).
+-export([report/3, remove/1, status/0, lookup/1, cluster_status/0, cluster_status_with_nodes/0]).
+-export([inject_node_info/2, find_matching_shovel/3]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -33,6 +34,23 @@ remove(Name) ->
 
 status() ->
     gen_server:call(?SERVER, status, infinity).
+
+cluster_status() ->
+    Nodes = rabbit_nodes:all_running(),
+    lists:usort(rabbit_misc:append_rpc_all_nodes(Nodes, ?MODULE, status, [])).
+
+cluster_status_with_nodes() ->
+    Nodes = rabbit_nodes:all_running(),
+    lists:foldl(
+        fun(Node, Acc) ->
+            case rabbit_misc:rpc_call(Node, ?MODULE, status, []) of
+                {badrpc, _} ->
+                    Acc;
+                Xs0 when is_list(Xs0) ->
+                    Xs = inject_node_info(Node, Xs0),
+                    Acc ++ Xs
+            end
+        end, [], Nodes).
 
 lookup(Name) ->
     gen_server:call(?SERVER, {lookup, Name}, infinity).
@@ -82,6 +100,26 @@ terminate(_Reason, State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+inject_node_info(Node, Shovels) ->
+    lists:map(
+        fun({Name, Type, {State, Opts}, Timestamp}) ->
+            Opts1 = Opts ++ [{node, Node}],
+            {Name, Type, {State, Opts1}, Timestamp}
+        end, Shovels).
+
+find_matching_shovel(VHost, Name, Shovels) ->
+    case lists:filter(
+        fun ({{V, S}, _Kind, _Status, _}) ->
+            VHost =:= V andalso Name =:= S
+        end, Shovels) of
+            []  -> undefined;
+        [S | _] -> S
+    end.
+
+%%
+%% Implementation
+%%
 
 split_status({running, MoreInfo})         -> [{status, running} | MoreInfo];
 split_status({terminated, Reason})        -> [{status, terminated},

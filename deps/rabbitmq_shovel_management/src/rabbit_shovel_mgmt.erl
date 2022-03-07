@@ -115,11 +115,17 @@ filter_vhost_req(List, ReqData) ->
     end.
 
 get_shovel_node(VHost, Name, ReqData, Context) ->
-    AllShovels = rabbit_shovel_mgmt_util:status(ReqData, Context),
-    MatchedShovel = lists:filter(fun (Shovel) ->
-        lists:member({name, Name}, Shovel) and lists:member({vhost, VHost}, Shovel) end, AllShovels),
-    case MatchedShovel of
-        [] -> undefined;
-        ShovelData -> {_,Node}=lists:keyfind(node, 1, lists:nth(1, ShovelData)),
+    Shovels = rabbit_shovel_mgmt_util:status(ReqData, Context),
+    Matches = find_shovel(VHost, Name, Shovels),
+    case Matches of
+        []      -> undefined;
+        [Match] ->
+            {_, Node} = lists:keyfind(node, 1, Match),
             Node
     end.
+
+find_shovel(VHost, Name, Shovels) ->
+    lists:filter(
+        fun ({{V, S}, _Kind, _Status, _}) ->
+            VHost =:= V andalso Name =:= S
+        end, Shovels).
