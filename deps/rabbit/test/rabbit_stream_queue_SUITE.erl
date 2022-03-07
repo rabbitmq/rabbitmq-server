@@ -54,7 +54,8 @@ groups() ->
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
      {cluster_size_3_2, [], [recover,
                              declare_with_node_down]},
-     {cluster_size_3_parallel_1, [parallel], [delete_replica,
+     {cluster_size_3_parallel_1, [parallel], [
+                                              delete_replica,
                                               delete_last_replica,
                                               delete_classic_replica,
                                               delete_quorum_replica,
@@ -65,7 +66,8 @@ groups() ->
                                               leader_locator_client_local,
                                               declare_delete_same_stream,
                                               leader_locator_random,
-                                              leader_locator_least_leaders]},
+                                              leader_locator_least_leaders
+                                             ]},
      {cluster_size_3_parallel_2, [parallel], all_tests()},
      {unclustered_size_3_1, [], [add_replica]},
      {unclustered_size_3_2, [], [consume_without_local_replica]},
@@ -1322,7 +1324,7 @@ consume_from_relative_time_offset(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 consume_from_replica(Config) ->
-    [Server1, Server2 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1, _, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
@@ -1338,7 +1340,7 @@ consume_from_replica(Config) ->
               length(proplists:get_value(online, Info)) == 3
       end),
 
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server3),
     qos(Ch2, 10, false),
 
     subscribe(Ch2, Q, false, 0),
