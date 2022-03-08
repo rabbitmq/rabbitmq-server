@@ -67,6 +67,34 @@ To generate these:
 | rabbitmq_global_publishers                                  | Publishers currently connected |
 | rabbitmq_global_consumers                                   | Consumers currently connected |
 
+#### Dead letter global counters
+
+| Metric                                                      | Description                                                                                                  |
+| ---                                                         | ---                                                                                                          |
+| rabbitmq_global_messages_dead_lettered_confirmed_total      | Total number of messages dead-lettered and confirmed by target queues                                        |
+| rabbitmq_global_messages_dead_lettered_delivery_limit_total | Total number of messages dead-lettered due to delivery-limit exceeded                                        |
+| rabbitmq_global_messages_dead_lettered_expired_total        | Total number of messages dead-lettered due to message TTL exceeded                                           |
+| rabbitmq_global_messages_dead_lettered_maxlen_total         | Total number of messages dead-lettered due to overflow drop-head or reject-publish-dlx                       |
+| rabbitmq_global_messages_dead_lettered_rejected_total       | Total number of messages dead-lettered due to basic.reject or basic.nack                                     |
+
+Metrics `rabbitmq_global_messages_dead_lettered_*` have labels `queue_type` and `dead_letter_strategy`.
+
+Label `queue_type` denotes the type of queue messages were discarded from. It can have value
+* `rabbit_classic_queue`, or
+* `rabbit_quorum_queue`
+
+(Queue type `rabbit_stream_queue` does not dead letter messages.)
+
+Note that metrics `rabbitmq_global_messages_dead_lettered_*` with label `queue_type` set to `rabbit_quorum_queue`
+might miss some counter updates in certain failure scenarios, i.e. the reported Prometheus value could be
+slightly lower than the actual number of messages dead lettered (and confirmed).
+(This is because in the current implementation quorum queue leaders update the counters asynchronously.)
+
+Label `dead_letter_strategy` can have value
+* `disabled` if queue has no dead-letter-exchange configured or if configured dead-letter-exchange does not exist implying messages get dropped, or
+* `at_most_once` if queue's configured dead-lettered-exchange exists, or
+* `at_least_once` if queue type is `rabbit_quorum_queue` with configured `dead-letter-exchange` and `dead-letter-strategy` set to `at-least-once` and `overflow` set to `reject-publish`.
+
 #### Stream global counters
 
 These metrics are specific to the stream protocol.

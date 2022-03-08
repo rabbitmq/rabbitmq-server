@@ -80,7 +80,7 @@
               state :: queue_state()}).
 
 
--record(?STATE, {ctxs = #{} :: #{queue_ref() => #ctx{} | queue_ref()},
+-record(?STATE, {ctxs = #{} :: #{queue_ref() => #ctx{}},
                  monitor_registry = #{} :: #{pid() => queue_ref()}
                 }).
 
@@ -436,10 +436,10 @@ handle_event(QRef, Evt, Ctxs) ->
 
 -spec module(queue_ref(), state()) ->
     {ok, module()} | {error, not_found}.
-module(QRef, Ctxs) ->
+module(QRef, State) ->
     %% events can arrive after a queue state has been cleared up
     %% so need to be defensive here
-    case get_ctx(QRef, Ctxs, undefined) of
+    case get_ctx(QRef, State, undefined) of
         #ctx{module = Mod} ->
             {ok, Mod};
         undefined ->
@@ -577,12 +577,7 @@ get_ctx_with(QRef, Contexts, undefined) when ?QREF(QRef) ->
 get_ctx(QRef, #?STATE{ctxs = Contexts}, Default) ->
     Ref = qref(QRef),
     %% if we use a QRef it should always be initialised
-    case maps:get(Ref, Contexts, undefined) of
-        #ctx{} = Ctx ->
-            Ctx;
-        undefined ->
-            Default
-    end.
+    maps:get(Ref, Contexts, Default).
 
 set_ctx(Q, Ctx, #?STATE{ctxs = Contexts} = State)
   when ?is_amqqueue(Q) ->

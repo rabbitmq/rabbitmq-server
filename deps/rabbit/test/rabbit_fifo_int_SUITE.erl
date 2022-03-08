@@ -295,7 +295,7 @@ returns_after_down(Config) ->
     F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
     {ok, F1} = rabbit_fifo_client:enqueue(msg1, F0),
     {_, _, F2} = process_ra_events(receive_ra_events(1, 0), F1),
-    % start a customer in a separate processes
+    % start a consumer in a separate processes
     % that exits after checkout
     Self = self(),
     _Pid = spawn(fun () ->
@@ -375,7 +375,7 @@ discard(Config) ->
              machine => {module, rabbit_fifo,
                          #{queue_resource => discard,
                            dead_letter_handler =>
-                           {?MODULE, dead_letter_handler, [self()]}}}},
+                           {at_most_once, {?MODULE, dead_letter_handler, [self()]}}}}},
     _ = rabbit_quorum_queue:start_server(Conf),
     ok = ra:trigger_election(ServerId),
     _ = ra:members(ServerId),
@@ -387,8 +387,9 @@ discard(Config) ->
     F3 = discard_next_delivery(F2, 5000),
     {empty, _F4} = rabbit_fifo_client:dequeue(<<"tag1">>, settled, F3),
     receive
-        {dead_letter, Letters} ->
-            [{_, msg1}] = Letters,
+        {dead_letter, Reason, Letters} ->
+            [msg1] = Letters,
+            rejected = Reason,
             ok
     after 500 ->
               flush(),
@@ -510,8 +511,8 @@ test_queries(Config) ->
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
-dead_letter_handler(Pid, Msgs) ->
-    Pid ! {dead_letter, Msgs}.
+dead_letter_handler(Pid, Reason, Msgs) ->
+    Pid ! {dead_letter, Reason, Msgs}.
 
 dequeue(Config) ->
     ClusterName = ?config(cluster_name, Config),

@@ -7,14 +7,15 @@
          delete/2,
          size/1,
          smallest/1,
-         map/2
+         map/2,
+         normalize/1
         ]).
 
 -compile({no_auto_import, [size/1]}).
 
 %% the empty atom is a lot smaller (4 bytes) than e.g. `undefined` (13 bytes).
 %% This matters as the data map gets persisted as part of the snapshot
--define(NIL, '').
+-define(NIL, []).
 
 -record(?MODULE, {data = #{} :: #{integer() => ?NIL},
                   smallest :: undefined | non_neg_integer(),
@@ -40,15 +41,29 @@ append(Key,
        #?MODULE{data = Data,
                 smallest = Smallest,
                 largest = Largest} = State)
-  when Key > Largest orelse Largest =:= undefined ->
+  when is_integer(Key) andalso
+       (Key > Largest orelse
+        Largest =:= undefined) ->
     State#?MODULE{data = maps:put(Key, ?NIL, Data),
                   smallest = ra_lib:default(Smallest, Key),
-                  largest = Key}.
+                  largest = Key};
+append(Key,
+       #?MODULE{data = Data,
+                largest = Largest,
+                smallest = Smallest} = State)
+  when is_integer(Key) ->
+    State#?MODULE{data = maps:put(Key, ?NIL, Data),
+                  smallest = min(Key, ra_lib:default(Smallest, Key)),
+                  largest = max(Key, ra_lib:default(Largest, Key))
+                  };
+append(undefined, State) ->
+    State.
 
--spec delete(Index :: integer(), state()) -> state().
+-spec delete(Index :: integer() | undefined, state()) -> state().
 delete(Smallest, #?MODULE{data = Data0,
                           largest = Largest,
-                          smallest = Smallest} = State) ->
+                          smallest = Smallest} = State)
+  when is_integer(Smallest) ->
     Data = maps:remove(Smallest, Data0),
     case find_next(Smallest + 1, Largest, Data) of
         undefined ->
@@ -65,10 +80,9 @@ delete(Key, #?MODULE{data = Data} = State) ->
 size(#?MODULE{data = Data}) ->
     maps:size(Data).
 
--spec smallest(state()) -> undefined | integer().
+-spec smallest(state()) -> undefined | non_neg_integer().
 smallest(#?MODULE{smallest = Smallest}) ->
     Smallest.
-
 
 -spec map(fun(), state()) -> state().
 map(F, #?MODULE{data = Data} = State) ->
@@ -90,6 +104,10 @@ find_next(Next, Last, Map) ->
             % assuming fifo-ish deletion of entries
             find_next(Next+1, Last, Map)
     end.
+
+-spec normalize(state()) -> state().
+normalize(State) ->
+    State#?MODULE{largest = undefined}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

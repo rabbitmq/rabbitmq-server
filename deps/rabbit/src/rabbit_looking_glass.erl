@@ -9,12 +9,13 @@
 
 -ignore_xref([
     {lg, trace, 4},
+    {lg, stop, 0},
     {lg_callgrind, profile_many, 3}
 ]).
 -ignore_xref([{maps, from_list, 1}]).
 
 -export([boot/0]).
--export([trace/1, profile/0, profile/1]).
+-export([trace/1, trace_qq/0, profile/0, profile/1]).
 -export([connections/0]).
 
 boot() ->
@@ -58,6 +59,27 @@ trace(Input) ->
                  {running, true},
                  {send, true}]
             )).
+
+trace_qq() ->
+    dbg:stop_clear(),
+    lg:trace([ra_server,
+              ra_server_proc,
+              rabbit_fifo,
+              queue,
+              rabbit_fifo_index
+             ],
+             lg_file_tracer,
+             "traces.lz4",
+             maps:from_list([
+                 {mode, profile}
+                 % {process_dump, true},
+                 % {running, true},
+                 % {send, true}
+                            ]
+            )),
+    timer:sleep(10000),
+    lg:stop(),
+    profile().
 
 profile() ->
     profile("callgrind.out").

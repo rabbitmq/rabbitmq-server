@@ -167,6 +167,9 @@
         <th class="horizontal">Unacked</th>
         <% if (is_quorum(queue)) { %>
         <th class="horizontal">In memory ready</th>
+        <th class="horizontal">Dead-lettered
+        <span class="help" id="queue-dead-lettered"></span>
+        </th>
         <% } %>
         <% if (is_classic(queue)) { %>
         <th class="horizontal">In memory</th>
@@ -191,6 +194,9 @@
         <% if (is_quorum(queue)) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ram) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_dlx) %>
         </td>
         <% } %>
         <% if (is_classic(queue)) { %>
@@ -222,6 +228,11 @@
         </td>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_ram) %>
+        </td>
+        <% } %>
+        <% if (is_quorum(queue)) { %>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_dlx) %>
         </td>
         <% } %>
         <% if (is_classic(queue)) { %>

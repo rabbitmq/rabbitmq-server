@@ -42,7 +42,6 @@
 -define(COMMAND_TIMEOUT, 30000).
 
 -type seq() :: non_neg_integer().
--type maybe_seq() :: integer().
 -type action() :: {send_credit_reply, Available :: non_neg_integer()} |
                   {send_drained, CTagCredit ::
                    {rabbit_fifo:consumer_tag(), non_neg_integer()}}.
@@ -66,10 +65,6 @@
                 leader :: undefined | ra:server_id(),
                 queue_status  :: undefined | go | reject_publish,
                 next_seq = 0 :: seq(),
-                %% Last applied is initialise to -1 to note that no command has yet been
-                %% applied, but allowing to resend messages if the first ones on the sequence
-                %% are lost (messages are sent from last_applied + 1)
-                last_applied = -1 :: maybe_seq(),
                 next_enqueue_seq = 1 :: seq(),
                 %% indicates that we've exceeded the soft limit
                 slow = false :: boolean(),
@@ -151,7 +146,7 @@ enqueue(Correlation, Msg,
         0 ->
             %% the leader is running the old version
             enqueue(Correlation, Msg, State0#state{queue_status = go});
-        1 ->
+        N when is_integer(N) ->
             %% were running the new version on the leader do sync initialisation
             %% of enqueuer session
             Reg = rabbit_fifo:make_register_enqueuer(self()),
@@ -183,18 +178,30 @@ enqueue(_Correlation, _Msg,
     {reject_publish, State};
 enqueue(Correlation, Msg,
         #state{slow = Slow,
+               pending = Pending,
                queue_status = go,
-               cfg = #cfg{block_handler = BlockFun}} = State0) ->
-    Node = pick_server(State0),
-    {Next, State1} = next_enqueue_seq(State0),
+               next_seq = Seq,
+               next_enqueue_seq = EnqueueSeq,
+               cfg = #cfg{soft_limit = SftLmt,
+                          block_handler = BlockFun}} = State0) ->
+    Server = pick_server(State0),
     % by default there is no correlation id
-    Cmd = rabbit_fifo:make_enqueue(self(), Next, Msg),
-    case send_command(Node, Correlation, Cmd, low, State1) of
-        {slow, State} when not Slow ->
+    Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg),
+    ok = ra:pipeline_command(Server, Cmd, Seq, low),
+    Tag = case map_size(Pending) >= SftLmt of
+              true -> slow;
+              false -> ok
+          end,
+    State = State0#state{pending = Pending#{Seq => {Correlation, Cmd}},
+                         next_seq = Seq + 1,
+                         next_enqueue_seq = EnqueueSeq + 1,
+                         slow = Tag == slow},
+    case Tag of
+        slow when not Slow ->
             BlockFun(),
             {slow, set_timer(State)};
-        Any ->
-            Any
+        _ ->
+            {ok, State}
     end.
 
 %% @doc Enqueues a message.
@@ -277,11 +284,7 @@ add_delivery_count_header(Msg, _Count) ->
 settle(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_server(State0),
     Cmd = rabbit_fifo:make_settle(consumer_id(ConsumerTag), MsgIds),
-    case send_command(Node, undefined, Cmd, normal, State0) of
-        {_, S} ->
-            % turn slow into ok for this function
-            {S, []}
-    end;
+    {send_command(Node, undefined, Cmd, normal, State0), []};
 settle(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -309,8 +312,7 @@ return(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_server(State0),
     % TODO: make rabbit_fifo return support lists of message ids
     Cmd = rabbit_fifo:make_return(consumer_id(ConsumerTag), MsgIds),
-    {_Tag, State1} = send_command(Node, undefined, Cmd, normal, State0),
-    {State1, []};
+    {send_command(Node, undefined, Cmd, normal, State0), []};
 return(ConsumerTag, [_|_] = MsgIds,
        #state{unsent_commands = Unsent0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -338,11 +340,7 @@ return(ConsumerTag, [_|_] = MsgIds,
 discard(ConsumerTag, [_|_] = MsgIds, #state{slow = false} = State0) ->
     Node = pick_server(State0),
     Cmd = rabbit_fifo:make_discard(consumer_id(ConsumerTag), MsgIds),
-    case send_command(Node, undefined, Cmd, normal, State0) of
-        {_, S} ->
-            % turn slow into ok for this function
-            {S, []}
-    end;
+    {send_command(Node, undefined, Cmd, normal, State0), []};
 discard(ConsumerTag, [_|_] = MsgIds,
         #state{unsent_commands = Unsent0} = State0) ->
     ConsumerId = consumer_id(ConsumerTag),
@@ -429,11 +427,7 @@ credit(ConsumerTag, Credit, Drain,
     Node = pick_server(State0),
     Cmd = rabbit_fifo:make_credit(ConsumerId, Credit,
                                   C#consumer.last_msg_id + 1, Drain),
-    case send_command(Node, undefined, Cmd, normal, State0) of
-        {_, S} ->
-            % turn slow into ok for this function
-            {S, []}
-    end.
+    {send_command(Node, undefined, Cmd, normal, State0), []}.
 
 %% @doc Cancels a checkout with the rabbit_fifo queue  for the consumer tag
 %%
@@ -531,7 +525,7 @@ update_machine_state(Server, Conf) ->
 %% `{internal, AppliedCorrelations, State}' if the event contained an internally
 %% handled event such as a notification and a correlation was included with
 %% the command (e.g. in a call to `enqueue/3' the correlation terms are returned
-%% here.
+%% here).
 %%
 %% `{RaFifoEvent, State}' if the event contained a client message generated by
 %% the `rabbit_fifo' state machine such as a delivery.
@@ -584,11 +578,8 @@ handle_ra_event(From, {applied, Seqs},
             Node = pick_server(State2),
             %% send all the settlements and returns
             State = lists:foldl(fun (C, S0) ->
-                                        case send_command(Node, undefined,
-                                                          C, normal, S0) of
-                                            {T, S} when T =/= error ->
-                                                S
-                                        end
+                                        send_command(Node, undefined, C,
+                                                     normal, S0)
                                 end, State2, Commands),
             UnblockFun(),
             {ok, State, Actions};
@@ -602,21 +593,25 @@ handle_ra_event(_, {machine, {queue_status, Status}},
     %% just set the queue status
     {ok, State#state{queue_status = Status}, []};
 handle_ra_event(Leader, {machine, leader_change},
-                #state{leader = Leader} = State) ->
-    %% leader already known
-    {ok, State, []};
-handle_ra_event(Leader, {machine, leader_change}, State0) ->
+                #state{leader = OldLeader} = State0) ->
     %% we need to update leader
     %% and resend any pending commands
+    rabbit_log:debug("~s: Detected QQ leader change from ~w to ~w",
+                     [?MODULE, OldLeader, Leader]),
+    State = resend_all_pending(State0#state{leader = Leader}),
+    {ok, State, []};
+handle_ra_event(_From, {rejected, {not_leader, Leader, _Seq}},
+                #state{leader = Leader} = State) ->
+    {ok, State, []};
+handle_ra_event(_From, {rejected, {not_leader, Leader, _Seq}},
+                #state{leader = OldLeader} = State0) ->
+    rabbit_log:debug("~s: Detected QQ leader change (rejection) from ~w to ~w",
+                     [?MODULE, OldLeader, Leader]),
     State = resend_all_pending(State0#state{leader = Leader}),
     {ok, cancel_timer(State), []};
-handle_ra_event(_From, {rejected, {not_leader, undefined, _Seq}}, State0) ->
+handle_ra_event(_From, {rejected, {not_leader, _UndefinedMaybe, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
     {ok, State0, []};
-handle_ra_event(_From, {rejected, {not_leader, Leader, Seq}}, State0) ->
-    State1 = State0#state{leader = Leader},
-    State = resend(Seq, State1),
-    {ok, State, []};
 handle_ra_event(_, timeout, #state{cfg = #cfg{servers = Servers}} = State0) ->
     case find_leader(Servers) of
         undefined ->
@@ -663,28 +658,26 @@ try_process_command([Server | Rem], Cmd,
             try_process_command(Rem, Cmd, State)
     end.
 
-seq_applied({Seq, MaybeAction},
-            {Corrs, Actions0, #state{last_applied = Last} = State0})
-  when Seq > Last ->
-    State1 = do_resends(Last+1, Seq-1, State0),
-    {Actions, State} = maybe_add_action(MaybeAction, Actions0, State1),
+seq_applied({Seq, Response},
+            {Corrs, Actions0, #state{} = State0}) ->
+    %% sequences aren't guaranteed to be applied in order as enqueues are
+    %% low priority commands and may be overtaken by others with a normal priority.
+    {Actions, State} = maybe_add_action(Response, Actions0, State0),
     case maps:take(Seq, State#state.pending) of
         {{undefined, _}, Pending} ->
-            {Corrs, Actions, State#state{pending = Pending,
-                                         last_applied = Seq}};
-        {{Corr, _}, Pending} ->
-            {[Corr | Corrs], Actions, State#state{pending = Pending,
-                                                  last_applied = Seq}};
-        error ->
-            % must have already been resent or removed for some other reason
-            % still need to update last_applied or we may inadvertently resend
-            % stuff later
-            {Corrs, Actions, State#state{last_applied = Seq}}
+            {Corrs, Actions, State#state{pending = Pending}};
+        {{Corr, _}, Pending}
+          when Response /= not_enqueued ->
+            {[Corr | Corrs], Actions, State#state{pending = Pending}};
+        _ ->
+            {Corrs, Actions, State#state{}}
     end;
 seq_applied(_Seq, Acc) ->
     Acc.
 
 maybe_add_action(ok, Acc, State) ->
+    {Acc, State};
+maybe_add_action(not_enqueued, Acc, State) ->
     {Acc, State};
 maybe_add_action({multi, Actions}, Acc0, State0) ->
     lists:foldl(fun (Act, {Acc, State}) ->
@@ -701,11 +694,6 @@ maybe_add_action({send_drained, {Tag, Credit}} = Action, Acc,
 maybe_add_action(Action, Acc, State) ->
     %% anything else is assumed to be an action
     {[Action | Acc], State}.
-
-do_resends(From, To, State) when From =< To ->
-    lists:foldl(fun resend/2, State, lists:seq(From, To));
-do_resends(_, _, State) ->
-    State.
 
 % resends a command with a new sequence number
 resend(OldSeq, #state{pending = Pending0, leader = Leader} = State) ->
@@ -850,32 +838,42 @@ sorted_servers(#state{leader = Leader,
                       cfg = #cfg{servers = Servers}}) ->
     [Leader | lists:delete(Leader, Servers)].
 
-next_seq(#state{next_seq = Seq} = State) ->
-    {Seq, State#state{next_seq = Seq + 1}}.
-
-next_enqueue_seq(#state{next_enqueue_seq = Seq} = State) ->
-    {Seq, State#state{next_enqueue_seq = Seq + 1}}.
-
 consumer_id(ConsumerTag) ->
     {ConsumerTag, self()}.
 
-send_command(Server, Correlation, Command, Priority,
+send_command(Server, Correlation, Command, _Priority,
              #state{pending = Pending,
-                    cfg = #cfg{soft_limit = SftLmt}} = State0) ->
-    {Seq, State} = next_seq(State0),
-    ok = ra:pipeline_command(Server, Command, Seq, Priority),
-    Tag = case maps:size(Pending) >= SftLmt of
+                    next_seq = Seq,
+                    cfg = #cfg{soft_limit = SftLmt}} = State)
+  when element(1, Command) == return ->
+    %% returns are sent to the aux machine for pre-evaluation
+    ok = ra:cast_aux_command(Server, {Command, Seq, self()}),
+    Tag = case map_size(Pending) >= SftLmt of
               true -> slow;
               false -> ok
           end,
-    {Tag, State#state{pending = Pending#{Seq => {Correlation, Command}},
-                      slow = Tag == slow}}.
+    State#state{pending = Pending#{Seq => {Correlation, Command}},
+                next_seq = Seq + 1,
+                slow = Tag == slow};
+send_command(Server, Correlation, Command, Priority,
+             #state{pending = Pending,
+                    next_seq = Seq,
+                    cfg = #cfg{soft_limit = SftLmt}} = State) ->
+    ok = ra:pipeline_command(Server, Command, Seq, Priority),
+    Tag = case map_size(Pending) >= SftLmt of
+              true -> slow;
+              false -> ok
+          end,
+    State#state{pending = Pending#{Seq => {Correlation, Command}},
+                next_seq = Seq + 1,
+                slow = Tag == slow}.
 
 resend_command(Node, Correlation, Command,
-               #state{pending = Pending} = State0) ->
-    {Seq, State} = next_seq(State0),
+               #state{pending = Pending,
+                      next_seq = Seq} = State) ->
     ok = ra:pipeline_command(Node, Command, Seq),
-    State#state{pending = Pending#{Seq => {Correlation, Command}}}.
+    State#state{pending = Pending#{Seq => {Correlation, Command}},
+                next_seq = Seq + 1}.
 
 add_command(_, _, [], Acc) ->
     Acc;
