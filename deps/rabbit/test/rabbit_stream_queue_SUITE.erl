@@ -42,7 +42,8 @@ groups() ->
      {cluster_size_2, [], [recover]},
      {cluster_size_2_parallel, [parallel], all_tests()},
      {cluster_size_3, [],
-          [restart_coordinator_without_queues,
+          [
+           restart_coordinator_without_queues,
            delete_down_replica,
            replica_recovery,
            leader_failover,
@@ -50,7 +51,8 @@ groups() ->
            add_replicas,
            publish_coordinator_unavailable,
            leader_locator_policy,
-           queue_size_on_declare]},
+           queue_size_on_declare
+          ]},
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
      {cluster_size_3_2, [], [recover,
                              declare_with_node_down]},
@@ -203,6 +205,16 @@ init_per_testcase(TestCase, Config)
             %% These 2 tests fail because the leader can be the lower version,
             %% which does not have the fix.
             {skip, "not tested in mixed-version cluster and cluster size = 2"};
+        _ ->
+            init_test_case(TestCase, Config)
+    end;
+init_per_testcase(TestCase, Config)
+  when TestCase == replica_recovery
+       orelse TestCase == leader_failover ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% not supported because of machine version difference
+            {skip, "mixed version clusters are not supported"};
         _ ->
             init_test_case(TestCase, Config)
     end;
