@@ -29,10 +29,8 @@
          smallest_raft_index/1
         ]).
 
--record(checkout,{
-          consumer :: pid(),
-          prefetch :: non_neg_integer()
-         }).
+-record(checkout, {consumer :: pid(),
+                   prefetch :: non_neg_integer()}).
 -record(settle, {msg_ids :: [msg_id()]}).
 -type protocol() :: {dlx, #checkout{} | #settle{}}.
 -opaque state() :: #?MODULE{}.
@@ -93,16 +91,17 @@ stat(#?MODULE{consumer = Con,
 apply(_Meta, {dlx, #settle{msg_ids = MsgIds}}, at_least_once,
       #?MODULE{consumer = #dlx_consumer{checked_out = Checked0}} = State0) ->
     Acked = maps:with(MsgIds, Checked0),
-    State = maps:fold(fun(MsgId, ?TUPLE(_Rsn, ?MSG(Idx, _) = Msg),
-                          #?MODULE{consumer = #dlx_consumer{checked_out = Checked} = C,
-                                   msg_bytes_checkout = BytesCheckout,
-                                   ra_indexes = Indexes0} = S) ->
-                              Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
-                              S#?MODULE{consumer = C#dlx_consumer{checked_out =
-                                                                  maps:remove(MsgId, Checked)},
-                                        msg_bytes_checkout = BytesCheckout - size_in_bytes(Msg),
-                                        ra_indexes = Indexes}
-                      end, State0, Acked),
+    State = maps:fold(
+              fun(MsgId, ?TUPLE(_Rsn, ?MSG(Idx, _) = Msg),
+                  #?MODULE{consumer = #dlx_consumer{checked_out = Checked} = C,
+                           msg_bytes_checkout = BytesCheckout,
+                           ra_indexes = Indexes0} = S) ->
+                      Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
+                      S#?MODULE{consumer = C#dlx_consumer{checked_out =
+                                                          maps:remove(MsgId, Checked)},
+                                msg_bytes_checkout = BytesCheckout - size_in_bytes(Msg),
+                                ra_indexes = Indexes}
+              end, State0, Acked),
     {State, [{mod_call, rabbit_global_counters, messages_dead_lettered_confirmed,
               [rabbit_quorum_queue, at_least_once, maps:size(Acked)]}]};
 apply(_, {dlx, #checkout{consumer = Pid,

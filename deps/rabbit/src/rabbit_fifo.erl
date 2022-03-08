@@ -106,21 +106,6 @@
 -record(purge_nodes, {nodes :: [node()]}).
 -record(update_config, {config :: config()}).
 -record(garbage_collection, {}).
-%% v2 alternative commands
-%% each consumer is assigned an integer index which can be used
-%% instead of the consumer id to identify the consumer
--type consumer_idx() :: non_neg_integer().
-
--record(?SETTLE_V2, {consumer_idx :: consumer_idx(),
-                     msg_ids :: [msg_id()]}).
--record(?RETURN_V2, {consumer_idx :: consumer_idx(),
-                     msg_ids :: [msg_id()]}).
--record(?DISCARD_V2, {consumer_idx :: consumer_idx(),
-                      msg_ids :: [msg_id()]}).
--record(?CREDIT_V2, {consumer_idx :: consumer_idx(),
-                     credit :: non_neg_integer(),
-                     delivery_count :: non_neg_integer(),
-                     drain :: boolean()}).
 
 -opaque protocol() ::
     #enqueue{} |
@@ -134,12 +119,7 @@
     #purge{} |
     #purge_nodes{} |
     #update_config{} |
-    #garbage_collection{} |
-    % v2
-    #?SETTLE_V2{} |
-    #?RETURN_V2{} |
-    #?DISCARD_V2{} |
-    #?CREDIT_V2{}.
+    #garbage_collection{}.
 
 -type command() :: protocol() |
                    rabbit_fifo_dlx:protocol() |
