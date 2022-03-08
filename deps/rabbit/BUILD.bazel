@@ -144,7 +144,9 @@ _APP_ENV = """[
 	    %% interval at which connection/channel tracking executes post operations
 	    {tracking_execution_timeout, 15000},
 	    {stream_messages_soft_limit, 256},
-        {track_auth_attempt_source, false}
+        {track_auth_attempt_source, false},
+        {dead_letter_worker_consumer_prefetch, 32},
+        {dead_letter_worker_publisher_confirm_timeout, 180000}
 	  ]
 """
 
@@ -400,7 +402,7 @@ suites = [
             ":quorum_queue_utils",
         ],
         flaky = True,
-        shard_count = 3,
+        shard_count = 7,
     ),
     rabbitmq_integration_suite(
         PACKAGE,
@@ -697,7 +699,7 @@ suites = [
     ),
     rabbitmq_suite(
         name = "rabbit_fifo_prop_SUITE",
-        size = "medium",
+        size = "large",
         additional_beam = [
             ":test_util",
         ],
@@ -712,6 +714,37 @@ suites = [
         ],
         deps = [
             "//deps/rabbit_common:erlang_app",
+            "@proper//:erlang_app",
+        ],
+    ),
+    rabbitmq_suite(
+        name = "rabbit_fifo_dlx_SUITE",
+        size = "small",
+        additional_hdrs = [
+            "src/rabbit_fifo.hrl",
+            "src/rabbit_fifo_dlx.hrl",
+        ],
+        deps = [
+            "//deps/rabbit_common:erlang_app",
+        ],
+    ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "rabbit_fifo_dlx_integration_SUITE",
+        size = "medium",
+        additional_beam = [
+            ":test_util",
+            ":quorum_queue_utils",
+            ":quorum_queue_SUITE_beam_files",
+        ],
+        additional_hdrs = [
+            "src/rabbit_fifo.hrl",
+            "src/rabbit_fifo_dlx.hrl",
+        ],
+        runtime_deps = [
+            "@ra//:erlang_app",
+        ],
+        deps = [
             "@proper//:erlang_app",
         ],
     ),

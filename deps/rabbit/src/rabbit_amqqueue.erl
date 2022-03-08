@@ -778,6 +778,7 @@ declare_args() ->
      {<<"x-message-ttl">>,             fun check_message_ttl_arg/2},
      {<<"x-dead-letter-exchange">>,    fun check_dlxname_arg/2},
      {<<"x-dead-letter-routing-key">>, fun check_dlxrk_arg/2},
+     {<<"x-dead-letter-strategy">>,    fun check_dlxstrategy_arg/2},
      {<<"x-max-length">>,              fun check_non_neg_int_arg/2},
      {<<"x-max-length-bytes">>,        fun check_non_neg_int_arg/2},
      {<<"x-max-in-memory-length">>,    fun check_non_neg_int_arg/2},
@@ -945,6 +946,22 @@ check_dlxrk_arg(Val, Args) when is_binary(Val) ->
     end;
 check_dlxrk_arg(_Val, _Args) ->
     {error, {unacceptable_type, "expected a string"}}.
+
+-define(KNOWN_DLX_STRATEGIES, [<<"at-most-once">>, <<"at-least-once">>]).
+check_dlxstrategy_arg({longstr, Val}, _Args) ->
+    case lists:member(Val, ?KNOWN_DLX_STRATEGIES) of
+        true -> ok;
+        false -> {error, invalid_dlx_strategy}
+    end;
+check_dlxstrategy_arg({Type, _}, _Args) ->
+    {error, {unacceptable_type, Type}};
+check_dlxstrategy_arg(Val, _Args) when is_binary(Val) ->
+    case lists:member(Val, ?KNOWN_DLX_STRATEGIES) of
+        true -> ok;
+        false -> {error, invalid_dlx_strategy}
+    end;
+check_dlxstrategy_arg(_Val, _Args) ->
+    {error, invalid_dlx_strategy}.
 
 -define(KNOWN_OVERFLOW_MODES, [<<"drop-head">>, <<"reject-publish">>, <<"reject-publish-dlx">>]).
 check_overflow({longstr, Val}, _Args) ->
@@ -1503,7 +1520,8 @@ get_queue_consumer_info(Q, ConsumerInfoKeys) ->
     [lists:zip(ConsumerInfoKeys,
                [amqqueue:get_name(Q), ChPid, CTag,
                 AckRequired, Prefetch, Active, ActivityStatus, Args]) ||
-        {ChPid, CTag, AckRequired, Prefetch, Active, ActivityStatus, Args, _} <- consumers(Q)].
+        {ChPid, CTag, AckRequired, Prefetch, Active, ActivityStatus, Args, _}
+        <- consumers(Q)].
 
 -spec stat(amqqueue:amqqueue()) ->
           {'ok', non_neg_integer(), non_neg_integer()}.
@@ -1657,8 +1675,8 @@ credit(Q, CTag, Credit, Drain, QStates) ->
           {'ok', non_neg_integer(), qmsg(), rabbit_queue_type:state()} |
           {'empty', rabbit_queue_type:state()} |
           {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
-basic_get(Q, NoAck, LimiterPid, CTag, QStates0) ->
-    rabbit_queue_type:dequeue(Q, NoAck, LimiterPid, CTag, QStates0).
+basic_get(Q, NoAck, LimiterPid, CTag, QStates) ->
+    rabbit_queue_type:dequeue(Q, NoAck, LimiterPid, CTag, QStates).
 
 
 -spec basic_consume(amqqueue:amqqueue(), boolean(), pid(), pid(), boolean(),
@@ -1670,7 +1688,7 @@ basic_get(Q, NoAck, LimiterPid, CTag, QStates0) ->
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 basic_consume(Q, NoAck, ChPid, LimiterPid,
               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
-              ExclusiveConsume, Args, OkMsg, ActingUser, Contexts) ->
+              ExclusiveConsume, Args, OkMsg, ActingUser, QStates) ->
 
     QName = amqqueue:get_name(Q),
     %% first phase argument validation
@@ -1686,7 +1704,7 @@ basic_consume(Q, NoAck, ChPid, LimiterPid,
              args => Args,
              ok_msg => OkMsg,
              acting_user =>  ActingUser},
-    rabbit_queue_type:consume(Q, Spec, Contexts).
+    rabbit_queue_type:consume(Q, Spec, QStates).
 
 -spec basic_cancel(amqqueue:amqqueue(), rabbit_types:ctag(), any(),
                    rabbit_types:username(),

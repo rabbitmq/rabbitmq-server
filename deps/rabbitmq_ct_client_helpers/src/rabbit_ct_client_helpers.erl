@@ -266,7 +266,7 @@ consume(Ch, QName, Count) ->
                            self()),
     CTag = receive #'basic.consume_ok'{consumer_tag = C} -> C end,
     [begin
-         Exp = list_to_binary(integer_to_list(I)),
+         Exp = integer_to_binary(I),
          receive {#'basic.deliver'{consumer_tag = CTag},
                   #amqp_msg{payload = Exp}} ->
                  ok
@@ -287,7 +287,7 @@ accumulate_without_acknowledging(Ch, CTag, Remaining, Acc) when Remaining =:= 0 
     amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
     lists:reverse(Acc);
 accumulate_without_acknowledging(Ch, CTag, Remaining, Acc) ->
-    receive {#'basic.deliver'{consumer_tag = CTag, delivery_tag = DTag}, _MSg} ->
+    receive {#'basic.deliver'{consumer_tag = CTag, delivery_tag = DTag}, _Msg} ->
            accumulate_without_acknowledging(Ch, CTag, Remaining - 1, [DTag | Acc])
     after 5000 ->
            amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),

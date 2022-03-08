@@ -246,11 +246,8 @@ get_disk_free(Dir, {win32, _}) ->
             rabbit_log:warning("Expected the mnesia directory absolute "
                                "path to start with a drive letter like "
                                "'C:'. The path is: '~p'", [Dir]),
-            case win32_get_disk_free_dir(Dir) of
-                {ok, Free} ->
-                    Free;
-                _ -> exit(could_not_determine_disk_free)
-            end;
+            {ok, Free} = win32_get_disk_free_dir(Dir),
+            Free;
         DriveLetter ->
             case catch win32_get_disk_free_pwsh(DriveLetter) of
                 {ok, Free1} -> Free1;
