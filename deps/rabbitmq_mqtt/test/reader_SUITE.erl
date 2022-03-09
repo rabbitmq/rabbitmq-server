@@ -9,7 +9,6 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
-
 all() ->
     [
       {group, non_parallel_tests}
@@ -57,7 +56,12 @@ end_per_suite(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
-    Config.
+%%  Added for quorum queue test else the mixing test would fail
+%% with "feature flag is disabled"
+  case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
+    ok -> Config;
+    Skip -> Skip
+  end.
 
 end_per_group(_, Config) ->
     Config.
@@ -156,49 +160,49 @@ stats(Config) ->
     emqttc:disconnect(C).
 
 get_queue_type(Server, Q0) ->
-  QNameRes = rabbit_misc:r(<<"/">>, queue, Q0),
-  {ok, Q1} = rpc:call(Server, rabbit_amqqueue, lookup, [QNameRes]),
-  amqqueue:get_type(Q1).
+    QNameRes = rabbit_misc:r(<<"/">>, queue, Q0),
+    {ok, Q1} = rpc:call(Server, rabbit_amqqueue, lookup, [QNameRes]),
+    amqqueue:get_type(Q1).
 
 set_env(QueueType) ->
-  ok = application:set_env(rabbitmq_mqtt, queue_type, QueueType).
+    application:set_env(rabbitmq_mqtt, queue_type, QueueType).
 
 get_env() ->
-  rabbit_mqtt_util:env(queue_type).
+    rabbit_mqtt_util:env(queue_type).
 
 %% quorum queue test when enable
 quorum(Config) ->
-  Default = rpc(Config, reader_SUITE, get_env, []),
-  P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
-  Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-  F = fun Test(ClientName, CleanSession, Expected) ->
-    {ok, C} = emqttc:start_link([{host, "localhost"},
-      {port, P},
-      {clean_sess, CleanSession},
-      {client_id, ClientName},
-      {proto_ver, 3},
-      {logger, info},
-      {puback_timeout, 1}]),
-    emqttc:subscribe(C, <<"TopicB">>, qos1),
-    emqttc:publish(C, <<"TopicB">>, <<"Payload">>),
-    expect_publishes(<<"TopicB">>, [<<"Payload">>]),
-    emqttc:unsubscribe(C, [<<"TopicB">>]),
-    Prefix = <<"mqtt-subscription-">>,
-    Suffix = <<"qos1">>,
-    Q= <<Prefix/binary, ClientName/binary, Suffix/binary>>,
-    ?assertEqual(Expected,get_queue_type(Server,Q)),
-    timer:sleep(500),
-    emqttc:disconnect(C)
-    end,
-    rpc(Config, reader_SUITE, set_env, [quorum]),
-  %%  test if the quorum queue is enable after the setting
-    F(<<"qCleanSessionFalse">>, false, rabbit_quorum_queue),
-  %%  in case clean session == true must be classic since quorum
-  %% doesn't support auto-delete
-    F(<<"qCleanSessionTrue">>, true, rabbit_classic_queue),
-    rpc(Config, reader_SUITE, set_env, [Default]),
-    F(<<"cCleanSessionTrue">>, true, rabbit_classic_queue),
-    F(<<"cCleanSessionFalse">>, false, rabbit_classic_queue).
+    Default = rpc(Config, reader_SUITE, get_env, []),
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    F = fun (ClientName, CleanSession, Expected) ->
+      {ok, C} = emqttc:start_link([{host, "localhost"},
+        {port, P},
+        {clean_sess, CleanSession},
+        {client_id, ClientName},
+        {proto_ver, 3},
+        {logger, info},
+        {puback_timeout, 1}]),
+      emqttc:subscribe(C, <<"TopicB">>, qos1),
+      emqttc:publish(C, <<"TopicB">>, <<"Payload">>),
+      expect_publishes(<<"TopicB">>, [<<"Payload">>]),
+      emqttc:unsubscribe(C, [<<"TopicB">>]),
+      Prefix = <<"mqtt-subscription-">>,
+      Suffix = <<"qos1">>,
+      Q= <<Prefix/binary, ClientName/binary, Suffix/binary>>,
+      ?assertEqual(Expected,get_queue_type(Server,Q)),
+      timer:sleep(100),
+      emqttc:disconnect(C)
+      end,
+      ok = rpc(Config, ?MODULE, set_env, [quorum]),
+    %%  test if the quorum queue is enable after the setting
+      F(<<"qCleanSessionFalse">>, false, rabbit_quorum_queue),
+    %%  in case clean session == true must be classic since quorum
+    %% doesn't support auto-delete
+      F(<<"qCleanSessionTrue">>, true, rabbit_classic_queue),
+      rpc(Config, reader_SUITE, set_env, [Default]),
+      F(<<"cCleanSessionTrue">>, true, rabbit_classic_queue),
+      F(<<"cCleanSessionFalse">>, false, rabbit_classic_queue).
 
 expect_publishes(_Topic, []) -> ok;
 expect_publishes(Topic, [Payload|Rest]) ->
