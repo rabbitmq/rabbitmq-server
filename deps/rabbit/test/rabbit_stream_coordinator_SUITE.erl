@@ -200,21 +200,30 @@ listeners(_) ->
 machine_version_from_1_to_2(_) ->
     S = <<"stream">>,
     LeaderPid = spawn(fun() -> ok end),
-    ListPid = spawn(fun() -> ok end),
+    ListPid = spawn(fun() -> ok end), %% simulate a dead listener (not cleaned up)
+    DeadListPid = spawn(fun() -> ok end),
     State0 = #?STATE{streams = #{S =>
-                                 #stream{listeners = #{ListPid => LeaderPid}}},
+                                 #stream{listeners = #{ListPid => LeaderPid,
+                                                       DeadListPid => LeaderPid}}},
                      monitors = #{ListPid => {S, listener}}},
 
-    {State1, ok, []} = apply_cmd(#{index => 42}, {machine_version, 1, 2}, State0),
+    {State1, ok, Effects} = apply_cmd(#{index => 42}, {machine_version, 1, 2}, State0),
 
     Stream1 = maps:get(S, State1#?STATE.streams),
     ?assertEqual(
-       #{{ListPid, leader} => LeaderPid},
+       #{{ListPid, leader} => LeaderPid,
+         {DeadListPid, leader} => LeaderPid}, %% should be cleaned up on DOWN event
        Stream1#stream.listeners
       ),
     ?assertEqual(
-       #{ListPid => {#{S => ok}, listener}},
+       #{ListPid => {#{S => ok}, listener},
+         DeadListPid => {#{S => ok}, listener}},
        State1#?STATE.monitors
+      ),
+    ?assertEqual(
+       [{monitor, process, DeadListPid}, %% will trigger an immediate DOWN event
+        {monitor, process, ListPid}],
+       Effects
       ),
     ok.
 
