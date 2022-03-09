@@ -26,7 +26,7 @@
 
 
 usage() ->
-    <<"add_uaa_key <name> [--json=<json_key>] [--pem=<public_key>] [--pem_file=<pem_file>]">>.
+    <<"add_uaa_key <name> [--json=<json_key>] [--pem=<public_key>] [--pem-file=<pem_file>]">>.
 
 switches() ->
     [{json, string},
