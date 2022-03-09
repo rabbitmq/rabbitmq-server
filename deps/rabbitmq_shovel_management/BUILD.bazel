@@ -8,7 +8,7 @@ load(
     "assert_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
-    "rabbitmq_suite"
+    "rabbitmq_suite",
 )
 
 APP_NAME = "rabbitmq_shovel_management"
@@ -73,8 +73,14 @@ suites = [
         name = "http_SUITE",
     ),
     rabbitmq_suite(
-            PACKAGE,
-            name = "rabbit_shovel_mgmt_SUITE",
+        name = "rabbit_shovel_mgmt_SUITE",
+        runtime_deps = [
+            "@meck//:erlang_app",
+        ],
+        deps = [
+            "//deps/rabbit_common:erlang_app",
+            "//deps/rabbitmq_management_agent:erlang_app",
+        ],
     ),
 ]
 
