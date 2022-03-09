@@ -116,16 +116,28 @@ filter_vhost_req(List, ReqData) ->
 
 get_shovel_node(VHost, Name, ReqData, Context) ->
     Shovels = rabbit_shovel_mgmt_util:status(ReqData, Context),
-    Matches = find_shovel(VHost, Name, Shovels),
-    case Matches of
-        []      -> undefined;
-        [Match] ->
+    Match   = find_matching_shovel(VHost, Name, Shovels),
+    case Match of
+        undefined -> undefined;
+        Match     ->
             {_, Node} = lists:keyfind(node, 1, Match),
             Node
     end.
 
-find_shovel(VHost, Name, Shovels) ->
-    lists:filter(
-        fun ({{V, S}, _Kind, _Status, _}) ->
-            VHost =:= V andalso Name =:= S
-        end, Shovels).
+%% This is similar to rabbit_shovel_status:find_matching_shovel/3
+%% but operates on a different input (a proplist of Shovel attributes)
+-spec find_matching_shovel(VHost :: vhost:name(),
+                           Name :: binary(),
+                           Shovels :: list()) -> 'undefined' | node().
+find_matching_shovel(VHost, Name, Shovels) ->
+    Matches = lists:filter(
+        fun (Attributes) ->
+            lists:member({name, Name}, Attributes) andalso
+            lists:member({vhost, VHost}, Attributes)
+        end, Shovels),
+    case Matches of
+        []         ->
+            undefined;
+        [Head | _] ->
+            Head
+    end.
