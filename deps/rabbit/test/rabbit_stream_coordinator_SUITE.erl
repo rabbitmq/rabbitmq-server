@@ -26,6 +26,7 @@ all() ->
 all_tests() ->
     [
      listeners,
+     machine_version_from_1_to_2,
      new_stream,
      leader_down,
      leader_down_scenario_1,
@@ -194,6 +195,27 @@ listeners(_) ->
        Stream6#stream.listeners
       ),
 
+    ok.
+
+machine_version_from_1_to_2(_) ->
+    S = <<"stream">>,
+    LeaderPid = spawn(fun() -> ok end),
+    ListPid = spawn(fun() -> ok end),
+    State0 = #?STATE{streams = #{S =>
+                                 #stream{listeners = #{ListPid => LeaderPid}}},
+                     monitors = #{ListPid => {S, listener}}},
+
+    {State1, ok, []} = apply_cmd(#{index => 42}, {machine_version, 1, 2}, State0),
+
+    Stream1 = maps:get(S, State1#?STATE.streams),
+    ?assertEqual(
+       #{{ListPid, leader} => LeaderPid},
+       Stream1#stream.listeners
+      ),
+    ?assertEqual(
+       #{ListPid => {#{S => ok}, listener}},
+       State1#?STATE.monitors
+      ),
     ok.
 
 new_stream(_) ->
