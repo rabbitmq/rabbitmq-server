@@ -81,7 +81,7 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                                     rabbit_log:info("Asked to restart shovel '~s' in vhost '~s' on node '~s'", [Name, VHost, Node]),
                                     case rpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], ?SHOVEL_CALLS_TIMEOUT_MS) of
                                         ok -> true;
-                                        {_, msg} -> rabbit_log:error(msg),
+                                        {_, Msg} -> rabbit_log:error(Msg),
                                             false
                                     end;
 
@@ -89,7 +89,7 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                                     rabbit_log:info("Asked to delete shovel '~s' in vhost '~s' on node '~s'", [Name, VHost, Node]),
                                     case rpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username], ?SHOVEL_CALLS_TIMEOUT_MS) of
                                         ok -> true;
-                                        {_, msg} -> rabbit_log:error(msg),
+                                        {_, Msg} -> rabbit_log:error(Msg),
                                             false
                                     end
 
@@ -128,16 +128,15 @@ get_shovel_node(VHost, Name, ReqData, Context) ->
 %% but operates on a different input (a proplist of Shovel attributes)
 -spec find_matching_shovel(VHost :: vhost:name(),
                            Name :: binary(),
-                           Shovels :: list()) -> 'undefined' | node().
+                           Shovels :: list(list(tuple()))) -> 'undefined' | list(tuple()).
 find_matching_shovel(VHost, Name, Shovels) ->
-    Matches = lists:filter(
-        fun (Attributes) ->
-            lists:member({name, Name}, Attributes) andalso
-            lists:member({vhost, VHost}, Attributes)
-        end, Shovels),
-    case Matches of
-        []         ->
-            undefined;
-        [Head | _] ->
-            Head
+    ShovelPred = fun (Attributes) ->
+                         lists:member({name, Name}, Attributes) andalso
+                             lists:member({vhost, VHost}, Attributes)
+                 end,
+    case lists:search(ShovelPred, Shovels) of
+        {value, Shovel} ->
+            Shovel;
+        _ ->
+            undefined
     end.
