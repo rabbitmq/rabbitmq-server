@@ -20,7 +20,8 @@ groups() ->
       {non_parallel_tests, [], [
                                 block,
                                 handle_invalid_frames,
-                                stats
+                                stats,
+                                quorum
                                ]}
     ].
 
@@ -153,6 +154,47 @@ stats(Config) ->
     [{Pid, _, _, _, _}] = rpc(Config, ets, lookup,
                               [connection_coarse_metrics, Pid]),
     emqttc:disconnect(C).
+
+get_queue_type(Server, Q0) ->
+  QNameRes = rabbit_misc:r(<<"/">>, queue, Q0),
+  {ok, Q1} = rpc:call(Server, rabbit_amqqueue, lookup, [QNameRes]),
+  amqqueue:get_type(Q1).
+
+set_env(QueueType) ->
+  ok = application:set_env(rabbitmq_mqtt, queue_type, QueueType).
+
+%% quorum queue test when enable
+quorum(Config) ->
+  P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+  Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+  F = fun Test(ClientName, CleanSession, Expected) ->
+    {ok, C} = emqttc:start_link([{host, "localhost"},
+      {port, P},
+      {clean_sess, CleanSession},
+      {client_id, ClientName},
+      {proto_ver, 3},
+      {logger, info},
+      {puback_timeout, 1}]),
+    emqttc:subscribe(C, <<"TopicB">>, qos1),
+    emqttc:publish(C, <<"TopicB">>, <<"Payload">>),
+    expect_publishes(<<"TopicB">>, [<<"Payload">>]),
+    emqttc:unsubscribe(C, [<<"TopicB">>]),
+    Prefix = <<"mqtt-subscription-">>,
+    Suffix = <<"qos1">>,
+    Q= <<Prefix/binary, ClientName/binary, Suffix/binary>>,
+    ?assertEqual(Expected,get_queue_type(Server,Q)),
+    timer:sleep(100),
+    emqttc:disconnect(C)
+    end,
+    rpc(Config, reader_SUITE, set_env, [quorum]),
+  %%  test if the quorum queue is enable after the setting
+    F(<<"qCleanSessionFalse">>, false, rabbit_quorum_queue),
+  %%  in case clean session == true must be classic since quorum
+  %% doesn't support auto-delete
+    F(<<"qCleanSessionTrue">>, true, rabbit_classic_queue),
+    rpc(Config, reader_SUITE, set_env, [classic]),
+    F(<<"cCleanSessionTrue">>, true, rabbit_classic_queue),
+    F(<<"cCleanSessionFalse">>, false, rabbit_classic_queue).
 
 expect_publishes(_Topic, []) -> ok;
 expect_publishes(Topic, [Payload|Rest]) ->
