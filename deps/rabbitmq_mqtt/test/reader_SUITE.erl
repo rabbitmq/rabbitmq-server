@@ -163,8 +163,12 @@ get_queue_type(Server, Q0) ->
 set_env(QueueType) ->
   ok = application:set_env(rabbitmq_mqtt, queue_type, QueueType).
 
+get_env() ->
+  rabbit_mqtt_util:env(queue_type).
+
 %% quorum queue test when enable
 quorum(Config) ->
+  Default = rpc(Config, reader_SUITE, get_env, []),
   P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
   Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
   F = fun Test(ClientName, CleanSession, Expected) ->
@@ -183,7 +187,7 @@ quorum(Config) ->
     Suffix = <<"qos1">>,
     Q= <<Prefix/binary, ClientName/binary, Suffix/binary>>,
     ?assertEqual(Expected,get_queue_type(Server,Q)),
-    timer:sleep(100),
+    timer:sleep(500),
     emqttc:disconnect(C)
     end,
     rpc(Config, reader_SUITE, set_env, [quorum]),
@@ -192,7 +196,7 @@ quorum(Config) ->
   %%  in case clean session == true must be classic since quorum
   %% doesn't support auto-delete
     F(<<"qCleanSessionTrue">>, true, rabbit_classic_queue),
-    rpc(Config, reader_SUITE, set_env, [classic]),
+    rpc(Config, reader_SUITE, set_env, [Default]),
     F(<<"cCleanSessionTrue">>, true, rabbit_classic_queue),
     F(<<"cCleanSessionFalse">>, false, rabbit_classic_queue).
 
