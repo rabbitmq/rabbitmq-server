@@ -73,6 +73,7 @@
                    {delete_replica, stream_id(), #{node := node()}} |
                    {policy_changed, stream_id(), #{queue := amqqueue:amqqueue()}} |
                    {register_listener, #{pid := pid(),
+                                         node := node(),
                                          stream_id := stream_id(),
                                          type := leader | local_member}} |
                    {action_failed, stream_id(), #{index := ra:index(),
@@ -524,13 +525,27 @@ apply(Meta, {nodeup, Node} = Cmd,
                   end, {Streams0, Effects0}, Streams0),
     return(Meta, State#?MODULE{monitors = Monitors,
                                streams = Streams}, ok, Effects);
-apply(Meta, {machine_version, 1, 2}, State = #?MODULE{streams = Streams0}) ->
-    Streams1 = maps:fold(fun(ListPid, LeaderPid, Acc) ->
-                            Acc#{{ListPid, leader} => LeaderPid}
+apply(Meta, {machine_version, From = 1, To = 2}, State = #?MODULE{streams = Streams0,
+                                                                  monitors = Monitors0}) ->
+    rabbit_log:info("Stream coordinator machine version changes from ~p to ~p, updating state.",
+                    [From, To]),
+    Streams1 = maps:fold(fun(S, #stream{listeners = L0} = S0, StreamAcc) ->
+                                 L1 = maps:fold(fun(ListPid, LeaderPid, LAcc) ->
+                                                        LAcc#{{ListPid, leader} => LeaderPid}
+                                                end, #{}, L0),
+                                 StreamAcc#{S => S0#stream{listeners = L1}}
                          end, #{}, Streams0),
+    Monitors1 = maps:fold(fun(P, {StreamId, listener}, Acc) ->
+                                  Acc#{P => {#{StreamId => ok}, listener}};
+                             (P, V, Acc) ->
+                                  Acc#{P => V}
+                          end, #{}, Monitors0),
     return(Meta, State#?MODULE{streams = Streams1,
+                               monitors = Monitors1,
                                listeners = undefined}, ok, []);
-apply(Meta, {machine_version, _From, _To}, State) ->
+apply(Meta, {machine_version, From, To}, State) ->
+    rabbit_log:info("Stream coordinator machine version changes from ~p to ~p, no state changes required.",
+                    [From, To]),
     return(Meta, State, ok, []);
 apply(Meta, UnkCmd, State) ->
     rabbit_log:debug("~s: unknown command ~W",
