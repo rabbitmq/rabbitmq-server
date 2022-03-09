@@ -442,11 +442,12 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
     end;
 apply(#{machine_version := MachineVersion} = Meta,
       {register_listener, #{pid := Pid,
-                            stream_id := StreamId}},
+                            stream_id := StreamId} = Args},
       #?MODULE{streams = Streams,
                monitors = Monitors0} = State0) when MachineVersion =< 1 ->
-    case Streams of
-        #{StreamId := #stream{listeners = Listeners0} = Stream0} ->
+    Type = maps:get(type, Args, leader),
+    case {Streams, Type} of
+        {#{StreamId := #stream{listeners = Listeners0} = Stream0}, leader} ->
             Stream1 = Stream0#stream{listeners = maps:put(Pid, undefined, Listeners0)},
             {Stream, Effects} = eval_listeners(MachineVersion, Stream1, []),
             Monitors = maps:put(Pid, {StreamId, listener}, Monitors0),
@@ -454,6 +455,9 @@ apply(#{machine_version := MachineVersion} = Meta,
                    State0#?MODULE{streams = maps:put(StreamId, Stream, Streams),
                                   monitors = Monitors}, ok,
                    [{monitor, process, Pid} | Effects]);
+        {#{StreamId := _Stream}, local_member} ->
+            %% registering a local member listener does not change the state in v1
+            return(Meta, State0, ok, []);
         _ ->
             return(Meta, State0, stream_not_found, [])
     end;
