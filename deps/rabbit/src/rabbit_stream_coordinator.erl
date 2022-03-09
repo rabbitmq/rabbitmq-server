@@ -529,20 +529,35 @@ apply(Meta, {machine_version, From = 1, To = 2}, State = #?MODULE{streams = Stre
                                                                   monitors = Monitors0}) ->
     rabbit_log:info("Stream coordinator machine version changes from ~p to ~p, updating state.",
                     [From, To]),
-    Streams1 = maps:fold(fun(S, #stream{listeners = L0} = S0, StreamAcc) ->
-                                 L1 = maps:fold(fun(ListPid, LeaderPid, LAcc) ->
-                                                        LAcc#{{ListPid, leader} => LeaderPid}
-                                                end, #{}, L0),
-                                 StreamAcc#{S => S0#stream{listeners = L1}}
-                         end, #{}, Streams0),
-    Monitors1 = maps:fold(fun(P, {StreamId, listener}, Acc) ->
+    %% conversion from old state to new state
+    %% additional operation: the stream listeners are never collected in the previous version
+    %% so we'll emit monitors for all listener PIDs
+    %% this way we'll get the DOWN event for dead listener PIDs and
+    %% we'll clean the stream listeners the in the DOWN event callback
+
+    %% transform the listeners of each stream and accumulate listener PIDs
+    {Streams1, Listeners} =
+    maps:fold(fun(S, #stream{listeners = L0} = S0, {StreamAcc, GlobalListAcc}) ->
+                      {L1, GlobalListAcc1} = maps:fold(fun(ListPid, LeaderPid, {LAcc, GLAcc}) ->
+                                             {LAcc#{{ListPid, leader} => LeaderPid},
+                                              GLAcc#{ListPid => S}}
+                                     end, {#{}, GlobalListAcc}, L0),
+                      {StreamAcc#{S => S0#stream{listeners = L1}}, GlobalListAcc1}
+              end, {#{}, #{}}, Streams0),
+    %% accumulate monitors for the map and create the effects to emit the monitors
+    {ExtraMonitors, Effects} = maps:fold(fun(P, StreamId, {MAcc, EAcc}) ->
+                                                 {MAcc#{P => {StreamId, listener}},
+                                                 [{monitor, process, P} | EAcc]}
+                          end, {#{}, []}, Listeners),
+    Monitors1 = maps:merge(Monitors0, ExtraMonitors),
+    Monitors2 = maps:fold(fun(P, {StreamId, listener}, Acc) ->
                                   Acc#{P => {#{StreamId => ok}, listener}};
                              (P, V, Acc) ->
                                   Acc#{P => V}
-                          end, #{}, Monitors0),
+                          end, #{}, Monitors1),
     return(Meta, State#?MODULE{streams = Streams1,
-                               monitors = Monitors1,
-                               listeners = undefined}, ok, []);
+                               monitors = Monitors2,
+                               listeners = undefined}, ok, Effects);
 apply(Meta, {machine_version, From, To}, State) ->
     rabbit_log:info("Stream coordinator machine version changes from ~p to ~p, no state changes required.",
                     [From, To]),
