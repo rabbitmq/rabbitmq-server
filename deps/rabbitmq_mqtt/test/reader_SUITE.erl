@@ -191,10 +191,10 @@ quorum(Config) ->
       Suffix = <<"qos1">>,
       Q= <<Prefix/binary, ClientName/binary, Suffix/binary>>,
       ?assertEqual(Expected,get_queue_type(Server,Q)),
-      timer:sleep(100),
+      timer:sleep(500),
       emqttc:disconnect(C)
       end,
-      ok = rpc(Config, ?MODULE, set_env, [quorum]),
+      rpc(Config, reader_SUITE, set_env, [quorum]),
     %%  test if the quorum queue is enable after the setting
       F(<<"qCleanSessionFalse">>, false, rabbit_quorum_queue),
     %%  in case clean session == true must be classic since quorum
@@ -203,6 +203,7 @@ quorum(Config) ->
       rpc(Config, reader_SUITE, set_env, [Default]),
       F(<<"cCleanSessionTrue">>, true, rabbit_classic_queue),
       F(<<"cCleanSessionFalse">>, false, rabbit_classic_queue).
+
 
 expect_publishes(_Topic, []) -> ok;
 expect_publishes(Topic, [Payload|Rest]) ->
