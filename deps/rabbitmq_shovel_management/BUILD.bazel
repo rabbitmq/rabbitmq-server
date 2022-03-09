@@ -8,6 +8,7 @@ load(
     "assert_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
+    "rabbitmq_suite"
 )
 
 APP_NAME = "rabbitmq_shovel_management"
