@@ -21,11 +21,9 @@ defmodule EncodeCommandTest do
     assert :ok == @command.validate(["value", "secret"], context[:opts])
   end
 
-  test "validate: providing zero or one positional argument fails", context do
-    assert match?({:validation_failure, {:not_enough_args, _}},
-                  @command.validate([], context[:opts]))
-    assert match?({:validation_failure, {:not_enough_args, _}},
-                  @command.validate(["value"], context[:opts]))
+  test "validate: providing zero or one positional argument passes", context do
+    assert :ok == @command.validate([], context[:opts])
+    assert :ok == @command.validate(["value"], context[:opts])
   end
 
   test "validate: providing three or more positional argument fails", context do
