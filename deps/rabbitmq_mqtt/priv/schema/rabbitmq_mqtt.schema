@@ -257,3 +257,12 @@ fun(Conf) ->
     LingerTimeout = cuttlefish:conf_get("mqtt.tcp_listen_options.linger.timeout", Conf, 0),
     {LingerOn, LingerTimeout}
 end}.
+
+%% Queue data type can be classic or quorum
+%%
+%%
+%% {queue_type, classic},
+
+
+{mapping, "mqtt.queue_type", "rabbitmq_mqtt.queue_type",
+    [{datatype, {enum, [classic, quorum]}}]}.

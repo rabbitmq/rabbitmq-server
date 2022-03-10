@@ -14,7 +14,7 @@
 
 %% for testing purposes
 -export([get_vhost_username/1, get_vhost/3, get_vhost_from_user_mapping/2,
-         add_client_id_to_adapter_info/2]).
+         add_client_id_to_adapter_info/2, maybe_quorum/3]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_mqtt_frame.hrl").
@@ -399,7 +399,7 @@ amqp_callback({#'basic.deliver'{ consumer_tag = ConsumerTag,
                            message_id    = MsgId,
                            send_fun      = SendFun,
                            amqp2mqtt_fun = Amqp2MqttFun } = PState) ->
-    amqp_channel:notify_received(DeliveryCtx),
+    notify_received(DeliveryCtx),
     case {delivery_dup(Delivery), delivery_qos(ConsumerTag, Headers, PState)} of
         {true, {?QOS_0, ?QOS_1}} ->
             amqp_channel:cast(
@@ -784,6 +784,22 @@ delivery_mode(?QOS_0) -> 1;
 delivery_mode(?QOS_1) -> 2;
 delivery_mode(?QOS_2) -> 2.
 
+maybe_quorum(Qos1Args, CleanSession, Queue) ->
+    case {rabbit_mqtt_util:env(queue_type), CleanSession} of
+      %% it is possible to Quorum queues only if Clean Session == False
+      %% else always use Classic queues
+      %% Clean Session == True sets auto-delete to True and quorum queues
+      %% does not support auto-delete flag
+       {quorum, false} -> lists:append(Qos1Args,
+          [{<<"x-queue-type">>, longstr, <<"quorum">>}]);
+
+      {quorum, true} ->
+          rabbit_log:debug("Can't use quorum queue for ~s. " ++
+          "The clean session is true. Classic queue will be used", [Queue]),
+          Qos1Args;
+      _ -> Qos1Args
+    end.
+
 %% different qos subscriptions are received in different queues
 %% with appropriate durability and timeout arguments
 %% this will lead to duplicate messages for overlapping subscriptions
@@ -819,7 +835,7 @@ ensure_queue(Qos, #proc_state{ channels      = {Channel, _},
                                    %%
                                    %% see rabbitmq/rabbitmq-mqtt#37
                                    auto_delete = CleanSess,
-                                   arguments   = Qos1Args },
+                                   arguments   = maybe_quorum(Qos1Args, CleanSess, QueueQ1)},
                  #'basic.consume'{ queue  = QueueQ1,
                                    no_ack = false }};
             {_, _, ?QOS_0} ->
@@ -1091,3 +1107,10 @@ additional_info(Key,
                 #proc_state{adapter_info =
                             #amqp_adapter_info{additional_info = AddInfo}}) ->
     proplists:get_value(Key, AddInfo).
+
+notify_received(undefined) ->
+    %% no notification for quorum queues and streams
+    ok;
+notify_received(DeliveryCtx) ->
+    %% notification for flow control
+    amqp_channel:notify_received(DeliveryCtx).
