@@ -24,6 +24,7 @@ setup(Context) ->
     %% TODO: Check if directories/files are inside Mnesia dir.
 
     ok = set_default_config(),
+    ok = disable_kernel_overlapping_partitions(),
 
     AdditionalConfigFiles = find_additional_config_files(Context),
     AdvancedConfigFile = find_actual_advanced_config_file(Context),
@@ -542,3 +543,9 @@ get_input_iodevice() ->
                     end
             end
     end.
+
+disable_kernel_overlapping_partitions() ->
+    %% This new "fixed" behavior seriously affects our own partition handling,
+    %% and potentially even libraries such as Aten and Ra,
+    %% so disable this to be forward-compatible with Erlang 25
+    application:set_env(kernel, prevent_overlapping_partitions, false).
