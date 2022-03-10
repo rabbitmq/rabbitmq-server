@@ -399,6 +399,10 @@ start_it(StartType) ->
             ?LOG_INFO("RabbitMQ is asked to start...", [],
                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
             try
+                %% This new "fixed" behavior seriously affects our own partition handling,
+                %% and potentially even libraries such as Aten and Ra,
+                %% so disable this to be forward-compatible with Erlang 25
+                _ = application:set_env(kernel, prevent_overlapping_partitions, false),
                 {ok, _} = application:ensure_all_started(rabbitmq_prelaunch,
                                                          StartType),
                 {ok, _} = application:ensure_all_started(rabbit,
