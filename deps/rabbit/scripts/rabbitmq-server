@@ -81,6 +81,7 @@ start_rabbitmq_server() {
         ${RABBITMQ_SERVER_START_ARGS} \
         -syslog logger '[]' \
         -syslog syslog_error_logger false \
+        -kernel prevent_overlapping_partitions false \
         "$@"
 }
 
