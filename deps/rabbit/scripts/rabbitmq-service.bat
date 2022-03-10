@@ -200,6 +200,7 @@ set ERLANG_SERVICE_ARGUMENTS= ^
 !RABBITMQ_DIST_ARG! ^
 -syslog logger [] ^
 -syslog syslog_error_logger false ^
+-kernel prevent_overlapping_partitions false ^
 !STARVAR!
 
 set ERLANG_SERVICE_ARGUMENTS=!ERLANG_SERVICE_ARGUMENTS:\=\\!
