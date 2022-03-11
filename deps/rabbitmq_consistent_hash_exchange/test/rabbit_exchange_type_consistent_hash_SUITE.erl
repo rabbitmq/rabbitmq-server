@@ -13,6 +13,10 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+
+-define(DEFAULT_WAIT, 1000).
+-define(DEFAULT_INTERVAL, 100).
 
 all() ->
     [
@@ -231,7 +235,7 @@ test0(Config, MakeMethod, MakeMsg, DeclareArgs, [Q1, Q2, Q3, Q4] = Queues, Itera
                        MakeMethod(CHX),
                        MakeMsg()) || _ <- lists:duplicate(IterationCount, const)],
     amqp_channel:wait_for_confirms(Chan, 300),
-    timer:sleep(500),
+    timer:sleep(1000),
 
     Counts =
         [begin
@@ -431,7 +435,7 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
 
     ct:pal("all hash ring rows after connection closure: ~p", [hash_ring_rows(Config)]),
 
-    ?assertEqual(0, count_buckets_of_exchange(Config, X)),
+    ?awaitMatch(0, count_buckets_of_exchange(Config, X), ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     clean_up_test_topology(Config, X, []),
     ok.
 
@@ -488,7 +492,7 @@ test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closu
 
     ct:pal("all hash ring rows after connection closure (~p): ~p", [XAsList, hash_ring_rows(Config)]),
 
-    ?assertEqual(0, count_buckets_of_exchange(Config, X)),
+    ?awaitMatch(0, count_buckets_of_exchange(Config, X), ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     clean_up_test_topology(Config, X, []),
     ok.
 
