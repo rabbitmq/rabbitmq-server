@@ -12,11 +12,9 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
     )
 
-    github_erlang_app(
+    hex_pm_erlang_app(
         name = "aten",
-        org = "rabbitmq",
-        sha256 = "f27453bfa270538e1b48a9111206847e19a5ad51b4ded4f03fcb0184fbb555be",
-        ref = "v0.5.7",
+        sha256 = "8b623c8be27b59a911d16ab0af41777b504c147bc0d60a29015fab58321c04b0",
         version = "0.5.7",
     )
 
@@ -107,8 +105,8 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "gen_batch_server",
-        version = "0.8.6",
-        sha256 = "b78679349168f27d7047f3283c9d766760b234d98c762aca9a1907f4ee3fd406",
+        version = "0.8.7",
+        sha256 = "94a49a528486298b009d2a1b452132c0a0d68b3e89d17d3764cb1ec879b7557a",
     )
 
     hex_pm_erlang_app(
@@ -209,10 +207,20 @@ erlang_app(
         sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
     )
 
-    git_repository(
+    hex_pm_erlang_app(
         name = "ra",
-        branch = "main",
-        remote = "https://github.com/rabbitmq/ra.git",
+        version = "2.0.4",
+        sha256 = "8e3550be1df23b5b1ba9d02e0c8c79febb8eae8a6dcbbba746bd5180f39aee1c",
+        first_srcs = [
+            "src/ra_machine.erl",
+            "src/ra_snapshot.erl",
+        ],
+        deps = [
+            "@gen_batch_server//:erlang_app",
+        ],
+        runtime_deps = [
+            "@aten//:erlang_app",
+        ],
     )
 
     hex_archive(
