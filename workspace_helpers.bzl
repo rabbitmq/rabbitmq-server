@@ -222,7 +222,14 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
 
     github_erlang_app(
         name = "seshat",
-        version = "0.3.2",
+        org = "rabbitmq",
+        ref = "0.1.0",
+        version = "0.1.0",
+        extra_apps = [
+            "sasl",
+            "crypto",
+        ],
+        sha256 = "fd20039322eabed814d0dfe75743652846007ec93faae3e141c9602c21152b14",
     )
 
     hex_pm_erlang_app(
