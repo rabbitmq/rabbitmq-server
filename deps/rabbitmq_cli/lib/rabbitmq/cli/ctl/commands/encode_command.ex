@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers, Input}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
@@ -30,15 +30,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     {args, Helpers.atomize_values(with_defaults, @atomized_keys)}
   end
 
-  def validate(args, _) when length(args) < 2 do
-    {:validation_failure, {:not_enough_args, "Please provide a value to decode and a passphrase."}}
-  end
-
   def validate(args, _) when length(args) > 2 do
     {:validation_failure, :too_many_args}
   end
 
-  def validate(args, opts) when length(args) === 2 do
+  def validate(_args, opts) do
     case {supports_cipher(opts.cipher), supports_hash(opts.hash), opts.iterations > 0} do
       {false, _, _} ->
         {:validation_failure, {:bad_argument, "The requested cipher is not supported."}}
@@ -54,6 +50,40 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
     end
   end
 
+  def run([], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
+    case Input.consume_single_line_string_with_prompt("Value to encode: ", opts) do
+      :eof  -> {:error, :not_enough_args}
+      value ->
+        case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
+          :eof  -> {:error, :not_enough_args}
+          passphrase ->
+            try do
+              term_value = Helpers.evaluate_input_as_term(value)
+              result = {:encrypted, _} = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+              {:ok, result}
+            catch
+              _, _ ->
+                {:error, "Error during cipher operation"}
+            end
+        end
+    end
+  end
+
+  def run([value], %{cipher: cipher, hash: hash, iterations: iterations} = opts) do
+    case Input.consume_single_line_string_with_prompt("Passphrase: ", opts) do
+      :eof -> {:error, :not_enough_args}
+      passphrase ->
+        try do
+          term_value = Helpers.evaluate_input_as_term(value)
+          result = {:encrypted, _} = :rabbit_pbe.encrypt_term(cipher, hash, iterations, passphrase, term_value)
+          {:ok, result}
+        catch
+          _, _ ->
+            {:error, "Error during cipher operation"}
+        end
+    end
+  end
+
   def run([value, passphrase], %{cipher: cipher, hash: hash, iterations: iterations}) do
     try do
       term_value = Helpers.evaluate_input_as_term(value)
@@ -61,13 +91,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
       {:ok, result}
     catch
       _, _ ->
-        {:error, "Error during cipher operation."}
+        {:error, "Error during cipher operation"}
     end
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
-  def banner([_, _], _) do
+  def banner(_, _) do
     "Encrypting value ..."
   end
 

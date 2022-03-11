@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule EncodeCommandTest do
   use ExUnit.Case, async: false
@@ -21,11 +21,9 @@ defmodule EncodeCommandTest do
     assert :ok == @command.validate(["value", "secret"], context[:opts])
   end
 
-  test "validate: providing zero or one positional argument fails", context do
-    assert match?({:validation_failure, {:not_enough_args, _}},
-                  @command.validate([], context[:opts]))
-    assert match?({:validation_failure, {:not_enough_args, _}},
-                  @command.validate(["value"], context[:opts]))
+  test "validate: providing zero or one positional argument passes", context do
+    assert :ok == @command.validate([], context[:opts])
+    assert :ok == @command.validate(["value"], context[:opts])
   end
 
   test "validate: providing three or more positional argument fails", context do
