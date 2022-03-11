@@ -13,6 +13,26 @@ pull_request_rules:
       label:
         add:
           - make
+  - name: Add comment if only bazel is touched
+    conditions:
+      - and:
+        - files~=\.(bazel|bzl)$
+        - -files~=(Makefile|\.mk)$
+        - head!=bump-rules_erlang
+        - -head~=bump-rbe-
+        - -head~=mergify/bp/
+    actions:
+      comment:
+        message: This pull request modifies the bazel build only. Should the makefiles be updated as well @{{author}}?
+  - name: Add comment if only make is touched
+    conditions:
+      - and:
+        - files~=(Makefile|\.mk)$
+        - -files~=\.(bazel|bzl)$
+        - -head~=mergify/bp/
+    actions:
+      comment:
+        message: This pull request modifies the erlang.mk build only. Should the makefiles be updated as well @{{author}}?
   - name: Automatically backport to v3.10.x based on label
     conditions:
       - base=master
