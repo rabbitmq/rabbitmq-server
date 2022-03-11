@@ -235,6 +235,9 @@ delete(VHost, ActingUser) ->
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
     rabbit_log:info("Deleting vhost '~s'", [VHost]),
+    %% Clear the permissions first to prohibit new incoming connections when deleting a vhost
+    rabbit_misc:execute_mnesia_transaction(
+          with(VHost, fun () -> clear_permissions(VHost, ActingUser) end)),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
     [begin
          Name = amqqueue:get_name(Q),
@@ -372,13 +375,6 @@ assert_benign({error, {absent, Q, _}}, ActingUser) ->
     rabbit_amqqueue:internal_delete(QName, ActingUser).
 
 internal_delete(VHost, ActingUser) ->
-    [ok = rabbit_auth_backend_internal:clear_permissions(
-            proplists:get_value(user, Info), VHost, ActingUser)
-     || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHost)],
-    TopicPermissions = rabbit_auth_backend_internal:list_vhost_topic_permissions(VHost),
-    [ok = rabbit_auth_backend_internal:clear_topic_permissions(
-        proplists:get_value(user, TopicPermission), VHost, ActingUser)
-     || TopicPermission <- TopicPermissions],
     Fs1 = [rabbit_runtime_parameters:clear(VHost,
                                            proplists:get_value(component, Info),
                                            proplists:get_value(name, Info),
@@ -580,3 +576,13 @@ info_all(Ref, AggregatorPid)        -> info_all(?INFO_KEYS, Ref, AggregatorPid).
 info_all(Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
        AggregatorPid, Ref, fun(VHost) -> info(VHost, Items) end, all()).
+
+
+clear_permissions(VHost, ActingUser) ->
+    [ok = rabbit_auth_backend_internal:clear_permissions(
+            proplists:get_value(user, Info), VHost, ActingUser)
+     || Info <- rabbit_auth_backend_internal:list_vhost_permissions(VHost)],
+    TopicPermissions = rabbit_auth_backend_internal:list_vhost_topic_permissions(VHost),
+    [ok = rabbit_auth_backend_internal:clear_topic_permissions(
+        proplists:get_value(user, TopicPermission), VHost, ActingUser)
+     || TopicPermission <- TopicPermissions].
