@@ -23,7 +23,7 @@ pull_request_rules:
         - -head~=mergify/bp/
     actions:
       comment:
-        message: This pull request modifies the bazel build only. Should the makefiles be updated as well @{{author}}?
+        message: This pull request modifies the bazel build only. If it is a deps update, remember to sync any changes to the makefiles.
   - name: Add comment if only make is touched
     conditions:
       - and:
@@ -32,7 +32,7 @@ pull_request_rules:
         - -head~=mergify/bp/
     actions:
       comment:
-        message: This pull request modifies the erlang.mk build only. Should the bazel build be updated as well @{{author}}?
+        message: This pull request modifies the erlang.mk build only. If it is a deps update, remember to sync any changes to the bazel files.
   - name: Automatically backport to v3.10.x based on label
     conditions:
       - base=master
