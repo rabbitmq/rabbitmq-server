@@ -1243,6 +1243,14 @@ end}.
 {mapping, "collect_statistics_interval", "rabbit.collect_statistics_interval",
     [{datatype, integer}]}.
 
+%% Enable/disable file_handle_cache statistics. Disabeling this
+%% can help in cases of lock contention on the backing ets table.
+%%
+%% {classic_queue.collect_fd_stats, true},
+
+{mapping, "classic_queue.collect_fd_stats", "rabbit.classic_queue_collect_fd_stats",
+    [{datatype, {enum, [true, false]}}]}.
+
 %%
 %% Misc/Advanced Options
 %% =====================

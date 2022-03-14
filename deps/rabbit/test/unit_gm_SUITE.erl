@@ -35,6 +35,7 @@ all() ->
     ].
 
 init_per_suite(Config) ->
+    ok = application:set_env(rabbit, classic_queue_collect_fd_stats, true),
     ok = application:set_env(mnesia, dir, ?config(priv_dir, Config)),
     ok = application:start(mnesia),
     {ok, FHC} = file_handle_cache:start_link(),

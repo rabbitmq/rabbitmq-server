@@ -31,20 +31,32 @@ init() ->
 
 update(Op, Bytes, Thunk) ->
     {Time, Res} = timer_tc(Thunk),
-    _ = ets:update_counter(?TABLE, {Op, count}, 1),
-    _ = ets:update_counter(?TABLE, {Op, bytes}, Bytes),
-    _ = ets:update_counter(?TABLE, {Op, time}, Time),
-    Res.
+    case application:get_env(rabbit, classic_queue_collect_fd_stats) of
+        {ok, false} -> Res;
+        {ok, true}  ->
+            _ = ets:update_counter(?TABLE, {Op, count}, 1),
+            _ = ets:update_counter(?TABLE, {Op, bytes}, Bytes),
+            _ = ets:update_counter(?TABLE, {Op, time}, Time),
+            Res
+    end.
 
 update(Op, Thunk) ->
     {Time, Res} = timer_tc(Thunk),
-    _ = ets:update_counter(?TABLE, {Op, count}, 1),
-    _ = ets:update_counter(?TABLE, {Op, time}, Time),
-    Res.
+    case application:get_env(rabbit, classic_queue_collect_fd_stats) of
+        {ok, false} -> Res;
+        {ok, true}  ->
+            _ = ets:update_counter(?TABLE, {Op, count}, 1),
+            _ = ets:update_counter(?TABLE, {Op, time}, Time),
+            Res
+    end.
 
 update(Op) ->
-    ets:update_counter(?TABLE, {Op, count}, 1),
-    ok.
+    case application:get_env(rabbit, classic_queue_collect_fd_stats) of
+        {ok, false} -> ok;
+        {ok, true}  ->
+            ets:update_counter(?TABLE, {Op, count}, 1),
+            ok
+    end.
 
 get() ->
     lists:sort(ets:tab2list(?TABLE)).

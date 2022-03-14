@@ -44,6 +44,7 @@ define PROJECT_ENV
 	    {server_properties, []},
 	    {collect_statistics, none},
 	    {collect_statistics_interval, 5000},
+	    {classic_queue_collect_fd_stats, true},
 	    {mnesia_table_loading_retry_timeout, 30000},
 	    {mnesia_table_loading_retry_limit, 10},
 	    {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
