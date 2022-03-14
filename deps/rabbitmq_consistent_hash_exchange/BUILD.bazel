@@ -54,6 +54,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "rabbit_exchange_type_consistent_hash_SUITE",
+        shard_count = 2,
     ),
 ]
 
