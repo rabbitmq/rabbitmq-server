@@ -28,6 +28,9 @@
 -import(quorum_queue_SUITE, [publish/2,
                              consume/3]).
 
+-define(DEFAULT_WAIT, 1000).
+-define(DEFAULT_INTERVAL, 200).
+
 -compile([nowarn_export_all, export_all]).
 
 all() ->
@@ -804,10 +807,12 @@ many_target_queues(Config) ->
                            #'basic.publish'{routing_key = SourceQ},
                            #amqp_msg{props   = #'P_basic'{expiration = <<"5">>},
                                      payload = Msg1}),
-    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
-                             amqp_channel:call(Ch, #'basic.get'{queue = TargetQ1}))),
-    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
-                             amqp_channel:call(Ch, #'basic.get'{queue = TargetQ2}))),
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
+                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ1}),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
+                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ2}),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     %% basic.get not supported by stream queues
     #'basic.qos_ok'{} = amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 2}),
     CTag = <<"ctag">>,
@@ -830,14 +835,18 @@ many_target_queues(Config) ->
     after 2000 ->
               exit(deliver_timeout)
     end,
-    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
-                             amqp_channel:call(Ch, #'basic.get'{queue = TargetQ4}))),
-    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
-                             amqp_channel:call(Ch2, #'basic.get'{queue = TargetQ5}))),
-    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
-                             amqp_channel:call(Ch2, #'basic.get'{queue = TargetQ6}))),
-    eventually(?_assertEqual([{0, 0}],
-                             dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
+                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ4}),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
+                amqp_channel:call(Ch2, #'basic.get'{queue = TargetQ5}),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg1}},
+                amqp_channel:call(Ch2, #'basic.get'{queue = TargetQ6}),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
+    ?awaitMatch([{0, 0}],
+                dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server3),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     Msg2 = <<"m2">>,
@@ -848,18 +857,22 @@ many_target_queues(Config) ->
     %% Nodes 2 and 3 are down.
     %% rabbit_fifo_dlx_worker should wait until all queues confirm the message
     %% before acking it to the source queue.
-    eventually(?_assertEqual([{1, 2}],
-                             dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1))),
-    consistently(?_assertEqual([{1, 2}],
-                               dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1))),
+    ?awaitMatch([{1, 2}],
+                dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
+    timer:sleep(1000),
+    ?assertEqual([{1, 2}],
+                 dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1)),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
                  amqp_channel:call(Ch, #'basic.get'{queue = TargetQ1})),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server2),
     ok = rabbit_ct_broker_helpers:start_node(Config, Server3),
-    eventually(?_assertEqual([{0, 0}],
-                             dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 6),
-    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
-                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ2})),
+    ?awaitMatch([{0, 0}],
+                dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1),
+                3000, 500),
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
+                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ2}),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     receive
         {#'basic.deliver'{consumer_tag = CTag},
          #amqp_msg{payload = Msg2}} ->
@@ -867,13 +880,16 @@ many_target_queues(Config) ->
     after 0 ->
               exit(deliver_timeout)
     end,
-    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
-                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ4})),
-    eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
-                             amqp_channel:call(Ch, #'basic.get'{queue = TargetQ5}))),
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
+                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ4}),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
+    ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
+                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ5}),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     %%TODO why is the 1st message (m1) a duplicate?
     ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
-                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ6}), 2, 200),
+                amqp_channel:call(Ch, #'basic.get'{queue = TargetQ6}),
+                ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(2, counted(messages_dead_lettered_confirmed_total, Config)).
 
