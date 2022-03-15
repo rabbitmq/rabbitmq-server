@@ -8,7 +8,7 @@
 -module(rabbit_mgmt_format).
 
 -export([format/2, ip/1, ipb/1, amqp_table/1, tuple/1]).
--export([parameter/1, now_to_str/1, now_to_str_ms/1, strip_pids/1]).
+-export([parameter/1, now_to_str/0, now_to_str/1, strip_pids/1]).
 -export([protocol/1, resource/1, queue/1, queue_state/1, queue_info/1]).
 -export([exchange/1, user/1, internal_user/1, binding/1, url/2]).
 -export([pack_binding_props/2, tokenise/1]).
@@ -187,20 +187,16 @@ protocol_version({Major, Minor})           -> io_lib:format("~B-~B", [Major, Min
 protocol_version({Major, Minor, 0})        -> protocol_version({Major, Minor});
 protocol_version({Major, Minor, Revision}) -> io_lib:format("~B-~B-~B",
                                                     [Major, Minor, Revision]).
+% Note:
+% Uses the same format as the OTP logger:
+% https://github.com/erlang/otp/blob/82e74303e715c7c64c1998bf034b12a48ce814b1/lib/kernel/src/logger_formatter.erl#L306-L311
+now_to_str() ->
+    calendar:system_time_to_rfc3339(os:system_time(millisecond), [{unit, millisecond}]).
 
 now_to_str(unknown) ->
     unknown;
-now_to_str(MilliSeconds) ->
-    BaseDate = calendar:datetime_to_gregorian_seconds({{1970, 1, 1},
-                                                       {0, 0, 0}}),
-    Seconds = BaseDate + (MilliSeconds div 1000),
-    {{Y, M, D}, {H, Min, S}} = calendar:gregorian_seconds_to_datetime(Seconds),
-    print("~w-~2.2.0w-~2.2.0w ~w:~2.2.0w:~2.2.0w", [Y, M, D, H, Min, S]).
-
-now_to_str_ms(unknown) ->
-    unknown;
-now_to_str_ms(MilliSeconds) ->
-    print("~s:~3.3.0w", [now_to_str(MilliSeconds), MilliSeconds rem 1000]).
+now_to_str(MilliSeconds) when is_integer(MilliSeconds) ->
+    calendar:system_time_to_rfc3339(MilliSeconds, [{unit, millisecond}]).
 
 resource(unknown) -> unknown;
 resource(Res)     -> resource(name, Res).
