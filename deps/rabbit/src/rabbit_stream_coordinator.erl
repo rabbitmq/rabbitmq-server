@@ -528,10 +528,11 @@ apply(Meta, {machine_version, From = 1, To = 2}, State = #?MODULE{streams = Stre
     %% transform the listeners of each stream and accumulate listener PIDs
     {Streams1, Listeners} =
     maps:fold(fun(S, #stream{listeners = L0} = S0, {StreamAcc, GlobalListAcc}) ->
-                      {L1, GlobalListAcc1} = maps:fold(fun(ListPid, LeaderPid, {LAcc, GLAcc}) ->
-                                             {LAcc#{{ListPid, leader} => LeaderPid},
-                                              GLAcc#{ListPid => S}}
-                                     end, {#{}, GlobalListAcc}, L0),
+                      {L1, GlobalListAcc1} = maps:fold(
+                                    fun(ListPid, LeaderPid, {LAcc, GLAcc}) ->
+                                        {LAcc#{{ListPid, leader} => LeaderPid},
+                                        GLAcc#{ListPid => S}}
+                                    end, {#{}, GlobalListAcc}, L0),
                       {StreamAcc#{S => S0#stream{listeners = L1}}, GlobalListAcc1}
               end, {#{}, #{}}, Streams0),
     %% accumulate monitors for the map and create the effects to emit the monitors
