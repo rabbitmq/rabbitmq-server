@@ -1415,7 +1415,9 @@ eval_listeners(MachineVersion, #stream{listeners = Listeners0,
                                                     when ListLPid0 == LeaderPid, T /= deleted ->
                                             %% it's the leader, same PID, nothing to do
                                             A;
-                                       (_N, #member{state = {running, _, LeaderPid}, role = {writer, _}, target = T}, {_, Efs})
+                                       (_N, #member{state  = {running, _, LeaderPid},
+                                                    role   = {writer, _},
+                                                    target = T}, {_, Efs})
                                                     when T /= deleted ->
                                             %% it's the leader, not same PID, assign the new leader, add effect
                                             {LeaderPid, [{send_msg, P,
