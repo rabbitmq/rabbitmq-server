@@ -392,7 +392,7 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                        []
                end,
     case maps:take(Pid, Monitors0) of
-        {{StreamId, listener}, Monitors} when MachineVersion =< 1 ->
+        {{StreamId, listener}, Monitors} when MachineVersion < 2 ->
             Listeners = case maps:take(StreamId, StateListeners0) of
                             error ->
                                 StateListeners0;
@@ -407,20 +407,20 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
             return(Meta, State#?MODULE{listeners = Listeners,
                                        monitors = Monitors}, ok, Effects0);
         {{PidStreams, listener}, Monitors} when MachineVersion >= 2 ->
-            Streams = maps:fold(fun(StreamId, _, Acc) ->
+            Streams = maps:fold(
+                fun(StreamId, _, Acc) ->
                     case Acc of
                         #{StreamId := Stream = #stream{listeners = Listeners0}} ->
                             Listeners = maps:fold(fun({P, _} = K, _, A) when P == Pid ->
                                                           maps:remove(K, A);
                                                      (K, V, A) ->
                                                           A#{K => V}
-                                                  end, #{}, Listeners0
-                            ),
+                                                  end, #{}, Listeners0),
                             Acc#{StreamId => Stream#stream{listeners = Listeners}};
                         _ ->
                             Acc
                     end
-                      end, Streams0, PidStreams),
+                end, Streams0, PidStreams),
             return(Meta, State#?MODULE{streams = Streams,
                                        monitors = Monitors}, ok, Effects0);
         {{StreamId, member}, Monitors1} ->
@@ -468,18 +468,8 @@ apply(#{machine_version := MachineVersion} = Meta,
                             stream_id := StreamId} = Args},
       #?MODULE{streams = Streams,
                monitors = Monitors0} = State0) when MachineVersion >= 2 ->
-    Node = case Args of
-               #{node := N} ->
-                   N;
-               _ ->
-                   node(Pid)
-           end,
-    Type = case Args of
-               #{type := T} ->
-                   T;
-               _ ->
-                   leader
-           end,
+    Node = maps:get(node, Args, node(Pid)),
+    Type = maps:get(type, Args, leader),
 
     case Streams of
         #{StreamId := #stream{listeners = Listeners0} = Stream0} ->
@@ -1371,15 +1361,16 @@ inform_listeners_eol(MachineVersion, #stream{target = deleted,
                        {queue_event, QRef, eol},
                        cast}
               end, maps:keys(Listeners));
-inform_listeners_eol(MachineVersion, #stream{target = deleted,
-                             listeners = Listeners,
-                             queue_ref = QRef
-                            }) when MachineVersion >= 2 ->
+inform_listeners_eol(MachineVersion,
+                        #stream{target    = deleted,
+                                listeners = Listeners,
+                                queue_ref = QRef}) when MachineVersion >= 2 ->
     LPidsMap = maps:fold(fun({P, _}, _V, Acc) ->
-                                 Acc#{P => ok}
+                            Acc#{P => ok}
                          end, #{}, Listeners),
     lists:map(fun(Pid) ->
-                      {send_msg, Pid,
+                      {send_msg,
+                       Pid,
                        {queue_event, QRef, eol},
                        cast}
               end, maps:keys(LPidsMap));
@@ -1418,7 +1409,9 @@ eval_listeners(MachineVersion, #stream{listeners = Listeners0,
         maps:fold(fun({P, leader}, ListLPid0, {Lsts0, Effs0}) ->
                           %% iterating over member to find the leader
                           {ListLPid1, Effs1} =
-                          maps:fold(fun(_N, #member{state = {running, _, LeaderPid}, role = {writer, _}, target = T}, A)
+                          maps:fold(fun(_N, #member{state  = {running, _, LeaderPid},
+                                                    role   = {writer, _},
+                                                    target = T}, A)
                                                     when ListLPid0 == LeaderPid, T /= deleted ->
                                             %% it's the leader, same PID, nothing to do
                                             A;
