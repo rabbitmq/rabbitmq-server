@@ -199,6 +199,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_stream(Q) ->
                 {error, _} = Err ->
                     Err;
                 {ok, OffsetSpec} ->
+                    rabbit_stream_coordinator:register_local_member_listener(Q),
                     rabbit_core_metrics:consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
                                                          not NoAck, QName,
                                                          ConsumerPrefetchCount, false,
@@ -283,8 +284,6 @@ begin_stream(#stream_client{name = QName, readers = Readers0} = State0,
                            log = Seg0,
                            max = Max},
             Actions = [],
-            %% TODO: we need to monitor the local pid in case the stream is
-            %% restarted
             {ok, State#stream_client{local_pid = LocalPid,
                                      readers = Readers0#{Tag => Str0}}, Actions}
     end.
@@ -407,6 +406,27 @@ handle_event({osiris_offset, _From, _Offs},
     {ok, State#stream_client{readers = Readers}, Deliveries};
 handle_event({stream_leader_change, Pid}, State) ->
     {ok, update_leader_pid(Pid, State), []};
+handle_event({stream_local_member_change, Pid}, #stream_client{local_pid = P} = State)
+  when P == Pid ->
+    {ok, State, []};
+handle_event({stream_local_member_change, Pid}, State = #stream_client{name = QName,
+                                                                       readers = Readers0}) ->
+    rabbit_log:debug("Local member change event for ~p", [QName]),
+    Readers1 = maps:fold(fun(T, #stream{log = Log0} = S0, Acc) ->
+                                 Offset = osiris_log:next_offset(Log0),
+                                 osiris_log:close(Log0),
+                                 CounterSpec = {{?MODULE, QName, self()}, []},
+                                 rabbit_log:debug("Re-creating Osiris reader for consumer ~p at offset ~p", [T, Offset]),
+                                 {ok, Log1} = osiris:init_reader(Pid, Offset, CounterSpec),
+                                 NextOffset = osiris_log:next_offset(Log1) - 1,
+                                 rabbit_log:debug("Registering offset listener at offset ~p", [NextOffset]),
+                                 osiris:register_offset_listener(Pid, NextOffset),
+                                 S1 = S0#stream{listening_offset = NextOffset,
+                                                log = Log1},
+                                 Acc#{T => S1}
+
+                         end, #{}, Readers0),
+    {ok, State#stream_client{local_pid = Pid, readers = Readers1}, []};
 handle_event(eol, _State) ->
     eol.
 
@@ -846,15 +866,13 @@ recover(Q) ->
     {ok, Q}.
 
 check_queue_exists_in_local_node(Q) ->
-    Conf = amqqueue:get_type_state(Q),
-    AllNodes = [maps:get(leader_node, Conf) |
-                maps:get(replica_nodes, Conf)],
-    case lists:member(node(), AllNodes) of
-        true ->
+    #{name := StreamId} = amqqueue:get_type_state(Q),
+    case rabbit_stream_coordinator:local_pid(StreamId) of
+        {ok, Pid} when is_pid(Pid) ->
             ok;
-        false ->
+        _ ->
             {protocol_error, precondition_failed,
-             "queue '~s' does not a have a replica on the local node",
+             "queue '~s' does not have a replica on the local node",
              [rabbit_misc:rs(amqqueue:get_name(Q))]}
     end.
 

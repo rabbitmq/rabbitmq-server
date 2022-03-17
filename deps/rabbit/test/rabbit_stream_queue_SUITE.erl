@@ -42,7 +42,8 @@ groups() ->
      {cluster_size_2, [], [recover]},
      {cluster_size_2_parallel, [parallel], all_tests()},
      {cluster_size_3, [],
-          [restart_coordinator_without_queues,
+          [
+           restart_coordinator_without_queues,
            delete_down_replica,
            replica_recovery,
            leader_failover,
@@ -50,11 +51,13 @@ groups() ->
            add_replicas,
            publish_coordinator_unavailable,
            leader_locator_policy,
-           queue_size_on_declare]},
+           queue_size_on_declare
+          ]},
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
      {cluster_size_3_2, [], [recover,
                              declare_with_node_down]},
-     {cluster_size_3_parallel_1, [parallel], [delete_replica,
+     {cluster_size_3_parallel_1, [parallel], [
+                                              delete_replica,
                                               delete_last_replica,
                                               delete_classic_replica,
                                               delete_quorum_replica,
@@ -65,7 +68,8 @@ groups() ->
                                               leader_locator_client_local,
                                               declare_delete_same_stream,
                                               leader_locator_random,
-                                              leader_locator_least_leaders]},
+                                              leader_locator_least_leaders
+                                             ]},
      {cluster_size_3_parallel_2, [parallel], all_tests()},
      {unclustered_size_3_1, [], [add_replica]},
      {unclustered_size_3_2, [], [consume_without_local_replica]},
@@ -101,6 +105,7 @@ all_tests() ->
      consume_credit_multiple_ack,
      basic_cancel,
      receive_basic_cancel_on_queue_deletion,
+     keep_consuming_on_leader_restart,
      max_length_bytes,
      max_age,
      invalid_policy,
@@ -188,9 +193,35 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-    Q = rabbit_data_coercion:to_binary(Testcase),
+init_per_testcase(TestCase, Config)
+  when TestCase == receive_basic_cancel_on_queue_deletion
+       orelse TestCase == keep_consuming_on_leader_restart ->
+    ClusterSize = ?config(rmq_nodes_count, Config),
+    case {rabbit_ct_helpers:is_mixed_versions(), ClusterSize} of
+        {true, 2} ->
+            %% These 2 tests fail because the leader can be the lower version,
+            %% which does not have the fix.
+            {skip, "not tested in mixed-version cluster and cluster size = 2"};
+        _ ->
+            init_test_case(TestCase, Config)
+    end;
+init_per_testcase(TestCase, Config)
+  when TestCase == replica_recovery
+       orelse TestCase == leader_failover
+       orelse TestCase == leader_failover_dedupe ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            %% not supported because of machine version difference
+            {skip, "mixed version clusters are not supported"};
+        _ ->
+            init_test_case(TestCase, Config)
+    end;
+init_per_testcase(TestCase, Config) ->
+    init_test_case(TestCase, Config).
+
+init_test_case(TestCase, Config) ->
+    Config1 = rabbit_ct_helpers:testcase_started(Config, TestCase),
+    Q = rabbit_data_coercion:to_binary(TestCase),
     Config2 = rabbit_ct_helpers:set_config(Config1, [{queue_name, Q}]),
     rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
 
@@ -1022,6 +1053,71 @@ receive_basic_cancel_on_queue_deletion(Config) ->
             exit(timeout)
     end.
 
+keep_consuming_on_leader_restart(Config) ->
+    [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    publish_confirm(Ch1, Q, [<<"msg 1">>]),
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    qos(Ch2, 10, false),
+    subscribe(Ch2, Q, false, 0),
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag1}, _} ->
+            ok = amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag1,
+                                                     multiple = false})
+    after 5000 ->
+              exit(timeout)
+    end,
+
+    {ok, {LeaderNode, LeaderPid}} = leader_info(Config),
+
+    kill_process(Config, LeaderNode, LeaderPid),
+
+    publish_confirm(Ch1, Q, [<<"msg 2">>]),
+
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag2}, _} ->
+            ok = amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag2,
+                                                     multiple = false})
+    after 5000 ->
+              exit(timeout)
+    end,
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+leader_info(Config) ->
+    Name = ?config(queue_name, Config),
+    QName = rabbit_misc:r(<<"/">>, queue, Name),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_leader_info,
+                                 [QName]).
+
+get_leader_info(QName) ->
+    {ok, Q} = rabbit_amqqueue:lookup(QName),
+    QState = amqqueue:get_type_state(Q),
+    #{name := StreamName} = QState,
+    case rabbit_stream_coordinator:members(StreamName) of
+        {ok, Members} ->
+            maps:fold(fun (LeaderNode, {Pid, writer}, _Acc) ->
+                              {ok, {LeaderNode, Pid}};
+                          (_Node, _, Acc) ->
+                              Acc
+                      end,
+                      {error, not_found}, Members);
+        _ ->
+            {error, not_found}
+    end.
+
+kill_process(Config, Node, Pid) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, ?MODULE, do_kill_process,
+                                 [Pid]).
+
+do_kill_process(Pid) ->
+    exit(Pid, kill).
 
 filter_consumers(Config, Server, CTag) ->
     CInfo = rabbit_ct_broker_helpers:rpc(Config, Server, ets, tab2list, [consumer_created]),
@@ -1238,7 +1334,7 @@ consume_from_relative_time_offset(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 consume_from_replica(Config) ->
-    [Server1, Server2 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1, _, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
@@ -1254,7 +1350,7 @@ consume_from_replica(Config) ->
               length(proplists:get_value(online, Info)) == 3
       end),
 
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server3),
     qos(Ch2, 10, false),
 
     subscribe(Ch2, Q, false, 0),
