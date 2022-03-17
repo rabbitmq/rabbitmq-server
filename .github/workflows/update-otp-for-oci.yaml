@@ -11,9 +11,9 @@ jobs:
       max-parallel: 1
       matrix:
         erlang_version:
-        - "24.1"
+        - "24.3"
         include:
-        - erlang_version: "24.1"
+        - erlang_version: "24.3"
           image_tag_suffix: 'otp-max'
     timeout-minutes: 10
     steps:
