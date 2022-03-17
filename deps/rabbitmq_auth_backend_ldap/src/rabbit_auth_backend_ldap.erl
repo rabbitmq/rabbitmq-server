@@ -829,7 +829,12 @@ dn_lookup(Username, LDAP) ->
                        {attributes, ["distinguishedName"]}]) of
         {ok, {referral, Referrals}} ->
             {error, {referrals_not_supported, Referrals}};
-        {ok, #eldap_search_result{entries = [#eldap_entry{object_name = DN}]}}->
+            %% support #eldap_search_result before and after
+            %% https://github.com/erlang/otp/pull/5538
+        {ok, {eldap_search_result, [#eldap_entry{object_name = DN}], _Referrals}}->
+            ?L1("DN lookup: ~s -> ~s", [Username, DN]),
+            DN;
+        {ok, {eldap_search_result, [#eldap_entry{object_name = DN}], _Referrals, _Controls}}->
             ?L1("DN lookup: ~s -> ~s", [Username, DN]),
             DN;
         {ok, #eldap_search_result{entries = Entries}} ->
