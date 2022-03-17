@@ -11,6 +11,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/src/rabbit_stream_coordinator.hrl").
 
+-define(STATE, rabbit_stream_coordinator).
+
 %%%===================================================================
 %%% Common Test callbacks
 %%%===================================================================
@@ -23,6 +25,8 @@ all() ->
 
 all_tests() ->
     [
+     listeners,
+     machine_version_from_1_to_2,
      new_stream,
      leader_down,
      leader_down_scenario_1,
@@ -68,6 +72,160 @@ update_stream(M, C, S) ->
 
 evaluate_stream(M, S, A) ->
     rabbit_stream_coordinator:evaluate_stream(M, S, A).
+
+apply_cmd(M, C, S) ->
+    rabbit_stream_coordinator:apply(M, C, S).
+
+register_listener(Args, S) ->
+    apply_cmd(#{index => 42, machine_version => 2}, {register_listener, Args}, S).
+
+eval_listeners(Stream) ->
+    rabbit_stream_coordinator:eval_listeners(2, Stream, []).
+
+down(Pid, S) ->
+    apply_cmd(#{index => 42, machine_version => 2}, {down, Pid, reason}, S).
+
+
+listeners(_) ->
+    S = <<"stream">>,
+    Q = #resource{kind = queue, name = S, virtual_host = <<"/">>},
+    ListPid = spawn(fun() -> ok end),
+    N1 = r@n1,
+    State0 = #?STATE{streams = #{}, monitors = #{}},
+    ?assertMatch(
+       {_, stream_not_found, []},
+       register_listener(#{pid => ListPid,
+                           node => N1,
+                           stream_id => S,
+                           type => leader}, State0)
+      ),
+
+    LeaderPid0 = spawn(fun() -> ok end),
+    Leader0 = #member{
+                role = {writer, 1},
+                state = {running, 1, LeaderPid0},
+                node = N1
+               },
+    State1 = State0#?STATE{
+                       streams = #{S => #stream{
+                                           listeners = #{},
+                                           members = #{N1 => Leader0},
+                                           queue_ref = Q}
+                      }},
+
+    {State2, ok, Effs2} = register_listener(#{pid => ListPid,
+                                              node => N1,
+                                              stream_id => S,
+                                              type => leader}, State1),
+    Stream2 = maps:get(S, State2#?STATE.streams),
+    ?assertEqual(
+       #{{ListPid, leader} => LeaderPid0},
+       Stream2#stream.listeners
+      ),
+    ?assertEqual(
+       [{monitor, process, ListPid},
+        {send_msg, ListPid,
+         {queue_event, Q,
+          {stream_leader_change, LeaderPid0}},
+         cast}],
+       Effs2
+      ),
+    ?assertEqual(
+       #{ListPid => {#{S => ok}, listener}},
+       State2#?STATE.monitors
+      ),
+
+    {State3, ok, Effs3} = register_listener(#{pid => ListPid,
+                                              node => N1,
+                                              stream_id => S,
+                                              type => local_member}, State2),
+    Stream3 = maps:get(S, State3#?STATE.streams),
+    ?assertEqual(
+       #{{ListPid, leader} => LeaderPid0,
+         {ListPid, member} => {N1, LeaderPid0}},
+       Stream3#stream.listeners
+      ),
+    ?assertEqual(
+       [{monitor, process, ListPid},
+        {send_msg, ListPid,
+         {queue_event, Q,
+          {stream_local_member_change, LeaderPid0}},
+         cast}],
+       Effs3
+      ),
+    ?assertEqual(
+       #{ListPid => {#{S => ok}, listener}},
+       State3#?STATE.monitors
+      ),
+
+    %% nothing should change after this evaluation
+    {Stream3, []} = eval_listeners(Stream3),
+
+    %% simulating a leader restart
+    LeaderPid1 = spawn(fun() -> ok end),
+    Leader1 = Leader0#member{state = {running, 2, LeaderPid1}},
+
+    Stream4 = Stream3#stream{members = #{N1 => Leader1}},
+
+    {Stream5, Effs5} = eval_listeners(Stream4),
+    ?assertEqual(
+       #{{ListPid, leader} => LeaderPid1,
+         {ListPid, member} => {N1, LeaderPid1}},
+       Stream5#stream.listeners
+      ),
+    ?assertEqual(
+       [{send_msg, ListPid,
+         {queue_event, Q,
+          {stream_local_member_change, LeaderPid1}},
+         cast},
+        {send_msg, ListPid,
+         {queue_event, Q,
+          {stream_leader_change, LeaderPid1}},
+         cast}],
+       Effs5
+      ),
+
+    State5 = State3#?STATE{streams = #{S => Stream5}},
+
+    {State6, ok, []} = down(ListPid, State5),
+
+    Stream6 = maps:get(S, State6#?STATE.streams),
+    ?assertEqual(
+       #{},
+       Stream6#stream.listeners
+      ),
+
+    ok.
+
+machine_version_from_1_to_2(_) ->
+    S = <<"stream">>,
+    LeaderPid = spawn(fun() -> ok end),
+    ListPid = spawn(fun() -> ok end), %% simulate a dead listener (not cleaned up)
+    DeadListPid = spawn(fun() -> ok end),
+    State0 = #?STATE{streams = #{S =>
+                                 #stream{listeners = #{ListPid => LeaderPid,
+                                                       DeadListPid => LeaderPid}}},
+                     monitors = #{ListPid => {S, listener}}},
+
+    {State1, ok, Effects} = apply_cmd(#{index => 42}, {machine_version, 1, 2}, State0),
+
+    Stream1 = maps:get(S, State1#?STATE.streams),
+    ?assertEqual(
+       #{{ListPid, leader} => LeaderPid,
+         {DeadListPid, leader} => LeaderPid}, %% should be cleaned up on DOWN event
+       Stream1#stream.listeners
+      ),
+    ?assertEqual(
+       #{ListPid => {#{S => ok}, listener},
+         DeadListPid => {#{S => ok}, listener}},
+       State1#?STATE.monitors
+      ),
+    ?assertEqual(
+       [{monitor, process, DeadListPid}, %% will trigger an immediate DOWN event
+        {monitor, process, ListPid}],
+       Effects
+      ),
+    ok.
 
 new_stream(_) ->
     [N1, N2, N3] = Nodes = [r@n1, r@n2, r@n3],
