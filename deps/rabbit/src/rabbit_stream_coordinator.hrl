@@ -48,16 +48,21 @@
                  conf :: osiris:config(),
                  nodes :: [node()],
                  members = #{} :: #{node() := #member{}},
-                 listeners = #{} :: #{pid() := LeaderPid :: pid()},
+                 listeners = #{} :: #{pid() | %% v0 & v1
+                                      {pid(), leader | member} %% v2
+                                      := LeaderPid :: pid()} | {node(), LocalPid :: pid()},
                  reply_to :: undefined | from(),
                  mnesia = {updated, 0} :: {updated | updating, osiris:epoch()},
                  target = running :: running | deleted
                 }).
 
--record(?MODULE, {streams = #{} :: #{stream_id() => #stream{}},
-                  monitors = #{} :: #{pid() => {stream_id(), monitor_role()}},
-                  listeners = #{} :: #{stream_id() =>
-                                       #{pid() := queue_ref()}},
-                  %% future extensibility
-                  reserved_1,
-                  reserved_2}).
+-record(rabbit_stream_coordinator, {streams = #{} :: #{stream_id() => #stream{}},
+                                    monitors = #{} :: #{pid() => {stream_id() | %% v0 & v1
+                                                                  #{stream_id() => ok}, %% v2
+                                                                  monitor_role()}},
+                                    %% not used as of v2
+                                    listeners = #{} :: undefined | #{stream_id() =>
+                                                                     #{pid() := queue_ref()}},
+                                    %% future extensibility
+                                    reserved_1,
+                                    reserved_2}).
