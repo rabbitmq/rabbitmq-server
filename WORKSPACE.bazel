@@ -40,7 +40,7 @@ git_repository(
 
 git_repository(
     name = "rbe_24",
-    commit = "fd644700933bb0efc3bd5c9577b4454b28457f22",
+    commit = "ef93a83d04878091177ef2264bb06ce14ccd5e36",
     remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
 )
 
