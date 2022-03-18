@@ -1670,10 +1670,10 @@ variable_queue_with_holes(VQ0) ->
     Interval = 2048, %% should match vq:IO_BATCH_SIZE
     Count = rabbit_queue_index:next_segment_boundary(0)*2 + 2 * Interval,
     Seq = lists:seq(1, Count),
-    VQ1 = variable_queue_set_ram_duration_target(0, VQ0),
-    VQ2 = variable_queue_publish(
+    VQ1 = variable_queue_publish(
             false, 1, Count,
-            fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ1),
+            fun (_, P) -> P end, fun erlang:term_to_binary/1, VQ0),
+    VQ2 = variable_queue_set_ram_duration_target(0, VQ1),
     {VQ3, AcksR} = variable_queue_fetch(Count, false, false, Count, VQ2),
     Acks = lists:reverse(AcksR),
     AckSeqs = lists:zip(Acks, Seq),
