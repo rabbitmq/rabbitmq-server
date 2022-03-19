@@ -1843,12 +1843,13 @@ consumer_monitor(ConsumerTag,
     QCons1 = maps:put(QRef, CTags1, QCons),
     State#ch{queue_consumers = QCons1}.
 
+%% Moves pending acks from unacknowledged to outdated for the given queue
 maybe_move_pending_acks_to_outdated_on_queue_down(QName, UAMQ, UAMQRet, OutdatedDeliveryTags) ->
     case ?QUEUE:out(UAMQ) of
-        {{value, #pending_ack{queue = QName, delivery_tag = Tag}}, QTail} ->
-            maybe_move_pending_acks_to_outdated_on_queue_down(QName, QTail, UAMQRet, [Tag | OutdatedDeliveryTags]);
-        {{value, Value}, QTail} ->
-            maybe_move_pending_acks_to_outdated_on_queue_down(QName, QTail, ?QUEUE:in(Value, UAMQRet), OutdatedDeliveryTags);
+        {{value, #pending_ack{queue = QName, delivery_tag = Tag}}, UAMQTail} ->
+            maybe_move_pending_acks_to_outdated_on_queue_down(QName, UAMQTail, UAMQRet, [Tag | OutdatedDeliveryTags]);
+        {{value, Value}, UAMQTail} ->
+            maybe_move_pending_acks_to_outdated_on_queue_down(QName, UAMQTail, ?QUEUE:in(Value, UAMQRet), OutdatedDeliveryTags);
         {empty, _} ->
             %% keep outdated delivery tags sorted in youngest-first order
             {UAMQRet, lists:sort(OutdatedDeliveryTags)}
