@@ -167,6 +167,7 @@
              queue_states,
              tick_timer,
              publishing_mode = false :: boolean(),
+             %% delivery tags pending consumer acknowledgement
              obsolete_delivery_tags = []
             }).
 
@@ -1339,7 +1340,8 @@ handle_method(#'basic.nack'{delivery_tag = DeliveryTag,
 
 handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple     = Multiple},
-              _, State = #ch{unacked_message_q = UAMQ, tx = Tx,
+              _, State = #ch{unacked_message_q      = UAMQ,
+                             tx                     = Tx,
                              obsolete_delivery_tags = ODTags}) ->
     {Acked, Remaining, ODTags1} = collect_acks(UAMQ, DeliveryTag, Multiple, ODTags),
     State1 = State#ch{unacked_message_q = Remaining, obsolete_delivery_tags = ODTags1},
@@ -1840,26 +1842,26 @@ consumer_monitor(ConsumerTag,
     QCons1 = maps:put(QRef, CTags1, QCons),
     State#ch{queue_consumers = QCons1}.
 
-delete_uamq_queue_down_or_eol(QName, UAMQ, UAMQRet, ObsoleteDeliverTags) ->
+delete_uamq_queue_down_or_eol(QName, UAMQ, UAMQRet, ObsoleteDeliveryTags) ->
     case ?QUEUE:out(UAMQ) of
         {{value, #pending_ack{queue = QName, delivery_tag = Tag}}, QTail} ->
-            delete_uamq_queue_down_or_eol(QName, QTail, UAMQRet, [Tag | ObsoleteDeliverTags]);
+            delete_uamq_queue_down_or_eol(QName, QTail, UAMQRet, [Tag | ObsoleteDeliveryTags]);
         {{value, Value}, QTail} ->
-            delete_uamq_queue_down_or_eol(QName, QTail, ?QUEUE:in(Value, UAMQRet), ObsoleteDeliverTags);
+            delete_uamq_queue_down_or_eol(QName, QTail, ?QUEUE:in(Value, UAMQRet), ObsoleteDeliveryTags);
         {empty, _} ->
             %% return ObsoleteDeliverTags in youngest-first order
-            {UAMQRet, lists:sort(ObsoleteDeliverTags)}
+            {UAMQRet, lists:sort(ObsoleteDeliveryTags)}
     end.
 
 handle_consuming_queue_down_or_eol(QName,
                                    State = #ch{queue_consumers = QCons,
-                                       unacked_message_q = UAMQ,
-                                       obsolete_delivery_tags = ODTags}) ->
+                                               unacked_message_q = UAMQ,
+                                               obsolete_delivery_tags = ODTags}) ->
     ConsumerTags = case maps:find(QName, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
-    %% Delete the UAMQ of old QPId
+    %% Drop elements associated with the down pid from UAMQ
     {UAMQ1, ODTags1} = delete_uamq_queue_down_or_eol(QName, UAMQ, ?QUEUE:new(), ODTags),
     gb_sets:fold(
       fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
@@ -1877,8 +1879,8 @@ handle_consuming_queue_down_or_eol(QName,
                       end
               end
       end, State#ch{queue_consumers = maps:remove(QName, QCons),
-            unacked_message_q = UAMQ1,
-            obsolete_delivery_tags = ODTags1}, ConsumerTags).
+                    unacked_message_q = UAMQ1,
+                    obsolete_delivery_tags = ODTags1}, ConsumerTags).
 
 %% [0] There is a slight danger here that if a queue is deleted and
 %% then recreated again the reconsume will succeed even though it was
