@@ -501,6 +501,8 @@ settle(QRef, Op, CTag, MsgIds, Ctxs)
             {ok, Ctxs, []};
         #ctx{state = State0,
              module = Mod} = Ctx ->
+            %% rabbit_log:debug("Settling messages ~p for consumer tag '~s'",
+            %%                  [MsgIds, CTag]),
             case Mod:settle(Op, CTag, MsgIds, State0) of
                 {State, Actions} ->
                     {ok, set_ctx(QRef, Ctx#ctx{state = State}, Ctxs), Actions};
