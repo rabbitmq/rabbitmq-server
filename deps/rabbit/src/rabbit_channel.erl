@@ -120,6 +120,22 @@
           writer_gc_threshold
          }).
 
+<<<<<<< HEAD
+=======
+-record(pending_ack, {
+                      %% delivery identifier used by clients
+                      %% to acknowledge and reject deliveries
+                      delivery_tag,
+                      %% consumer tag
+                      tag,
+                      delivered_at,
+                      %% queue name
+                      queue,
+                      %% message ID used by queue and message store implementations
+                      msg_id
+                    }).
+
+>>>>>>> 6decaaff97 (Naming from #4305)
 -record(ch, {cfg :: #conf{},
              %% limiter state, see rabbit_limiter
              limiter,
@@ -1391,7 +1407,12 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     State1 = State#ch{unacked_message_q = Remaining},
     {noreply, case Tx of
+<<<<<<< HEAD
                   none         -> ack(Acked, State1);
+=======
+                  none         -> {State2, Actions} = settle_acks(Acked, State1),
+                                  handle_queue_actions(Actions, State2);
+>>>>>>> 6decaaff97 (Naming from #4305)
                   {Msgs, Acks} -> Acks1 = ack_cons(ack, Acked, Acks),
                                   State1#ch{tx = {Msgs, Acks1}}
               end};
@@ -1735,12 +1756,25 @@ handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Msgs, Acks},
                                              limiter = Limiter}) ->
     State1 = queue_fold(fun deliver_to_queues/2, State, Msgs),
     Rev = fun (X) -> lists:reverse(lists:sort(X)) end,
+<<<<<<< HEAD
     State2 = lists:foldl(fun ({ack,     A}, Acc) ->
                                  ack(Rev(A), Acc);
                              ({Requeue, A}, Acc) ->
                                  internal_reject(Requeue, Rev(A), Limiter, Acc)
                          end, State1, lists:reverse(Acks)),
     {noreply, maybe_complete_tx(State2#ch{tx = committing})};
+=======
+    {State2, Actions2} =
+        lists:foldl(fun ({ack,     A}, {Acc, Actions}) ->
+                            {Acc0, Actions0} = settle_acks(Rev(A), Acc),
+                            {Acc0, Actions ++ Actions0};
+                        ({Requeue, A}, {Acc, Actions}) ->
+                            {Acc0, Actions0} = internal_reject(Requeue, Rev(A), Limiter, Acc),
+                            {Acc0, Actions ++ Actions0}
+                    end, {State1, []}, lists:reverse(Acks)),
+    State3 = handle_queue_actions(Actions2, State2),
+    {noreply, maybe_complete_tx(State3#ch{tx = committing})};
+>>>>>>> 6decaaff97 (Naming from #4305)
 
 handle_method(#'tx.rollback'{}, _, #ch{tx = none}) ->
     precondition_failed("channel is not transactional");
@@ -2069,12 +2103,18 @@ record_sent(Type, Tag, AckRequired,
             end,
     State#ch{unacked_message_q = UAMQ1, next_tag = DeliveryTag + 1}.
 
-%% NB: returns acks in youngest-first order
-collect_acks(Q, 0, true) ->
-    {lists:reverse(?QUEUE:to_list(Q)), ?QUEUE:new()};
-collect_acks(Q, DeliveryTag, Multiple) ->
-    collect_acks([], [], Q, DeliveryTag, Multiple).
+%% Records a client-sent acknowledgement. Handles both single delivery acks
+%% and multi-acks.
+%%
+%% Returns a triple of acknowledged pending acks, remaining pending acks,
+%% and outdated pending acks (if any).
+%% Sorts each group in the youngest-first order (ascending by delivery tag).
+collect_acks(UAMQ, 0, true) ->
+    {lists:reverse(?QUEUE:to_list(UAMQ)), ?QUEUE:new()};
+collect_acks(UAMQ, DeliveryTag, Multiple) ->
+    collect_acks([], [], UAMQ, DeliveryTag, Multiple).
 
+<<<<<<< HEAD
 collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
     case ?QUEUE:out(Q) of
         {{value, UnackedMsg = {CurrentDeliveryTag, _ConsumerTag, _Time, _Msg}},
@@ -2087,17 +2127,32 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
                                  ?QUEUE:from_list(lists:reverse(PrefixAcc)),
                                  QTail)
                      end};
+=======
+collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
+    case ?QUEUE:out(UAMQ) of
+        {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDT}},
+         UAMQTail} ->
+            if CurrentDT == DeliveryTag ->
+                   {[UnackedMsg | AcknowledgedAcc],
+                    case RemainingAcc of
+                        [] -> UAMQTail;
+                        _  -> ?QUEUE:join(
+                                 ?QUEUE:from_list(lists:reverse(RemainingAcc)),
+                                 UAMQTail)
+                    end};
+>>>>>>> 6decaaff97 (Naming from #4305)
                Multiple ->
-                    collect_acks([UnackedMsg | ToAcc], PrefixAcc,
-                                 QTail, DeliveryTag, Multiple);
+                    collect_acks([UnackedMsg | AcknowledgedAcc], RemainingAcc,
+                                 UAMQTail, DeliveryTag, Multiple);
                true ->
-                    collect_acks(ToAcc, [UnackedMsg | PrefixAcc],
-                                 QTail, DeliveryTag, Multiple)
+                    collect_acks(AcknowledgedAcc, [UnackedMsg | RemainingAcc],
+                                 UAMQTail, DeliveryTag, Multiple)
             end;
         {empty, _} ->
             precondition_failed("unknown delivery tag ~w", [DeliveryTag])
     end.
 
+<<<<<<< HEAD
 %% NB: Acked is in youngest-first order
 ack(Acked, State = #ch{queue_names = QNames,
                        queue_states = QueueStates0}) ->
@@ -2110,6 +2165,25 @@ ack(Acked, State = #ch{queue_names = QNames,
           end, Acked, QueueStates0),
     ok = notify_limiter(State#ch.limiter, Acked),
     State#ch{queue_states = QueueStates}.
+=======
+%% Settles (acknowledges) messages at the queue replica process level.
+%% This happens in the youngest-first order (ascending by delivery tag).
+settle_acks(Acks, State = #ch{queue_states = QueueStates0}) ->
+    {QueueStates, Actions} =
+        foreach_per_queue(
+          fun ({QRef, CTag}, MsgIds, {Acc0, ActionsAcc0}) ->
+                  case rabbit_queue_type:settle(QRef, complete, CTag,
+                                                MsgIds, Acc0) of
+                      {ok, Acc, ActionsAcc} ->
+                          incr_queue_stats(QRef, MsgIds, State),
+                          {Acc, ActionsAcc0 ++ ActionsAcc};
+                      {protocol_error, ErrorType, Reason, ReasonArgs} ->
+                          rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
+                  end
+          end, Acks, {QueueStates0, []}),
+    ok = notify_limiter(State#ch.limiter, Acks),
+    {State#ch{queue_states = QueueStates}, Actions}.
+>>>>>>> 6decaaff97 (Naming from #4305)
 
 incr_queue_stats(QPid, QNames, MsgIds, State) ->
     case maps:find(qpid_to_ref(QPid), QNames) of
