@@ -167,8 +167,9 @@
              queue_states,
              tick_timer,
              publishing_mode = false :: boolean(),
-             %% delivery tags pending consumer acknowledgement
-             obsolete_delivery_tags = []
+             %% delivery tags that were pending consumer acknowledgement
+             %% but became outdated because queue leader process failed
+             outdated_delivery_tags = []
             }).
 
 -define(QUEUE, lqueue).
@@ -1342,9 +1343,9 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
                            multiple     = Multiple},
               _, State = #ch{unacked_message_q      = UAMQ,
                              tx                     = Tx,
-                             obsolete_delivery_tags = ODTags}) ->
+                             outdated_delivery_tags = ODTags}) ->
     {Acked, Remaining, ODTags1} = collect_acks(UAMQ, DeliveryTag, Multiple, ODTags),
-    State1 = State#ch{unacked_message_q = Remaining, obsolete_delivery_tags = ODTags1},
+    State1 = State#ch{unacked_message_q = Remaining, outdated_delivery_tags = ODTags1},
     {noreply, case Tx of
                   none         -> {State2, Actions} = ack(Acked, State1),
                                   handle_queue_actions(Actions, State2);
@@ -1842,27 +1843,27 @@ consumer_monitor(ConsumerTag,
     QCons1 = maps:put(QRef, CTags1, QCons),
     State#ch{queue_consumers = QCons1}.
 
-delete_uamq_queue_down_or_eol(QName, UAMQ, UAMQRet, ObsoleteDeliveryTags) ->
+maybe_move_pending_acks_to_outdated_on_queue_down(QName, UAMQ, UAMQRet, OutdatedDeliveryTags) ->
     case ?QUEUE:out(UAMQ) of
         {{value, #pending_ack{queue = QName, delivery_tag = Tag}}, QTail} ->
-            delete_uamq_queue_down_or_eol(QName, QTail, UAMQRet, [Tag | ObsoleteDeliveryTags]);
+            maybe_move_pending_acks_to_outdated_on_queue_down(QName, QTail, UAMQRet, [Tag | OutdatedDeliveryTags]);
         {{value, Value}, QTail} ->
-            delete_uamq_queue_down_or_eol(QName, QTail, ?QUEUE:in(Value, UAMQRet), ObsoleteDeliveryTags);
+            maybe_move_pending_acks_to_outdated_on_queue_down(QName, QTail, ?QUEUE:in(Value, UAMQRet), OutdatedDeliveryTags);
         {empty, _} ->
-            %% return ObsoleteDeliverTags in youngest-first order
-            {UAMQRet, lists:sort(ObsoleteDeliveryTags)}
+            %% keep outdated delivery tags sorted in youngest-first order
+            {UAMQRet, lists:sort(OutdatedDeliveryTags)}
     end.
 
 handle_consuming_queue_down_or_eol(QName,
                                    State = #ch{queue_consumers = QCons,
                                                unacked_message_q = UAMQ,
-                                               obsolete_delivery_tags = ODTags}) ->
+                                               outdated_delivery_tags = ODTags}) ->
     ConsumerTags = case maps:find(QName, QCons) of
                        error       -> gb_sets:new();
                        {ok, CTags} -> CTags
                    end,
     %% Drop elements associated with the down pid from UAMQ
-    {UAMQ1, ODTags1} = delete_uamq_queue_down_or_eol(QName, UAMQ, ?QUEUE:new(), ODTags),
+    {UAMQ1, ODTags1} = maybe_move_pending_acks_to_outdated_on_queue_down(QName, UAMQ, ?QUEUE:new(), ODTags),
     gb_sets:fold(
       fun (CTag, StateN = #ch{consumer_mapping = CMap}) ->
               case queue_down_consumer_action(CTag, CMap) of
@@ -1878,9 +1879,9 @@ handle_consuming_queue_down_or_eol(QName,
                               cancel_consumer(CTag, QName, StateN)
                       end
               end
-      end, State#ch{queue_consumers = maps:remove(QName, QCons),
-                    unacked_message_q = UAMQ1,
-                    obsolete_delivery_tags = ODTags1}, ConsumerTags).
+      end, State#ch{queue_consumers        = maps:remove(QName, QCons),
+                    unacked_message_q      = UAMQ1,
+                    outdated_delivery_tags = ODTags1}, ConsumerTags).
 
 %% [0] There is a slight danger here that if a queue is deleted and
 %% then recreated again the reconsume will succeed even though it was
@@ -1971,9 +1972,9 @@ basic_return(#basic_message{exchange_name = ExchangeName,
            Content).
 
 reject(DeliveryTag, Requeue, Multiple,
-       State = #ch{unacked_message_q = UAMQ, tx = Tx, obsolete_delivery_tags = ODTags}) ->
+       State = #ch{unacked_message_q = UAMQ, tx = Tx, outdated_delivery_tags = ODTags}) ->
     {Acked, Remaining, ODTags1} = collect_acks(UAMQ, DeliveryTag, Multiple, ODTags),
-    State1 = State#ch{unacked_message_q = Remaining, obsolete_delivery_tags = ODTags1},
+    State1 = State#ch{unacked_message_q = Remaining, outdated_delivery_tags = ODTags1},
     {noreply, case Tx of
                   none ->
                       {State2, Actions} = internal_reject(Requeue, Acked, State1#ch.limiter, State1),
@@ -2050,75 +2051,86 @@ record_sent(Type, QueueType, Tag, AckRequired,
             end,
     State#ch{unacked_message_q = UAMQ1, next_tag = DeliveryTag + 1}.
 
-%% NB: returns acks in youngest-first order
-collect_acks(Q, 0, true, ODTags) ->
-    {lists:reverse(?QUEUE:to_list(Q)), ?QUEUE:new(), ODTags};
-collect_acks(Q, DeliveryTag, Multiple, ODTags) ->
-    collect_acks([], [], Q, DeliveryTag, Multiple, ODTags).
+%% Records a client-sent acknowledgement. Handles both single delivery acks
+%% and multi-acks.
+%%
+%% Returns a triple of acknowledged pending acks, remaining pending acks,
+%% and outdated pending acks (if any).
+%% Sorts each group in the youngest-first order (ascending by delivery tag).
+collect_acks(UAMQ, 0, true, ODTags) ->
+    {lists:reverse(?QUEUE:to_list(UAMQ)), ?QUEUE:new(), ODTags};
+collect_acks(UAMQ, DeliveryTag, Multiple, ODTags) ->
+    collect_acks([], [], UAMQ, DeliveryTag, Multiple, ODTags).
 
-collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple, []) ->
-    case ?QUEUE:out(Q) of
-        {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDeliveryTag}},
-         QTail} ->
+collect_acks(AckedAcc, StillPendingAcc, UAMQ, DeliveryTag, Multiple, []) ->
+    case ?QUEUE:out(UAMQ) of
+        {{value, UnackedMsg = #pending_ack{delivery_tag = PendingDT}}, UAMQTail} ->
             %% ack of a single delivery
-            if CurrentDeliveryTag == DeliveryTag ->
-                   {[UnackedMsg | ToAcc],
-                    case PrefixAcc of
-                        [] -> QTail;
-                        _  -> ?QUEUE:join(
-                                 ?QUEUE:from_list(lists:reverse(PrefixAcc)),
-                                 QTail)
-                    end, []};
+            AcksStillPending = case StillPendingAcc of
+                [] -> UAMQTail;
+                _  -> ?QUEUE:join(
+                         ?QUEUE:from_list(lists:reverse(StillPendingAcc)),
+                         UAMQTail)
+            end,
+            if PendingDT == DeliveryTag ->
+                    {[UnackedMsg | AckedAcc], AcksStillPending, []};
                %% ack of multiple deliveries (up to DeliveryTag)
                Multiple ->
-                    collect_acks([UnackedMsg | ToAcc], PrefixAcc,
-                                 QTail, DeliveryTag, Multiple, []);
+                    collect_acks([UnackedMsg | AckedAcc], StillPendingAcc,
+                                 UAMQTail, DeliveryTag, Multiple, []);
                true ->
-                    collect_acks(ToAcc, [UnackedMsg | PrefixAcc],
-                                 QTail, DeliveryTag, Multiple, [])
+                    collect_acks(AckedAcc, [UnackedMsg | StillPendingAcc],
+                                 UAMQTail, DeliveryTag, Multiple, [])
             end;
         {empty, _} ->
             precondition_failed("unknown delivery tag ~w", [DeliveryTag])
     end;
-collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple, ODTags) ->
-    case ?QUEUE:out(Q) of
-        {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDeliveryTag}},
-         QTail} ->
+collect_acks(AckedAcc, StillPendingAcc, UAMQ, DeliveryTag, Multiple, ODTags) ->
+    case ?QUEUE:out(UAMQ) of
+        {{value, PendingAck = #pending_ack{delivery_tag = PendingDT}}, UAMQTail} ->
             %% ack of a single delivery
-            if CurrentDeliveryTag == DeliveryTag ->
-                   {[UnackedMsg | ToAcc],
-                    case PrefixAcc of
-                        [] -> QTail;
+            if PendingDT == DeliveryTag ->
+                    AcksStillPending = case StillPendingAcc of
+                        [] -> UAMQTail;
                         _  -> ?QUEUE:join(
-                                 ?QUEUE:from_list(lists:reverse(PrefixAcc)),
-                                 QTail)
-                    end, ODTags};
+                                 ?QUEUE:from_list(lists:reverse(StillPendingAcc)),
+                                 UAMQTail)
+                    end,
+                   {[PendingAck | AckedAcc], AcksStillPending, ODTags};
                %% ack of multiple deliveries (up to DeliveryTag)
                Multiple ->
                     ODTags1 = lists:filter(
-                        fun(ODTag) -> ODTag > CurrentDeliveryTag
-                    end, ODTags),
-                    collect_acks([UnackedMsg | ToAcc], PrefixAcc,
-                                  QTail, DeliveryTag, Multiple, ODTags1);
+                        fun(ODTag) ->
+                            ODTag > PendingDT
+                        end, ODTags),
+                    collect_acks([PendingAck | AckedAcc], StillPendingAcc,
+                                  UAMQTail, DeliveryTag, Multiple, ODTags1);
                true ->
-                    ODTags1 = lists:delete(CurrentDeliveryTag, ODTags),
-                    collect_acks(ToAcc, [UnackedMsg | PrefixAcc],
-                                  QTail, DeliveryTag, Multiple, ODTags1)
+                    ODTags1 = lists:delete(PendingDT, ODTags),
+                    collect_acks(AckedAcc, [PendingAck | StillPendingAcc],
+                                 UAMQTail, DeliveryTag, Multiple, ODTags1)
             end;
         {empty, _} ->
+            %% this delivery tag is not pending, see if it's been marked as
+            %% outdated by a queue leader replica down event
             IsODTag = lists:member(DeliveryTag, ODTags),
             case IsODTag of
                 true ->
                     ODTags1 =
                         case Multiple of
-                            true -> lists:filter(fun(ODTag) -> ODTag > DeliveryTag end, ODTags);
-                            _ -> lists:delete(DeliveryTag, ODTags)
+                            true ->
+                                lists:filter(
+                                    fun(ODTag) ->
+                                        ODTag > DeliveryTag
+                                    end, ODTags);
+                            _ ->
+                                lists:delete(DeliveryTag, ODTags)
                         end,
-                    {ToAcc,
-                        case PrefixAcc of
-                            [] -> ?QUEUE:new();
-                            _  -> ?QUEUE:from_list(lists:reverse(PrefixAcc))
-                        end, ODTags1};
+                    AcksStillPending = case StillPendingAcc of
+                        [] -> ?QUEUE:new();
+                        _  -> ?QUEUE:from_list(lists:reverse(StillPendingAcc))
+                    end,
+                    {AckedAcc, AcksStillPending, ODTags1};
                 _ -> precondition_failed("unknown delivery tag ~w", [DeliveryTag])
             end
     end.
