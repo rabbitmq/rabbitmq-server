@@ -2062,7 +2062,7 @@ collect_acks(UAMQ, 0, true, ODTags) ->
 collect_acks(UAMQ, DeliveryTag, Multiple, ODTags) ->
     collect_acks([], [], UAMQ, DeliveryTag, Multiple, ODTags).
 
-collect_acks(AckedAcc, StillPendingAcc, UAMQ, DeliveryTag, Multiple, []) ->
+collect_acks(AckedAcc, StillPendingAcc, UAMQ, DeliveryTag, Multiple, [] = _ODTags) ->
     case ?QUEUE:out(UAMQ) of
         {{value, UnackedMsg = #pending_ack{delivery_tag = PendingDT}}, UAMQTail} ->
             %% ack of a single delivery
