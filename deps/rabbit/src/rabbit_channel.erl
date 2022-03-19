@@ -2060,6 +2060,7 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple, []) ->
     case ?QUEUE:out(Q) of
         {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDeliveryTag}},
          QTail} ->
+            %% ack of a single delivery
             if CurrentDeliveryTag == DeliveryTag ->
                    {[UnackedMsg | ToAcc],
                     case PrefixAcc of
@@ -2068,6 +2069,7 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple, []) ->
                                  ?QUEUE:from_list(lists:reverse(PrefixAcc)),
                                  QTail)
                     end, []};
+               %% ack of multiple deliveries (up to DeliveryTag)
                Multiple ->
                     collect_acks([UnackedMsg | ToAcc], PrefixAcc,
                                  QTail, DeliveryTag, Multiple, []);
@@ -2082,6 +2084,7 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple, ODTags) ->
     case ?QUEUE:out(Q) of
         {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDeliveryTag}},
          QTail} ->
+            %% ack of a single delivery
             if CurrentDeliveryTag == DeliveryTag ->
                    {[UnackedMsg | ToAcc],
                     case PrefixAcc of
@@ -2090,13 +2093,17 @@ collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple, ODTags) ->
                                  ?QUEUE:from_list(lists:reverse(PrefixAcc)),
                                  QTail)
                     end, ODTags};
+               %% ack of multiple deliveries (up to DeliveryTag)
                Multiple ->
-                   collect_acks([UnackedMsg | ToAcc], PrefixAcc,
-                                 QTail, DeliveryTag, Multiple,
-                                lists:filter(fun(ODTag) -> ODTag > CurrentDeliveryTag end, ODTags));
+                    ODTags1 = lists:filter(
+                        fun(ODTag) -> ODTag > CurrentDeliveryTag
+                    end, ODTags),
+                    collect_acks([UnackedMsg | ToAcc], PrefixAcc,
+                                  QTail, DeliveryTag, Multiple, ODTags1);
                true ->
-                   collect_acks(ToAcc, [UnackedMsg | PrefixAcc],
-                                 QTail, DeliveryTag, Multiple, lists:delete(CurrentDeliveryTag, ODTags))
+                    ODTags1 = lists:delete(CurrentDeliveryTag, ODTags),
+                    collect_acks(ToAcc, [UnackedMsg | PrefixAcc],
+                                  QTail, DeliveryTag, Multiple, ODTags1)
             end;
         {empty, _} ->
             IsODTag = lists:member(DeliveryTag, ODTags),
