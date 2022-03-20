@@ -120,11 +120,18 @@
           writer_gc_threshold
          }).
 
--record(pending_ack, {delivery_tag,
+-record(pending_ack, {
+                      %% delivery identifier used by clients
+                      %% to acknowledge and reject deliveries
+                      delivery_tag,
+                      %% consumer tag
                       tag,
                       delivered_at,
-                      queue, %% queue name
-                      msg_id}).
+                      %% queue name
+                      queue,
+                      %% message ID used by queue and message store implementations
+                      msg_id
+                    }).
 
 -record(ch, {cfg :: #conf{},
              %% limiter state, see rabbit_limiter
@@ -1342,7 +1349,7 @@ handle_method(#'basic.ack'{delivery_tag = DeliveryTag,
     {Acked, Remaining} = collect_acks(UAMQ, DeliveryTag, Multiple),
     State1 = State#ch{unacked_message_q = Remaining},
     {noreply, case Tx of
-                  none         -> {State2, Actions} = ack(Acked, State1),
+                  none         -> {State2, Actions} = settle_acks(Acked, State1),
                                   handle_queue_actions(Actions, State2);
                   {Msgs, Acks} -> Acks1 = ack_cons(ack, Acked, Acks),
                                   State1#ch{tx = {Msgs, Acks1}}
@@ -1722,7 +1729,7 @@ handle_method(#'tx.commit'{}, _, State = #ch{tx      = {Deliveries, Acks},
     Rev = fun (X) -> lists:reverse(lists:sort(X)) end,
     {State2, Actions2} =
         lists:foldl(fun ({ack,     A}, {Acc, Actions}) ->
-                            {Acc0, Actions0} = ack(Rev(A), Acc),
+                            {Acc0, Actions0} = settle_acks(Rev(A), Acc),
                             {Acc0, Actions ++ Actions0};
                         ({Requeue, A}, {Acc, Actions}) ->
                             {Acc0, Actions0} = internal_reject(Requeue, Rev(A), Limiter, Acc),
@@ -2029,37 +2036,43 @@ record_sent(Type, QueueType, Tag, AckRequired,
             end,
     State#ch{unacked_message_q = UAMQ1, next_tag = DeliveryTag + 1}.
 
-%% NB: returns acks in youngest-first order
-collect_acks(Q, 0, true) ->
-    {lists:reverse(?QUEUE:to_list(Q)), ?QUEUE:new()};
-collect_acks(Q, DeliveryTag, Multiple) ->
-    collect_acks([], [], Q, DeliveryTag, Multiple).
+%% Records a client-sent acknowledgement. Handles both single delivery acks
+%% and multi-acks.
+%%
+%% Returns a triple of acknowledged pending acks, remaining pending acks,
+%% and outdated pending acks (if any).
+%% Sorts each group in the youngest-first order (ascending by delivery tag).
+collect_acks(UAMQ, 0, true) ->
+    {lists:reverse(?QUEUE:to_list(UAMQ)), ?QUEUE:new()};
+collect_acks(UAMQ, DeliveryTag, Multiple) ->
+    collect_acks([], [], UAMQ, DeliveryTag, Multiple).
 
-collect_acks(ToAcc, PrefixAcc, Q, DeliveryTag, Multiple) ->
-    case ?QUEUE:out(Q) of
-        {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDeliveryTag}},
-         QTail} ->
-            if CurrentDeliveryTag == DeliveryTag ->
-                   {[UnackedMsg | ToAcc],
-                    case PrefixAcc of
-                        [] -> QTail;
+collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
+    case ?QUEUE:out(UAMQ) of
+        {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDT}},
+         UAMQTail} ->
+            if CurrentDT == DeliveryTag ->
+                   {[UnackedMsg | AcknowledgedAcc],
+                    case RemainingAcc of
+                        [] -> UAMQTail;
                         _  -> ?QUEUE:join(
-                                 ?QUEUE:from_list(lists:reverse(PrefixAcc)),
-                                 QTail)
+                                 ?QUEUE:from_list(lists:reverse(RemainingAcc)),
+                                 UAMQTail)
                     end};
                Multiple ->
-                    collect_acks([UnackedMsg | ToAcc], PrefixAcc,
-                                 QTail, DeliveryTag, Multiple);
+                    collect_acks([UnackedMsg | AcknowledgedAcc], RemainingAcc,
+                                 UAMQTail, DeliveryTag, Multiple);
                true ->
-                    collect_acks(ToAcc, [UnackedMsg | PrefixAcc],
-                                 QTail, DeliveryTag, Multiple)
+                    collect_acks(AcknowledgedAcc, [UnackedMsg | RemainingAcc],
+                                 UAMQTail, DeliveryTag, Multiple)
             end;
         {empty, _} ->
             precondition_failed("unknown delivery tag ~w", [DeliveryTag])
     end.
 
-%% NB: Acked is in youngest-first order
-ack(Acked, State = #ch{queue_states = QueueStates0}) ->
+%% Settles (acknowledges) messages at the queue replica process level.
+%% This happens in the youngest-first order (ascending by delivery tag).
+settle_acks(Acks, State = #ch{queue_states = QueueStates0}) ->
     {QueueStates, Actions} =
         foreach_per_queue(
           fun ({QRef, CTag}, MsgIds, {Acc0, ActionsAcc0}) ->
@@ -2071,8 +2084,8 @@ ack(Acked, State = #ch{queue_states = QueueStates0}) ->
                       {protocol_error, ErrorType, Reason, ReasonArgs} ->
                           rabbit_misc:protocol_error(ErrorType, Reason, ReasonArgs)
                   end
-          end, Acked, {QueueStates0, []}),
-    ok = notify_limiter(State#ch.limiter, Acked),
+          end, Acks, {QueueStates0, []}),
+    ok = notify_limiter(State#ch.limiter, Acks),
     {State#ch{queue_states = QueueStates}, Actions}.
 
 incr_queue_stats(QName, MsgIds, State = #ch{queue_states = QueueStates}) ->
