@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 %% @private
@@ -317,7 +317,7 @@ client_properties(UserProperties) ->
                {<<"version">>,   longstr, list_to_binary(Vsn)},
                {<<"platform">>,  longstr, <<"Erlang">>},
                {<<"copyright">>, longstr,
-                <<"Copyright (c) 2007-2021 VMware, Inc. or its affiliates.">>},
+                <<"Copyright (c) 2007-2022 VMware, Inc. or its affiliates.">>},
                {<<"information">>, longstr,
                 <<"Licensed under the MPL.  "
                   "See https://www.rabbitmq.com/">>},
