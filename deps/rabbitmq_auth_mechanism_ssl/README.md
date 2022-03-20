@@ -128,6 +128,6 @@ ssl_cert_login_from = common_name
 
 ## Copyright & License
 
-(c) 2007-2021 VMware, Inc. or its affiliates.
+(c) 2007-2022 VMware, Inc. or its affiliates.
 
 Released under the same license as RabbitMQ.
