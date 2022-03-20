@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2012-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2012-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %% -----------------------------------------------------------------------------
 %% Derived from works which were:
 %% Copyright (c) 2002, 2012 Tim Watson (watson.timothy@gmail.com)
