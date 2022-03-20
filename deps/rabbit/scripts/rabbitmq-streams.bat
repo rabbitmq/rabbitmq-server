@@ -4,7 +4,7 @@ REM This Source Code Form is subject to the terms of the Mozilla Public
 REM License, v. 2.0. If a copy of the MPL was not distributed with this
 REM file, You can obtain one at https://mozilla.org/MPL/2.0/.
 REM
-REM Copyright (c) 2007-2021 VMware, Inc. or its affiliates.  All rights reserved.
+REM Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 REM
 
 REM Scopes the variables to the current batch file

@@ -2,7 +2,7 @@
 %% from rabbitmq-autocluster by Gavin Roy.
 %%
 %% Copyright (c) 2014-2015 AWeber Communications
-%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates
+%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without modification,
@@ -32,7 +32,7 @@
 %%
 %% The Initial Developer of the Original Code is AWeber Communications.
 %% Copyright (c) 2014-2015 AWeber Communications
-%% Copyright (c) 2016-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2016-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
 -module(rabbit_peer_discovery_backend).

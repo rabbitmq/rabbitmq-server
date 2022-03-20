@@ -1,7 +1,7 @@
 %% This file is a copy of http_uri.erl from the R13B-1 Erlang/OTP
 %% distribution with several modifications.
 
-%% All modifications are Copyright (c) 2009-2021 VMware, Inc. or its affiliates.
+%% All modifications are Copyright (c) 2009-2022 VMware, Inc. or its affiliates.
 
 %% ``The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in

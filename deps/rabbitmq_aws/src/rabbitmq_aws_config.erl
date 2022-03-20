@@ -1,7 +1,7 @@
 %% ====================================================================
 %% @author Gavin M. Roy <gavinmroy@gmail.com>
 %% @copyright 2016, Gavin M. Roy
-%% @copyright 2016-2021 VMware, Inc. or its affiliates.
+%% @copyright 2016-2022 VMware, Inc. or its affiliates.
 %% @private
 %% @doc rabbitmq_aws configuration functionality
 %% @end

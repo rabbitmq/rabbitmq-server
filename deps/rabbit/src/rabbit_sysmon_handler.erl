@@ -1,5 +1,5 @@
 %% Copyright (c) 2011 Basho Technologies, Inc.  All Rights Reserved.
-%% Copyright (c) 2018-2021 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2018-2022 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
