@@ -212,6 +212,7 @@ erlang_app(
         name = "ra",
         branch = "main",
         remote = "https://github.com/rabbitmq/ra.git",
+        patch_cmds = [RA_INJECT_GIT_VERSION],
     )
 
     hex_archive(
@@ -282,3 +283,9 @@ erlang_app(
         branch = "master",
         build_file = rabbitmq_workspace + "//:BUILD.trust_store_http",
     )
+
+RA_INJECT_GIT_VERSION = """
+VERSION=$(git rev-parse HEAD)
+echo "Injecting ${VERSION} into ra.app.src..."
+sed -i"_orig" "/vsn,/ s/2\\.[0-9]\\.[0-9]/${VERSION}/" src/ra.app.src
+"""
