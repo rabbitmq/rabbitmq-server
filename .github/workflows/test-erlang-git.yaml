@@ -25,7 +25,7 @@ jobs:
           "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
           //:erlang_git_platform
     - name: MOUNT BAZEL CACHE
-      uses: actions/cache@v1
+      uses: actions/cache@v3
       with:
         path: "/home/runner/repo-cache/"
         key: repo-cache
