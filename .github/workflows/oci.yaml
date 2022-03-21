@@ -76,12 +76,12 @@ jobs:
           cat << EOF >> user.bazelrc
             build:buildbuddy --build_metadata=ROLE=CI
             build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-            build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-oci-${{ matrix.erlang_version }}
+            build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-oci
             build:buildbuddy --repository_cache=/home/runner/repo-cache/
             build:buildbuddy --color=yes
             build:buildbuddy --disk_cache=
 
-            build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
+            build --@rules_erlang//:erlang_version=${{ steps.load-info.outputs.otp }}
             build --@rules_erlang//:erlang_home=${ERLANG_HOME}
             build --//:elixir_home=${ELIXIR_HOME}
           EOF
@@ -90,6 +90,11 @@ jobs:
         run: |
           sed -i"_orig" '/APP_VERSION/ s/3.10.0/${{ github.sha }}/' rabbitmq.bzl
           bazelisk build :package-generic-unix
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: package-generic-unix-${{ steps.load-info.outputs.otp }}.tar.xz
+          path: ${{ github.workspace }}/bazel-bin/package-generic-unix.tar.xz
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
