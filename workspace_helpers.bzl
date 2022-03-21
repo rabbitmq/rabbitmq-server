@@ -210,8 +210,8 @@ erlang_app(
 
     git_repository(
         name = "ra",
-        branch = "notify-effect-refactor",
         remote = "https://github.com/rabbitmq/ra.git",
+        branch = "notify-effect-refactor",
     )
 
     hex_archive(
