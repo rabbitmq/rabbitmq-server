@@ -156,13 +156,11 @@ defmodule RabbitMQCtl.MixfileBase do
           {
             :goldrush,
             path: Path.join(deps_dir, "goldrush"),
-            compile: false,
             override: true
           },
           {
             :lager,
             path: Path.join(deps_dir, "lager"),
-            compile: false,
             override: true
           },
           {
