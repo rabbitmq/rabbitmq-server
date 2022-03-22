@@ -86,7 +86,9 @@ cd ${{TEST_UNDECLARED_OUTPUTS_DIR}}
 export ERL_LIBS=$DEPS_DIR
 
 # run the actual tests
-"{elixir_home}"/bin/mix test --trace --max-failures 1
+set +u
+set -x
+"{elixir_home}"/bin/mix test --trace --max-failures 1 ${{TEST_FILE}}
     """.format(
             begins_with_fun = BEGINS_WITH_FUN,
             query_erlang_version = QUERY_ERL_VERSION,
