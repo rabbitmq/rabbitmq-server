@@ -21,7 +21,7 @@
 -define(COUNT_TIME_BYTES, [io_read, io_write]).
 
 init() ->
-    _ = ets:new(?TABLE, [public, named_table]),
+    _ = ets:new(?TABLE, [public, named_table, {write_concurrency,true}]),
     [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- ?COUNT_TIME_BYTES,
                                                Counter <- [count, bytes, time]],
     [ets:insert(?TABLE, {{Op, Counter}, 0}) || Op      <- ?COUNT_TIME,
