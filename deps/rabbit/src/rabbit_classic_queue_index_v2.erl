@@ -678,12 +678,17 @@ maybe_mark_unconfirmed(_, _, State) ->
 
 maybe_flush_buffer(State = #qi { write_buffer = WriteBuffer,
 <<<<<<< HEAD
+<<<<<<< HEAD
                                  write_buffer_updates = NumUpdates },
                    SegmentEntryCount) ->
 =======
                                  write_buffer_updates = NumUpdates }) ->
     SegmentEntryCount = segment_entry_count(),
 >>>>>>> 95289147c4 (CQv2 index: Increase threshold before flushing to disk)
+=======
+                                 write_buffer_updates = NumUpdates },
+                   SegmentEntryCount) ->
+>>>>>>> 33db120b2b (CQv2 index: Reduce number of calls to segment_entry_count/0)
     if
         %% We only flush updates (acks) when too many have accumulated.
         NumUpdates >= (SegmentEntryCount div 2) ->
