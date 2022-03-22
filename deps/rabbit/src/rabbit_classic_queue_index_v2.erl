@@ -590,6 +590,23 @@ new_segment_file(Segment, SegmentEntryCount, State = #qi{ segments = Segments })
     #qi{ fds = OpenFds } = reduce_fd_usage(Segment, State),
     false = maps:is_key(Segment, OpenFds), %% assert
     {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
+    %% We must preallocate space for the file. We want the space
+    %% to be allocated to not have to worry about errors when
+    %% writing later on.
+    Size = ?HEADER_SIZE + SegmentEntryCount * ?ENTRY_SIZE,
+    case file:allocate(Fd, 0, Size) of
+        ok ->
+            ok;
+        %% On some platforms file:allocate is not supported (e.g. Windows).
+        %% In that case we fill the file with zeroes manually.
+        {error, enotsup} ->
+            ok = file:write(Fd, <<0:Size/unit:8>>),
+            {ok, 0} = file:position(Fd, bof),
+            %% We do a full GC immediately after because we do not want
+            %% to keep around the large binary we used to fill the file.
+            _ = garbage_collect(),
+            ok
+    end,
     %% We then write the segment file header. It contains
     %% some useful info and some reserved bytes for future use.
     %% We currently do not make use of this information. It is
