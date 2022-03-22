@@ -124,7 +124,7 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: packaging/docker-image
-          push: false
+          push: true
           tags: |
             pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_1 }}
             pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_2 }}
