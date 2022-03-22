@@ -5,8 +5,8 @@ on:
   workflow_dispatch:
 env:
   GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/bazel-bin/package-generic-unix.tar.xz
-  RABBITMQ_VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
-  VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
+  RABBITMQ_VERSION: ${{ github.sha }}
+  VERSION: ${{ github.sha }}
 jobs:
 
   # This job will build one docker image per supported Erlang major version.
@@ -65,11 +65,38 @@ jobs:
           bazelisk build :otp_version --config=rbe-${{ matrix.otp_major }}
           echo "::set-output name=otp::$(cat bazel-bin/otp_version.txt)"
 
+      - name: MOUNT BAZEL CACHE
+        uses: actions/cache@v1
+        with:
+          path: "/home/runner/repo-cache/"
+          key: repo-cache
+
+      - name: CONFIGURE BAZEL
+        run: |
+          ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+          ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+          if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+          cat << EOF >> user.bazelrc
+            build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+          EOF
+          fi
+          cat << EOF >> user.bazelrc
+            build:buildbuddy --build_metadata=ROLE=CI
+            build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
+            build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-oci
+            build:buildbuddy --repository_cache=/home/runner/repo-cache/
+            build:buildbuddy --color=yes
+            build:buildbuddy --disk_cache=
+
+            build --@rules_erlang//:erlang_version=${{ steps.load-info.outputs.otp }}
+            build --@rules_erlang//:erlang_home=${ERLANG_HOME}
+            build --//:elixir_home=${ELIXIR_HOME}
+          EOF
+
       - name: Build generic unix package
         run: |
-          sed -i"_orig" -E '/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ github.event.pull_request.head.sha || github.sha }}/' rabbitmq.bzl
-          bazelisk build :package-generic-unix \
-            --config=rbe-${{ matrix.otp_major }}
+          sed -i"_orig" '/APP_VERSION/ s/3.10.0/${{ github.sha }}/' rabbitmq.bzl
+          bazelisk build :package-generic-unix
 
       - name: Resolve generic unix package path
         run: |
