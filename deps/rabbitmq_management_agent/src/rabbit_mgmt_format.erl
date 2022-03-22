@@ -191,12 +191,14 @@ protocol_version({Major, Minor, Revision}) -> io_lib:format("~B-~B-~B",
 % Uses the same format as the OTP logger:
 % https://github.com/erlang/otp/blob/82e74303e715c7c64c1998bf034b12a48ce814b1/lib/kernel/src/logger_formatter.erl#L306-L311
 now_to_str() ->
-    calendar:system_time_to_rfc3339(os:system_time(millisecond), [{unit, millisecond}]).
+    Str = calendar:system_time_to_rfc3339(os:system_time(millisecond), [{unit, millisecond}]),
+    rabbit_data_coercion:to_binary(Str).
 
-now_to_str(unknown) ->
-    unknown;
 now_to_str(MilliSeconds) when is_integer(MilliSeconds) ->
-    calendar:system_time_to_rfc3339(MilliSeconds, [{unit, millisecond}]).
+    Str = calendar:system_time_to_rfc3339(MilliSeconds, [{unit, millisecond}]),
+    rabbit_data_coercion:to_binary(Str);
+now_to_str(NonInteger) ->
+    rabbit_data_coercion:to_binary(NonInteger).
 
 resource(unknown) -> unknown;
 resource(Res)     -> resource(name, Res).
