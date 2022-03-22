@@ -528,7 +528,7 @@ terminate(VHost, Terms, State0 = #qi { dir = Dir,
                                        fds = OpenFds }) ->
     ?DEBUG("~0p ~0p ~0p", [VHost, Terms, State0]),
     %% Flush the buffer.
-    State = flush_buffer(State0, full),
+    State = flush_buffer(State0, full, segment_entry_count()),
     %% Fsync and close all FDs.
     _ = maps:map(fun(_, Fd) ->
         ok = file:sync(Fd),
@@ -575,22 +575,21 @@ publish(MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount,
     SegmentEntryCount = segment_entry_count(),
     ThisSegment = SeqId div SegmentEntryCount,
     State2 = case maps:get(ThisSegment, Segments, undefined) of
-        undefined -> new_segment_file(ThisSegment, State1);
+        undefined -> new_segment_file(ThisSegment, SegmentEntryCount, State1);
         ThisSegmentCount -> State1#qi{ segments = Segments#{ ThisSegment => ThisSegmentCount + 1 }}
     end,
     %% When publisher confirms have been requested for this
     %% message we mark the message as unconfirmed.
     State = maybe_mark_unconfirmed(MsgId, Props, State2),
-    maybe_flush_buffer(State).
+    maybe_flush_buffer(State, SegmentEntryCount).
 
-new_segment_file(Segment, State = #qi{ segments = Segments }) ->
+new_segment_file(Segment, SegmentEntryCount, State = #qi{ segments = Segments }) ->
     #qi{ fds = OpenFds } = reduce_fd_usage(Segment, State),
     false = maps:is_key(Segment, OpenFds), %% assert
     {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
     %% We must preallocate space for the file. We want the space
     %% to be allocated to not have to worry about errors when
     %% writing later on.
-    SegmentEntryCount = segment_entry_count(),
     Size = ?HEADER_SIZE + SegmentEntryCount * ?ENTRY_SIZE,
     case file:allocate(Fd, 0, Size) of
         ok ->
@@ -677,19 +676,16 @@ maybe_mark_unconfirmed(MsgId, #message_properties{ needs_confirming = true },
 maybe_mark_unconfirmed(_, _, State) ->
     State.
 
-%% @todo Perhaps make the two limits configurable. Also refine the default.
 maybe_flush_buffer(State = #qi { write_buffer = WriteBuffer,
-                                 write_buffer_updates = NumUpdates }) ->
+                                 write_buffer_updates = NumUpdates },
+                   SegmentEntryCount) ->
     if
-        %% When we have at least 100 entries, we always want to flush,
-        %% in order to limit the memory usage and avoid losing too much
-        %% data on crashes.
-        (map_size(WriteBuffer) - NumUpdates) >= 100 ->
-            flush_buffer(State, full);
-        %% We may want to flush updates (acks) when
-        %% too many have accumulated.
-        NumUpdates >= 2000 ->
-            flush_buffer(State, updates);
+        %% We only flush updates (acks) when too many have accumulated.
+        NumUpdates >= (SegmentEntryCount div 2) ->
+            flush_buffer(State, updates, SegmentEntryCount);
+        %% We flush when the write buffer exceeds the size of a segment.
+        map_size(WriteBuffer) >= SegmentEntryCount ->
+            flush_buffer(State, full, SegmentEntryCount);
         %% Otherwise we do not flush this time.
         true ->
             State
@@ -697,8 +693,7 @@ maybe_flush_buffer(State = #qi { write_buffer = WriteBuffer,
 
 flush_buffer(State0 = #qi { write_buffer = WriteBuffer0,
                             cache = Cache0 },
-             FlushType) ->
-    SegmentEntryCount = segment_entry_count(),
+             FlushType, SegmentEntryCount) ->
     %% First we prepare the writes sorted by segment.
     {Writes, WriteBuffer, AcksToCache} = maps:fold(fun
         (SeqId, ack, {WritesAcc, BufferAcc, AcksAcc}) when FlushType =:= updates ->
@@ -813,10 +808,11 @@ ack(SeqIds, State0 = #qi{ write_buffer = WriteBuffer0,
                           write_buffer_updates = NumUpdates0,
                           cache = Cache0 }) ->
     ?DEBUG("~0p ~0p", [SeqIds, State0]),
+    SegmentEntryCount = segment_entry_count(),
     %% We start by updating the ack state information. We then
     %% use this information to delete segment files on disk that
     %% were fully acked.
-    {Deletes, State1} = update_ack_state(SeqIds, State0),
+    {Deletes, State1} = update_ack_state(SeqIds, SegmentEntryCount, State0),
     State = delete_segments(Deletes, State1),
     %% We add acks to the write buffer. We take special care not to add
     %% acks for segments that have been deleted. We do this using second
@@ -831,16 +827,16 @@ ack(SeqIds, State0 = #qi{ write_buffer = WriteBuffer0,
         _ ->
             {WriteBuffer2, NumUpdates2, _, _} = maps:fold(
                 fun ack_delete_fold_fun/3,
-                {#{}, 0, Deletes, segment_entry_count()},
+                {#{}, 0, Deletes, SegmentEntryCount},
                 WriteBuffer1),
             {WriteBuffer2, NumUpdates2}
     end,
     {Deletes, maybe_flush_buffer(State#qi{ write_buffer = WriteBuffer,
                                            write_buffer_updates = NumUpdates,
-                                           cache = Cache })}.
+                                           cache = Cache },
+                                 SegmentEntryCount)}.
 
-update_ack_state(SeqIds, State = #qi{ segments = Segments0 }) ->
-    SegmentEntryCount = segment_entry_count(),
+update_ack_state(SeqIds, SegmentEntryCount, State = #qi{ segments = Segments0 }) ->
     {Delete, Segments} = lists:foldl(fun(SeqId, {DeleteAcc, Segments1}) ->
         Segment = SeqId div SegmentEntryCount,
         case Segments1 of
@@ -1054,7 +1050,7 @@ parse_entries(<< Status:8,
 sync(State0 = #qi{ confirms = Confirms,
                    on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State0]),
-    State = flush_buffer(State0, full),
+    State = flush_buffer(State0, full, segment_entry_count()),
     _ = case gb_sets:is_empty(Confirms) of
         true ->
             ok;
