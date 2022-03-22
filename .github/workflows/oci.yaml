@@ -2,16 +2,6 @@
 name: OCI
 on:
   push:
-    paths:
-      - 'deps/**'
-      - 'packaging/**'
-      - 'scripts/**'
-      - .bazelrc
-      - .bazelversion
-      - BUILD.*
-      - '*.bzl'
-      - '*.bazel'
-      - .github/workflows/oci.yaml
   workflow_dispatch:
 env:
   GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/bazel-bin/package-generic-unix.tar.xz
