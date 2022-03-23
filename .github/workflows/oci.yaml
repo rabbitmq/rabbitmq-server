@@ -2,16 +2,9 @@
 name: OCI
 on:
   push:
-    paths:
-      - 'deps/**'
-      - 'packaging/**'
-      - 'scripts/**'
-      - Makefile
-      - plugins.mk
-      - rabbitmq-components.mk
-      - .github/workflows/oci.yaml
+  workflow_dispatch:
 env:
-  GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/PACKAGES/rabbitmq-server-generic-unix-${{ github.sha }}.tar.xz
+  GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/bazel-bin/package-generic-unix.tar.xz
   RABBITMQ_VERSION: ${{ github.sha }}
   VERSION: ${{ github.sha }}
 jobs:
@@ -55,9 +48,49 @@ jobs:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
 
+      - name: MOUNT BAZEL CACHE
+        uses: actions/cache@v1
+        with:
+          path: "/home/runner/repo-cache/"
+          key: repo-cache
+
+      - name: CONFIGURE BAZEL
+        run: |
+          ERLANG_HOME="$(dirname $(dirname $(which erl)))"
+          ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
+          if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
+          cat << EOF >> user.bazelrc
+            build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
+          EOF
+          fi
+          cat << EOF >> user.bazelrc
+            build:buildbuddy --build_metadata=ROLE=CI
+            build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
+            build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-oci
+            build:buildbuddy --repository_cache=/home/runner/repo-cache/
+            build:buildbuddy --color=yes
+            build:buildbuddy --disk_cache=
+
+            build --@rules_erlang//:erlang_version=${{ steps.load-info.outputs.otp }}
+            build --@rules_erlang//:erlang_home=${ERLANG_HOME}
+            build --//:elixir_home=${ELIXIR_HOME}
+          EOF
+
       - name: Build generic unix package
         run: |
-          make package-generic-unix PROJECT_VERSION=${{ github.sha }}
+          sed -i"_orig" '/APP_VERSION/ s/3.8.0/${{ github.sha }}/' rabbitmq.bzl
+          bazelisk build :package-generic-unix
+
+      - name: Resolve generic unix package path
+        run: |
+          echo "::set-output name=ARTIFACT_PATH::$(readlink -f ${GENERIC_UNIX_ARCHIVE})"
+        id: resolve-artifact-path
+
+      - name: Save the package as a workflow artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: package-generic-unix-${{ steps.load-info.outputs.otp }}.tar.xz
+          path: ${{ steps.resolve-artifact-path.outputs.ARTIFACT_PATH }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1

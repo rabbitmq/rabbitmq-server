@@ -58,7 +58,7 @@ RABBITMQ_DIALYZER_OPTS = [
     "-Wunmatched_returns",
 ]
 
-APP_VERSION = "3.8"
+APP_VERSION = "3.8.0"
 
 ALL_PLUGINS = [
     "//deps/rabbit:erlang_app",
