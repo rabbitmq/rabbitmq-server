@@ -320,6 +320,7 @@ activate_consumer(VirtualHost, Stream, ConsumerName) ->
               Res
       end).
 
+%% return the current groups for a given virtual host
 -spec consumer_groups(binary(), [atom()]) -> {ok, [term()] | {error, atom()}}.
 consumer_groups(VirtualHost, InfoKeys) ->
     maybe_sac_execute(
@@ -341,6 +342,7 @@ consumer_groups(VirtualHost, InfoKeys) ->
               end
       end).
 
+%% get the consumers of a given group in a given virtual host
 -spec group_consumers(binary(), binary(), binary(), [atom()]) ->
     {ok, [term()]} | {error, atom()}.
 group_consumers(VirtualHost, Stream, Reference, InfoKeys) ->
@@ -439,7 +441,7 @@ all_coord_members() ->
     Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
     [{?MODULE, Node} || Node <- [node() | Nodes]].
 
-version() -> 2.
+version() -> 3.
 
 which_module(_) ->
     ?MODULE.
@@ -1896,6 +1898,9 @@ machine_version(1, 2, State = #?MODULE{streams = Streams0,
     {State#?MODULE{streams = Streams1,
                    monitors = Monitors2,
                    listeners = undefined}, Effects};
+machine_version(2, 3, State) ->
+    rabbit_log:info("Stream coordinator machine version changes from 2 to 3, updating state."),
+    {State#?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()}, []};
 machine_version(From, To, State) ->
     rabbit_log:info("Stream coordinator machine version changes from ~p to ~p, no state changes required.",
                     [From, To]),

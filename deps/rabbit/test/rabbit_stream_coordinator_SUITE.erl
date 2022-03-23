@@ -26,7 +26,8 @@ all() ->
 all_tests() ->
     [
      listeners,
-     machine_version_upgrade,
+     machine_version_upgrade_to_2,
+     machine_version_upgrade_to_3,
      new_stream,
      leader_down,
      leader_down_scenario_1,
@@ -197,12 +198,12 @@ listeners(_) ->
 
     ok.
 
-machine_version_upgrade(_) ->
-    machine_version(0, 2),
-    machine_version(1, 2),
+machine_version_upgrade_to_2(_) ->
+    machine_version_to_2(0),
+    machine_version_to_2(1),
     ok.
 
-machine_version(From, To) ->
+machine_version_to_2(From) ->
     S = <<"stream">>,
     LeaderPid = spawn(fun() -> ok end),
     ListPid = spawn(fun() -> ok end), %% simulate a dead listener (not cleaned up)
@@ -212,7 +213,7 @@ machine_version(From, To) ->
                                                        DeadListPid => LeaderPid}}},
                      monitors = #{ListPid => {S, listener}}},
 
-    {State1, ok, Effects} = apply_cmd(#{index => 42}, {machine_version, From, To}, State0),
+    {State1, ok, Effects} = apply_cmd(#{index => 42}, {machine_version, From, 2}, State0),
 
     Stream1 = maps:get(S, State1#?STATE.streams),
     ?assertEqual(
@@ -230,6 +231,24 @@ machine_version(From, To) ->
         {monitor, process, ListPid}],
        Effects
       ),
+    ok.
+
+machine_version_upgrade_to_3(_) ->
+    machine_version_to_3(0),
+    machine_version_to_3(1),
+    machine_version_to_3(2),
+    ok.
+
+machine_version_to_3(From) ->
+    State0 = #?STATE{},
+    #?STATE{single_active_consumer = Sac0} = State0,
+
+    ?assert(Sac0 == undefined),
+
+    {#?STATE{single_active_consumer = Sac1}, ok, Effects} = apply_cmd(#{index => 42}, {machine_version, From, 3}, State0),
+
+    ?assertNot(Sac1 == undefined),
+    ?assertEqual(Effects, []),
     ok.
 
 new_stream(_) ->
