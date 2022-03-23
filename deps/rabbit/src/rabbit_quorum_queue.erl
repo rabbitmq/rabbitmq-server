@@ -107,6 +107,7 @@
 -define(TICK_TIMEOUT, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
+-define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 
 %%----------- rabbit_queue_type ---------------------------------------------
 
@@ -189,7 +190,9 @@ start_cluster(Q) ->
         {created, NewQ} ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                               ?TICK_TIMEOUT),
-            RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout)
+            SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
+                                                   ?SNAPSHOT_INTERVAL),
+            RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout, SnapshotInterval)
                        || ServerId <- members(NewQ)],
             case ra:start_cluster(?RA_SYSTEM, RaConfs) of
                 {ok, _, _} ->
@@ -1058,7 +1061,9 @@ add_member(Q, Node, Timeout) when ?amqqueue_is_quorum(Q) ->
     Members = members(Q),
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                       ?TICK_TIMEOUT),
-    Conf = make_ra_conf(Q, ServerId, TickTimeout),
+    SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
+                                           ?SNAPSHOT_INTERVAL),
+    Conf = make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval),
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             case ra:add_member(Members, ServerId, Timeout) of
@@ -1621,7 +1626,7 @@ members(Q) when ?amqqueue_is_quorum(Q) ->
 format_ra_event(ServerId, Evt, QRef) ->
     {'$gen_cast', {queue_event, QRef, {ServerId, Evt}}}.
 
-make_ra_conf(Q, ServerId, TickTimeout) ->
+make_ra_conf(Q, ServerId, TickTimeout, SnapshotInterval) ->
     QName = amqqueue:get_name(Q),
     RaMachine = ra_machine(Q),
     [{ClusterName, _} | _] = Members = members(Q),
@@ -1634,7 +1639,8 @@ make_ra_conf(Q, ServerId, TickTimeout) ->
       friendly_name => FName,
       metrics_key => QName,
       initial_members => Members,
-      log_init_args => #{uid => UId},
+      log_init_args => #{uid => UId,
+                         snapshot_interval => SnapshotInterval},
       tick_timeout => TickTimeout,
       machine => RaMachine,
       ra_event_formatter => Formatter}.
