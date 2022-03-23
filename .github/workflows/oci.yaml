@@ -78,7 +78,7 @@ jobs:
 
       - name: Build generic unix package
         run: |
-          sed -i"_orig" '/APP_VERSION/ s/3.9.0/${{ github.sha }}/' rabbitmq.bzl
+          sed -i"_orig" '/APP_VERSION/ s/3.8.0/${{ github.sha }}/' rabbitmq.bzl
           bazelisk build :package-generic-unix
 
       - name: Resolve generic unix package path
