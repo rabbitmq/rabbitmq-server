@@ -137,7 +137,7 @@ basics(Config) ->
                     {_, _} = rabbit_fifo_client:return(Ctag, [Mid], FState7),
                     ok
             end
-    after 2000 ->
+    after 5000 ->
               exit(await_msg_timeout)
     end,
     rabbit_quorum_queue:stop_server(ServerId),
@@ -172,7 +172,7 @@ rabbit_fifo_returns_correlation(Config) ->
                 Del ->
                     exit({unexpected, Del})
             end
-    after 2000 ->
+    after 5000 ->
               exit(await_msg_timeout)
     end,
     rabbit_quorum_queue:stop_server(ServerId),
@@ -205,7 +205,7 @@ duplicate_delivery(Config) ->
                                     end
                             end
                     end
-            after 2000 ->
+            after 5000 ->
                       exit(await_msg_timeout)
             end
         end,
@@ -224,7 +224,7 @@ usage(Config) ->
     {_, _, _} = process_ra_events(receive_ra_events(2, 2), F3),
     % force tick and usage stats emission
     ServerId ! tick_timeout,
-    timer:sleep(50),
+    timer:sleep(100),
     Use = rabbit_fifo:usage(element(1, ServerId)),
     rabbit_quorum_queue:stop_server(ServerId),
     ?assert(Use > 0.0),
@@ -306,7 +306,7 @@ returns_after_down(Config) ->
                          Self ! checkout_done
                  end),
     receive checkout_done -> ok after 1000 -> exit(checkout_done_timeout) end,
-    timer:sleep(1000),
+    timer:sleep(2000),
     % message should be available for dequeue
     {ok, _, {_, _, _, _, msg1}, _} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F2),
     rabbit_quorum_queue:stop_server(ServerId),
@@ -325,7 +325,7 @@ resends_after_lost_applied(Config) ->
     receive
         {ra_event, _, {applied, _}} ->
             ok
-    after 500 ->
+    after 2000 ->
               exit(await_ra_event_timeout)
     end,
     % send another message
@@ -354,7 +354,7 @@ handles_reject_notification(Config) ->
     F0 = rabbit_fifo_client:init(ClusterName, [ServerId2, ServerId1]),
     {ok, F1} = rabbit_fifo_client:enqueue(one, F0),
 
-    timer:sleep(500),
+    timer:sleep(1000),
 
     % the applied notification
     _F2 = process_ra_events(receive_ra_events(1, 0), F1),
@@ -391,7 +391,7 @@ discard(Config) ->
             [msg1] = Letters,
             rejected = Reason,
             ok
-    after 500 ->
+    after 1000 ->
               flush(),
               exit(dead_letter_timeout)
     end,
@@ -456,7 +456,7 @@ untracked_enqueue(Config) ->
     ok = start_cluster(ClusterName, [ServerId]),
 
     ok = rabbit_fifo_client:untracked_enqueue([ServerId], msg1),
-    timer:sleep(100),
+    timer:sleep(500),
     F0 = rabbit_fifo_client:init(ClusterName, [ServerId]),
     {ok, _, {_, _, _, _, msg1}, _F5} = rabbit_fifo_client:dequeue(<<"tag">>, settled, F0),
     rabbit_quorum_queue:stop_server(ServerId),
@@ -578,7 +578,7 @@ receive_ra_events(Acc) ->
     receive
         {ra_event, _, _} = Evt ->
             receive_ra_events([Evt | Acc])
-    after 500 ->
+    after 1000 ->
             Acc
     end.
 
