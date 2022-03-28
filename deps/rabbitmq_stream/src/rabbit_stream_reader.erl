@@ -1880,11 +1880,25 @@ handle_frame_post_auth(Transport,
                             Sac = single_active_consumer(Properties),
                             ConsumerName = consumer_name(Properties),
                             %% TODO check consumer name is defined when SAC
-                            case {Sac, rabbit_stream_utils:is_sac_ff_enabled()}
+                            case {Sac, rabbit_stream_utils:is_sac_ff_enabled(),
+                                  ConsumerName}
                             of
-                                {true, false} ->
+                                {true, false, _} ->
                                     rabbit_log:warning("Cannot create subcription ~p, stream single active "
                                                        "consumer feature flag is not enabled",
+                                                       [SubscriptionId]),
+                                    response(Transport,
+                                             Connection,
+                                             subscribe,
+                                             CorrelationId,
+                                             ?RESPONSE_CODE_PRECONDITION_FAILED),
+                                    rabbit_global_counters:increase_protocol_counter(stream,
+                                                                                     ?PRECONDITION_FAILED,
+                                                                                     1),
+                                    {Connection, State};
+                                {true, _, undefined} ->
+                                    rabbit_log:warning("Cannot create subcription ~p, a single active "
+                                                       "consumer must have a name",
                                                        [SubscriptionId]),
                                     response(Transport,
                                              Connection,
