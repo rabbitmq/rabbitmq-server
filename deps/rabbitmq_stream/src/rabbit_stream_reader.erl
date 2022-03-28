@@ -788,39 +788,53 @@ open(info,
     #stream_connection_state{consumers = Consumers0} = ConnState0,
     {Connection1, ConnState1} =
         case Consumers0 of
-            #{SubId := Consumer0} ->
-                %% FIXME check consumer is SAC, to avoid changing a regular consumer
-                #consumer{log = Log0, configuration = Conf0} = Consumer0,
-                Log1 =
-                    case {Active, Log0} of
-                        {false, undefined} ->
-                            undefined;
-                        {false, L} ->
-                            rabbit_log:debug("Closing Osiris segment of subscription ~p for "
-                                             "now",
-                                             [SubId]),
-                            osiris_log:close(L),
-                            undefined;
-                        _ ->
-                            Log0
-                    end,
-                Consumer1 =
-                    Consumer0#consumer{configuration =
-                                           Conf0#consumer_configuration{active =
-                                                                            Active},
-                                       log = Log1},
+            #{SubId :=
+                  #consumer{configuration =
+                                #consumer_configuration{properties =
+                                                            Properties} =
+                                    Conf0,
+                            log = Log0} =
+                      Consumer0} ->
+                case single_active_consumer(Properties) of
+                    true ->
+                        Log1 =
+                            case {Active, Log0} of
+                                {false, undefined} ->
+                                    undefined;
+                                {false, L} ->
+                                    rabbit_log:debug("Closing Osiris segment of subscription ~p for "
+                                                     "now",
+                                                     [SubId]),
+                                    osiris_log:close(L),
+                                    undefined;
+                                _ ->
+                                    Log0
+                            end,
+                        Consumer1 =
+                            Consumer0#consumer{configuration =
+                                                   Conf0#consumer_configuration{active
+                                                                                    =
+                                                                                    Active},
+                                               log = Log1},
 
-                Conn1 =
-                    maybe_notify_consumer(Transport,
-                                          Connection0,
-                                          SubId,
-                                          Active,
-                                          true,
-                                          Extra),
-                {Conn1,
-                 ConnState0#stream_connection_state{consumers =
-                                                        Consumers0#{SubId =>
-                                                                        Consumer1}}};
+                        Conn1 =
+                            maybe_notify_consumer(Transport,
+                                                  Connection0,
+                                                  SubId,
+                                                  Active,
+                                                  true,
+                                                  Extra),
+                        {Conn1,
+                         ConnState0#stream_connection_state{consumers =
+                                                                Consumers0#{SubId
+                                                                                =>
+                                                                                Consumer1}}};
+                    false ->
+                        rabbit_log:warning("Received SAC event for subscription ~p, which "
+                                           "is not a SAC. Not doing anything.",
+                                           [SubId]),
+                        {Connection0, ConnState0}
+                end;
             _ ->
                 {Connection0, ConnState0}
         end,
