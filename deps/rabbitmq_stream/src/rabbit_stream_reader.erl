@@ -2495,9 +2495,14 @@ handle_frame_post_auth(Transport,
                            Connection,
                        #stream_connection_state{consumers = Consumers} = State,
                        {response, CorrelationId,
-                        {consumer_update, _ResponseCode,
-                         ResponseOffsetSpec}}) ->
-    %% FIXME check response code? It's supposed to be OK all the time.
+                        {consumer_update, ResponseCode, ResponseOffsetSpec}}) ->
+    case ResponseCode of
+        ?RESPONSE_CODE_OK ->
+            ok;
+        RC ->
+            rabbit_log:info("Unexpected consumer update response code: ~p",
+                            [RC])
+    end,
     case maps:take(CorrelationId, Requests0) of
         {{{subscription_id, SubscriptionId}, {extra, Extra}}, Rs} ->
             rabbit_log:debug("Received consumer update response for subscription ~p",
