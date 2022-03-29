@@ -193,8 +193,8 @@ multiple_upstreams(Config) ->
     TargetArgs = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
-              expect_federation(Ch, <<"upstream">>, <<"fed12.downstream">>),
-              expect_federation(Ch, <<"upstream2">>, <<"fed12.downstream">>)
+              expect_federation(Ch, <<"upstream">>, <<"fed12.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
+              expect_federation(Ch, <<"upstream2">>, <<"fed12.downstream">>, ?EXPECT_FEDERATION_TIMEOUT)
       end, [q(<<"upstream">>, SourceArgs),
             q(<<"upstream2">>, SourceArgs),
             q(<<"fed12.downstream">>, TargetArgs)]).
@@ -408,10 +408,14 @@ expect_empty(Ch, Q) ->
     rabbit_federation_test_util:expect_empty(Ch, Q).
 
 expect_federation(Ch, UpstreamQ, DownstreamQ) ->
-    publish_expect(Ch, <<>>, UpstreamQ, DownstreamQ, <<"HELLO">>).
+    Base = <<"HELLO">>,
+    Payload = <<Base/binary, "-to-", UpstreamQ/binary>>,
+    publish_expect(Ch, <<>>, UpstreamQ, DownstreamQ, Payload).
 
 expect_federation(Ch, UpstreamQ, DownstreamQ, Timeout) ->
-    publish_expect(Ch, <<>>, UpstreamQ, DownstreamQ, <<"HELLO">>, Timeout).
+    Base = <<"HELLO">>,
+    Payload = <<Base/binary, "-to-", UpstreamQ/binary>>,
+    publish_expect(Ch, <<>>, UpstreamQ, DownstreamQ, Payload, Timeout).
 
 expect_no_federation(Ch, UpstreamQ, DownstreamQ) ->
     publish(Ch, <<>>, UpstreamQ, <<"HELLO">>),
