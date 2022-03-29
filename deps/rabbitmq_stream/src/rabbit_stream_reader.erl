@@ -41,8 +41,10 @@
          counters :: atomics:atomics_ref(),
          properties :: map()}).
 -record(consumer,
-        {configuration :: #consumer_configuration{}, credit :: integer(),
-         log :: osiris_log:state()}).
+        {configuration :: #consumer_configuration{},
+         credit :: integer(),
+         log :: osiris_log:state(),
+         last_listener_offset = undefined :: undefined | osiris:offset()}).
 -record(stream_connection_state,
         {data :: rabbit_stream_core:state(), blocked :: boolean(),
          consumers :: #{subscription_id() => #consumer{}}}).
@@ -1017,12 +1019,17 @@ open(cast,
                                                        %% likely a connection problem
                                                        Consumer;
                                                    {{segment, Log1},
-                                                    {credit, Credit1}} ->
+                                                    {credit, Credit1},
+                                                    {last_listener_offset,
+                                                     LLO1}} ->
                                                        Consumer#consumer{log =
                                                                              Log1,
                                                                          credit
                                                                              =
-                                                                             Credit1}
+                                                                             Credit1,
+                                                                         last_listener_offset
+                                                                             =
+                                                                             LLO1}
                                                end
                                        end,
                                    ConsumersAcc#{CorrelationId => Consumer1}
@@ -1850,11 +1857,13 @@ handle_frame_post_auth(Transport,
                                                                "peer",
                                                                []),
                                     throw({stop, normal});
-                                {{segment, Log1}, {credit, Credit1}} ->
+                                {{segment, Log1}, {credit, Credit1},
+                                 {last_listener_offset, LLO1}} ->
                                     ConsumerState1 =
                                         ConsumerState#consumer{log = Log1,
-                                                               credit =
-                                                                   Credit1},
+                                                               credit = Credit1,
+                                                               last_listener_offset
+                                                                   = LLO1},
                                     Consumers1 =
                                         Consumers#{SubscriptionId =>
                                                        ConsumerState1},
@@ -1923,10 +1932,12 @@ handle_frame_post_auth(Transport,
                        {credit, SubscriptionId, Credit}) ->
     case Consumers of
         #{SubscriptionId := Consumer} ->
-            #consumer{credit = AvailableCredit} = Consumer,
+            #consumer{credit = AvailableCredit, last_listener_offset = LLO} =
+                Consumer,
             case send_chunks(Transport,
                              Consumer,
                              AvailableCredit + Credit,
+                             LLO,
                              SendFileOct)
             of
                 {error, closed} ->
@@ -1934,8 +1945,12 @@ handle_frame_post_auth(Transport,
                                                "peer",
                                                []),
                     throw({stop, normal});
-                {{segment, Log1}, {credit, Credit1}} ->
-                    Consumer1 = Consumer#consumer{log = Log1, credit = Credit1},
+                {{segment, Log1}, {credit, Credit1},
+                 {last_listener_offset, LLO1}} ->
+                    Consumer1 =
+                        Consumer#consumer{log = Log1,
+                                          credit = Credit1,
+                                          last_listener_offset = LLO1},
                     {Connection,
                      State#stream_connection_state{consumers =
                                                        Consumers#{SubscriptionId
@@ -2704,36 +2719,59 @@ send_file_callback(Transport,
        set_consumer_offset(Counters, FirstOffsetInChunk)
     end.
 
-send_chunks(Transport, #consumer{credit = Credit} = State, Counter) ->
-    send_chunks(Transport, State, Credit, Counter).
+send_chunks(Transport,
+            #consumer{credit = Credit, last_listener_offset = LastLstOffset} =
+                State,
+            Counter) ->
+    send_chunks(Transport, State, Credit, LastLstOffset, Counter).
 
-send_chunks(_Transport, #consumer{log = Log}, 0, _Counter) ->
-    {{segment, Log}, {credit, 0}};
+send_chunks(_Transport,
+            #consumer{log = Log},
+            0,
+            LastLstOffset,
+            _Counter) ->
+    {{segment, Log}, {credit, 0}, {last_listener_offset, LastLstOffset}};
 send_chunks(Transport,
             #consumer{log = Log} = State,
             Credit,
+            LastLstOffset,
             Counter) ->
-    send_chunks(Transport, State, Log, Credit, true, Counter).
+    send_chunks(Transport,
+                State,
+                Log,
+                Credit,
+                LastLstOffset,
+                true,
+                Counter).
 
 send_chunks(_Transport,
             _State,
             Segment,
             0 = _Credit,
+            LastLstOffset,
             _Retry,
             _Counter) ->
-    {{segment, Segment}, {credit, 0}};
+    {{segment, Segment}, {credit, 0},
+     {last_listener_offset, LastLstOffset}};
 send_chunks(Transport,
             #consumer{configuration = #consumer_configuration{socket = S}} =
                 State,
             Segment,
             Credit,
+            LastLstOffset,
             Retry,
             Counter) ->
     case osiris_log:send_file(S, Segment,
                               send_file_callback(Transport, State, Counter))
     of
         {ok, Segment1} ->
-            send_chunks(Transport, State, Segment1, Credit - 1, true, Counter);
+            send_chunks(Transport,
+                        State,
+                        Segment1,
+                        Credit - 1,
+                        LastLstOffset,
+                        true,
+                        Counter);
         {error, closed} ->
             {error, closed};
         {error, enotconn} ->
@@ -2748,6 +2786,7 @@ send_chunks(Transport,
                                 State,
                                 Segment1,
                                 Credit,
+                                LastLstOffset,
                                 false,
                                 Counter);
                 false ->
@@ -2755,9 +2794,21 @@ send_chunks(Transport,
                                   #consumer_configuration{member_pid =
                                                               LocalMember}} =
                         State,
-                    osiris:register_offset_listener(LocalMember,
-                                                    osiris_log:next_offset(Segment1)),
-                    {{segment, Segment1}, {credit, Credit}}
+                    NextOffset = osiris_log:next_offset(Segment1),
+                    LLO = case {LastLstOffset, NextOffset > LastLstOffset} of
+                              {undefined, _} ->
+                                  osiris:register_offset_listener(LocalMember,
+                                                                  NextOffset),
+                                  NextOffset;
+                              {_, true} ->
+                                  osiris:register_offset_listener(LocalMember,
+                                                                  NextOffset),
+                                  NextOffset;
+                              _ ->
+                                  LastLstOffset
+                          end,
+                    {{segment, Segment1}, {credit, Credit},
+                     {last_listener_offset, LLO}}
             end
     end.
 
