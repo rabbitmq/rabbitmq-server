@@ -2563,9 +2563,8 @@ handle_frame_post_auth(Transport,
                                                                [Reason]),
                                     %% likely a connection problem
                                     Consumer;
-                                {{segment, Log1}, {credit, Credit1}} ->
-                                    Consumer#consumer{log = Log1,
-                                                      credit = Credit1}
+                                {ok, Csmr} ->
+                                    Csmr
                             end,
                         #consumer{configuration =
                                       #consumer_configuration{counters =
