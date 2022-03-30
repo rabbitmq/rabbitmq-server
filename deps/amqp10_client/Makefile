@@ -2,6 +2,22 @@ PROJECT = amqp10_client
 PROJECT_DESCRIPTION = AMQP 1.0 client from the RabbitMQ Project
 PROJECT_MOD = amqp10_client_app
 
+define PROJECT_APP_EXTRA_KEYS
+%% Hex.pm package informations.
+	{licenses, ["MPL-2.0"]},
+	{links, [
+	    {"Website", "https://www.rabbitmq.com/"},
+	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/deps/amqp10_client"}
+	  ]},
+	{build_tools, ["make", "rebar3"]},
+	{files, [
+	    $(RABBITMQ_HEXPM_DEFAULT_FILES)
+	  ]}
+endef
+
+# Release artifacts are put in $(PACKAGES_DIR).
+PACKAGES_DIR ?= $(abspath PACKAGES)
+
 BUILD_DEPS = rabbit_common elvis_mk
 DEPS = amqp10_common
 TEST_DEPS = rabbit rabbitmq_amqp1_0 rabbitmq_ct_helpers
@@ -9,6 +25,7 @@ LOCAL_DEPS = ssl inets crypto
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-macros.mk \
+	      rabbit_common/mk/rabbitmq-build.mk \
 	      rabbit_common/mk/rabbitmq-hexpm.mk \
 	      rabbit_common/mk/rabbitmq-dist.mk \
 	      rabbit_common/mk/rabbitmq-run.mk \
