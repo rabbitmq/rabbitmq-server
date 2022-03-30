@@ -59,7 +59,7 @@ rules_pkg_dependencies()
 
 git_repository(
     name = "rules_erlang",
-    commit = "3f08d1e82390cf68448a102774f92c5595ebfeee",
+    commit = "04e49d17027b461864eab8dcc80ea6c298bfc331",
     remote = "https://github.com/rabbitmq/rules_erlang.git",
 )
 
