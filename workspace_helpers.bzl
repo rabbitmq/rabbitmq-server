@@ -176,12 +176,9 @@ erlang_app(
         build_file = rabbitmq_workspace + "//:BUILD.osiris",
     )
 
-    github_erlang_app(
+    hex_pm_erlang_app(
         name = "prometheus",
-        repo = "prometheus.erl",
-        org = "deadtrickster",
-        ref = "06425c21a39c1564164f1cc3fe5bdfa8b23b1f78",
-        version = "06425c21a39c1564164f1cc3fe5bdfa8b23b1f78",
+        version = "4.8.2",
         first_srcs = [
             "src/prometheus_collector.erl",
             "src/prometheus_format.erl",
@@ -191,6 +188,7 @@ erlang_app(
         deps = [
             "@quantile_estimator//:erlang_app",
         ],
+        sha256 = "c3abd6521e52cec4f0d8eca603cf214dfc84d8a27aa85946639f1424b8554d98",
     )
 
     github_erlang_app(
