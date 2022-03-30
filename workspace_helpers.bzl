@@ -168,9 +168,15 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         ],
     )
 
-    github_erlang_app(
+    hex_pm_erlang_app(
         name = "prometheus",
         version = "4.8.2",
+        first_srcs = [
+            "src/prometheus_collector.erl",
+            "src/prometheus_format.erl",
+            "src/prometheus_instrumenter.erl",
+            "src/prometheus_metric.erl",
+        ],
         deps = [
             "@quantile_estimator//:erlang_app",
         ],
