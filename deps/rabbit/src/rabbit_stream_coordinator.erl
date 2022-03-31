@@ -449,7 +449,7 @@ which_module(_) ->
 init(_Conf) ->
     #?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()}.
 
--spec apply(map(), command(), state()) ->
+-spec apply(ra_machine:command_meta_data(), command(), state()) ->
     {state(), term(), ra_machine:effects()}.
 apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
       {_CmdTag, StreamId, #{}} = Cmd,
