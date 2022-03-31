@@ -11,6 +11,19 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
+    - name: UPDATE RBE IMAGE SHA
+      env:
+        IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
+        TAG: linux-erlang-git-master
+      run: |
+        # buildbuddy caches the container image, so we must use a specific sha to ensure
+        # the latest is used
+        DIGEST="$(skopeo inspect --format '{{.Digest}}' docker://${IMAGE}:${TAG})"
+        echo "Will use ${IMAGE}@${DIGEST}"
+        sudo npm install --global --silent @bazel/buildozer
+        npx buildozer \
+          "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
+          //:erlang_git_platform
     - name: MOUNT BAZEL CACHE
       uses: actions/cache@v3.0.5
       with:

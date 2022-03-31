@@ -36,29 +36,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Mount Bazel Cache
-        uses: actions/cache@v3.0.5
-        with:
-          path: "/home/runner/repo-cache/"
-          key: repo-cache
-
-      - name: Configure Bazel
-        run: |
-          if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
-          cat << EOF >> user.bazelrc
-            build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
-          EOF
-          fi
-          cat << EOF >> user.bazelrc
-            build:buildbuddy --build_metadata=ROLE=CI
-            build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-            build:buildbuddy --repository_cache=/home/runner/repo-cache/
-            build:buildbuddy --color=yes
-            build:buildbuddy --disk_cache=
-
-            build:buildbuddy --remote_download_toplevel
-          EOF
-
       - name: Load version info
         id: load-info
         run: |
