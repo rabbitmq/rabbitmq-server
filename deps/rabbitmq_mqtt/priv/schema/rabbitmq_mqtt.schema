@@ -257,3 +257,9 @@ fun(Conf) ->
     LingerTimeout = cuttlefish:conf_get("mqtt.tcp_listen_options.linger.timeout", Conf, 0),
     {LingerOn, LingerTimeout}
 end}.
+
+%% Durable queue type to be used for QoS 1 subscriptions
+%%
+
+{mapping, "mqtt.durable_queue_type", "rabbitmq_mqtt.durable_queue_type",
+    [{datatype, {enum, [classic, quorum]}}]}.
