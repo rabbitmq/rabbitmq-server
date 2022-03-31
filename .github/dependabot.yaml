@@ -5,3 +5,19 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    target-branch: "master"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    target-branch: "v3.10.x"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    target-branch: "v3.9.x"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    target-branch: "v3.8.x"
