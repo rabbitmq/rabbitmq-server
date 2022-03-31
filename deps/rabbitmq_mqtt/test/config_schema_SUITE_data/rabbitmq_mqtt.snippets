@@ -14,7 +14,7 @@
    mqtt.listeners.tcp.default = 1883
    mqtt.tcp_listen_options.backlog = 128
    mqtt.tcp_listen_options.nodelay = true
-   mqtt.queue_type = classic
+   mqtt.durable_queue_type = classic
    mqtt.proxy_protocol = false",
   [{rabbit,[{tcp_listeners,[5672]}]},
    {rabbitmq_mqtt,
@@ -29,7 +29,7 @@
         {ssl_listeners,[]},
         {tcp_listeners,[1883]},
         {tcp_listen_options,[{backlog,128},{nodelay,true}]},
-        {queue_type,classic},
+        {durable_queue_type,classic},
         {proxy_protocol,false}]}],
   [rabbitmq_mqtt]},
 

@@ -219,7 +219,7 @@ quorum_configuration(_Config) ->
 %%  default setting with CleanSession = true of false
     QMustBeClassicEvenFalse = rabbit_mqtt_processor:maybe_quorum(MyArgs, false, <<"">>),
     ?assertEqual(QMustBeClassicEvenFalse, []),
-    application:set_env(rabbitmq_mqtt, queue_type, quorum),
+    application:set_env(rabbitmq_mqtt, durable_queue_type, quorum),
 %%  quorum setting with CleanSession  == false must me quorum
     QMustBeQuorum = rabbit_mqtt_processor:maybe_quorum(MyArgs, false, <<"">>),
     ?assertEqual(QMustBeQuorum, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
