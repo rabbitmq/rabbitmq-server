@@ -715,9 +715,10 @@ flush_buffer(State0 = #qi { write_buffer = WriteBuffer0,
              AcksAcc}
     end, {#{}, #{}, #{}}, WriteBuffer0),
     %% Then we do the writes for each segment.
-    State = maps:fold(fun(Segment, LocBytes, FoldState0) ->
+    State = maps:fold(fun(Segment, LocBytes0, FoldState0) ->
         FoldState1 = reduce_fd_usage(Segment, FoldState0),
         {Fd, FoldState} = get_fd_for_segment(Segment, FoldState1),
+        LocBytes = flush_buffer_consolidate(lists:sort(LocBytes0), 1),
         ok = file:pwrite(Fd, LocBytes),
         file_handle_cache_stats:update(queue_index_write),
         FoldState
@@ -744,7 +745,7 @@ write_ack(SeqId, SegmentEntryCount, WritesAcc) ->
     Segment = SeqId div SegmentEntryCount,
     Offset = ?HEADER_SIZE + (SeqId rem SegmentEntryCount) * ?ENTRY_SIZE,
     LocBytesAcc = maps:get(Segment, WritesAcc, []),
-    WritesAcc#{Segment => [{Offset, <<0>>}|LocBytesAcc]}.
+    WritesAcc#{Segment => [{Offset, <<0:?ENTRY_SIZE/unit:8>>}|LocBytesAcc]}.
 
 write_entry(SeqId, SegmentEntryCount, Entry, WritesAcc) ->
     Segment = SeqId div SegmentEntryCount,
@@ -792,6 +793,14 @@ get_fd_for_segment(Segment, State = #qi{ fds = OpenFds }) ->
             {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
             {Fd, State#qi{ fds = OpenFds#{ Segment => Fd }}}
     end.
+
+flush_buffer_consolidate([{Offset, Data}, {NextOffset, NextData}|Tail], Num)
+        when Offset + ?ENTRY_SIZE * Num =:= NextOffset ->
+    flush_buffer_consolidate([{Offset, [Data, NextData]}|Tail], Num + 1);
+flush_buffer_consolidate([Entry, NextEntry|Tail], _) ->
+    [Entry|flush_buffer_consolidate([NextEntry|Tail], 1)];
+flush_buffer_consolidate(Tail, _) ->
+    Tail.
 
 %% When marking acks we need to update the file(s) on disk.
 %% When a file has been fully acked we may also close its
