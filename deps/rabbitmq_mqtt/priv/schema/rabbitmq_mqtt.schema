@@ -258,11 +258,8 @@ fun(Conf) ->
     {LingerOn, LingerTimeout}
 end}.
 
-%% Queue data type can be classic or quorum
+%% Durable queue type to be used for QoS 1 subscriptions
 %%
-%%
-%% {queue_type, classic},
 
-
-{mapping, "mqtt.queue_type", "rabbitmq_mqtt.queue_type",
+{mapping, "mqtt.durable_queue_type", "rabbitmq_mqtt.durable_queue_type",
     [{datatype, {enum, [classic, quorum]}}]}.

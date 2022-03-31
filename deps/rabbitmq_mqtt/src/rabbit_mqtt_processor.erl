@@ -785,7 +785,7 @@ delivery_mode(?QOS_1) -> 2;
 delivery_mode(?QOS_2) -> 2.
 
 maybe_quorum(Qos1Args, CleanSession, Queue) ->
-    case {rabbit_mqtt_util:env(queue_type), CleanSession} of
+    case {rabbit_mqtt_util:env(durable_queue_type), CleanSession} of
       %% it is possible to Quorum queues only if Clean Session == False
       %% else always use Classic queues
       %% Clean Session == True sets auto-delete to True and quorum queues
