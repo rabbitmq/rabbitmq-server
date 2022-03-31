@@ -10,11 +10,11 @@ jobs:
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
       with:
         path: rabbitmq-server
     - name: CHECKOUT rules_erlang
-      uses: actions/checkout@v2.4.0
+      uses: actions/checkout@v3
       with:
         repository: rabbitmq/rules_erlang
         path: rules_erlang
