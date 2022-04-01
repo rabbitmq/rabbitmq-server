@@ -157,11 +157,20 @@ erlang_app(
 
     github_erlang_app(
         name = "osiris",
+<<<<<<< HEAD
         org = "rabbitmq",
         ref = "refs/tags/v1.2.6",
         version = "1.2.6",
         sha256 = "abfe9bc53b0eb1c14713152314f612562ecb76465b9f804313e3510b73e5720b",
         build_file = rabbitmq_workspace + "//:BUILD.osiris",
+=======
+        branch = "main",
+        remote = "https://github.com/rabbitmq/osiris.git",
+        repo_mapping = {
+            "@gen_batch_server": "@rules_erlang.2.5.2.erlang_package.gen_batch_server",
+            "@seshat": "@rules_erlang.2.5.2.erlang_package.seshat",
+        },
+>>>>>>> a4da3bb332 (Add a MODULE.bazel file and enable bzlmod)
     )
 
     hex_pm_erlang_app(

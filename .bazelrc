@@ -1,3 +1,5 @@
+build --experimental_enable_bzlmod
+
 build --incompatible_strict_action_env
 build --local_test_jobs=1
 
