@@ -243,7 +243,7 @@ ensure_monitors_test(_) ->
                                                       []),
     assertSize(1, PidsGroups1),
     assertSize(1, maps:get(self(), PidsGroups1)),
-    ?assertEqual(#{self() => {self(), sac}}, Monitors1),
+    ?assertEqual(#{self() => sac}, Monitors1),
     ?assertEqual([{monitor, process, self()}, {monitor, node, node()}],
                  Effects1),
 
@@ -257,7 +257,7 @@ ensure_monitors_test(_) ->
                                                       []),
     assertSize(1, PidsGroups2),
     assertSize(1, maps:get(self(), PidsGroups2)),
-    ?assertEqual(#{self() => {self(), sac}}, Monitors2),
+    ?assertEqual(#{self() => sac}, Monitors2),
     ?assertEqual([{monitor, process, self()}, {monitor, node, node()}],
                  Effects2),
     Group2 = cgroup([consumer(self(), 1, true)]),
@@ -275,7 +275,7 @@ ensure_monitors_test(_) ->
                                                       []),
     assertSize(1, PidsGroups3),
     assertSize(1, maps:get(self(), PidsGroups3)),
-    ?assertEqual(#{self() => {self(), sac}}, Monitors3),
+    ?assertEqual(#{self() => sac}, Monitors3),
     ?assertEqual([], Effects3),
 
     Command3 =

@@ -165,7 +165,8 @@ consumer_groups(VirtualHost, InfoKeys, #?MODULE{groups = Groups}) ->
                                                       length(Consumers)}
                                                      | RecAcc];
                                                 (Unknown, RecAcc) ->
-                                                    [{Unknown, unknown_field} | RecAcc]
+                                                    [{Unknown, unknown_field}
+                                                     | RecAcc]
                                             end,
                                             [], InfoKeys),
                             [Record | Acc];
@@ -209,8 +210,10 @@ group_consumers(VirtualHost,
                                                     (state, RecAcc) ->
                                                         [{state, inactive}
                                                          | RecAcc];
-                                                (Unknown, RecAcc) ->
-                                                    [{Unknown, unknown_field} | RecAcc]
+                                                    (Unknown, RecAcc) ->
+                                                        [{Unknown,
+                                                          unknown_field}
+                                                         | RecAcc]
                                                 end,
                                                 [], InfoKeys),
                                 [Record | Acc]
@@ -238,8 +241,7 @@ ensure_monitors({register_consumer,
     Groups0 = maps:get(Pid, PidsGroups0, sets:new()),
     PidsGroups1 =
         maps:put(Pid, sets:add_element(GroupId, Groups0), PidsGroups0),
-    {State0#?MODULE{pids_groups = PidsGroups1},
-     Monitors0#{Pid => {Pid, sac}},
+    {State0#?MODULE{pids_groups = PidsGroups1}, Monitors0#{Pid => sac},
      [{monitor, process, Pid}, {monitor, node, node(Pid)} | Effects]};
 ensure_monitors({unregister_consumer,
                  VirtualHost,
@@ -331,7 +333,7 @@ handle_connection_down(Pid,
 
 do_register_consumer(VirtualHost,
                      Stream,
-                     -1,
+                     -1 = _PartitionIndex,
                      ConsumerName,
                      ConnectionPid,
                      Owner,
@@ -365,8 +367,8 @@ do_register_consumer(VirtualHost,
 
     #consumer{active = Active} = Consumer,
     Effects =
-        case Consumer of
-            #consumer{active = true} ->
+        case Active of
+            true ->
                 [notify_consumer_effect(ConnectionPid, SubscriptionId, Active)];
             _ ->
                 []
@@ -375,7 +377,7 @@ do_register_consumer(VirtualHost,
     {State#?MODULE{groups = StreamGroups1}, {ok, Active}, Effects};
 do_register_consumer(VirtualHost,
                      Stream,
-                     _,
+                     _PartitionIndex,
                      ConsumerName,
                      ConnectionPid,
                      Owner,
@@ -425,7 +427,7 @@ do_register_consumer(VirtualHost,
                                                          false,
                                                          true)]}
                         end;
-                    undefined ->
+                    false ->
                         %% no active consumer in the (non-empty) group, we are waiting for the reply of a former active
                         {G1, []}
                 end
@@ -541,9 +543,12 @@ has_consumers_from_pid(#group{consumers = Consumers}, Pid) ->
               end,
               Consumers).
 
-compute_active_consumer(#group{consumers = []} = Group) ->
+compute_active_consumer(#group{consumers = Crs,
+                               partition_index = -1} =
+                            Group)
+    when length(Crs) == 0 ->
     Group;
-compute_active_consumer(#group{partition_index = _,
+compute_active_consumer(#group{partition_index = -1,
                                consumers = [Consumer0]} =
                             Group0) ->
     Consumer1 = Consumer0#consumer{active = true},
@@ -553,26 +558,11 @@ compute_active_consumer(#group{partition_index = -1,
                             Group0) ->
     Consumer1 = Consumer0#consumer{active = true},
     Consumers = lists:map(fun(C) -> C#consumer{active = false} end, T),
-    Group0#group{consumers = [Consumer1] ++ Consumers};
-compute_active_consumer(#group{partition_index = PartitionIndex,
-                               consumers = Consumers0} =
-                            Group) ->
-    ActiveConsumerIndex = PartitionIndex rem length(Consumers0),
-    rabbit_log:debug("Active consumer index = ~p rem ~p = ~p",
-                     [PartitionIndex, length(Consumers0), ActiveConsumerIndex]),
-    {_, Consumers1} =
-        lists:foldr(fun (C0, {Index, Cs}) when Index == ActiveConsumerIndex ->
-                            C1 = C0#consumer{active = true},
-                            {Index - 1, [C1 | Cs]};
-                        (C0, {Index, Cs}) ->
-                            C1 = C0#consumer{active = false},
-                            {Index - 1, [C1 | Cs]}
-                    end,
-                    {length(Consumers0) - 1, []}, Consumers0),
-    Group#group{consumers = Consumers1}.
+    Group0#group{consumers = [Consumer1] ++ Consumers}.
 
 evaluate_active_consumer(#group{partition_index = PartitionIndex,
-                                consumers = Consumers}) ->
+                                consumers = Consumers})
+    when PartitionIndex >= 0 ->
     ActiveConsumerIndex = PartitionIndex rem length(Consumers),
     lists:nth(ActiveConsumerIndex + 1, Consumers).
 
@@ -606,15 +596,14 @@ update_consumer_state_in_group(#group{consumers = Consumers0} = G,
                                Pid,
                                SubId,
                                NewState) ->
-    CS1 = lists:foldr(fun(C0, Acc) ->
-                         case C0 of
-                             #consumer{pid = Pid, subscription_id = SubId} ->
-                                 C1 = C0#consumer{active = NewState},
-                                 [C1 | Acc];
-                             C -> [C | Acc]
-                         end
-                      end,
-                      [], Consumers0),
+    CS1 = lists:map(fun(C0) ->
+                       case C0 of
+                           #consumer{pid = Pid, subscription_id = SubId} ->
+                               C0#consumer{active = NewState};
+                           C -> C
+                       end
+                    end,
+                    Consumers0),
     G#group{consumers = CS1}.
 
 mod_call_effect(Pid, Msg) ->

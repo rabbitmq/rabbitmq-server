@@ -60,7 +60,7 @@
                                     monitors = #{} :: #{pid() => {stream_id() | %% v0 & v1
                                                                   #{stream_id() => ok}, %% v2
                                                                   monitor_role()} |
-                                                                 {pid(), sac}},
+                                                        sac},
                                     %% not used as of v2
                                     listeners = #{} :: undefined | #{stream_id() =>
                                                                      #{pid() := queue_ref()}},

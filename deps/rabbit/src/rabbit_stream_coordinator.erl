@@ -283,7 +283,7 @@ register_local_member_listener(Q) when ?is_amqqueue(Q) ->
 
 %% Single Active Consumer API
 -spec register_consumer(binary(), binary(), integer(), binary(), pid(), binary(), integer()) ->
-    {ok, boolean()}.
+    {ok, boolean()} | {error, feature_flag_disabled}.
 register_consumer(VirtualHost,
                   Stream,
                   PartitionIndex,
@@ -299,7 +299,7 @@ register_consumer(VirtualHost,
               Res
       end).
 
--spec unregister_consumer(binary(), binary(), binary(), pid(), integer()) -> ok.
+-spec unregister_consumer(binary(), binary(), binary(), pid(), integer()) -> ok | {error, feature_flag_disabled}.
 unregister_consumer(VirtualHost,
                     Stream,
                     ConsumerName,
@@ -312,7 +312,7 @@ unregister_consumer(VirtualHost,
               Res
       end).
 
--spec activate_consumer(binary(), binary(), binary()) -> ok.
+-spec activate_consumer(binary(), binary(), binary()) -> ok | {error, feature_flag_disabled}.
 activate_consumer(VirtualHost, Stream, ConsumerName) ->
     maybe_sac_execute(
       fun() ->
@@ -321,7 +321,7 @@ activate_consumer(VirtualHost, Stream, ConsumerName) ->
       end).
 
 %% return the current groups for a given virtual host
--spec consumer_groups(binary(), [atom()]) -> {ok, [term()] | {error, atom()}}.
+-spec consumer_groups(binary(), [atom()]) -> {ok, [term()] | {error, feature_flag_disabled | atom()}}.
 consumer_groups(VirtualHost, InfoKeys) ->
     maybe_sac_execute(
       fun() ->
@@ -344,7 +344,7 @@ consumer_groups(VirtualHost, InfoKeys) ->
 
 %% get the consumers of a given group in a given virtual host
 -spec group_consumers(binary(), binary(), binary(), [atom()]) ->
-    {ok, [term()]} | {error, atom()}.
+    {ok, [term()]} | {error, feature_flag_disabled | atom()}.
 group_consumers(VirtualHost, Stream, Reference, InfoKeys) ->
     maybe_sac_execute(
       fun() ->
@@ -548,7 +548,7 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                     return(Meta, State#?MODULE{streams = Streams0,
                                                monitors = Monitors1}, ok, Effects0)
             end;
-        {{Pid, sac}, Monitors1} ->
+        {sac, Monitors1} ->
             {SacState1, Effects} = rabbit_stream_sac_coordinator:handle_connection_down(Pid, SacState0),
             return(Meta, State#?MODULE{single_active_consumer = SacState1,
                                        monitors = Monitors1}, ok, Effects);

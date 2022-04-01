@@ -425,7 +425,7 @@ handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
           catch
               exit:Error ->
                   rabbit_log:error("Error while looking up exchange ~p, ~p",
-                                   [ExchangeName, Error]),
+                                   [rabbit_misc:rs(ExchangeName), Error]),
                   {error, stream_not_found}
           end,
     {reply, Res, State};
