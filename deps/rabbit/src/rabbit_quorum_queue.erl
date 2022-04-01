@@ -179,9 +179,17 @@ start_cluster(Q) ->
                  {error, {too_long, N}} ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
-    Id = {RaName, node()},
-    Nodes = select_quorum_nodes(QuorumSize, rabbit_nodes:all()),
-    NewQ0 = amqqueue:set_pid(Q, Id),
+    AllQuorumQs = rabbit_amqqueue:list_with_possible_retry(
+                    fun() ->
+                            mnesia:dirty_match_object(rabbit_queue,
+                                                      amqqueue:pattern_match_on_type(?MODULE))
+                    end),
+    Nodes = select_quorum_nodes(QuorumSize, rabbit_nodes:all(), AllQuorumQs),
+    LeaderLocator = leader_locator(args_policy_lookup(<<"queue-leader-locator">>,
+                                                      fun policyHasPrecedence/2, Q)),
+    LeaderNode = leader_node(LeaderLocator, Nodes, AllQuorumQs),
+    LeaderId = {RaName, LeaderNode},
+    NewQ0 = amqqueue:set_pid(Q, LeaderId),
     NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => Nodes}),
 
     rabbit_log:debug("Will start up to ~w replicas for quorum queue ~s",
@@ -202,7 +210,7 @@ start_cluster(Q) ->
                     %% keys
                     %% TODO: handle error - what should be done if the
                     %% config cannot be updated
-                    ok = rabbit_fifo_client:update_machine_state(Id,
+                    ok = rabbit_fifo_client:update_machine_state({RaName, node()},
                                                                  ra_machine_config(NewQ)),
                     notify_decorators(QName, startup),
                     rabbit_event:notify(queue_created,
@@ -393,8 +401,7 @@ capabilities() ->
             <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
             <<"queue-master-locator">>,
             %% Stream policies
-            <<"max-age">>, <<"stream-max-segment-size-bytes">>,
-            <<"queue-leader-locator">>, <<"initial-cluster-size">>],
+            <<"max-age">>, <<"stream-max-segment-size-bytes">>, <<"initial-cluster-size">>],
           queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
                               <<"x-dead-letter-strategy">>, <<"x-expires">>, <<"x-max-length">>,
                               <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
@@ -1600,22 +1607,49 @@ get_default_quorum_initial_group_size(Arguments) ->
             Val
     end.
 
-select_quorum_nodes(Size, All) when length(All) =< Size ->
-    All;
-select_quorum_nodes(Size, All) ->
-    Node = node(),
-    case lists:member(Node, All) of
-        true ->
-            select_quorum_nodes(Size - 1, lists:delete(Node, All), [Node]);
-        false ->
-            select_quorum_nodes(Size, All, [])
-    end.
+select_quorum_nodes(Size, AllNodes, _)
+  when length(AllNodes) =< Size ->
+    AllNodes;
+select_quorum_nodes(Size, AllNodes, AllQuorumQs) ->
+    %% Select local node (to have data locality for declaring client)
+    %% and nodes with least quorum queue replicas (to have a "balanced" RabbitMQ cluster).
+    Local = node(),
+    true = lists:member(Local, AllNodes),
+    Counters0 = maps:from_list([{Node, 0} || Node <- lists:delete(Local, AllNodes)]),
+    Counters = lists:foldl(fun(Q, Acc) ->
+                                   lists:foldl(fun(N, A)
+                                                     when is_map_key(N, A) ->
+                                                       maps:update_with(N, fun(C) -> C+1 end, A);
+                                                  (_, A) ->
+                                                       A
+                                               end, Acc, get_nodes(Q))
+                           end, Counters0, AllQuorumQs),
+    L0 = maps:to_list(Counters),
+    L1 = lists:keysort(2, L0),
+    {L, _} = lists:split(Size - 1, L1),
+    LeastReplicas = lists:map(fun({N, _}) -> N end, L),
+    [Local | LeastReplicas].
 
-select_quorum_nodes(0, _, Selected) ->
-    Selected;
-select_quorum_nodes(Size, Rest, Selected) ->
-    S = lists:nth(rand:uniform(length(Rest)), Rest),
-    select_quorum_nodes(Size - 1, lists:delete(S, Rest), [S | Selected]).
+leader_locator(undefined) -> <<"client-local">>;
+leader_locator(Val) -> Val.
+
+leader_node(<<"client-local">>, _, _) ->
+    node();
+leader_node(<<"random">>, Nodes, _) ->
+    lists:nth(rand:uniform(length(Nodes)), Nodes);
+leader_node(<<"least-leaders">>, Nodes, AllQuorumQs) ->
+    Counters0 = maps:from_list([{N, 0} || N <- Nodes]),
+    Counters = lists:foldl(fun(Q, Acc) ->
+                                   case amqqueue:get_pid(Q) of
+                                       {_, LeaderNode}
+                                         when is_map_key(LeaderNode, Acc) ->
+                                           maps:update_with(LeaderNode, fun(C) -> C+1 end, Acc);
+                                       _ ->
+                                           Acc
+                                   end
+                           end, Counters0, AllQuorumQs),
+    {Node, _} = hd(lists:keysort(2, maps:to_list(Counters))),
+    Node.
 
 %% member with the current leader first
 members(Q) when ?amqqueue_is_quorum(Q) ->
