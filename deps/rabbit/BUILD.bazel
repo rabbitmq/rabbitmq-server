@@ -235,7 +235,7 @@ rabbitmq_home(
     plugins = [
         ":test_erlang_app",
         "//deps/rabbitmq_ct_client_helpers:erlang_app",
-        "@inet_tcp_proxy//:erlang_app",
+        "@inet_tcp_proxy_dist//:erlang_app",
         "@meck//:erlang_app",
     ],
 )
