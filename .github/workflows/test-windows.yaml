@@ -10,11 +10,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-        - erlang_version: "24"
-          elixir_version: 1.12.3
-        #! - erlang_version: "25"
-        #!   elixir_version: 1.13.4
+        erlang_version:
+        #! - "23"
+        - "24"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -23,7 +21,7 @@ jobs:
       uses: erlef/setup-beam@v1.11
       with:
         otp-version: ${{ matrix.erlang_version }}
-        elixir-version: ${{ matrix.elixir_version }}
+        elixir-version: 1.12.3
     #! - name: MOUNT BAZEL CACHE
     #!   uses: actions/cache@v1
     #!   with:
@@ -34,7 +32,6 @@ jobs:
       run: |
         ERL_PATH="$(which erl)"
         IEX_PATH="$(which iex)"
-        sed -i"_orig" 's/build --experimental_enable_bzlmod//' .bazelrc
         cat << EOF >> user.bazelrc
           startup --output_user_root=C:/tmp
           startup --windows_enable_symlinks
@@ -44,18 +41,14 @@ jobs:
 
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
-          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-windows
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-windows-${{ matrix.erlang_version }}
           # build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=
-          build:buildbuddy --noexperimental_remote_cache_compression
-          build:buildbuddy --noexperimental_remote_cache_async
 
           build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@rules_erlang//:erlang_home="${ERL_PATH/\/bin\/erl/}"
           build --//:elixir_home="${IEX_PATH/\/bin\/iex/}"
-          build --platforms=//bazel/platforms:erlang_external_platform
-          build --extra_execution_platforms=//bazel/platforms:erlang_external_platform
         EOF
 
         bazelisk info release

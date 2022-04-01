@@ -7,6 +7,17 @@ jobs:
   update-rbe-images:
     name: Update rbe-erlang-platform
     runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        erlang_version:
+        - "23.3"
+        - "24.3"
+        include:
+        - erlang_version: "23.3"
+          short_version: "23"
+        - erlang_version: "24.3"
+          short_version: "24"
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
