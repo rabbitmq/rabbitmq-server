@@ -331,6 +331,8 @@ default_options = {"hostname": "localhost",
                    "username": "guest",
                    "password": "guest",
                    "ssl": False,
+                   "ssl_insecure": False,
+                   "ssl_disable_hostname_verification": False,
                    "request_timeout": 120,
                    "verbose": True,
                    "format": "table",
@@ -393,9 +395,9 @@ def make_parser():
     add("--ssl-ca-cert-file", dest="ssl_ca_cert_file",
         help="PEM format CA certificate file for SSL")
     add("--ssl-disable-hostname-verification", dest="ssl_disable_hostname_verification",
-        help="Disables peer hostname verification", default=False, action="store_true")
+        help="Disables peer hostname verification", action="store_true")
     add("-k", "--ssl-insecure", dest="ssl_insecure",
-        help="Disables all SSL validations like curl's '-k' argument", default=False, action="store_true")
+        help="Disables all SSL validations like curl's '-k' argument", action="store_true")
     add("-t", "--request-timeout", dest="request_timeout",
         help="HTTP request timeout in seconds", type="int")
     add("-f", "--format", dest="format",
@@ -470,13 +472,14 @@ def merge_config_file_options(cli_options, final_options):
                 assert_usage(False, msg)
         else:
             for key, section_val in section_settings.items():
-                # special case --ssl
-                if key == 'ssl':
+                # if CLI options contain this key, do not set it from the config file
+                if getattr(cli_options, key) is not None:
+                    continue
+                # special case for boolean values
+                if section_val == "True" or section_val == "False":
                     setattr(final_options, key, section_val == "True")
                 else:
-                    # if CLI options do not contain this key, set it from the config file
-                    if getattr(cli_options, key) is None:
-                        setattr(final_options, key, section_val)
+                    setattr(final_options, key, section_val)
     return final_options
 
 def expand_base_uri_options(cli_options, final_options):
