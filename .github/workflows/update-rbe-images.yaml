@@ -12,11 +12,11 @@ jobs:
       matrix:
         erlang_version:
         - "23.3"
-        - "24.1"
+        - "24.3"
         include:
         - erlang_version: "23.3"
           short_version: "23"
-        - erlang_version: "24.1"
+        - erlang_version: "24.3"
           short_version: "24"
     timeout-minutes: 10
     steps:
@@ -54,6 +54,7 @@ jobs:
 
           for remote build execution (RBE) with BuildBuddy
         labels: |
+          backport-v3.10.x
           backport-v3.9.x
           backport-v3.8.x
         branch: bump-rbe-${{ matrix.short_version }}
