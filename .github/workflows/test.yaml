@@ -56,6 +56,8 @@ jobs:
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=
         EOF
+
+        bazelisk info release
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
