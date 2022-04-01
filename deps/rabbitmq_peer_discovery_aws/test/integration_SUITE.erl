@@ -44,8 +44,9 @@ groups() ->
 init_per_suite(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
-            %% These test would like passed in mixed versions, but they won't
-            %% actually honor mixed versions as currently specified via env var
+            %% These test would likely pass in mixed versions, but they won't
+            %% actually honor mixed versions like the other suites, as these
+            %% tests are docker image based
             {skip, "not mixed versions compatible"};
         _ ->
             inets:start(),

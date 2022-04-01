@@ -169,6 +169,7 @@ ecs_up(Config) ->
     ProfileName = ?config(ecs_profile_name, Config),
     ClusterSize = ?config(ecs_cluster_size, Config),
     UpCmd = [EcsCliCmd, "up",
+             "--force",
              "--instance-role", InstanceRole,
              "--size", integer_to_list(ClusterSize),
              "--instance-type", "t2.medium",
