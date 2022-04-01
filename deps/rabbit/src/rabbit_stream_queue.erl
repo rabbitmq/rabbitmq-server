@@ -978,12 +978,6 @@ capabilities() ->
             <<"queue-master-locator">>,
             %% Quorum policies
             <<"dead-letter-strategy">>],
-      queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
-                          <<"x-max-length">>, <<"x-max-length-bytes">>,
-                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                          <<"x-max-age">>, <<"x-stream-max-segment-size-bytes">>,
-                          <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],
-      consumer_arguments => [<<"x-stream-offset">>],
       server_named => false}.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->

@@ -395,14 +395,6 @@ capabilities() ->
             %% Stream policies
             <<"max-age">>, <<"stream-max-segment-size-bytes">>,
             <<"queue-leader-locator">>, <<"initial-cluster-size">>],
-          queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
-                              <<"x-dead-letter-strategy">>, <<"x-expires">>, <<"x-max-length">>,
-                              <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
-                              <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
-                              <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                              <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
-                              <<"x-message-ttl">>],
-      consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
       server_named => false}.
 
 rpc_delete_metrics(QName) ->
