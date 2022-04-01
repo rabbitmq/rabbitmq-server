@@ -1,5 +1,8 @@
 build --experimental_enable_bzlmod
+<<<<<<< HEAD
 build --registry=https://raw.githubusercontent.com/rabbitmq/bazel-central-registry/dev/
+=======
+>>>>>>> Add a MODULE.bazel file and enable bzlmod
 
 build --incompatible_strict_action_env
 build --local_test_jobs=1

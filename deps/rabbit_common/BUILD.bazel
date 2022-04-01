@@ -105,7 +105,9 @@ rabbitmq_app(
 
 erlc(
     name = "beam_files",
-    srcs = glob(["src/*.erl"]) + [
+    srcs = glob(
+        ["src/*.erl"],
+    ) + [
         "src/rabbit_framing_amqp_0_8.erl",
         "src/rabbit_framing_amqp_0_9_1.erl",
     ],
@@ -120,7 +122,9 @@ erlang_app_info(
     hdrs = HDRS,
     app = ":app_file",
     app_name = APP_NAME,
-    beam = [":beam_files"],
+    beam = [
+        ":beam_files",
+    ],
     visibility = ["//visibility:public"],
     deps = DEPS + RUNTIME_DEPS,
 )
@@ -128,7 +132,9 @@ erlang_app_info(
 erlc(
     name = "test_beam_files",
     testonly = True,
-    srcs = glob(["src/*.erl"]) + [
+    srcs = glob(
+        ["src/*.erl"],
+    ) + [
         "src/rabbit_framing_amqp_0_8.erl",
         "src/rabbit_framing_amqp_0_9_1.erl",
     ],
@@ -144,7 +150,9 @@ erlang_app_info(
     hdrs = HDRS,
     app = ":app_file",
     app_name = APP_NAME,
-    beam = [":test_beam_files"],
+    beam = [
+        ":test_beam_files",
+    ],
     visibility = ["//:__subpackages__"],
     deps = DEPS + RUNTIME_DEPS,
 )
