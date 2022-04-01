@@ -70,14 +70,19 @@ groups() ->
                                             rebalance,
                                             file_handle_reservations,
                                             file_handle_reservations_above_limit,
-                                            node_removal_is_not_quorum_critical
-                                            ]
+                                            node_removal_is_not_quorum_critical,
+                                            leader_locator_client_local,
+                                            leader_locator_least_leaders,
+                                            leader_locator_random,
+                                            leader_locator_policy
+                                           ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
                                             start_queue_concurrent,
                                             quorum_cluster_size_3,
                                             quorum_cluster_size_7,
-                                            node_removal_is_not_quorum_critical
+                                            node_removal_is_not_quorum_critical,
+                                            select_nodes_with_least_replicas
                                            ]},
                       {clustered_with_partitions, [],
                        [
@@ -2595,6 +2600,103 @@ cancel_consumer_gh_3729(Config) ->
     wait_until(F),
 
     ok = rabbit_ct_client_helpers:close_channel(Ch).
+
+leader_locator_client_local(Config) ->
+    [Server1 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Q = ?config(queue_name, Config),
+
+    [begin
+         Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+         ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                      declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                      {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
+         ?assertMatch({ok, _, {_, Server = _Leader}},
+                      ra:members({ra_name(Q), Server1})),
+         ?assertMatch(#'queue.delete_ok'{},
+                      amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     end || Server <- Servers].
+
+leader_locator_least_leaders(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Qs = [?config(queue_name, Config),
+          ?config(alt_queue_name, Config),
+          <<"leader_locator_policy_q3">>],
+
+    Leaders = [begin
+                   ?assertMatch({'queue.declare_ok', Q, 0, 0},
+                                declare(Ch, Q,
+                                        [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                         {<<"x-queue-leader-locator">>, longstr, <<"least-leaders">>}])),
+                   {ok, _, {_, Leader}} = ra:members({ra_name(Q), Server}),
+                   Leader
+               end || Q <- Qs],
+    ?assertEqual(3, sets:size(sets:from_list(Leaders))),
+
+    [?assertMatch(#'queue.delete_ok'{},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- Qs].
+
+leader_locator_random(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    Leaders = [begin
+                   ?assertMatch({'queue.declare_ok', Q, 0, 0},
+                                declare(Ch, Q,
+                                        [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                         {<<"x-queue-leader-locator">>, longstr, <<"random">>}])),
+                   {ok, _, {_, Leader}} = ra:members({ra_name(Q), Server}),
+                   ?assertMatch(#'queue.delete_ok'{},
+                                amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+                   Leader
+               end || _ <- lists:seq(1, 15)],
+    ?assertEqual(3, sets:size(sets:from_list(Leaders))).
+
+leader_locator_policy(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Qs = [?config(queue_name, Config),
+          ?config(alt_queue_name, Config),
+          <<"leader_locator_policy_q3">>],
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"my-leader-locator">>, <<"leader_locator_policy_.*">>, <<"queues">>,
+           [{<<"queue-leader-locator">>, <<"least-leaders">>}]),
+
+    Leaders = [begin
+                   ?assertMatch({'queue.declare_ok', Q, 0, 0},
+                                declare(Ch, Q,
+                                        [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+                   {ok, _, {_, Leader}} = ra:members({ra_name(Q), Server}),
+                   Leader
+               end || Q <- Qs],
+    ?assertEqual(3, sets:size(sets:from_list(Leaders))),
+
+    [?assertMatch(#'queue.delete_ok'{},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- Qs],
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"my-leader-locator">>).
+
+select_nodes_with_least_replicas(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Qs = [?config(queue_name, Config),
+          ?config(alt_queue_name, Config)],
+    Members = [begin
+                   ?assertMatch({'queue.declare_ok', Q, 0, 0},
+                                declare(Ch, Q,
+                                        [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                         {<<"x-quorum-initial-group-size">>, long, 3}])),
+                   {ok, Members, _} = ra:members({ra_name(Q), Server}),
+                   ?assertEqual(3, length(Members)),
+                   lists:map(fun({_, N}) -> N end, Members)
+               end || Q <- Qs],
+    %% Assert that second queue selected the nodes where first queue does not have replicas.
+    ?assertEqual(5, sets:size(sets:from_list(lists:flatten(Members)))),
+    [?assertMatch(#'queue.delete_ok'{},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- Qs].
 
 %%----------------------------------------------------------------------------
 

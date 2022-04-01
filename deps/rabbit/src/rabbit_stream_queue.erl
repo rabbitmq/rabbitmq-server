@@ -1050,9 +1050,7 @@ apply_leader_locator_strategy(#{leader_node := Leader,
                                              Acc
                                      end
                              end, Counters0, rabbit_amqqueue:list())),
-    Ordered = lists:sort(fun({_, V1}, {_, V2}) ->
-                                 V1 =< V2
-                         end, Counters),
+    Ordered = lists:keysort(2, Counters),
     %% We could have potentially introduced nodes that are not in the list of replicas if
     %% initial cluster size is smaller than the cluster size. Let's select the first one
     %% that is on the list of replicas
