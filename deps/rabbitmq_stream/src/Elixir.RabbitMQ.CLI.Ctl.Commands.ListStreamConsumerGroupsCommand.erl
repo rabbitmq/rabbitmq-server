@@ -103,7 +103,7 @@ run(Args,
         end,
 
     rabbit_misc:rpc_call(NodeName,
-                         rabbit_stream_coordinator,
+                         rabbit_stream_sac_coordinator,
                          consumer_groups,
                          [VHost, InfoKeys],
                          Timeout).

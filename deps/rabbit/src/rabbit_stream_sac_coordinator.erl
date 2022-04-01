@@ -39,6 +39,12 @@
 -export_type([state/0,
               command/0]).
 
+%% Single Active Consumer API
+-export([register_consumer/7,
+         unregister_consumer/5,
+         activate_consumer/3,
+         consumer_groups/2,
+         group_consumers/4]).
 -export([apply/2,
          init_state/0,
          send_message/2,
@@ -47,6 +53,136 @@
          consumer_groups/3,
          group_consumers/5,
          is_ff_enabled/0]).
+
+%% Single Active Consumer API
+-spec register_consumer(binary(),
+                        binary(),
+                        integer(),
+                        binary(),
+                        pid(),
+                        binary(),
+                        integer()) ->
+                           {ok, boolean()} | {error, feature_flag_disabled}.
+register_consumer(VirtualHost,
+                  Stream,
+                  PartitionIndex,
+                  ConsumerName,
+                  ConnectionPid,
+                  Owner,
+                  SubscriptionId) ->
+    maybe_sac_execute(fun() ->
+                         {ok, Res, _} =
+                             process_command({sac,
+                                              {register_consumer,
+                                               VirtualHost,
+                                               Stream,
+                                               PartitionIndex,
+                                               ConsumerName,
+                                               ConnectionPid,
+                                               Owner,
+                                               SubscriptionId}}),
+                         Res
+                      end).
+
+-spec unregister_consumer(binary(),
+                          binary(),
+                          binary(),
+                          pid(),
+                          integer()) ->
+                             ok | {error, feature_flag_disabled}.
+unregister_consumer(VirtualHost,
+                    Stream,
+                    ConsumerName,
+                    ConnectionPid,
+                    SubscriptionId) ->
+    maybe_sac_execute(fun() ->
+                         {ok, Res, _} =
+                             process_command({sac,
+                                              {unregister_consumer,
+                                               VirtualHost,
+                                               Stream,
+                                               ConsumerName,
+                                               ConnectionPid,
+                                               SubscriptionId}}),
+                         Res
+                      end).
+
+-spec activate_consumer(binary(), binary(), binary()) ->
+                           ok | {error, feature_flag_disabled}.
+activate_consumer(VirtualHost, Stream, ConsumerName) ->
+    maybe_sac_execute(fun() ->
+                         {ok, Res, _} =
+                             process_command({sac,
+                                              {activate_consumer,
+                                               VirtualHost,
+                                               Stream,
+                                               ConsumerName}}),
+                         Res
+                      end).
+
+process_command(Cmd) ->
+    rabbit_stream_coordinator:process_command(Cmd).
+
+%% return the current groups for a given virtual host
+-spec consumer_groups(binary(), [atom()]) ->
+                         {ok,
+                          [term()] | {error, feature_flag_disabled | atom()}}.
+consumer_groups(VirtualHost, InfoKeys) ->
+    maybe_sac_execute(fun() ->
+                         case ra:local_query({rabbit_stream_coordinator,
+                                              node()},
+                                             fun(State) ->
+                                                SacState =
+                                                    rabbit_stream_coordinator:sac_state(State),
+                                                consumer_groups(VirtualHost,
+                                                                InfoKeys,
+                                                                SacState)
+                                             end)
+                         of
+                             {ok, {_, Result}, _} -> Result;
+                             {error, noproc} ->
+                                 %% not started yet, so no groups
+                                 {ok, []};
+                             {error, _} = Err -> Err;
+                             {timeout, _} -> {error, timeout}
+                         end
+                      end).
+
+%% get the consumers of a given group in a given virtual host
+-spec group_consumers(binary(), binary(), binary(), [atom()]) ->
+                         {ok, [term()]} |
+                         {error, feature_flag_disabled | atom()}.
+group_consumers(VirtualHost, Stream, Reference, InfoKeys) ->
+    maybe_sac_execute(fun() ->
+                         case ra:local_query({rabbit_stream_coordinator,
+                                              node()},
+                                             fun(State) ->
+                                                SacState =
+                                                    rabbit_stream_coordinator:sac_state(State),
+                                                group_consumers(VirtualHost,
+                                                                Stream,
+                                                                Reference,
+                                                                InfoKeys,
+                                                                SacState)
+                                             end)
+                         of
+                             {ok, {_, {ok, _} = Result}, _} -> Result;
+                             {ok, {_, {error, _} = Err}, _} -> Err;
+                             {error, noproc} ->
+                                 %% not started yet, so the group cannot exist
+                                 {error, not_found};
+                             {error, _} = Err -> Err;
+                             {timeout, _} -> {error, timeout}
+                         end
+                      end).
+
+maybe_sac_execute(Fun) ->
+    case rabbit_stream_sac_coordinator:is_ff_enabled() of
+        true ->
+            Fun();
+        false ->
+            {error, feature_flag_disabled}
+    end.
 
 -spec init_state() -> state().
 init_state() ->
