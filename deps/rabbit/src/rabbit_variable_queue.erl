@@ -1788,7 +1788,7 @@ init(QueueVsn, IsDurable, IndexMod, IndexState, StoreState, DeltaCount, DeltaByt
         case Terms of
             non_clean_shutdown -> {HiSeqId, HiSeqId, DeltaCount, DeltaBytes};
             _                  -> NextSeqId0 = proplists:get_value(next_seq_id,
-                                                                   Terms, 0),
+                                                                   Terms, HiSeqId),
                                   {NextSeqId0,
                                    proplists:get_value(next_deliver_seq_id,
                                                        Terms, NextSeqId0),
