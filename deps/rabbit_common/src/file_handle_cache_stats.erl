@@ -16,8 +16,8 @@
 -define(COUNT,
         [io_reopen, mnesia_ram_tx, mnesia_disk_tx,
          msg_store_read, msg_store_write,
-         queue_index_journal_write, queue_index_write, queue_index_read]).
--define(COUNT_TIME, [io_sync, io_seek, io_file_handle_open_attempt]).
+         queue_index_write, queue_index_read]).
+-define(COUNT_TIME, [io_sync, io_seek]).
 -define(COUNT_TIME_BYTES, [io_read, io_write]).
 
 init() ->

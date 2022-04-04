@@ -61,7 +61,6 @@ Group `node_persister_metrics`:
 | rabbitmq_detailed_io_write_bytes_total                | Total number of I/O bytes written                    |
 | rabbitmq_detailed_io_sync_ops_total                   | Total number of I/O sync operations                  |
 | rabbitmq_detailed_io_seek_ops_total                   | Total number of I/O seek operations                  |
-| rabbitmq_detailed_io_open_attempt_ops_total           | Total number of file open attempts                   |
 | rabbitmq_detailed_io_reopen_ops_total                 | Total number of times files have been reopened       |
 | rabbitmq_detailed_schema_db_ram_tx_total              | Total number of Schema DB memory transactions        |
 | rabbitmq_detailed_schema_db_disk_tx_total             | Total number of Schema DB disk transactions          |
@@ -69,12 +68,10 @@ Group `node_persister_metrics`:
 | rabbitmq_detailed_msg_store_write_total               | Total number of Message Store write operations       |
 | rabbitmq_detailed_queue_index_read_ops_total          | Total number of Queue Index read operations          |
 | rabbitmq_detailed_queue_index_write_ops_total         | Total number of Queue Index write operations         |
-| rabbitmq_detailed_queue_index_journal_write_ops_total | Total number of Queue Index Journal write operations |
 | rabbitmq_detailed_io_read_time_seconds_total          | Total I/O read time                                  |
 | rabbitmq_detailed_io_write_time_seconds_total         | Total I/O write time                                 |
 | rabbitmq_detailed_io_sync_time_seconds_total          | Total I/O sync time                                  |
 | rabbitmq_detailed_io_seek_time_seconds_total          | Total I/O seek time                                  |
-| rabbitmq_detailed_io_open_attempt_time_seconds_total  | Total file open attempts time                        |
 
 
 #### Raft metrics

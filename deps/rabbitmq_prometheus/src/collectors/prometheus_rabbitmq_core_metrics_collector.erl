@@ -94,7 +94,6 @@
         {2, undefined, io_write_bytes_total, counter, "Total number of I/O bytes written", io_write_bytes},
         {2, undefined, io_sync_ops_total, counter, "Total number of I/O sync operations", io_sync_count},
         {2, undefined, io_seek_ops_total, counter, "Total number of I/O seek operations", io_seek_count},
-        {2, undefined, io_open_attempt_ops_total, counter, "Total number of file open attempts", io_file_handle_open_attempt_count},
         {2, undefined, io_reopen_ops_total, counter, "Total number of times files have been reopened", io_reopen_count},
         {2, undefined, schema_db_ram_tx_total, counter, "Total number of Schema DB memory transactions", mnesia_ram_tx_count},
         {2, undefined, schema_db_disk_tx_total, counter, "Total number of Schema DB disk transactions", mnesia_disk_tx_count},
@@ -102,12 +101,10 @@
         {2, undefined, msg_store_write_total, counter, "Total number of Message Store write operations", msg_store_write_count},
         {2, undefined, queue_index_read_ops_total, counter, "Total number of Queue Index read operations", queue_index_read_count},
         {2, undefined, queue_index_write_ops_total, counter, "Total number of Queue Index write operations", queue_index_write_count},
-        {2, undefined, queue_index_journal_write_ops_total, counter, "Total number of Queue Index Journal write operations", queue_index_journal_write_count},
         {2, ?MICROSECOND, io_read_time_seconds_total, counter, "Total I/O read time", io_read_time},
         {2, ?MICROSECOND, io_write_time_seconds_total, counter, "Total I/O write time", io_write_time},
         {2, ?MICROSECOND, io_sync_time_seconds_total, counter, "Total I/O sync time", io_sync_time},
-        {2, ?MICROSECOND, io_seek_time_seconds_total, counter, "Total I/O seek time", io_seek_time},
-        {2, ?MICROSECOND, io_open_attempt_time_seconds_total, counter, "Total file open attempts time", io_file_handle_open_attempt_time}
+        {2, ?MICROSECOND, io_seek_time_seconds_total, counter, "Total I/O seek time", io_seek_time}
     ]},
 
     {ra_metrics, [
