@@ -172,8 +172,7 @@
        ['Write', 'io_write_count'],
        ['Seek', 'io_seek_count'],
        ['Sync', 'io_sync_count'],
-       ['File handle reopen', 'io_reopen_count'],
-       ['File handle open attempt', 'io_file_handle_open_attempt_count']],
+       ['File handle reopen', 'io_reopen_count']],
       fmt_rate, fmt_rate_axis, true, 'I/O operations', 'io-operations') %>
 
   <%= rates_chart_or_text('persister-io-stats-bytes', node,
@@ -185,8 +184,7 @@
       [['Read', 'io_read_avg_time'],
        ['Write', 'io_write_avg_time'],
        ['Seek', 'io_seek_avg_time'],
-       ['Sync', 'io_sync_avg_time'],
-       ['File handle open attempt', 'io_file_handle_open_attempt_avg_time']],
+       ['Sync', 'io_sync_avg_time']],
       fmt_ms, fmt_ms, false, 'I/O average time per operation') %>
 </div>
 </div>
