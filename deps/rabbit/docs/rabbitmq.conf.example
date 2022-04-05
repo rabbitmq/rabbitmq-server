@@ -883,12 +883,17 @@
 ##
 # mqtt.prefetch = 10
 
-## Set the durable queue type for QoS 1 subscriptions.
-## Supported queues:
+## Sets the durable queue type to be used for QoS 1 subscriptions.
+##
+## Supported types are:
 ## 
-## classic
-## quorum
-##  
+## * classic
+## * quorum
+##
+## IMPORTANT: changing this setting requires all existing queues used by
+## the MQTT plugin to be DELETED or clients will fail to subscribe.
+## So this setting should be used for new clusters.
+##
 # mqtt.durable_queue_type = classic
 
 
