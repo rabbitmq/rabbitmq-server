@@ -853,18 +853,13 @@ dn_lookup(Username, LDAP) ->
         {ok, {eldap_search_result, [#eldap_entry{object_name = DN}], _Referrals, _Controls}}->
             ?L1("DN lookup: ~s -> ~s", [Username, DN]),
             DN;
-<<<<<<< HEAD
-        {ok, #eldap_search_result{entries = Entries}} ->
-            _ = rabbit_log_ldap:warning("Searching for DN for ~s, got back ~p~n",
-=======
         {ok, {eldap_search_result, Entries, _Referrals}} ->
-            rabbit_log_ldap:warning("Searching for DN for ~s, got back ~p",
-                               [Filled, Entries]),
+            _ = rabbit_log_ldap:warning("Searching for DN for ~s, got back ~p",
+                                       [Filled, Entries]),
             Filled;
         {ok, {eldap_search_result, Entries, _Referrals, _Controls}} ->
-            rabbit_log_ldap:warning("Searching for DN for ~s, got back ~p",
->>>>>>> ec231d8622 (Take other eldap_search_result cases into account)
-                               [Filled, Entries]),
+            _ = rabbit_log_ldap:warning("Searching for DN for ~s, got back ~p",
+                                       [Filled, Entries]),
             Filled;
         {error, _} = E ->
             exit(E)
