@@ -179,6 +179,7 @@ start_cluster(Q) ->
                  {error, {too_long, N}} ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
+    Id = {RaName, node()},
     AllQuorumQs = rabbit_amqqueue:list_with_possible_retry(
                     fun() ->
                             mnesia:dirty_match_object(rabbit_queue,
@@ -210,7 +211,7 @@ start_cluster(Q) ->
                     %% keys
                     %% TODO: handle error - what should be done if the
                     %% config cannot be updated
-                    ok = rabbit_fifo_client:update_machine_state({RaName, node()},
+                    ok = rabbit_fifo_client:update_machine_state(Id,
                                                                  ra_machine_config(NewQ)),
                     notify_decorators(QName, startup),
                     rabbit_event:notify(queue_created,
