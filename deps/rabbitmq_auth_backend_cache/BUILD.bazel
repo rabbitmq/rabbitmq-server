@@ -32,16 +32,11 @@ RUNTIME_DEPS = [
     "//deps/rabbit:erlang_app",
 ]
 
-FIRST_SRCS = [
-    "src/rabbit_auth_cache.erl",
-]
-
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
     app_module = APP_MODULE,
     app_name = APP_NAME,
-    first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )

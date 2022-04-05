@@ -33,10 +33,6 @@ rabbitmq_app(
         "amqp_sup",
     ],
     extra_apps = EXTRA_APPS,
-    first_srcs = [
-        "src/amqp_gen_connection.erl",
-        "src/amqp_gen_consumer.erl",
-    ],
     deps = DEPS,
 )
 

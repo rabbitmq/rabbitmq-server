@@ -100,9 +100,9 @@ def rabbitmq_app(
         app_description = "",
         app_module = "",
         app_registered = [],
-        app_env = "[]",
+        app_env = "",
+        app_extra_keys = "",
         extra_apps = [],
-        first_srcs = [],
         extra_priv = [],
         build_deps = [],
         deps = [],
@@ -114,13 +114,13 @@ def rabbitmq_app(
         app_module = app_module,
         app_registered = app_registered,
         app_env = app_env,
+        app_extra = app_extra_keys,
         extra_apps = extra_apps,
         extra_priv = extra_priv,
         erlc_opts = select({
             "//:debug_build": without("+deterministic", RABBITMQ_ERLC_OPTS),
             "//conditions:default": RABBITMQ_ERLC_OPTS,
         }),
-        first_srcs = first_srcs,
         build_deps = build_deps,
         deps = deps,
         runtime_deps = runtime_deps,
@@ -133,13 +133,13 @@ def rabbitmq_app(
         app_module = app_module,
         app_registered = app_registered,
         app_env = app_env,
+        app_extra = app_extra_keys,
         extra_apps = extra_apps,
         extra_priv = extra_priv,
         erlc_opts = select({
             "//:debug_build": without("+deterministic", RABBITMQ_TEST_ERLC_OPTS),
             "//conditions:default": RABBITMQ_TEST_ERLC_OPTS,
         }),
-        first_srcs = first_srcs,
         build_deps = with_test_versions(build_deps),
         deps = with_test_versions(deps),
         runtime_deps = with_test_versions(runtime_deps),
@@ -184,6 +184,13 @@ def rabbitmq_integration_suite(
         deps = [],
         runtime_deps = [],
         **kwargs):
+    extra_deps = [
+        "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_ct_helpers:erlang_app",
+    ]
+    if package != "deps/amqp_client":
+        extra_deps.append("//deps/amqp_client:erlang_app")
+
     ct_suite(
         name = name,
         suite_name = name,
@@ -211,11 +218,7 @@ def rabbitmq_integration_suite(
             "//deps/rabbitmq_cli:rabbitmqctl",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
-        deps = [
-            "//deps/amqp_client:erlang_app",
-            "//deps/rabbit_common:erlang_app",
-            "//deps/rabbitmq_ct_helpers:erlang_app",
-        ] + deps,
+        deps = extra_deps + deps,
         **kwargs
     )
 
@@ -242,11 +245,7 @@ def rabbitmq_integration_suite(
             "//deps/rabbitmq_cli:rabbitmqctl",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
-        deps = [
-            "//deps/amqp_client:erlang_app",
-            "//deps/rabbit_common:erlang_app",
-            "//deps/rabbitmq_ct_helpers:erlang_app",
-        ] + deps,
+        deps = extra_deps + deps,
         **kwargs
     )
 
