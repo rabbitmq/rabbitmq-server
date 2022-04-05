@@ -107,8 +107,6 @@ def rabbitmq_app(
         app_env = "",
         app_extra_keys = "",
         extra_apps = [],
-        extra_hdrs = [],
-        extra_srcs = [],
         extra_priv = [],
         build_deps = [],
         deps = [],
@@ -120,7 +118,7 @@ def rabbitmq_app(
         app_module = app_module,
         app_registered = app_registered,
         app_env = app_env,
-        app_extra_keys = app_extra_keys,
+        app_extra = app_extra_keys,
         extra_apps = extra_apps,
         extra_hdrs = extra_hdrs,
         extra_srcs = extra_srcs,
@@ -141,7 +139,7 @@ def rabbitmq_app(
         app_module = app_module,
         app_registered = app_registered,
         app_env = app_env,
-        app_extra_keys = app_extra_keys,
+        app_extra = app_extra_keys,
         extra_apps = extra_apps,
         extra_hdrs = extra_hdrs,
         extra_srcs = extra_srcs,
@@ -240,11 +238,7 @@ def rabbitmq_integration_suite(
             "//deps/rabbitmq_cli:rabbitmqctl",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
-        deps = [
-            "//deps/amqp_client:erlang_app",
-            "//deps/rabbit_common:erlang_app",
-            "//deps/rabbitmq_ct_helpers:erlang_app",
-        ] + deps,
+        deps = extra_deps + deps,
         **kwargs
     )
 
@@ -283,11 +277,7 @@ def rabbitmq_integration_suite(
             "//deps/rabbitmq_cli:rabbitmqctl",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
-        deps = [
-            "//deps/amqp_client:erlang_app",
-            "//deps/rabbit_common:erlang_app",
-            "//deps/rabbitmq_ct_helpers:erlang_app",
-        ] + deps,
+        deps = extra_deps + deps,
         **kwargs
     )
 

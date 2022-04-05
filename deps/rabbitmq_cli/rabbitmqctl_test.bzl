@@ -1,4 +1,8 @@
-load("@rules_erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
+load(
+    "@rules_erlang//:erlang_home.bzl",
+    "ErlangHomeProvider",
+    "ErlangVersionProvider",
+)
 load(
     "@rules_erlang//:erlang_app_info.bzl",
     "ErlangAppInfo",
@@ -11,23 +15,26 @@ load(
     "windows_path",
 )
 load(
-    "@rules_erlang//private:ct.bzl",
-    "ERL_LIBS_DIR",
-    "code_paths",
+    "@rules_erlang//private:util.bzl",
     "erl_libs_contents",
 )
-load("//:elixir_home.bzl", "ElixirHomeProvider")
+load(
+    "//:elixir_home.bzl",
+    "ElixirHomeProvider",
+)
 
 def _impl(ctx):
     erlang_version = ctx.attr._erlang_version[ErlangVersionProvider].version
     erlang_home = ctx.attr._erlang_home[ErlangHomeProvider].path
     elixir_home = ctx.attr._elixir_home[ElixirHomeProvider].path
 
-    erl_libs_files = erl_libs_contents(ctx, headers = True)
+    erl_libs_dir = ctx.label.name + "_deps"
+
+    erl_libs_files = erl_libs_contents(ctx, headers = True, dir = erl_libs_dir)
 
     package_dir = path_join(ctx.label.workspace_root, ctx.label.package)
 
-    erl_libs_path = path_join(package_dir, ERL_LIBS_DIR)
+    erl_libs_path = path_join(package_dir, erl_libs_dir)
 
     if not ctx.attr.is_windows:
         output = ctx.actions.declare_file(ctx.label.name)

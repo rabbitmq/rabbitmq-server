@@ -4,13 +4,11 @@ load("@rules_erlang//:erlang_app.bzl", "DEFAULT_ERLC_OPTS")
 
 load("@rules_erlang//:erlc.bzl", "erlc")
 
-erlang_bytecode(
+erlc(
     name = "beam_files",
+    hdrs = glob(["include/**/*.hrl", "src/**/*.hrl"]),
     srcs = glob(["src/**/*.erl"]),
-    hdrs = glob([
-        "include/**/*.hrl",
-        "src/**/*.hrl",
-    ]),
+    erlc_opts = DEFAULT_ERLC_OPTS,
     dest = "ebin",
     erlc_opts = DEFAULT_ERLC_OPTS,
 )
@@ -34,11 +32,6 @@ erlang_app_info(
     app_name = "ranch",
     app = ":app_file",
     hdrs = glob(["include/**/*.hrl"]),
-    app = ":app_file",
-    app_name = "ranch",
-    beam = [
-        ":beam_files",
-        ":appup",
-    ],
+    beam = [":beam_files", ":appup"],
     visibility = ["//visibility:public"],
 )
