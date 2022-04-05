@@ -55,9 +55,6 @@ rabbitmq_app(
     app_name = APP_NAME,
     build_deps = BUILD_DEPS,
     extra_apps = EXTRA_APPS,
-    first_srcs = [
-        "src/rabbit_shovel_behaviour.erl",
-    ],
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )

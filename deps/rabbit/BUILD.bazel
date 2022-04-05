@@ -190,14 +190,6 @@ EXTRA_APPS = [
     "xmerl",
 ]
 
-FIRST_SRCS = [
-    "src/rabbit_tracking.erl",
-    "src/rabbit_queue_type.erl",
-    "src/rabbit_credential_validator.erl",
-    "src/rabbit_policy_merge_strategy.erl",
-    "src/rabbit_queue_master_locator.erl",
-]
-
 rabbitmq_app(
     app_description = "RabbitMQ",
     app_env = _APP_ENV,
@@ -206,7 +198,6 @@ rabbitmq_app(
     app_registered = APP_REGISTERED,
     build_deps = BUILD_DEPS,
     extra_apps = EXTRA_APPS,
-    first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
