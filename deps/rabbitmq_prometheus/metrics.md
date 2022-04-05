@@ -228,8 +228,6 @@ These metrics are specific to the stream protocol.
 
 | Metric                                       | Description                                          |
 | ---                                          | ---                                                  |
-| rabbitmq_io_open_attempt_ops_total           | Total number of file open attempts                   |
-| rabbitmq_io_open_attempt_time_seconds_total  | Total file open attempts time                        |
 | rabbitmq_io_read_bytes_total                 | Total number of I/O bytes read                       |
 | rabbitmq_io_read_ops_total                   | Total number of I/O read operations                  |
 | rabbitmq_io_read_time_seconds_total          | Total I/O read time                                  |
@@ -243,7 +241,6 @@ These metrics are specific to the stream protocol.
 | rabbitmq_io_write_time_seconds_total         | Total I/O write time                                 |
 | rabbitmq_msg_store_read_total                | Total number of Message Store read operations        |
 | rabbitmq_msg_store_write_total               | Total number of Message Store write operations       |
-| rabbitmq_queue_index_journal_write_ops_total | Total number of Queue Index Journal write operations |
 | rabbitmq_queue_index_read_ops_total          | Total number of Queue Index read operations          |
 | rabbitmq_queue_index_write_ops_total         | Total number of Queue Index write operations         |
 | rabbitmq_schema_db_disk_tx_total             | Total number of Schema DB disk transactions          |

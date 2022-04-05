@@ -118,15 +118,15 @@
                              Io_write_bytes, Io_write_avg_time, Io_sync_count, Io_sync_avg_time,
                              Io_seek_count, Io_seek_avg_time, Io_reopen_count, Mnesia_ram_tx_count,
                              Mnesia_disk_tx_count, Msg_store_read_count, Msg_store_write_count,
-                             Queue_index_journal_write_count, Queue_index_write_count,
-                             Queue_index_read_count, Io_file_handle_open_attempt_count,
-                             Io_file_handle_open_attempt_avg_time),
+                             Unused1, Queue_index_write_count,
+                             Queue_index_read_count, Unused2,
+                             Unused3),
         {Io_read_count, Io_read_bytes, Io_read_avg_time, Io_write_count, Io_write_bytes,
          Io_write_avg_time, Io_sync_count, Io_sync_avg_time, Io_seek_count, Io_seek_avg_time,
          Io_reopen_count, Mnesia_ram_tx_count, Mnesia_disk_tx_count, Msg_store_read_count,
-         Msg_store_write_count, Queue_index_journal_write_count, Queue_index_write_count,
-         Queue_index_read_count, Io_file_handle_open_attempt_count,
-         Io_file_handle_open_attempt_avg_time}).
+         Msg_store_write_count, Unused1, Queue_index_write_count,
+         Queue_index_read_count, Unused2,
+         Unused3}).
 -define(node_node_stats(Send_bytes, Recv_bytes), {Send_bytes, Recv_bytes}).
 -define(node_node_coarse_stats(Send_bytes, Recv_bytes), {Send_bytes, Recv_bytes}).
 -define(queue_msg_rates(Disk_reads, Disk_writes), {Disk_reads, Disk_writes}).
@@ -175,9 +175,9 @@
                  io_write_bytes, io_write_avg_time, io_sync_count, io_sync_avg_time,
                  io_seek_count, io_seek_avg_time, io_reopen_count, mnesia_ram_tx_count,
                  mnesia_disk_tx_count, msg_store_read_count, msg_store_write_count,
-                 queue_index_journal_write_count, queue_index_write_count,
-                 queue_index_read_count, io_file_handle_open_attempt_count,
-                 io_file_handle_open_attempt_avg_time];
+                 unused1, queue_index_write_count,
+                 queue_index_read_count, unused2,
+                 unused3];
             node_node_coarse_stats ->
                 [send_bytes, recv_bytes];
             T when T =:= queue_msg_rates;
