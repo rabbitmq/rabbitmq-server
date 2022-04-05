@@ -135,7 +135,7 @@ prop_format(SampleSize, Check, Incremental, RangeFun) ->
            Results = rabbit_mgmt_stats:format_range(Range, LastTS, Table, 5000,
                                                     InstantRateFun,
                                                     SamplesFun),
-           ?WHENFAIL(io:format("Got: ~p~nSlide: ~p~nRange~p~n", [Results, Slide, Range]),
+           ?WHENFAIL(io:format("Got: ~p~nSlide: ~p~nRange: ~p~n", [Results, Slide, Range]),
                      Check(Results, Total, Samples, Table))
        end).
 
@@ -324,11 +324,15 @@ rate_check(RateCheck) ->
             Rate = proplists:get_value(rate, proplists:get_value(Detail, Results), 0),
             RateCheck(Rate)
         end,
-        lists:all(Check, details(Table))
+        lists:all(Check,
+                  details(Table) -- [unused1_details, unused2_details, unused3_details])
     end.
 
 check_total(Results, Totals, _Samples, Table) ->
-    Expected = lists:zip(?stats_per_table(Table), tuple_to_list(Totals)),
+    Expected0 = lists:zip(?stats_per_table(Table), tuple_to_list(Totals)),
+    Expected = lists:keydelete(unused1, 1,
+                   lists:keydelete(unused2, 1,
+                       lists:keydelete(unused3, 1, Expected0))),
     lists:all(fun({K, _} = E) ->
                   case is_average_time(K) of
                       false -> lists:member(E, Results);
@@ -340,9 +344,11 @@ is_avg_time_details(Detail) ->
     match == re:run(atom_to_list(Detail), "avg_time_details$", [{capture, none}]).
 
 check_samples(Results, _Totals, Samples, Table) ->
-    Details = details(Table),
+    Details0 = details(Table),
     %% Lookup list for the position of the key in the stats tuple
-    Pairs = lists:zip(Details, lists:seq(1, length(Details))),
+    Pairs = lists:zip(Details0, lists:seq(1, length(Details0))),
+    %% Remove unused values that must not be checked.
+    Details = Details0 -- [unused1_details, unused2_details, unused3_details],
 
     NonAvgTimeDetails = lists:filter(fun(D) ->
                                              not is_avg_time_details(D)
@@ -372,7 +378,7 @@ check_samples(Results, _Totals, Samples, Table) ->
               end, Details).
 
 check_avg_rate(Results, _Totals, _Samples, Table) ->
-    Details = details(Table),
+    Details = details(Table) -- [unused1_details, unused2_details, unused3_details],
 
     NonAvgTimeDetails = lists:filter(fun(D) ->
                                              not is_avg_time_details(D)
@@ -399,7 +405,7 @@ check_avg_rate(Results, _Totals, _Samples, Table) ->
                   end, AvgTimeDetails).
 
 check_avg(Results, _Totals, _Samples, Table) ->
-    Details = details(Table),
+    Details = details(Table) -- [unused1_details, unused2_details, unused3_details],
 
     NonAvgTimeDetails = lists:filter(fun(D) ->
                                              not is_avg_time_details(D)

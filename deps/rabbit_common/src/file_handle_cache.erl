@@ -693,8 +693,7 @@ with_flushed_handles(Refs, ReadBuffer, Fun) ->
       end).
 
 get_or_reopen_timed(RefNewOrReopens) ->
-    file_handle_cache_stats:update(
-      io_file_handle_open_attempt, fun() -> get_or_reopen(RefNewOrReopens) end).
+    get_or_reopen(RefNewOrReopens).
 
 get_or_reopen(RefNewOrReopens) ->
     case partition_handles(RefNewOrReopens) of

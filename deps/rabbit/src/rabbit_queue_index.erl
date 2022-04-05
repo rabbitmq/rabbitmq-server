@@ -405,7 +405,6 @@ flush_pre_publish_cache(#qistate{pre_publish_cache = []} = State) ->
     State;
 flush_pre_publish_cache(State = #qistate{pre_publish_cache = PPC}) ->
     {JournalHdl, State1} = get_journal_handle(State),
-    file_handle_cache_stats:update(queue_index_journal_write),
     ok = file_handle_cache:append(JournalHdl, lists:reverse(PPC)),
     State1#qistate{pre_publish_cache = []}.
 
@@ -419,7 +418,6 @@ publish(MsgOrId, SeqId, _Location, MsgProps, IsPersistent, JournalSizeHint, Stat
     {JournalHdl, State1} =
         get_journal_handle(
           maybe_needs_confirming(MsgProps, MsgOrId, State)),
-    file_handle_cache_stats:update(queue_index_journal_write),
     {Bin, MsgBin} = create_pub_record_body(MsgOrId, MsgProps),
     ok = file_handle_cache:append(
            JournalHdl, [<<(case IsPersistent of
@@ -1092,7 +1090,6 @@ deliver_or_ack(_Kind, [], State) ->
 deliver_or_ack(Kind, SeqIds, State) ->
     JPrefix = case Kind of ack -> ?ACK_JPREFIX; del -> ?DEL_JPREFIX end,
     {JournalHdl, State1} = get_journal_handle(State),
-    file_handle_cache_stats:update(queue_index_journal_write),
     ok = file_handle_cache:append(
            JournalHdl,
            [<<JPrefix:?JPREFIX_BITS, SeqId:?SEQ_BITS>> || SeqId <- SeqIds]),
