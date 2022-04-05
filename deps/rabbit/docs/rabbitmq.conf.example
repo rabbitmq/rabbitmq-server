@@ -883,6 +883,15 @@
 ##
 # mqtt.prefetch = 10
 
+## Set the durable queue type for QoS 1 subscriptions.
+## Supported queues:
+## 
+## classic
+## quorum
+##  
+# mqtt.durable_queue_type = classic
+
+
 
 ## ----------------------------------------------------------------------------
 ## RabbitMQ AMQP 1.0 Support
