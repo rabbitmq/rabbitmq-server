@@ -15,7 +15,7 @@
 
 -import(rabbit_federation_test_util,
         [wait_for_federation/2, expect/3, expect/4,
-         set_upstream/4, set_upstream/5, clear_upstream/3, clear_upstream_set/3,
+         set_upstream/4, set_upstream/5, clear_upstream/3, set_upstream_set/4, clear_upstream_set/3,
          set_policy/5, clear_policy/3,
          set_policy_pattern/5, set_policy_upstream/5, q/2, with_ch/3,
          maybe_declare_queue/3, delete_queue/2,
@@ -33,7 +33,6 @@ all() ->
 
 groups() ->
     ClusterSize1 = [simple,
-                    multiple_upstreams,
                     multiple_upstreams_pattern,
                     multiple_downstreams,
                     message_flow,
@@ -187,17 +186,6 @@ simple(Config) ->
       fun (Ch) ->
               expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
       end, upstream_downstream(Config)).
-
-multiple_upstreams(Config) ->
-    SourceArgs = ?config(source_queue_args, Config),
-    TargetArgs = ?config(target_queue_args, Config),
-    with_ch(Config,
-      fun (Ch) ->
-              expect_federation(Ch, <<"upstream">>, <<"fed12.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
-              expect_federation(Ch, <<"upstream2">>, <<"fed12.downstream">>, ?EXPECT_FEDERATION_TIMEOUT)
-      end, [q(<<"upstream">>, SourceArgs),
-            q(<<"upstream2">>, SourceArgs),
-            q(<<"fed12.downstream">>, TargetArgs)]).
 
 multiple_upstreams_pattern(Config) ->
     set_upstream(Config, 0, <<"local453x">>,
