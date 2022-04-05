@@ -38,10 +38,6 @@ APP_ENV = """[
 	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
 	  ]"""
 
-FIRST_SRCS = [
-    "src/rabbit_mgmt_extension.erl",
-]
-
 DEPS = [
     "//deps/amqp_client:erlang_app",
     "//deps/rabbit_common:erlang_app",
@@ -72,7 +68,6 @@ rabbitmq_app(
     app_name = APP_NAME,
     extra_apps = EXTRA_APPS,
     extra_priv = [":rabbitmqadmin"],
-    first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
