@@ -53,11 +53,15 @@ groups() ->
            leader_locator_policy,
            queue_size_on_declare,
            leader_locator_random_maintenance,
-           leader_locator_least_leaders_maintenance
+           leader_locator_least_leaders_maintenance,
+           leader_locator_random,
+           leader_locator_least_leaders,
+           select_nodes_with_least_replicas
           ]},
      {cluster_size_3_1, [], [shrink_coordinator_cluster]},
      {cluster_size_3_2, [], [recover,
-                             declare_with_node_down]},
+                             declare_with_node_down_1,
+                             declare_with_node_down_2]},
      {cluster_size_3_parallel_1, [parallel], [
                                               delete_replica,
                                               delete_last_replica,
@@ -68,9 +72,7 @@ groups() ->
                                               initial_cluster_size_two,
                                               initial_cluster_size_one_policy,
                                               leader_locator_client_local,
-                                              declare_delete_same_stream,
-                                              leader_locator_random,
-                                              leader_locator_least_leaders
+                                              declare_delete_same_stream
                                              ]},
      {cluster_size_3_parallel_2, [parallel], all_tests()},
      {unclustered_size_3_1, [], [add_replica]},
@@ -708,17 +710,37 @@ restart_single_node(Config) ->
 
 %% the failing case for this test relies on a particular random condition
 %% please never consider this a flake
-declare_with_node_down(Config) ->
+declare_with_node_down_1(Config) ->
     [Server1, Server2, Server3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     rabbit_ct_broker_helpers:stop_node(Config, Server2),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-initial-cluster-size">>, long, 3}])),
     check_leader_and_replicas(Config, [Server1, Server3]),
+    %% Since there are not sufficient running nodes, we expect that
+    %% also stopped nodes are selected as replicas.
+    check_members(Config, Servers),
     rabbit_ct_broker_helpers:start_node(Config, Server2),
     check_leader_and_replicas(Config, Servers),
+    ok.
+
+declare_with_node_down_2(Config) ->
+    [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    rabbit_ct_broker_helpers:stop_node(Config, Server2),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-initial-cluster-size">>, long, 2},
+                                 {<<"x-queue-leader-locator">>, longstr, <<"random">>}])),
+    check_leader_and_replicas(Config, [Server1, Server3]),
+    %% Since there are sufficient running nodes, we expect that
+    %% stopped nodes are not selected as replicas.
+    check_members(Config, [Server1, Server3]),
+    rabbit_ct_broker_helpers:start_node(Config, Server2),
+    check_leader_and_replicas(Config, [Server1, Server3]),
     ok.
 
 recover(Config) ->
@@ -1887,16 +1909,16 @@ leader_locator_least_leaders(Config) ->
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q = ?config(queue_name, Config),
+    Bin = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    Q1 = <<Bin/binary, "_q1">>,
+    Q2 = <<Bin/binary, "_q2">>,
 
-    Q1 = <<"q1">>,
-    Q2 = <<"q2">>,
     ?assertEqual({'queue.declare_ok', Q1, 0, 0},
                  declare(Ch, Q1, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                   {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
                  declare(Ch, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                   {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
-
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                  {<<"x-queue-leader-locator">>, longstr, <<"least-leaders">>}])),
@@ -1905,7 +1927,32 @@ leader_locator_least_leaders(Config) ->
     Leader = proplists:get_value(leader, Info),
 
     ?assert(lists:member(Leader, [Server2, Server3])),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, [[Q2, Q1, Q]]).
+
+select_nodes_with_least_replicas(Config) ->
+    [Server1 | _ ] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Q = ?config(queue_name, Config),
+    Bin = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    Q1 = <<Bin/binary, "_q1">>,
+    Qs = [Q1, Q],
+
+    [Q1Members, QMembers] =
+    lists:map(fun(Q0) ->
+                      ?assertEqual({'queue.declare_ok', Q0, 0, 0},
+                                   declare(Ch, Q0, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                                    {<<"x-initial-cluster-size">>, long, 2}])),
+                      Infos = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, info_all,
+                                                           [<<"/">>, [name, members]]),
+                      Name = rabbit_misc:r(<<"/">>, queue, Q0),
+                      [Info] = [Props || Props <- Infos, lists:member({name, Name}, Props)],
+                      proplists:get_value(members, Info)
+              end, Qs),
+
+    %% We expect that the second stream chose nodes where the first stream does not have replicas.
+    ?assertEqual(lists:usort(Servers),
+                 lists:usort(Q1Members ++ QMembers)),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, [Qs]).
 
 leader_locator_least_leaders_maintenance(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -2137,9 +2184,8 @@ purge(Config) ->
 
 %%----------------------------------------------------------------------------
 
-delete_queues() ->
-    [{ok, _} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
-     || Q <- rabbit_amqqueue:list()].
+delete_queues(Qs) when is_list(Qs) ->
+    lists:foreach(fun delete_testcase_queue/1, Qs).
 
 delete_testcase_queue(Name) ->
     QName = rabbit_misc:r(<<"/">>, queue, Name),
@@ -2177,7 +2223,16 @@ check_leader_and_replicas(Config, Members, Tag) ->
               ct:pal("~s members ~w ~p", [?FUNCTION_NAME, Members, Info]),
               lists:member(proplists:get_value(leader, Info), Members)
                   andalso (lists:sort(Members) == lists:sort(proplists:get_value(Tag, Info)))
-      end, 60000).
+      end, 60_000).
+
+check_members(Config, ExpectedMembers) ->
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              Info = find_queue_info(Config, 0, [members]),
+              Members = proplists:get_value(members, Info),
+              ct:pal("~s members ~w ~p", [?FUNCTION_NAME, Members, Info]),
+              lists:sort(ExpectedMembers) == lists:sort(Members)
+      end, 20_000).
 
 publish(Ch, Queue) ->
     publish(Ch, Queue, <<"msg">>).

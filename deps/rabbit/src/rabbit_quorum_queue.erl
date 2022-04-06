@@ -180,18 +180,10 @@ start_cluster(Q) ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
     Id = {RaName, node()},
-    AllQuorumQs = rabbit_amqqueue:list_with_possible_retry(
-                    fun() ->
-                            mnesia:dirty_match_object(rabbit_queue,
-                                                      amqqueue:pattern_match_on_type(?MODULE))
-                    end),
-    Nodes = select_quorum_nodes(QuorumSize, rabbit_nodes:all(), AllQuorumQs),
-    LeaderLocator = leader_locator(args_policy_lookup(<<"queue-leader-locator">>,
-                                                      fun policyHasPrecedence/2, Q)),
-    LeaderNode = leader_node(LeaderLocator, Nodes, AllQuorumQs),
-    LeaderId = {RaName, LeaderNode},
+    {Leader, Followers} = rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
+    LeaderId = {RaName, Leader},
     NewQ0 = amqqueue:set_pid(Q, LeaderId),
-    NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => Nodes}),
+    NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => [Leader | Followers]}),
 
     rabbit_log:debug("Will start up to ~w replicas for quorum queue ~s",
                      [QuorumSize, rabbit_misc:rs(QName)]),
@@ -1606,62 +1598,6 @@ get_default_quorum_initial_group_size(Arguments) ->
             application:get_env(rabbit, quorum_cluster_size, 3);
         {_Type, Val} ->
             Val
-    end.
-
-select_quorum_nodes(Size, AllNodes, _)
-  when length(AllNodes) =< Size ->
-    AllNodes;
-select_quorum_nodes(Size, AllNodes, AllQuorumQs) ->
-    %% Select local node (to have data locality for declaring client)
-    %% and nodes with least quorum queue replicas (to have a "balanced" RabbitMQ cluster).
-    Local = node(),
-    true = lists:member(Local, AllNodes),
-    Counters0 = maps:from_list([{Node, 0} || Node <- lists:delete(Local, AllNodes)]),
-    Counters = lists:foldl(fun(Q, Acc) ->
-                                   lists:foldl(fun(N, A)
-                                                     when is_map_key(N, A) ->
-                                                       maps:update_with(N, fun(C) -> C+1 end, A);
-                                                  (_, A) ->
-                                                       A
-                                               end, Acc, get_nodes(Q))
-                           end, Counters0, AllQuorumQs),
-    L0 = maps:to_list(Counters),
-    L1 = lists:keysort(2, L0),
-    {L, _} = lists:split(Size - 1, L1),
-    LeastReplicas = lists:map(fun({N, _}) -> N end, L),
-    [Local | LeastReplicas].
-
-leader_locator(undefined) -> <<"client-local">>;
-leader_locator(Val) -> Val.
-
-leader_node(<<"client-local">>, _, _) ->
-    node();
-leader_node(<<"random">>, Nodes0, _) ->
-    Nodes = potential_leaders(Nodes0),
-    lists:nth(rand:uniform(length(Nodes)), Nodes);
-leader_node(<<"least-leaders">>, Nodes0, AllQuorumQs) ->
-    Nodes = potential_leaders(Nodes0),
-    Counters0 = maps:from_list([{N, 0} || N <- Nodes]),
-    Counters = lists:foldl(fun(Q, Acc) ->
-                                   case amqqueue:get_pid(Q) of
-                                       {_, LeaderNode}
-                                         when is_map_key(LeaderNode, Acc) ->
-                                           maps:update_with(LeaderNode, fun(C) -> C+1 end, Acc);
-                                       _ ->
-                                           Acc
-                                   end
-                           end, Counters0, AllQuorumQs),
-    {Node, _} = hd(lists:keysort(2, maps:to_list(Counters))),
-    Node.
-
-potential_leaders(Nodes) ->
-    case rabbit_maintenance:filter_out_drained_nodes_local_read(Nodes) of
-        [] ->
-            %% All nodes are drained. Let's place the leader on a drained node
-            %% respecting the requested queue-leader-locator streategy.
-            Nodes;
-        Filtered ->
-            Filtered
     end.
 
 %% member with the current leader first

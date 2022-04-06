@@ -86,30 +86,35 @@ is_enabled() ->
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing', amqqueue:amqqueue()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
-declare(Q0, Node) when ?amqqueue_is_stream(Q0) ->
+declare(Q0, _Node) when ?amqqueue_is_stream(Q0) ->
     case rabbit_queue_type_util:run_checks(
            [fun rabbit_queue_type_util:check_auto_delete/1,
             fun rabbit_queue_type_util:check_exclusive/1,
             fun rabbit_queue_type_util:check_non_durable/1],
            Q0) of
         ok ->
-            create_stream(Q0, Node);
+            create_stream(Q0);
         Err ->
             Err
     end.
 
-create_stream(Q0, Node) ->
+create_stream(Q0) ->
     Arguments = amqqueue:get_arguments(Q0),
     QName = amqqueue:get_name(Q0),
     Opts = amqqueue:get_options(Q0),
     ActingUser = maps:get(user, Opts, ?UNKNOWN_USER),
-    Conf0 = make_stream_conf(Node, Q0),
-    Conf = apply_leader_locator_strategy(Conf0),
-    #{leader_node := LeaderNode} = Conf,
+    Conf0 = make_stream_conf(Q0),
+    InitialClusterSize = initial_cluster_size(
+                           args_policy_lookup(<<"initial-cluster-size">>,
+                                              fun policy_precedence/2, Q0)),
+    {Leader, Followers} = rabbit_queue_location:select_leader_and_followers(Q0, InitialClusterSize),
+    Conf = maps:merge(Conf0, #{nodes => [Leader | Followers],
+                               leader_node => Leader,
+                               replica_nodes => Followers}),
     Q1 = amqqueue:set_type_state(Q0, Conf),
     case rabbit_amqqueue:internal_declare(Q1, false) of
         {created, Q} ->
-            case rabbit_stream_coordinator:new_stream(Q, LeaderNode) of
+            case rabbit_stream_coordinator:new_stream(Q, Leader) of
                 {ok, {ok, LeaderPid}, _} ->
                     %% update record with leader pid
                     set_leader_pid(LeaderPid, amqqueue:get_name(Q)),
@@ -770,21 +775,13 @@ delete_replica(VHost, Name, Node) ->
             E
     end.
 
-make_stream_conf(Node, Q) ->
+make_stream_conf(Q) ->
     QName = amqqueue:get_name(Q),
     Name = stream_name(QName),
     %% MaxLength = args_policy_lookup(<<"max-length">>, policy_precedence/2, Q),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun policy_precedence/2, Q),
     MaxAge = max_age(args_policy_lookup(<<"max-age">>, fun policy_precedence/2, Q)),
     MaxSegmentSizeBytes = args_policy_lookup(<<"stream-max-segment-size-bytes">>, fun policy_precedence/2, Q),
-    LeaderLocator = queue_leader_locator(args_policy_lookup(<<"queue-leader-locator">>,
-                                                            fun policy_precedence/2, Q)),
-    InitialClusterSize = initial_cluster_size(
-                           args_policy_lookup(<<"initial-cluster-size">>,
-                                              fun policy_precedence/2, Q)),
-    Replicas0 = rabbit_nodes:all() -- [Node],
-    %% TODO: try to avoid nodes that are not connected
-    Replicas = select_stream_nodes(InitialClusterSize - 1, Replicas0),
     Formatter = {?MODULE, format_osiris_event, [QName]},
     Retention = lists:filter(fun({_, R}) ->
                                      R =/= undefined
@@ -794,29 +791,8 @@ make_stream_conf(Node, Q) ->
                    #{reference => QName,
                      name => Name,
                      retention => Retention,
-                     nodes => [Node | Replicas],
-                     leader_locator_strategy => LeaderLocator,
-                     leader_node => Node,
-                     replica_nodes => Replicas,
                      event_formatter => Formatter,
                      epoch => 1}).
-
-select_stream_nodes(Size, All) when length(All) =< Size ->
-    All;
-select_stream_nodes(Size, All) ->
-    Node = node(),
-    case lists:member(Node, All) of
-        true ->
-            select_stream_nodes(Size - 1, lists:delete(Node, All), [Node]);
-        false ->
-            select_stream_nodes(Size, All, [])
-    end.
-
-select_stream_nodes(0, _, Selected) ->
-    Selected;
-select_stream_nodes(Size, Rest, Selected) ->
-    S = lists:nth(rand:uniform(length(Rest)), Rest),
-    select_stream_nodes(Size - 1, lists:delete(S, Rest), [S | Selected]).
 
 update_stream_conf(undefined, #{} = Conf) ->
     Conf;
@@ -845,9 +821,6 @@ max_age(Bin) when is_binary(Bin) ->
     rabbit_amqqueue:check_max_age(Bin);
 max_age(Age) ->
     Age.
-
-queue_leader_locator(undefined) -> <<"client-local">>;
-queue_leader_locator(Val) -> Val.
 
 initial_cluster_size(undefined) ->
     length(rabbit_nodes:all());
@@ -1019,56 +992,4 @@ set_leader_pid(Pid, QName) ->
             rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q));
         _ ->
             ok
-    end.
-
-apply_leader_locator_strategy(#{leader_locator_strategy := <<"client-local">>} = Conf) ->
-    Conf;
-apply_leader_locator_strategy(#{leader_node := Leader,
-                                replica_nodes := Replicas0,
-                                leader_locator_strategy := <<"random">>} = Conf) ->
-    Replicas = [Leader | Replicas0],
-    PotentialLeaders = potential_leaders(Replicas),
-    NewLeader = lists:nth(rand:uniform(length(PotentialLeaders)), PotentialLeaders),
-    NewReplicas = lists:delete(NewLeader, Replicas),
-    Conf#{leader_node => NewLeader,
-          replica_nodes => NewReplicas};
-apply_leader_locator_strategy(#{leader_node := Leader,
-                                replica_nodes := Replicas0,
-                                leader_locator_strategy := <<"least-leaders">>} = Conf) ->
-    Replicas = [Leader | Replicas0],
-    PotentialLeaders = potential_leaders(Replicas),
-    Counters0 = maps:from_list([{R, 0} || R <- PotentialLeaders]),
-    Counters = maps:to_list(
-                 lists:foldl(fun(Q, Acc) ->
-                                     P = amqqueue:get_pid(Q),
-                                     case amqqueue:get_type(Q) of
-                                         ?MODULE when is_pid(P) ->
-                                             maps:update_with(node(P), fun(V) -> V + 1 end, 1, Acc);
-                                         _ ->
-                                             Acc
-                                     end
-                             end, Counters0, rabbit_amqqueue:list())),
-    Ordered = lists:keysort(2, Counters),
-    %% We could have potentially introduced nodes that are not in the list of replicas if
-    %% initial cluster size is smaller than the cluster size. Let's select the first one
-    %% that is on the list of replicas
-    NewLeader = select_first_matching_node(Ordered, Replicas),
-    NewReplicas = lists:delete(NewLeader, Replicas),
-    Conf#{leader_node => NewLeader,
-          replica_nodes => NewReplicas}.
-
-potential_leaders(Nodes) ->
-    case rabbit_maintenance:filter_out_drained_nodes_local_read(Nodes) of
-        [] ->
-            %% All nodes are drained. Let's place the leader on a drained node
-            %% respecting the requested queue-leader-locator streategy.
-            Nodes;
-        Filtered ->
-            Filtered
-    end.
-
-select_first_matching_node([{N, _} | Rest], Replicas) ->
-    case lists:member(N, Replicas) of
-        true -> N;
-        false -> select_first_matching_node(Rest, Replicas)
     end.
