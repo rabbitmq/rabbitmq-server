@@ -84,7 +84,8 @@ groups() ->
                                             quorum_cluster_size_3,
                                             quorum_cluster_size_7,
                                             node_removal_is_not_quorum_critical,
-                                            select_nodes_with_least_replicas
+                                            select_nodes_with_least_replicas,
+                                            select_nodes_with_least_replicas_node_down
                                            ]},
                       {clustered_with_partitions, [],
                        [
@@ -1419,6 +1420,11 @@ declare_during_node_down(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     RaName = ra_name(QQ),
+    {ok, Members0, _} = ra:members({RaName, Server}),
+    %% Since there are not sufficient running nodes, we expect that
+    %% also stopped nodes are selected as replicas.
+    Members = lists:map(fun({_, N}) -> N end, Members0),
+    ?assert(same_elements(Members, Servers)),
     timer:sleep(2000),
     rabbit_ct_broker_helpers:start_node(Config, DownServer),
     publish(Ch, QQ),
@@ -2753,17 +2759,50 @@ select_nodes_with_least_replicas(Config) ->
                                 declare(Ch, Q,
                                         [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                          {<<"x-quorum-initial-group-size">>, long, 3}])),
-                   {ok, Members, _} = ra:members({ra_name(Q), Server}),
-                   ?assertEqual(3, length(Members)),
-                   lists:map(fun({_, N}) -> N end, Members)
+                   {ok, Members0, _} = ra:members({ra_name(Q), Server}),
+                   ?assertEqual(3, length(Members0)),
+                   lists:map(fun({_, N}) -> N end, Members0)
                end || Q <- Qs],
     %% Assert that second queue selected the nodes where first queue does not have replicas.
     ?assertEqual(5, sets:size(sets:from_list(lists:flatten(Members)))),
+
+    [?assertMatch(#'queue.delete_ok'{},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- Qs].
+
+select_nodes_with_least_replicas_node_down(Config) ->
+    [S1, S2 | _ ] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    ?assertEqual(ok, rabbit_control_helper:command(stop_app, S2)),
+    RunningNodes = lists:delete(S2, Servers),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
+    Qs = [?config(queue_name, Config),
+          ?config(alt_queue_name, Config)],
+
+    timer:sleep(1000),
+    Members = [begin
+                   ?assertMatch({'queue.declare_ok', Q, 0, 0},
+                                declare(Ch, Q,
+                                        [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                         {<<"x-quorum-initial-group-size">>, long, 3}])),
+                   {ok, Members0, _} = ra:members({ra_name(Q), S1}),
+                   ?assertEqual(3, length(Members0)),
+                   lists:map(fun({_, N}) -> N end, Members0)
+               end || Q <- Qs],
+    %% Assert that
+    %% 1. no replicas got placed on a node which is down because there are sufficient running nodes, and
+    %% 2. second queue selected the nodes where first queue does not have replicas.
+    ?assert(same_elements(lists:flatten(Members), RunningNodes)),
+
+    ?assertEqual(ok, rabbit_control_helper:command(start_app, S2)),
     [?assertMatch(#'queue.delete_ok'{},
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- Qs].
 
 %%----------------------------------------------------------------------------
+
+same_elements(L1, L2)
+  when is_list(L1), is_list(L2) ->
+    lists:usort(L1) =:= lists:usort(L2).
 
 declare(Ch, Q) ->
     declare(Ch, Q, []).

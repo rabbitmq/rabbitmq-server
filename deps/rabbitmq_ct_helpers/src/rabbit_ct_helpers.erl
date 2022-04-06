@@ -1033,7 +1033,7 @@ is_mixed_versions(Config) ->
 %% -------------------------------------------------------------------
 
 await_condition(ConditionFun) ->
-    await_condition(ConditionFun, 10000).
+    await_condition(ConditionFun, 10_000).
 
 await_condition(ConditionFun, Timeout) ->
     Retries = ceil(Timeout / 50),
