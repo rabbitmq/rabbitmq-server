@@ -1025,13 +1025,10 @@ apply_leader_locator_strategy(#{leader_locator_strategy := <<"client-local">>} =
     Conf;
 apply_leader_locator_strategy(#{leader_node := Leader,
                                 replica_nodes := Replicas0,
-                                leader_locator_strategy := <<"random">>,
-                                name := StreamId} = Conf) ->
+                                leader_locator_strategy := <<"random">>} = Conf) ->
     Replicas = [Leader | Replicas0],
-    ClusterSize = length(Replicas),
-    Hash = erlang:phash2(StreamId),
-    Pos = (Hash rem ClusterSize) + 1,
-    NewLeader = lists:nth(Pos, Replicas),
+    PotentialLeaders = potential_leaders(Replicas),
+    NewLeader = lists:nth(rand:uniform(length(PotentialLeaders)), PotentialLeaders),
     NewReplicas = lists:delete(NewLeader, Replicas),
     Conf#{leader_node => NewLeader,
           replica_nodes => NewReplicas};
@@ -1039,7 +1036,8 @@ apply_leader_locator_strategy(#{leader_node := Leader,
                                 replica_nodes := Replicas0,
                                 leader_locator_strategy := <<"least-leaders">>} = Conf) ->
     Replicas = [Leader | Replicas0],
-    Counters0 = maps:from_list([{R, 0} || R <- Replicas]),
+    PotentialLeaders = potential_leaders(Replicas),
+    Counters0 = maps:from_list([{R, 0} || R <- PotentialLeaders]),
     Counters = maps:to_list(
                  lists:foldl(fun(Q, Acc) ->
                                      P = amqqueue:get_pid(Q),
@@ -1058,6 +1056,16 @@ apply_leader_locator_strategy(#{leader_node := Leader,
     NewReplicas = lists:delete(NewLeader, Replicas),
     Conf#{leader_node => NewLeader,
           replica_nodes => NewReplicas}.
+
+potential_leaders(Nodes) ->
+    case rabbit_maintenance:filter_out_drained_nodes_local_read(Nodes) of
+        [] ->
+            %% All nodes are drained. Let's place the leader on a drained node
+            %% respecting the requested queue-leader-locator streategy.
+            Nodes;
+        Filtered ->
+            Filtered
+    end.
 
 select_first_matching_node([{N, _} | Rest], Replicas) ->
     case lists:member(N, Replicas) of
