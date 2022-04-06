@@ -418,12 +418,17 @@ info(backing_queue_status, #state{bq = BQ, bqss = BQSs}) ->
           end, nothing, BQSs);
 info(head_message_timestamp, #state{bq = BQ, bqss = BQSs}) ->
     find_head_message_timestamp(BQ, BQSs, '');
+info(online, _) ->
+    '';
 info(Item, #state{bq = BQ, bqss = BQSs}) ->
     fold0(fun (_P, BQSN, Acc) ->
-                  Acc + BQ:info(Item, BQSN)
+                 add(Acc, BQ:info(Item, BQSN))
           end, 0, BQSs);
 info(Item, #passthrough{bq = BQ, bqs = BQS}) ->
     BQ:info(Item, BQS).
+
+add(Acc, Value) when is_number(Acc), is_number(Value) -> Acc + Value;
+add(_, Value) -> Value.
 
 invoke(Mod, {P, Fun}, State = #state{bq = BQ}) ->
     pick1(fun (_P, BQSN) -> BQ:invoke(Mod, Fun, BQSN) end, P, State);
