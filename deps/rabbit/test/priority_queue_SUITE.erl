@@ -27,6 +27,7 @@ groups() ->
                          {overflow_reject_publish_dlx, [], [reject]},
                          dropwhile_fetchwhile,
                          info_head_message_timestamp,
+                         unknown_info_key,
                          matching,
                          purge,
                          requeue,
@@ -397,6 +398,19 @@ info_head_message_timestamp1(_Config) ->
     PQ:delete_and_terminate(a_whim, BQS6),
     passed.
 
+unknown_info_key(Config) ->
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Q = <<"info-priority-queue">>,
+    declare(Ch, Q, 3),
+    publish(Ch, Q, [1, 2, 3]),
+    
+    {ok, [{pid, _Pid}, {unknown_key, ''}]} = info(Config, Q, [pid, unknown_key]),
+
+    delete(Ch, Q),
+    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection(Conn),
+    passed.
+
 ram_duration(_Config) ->
     QName = rabbit_misc:r(<<"/">>, queue, <<"ram_duration-queue">>),
     Q0 = rabbit_amqqueue:pseudo_queue(QName, self()),
@@ -518,4 +532,13 @@ queue_pid(Config, Nodename, Q) ->
     [Pid] = [P || [{name, Q1}, {pid, P}] <- Info, Q =:= Q1],
     Pid.
 
+info(Config, Q, InfoKeys) -> 
+    Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    {ok, Amq} = rabbit_ct_broker_helpers:rpc(
+            Config, Nodename,
+            rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, Q)]),
+    Info = rabbit_ct_broker_helpers:rpc(
+             Config, Nodename,
+             rabbit_classic_queue, info, [Amq, InfoKeys]),
+    {ok, Info}.
 %%----------------------------------------------------------------------------
