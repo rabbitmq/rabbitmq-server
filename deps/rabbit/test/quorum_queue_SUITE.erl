@@ -73,7 +73,9 @@ groups() ->
                                             node_removal_is_not_quorum_critical,
                                             leader_locator_client_local,
                                             leader_locator_least_leaders,
+                                            leader_locator_least_leaders_maintenance,
                                             leader_locator_random,
+                                            leader_locator_random_maintenance,
                                             leader_locator_policy
                                            ]
                        ++ all_tests()},
@@ -2654,6 +2656,31 @@ leader_locator_least_leaders(Config) ->
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- Qs].
 
+leader_locator_least_leaders_maintenance(Config) ->
+    [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
+    Qs = [?config(queue_name, Config),
+          ?config(alt_queue_name, Config),
+          <<"leader_locator_policy_q3">>],
+
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, S2),
+    Leaders = [begin
+                   ?assertMatch({'queue.declare_ok', Q, 0, 0},
+                                declare(Ch, Q,
+                                        [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                         {<<"x-queue-leader-locator">>, longstr, <<"least-leaders">>}])),
+                   {ok, _, {_, Leader}} = ra:members({ra_name(Q), S1}),
+                   Leader
+               end || Q <- Qs],
+    ?assert(lists:member(S1, Leaders)),
+    ?assertNot(lists:member(S2, Leaders)),
+    ?assert(lists:member(S3, Leaders)),
+
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, S2),
+    [?assertMatch(#'queue.delete_ok'{},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- Qs].
+
 leader_locator_random(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -2670,6 +2697,27 @@ leader_locator_random(Config) ->
                    Leader
                end || _ <- lists:seq(1, 15)],
     ?assertEqual(3, sets:size(sets:from_list(Leaders))).
+
+leader_locator_random_maintenance(Config) ->
+    [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
+    Q = ?config(queue_name, Config),
+
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, S2),
+    Leaders = [begin
+                   ?assertMatch({'queue.declare_ok', Q, 0, 0},
+                                declare(Ch, Q,
+                                        [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                         {<<"x-queue-leader-locator">>, longstr, <<"random">>}])),
+                   {ok, _, {_, Leader}} = ra:members({ra_name(Q), S1}),
+                   ?assertMatch(#'queue.delete_ok'{},
+                                amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+                   Leader
+               end || _ <- lists:seq(1, 12)],
+    ?assert(lists:member(S1, Leaders)),
+    ?assertNot(lists:member(S2, Leaders)),
+    ?assert(lists:member(S3, Leaders)),
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, S2).
 
 leader_locator_policy(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),

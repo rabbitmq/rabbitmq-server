@@ -1636,9 +1636,11 @@ leader_locator(Val) -> Val.
 
 leader_node(<<"client-local">>, _, _) ->
     node();
-leader_node(<<"random">>, Nodes, _) ->
+leader_node(<<"random">>, Nodes0, _) ->
+    Nodes = potential_leaders(Nodes0),
     lists:nth(rand:uniform(length(Nodes)), Nodes);
-leader_node(<<"least-leaders">>, Nodes, AllQuorumQs) ->
+leader_node(<<"least-leaders">>, Nodes0, AllQuorumQs) ->
+    Nodes = potential_leaders(Nodes0),
     Counters0 = maps:from_list([{N, 0} || N <- Nodes]),
     Counters = lists:foldl(fun(Q, Acc) ->
                                    case amqqueue:get_pid(Q) of
@@ -1651,6 +1653,16 @@ leader_node(<<"least-leaders">>, Nodes, AllQuorumQs) ->
                            end, Counters0, AllQuorumQs),
     {Node, _} = hd(lists:keysort(2, maps:to_list(Counters))),
     Node.
+
+potential_leaders(Nodes) ->
+    case rabbit_maintenance:filter_out_drained_nodes_local_read(Nodes) of
+        [] ->
+            %% All nodes are drained. Let's place the leader on a drained node
+            %% respecting the requested queue-leader-locator streategy.
+            Nodes;
+        Filtered ->
+            Filtered
+    end.
 
 %% member with the current leader first
 members(Q) when ?amqqueue_is_quorum(Q) ->
