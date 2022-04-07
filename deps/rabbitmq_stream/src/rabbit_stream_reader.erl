@@ -818,7 +818,7 @@ open(info,
                                                log = Log1},
 
                         Conn1 =
-                            maybe_notify_consumer(Transport,
+                            maybe_send_consumer_update(Transport,
                                                   Connection0,
                                                   SubId,
                                                   Active,
@@ -2774,9 +2774,9 @@ maybe_register_consumer(VirtualHost,
                                                         SubscriptionId),
     Active.
 
-maybe_notify_consumer(_, Connection, _, _, false = _Sac, _) ->
+maybe_send_consumer_update(_, Connection, _, _, false = _Sac, _) ->
     Connection;
-maybe_notify_consumer(Transport,
+maybe_send_consumer_update(Transport,
                       #stream_connection{socket = S,
                                          correlation_id_sequence = CorrIdSeq,
                                          outstanding_requests =
