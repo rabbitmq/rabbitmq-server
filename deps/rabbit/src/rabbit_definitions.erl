@@ -683,12 +683,17 @@ add_queue_int(_Queue, R = #resource{kind = queue,
     rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
                        "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_queue_int(Queue, Name, ActingUser) ->
-    rabbit_amqqueue:declare(Name,
-                            maps:get(durable,                         Queue, undefined),
-                            maps:get(auto_delete,                     Queue, undefined),
-                            args(maps:get(arguments, Queue, undefined)),
-                            none,
-                            ActingUser).
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, _} ->
+            ok;
+        {error, not_found} ->
+            rabbit_amqqueue:declare(Name,
+                                    maps:get(durable, Queue, undefined),
+                                    maps:get(auto_delete, Queue, undefined),
+                                    args(maps:get(arguments, Queue, undefined)),
+                                    none,
+                                    ActingUser)
+    end.
 
 add_exchange(Exchange, ActingUser) ->
     add_exchange_int(Exchange, r(exchange, Exchange), ActingUser).
