@@ -5,6 +5,7 @@ load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
     "APP_VERSION",
+    "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "rabbitmq_app",
@@ -30,6 +31,7 @@ DEPS = [
 
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
+    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
     app_version = APP_VERSION,
