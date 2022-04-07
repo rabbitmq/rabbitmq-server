@@ -39,6 +39,10 @@ RABBITMQ_DIALYZER_OPTS = [
 
 APP_VERSION = "3.9.0"
 
+BROKER_VERSION_REQUIREMENTS_ANY = """
+	{broker_version_requirements, []}
+"""
+
 ALL_PLUGINS = [
     "//deps/rabbit:erlang_app",
     "//deps/rabbitmq_amqp1_0:erlang_app",
