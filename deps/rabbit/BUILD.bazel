@@ -698,7 +698,8 @@ suites = [
             "src/rabbit_fifo.hrl",
         ],
         erlc_opts = [
-            "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
+            "-I",
+            "deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
         ],
         runtime_deps = [
             "@ra//:erlang_app",
@@ -767,7 +768,8 @@ suites = [
             "src/rabbit_fifo_v0.hrl",
         ],
         erlc_opts = [
-            "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
+            "-I",
+            "deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
         ],
         runtime_deps = [
             "@meck//:erlang_app",
