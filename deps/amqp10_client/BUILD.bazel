@@ -109,7 +109,8 @@ suites = [
             "@activemq//:exec_dir",
         ],
         erlc_opts = [
-            "-I deps/amqp10_client",
+            "-I",
+            "deps/amqp10_client",
         ],
         test_env = {
             "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq",
