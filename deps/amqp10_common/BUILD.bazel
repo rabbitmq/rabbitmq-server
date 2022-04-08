@@ -55,9 +55,6 @@ BUILD_DEPS = [
 app_file(
     name = "app_file",
     app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",
-<<<<<<< HEAD
-    app_name = APP_NAME,
-=======
     app_extra = """%% Hex.pm package informations.
 	{licenses, ["MPL-2.0"]},
 	{links, [
@@ -77,8 +74,7 @@ app_file(
 	    "mk"
 	  ]}
 """,
-    app_name = "amqp10_common",
->>>>>>> f89094adcf (Bring over PROJECT_APP_EXTRA_KEYS values from make to bazel)
+    app_name = APP_NAME,
     app_version = APP_VERSION,
     modules = [":beam_files"],
 )

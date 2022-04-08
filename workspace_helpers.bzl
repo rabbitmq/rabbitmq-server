@@ -177,18 +177,8 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "prometheus",
-<<<<<<< HEAD
         version = "4.8.1",
         sha256 = "6edfbe928d271c7f657a6f2c46258738086584bd6cae4a000b8b9a6009ba23a5",
-        first_srcs = [
-            "src/prometheus_collector.erl",
-            "src/prometheus_format.erl",
-            "src/prometheus_instrumenter.erl",
-            "src/prometheus_metric.erl",
-        ],
-=======
-        version = "4.8.2",
->>>>>>> bb6d45e437 (Updates for rules_erlang 2.5.0)
         deps = [
             "@quantile_estimator//:erlang_app",
         ],
@@ -246,18 +236,9 @@ erlang_app(
     github_erlang_app(
         name = "syslog",
         org = "schlagert",
-<<<<<<< HEAD
         sha256 = "25abcfe2cc0745fc4ffb0d66d4a5868d343a0130c7a7ddcae03771326feae619",
         ref = "3.4.5",
         version = "3.4.5",
-        first_srcs = [
-            "src/syslog_logger.erl",
-        ],
-=======
-        sha256 = "01c31c31d4d28e564da0660bdb69725ba37173fca5b3228829b8f3f416f9e486",
-        ref = "4.0.0",
-        version = "4.0.0",
->>>>>>> bb6d45e437 (Updates for rules_erlang 2.5.0)
     )
 
     hex_pm_erlang_app(

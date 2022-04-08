@@ -39,17 +39,10 @@ APP_ENV = """[
 	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
 	  ]"""
 
-<<<<<<< HEAD
-FIRST_SRCS = [
-    "src/rabbit_mgmt_extension.erl",
-]
-
 BUILD_DEPS = [
     "@lager//:erlang_app",
 ]
 
-=======
->>>>>>> bb6d45e437 (Updates for rules_erlang 2.5.0)
 DEPS = [
     "//deps/amqp_client:erlang_app",
     "//deps/rabbit_common:erlang_app",
