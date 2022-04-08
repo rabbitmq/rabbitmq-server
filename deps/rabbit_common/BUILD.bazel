@@ -66,6 +66,27 @@ RUNTIME_DEPS = [
 
 APP_NAME = "rabbit_common"
 
+APP_EXTRA_KEYS = """
+%% Hex.pm package informations.
+	{licenses, ["MPL-2.0"]},
+	{links, [
+	    {"Website", "https://www.rabbitmq.com/"},
+	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-common"}
+	  ]},
+	{build_tools, ["make", "rebar3"]},
+	{files, [
+	    "erlang.mk",
+	    "git-revisions.txt",
+	    "include",
+	    "LICENSE*",
+	    "Makefile",
+	    "rabbitmq-components.mk",
+	    "README",
+	    "README.md",
+	    "mk"
+	  ]}
+"""
+
 EXTRA_APPS = [
     "compiler",
     "crypto",
@@ -82,6 +103,7 @@ HDRS = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"]
 app_file(
     name = "app_file",
     app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
+    app_extra = APP_EXTRA_KEYS,
     app_name = APP_NAME,
     app_version = APP_VERSION,
     extra_apps = EXTRA_APPS,
@@ -89,33 +111,13 @@ app_file(
     deps = DEPS + RUNTIME_DEPS,
 )
 
-FIRST_SRCS = [
-    "src/gen_server2.erl",
-    "src/rabbit_authn_backend.erl",
-    "src/rabbit_authz_backend.erl",
-    "src/rabbit_registry_class.erl",
-]
-
-erlc(
-    name = "first_beam_files",
-    srcs = glob(FIRST_SRCS),
-    hdrs = HDRS,
-    dest = "ebin",
-    erlc_opts = RABBITMQ_ERLC_OPTS,
-    deps = DEPS,
-)
-
 erlc(
     name = "beam_files",
-    srcs = glob(
-        ["src/*.erl"],
-        exclude = FIRST_SRCS,
-    ) + [
+    srcs = glob(["src/*.erl"]) + [
         "src/rabbit_framing_amqp_0_8.erl",
         "src/rabbit_framing_amqp_0_9_1.erl",
     ],
     hdrs = HDRS,
-    beam = [":first_beam_files"],
     dest = "ebin",
     erlc_opts = RABBITMQ_ERLC_OPTS,
     deps = DEPS,
@@ -126,36 +128,19 @@ erlang_app_info(
     hdrs = HDRS,
     app = ":app_file",
     app_name = APP_NAME,
-    beam = [
-        ":first_beam_files",
-        ":beam_files",
-    ],
+    beam = [":beam_files"],
     visibility = ["//visibility:public"],
     deps = DEPS + RUNTIME_DEPS,
 )
 
 erlc(
-    name = "first_test_beam_files",
-    testonly = True,
-    srcs = glob(FIRST_SRCS),
-    hdrs = HDRS,
-    dest = "src",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = DEPS,
-)
-
-erlc(
     name = "test_beam_files",
     testonly = True,
-    srcs = glob(
-        ["src/*.erl"],
-        exclude = FIRST_SRCS,
-    ) + [
+    srcs = glob(["src/*.erl"]) + [
         "src/rabbit_framing_amqp_0_8.erl",
         "src/rabbit_framing_amqp_0_9_1.erl",
     ],
     hdrs = HDRS,
-    beam = [":first_test_beam_files"],
     dest = "src",
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = DEPS,
@@ -167,10 +152,7 @@ erlang_app_info(
     hdrs = HDRS,
     app = ":app_file",
     app_name = APP_NAME,
-    beam = [
-        ":first_test_beam_files",
-        ":test_beam_files",
-    ],
+    beam = [":test_beam_files"],
     visibility = ["//:__subpackages__"],
     deps = DEPS + RUNTIME_DEPS,
 )
