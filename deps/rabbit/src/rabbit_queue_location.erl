@@ -9,9 +9,19 @@
 
 -include("amqqueue.hrl").
 
--export([select_leader_and_followers/2]).
+-export([queue_leader_locators/0,
+         select_leader_and_followers/2]).
 
 -define(QUEUES_LIMIT_FOR_LEAST_REPLICAS_SELECTION, 1_000).
+-define(QUEUE_LEADER_LOCATORS, [<<"client-local">>, <<"random">>, <<"least-leaders">>]).
+-define(DEFAULT_QUEUE_LEADER_LOCATOR, <<"client-local">>).
+
+-type queue_leader_locator() :: nonempty_binary().
+
+-spec queue_leader_locators() ->
+    [queue_leader_locator()].
+queue_leader_locators() ->
+    ?QUEUE_LEADER_LOCATORS.
 
 -spec select_leader_and_followers(amqqueue:amqqueue(), pos_integer()) ->
     {Leader :: node(), Followers :: [node()]}.
@@ -21,12 +31,7 @@ select_leader_and_followers(Q, Size)
     GetQueues0 = get_queues_for_type(QueueType),
     {AllNodes, _DiscNodes, RunningNodes} = rabbit_mnesia:cluster_nodes(status),
     {Replicas, GetQueues} = select_replicas(Size, AllNodes, RunningNodes, GetQueues0),
-    LeaderLocator = leader_locator(
-                      rabbit_queue_type_util:args_policy_lookup(
-                        <<"queue-leader-locator">>,
-                        fun (PolVal, _ArgVal) ->
-                                PolVal
-                        end, Q)),
+    LeaderLocator = leader_locator(Q),
     Leader = leader_node(LeaderLocator, Replicas, RunningNodes, GetQueues),
     Followers = lists:delete(Leader, Replicas),
     {Leader, Followers}.
@@ -83,10 +88,30 @@ select_replicas(Size, AllNodes, RunningNodes, GetQueues) ->
             {[Local | L], GetQueues}
     end.
 
-leader_locator(undefined) -> <<"client-local">>;
-leader_locator(Val) -> Val.
+-spec leader_locator(amqqueue:amqqueue()) ->
+    queue_leader_locator().
+leader_locator(Q) ->
+    case rabbit_queue_type_util:args_policy_lookup(
+           <<"queue-leader-locator">>,
+           fun (PolVal, _ArgVal) -> PolVal end,
+           Q) of
+        undefined ->
+            case application:get_env(rabbit, queue_leader_locator) of
+                {ok, Locator} ->
+                    case lists:member(Locator, ?QUEUE_LEADER_LOCATORS) of
+                        true ->
+                            Locator;
+                        false ->
+                            ?DEFAULT_QUEUE_LEADER_LOCATOR
+                    end;
+                undefined ->
+                    ?DEFAULT_QUEUE_LEADER_LOCATOR
+            end;
+        Val ->
+            Val
+    end.
 
--spec leader_node(nonempty_binary(), [node(),...], [node(),...], function()) ->
+-spec leader_node(queue_leader_locator(), [node(),...], [node(),...], function()) ->
     node().
 leader_node(<<"client-local">>, _, _, _) ->
     node();
