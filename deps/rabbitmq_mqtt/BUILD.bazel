@@ -3,6 +3,7 @@ load("@rules_erlang//:xref.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
+    "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
     "RABBITMQ_TEST_ERLC_OPTS",
     "assert_suites",
@@ -41,10 +42,6 @@ APP_ENV = """[
 	    {sparkplug, false}
 	  ]"""
 
-FIRST_SRCS = [
-    "src/rabbit_mqtt_retained_msg_store.erl",
-]
-
 BUILD_DEPS = [
     "//deps/rabbitmq_cli:rabbitmqctl",
 ]
@@ -63,10 +60,10 @@ RUNTIME_DEPS = [
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
+    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
     build_deps = BUILD_DEPS,
-    first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )

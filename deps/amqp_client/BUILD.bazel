@@ -16,6 +16,26 @@ APP_ENV = """[
 	    {writer_gc_threshold, 1000000000}
 	  ]"""
 
+APP_EXTRA_KEYS = """%% Hex.pm package informations.
+	{licenses, ["MPL-2.0"]},
+	{links, [
+	    {"Website", "https://www.rabbitmq.com/"},
+	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/deps/amqp_client"},
+	    {"User guide", "https://www.rabbitmq.com/erlang-client-user-guide.html"}
+	  ]},
+	{build_tools, ["make", "rebar3"]},
+	{files, [
+	    "erlang.mk",
+	    "git-revisions.txt",
+	    "include",
+	    "LICENSE*",
+	    "Makefile",
+	    "rabbitmq-components.mk",
+	    "README",
+	    "README.md"
+	  ]}
+"""
+
 EXTRA_APPS = [
     "xmerl",
 ]
@@ -27,16 +47,13 @@ DEPS = [
 rabbitmq_app(
     app_description = "RabbitMQ AMQP Client",
     app_env = APP_ENV,
+    app_extra_keys = APP_EXTRA_KEYS,
     app_module = "amqp_client",
     app_name = "amqp_client",
     app_registered = [
         "amqp_sup",
     ],
     extra_apps = EXTRA_APPS,
-    first_srcs = [
-        "src/amqp_gen_connection.erl",
-        "src/amqp_gen_consumer.erl",
-    ],
     deps = DEPS,
 )
 
