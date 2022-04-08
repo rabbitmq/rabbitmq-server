@@ -89,18 +89,77 @@ merge_operator_definitions(Policy, OpPolicy) ->
     lists:umerge(Keys, OpKeys)).
 
 set(Q0) when ?is_amqqueue(Q0) ->
-    Name = amqqueue:get_name(Q0),
-    Policy = match(Name),
-    OpPolicy = match_op(Name),
+    %% On queue.declare the queue record doesn't exist yet, so the later lookup in
+    %% `rabbit_amqqueue:is_policy_applicable` fails. Thus, let's send the whole record
+    %% through the match functions. `match_all` still needs to support resources only,
+    %% as that is used by some plugins. Maybe `match` too, difficult to figure out
+    %% what is public API and what is not, so let's support both `amqqueue` and `resource`
+    %% records as arguments.
+    Policy = match(Q0),
+    OpPolicy = match_op(Q0),
     Q1 = amqqueue:set_policy(Q0, Policy),
     Q2 = amqqueue:set_operator_policy(Q1, OpPolicy),
     Q2;
 set(X = #exchange{name = Name}) ->
     X#exchange{policy = match(Name), operator_policy = match_op(Name)}.
 
+<<<<<<< HEAD
+=======
+
+list() ->
+    list('_').
+
+list(VHost) ->
+    list0(VHost, fun ident/1).
+
+list_in(VHost) ->
+    list(VHost).
+
+list_in(VHost, DefinitionKeys) ->
+    [P || P <- list_in(VHost), keys_overlap(definition_keys(P), DefinitionKeys)].
+
+list_as_maps() ->
+    list_as_maps('_').
+
+list_as_maps(VHost) ->
+    [maps:from_list(PL) || PL <- sort_by_priority(list0(VHost, fun maps:from_list/1))].
+
+list_op_as_maps(VHost) ->
+    [maps:from_list(PL) || PL <- sort_by_priority(list0_op(VHost, fun maps:from_list/1))].
+
+list_formatted(VHost) ->
+    sort_by_priority(list0(VHost, fun rabbit_json:encode/1)).
+
+list_formatted(VHost, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map(AggregatorPid, Ref,
+                                     fun(P) -> P end, list_formatted(VHost)).
+
+list_op() ->
+    list_op('_').
+
+list_op(VHost) ->
+    list0_op(VHost, fun ident/1).
+
+list_op(VHost, DefinitionKeys) ->
+    [P || P <- list_op(VHost), keys_overlap(definition_keys(P), DefinitionKeys)].
+
+list_formatted_op(VHost) ->
+    sort_by_priority(list0_op(VHost, fun rabbit_json:encode/1)).
+
+list_formatted_op(VHost, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map(AggregatorPid, Ref,
+                                     fun(P) -> P end, list_formatted_op(VHost)).
+
+match(Q) when ?is_amqqueue(Q) ->
+    #resource{virtual_host = VHost} = amqqueue:get_name(Q),
+    match(Q, list(VHost));
+>>>>>>> b226baf6fb (Bugfix: check unsupported policies on queue.declare)
 match(Name = #resource{virtual_host = VHost}) ->
     match(Name, list(VHost)).
 
+match_op(Q) when ?is_amqqueue(Q) ->
+    #resource{virtual_host = VHost} = amqqueue:get_name(Q),
+    match(Q, list_op(VHost));
 match_op(Name = #resource{virtual_host = VHost}) ->
     match(Name, list_op(VHost)).
 
@@ -117,6 +176,30 @@ get(Name, EntityName = #resource{virtual_host = VHost}) ->
          match(EntityName, list(VHost)),
          match(EntityName, list_op(VHost))).
 
+<<<<<<< HEAD
+=======
+match(NameOrQueue, Policies) ->
+    case match_all(NameOrQueue, Policies) of
+        []           -> undefined;
+        [Policy | _] -> Policy
+    end.
+
+match_all(NameOrQueue, Policies) ->
+   lists:sort(fun priority_comparator/2, [P || P <- Policies, matches(NameOrQueue, P)]).
+
+matches(Q, Policy) when ?is_amqqueue(Q) ->
+    #resource{name = Name, kind = Kind, virtual_host = VHost} = amqqueue:get_name(Q),
+    matches_type(Kind, pget('apply-to', Policy)) andalso
+        is_applicable(Q, pget(definition, Policy)) andalso
+        match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
+        VHost =:= pget(vhost, Policy);
+matches(#resource{name = Name, kind = Kind, virtual_host = VHost} = Resource, Policy) ->
+    matches_type(Kind, pget('apply-to', Policy)) andalso
+        is_applicable(Resource, pget(definition, Policy)) andalso
+        match =:= re:run(Name, pget(pattern, Policy), [{capture, none}]) andalso
+        VHost =:= pget(vhost, Policy).
+
+>>>>>>> b226baf6fb (Bugfix: check unsupported policies on queue.declare)
 get0(_Name, undefined, undefined) -> undefined;
 get0(Name, undefined, OpPolicy) -> pget(Name, pget(definition, OpPolicy, []));
 get0(Name, Policy, undefined) -> pget(Name, pget(definition, Policy, []));
@@ -473,6 +556,8 @@ matches_type(_,        _)               -> false.
 
 sort_pred(A, B) -> pget(priority, A) >= pget(priority, B).
 
+is_applicable(Q, Policy) when ?is_amqqueue(Q) ->
+    rabbit_amqqueue:is_policy_applicable(Q, rabbit_data_coercion:to_list(Policy));
 is_applicable(#resource{kind = queue} = Resource, Policy) ->
     rabbit_amqqueue:is_policy_applicable(Resource, Policy);
 is_applicable(_, _) ->

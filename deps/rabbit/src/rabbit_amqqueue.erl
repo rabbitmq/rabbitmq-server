@@ -453,6 +453,8 @@ policy_changed(Q1, Q2) ->
     %% mirroring-related has changed - the policy may have changed anyway.
     notify_policy_changed(Q1).
 
+is_policy_applicable(Q, Policy) when ?is_amqqueue(Q) ->
+    rabbit_queue_type:is_policy_applicable(Q, Policy);
 is_policy_applicable(QName, Policy) ->
     case lookup(QName) of
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
