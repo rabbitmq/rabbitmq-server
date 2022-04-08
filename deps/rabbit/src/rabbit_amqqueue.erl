@@ -979,16 +979,15 @@ check_overflow(Val, _Args) when is_binary(Val) ->
 check_overflow(_Val, _Args) ->
     {error, invalid_overflow}.
 
--define(KNOWN_LEADER_LOCATORS, [<<"client-local">>, <<"random">>, <<"least-leaders">>]).
 check_queue_leader_locator_arg({longstr, Val}, _Args) ->
-    case lists:member(Val, ?KNOWN_LEADER_LOCATORS) of
+    case lists:member(Val, rabbit_queue_location:queue_leader_locators()) of
         true  -> ok;
         false -> {error, invalid_queue_locator_arg}
     end;
 check_queue_leader_locator_arg({Type, _}, _Args) ->
     {error, {unacceptable_type, Type}};
 check_queue_leader_locator_arg(Val, _Args) when is_binary(Val) ->
-    case lists:member(Val, ?KNOWN_LEADER_LOCATORS) of
+    case lists:member(Val, rabbit_queue_location:queue_leader_locators()) of
         true  -> ok;
         false -> {error, invalid_queue_locator_arg}
     end;

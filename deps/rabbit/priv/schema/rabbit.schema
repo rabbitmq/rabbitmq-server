@@ -1212,7 +1212,7 @@ end}.
 {mapping, "cluster_keepalive_interval", "rabbit.cluster_keepalive_interval",
     [{datatype, integer}]}.
 
-%% Queue master locator
+%% Queue master locator (classic queues)
 %%
 
 {mapping, "queue_master_locator", "rabbit.queue_master_locator",
@@ -1221,6 +1221,17 @@ end}.
 {translation, "rabbit.queue_master_locator",
 fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("queue_master_locator", Conf))
+end}.
+
+%% Queue leader locator (quorum queues and streams)
+%%
+
+{mapping, "queue_leader_locator", "rabbit.queue_leader_locator",
+    [{datatype, string}]}.
+
+{translation, "rabbit.queue_leader_locator",
+fun(Conf) ->
+    list_to_binary(cuttlefish:conf_get("queue_leader_locator", Conf))
 end}.
 
 %%
