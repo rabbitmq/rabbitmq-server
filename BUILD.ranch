@@ -3,23 +3,10 @@ load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
 load("@rules_erlang//:erlang_app.bzl", "DEFAULT_ERLC_OPTS")
 load("@rules_erlang//:erlc.bzl", "erlc")
 
-FIRST_SRCS = [
-    "src/ranch_transport.erl",
-]
-
-erlc(
-    name = "first_beam_files",
-    hdrs = glob(["include/**/*.hrl", "src/**/*.hrl"]),
-    srcs = glob(FIRST_SRCS),
-    erlc_opts = DEFAULT_ERLC_OPTS,
-    dest = "ebin",
-)
-
 erlc(
     name = "beam_files",
     hdrs = glob(["include/**/*.hrl", "src/**/*.hrl"]),
-    srcs = glob(["src/**/*.erl"], exclude = FIRST_SRCS),
-    beam = [":first_beam_files"],
+    srcs = glob(["src/**/*.erl"]),
     erlc_opts = DEFAULT_ERLC_OPTS,
     dest = "ebin",
 )
@@ -35,7 +22,7 @@ app_file(
     name = "app_file",
     app_name = "ranch",
     app_version = "2.1.0",
-    modules = [":first_beam_files", ":beam_files"],
+    modules = [":beam_files"],
 )
 
 erlang_app_info(
@@ -43,6 +30,6 @@ erlang_app_info(
     app_name = "ranch",
     app = ":app_file",
     hdrs = glob(["include/**/*.hrl"]),
-    beam = [":first_beam_files", ":beam_files", ":appup"],
+    beam = [":beam_files", ":appup"],
     visibility = ["//visibility:public"],
 )

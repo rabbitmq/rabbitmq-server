@@ -2,6 +2,7 @@ load("@rules_erlang//:xref.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
+    "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
@@ -21,6 +22,7 @@ DEPS = [
 
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
+    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_name = APP_NAME,
     deps = DEPS,
 )

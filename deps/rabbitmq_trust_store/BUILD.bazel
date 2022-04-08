@@ -42,9 +42,6 @@ rabbitmq_app(
     app_module = APP_MODULE,
     app_name = APP_NAME,
     extra_apps = EXTRA_APPS,
-    first_srcs = [
-        "src/rabbit_trust_store_certificate_provider.erl",
-    ],
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )

@@ -59,9 +59,7 @@ dialyze(
 )
 
 eunit(
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
-        "-I deps/rabbitmq_aws",
-    ],
+    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     runtime_deps = [
         "//deps/rabbit_common:erlang_app",
         "@meck//:erlang_app",

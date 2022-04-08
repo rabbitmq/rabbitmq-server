@@ -190,14 +190,6 @@ EXTRA_APPS = [
     "xmerl",
 ]
 
-FIRST_SRCS = [
-    "src/rabbit_tracking.erl",
-    "src/rabbit_queue_type.erl",
-    "src/rabbit_credential_validator.erl",
-    "src/rabbit_policy_merge_strategy.erl",
-    "src/rabbit_queue_master_locator.erl",
-]
-
 rabbitmq_app(
     app_description = "RabbitMQ",
     app_env = _APP_ENV,
@@ -206,7 +198,6 @@ rabbitmq_app(
     app_registered = APP_REGISTERED,
     build_deps = BUILD_DEPS,
     extra_apps = EXTRA_APPS,
-    first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
@@ -669,9 +660,6 @@ suites = [
         additional_hdrs = [
             "src/rabbit_fifo.hrl",
         ],
-        erlc_opts = [
-            "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-        ],
         runtime_deps = [
             "@ra//:erlang_app",
         ],
@@ -690,9 +678,6 @@ suites = [
         additional_hdrs = [
             "src/rabbit_fifo.hrl",
         ],
-        erlc_opts = [
-            "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
-        ],
         runtime_deps = [
             "@meck//:erlang_app",
             "@ra//:erlang_app",
@@ -709,9 +694,6 @@ suites = [
         ],
         additional_hdrs = [
             "src/rabbit_fifo_v0.hrl",
-        ],
-        erlc_opts = [
-            "-I deps/rabbit",  # allow rabbit_fifo.hrl to be included at src/rabbit_fifo.hrl
         ],
         runtime_deps = [
             "@meck//:erlang_app",

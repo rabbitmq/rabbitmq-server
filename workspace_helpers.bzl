@@ -35,11 +35,6 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     hex_pm_erlang_app(
         name = "cowboy",
-        first_srcs = [
-            "src/cowboy_stream.erl",
-            "src/cowboy_middleware.erl",
-            "src/cowboy_sub_protocol.erl",
-        ],
         version = "2.8.0",
         sha256 = "4643e4fba74ac96d4d152c75803de6fad0b3fa5df354c71afdd6cbeeb15fac8a",
         deps = [
@@ -115,9 +110,6 @@ erlang_app(
         name = "gun",
         version = "1.3.3",
         sha256 = "3106ce167f9c9723f849e4fb54ea4a4d814e3996ae243a1c828b256e749041e0",
-        first_srcs = [
-            "src/gun_content_handler.erl",
-        ],
         runtime_deps = [
             "@cowlib//:erlang_app",
         ],
@@ -144,9 +136,6 @@ erlang_app(
         version = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
         first_srcs = [
             "src/jose_block_encryptor.erl",
-            "src/jwk/jose_jwk_use_enc.erl",
-            "src/jwk/jose_jwk_use_sig.erl",
-            "src/jwk/jose_jwk_oct.erl",
         ],
         sha256 = "7816f39d00655f2605cfac180755e97e268dba86c2f71037998ff63792ca727b",
     )
@@ -190,12 +179,6 @@ erlang_app(
         name = "prometheus",
         version = "4.8.1",
         sha256 = "6edfbe928d271c7f657a6f2c46258738086584bd6cae4a000b8b9a6009ba23a5",
-        first_srcs = [
-            "src/prometheus_collector.erl",
-            "src/prometheus_format.erl",
-            "src/prometheus_instrumenter.erl",
-            "src/prometheus_metric.erl",
-        ],
         deps = [
             "@quantile_estimator//:erlang_app",
         ],
@@ -203,10 +186,6 @@ erlang_app(
 
     github_erlang_app(
         name = "proper",
-        first_srcs = [
-            "src/vararg.erl",
-            "src/proper_target.erl",
-        ],
         org = "manopapad",
     )
 
@@ -260,9 +239,6 @@ erlang_app(
         sha256 = "25abcfe2cc0745fc4ffb0d66d4a5868d343a0130c7a7ddcae03771326feae619",
         ref = "3.4.5",
         version = "3.4.5",
-        first_srcs = [
-            "src/syslog_logger.erl",
-        ],
     )
 
     hex_pm_erlang_app(

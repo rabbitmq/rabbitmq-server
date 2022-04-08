@@ -4,6 +4,7 @@ load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "APP_VERSION",
+    "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
@@ -38,10 +39,6 @@ APP_ENV = """[
 	    {content_security_policy, "script-src 'self' 'unsafe-eval' 'unsafe-inline'; object-src 'self'"}
 	  ]"""
 
-FIRST_SRCS = [
-    "src/rabbit_mgmt_extension.erl",
-]
-
 BUILD_DEPS = [
     "@lager//:erlang_app",
 ]
@@ -72,12 +69,12 @@ sed 's/%%VSN%%/{}/' $< > $@
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
     app_env = APP_ENV,
+    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_module = APP_MODULE,
     app_name = APP_NAME,
     build_deps = BUILD_DEPS,
     extra_apps = EXTRA_APPS,
     extra_priv = [":rabbitmqadmin"],
-    first_srcs = FIRST_SRCS,
     runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
