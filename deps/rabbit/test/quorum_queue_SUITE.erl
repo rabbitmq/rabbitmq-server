@@ -124,6 +124,7 @@ all_tests() ->
      purge,
      consumer_metrics,
      invalid_policy,
+     pre_existing_invalid_policy,
      delete_if_empty,
      delete_if_unused,
      queue_ttl,
@@ -957,6 +958,22 @@ invalid_policy(Config) ->
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, <<"ha">>, <<"invalid_policy.*">>, <<"queues">>,
            [{<<"ha-mode">>, <<"all">>}]),
+    Info = rpc:call(Server, rabbit_quorum_queue, infos,
+                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    ?assertEqual('', proplists:get_value(policy, Info)),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ha">>),
+    ok.
+
+pre_existing_invalid_policy(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"ha">>, <<"invalid_policy.*">>, <<"queues">>,
+           [{<<"ha-mode">>, <<"all">>}]),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     Info = rpc:call(Server, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
     ?assertEqual('', proplists:get_value(policy, Info)),
