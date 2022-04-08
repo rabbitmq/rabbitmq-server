@@ -58,7 +58,8 @@ dialyze(
 
 eunit(
     erlc_opts = RABBITMQ_TEST_ERLC_OPTS + [
-        "-I deps/rabbitmq_aws",
+        "-I",
+        "deps/rabbitmq_aws",
         "+nowarn_export_all",
     ],
     runtime_deps = [

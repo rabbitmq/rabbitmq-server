@@ -88,7 +88,8 @@ suites = [
         additional_beam = [":test_utils"],
         additional_hdrs = glob(["test/src/*.hrl"]),
         erlc_opts = [
-            "-I deps/rabbitmq_web_mqtt/test",
+            "-I",
+            "deps/rabbitmq_web_mqtt/test",
         ],
     ),
     rabbitmq_integration_suite(
