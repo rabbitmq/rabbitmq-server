@@ -270,15 +270,15 @@ transfer_leadership_of_classic_mirrored_queues(TransferCandidates) ->
                           [rabbit_misc:rs(Name), readable_candidate_list(ExistingReplicaNodes)]),
          case random_primary_replica_transfer_candidate_node(TransferCandidates, ExistingReplicaNodes) of
              {ok, Pick} ->
-                 rabbit_log:debug("Will transfer leadership of local ~s to node ~s",
+                 rabbit_log:debug("Will transfer leadership of local ~s. Planned target node: ~s",
                           [rabbit_misc:rs(Name), Pick]),
                  case rabbit_mirror_queue_misc:migrate_leadership_to_existing_replica(Q, Pick) of
-                     {migrated, _} ->
+                     {migrated, NewPrimary} ->
                          rabbit_log:debug("Successfully transferred leadership of queue ~s to node ~s",
-                                          [rabbit_misc:rs(Name), Pick]);
+                                          [rabbit_misc:rs(Name), NewPrimary]);
                      Other ->
-                         rabbit_log:warning("Could not transfer leadership of queue ~s to node ~s: ~p",
-                                            [rabbit_misc:rs(Name), Pick, Other])
+                         rabbit_log:warning("Could not transfer leadership of queue ~s: ~p",
+                                            [rabbit_misc:rs(Name), Other])
                  end;
              undefined ->
                  rabbit_log:warning("Could not transfer leadership of queue ~s: no suitable candidates?",
