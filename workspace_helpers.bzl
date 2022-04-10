@@ -71,8 +71,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     hex_pm_erlang_app(
         name = "eetcd",
-        version = "0.3.3",
-        sha256 = "8fb280156ddd1b7b34d0f446c5711832385bff512c05378dcea8362f4f5060d6",
+        version = "0.3.5",
+        sha256 = "af9d5158ad03a6794d412708d605be5dd1ebd0b8a1271786530d99f165bb0cff",
         runtime_deps = [
             "@gun//:erlang_app",
         ],
