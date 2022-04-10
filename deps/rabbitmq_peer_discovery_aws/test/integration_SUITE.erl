@@ -145,8 +145,6 @@ register_autoscaled_task(Config) ->
 task_json(Config, RabbitmqConf) ->
     DataDir = ?config(data_dir, Config),
     RabbitmqImage = ?config(rabbitmq_image, Config),
-    RabbitmqDefaultUser = ?config(rabbitmq_default_user, Config),
-    RabbitmqDefaultPass = ?config(rabbitmq_default_pass, Config),
     RabbitmqErlangCookie = ?config(rabbitmq_erlang_cookie, Config),
     ServiceName = ?config(ecs_service_name, Config),
 
