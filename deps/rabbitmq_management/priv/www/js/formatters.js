@@ -332,7 +332,7 @@ function fmt_rate_axis(num, max) {
 function fmt_bytes(bytes) {
     if (bytes == undefined) return UNKNOWN_REPR;
     var prefix = fmt_si_prefix(bytes, bytes, 1024, false);
-    return prefix + (prefix != bytes ? 'iB' : 'B');
+    return prefix + (prefix.endsWith(' ') ? 'B' : 'iB');
 }
 
 function fmt_bytes_axis(num, max) {
