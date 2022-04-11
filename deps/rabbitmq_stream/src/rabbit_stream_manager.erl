@@ -169,9 +169,7 @@ validate_stream_queue_arguments([{<<"x-initial-cluster-size">>, long,
 validate_stream_queue_arguments([{<<"x-queue-leader-locator">>,
                                   longstr, Locator}
                                  | T]) ->
-    case lists:member(Locator,
-                      [<<"client-local">>, <<"random">>, <<"least-leaders">>])
-    of
+    case lists:member(Locator, rabbit_queue_location:queue_leader_locators()) of
         true ->
             validate_stream_queue_arguments(T);
         false ->
