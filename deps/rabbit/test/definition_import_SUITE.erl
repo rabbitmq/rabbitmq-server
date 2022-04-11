@@ -44,6 +44,7 @@ groups() ->
                                import_case11,
                                import_case12,
                                import_case13,
+                               import_case13a,
                                import_case14,
                                import_case15,
                                import_case16,
@@ -203,6 +204,31 @@ import_case13(Config) ->
             ?assertEqual([{<<"x-max-length">>, long, 991},
                           {<<"x-queue-type">>, longstr, <<"quorum">>}],
                          amqqueue:get_arguments(Q));
+        Skip ->
+            Skip
+    end.
+
+import_case13a(Config) ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
+        ok ->
+            import_file_case(Config, "case13"),
+            VHost = <<"/">>,
+            QueueName = <<"definitions.import.case13.qq.1">>,
+            QueueIsImported =
+            fun () ->
+                    case queue_lookup(Config, VHost, QueueName) of
+                        {ok, _} -> true;
+                        _       -> false
+                    end
+            end,
+            rabbit_ct_helpers:await_condition(QueueIsImported, 20000),
+            {ok, Q} = queue_lookup(Config, VHost, QueueName),
+
+            %% We expect that importing an existing queue (i.e. same vhost and name)
+            %% but with different arguments and different properties is a no-op.
+            import_file_case(Config, "case13a"),
+            timer:sleep(1000),
+            ?assertMatch({ok, Q}, queue_lookup(Config, VHost, QueueName));
         Skip ->
             Skip
     end.
