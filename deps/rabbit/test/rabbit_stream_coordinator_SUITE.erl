@@ -25,7 +25,7 @@ all() ->
 all_tests() ->
     [
      listeners,
-     machine_version_from_1_to_2,
+     machine_version_upgrade,
      new_stream,
      leader_down,
      leader_down_scenario_1,
@@ -196,7 +196,12 @@ listeners(_) ->
 
     ok.
 
-machine_version_from_1_to_2(_) ->
+machine_version_upgrade(_) ->
+    machine_version(0, 2),
+    machine_version(1, 2),
+    ok.
+
+machine_version(From, To) ->
     S = <<"stream">>,
     LeaderPid = spawn(fun() -> ok end),
     ListPid = spawn(fun() -> ok end), %% simulate a dead listener (not cleaned up)
@@ -206,7 +211,7 @@ machine_version_from_1_to_2(_) ->
                                                        DeadListPid => LeaderPid}}},
                      monitors = #{ListPid => {S, listener}}},
 
-    {State1, ok, Effects} = apply_cmd(#{index => 42}, {machine_version, 1, 2}, State0),
+    {State1, ok, Effects} = apply_cmd(#{index => 42}, {machine_version, From, To}, State0),
 
     Stream1 = maps:get(S, State1#?STATE.streams),
     ?assertEqual(
