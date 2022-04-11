@@ -516,7 +516,10 @@ apply(Meta, {nodeup, Node} = Cmd,
     return(Meta, State#?MODULE{monitors = Monitors,
                                streams = Streams}, ok, Effects);
 apply(Meta, {machine_version, From, To}, State0) ->
-    rabbit_log:info("Stream coordinator machine version changes from ~p to ~p, applying incremental upgrade."),
+    rabbit_log:info("Stream coordinator machine version changes from ~p to ~p, "
+                    ++ "applying incremental upgrade.", [From, To]),
+    %% RA applies machine upgrades from any version to any version, e.g. 0 -> 2.
+    %% We fill in the gaps here, applying all 1-to-1 machine upgrades.
     {State1, Effects} = lists:foldl(fun(Version, {S0, Eff0}) ->
                                             {S1, Eff1} = machine_version(Version, Version + 1, S0),
                                             {S1, Eff0 ++ Eff1}
