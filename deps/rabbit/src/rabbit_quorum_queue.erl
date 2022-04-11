@@ -104,6 +104,7 @@
                     messages_unacknowledged, local_state, type] ++ ?STATISTICS_KEYS).
 
 -define(RPC_TIMEOUT, 1000).
+-define(START_CLUSTER_RPC_TIMEOUT, 6000). %% the ra start cluster default is 5000
 -define(TICK_TIMEOUT, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
@@ -185,8 +186,8 @@ start_cluster(Q) ->
     NewQ0 = amqqueue:set_pid(Q, LeaderId),
     NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => [Leader | Followers]}),
 
-    rabbit_log:debug("Will start up to ~w replicas for quorum queue ~s",
-                     [QuorumSize, rabbit_misc:rs(QName)]),
+    rabbit_log:debug("Will start up to ~w replicas for quorum ~s with leader on node '~s'",
+                     [QuorumSize, rabbit_misc:rs(QName), Leader]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval,
@@ -195,7 +196,7 @@ start_cluster(Q) ->
                                                    ?SNAPSHOT_INTERVAL),
             RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout, SnapshotInterval)
                        || ServerId <- members(NewQ)],
-            case ra:start_cluster(?RA_SYSTEM, RaConfs) of
+            try erpc:call(Leader, ra, start_cluster, [?RA_SYSTEM, RaConfs], ?START_CLUSTER_RPC_TIMEOUT) of
                 {ok, _, _} ->
                     %% ensure the latest config is evaluated properly
                     %% even when running the machine version from 0
@@ -217,14 +218,20 @@ start_cluster(Q) ->
                                           ActingUser}]),
                     {new, NewQ};
                 {error, Error} ->
-                    _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-                    {protocol_error, internal_error,
-                     "Cannot declare a queue '~s' on node '~s': ~255p",
-                     [rabbit_misc:rs(QName), node(), Error]}
+                    declare_queue_error(Error, QName, Leader, ActingUser)
+            catch
+                error:Error ->
+                    declare_queue_error(Error, QName, Leader, ActingUser)
             end;
         {existing, _} = Ex ->
             Ex
     end.
+
+declare_queue_error(Error, QName, Leader, ActingUser) ->
+    _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
+    {protocol_error, internal_error,
+     "Cannot declare quorum ~s on node '~s' with leader on node '~s': ~255p",
+     [rabbit_misc:rs(QName), node(), Leader, Error]}.
 
 ra_machine(Q) ->
     {module, rabbit_fifo, ra_machine_config(Q)}.
@@ -657,7 +664,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                 false ->
                     %% attempt forced deletion of all servers
                     rabbit_log:warning(
-                      "Could not delete quorum queue '~s', not enough nodes "
+                      "Could not delete quorum '~s', not enough nodes "
                        " online to reach a quorum: ~255p."
                        " Attempting force delete.",
                       [rabbit_misc:rs(QName), Errs]),
