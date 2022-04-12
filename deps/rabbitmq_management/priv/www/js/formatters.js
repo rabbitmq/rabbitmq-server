@@ -33,7 +33,11 @@ function fmt_si_prefix(num0, max0, binary, allow_fractions) {
     var max = num_power[1];
     var power = num_power[2];
     var powers = ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
-    var suffix = powers[power] + ((power != 0 && binary) ? 'i' : '');
+    var suffix = powers[power];
+    if (power != 0 && binary) {
+        suffix = suffix.toUpperCase() + 'i';
+    }
+
     return (((power != 0 || allow_fractions) && max <= 10) ? num.toFixed(1) :
             num.toFixed(0)) + " " + suffix;
 }
