@@ -18,7 +18,7 @@
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
          set_queue_version/2,
-         zip_msgs_and_acks/4,  multiple_routing_keys/0, handle_info/2]).
+         zip_msgs_and_acks/4,  multiple_routing_keys/0]).
 
 -export([start/2, stop/1]).
 
@@ -880,7 +880,7 @@ set_ram_duration_target(
           (TargetRamCount =/= infinity andalso
            TargetRamCount1 >= TargetRamCount) of
           true  -> State1;
-          false -> State1 % reduce_memory_use(State1)
+          false -> reduce_memory_use(State1)
       end).
 
 maybe_update_rates(State = #vqstate{ in_counter  = InCount,
@@ -970,11 +970,6 @@ handle_pre_hibernate(State = #vqstate { index_mod   = IndexMod,
                                         store_state = StoreState }) ->
     State #vqstate { index_state = IndexMod:flush(IndexState),
                      store_state = rabbit_classic_queue_store_v2:sync(StoreState) }.
-
-handle_info(bump_reduce_memory_use, State = #vqstate{ waiting_bump = true }) ->
-    State#vqstate{ waiting_bump = false };
-handle_info(bump_reduce_memory_use, State) ->
-    State.
 
 resume(State) -> a(reduce_memory_use(State)).
 
@@ -2118,41 +2113,17 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                             unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(Version, IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
-    %% Unlike what the comment at the top of the file says, it is possible to
-    %% have messages in q1 that are also persisted to disk, as that is a
-    %% necessary requirement for confirms to be sent.
     State4 = case {DeltaCount, ?QUEUE:len(Q3)} of
-                 {0, Q34Len} when Q34Len < 16384 -> %% @todo It would be interesting to get a dynamic max size.
+                 {0, Q3Len} when Q3Len < 16384 -> %% @todo It would be interesting to get a dynamic max size.
                      {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
-                     State2 = case IsDelivered of
-                         true -> record_pending_ack(m(MsgStatus1), State1);
-                         false -> State1 #vqstate { q3 = ?QUEUE:in(m(MsgStatus1), Q3) }
-                     end,
+                     State2 = State1 #vqstate { q3 = ?QUEUE:in(m(MsgStatus1), Q3) },
                      %% @todo I am not sure about the stats from this.
-                     stats(case IsDelivered of
-                               true -> {0, 1};
-                               false -> {1, 0}
-                           end, {none, MsgStatus1}, 0, State2);
+                     stats({1, 0}, {none, MsgStatus1}, 0, State2);
                  _ ->
                      {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
-                     State2 = case IsDelivered of
-                         true -> record_pending_ack(m(MsgStatus1), State1);
-                         false ->
-                             Delta1 = expand_delta(SeqId, Delta, IsPersistent),
-                             State1 #vqstate { delta = Delta1 }
-                     end,
-                     stats(case IsDelivered of
-                               true -> {0, 1};
-                               false -> lazy_pub
-                           end,
-                           case IsDelivered of
-                               true -> {none, MsgStatus1};
-                               false -> {lazy, MsgStatus1}
-                           end,
-                           case IsDelivered of
-                               true -> 0;
-                               false -> 1
-                           end, State2)
+                     Delta1 = expand_delta(SeqId, Delta, IsPersistent),
+                     State2 = State1 #vqstate { delta = Delta1 },
+                     stats(lazy_pub, {lazy, MsgStatus1}, 1, State2)
              end,
     UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
     State4#vqstate{ next_seq_id         = SeqId + 1,
@@ -2170,8 +2141,29 @@ batch_publish1({Msg, MsgProps, IsDelivered}, {ChPid, Flow, State}) ->
     {ChPid, Flow, publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
                            fun maybe_prepare_write_to_disk/4, State)}.
 
-publish_delivered1(Msg, MsgProps, ChPid, Flow, PersistFun, State = #vqstate { next_seq_id = SeqId }) ->
-    {SeqId, publish1(Msg, MsgProps, true, ChPid, Flow, PersistFun, State)}.
+publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
+                   MsgProps = #message_properties { needs_confirming = NeedsConfirming },
+                   _ChPid, _Flow, PersistFun,
+                   State = #vqstate { version             = Version,
+                                      qi_embed_msgs_below = IndexMaxSize,
+                                      next_seq_id         = SeqId,
+                                      next_deliver_seq_id = NextDeliverSeqId,
+                                      in_counter          = InCount,
+                                      out_counter         = OutCount,
+                                      durable             = IsDurable,
+                                      unconfirmed         = UC }) ->
+    IsPersistent1 = IsDurable andalso IsPersistent,
+    MsgStatus = msg_status(Version, IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
+    {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
+    State2 = record_pending_ack(m(MsgStatus1), State1),
+    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    {SeqId,
+     stats({0, 1}, {none, MsgStatus1}, 0,
+           State2#vqstate{ next_seq_id         = SeqId + 1,
+                           next_deliver_seq_id = next_deliver_seq_id(SeqId, NextDeliverSeqId),
+                           out_counter         = OutCount + 1,
+                           in_counter          = InCount + 1,
+                           unconfirmed         = UC1 })}.
 
 batch_publish_delivered1({Msg, MsgProps}, {ChPid, Flow, SeqIds, State}) ->
     {SeqId, State1} =
@@ -2719,17 +2711,19 @@ ifold(Fun, Acc, Its0, State0) ->
 %% Phase changes
 %%----------------------------------------------------------------------------
 
-maybe_reduce_memory_use(State = #vqstate {memory_reduction_run_count = MRedRunCount,
-                                          mode = Mode}) ->
-    case MRedRunCount >= ?EXPLICIT_GC_RUN_OP_THRESHOLD(Mode) of
+maybe_reduce_memory_use(State = #vqstate {memory_reduction_run_count = MRedRunCount}) ->
+    case MRedRunCount >= ?EXPLICIT_GC_RUN_OP_THRESHOLD(lazy) of
         true -> State1 = reduce_memory_use(State),
                 State1#vqstate{memory_reduction_run_count =  0};
         false -> State#vqstate{memory_reduction_run_count =  MRedRunCount + 1}
     end.
 
-reduce_memory_use(State) ->
-    garbage_collect(), %% @todo Do we still want this? Probably not.
-    %% @todo Remove bump_reduce_memory_use message handling from other modules.
+reduce_memory_use(State0 = #vqstate{ index_mod   = IndexMod,
+                                     index_state = IndexState,
+                                     store_state = StoreState }) ->
+    State = State0#vqstate{ index_state = IndexMod:flush(IndexState),
+                            store_state = rabbit_classic_queue_store_v2:sync(StoreState) },
+    garbage_collect(),
     %% @todo Get rid of target ram count?
     State.
 

@@ -502,14 +502,14 @@ next_state(State = #q{q = Q,
                       backing_queue       = BQ,
                       backing_queue_state = BQS,
                       msg_id_to_channel   = MTC}) ->
-    try
-        assert_invariant(State)
-    catch C:E:S ->
-        rabbit_time_travel_dbg:dump(),
-        rabbit_time_travel_dbg:print(),
-        logger:error("BAD STATE ~p", [State]),
-        erlang:raise(C,E,S)
-    end,
+%    try
+        assert_invariant(State),
+%    catch C:E:S ->
+%        rabbit_time_travel_dbg:dump(),
+%        rabbit_time_travel_dbg:print(),
+%        logger:error("BAD STATE ~p", [State]),
+%        erlang:raise(C,E,S)
+%    end,
     {MsgIds, BQS1} = BQ:drain_confirmed(BQS),
     MTC1 = confirm_messages(MsgIds, MTC, amqqueue:get_name(Q)),
     State1 = State#q{backing_queue_state = BQS1, msg_id_to_channel = MTC1},
@@ -1281,9 +1281,6 @@ prioritise_cast(Msg, _Len, State) ->
 %% stack are optimised for that) and to make things easier to reason
 %% about. Finally, we prioritise ack over resume since it should
 %% always reduce memory use.
-%% bump_reduce_memory_use is prioritised over publishes, because sending
-%% credit to self is hard to reason about. Consumers can continue while
-%% reduce_memory_use is in progress.
 
 consumer_bias(#q{backing_queue = BQ, backing_queue_state = BQS}, Low, High) ->
     case BQ:msg_rates(BQS) of
@@ -1301,7 +1298,6 @@ prioritise_info(Msg, _Len, #q{q = Q}) ->
         {drop_expired, _Version}             -> 8;
         emit_stats                           -> 7;
         sync_timeout                         -> 6;
-        bump_reduce_memory_use               -> 1;
         _                                    -> 0
     end.
 
@@ -1783,10 +1779,6 @@ handle_info({bump_credit, Msg}, State = #q{backing_queue       = BQ,
     %% rabbit_variable_queue:msg_store_write/4.
     credit_flow:handle_bump_msg(Msg),
     noreply(State#q{backing_queue_state = BQ:resume(BQS)});
-handle_info(bump_reduce_memory_use, State = #q{backing_queue       = BQ,
-                                               backing_queue_state = BQS0}) ->
-    BQS1 = BQ:handle_info(bump_reduce_memory_use, BQS0),
-    noreply(State#q{backing_queue_state = BQ:resume(BQS1)});
 
 handle_info(Info, State) ->
     {stop, {unhandled_info, Info}, State}.
