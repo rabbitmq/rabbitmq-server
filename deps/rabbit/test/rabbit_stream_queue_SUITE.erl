@@ -184,6 +184,8 @@ init_per_group1(Group, Config) ->
                     ok = rabbit_ct_broker_helpers:rpc(
                            Config2, 0, application, set_env,
                            [rabbit, channel_tick_interval, 100]),
+                    ok = rabbit_ct_broker_helpers:enable_feature_flag(
+                           Config2, maintenance_mode_status),
                     Config2;
                 {skip, _} = Skip ->
                     end_per_group(Group, Config2),
@@ -1884,7 +1886,7 @@ leader_locator_balanced_maintenance(Config) ->
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
                  declare(Ch2, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                    {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
-    rabbit_ct_broker_helpers:mark_as_being_drained(Config, Server3),
+    true = rabbit_ct_broker_helpers:mark_as_being_drained(Config, Server3),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
                                   {<<"x-queue-leader-locator">>, longstr, <<"balanced">>}])),
@@ -1893,7 +1895,7 @@ leader_locator_balanced_maintenance(Config) ->
     Leader = proplists:get_value(leader, Info),
     ?assert(lists:member(Leader, [Server1, Server2])),
 
-    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Server3),
+    true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Server3),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 select_nodes_with_least_replicas(Config) ->

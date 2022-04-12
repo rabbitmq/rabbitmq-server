@@ -212,6 +212,8 @@ init_per_group(Group, Config) ->
                             %% more time after clustering before running the
                             %% tests.
                             timer:sleep(ClusterSize * 1000),
+                            ok = rabbit_ct_broker_helpers:enable_feature_flag(
+                                   Config2, maintenance_mode_status),
                             Config2;
                         Skip ->
                             end_per_group(Group, Config2),
@@ -2650,7 +2652,7 @@ leader_locator_balanced_maintenance(Config) ->
           ?config(alt_queue_name, Config),
           <<"leader_locator_policy_q3">>],
 
-    rabbit_ct_broker_helpers:mark_as_being_drained(Config, S2),
+    true = rabbit_ct_broker_helpers:mark_as_being_drained(Config, S2),
     Leaders = [begin
                    ?assertMatch({'queue.declare_ok', Q, 0, 0},
                                 declare(Ch, Q,
@@ -2663,7 +2665,7 @@ leader_locator_balanced_maintenance(Config) ->
     ?assertNot(lists:member(S2, Leaders)),
     ?assert(lists:member(S3, Leaders)),
 
-    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, S2),
+    true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, S2),
     [?assertMatch(#'queue.delete_ok'{},
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- Qs].
