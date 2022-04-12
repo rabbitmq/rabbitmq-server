@@ -16,7 +16,7 @@
 -define(QUEUE_LEADER_LOCATORS, [<<"client-local">>, <<"balanced">>] ++ ?QUEUE_LEADER_LOCATORS_DEPRECATED).
 -define(QUEUE_COUNT_START_RANDOM_SELECTION, 1_000).
 
--type queue_leader_locator() :: nonempty_binary().
+-type queue_leader_locator() :: binary().
 
 -spec queue_leader_locators() ->
     [queue_leader_locator()].
