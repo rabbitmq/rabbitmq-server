@@ -287,13 +287,17 @@ init_per_testcase(Testcase, Config) ->
             {skip, "start_queue isn't mixed versions compatible"};
         start_queue_concurrent when IsMixed andalso ClusterSize == 5 ->
             {skip, "start_queue_concurrent isn't mixed versions compatible"};
+        leader_locator_client_local when IsMixed ->
+            {skip, "leader_locator_client_local isn't mixed versions compatible because "
+             "delete_declare isn't mixed versions reliable"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
             Q = rabbit_data_coercion:to_binary(Testcase),
             Config2 = rabbit_ct_helpers:set_config(Config1,
                                                    [{queue_name, Q},
-                                                    {alt_queue_name, <<Q/binary, "_alt">>}
+                                                    {alt_queue_name, <<Q/binary, "_alt">>},
+                                                    {alt_2_queue_name, <<Q/binary, "_alt_2">>}
                                                    ]),
             EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
                          Config2, quorum_queue),
@@ -2646,7 +2650,7 @@ leader_locator_balanced(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Qs = [?config(queue_name, Config),
           ?config(alt_queue_name, Config),
-          <<"leader_locator_policy_q3">>],
+          ?config(alt_2_queue_name, Config)],
 
     Leaders = [begin
                    ?assertMatch({'queue.declare_ok', Q, 0, 0},
@@ -2667,7 +2671,7 @@ leader_locator_balanced_maintenance(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
     Qs = [?config(queue_name, Config),
           ?config(alt_queue_name, Config),
-          <<"leader_locator_policy_q3">>],
+          ?config(alt_2_queue_name, Config)],
 
     true = rabbit_ct_broker_helpers:mark_as_being_drained(Config, S2),
     Leaders = [begin
@@ -2692,7 +2696,7 @@ leader_locator_policy(Config) ->
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Qs = [?config(queue_name, Config),
           ?config(alt_queue_name, Config),
-          <<"leader_locator_policy_q3">>],
+          ?config(alt_2_queue_name, Config)],
     ok = rabbit_ct_broker_helpers:set_policy(
            Config, 0, <<"my-leader-locator">>, <<"leader_locator_policy_.*">>, <<"queues">>,
            [{<<"queue-leader-locator">>, <<"balanced">>}]),
