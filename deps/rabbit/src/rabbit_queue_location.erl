@@ -32,9 +32,13 @@ select_leader_and_followers(Q, Size)
     QueueType = amqqueue:get_type(Q),
     GetQueues0 = get_queues_for_type(QueueType),
     QueueCount = rabbit_amqqueue:count(),
-    {Replicas, GetQueues} = select_replicas(Size, AllNodes, RunningNodes, QueueCount, GetQueues0),
+    QueueCountStartRandom = application:get_env(rabbit, queue_count_start_random_selection,
+                                                ?QUEUE_COUNT_START_RANDOM_SELECTION),
+    {Replicas, GetQueues} = select_replicas(Size, AllNodes, RunningNodes,
+                                            QueueCount, QueueCountStartRandom, GetQueues0),
     LeaderLocator = leader_locator(Q),
-    Leader = leader_node(LeaderLocator, Replicas, RunningNodes, QueueCount, GetQueues),
+    Leader = leader_node(LeaderLocator, Replicas, RunningNodes,
+                         QueueCount, QueueCountStartRandom, GetQueues),
     Followers = lists:delete(Leader, Replicas),
     {Leader, Followers}.
 
@@ -65,9 +69,10 @@ leader_locator0(_) ->
     %% default
     <<"client-local">>.
 
--spec select_replicas(pos_integer(), [node(),...], [node(),...], non_neg_integer(), function()) ->
+-spec select_replicas(pos_integer(), [node(),...], [node(),...],
+                      non_neg_integer(), non_neg_integer(), function()) ->
     {[node(),...], function()}.
-select_replicas(Size, AllNodes, _, _, Fun)
+select_replicas(Size, AllNodes, _, _, _, Fun)
   when length(AllNodes) =< Size ->
     {AllNodes, Fun};
 %% Select nodes in the following order:
@@ -76,15 +81,15 @@ select_replicas(Size, AllNodes, _, _, Fun)
 %% 3.1. If there are many queues: Randomly to avoid expensive calculation of counting replicas
 %%      per node. Random replica selection is good enough for most use cases.
 %% 3.2. If there are few queues: Nodes with least replicas to have a "balanced" RabbitMQ cluster.
-select_replicas(Size, AllNodes, RunningNodes, QueueCount, GetQueues)
-  when QueueCount >= ?QUEUE_COUNT_START_RANDOM_SELECTION ->
+select_replicas(Size, AllNodes, RunningNodes, QueueCount, QueueCountStartRandom, GetQueues)
+  when QueueCount >= QueueCountStartRandom ->
     L0 = shuffle(lists:delete(node(), AllNodes)),
     L1 = lists:sort(fun(X, _Y) ->
                             lists:member(X, RunningNodes)
                     end, L0),
     {L, _} = lists:split(Size - 1, L1),
     {[node() | L], GetQueues};
-select_replicas(Size, AllNodes, RunningNodes, _, GetQueues) ->
+select_replicas(Size, AllNodes, RunningNodes, _, _, GetQueues) ->
     Counters0 = maps:from_list([{N, 0} || N <- lists:delete(node(), AllNodes)]),
     Queues = GetQueues(),
     Counters = lists:foldl(fun(Q, Acc) ->
@@ -112,15 +117,16 @@ select_replicas(Size, AllNodes, RunningNodes, _, GetQueues) ->
     L = lists:map(fun({N, _}) -> N end, L2),
     {[node() | L], fun() -> Queues end}.
 
--spec leader_node(queue_leader_locator(), [node(),...], [node(),...], non_neg_integer(), function()) ->
+-spec leader_node(queue_leader_locator(), [node(),...], [node(),...],
+                  non_neg_integer(), non_neg_integer(), function()) ->
     node().
-leader_node(<<"client-local">>, _, _, _, _) ->
+leader_node(<<"client-local">>, _, _, _, _, _) ->
     node();
-leader_node(<<"balanced">>, Nodes0, RunningNodes, QueueCount, _)
-  when QueueCount >= ?QUEUE_COUNT_START_RANDOM_SELECTION ->
+leader_node(<<"balanced">>, Nodes0, RunningNodes, QueueCount, QueueCountStartRandom, _)
+  when QueueCount >= QueueCountStartRandom ->
     Nodes = potential_leaders(Nodes0, RunningNodes),
     lists:nth(rand:uniform(length(Nodes)), Nodes);
-leader_node(<<"balanced">>, Nodes0, RunningNodes, _, GetQueues)
+leader_node(<<"balanced">>, Nodes0, RunningNodes, _, _, GetQueues)
   when is_function(GetQueues, 0) ->
     Nodes = potential_leaders(Nodes0, RunningNodes),
     Counters0 = maps:from_list([{N, 0} || N <- Nodes]),

@@ -74,6 +74,7 @@ groups() ->
                                             leader_locator_client_local,
                                             leader_locator_balanced,
                                             leader_locator_balanced_maintenance,
+                                            leader_locator_balanced_random_maintenance,
                                             leader_locator_policy
                                            ]
                        ++ all_tests()},
@@ -289,6 +290,9 @@ init_per_testcase(Testcase, Config) ->
             {skip, "start_queue_concurrent isn't mixed versions compatible"};
         leader_locator_client_local when IsMixed ->
             {skip, "leader_locator_client_local isn't mixed versions compatible because "
+             "delete_declare isn't mixed versions reliable"};
+        leader_locator_balanced_random_maintenance when IsMixed ->
+            {skip, "leader_locator_balanced_random_maintenance isn't mixed versions compatible because "
              "delete_declare isn't mixed versions reliable"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
@@ -2690,6 +2694,39 @@ leader_locator_balanced_maintenance(Config) ->
     [?assertMatch(#'queue.delete_ok'{},
                   amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
      || Q <- Qs].
+
+leader_locator_balanced_random_maintenance(Config) ->
+    [S1, S2, S3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
+    Q = ?config(queue_name, Config),
+
+    true = rabbit_ct_broker_helpers:mark_as_being_drained(Config, S2),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, queue_leader_locator, <<"balanced">>]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, queue_count_start_random_selection, 0]),
+
+    Leaders = [begin
+                   ?assertMatch({'queue.declare_ok', Q, 0, 0},
+                                declare(Ch, Q,
+                                        [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                         {<<"x-quorum-initial-group-size">>, long, 2}])),
+                   {ok, [{_, R1}, {_, R2}], {_, Leader}} = ra:members({ra_name(Q), S1}),
+                   ?assert(lists:member(R1, Servers)),
+                   ?assert(lists:member(R2, Servers)),
+                   ?assertMatch(#'queue.delete_ok'{},
+                                amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+                   Leader
+               end || _ <- lists:seq(1, 10)],
+    ?assert(lists:member(S1, Leaders)),
+    ?assertNot(lists:member(S2, Leaders)),
+    ?assert(lists:member(S3, Leaders)),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                      [rabbit, queue_leader_locator]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+                                      [rabbit, queue_count_start_random_selection]),
+    true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, S2).
 
 leader_locator_policy(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
