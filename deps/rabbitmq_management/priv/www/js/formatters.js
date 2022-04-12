@@ -19,9 +19,10 @@ function fmt_string(str, unknown) {
     return fmt_escape_html("" + str);
 }
 
-function fmt_si_prefix(num0, max0, thousand, allow_fractions) {
+function fmt_si_prefix(num0, max0, binary, allow_fractions) {
     if (num == 0) return 0;
 
+    var thousand = binary ? 1024 : 1000;
     function f(n, m, p) {
         if (m > thousand) return f(n / thousand, m / thousand, p + 1);
         else return [n, m, p];
@@ -32,8 +33,9 @@ function fmt_si_prefix(num0, max0, thousand, allow_fractions) {
     var max = num_power[1];
     var power = num_power[2];
     var powers = ['', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
+    var suffix = powers[power] + ((power != 0 && binary) ? 'i' : '');
     return (((power != 0 || allow_fractions) && max <= 10) ? num.toFixed(1) :
-            num.toFixed(0)) + " " + powers[power];
+            num.toFixed(0)) + " " + suffix;
 }
 
 function fmt_boolean(b, unknown) {
@@ -301,7 +303,7 @@ function fmt_plain(num) {
 }
 
 function fmt_plain_axis(num, max) {
-    return fmt_si_prefix(num, max, 1000, true);
+    return fmt_si_prefix(num, max, false, true);
 }
 
 function fmt_rate(num) {
@@ -314,8 +316,8 @@ function fmt_rate_axis(num, max) {
 
 function fmt_bytes(bytes) {
     if (bytes == undefined) return UNKNOWN_REPR;
-    var prefix = fmt_si_prefix(bytes, bytes, 1024, false);
-    return prefix + (prefix.endsWith(' ') ? 'B' : 'iB');
+    var prefix = fmt_si_prefix(bytes, bytes, true, false);
+    return prefix + 'B';
 }
 
 function fmt_bytes_axis(num, max) {
