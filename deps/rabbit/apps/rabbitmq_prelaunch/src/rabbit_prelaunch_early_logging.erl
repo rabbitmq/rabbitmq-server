@@ -70,6 +70,18 @@ add_rmqlog_filter(LogLevels) ->
 add_erlang_specific_filters(_) ->
     _ = logger:add_handler_filter(
           default, progress_reports, {fun logger_filters:progress/2, stop}),
+    MsgFilter = fun(#{level := error, meta := #{error_logger := #{emulator := true, tag := error}}, msg := {"~s~n", Msg}}, _FilterArg) ->
+                        case string:find(Msg, "Discarding message ") of
+                            nomatch ->
+                                ignore;
+                            _ ->
+                                stop
+                        end;
+                   (_LogEvent, _FilterArg) ->
+                        ignore
+                end,
+    _ = logger:add_handler_filter(
+          default, discarded_messages, {MsgFilter, undefined}),
     ok.
 
 filter_log_event(
