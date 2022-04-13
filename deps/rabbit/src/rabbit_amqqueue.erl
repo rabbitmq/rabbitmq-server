@@ -753,20 +753,24 @@ assert_args_equivalence(Q, NewArgs) ->
     ExistingArgs = amqqueue:get_arguments(Q),
     QueueName = amqqueue:get_name(Q),
     Type = amqqueue:get_type(Q),
-    QueueTypeArgs = rabbit_queue_type:queue_arguments(Type),
+    QueueTypeArgs = rabbit_queue_type:arguments(queue_arguments, Type),
     rabbit_misc:assert_args_equivalence(ExistingArgs, NewArgs, QueueName, QueueTypeArgs).
 
 check_declare_arguments(QueueName, Args) ->
     check_arguments_type_and_value(QueueName, Args, [{<<"x-queue-type">>, fun check_queue_type/2}]),
     Type = get_queue_type(Args),
-    QueueTypeArgs = rabbit_queue_type:queue_arguments(Type),
+    QueueTypeArgs = rabbit_queue_type:arguments(queue_arguments, Type),
     Validators = lists:filter(fun({Arg, _}) -> lists:member(Arg, QueueTypeArgs) end, declare_args()),
     check_arguments_type_and_value(QueueName, Args, Validators),
-    InvalidArgs = rabbit_queue_type:queue_arguments() -- QueueTypeArgs,
+    InvalidArgs = rabbit_queue_type:arguments(queue_arguments) -- QueueTypeArgs,
     check_arguments_key(QueueName, Type, Args, InvalidArgs).
 
-check_consume_arguments(QueueName, Args) ->
-    check_arguments_type_and_value(QueueName, Args, consume_args()).
+check_consume_arguments(QueueName, QueueType, Args) ->
+    QueueTypeArgs = rabbit_queue_type:arguments(consumer_arguments, QueueType),
+    Validators = lists:filter(fun({Arg, _}) -> lists:member(Arg, QueueTypeArgs) end, consume_args()),
+    check_arguments_type_and_value(QueueName, Args, Validators),
+    InvalidArgs = rabbit_queue_type:arguments(consumer_arguments) -- QueueTypeArgs,
+    check_arguments_key(QueueName, QueueType, Args, InvalidArgs).
 
 check_arguments_type_and_value(QueueName, Args, Validators) ->
     [case rabbit_misc:table_lookup(Args, Key) of
@@ -1711,11 +1715,9 @@ basic_get(Q, NoAck, LimiterPid, CTag, QStates) ->
 basic_consume(Q, NoAck, ChPid, LimiterPid,
               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, ActingUser, QStates) ->
-
     QName = amqqueue:get_name(Q),
-    %% first phase argument validation
-    %% each queue type may do further validations
-    ok = check_consume_arguments(QName, Args),
+    QType = amqqueue:get_type(Q),
+    ok = check_consume_arguments(QName, QType, Args),
     Spec = #{no_ack => NoAck,
              channel_pid => ChPid,
              limiter_pid => LimiterPid,
