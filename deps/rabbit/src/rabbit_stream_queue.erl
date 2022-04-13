@@ -939,21 +939,18 @@ msg_to_iodata(#basic_message{exchange_name = #resource{name = Exchange},
     rabbit_msg_record:to_iodata(R).
 
 capabilities() ->
-    #{unsupported_policies =>
-          [ %% Classic policies
-            <<"expires">>, <<"message-ttl">>, <<"dead-letter-exchange">>,
-            <<"dead-letter-routing-key">>, <<"max-length">>,
-            <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
-            <<"max-priority">>, <<"overflow">>, <<"queue-mode">>,
-            <<"single-active-consumer">>, <<"delivery-limit">>,
-            <<"ha-mode">>, <<"ha-params">>, <<"ha-sync-mode">>,
-            <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
-            <<"queue-master-locator">>,
-            %% Quorum policies
-            <<"dead-letter-strategy">>],
-      queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
-                          <<"x-max-length">>, <<"x-max-length-bytes">>,
-                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
+    #{unsupported_policies => [%% Classic policies
+                               <<"expires">>, <<"message-ttl">>, <<"dead-letter-exchange">>,
+                               <<"dead-letter-routing-key">>, <<"max-length">>,
+                               <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
+                               <<"max-priority">>, <<"overflow">>, <<"queue-mode">>,
+                               <<"single-active-consumer">>, <<"delivery-limit">>,
+                               <<"ha-mode">>, <<"ha-params">>, <<"ha-sync-mode">>,
+                               <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
+                               <<"queue-master-locator">>,
+                               %% Quorum policies
+                               <<"dead-letter-strategy">>],
+      queue_arguments => [<<"x-max-length-bytes">>, <<"x-queue-type">>,
                           <<"x-max-age">>, <<"x-stream-max-segment-size-bytes">>,
                           <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-stream-offset">>],
