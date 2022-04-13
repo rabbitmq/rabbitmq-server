@@ -42,6 +42,8 @@
          find_name_from_pid/2,
          is_policy_applicable/2,
          is_server_named_allowed/1,
+         queue_arguments/0,
+         queue_arguments/1,
          notify_decorators/1
          ]).
 
@@ -324,6 +326,20 @@ is_policy_applicable(Q, Policy) ->
 is_server_named_allowed(Type) ->
     Capabilities = Type:capabilities(),
     maps:get(server_named, Capabilities, false).
+
+-spec queue_arguments() -> [binary()].
+queue_arguments() ->
+    Types = [rabbit_classic_queue, rabbit_quorum_queue, rabbit_stream_queue],
+    Args0 = lists:map(fun(T) ->
+                              maps:get(queue_arguments, T:capabilities(), [])
+                      end, Types),
+    Args = lists:flatten(Args0),
+    sets:to_list(sets:from_list(Args)).
+
+-spec queue_arguments(atom()) -> [binary()].
+queue_arguments(Type) ->
+    Capabilities = Type:capabilities(),
+    maps:get(queue_arguments, Capabilities, []).
 
 notify_decorators(Q) ->
     Mod = amqqueue:get_type(Q),

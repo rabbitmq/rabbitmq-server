@@ -743,8 +743,9 @@ target_quorum_queue_delete_create(Config) ->
 %% 2. Target queue can be classic queue, quorum queue, or stream queue.
 %%
 %% Lesson learnt by writing this test:
-%% If there are multiple target queues, messages will not be sent to target non-mirrored classic queues
-%% (even if durable) when their host node is temporarily down because these queues get (temporarily) deleted. See:
+%% If there are multiple target queues, messages will not be sent / routed to target non-mirrored durable classic queues
+%% when their host node is temporarily down because these queues get temporarily deleted from the rabbit_queue RAM table
+%% (but will still be present in the rabbit_durable_queue DISC table). See:
 %% https://github.com/rabbitmq/rabbitmq-server/blob/cf76b479300b767b8ea450293d096cbf729ed734/deps/rabbit/src/rabbit_amqqueue.erl#L1955-L1964
 many_target_queues(Config) ->
     [Server1, Server2, Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
