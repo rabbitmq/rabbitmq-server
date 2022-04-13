@@ -302,8 +302,8 @@ handle_connection_down_test(_) ->
                 consumer(Pid0, 2, false)]),
     State0 =
         state(#{GroupId => Group},
-              #{Pid0 => sets:from_list([GroupId]),
-                Pid1 => sets:from_list([GroupId])}),
+              #{Pid0 => maps:from_list([{GroupId, true}]),
+                Pid1 => maps:from_list([{GroupId, true}])}),
 
     {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = State1,
      Effects1} =
@@ -327,12 +327,7 @@ assertSize(Expected, []) ->
 assertSize(Expected, Map) when is_map(Map) ->
     ?assertEqual(Expected, maps:size(Map));
 assertSize(Expected, List) when is_list(List) ->
-    ?assertEqual(Expected, length(List));
-assertSize(Expected, Other) ->
-    case sets:is_set(Other) of
-        true ->
-            ?assertEqual(Expected, sets:size(Other))
-    end.
+    ?assertEqual(Expected, length(List)).
 
 assertEmpty(Data) ->
     assertSize(0, Data).
@@ -363,28 +358,28 @@ register_consumer_command(Stream,
                           ConsumerName,
                           ConnectionPid,
                           SubId) ->
-    {register_consumer,
-     <<"/">>,
-     Stream,
-     PartitionIndex,
-     ConsumerName,
-     ConnectionPid,
-     <<"owning connection label">>,
-     SubId}.
+    #command_register_consumer{vhost = <<"/">>,
+                               stream = Stream,
+                               partition_index = PartitionIndex,
+                               consumer_name = ConsumerName,
+                               connection_pid = ConnectionPid,
+                               owner = <<"owning connection label">>,
+                               subscription_id = SubId}.
 
 unregister_consumer_command(Stream,
                             ConsumerName,
                             ConnectionPid,
                             SubId) ->
-    {unregister_consumer,
-     <<"/">>,
-     Stream,
-     ConsumerName,
-     ConnectionPid,
-     SubId}.
+    #command_unregister_consumer{vhost = <<"/">>,
+                                 stream = Stream,
+                                 consumer_name = ConsumerName,
+                                 connection_pid = ConnectionPid,
+                                 subscription_id = SubId}.
 
 activate_consumer_command(Stream, ConsumerName) ->
-    {activate_consumer, <<"/">>, Stream, ConsumerName}.
+    #command_activate_consumer{vhost = <<"/">>,
+                               stream = Stream,
+                               consumer_name = ConsumerName}.
 
 assertSendMessageEffect(Pid, SubId, Active, [Effect]) ->
     ?assertEqual({mod_call,

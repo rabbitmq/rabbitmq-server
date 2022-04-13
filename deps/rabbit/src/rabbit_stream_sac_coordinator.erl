@@ -19,21 +19,8 @@
 -include("rabbit_stream_sac_coordinator.hrl").
 
 -opaque command() ::
-    {register_consumer,
-     vhost(),
-     stream(),
-     partition_index(),
-     consumer_name(),
-     connection_pid(),
-     owner(),
-     subscription_id()} |
-    {unregister_consumer,
-     vhost(),
-     stream(),
-     consumer_name(),
-     connection_pid(),
-     subscription_id()} |
-    {activate_consumer, vhost(), stream(), consumer_name()}.
+    #command_register_consumer{} | #command_unregister_consumer{} |
+    #command_activate_consumer{}.
 -opaque state() :: #?MODULE{}.
 
 -export_type([state/0,
@@ -62,7 +49,8 @@
                         pid(),
                         binary(),
                         integer()) ->
-                           {ok, boolean()} | {error, feature_flag_disabled}.
+                           {ok, boolean()} | {error, feature_flag_disabled} |
+                           {error, term()}.
 register_consumer(VirtualHost,
                   Stream,
                   PartitionIndex,
@@ -71,17 +59,25 @@ register_consumer(VirtualHost,
                   Owner,
                   SubscriptionId) ->
     maybe_sac_execute(fun() ->
-                         {ok, Res, _} =
-                             process_command({sac,
-                                              {register_consumer,
-                                               VirtualHost,
-                                               Stream,
-                                               PartitionIndex,
-                                               ConsumerName,
-                                               ConnectionPid,
-                                               Owner,
-                                               SubscriptionId}}),
-                         Res
+                         process_command({sac,
+                                          #command_register_consumer{vhost =
+                                                                         VirtualHost,
+                                                                     stream =
+                                                                         Stream,
+                                                                     partition_index
+                                                                         =
+                                                                         PartitionIndex,
+                                                                     consumer_name
+                                                                         =
+                                                                         ConsumerName,
+                                                                     connection_pid
+                                                                         =
+                                                                         ConnectionPid,
+                                                                     owner =
+                                                                         Owner,
+                                                                     subscription_id
+                                                                         =
+                                                                         SubscriptionId}})
                       end).
 
 -spec unregister_consumer(binary(),
@@ -89,39 +85,53 @@ register_consumer(VirtualHost,
                           binary(),
                           pid(),
                           integer()) ->
-                             ok | {error, feature_flag_disabled}.
+                             ok | {error, feature_flag_disabled} |
+                             {error, term()}.
 unregister_consumer(VirtualHost,
                     Stream,
                     ConsumerName,
                     ConnectionPid,
                     SubscriptionId) ->
     maybe_sac_execute(fun() ->
-                         {ok, Res, _} =
-                             process_command({sac,
-                                              {unregister_consumer,
-                                               VirtualHost,
-                                               Stream,
-                                               ConsumerName,
-                                               ConnectionPid,
-                                               SubscriptionId}}),
-                         Res
+                         process_command({sac,
+                                          #command_unregister_consumer{vhost =
+                                                                           VirtualHost,
+                                                                       stream =
+                                                                           Stream,
+                                                                       consumer_name
+                                                                           =
+                                                                           ConsumerName,
+                                                                       connection_pid
+                                                                           =
+                                                                           ConnectionPid,
+                                                                       subscription_id
+                                                                           =
+                                                                           SubscriptionId}})
                       end).
 
 -spec activate_consumer(binary(), binary(), binary()) ->
                            ok | {error, feature_flag_disabled}.
 activate_consumer(VirtualHost, Stream, ConsumerName) ->
     maybe_sac_execute(fun() ->
-                         {ok, Res, _} =
-                             process_command({sac,
-                                              {activate_consumer,
-                                               VirtualHost,
-                                               Stream,
-                                               ConsumerName}}),
-                         Res
+                         process_command({sac,
+                                          #command_activate_consumer{vhost =
+                                                                         VirtualHost,
+                                                                     stream =
+                                                                         Stream,
+                                                                     consumer_name
+                                                                         =
+                                                                         ConsumerName}})
                       end).
 
 process_command(Cmd) ->
-    rabbit_stream_coordinator:process_command(Cmd).
+    case rabbit_stream_coordinator:process_command(Cmd) of
+        {ok, Res, _} ->
+            Res;
+        {error, _} = Err ->
+            rabbit_log:warning("SAC coordinator command ~p returned error ~p",
+                               [Cmd, Err]),
+            Err
+    end.
 
 %% return the current groups for a given virtual host
 -spec consumer_groups(binary(), [atom()]) ->
@@ -190,14 +200,13 @@ init_state() ->
 
 -spec apply(command(), state()) ->
                {state(), term(), ra_machine:effects()}.
-apply({register_consumer,
-       VirtualHost,
-       Stream,
-       PartitionIndex,
-       ConsumerName,
-       ConnectionPid,
-       Owner,
-       SubscriptionId},
+apply(#command_register_consumer{vhost = VirtualHost,
+                                 stream = Stream,
+                                 partition_index = PartitionIndex,
+                                 consumer_name = ConsumerName,
+                                 connection_pid = ConnectionPid,
+                                 owner = Owner,
+                                 subscription_id = SubscriptionId},
       #?MODULE{groups = StreamGroups0} = State) ->
     rabbit_log:debug("New consumer ~p ~p in group ~p, partition index "
                      "is ~p",
@@ -220,12 +229,11 @@ apply({register_consumer,
                          Owner,
                          SubscriptionId,
                          State#?MODULE{groups = StreamGroups1});
-apply({unregister_consumer,
-       VirtualHost,
-       Stream,
-       ConsumerName,
-       ConnectionPid,
-       SubscriptionId},
+apply(#command_unregister_consumer{vhost = VirtualHost,
+                                   stream = Stream,
+                                   consumer_name = ConsumerName,
+                                   connection_pid = ConnectionPid,
+                                   subscription_id = SubscriptionId},
       #?MODULE{groups = StreamGroups0} = State0) ->
     {State1, Effects1} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
@@ -259,14 +267,17 @@ apply({unregister_consumer,
                 {State0#?MODULE{groups = SGS}, Effects}
         end,
     {State1, ok, Effects1};
-apply({activate_consumer, VirtualHost, Stream, ConsumerName},
+apply(#command_activate_consumer{vhost = VirtualHost,
+                                 stream = Stream,
+                                 consumer_name = ConsumerName},
       #?MODULE{groups = StreamGroups0} = State0) ->
     {G, Eff} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             undefined ->
                 rabbit_log:warning("trying to activate consumer in group ~p, but "
                                    "the group does not longer exist",
-                                   [{VirtualHost, Stream, ConsumerName}]);
+                                   [{VirtualHost, Stream, ConsumerName}]),
+                {undefined, []};
             Group ->
                 #consumer{pid = Pid, subscription_id = SubId} =
                     evaluate_active_consumer(Group),
@@ -359,31 +370,28 @@ group_consumers(VirtualHost,
             {error, not_found}
     end.
 
--spec ensure_monitors(command(), state(), map(), ra:effects()) ->
-                         {state(), map(), ra:effects()}.
-ensure_monitors({register_consumer,
-                 VirtualHost,
-                 Stream,
-                 _PartitionIndex,
-                 ConsumerName,
-                 Pid,
-                 _Owner,
-                 _SubscriptionId},
+-spec ensure_monitors(command(),
+                      state(),
+                      map(),
+                      ra_machine:effects()) ->
+                         {state(), map(), ra_machine:effects()}.
+ensure_monitors(#command_register_consumer{vhost = VirtualHost,
+                                           stream = Stream,
+                                           consumer_name = ConsumerName,
+                                           connection_pid = Pid},
                 #?MODULE{pids_groups = PidsGroups0} = State0,
                 Monitors0,
                 Effects) ->
     GroupId = {VirtualHost, Stream, ConsumerName},
-    Groups0 = maps:get(Pid, PidsGroups0, sets:new()),
+    Groups0 = maps:get(Pid, PidsGroups0, #{}),
     PidsGroups1 =
-        maps:put(Pid, sets:add_element(GroupId, Groups0), PidsGroups0),
+        maps:put(Pid, maps:put(GroupId, true, Groups0), PidsGroups0),
     {State0#?MODULE{pids_groups = PidsGroups1}, Monitors0#{Pid => sac},
      [{monitor, process, Pid}, {monitor, node, node(Pid)} | Effects]};
-ensure_monitors({unregister_consumer,
-                 VirtualHost,
-                 Stream,
-                 ConsumerName,
-                 Pid,
-                 _SubscriptionId},
+ensure_monitors(#command_unregister_consumer{vhost = VirtualHost,
+                                             stream = Stream,
+                                             consumer_name = ConsumerName,
+                                             connection_pid = Pid},
                 #?MODULE{groups = StreamGroups0, pids_groups = PidsGroups0} =
                     State0,
                 Monitors,
@@ -393,8 +401,8 @@ ensure_monitors({unregister_consumer,
     PidGroup1 =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             undefined ->
-                %% group is gone, can be removed from the PID set
-                sets:del_element(GroupId, PidGroup0);
+                %% group is gone, can be removed from the PID map
+                maps:remove(GroupId, PidGroup0);
             Group ->
                 %% group still exists, check if other consumers are from this PID
                 %% if yes, don't change the PID set
@@ -404,11 +412,11 @@ ensure_monitors({unregister_consumer,
                         %% the group still depends on this PID, keep the group entry in the set
                         PidGroup0;
                     false ->
-                        %% the group does not depend on the PID anymore, remove the group entry from the set
-                        sets:del_element(GroupId, PidGroup0)
+                        %% the group does not depend on the PID anymore, remove the group entry from the map
+                        maps:remove(GroupId, PidGroup0)
                 end
         end,
-    case sets:is_empty(PidGroup1) of
+    case maps:size(PidGroup1) == 0 of
         true ->
             %% no more groups depend on the PID
             %% remove PID from data structure and demonitor it
@@ -424,7 +432,7 @@ ensure_monitors(_, #?MODULE{} = State0, Monitors, Effects) ->
     {State0, Monitors, Effects}.
 
 -spec handle_connection_down(connection_pid(), state()) ->
-                                {state(), ra:effects()}.
+                                {state(), ra_machine:effects()}.
 handle_connection_down(Pid,
                        #?MODULE{pids_groups = PidsGroups0} = State0) ->
     case maps:take(Pid, PidsGroups0) of
@@ -433,7 +441,7 @@ handle_connection_down(Pid,
         {Groups, PidsGroups1} ->
             State1 = State0#?MODULE{pids_groups = PidsGroups1},
             %% iterate other the groups that this PID affects
-            sets:fold(fun({VirtualHost, Stream, ConsumerName},
+            maps:fold(fun({VirtualHost, Stream, ConsumerName}, _,
                           {#?MODULE{groups = ConsumerGroups} = S0, Eff0}) ->
                          case lookup_group(VirtualHost,
                                            Stream,
@@ -453,12 +461,21 @@ handle_connection_down(Pid,
                                                   {StateSub0, EffSub0})
                                                      when P == Pid ->
                                                      {StateSub1, ok, E} =
-                                                         ?MODULE:apply({unregister_consumer,
-                                                                        VirtualHost,
-                                                                        Stream,
-                                                                        ConsumerName,
-                                                                        Pid,
-                                                                        SubId},
+                                                         ?MODULE:apply(#command_unregister_consumer{vhost
+                                                                                                        =
+                                                                                                        VirtualHost,
+                                                                                                    stream
+                                                                                                        =
+                                                                                                        Stream,
+                                                                                                    consumer_name
+                                                                                                        =
+                                                                                                        ConsumerName,
+                                                                                                    connection_pid
+                                                                                                        =
+                                                                                                        Pid,
+                                                                                                    subscription_id
+                                                                                                        =
+                                                                                                        SubId},
                                                                        StateSub0),
                                                      {StateSub1, EffSub0 ++ E};
                                                  (_Consumer, Acc) -> Acc
@@ -715,6 +732,12 @@ lookup_active_consumer(#group{consumers = Consumers}) ->
     lists:search(fun(#consumer{active = Active}) -> Active end,
                  Consumers).
 
+update_groups(_VirtualHost,
+              _Stream,
+              _ConsumerName,
+              undefined,
+              StreamGroups) ->
+    StreamGroups;
 update_groups(VirtualHost,
               Stream,
               ConsumerName,

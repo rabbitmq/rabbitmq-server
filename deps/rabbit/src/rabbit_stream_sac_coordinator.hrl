@@ -32,4 +32,27 @@
         {consumers :: [#consumer{}], partition_index :: integer()}).
 -record(rabbit_stream_sac_coordinator,
         {groups :: #{group_id() => #group{}},
-         pids_groups :: #{connection_pid() => sets:set(group_id())}}).
+         pids_groups ::
+             #{connection_pid() =>
+                   #{group_id() => true}}, %% inner map acts as a set
+         %% future extensibility
+         reserved_1,
+         reserved_2}).
+%% commands
+-record(command_register_consumer,
+        {vhost :: vhost(),
+         stream :: stream(),
+         partition_index :: partition_index(),
+         consumer_name :: consumer_name(),
+         connection_pid :: connection_pid(),
+         owner :: owner(),
+         subscription_id :: subscription_id()}).
+-record(command_unregister_consumer,
+        {vhost :: vhost(),
+         stream :: stream(),
+         consumer_name :: consumer_name(),
+         connection_pid :: connection_pid(),
+         subscription_id :: subscription_id()}).
+-record(command_activate_consumer,
+        {vhost :: vhost(), stream :: stream(),
+         consumer_name :: consumer_name()}).
