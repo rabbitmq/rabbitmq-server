@@ -144,7 +144,7 @@ If you want to remove the exchange which this plugin creates, first
 disable the plugin and restart the broker. Then you can delete the exchange,
 e.g. with :
 
-    rabbitmqctl eval 'rabbit_exchange:delete(rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.event">>), false).'
+    rabbitmqctl eval 'rabbit_exchange:delete(rabbit_misc:r(<<"/">>, exchange, <<"amq.rabbitmq.event">>), false, <<"username">>).'
 
 
 ## Building from Source
