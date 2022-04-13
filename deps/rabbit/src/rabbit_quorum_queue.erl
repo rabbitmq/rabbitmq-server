@@ -394,21 +394,20 @@ filter_quorum_critical(Queues, ReplicaStates) ->
                  end, Queues).
 
 capabilities() ->
-    #{unsupported_policies =>
-          [ %% Classic policies
-            <<"max-priority">>, <<"queue-mode">>,
-            <<"single-active-consumer">>, <<"ha-mode">>, <<"ha-params">>,
-            <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
-            <<"queue-master-locator">>,
-            %% Stream policies
-            <<"max-age">>, <<"stream-max-segment-size-bytes">>, <<"initial-cluster-size">>],
-          queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
-                              <<"x-dead-letter-strategy">>, <<"x-expires">>, <<"x-max-length">>,
-                              <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
-                              <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
-                              <<"x-single-active-consumer">>, <<"x-queue-type">>,
-                              <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
-                              <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
+    #{unsupported_policies => [%% Classic policies
+                               <<"max-priority">>, <<"queue-mode">>,
+                               <<"single-active-consumer">>, <<"ha-mode">>, <<"ha-params">>,
+                               <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
+                               <<"queue-master-locator">>,
+                               %% Stream policies
+                               <<"max-age">>, <<"stream-max-segment-size-bytes">>, <<"initial-cluster-size">>],
+      queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
+                          <<"x-dead-letter-strategy">>, <<"x-expires">>, <<"x-max-length">>,
+                          <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
+                          <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
+                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
+                          <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
+                          <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
       server_named => false}.
 
