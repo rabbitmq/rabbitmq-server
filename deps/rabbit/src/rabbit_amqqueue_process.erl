@@ -1163,25 +1163,37 @@ i(memory, _) ->
     M;
 i(slave_pids, #q{q = Q0}) ->
     Name = amqqueue:get_name(Q0),
-    {ok, Q} = rabbit_amqqueue:lookup(Name),
-    case rabbit_mirror_queue_misc:is_mirrored(Q) of
-        false -> '';
-        true  -> amqqueue:get_slave_pids(Q)
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, Q} ->
+            case rabbit_mirror_queue_misc:is_mirrored(Q) of
+                false -> '';
+                true  -> amqqueue:get_slave_pids(Q)
+            end;
+        {error, not_found} ->
+            ''
     end;
 i(synchronised_slave_pids, #q{q = Q0}) ->
     Name = amqqueue:get_name(Q0),
-    {ok, Q} = rabbit_amqqueue:lookup(Name),
-    case rabbit_mirror_queue_misc:is_mirrored(Q) of
-        false -> '';
-        true  -> amqqueue:get_sync_slave_pids(Q)
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, Q} ->
+            case rabbit_mirror_queue_misc:is_mirrored(Q) of
+                false -> '';
+                true  -> amqqueue:get_sync_slave_pids(Q)
+            end;
+        {error, not_found} ->
+            ''
     end;
 i(recoverable_slaves, #q{q = Q0}) ->
     Name = amqqueue:get_name(Q0),
     Durable = amqqueue:is_durable(Q0),
-    {ok, Q} = rabbit_amqqueue:lookup(Name),
-    case Durable andalso rabbit_mirror_queue_misc:is_mirrored(Q) of
-        false -> '';
-        true  -> amqqueue:get_recoverable_slaves(Q)
+    case rabbit_amqqueue:lookup(Name) of
+        {ok, Q} ->
+            case Durable andalso rabbit_mirror_queue_misc:is_mirrored(Q) of
+                false -> '';
+                true  -> amqqueue:get_recoverable_slaves(Q)
+            end;
+        {error, not_found} ->
+            ''
     end;
 i(state, #q{status = running}) -> credit_flow:state();
 i(state, #q{status = State})   -> State;
