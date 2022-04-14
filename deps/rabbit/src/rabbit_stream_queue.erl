@@ -953,7 +953,7 @@ capabilities() ->
       queue_arguments => [<<"x-max-length-bytes">>, <<"x-queue-type">>,
                           <<"x-max-age">>, <<"x-stream-max-segment-size-bytes">>,
                           <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],
-      consumer_arguments => [<<"x-stream-offset">>],
+      consumer_arguments => [<<"x-stream-offset">>, <<"x-credit">>],
       server_named => false}.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->
