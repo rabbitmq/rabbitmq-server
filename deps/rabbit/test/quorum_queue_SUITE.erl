@@ -100,6 +100,11 @@ all_tests() ->
      declare_args,
      declare_invalid_properties,
      declare_server_named,
+     declare_invalid_arg_1,
+     declare_invalid_arg_2,
+     declare_invalid_arg_3,
+     consume_invalid_arg_1,
+     consume_invalid_arg_2,
      start_queue,
      long_name,
      stop_queue,
@@ -392,6 +397,80 @@ declare_server_named(Config) ->
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                <<"">>, [{<<"x-queue-type">>, longstr, <<"quorum">>}])).
+
+declare_invalid_arg_1(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ExpectedError = <<"PRECONDITION_FAILED - invalid arg 'x-queue-mode' for queue "
+                      "'declare_invalid_arg_1' in vhost '/' of queue type rabbit_quorum_queue">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                       %% only available in classic queues
+                       {<<"x-queue-mode">>, longstr, <<"default">>}])).
+
+declare_invalid_arg_2(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ExpectedError = <<"PRECONDITION_FAILED - invalid arg 'x-queue-type' for queue 'declare_invalid_arg_2'"
+                      " in vhost '/': \"unsupported queue type 'fake-queue-type'\"">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"fake-queue-type">>}])).
+
+declare_invalid_arg_3(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ExpectedError = <<"PRECONDITION_FAILED - invalid arg 'x-max-length' for queue 'declare_invalid_arg_3'"
+                      " in vhost '/': {value_negative,-5}">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                       {<<"x-max-length">>, long, -5}])).
+
+consume_invalid_arg_1(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ExpectedError = <<"PRECONDITION_FAILED - invalid arg 'x-stream-offset' for queue "
+                      "'consume_invalid_arg_1' in vhost '/' of queue type rabbit_quorum_queue">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       amqp_channel:subscribe(Ch, #'basic.consume'{
+                                     queue = Q,
+                                     arguments = [{<<"x-stream-offset">>, longstr, <<"last">>}],
+                                     no_ack = false,
+                                     consumer_tag = <<"ctag">>},
+                              self())).
+
+consume_invalid_arg_2(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ExpectedError = <<"PRECONDITION_FAILED - invalid arg 'x-priority' for queue 'consume_invalid_arg_2'"
+                      " in vhost '/': \"expected integer, got longstr\"">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       amqp_channel:subscribe(Ch, #'basic.consume'{
+                                     queue = Q,
+                                     arguments = [{<<"x-priority">>, longstr, <<"important">>}],
+                                     no_ack = false,
+                                     consumer_tag = <<"ctag">>},
+                              self())).
 
 start_queue(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
