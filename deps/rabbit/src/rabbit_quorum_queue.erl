@@ -408,7 +408,7 @@ capabilities() ->
                               <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
                               <<"x-single-active-consumer">>, <<"x-queue-type">>,
                               <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
-                              <<"x-message-ttl">>],
+                              <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
       server_named => false}.
 
