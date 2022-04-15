@@ -30,6 +30,8 @@ endif
 # RabbitMQ components.
 # --------------------------------------------------------------------
 
+dep_amqp10_client                     = hex $(PROJECT_VERSION)
+dep_amqp10_common                     = hex $(PROJECT_VERSION)
 dep_amqp_client                       = hex $(PROJECT_VERSION)
 dep_rabbit_common                     = hex $(PROJECT_VERSION)
 
