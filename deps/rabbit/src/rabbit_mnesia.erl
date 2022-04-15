@@ -457,7 +457,8 @@ is_process_alive({Name, Node}) ->
 is_registered_process_alive(Name) ->
     is_pid(whereis(Name)).
 
--spec cluster_nodes('all' | 'disc' | 'ram' | 'running') -> [node()].
+-spec cluster_nodes('all' | 'disc' | 'ram' | 'running') -> [node()];
+                   ('status') -> {[node()], [node()], [node()]}.
 
 cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 

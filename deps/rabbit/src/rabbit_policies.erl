@@ -168,6 +168,9 @@ validate_policy0(<<"max-age">>, Value) ->
 
 validate_policy0(<<"queue-leader-locator">>, <<"client-local">>) ->
     ok;
+validate_policy0(<<"queue-leader-locator">>, <<"balanced">>) ->
+    ok;
+%% 'random' and 'least-leaders' are deprecated and get mapped to 'balanced'
 validate_policy0(<<"queue-leader-locator">>, <<"random">>) ->
     ok;
 validate_policy0(<<"queue-leader-locator">>, <<"least-leaders">>) ->
