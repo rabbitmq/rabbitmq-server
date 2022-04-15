@@ -683,19 +683,10 @@ add_queue_int(_Queue, R = #resource{kind = queue,
     rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
                        "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_queue_int(Queue, Name, ActingUser) ->
-<<<<<<< HEAD
-<<<<<<< HEAD
     case rabbit_amqqueue:lookup(Name) of
         {ok, _} ->
-<<<<<<< HEAD
-=======
             %% Skip declaring a queue that already exists to avoid
             %% potentially expensive node and leader selection.
->>>>>>> ca4f35425e (Do not declare queues that already exist)
-=======
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, _} ->
->>>>>>> fa724293be (Speed up re-importing queue definitions)
             ok;
         {error, not_found} ->
             rabbit_amqqueue:declare(Name,
@@ -705,17 +696,6 @@ add_queue_int(Queue, Name, ActingUser) ->
                                     none,
                                     ActingUser)
     end.
-<<<<<<< HEAD
-=======
-    rabbit_amqqueue:declare(Name,
-                            maps:get(durable,                         Queue, undefined),
-                            maps:get(auto_delete,                     Queue, undefined),
-                            args(maps:get(arguments, Queue, undefined)),
-                            none,
-                            ActingUser).
->>>>>>> f602987fc3 (Revert "Do not declare queues that already exist")
-=======
->>>>>>> fa724293be (Speed up re-importing queue definitions)
 
 add_exchange(Exchange, ActingUser) ->
     add_exchange_int(Exchange, r(exchange, Exchange), ActingUser).
