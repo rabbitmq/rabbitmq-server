@@ -104,6 +104,7 @@
                     messages_unacknowledged, local_state, type] ++ ?STATISTICS_KEYS).
 
 -define(RPC_TIMEOUT, 1000).
+-define(START_CLUSTER_RPC_TIMEOUT, 6000). %% the ra start cluster default is 5000
 -define(TICK_TIMEOUT, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
@@ -180,12 +181,13 @@ start_cluster(Q) ->
                      rabbit_data_coercion:to_atom(ra:new_uid(N))
              end,
     Id = {RaName, node()},
-    Nodes = select_quorum_nodes(QuorumSize, rabbit_nodes:all()),
-    NewQ0 = amqqueue:set_pid(Q, Id),
-    NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => Nodes}),
+    {Leader, Followers} = rabbit_queue_location:select_leader_and_followers(Q, QuorumSize),
+    LeaderId = {RaName, Leader},
+    NewQ0 = amqqueue:set_pid(Q, LeaderId),
+    NewQ1 = amqqueue:set_type_state(NewQ0, #{nodes => [Leader | Followers]}),
 
-    rabbit_log:debug("Will start up to ~w replicas for quorum queue ~s",
-                     [QuorumSize, rabbit_misc:rs(QName)]),
+    rabbit_log:debug("Will start up to ~w replicas for quorum ~s with leader on node '~s'",
+                     [QuorumSize, rabbit_misc:rs(QName), Leader]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
             TickTimeout = application:get_env(rabbit, quorum_tick_interval,
@@ -194,7 +196,7 @@ start_cluster(Q) ->
                                                    ?SNAPSHOT_INTERVAL),
             RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout, SnapshotInterval)
                        || ServerId <- members(NewQ)],
-            case ra:start_cluster(?RA_SYSTEM, RaConfs) of
+            try erpc:call(Leader, ra, start_cluster, [?RA_SYSTEM, RaConfs], ?START_CLUSTER_RPC_TIMEOUT) of
                 {ok, _, _} ->
                     %% ensure the latest config is evaluated properly
                     %% even when running the machine version from 0
@@ -216,14 +218,20 @@ start_cluster(Q) ->
                                           ActingUser}]),
                     {new, NewQ};
                 {error, Error} ->
-                    _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
-                    {protocol_error, internal_error,
-                     "Cannot declare a queue '~s' on node '~s': ~255p",
-                     [rabbit_misc:rs(QName), node(), Error]}
+                    declare_queue_error(Error, QName, Leader, ActingUser)
+            catch
+                error:Error ->
+                    declare_queue_error(Error, QName, Leader, ActingUser)
             end;
         {existing, _} = Ex ->
             Ex
     end.
+
+declare_queue_error(Error, QName, Leader, ActingUser) ->
+    _ = rabbit_amqqueue:internal_delete(QName, ActingUser),
+    {protocol_error, internal_error,
+     "Cannot declare quorum ~s on node '~s' with leader on node '~s': ~255p",
+     [rabbit_misc:rs(QName), node(), Leader, Error]}.
 
 ra_machine(Q) ->
     {module, rabbit_fifo, ra_machine_config(Q)}.
@@ -393,15 +401,14 @@ capabilities() ->
             <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
             <<"queue-master-locator">>,
             %% Stream policies
-            <<"max-age">>, <<"stream-max-segment-size-bytes">>,
-            <<"queue-leader-locator">>, <<"initial-cluster-size">>],
+            <<"max-age">>, <<"stream-max-segment-size-bytes">>, <<"initial-cluster-size">>],
           queue_arguments => [<<"x-dead-letter-exchange">>, <<"x-dead-letter-routing-key">>,
                               <<"x-dead-letter-strategy">>, <<"x-expires">>, <<"x-max-length">>,
                               <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
                               <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
                               <<"x-single-active-consumer">>, <<"x-queue-type">>,
                               <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
-                              <<"x-message-ttl">>],
+                              <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-priority">>, <<"x-credit">>],
       server_named => false}.
 
@@ -657,7 +664,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                 false ->
                     %% attempt forced deletion of all servers
                     rabbit_log:warning(
-                      "Could not delete quorum queue '~s', not enough nodes "
+                      "Could not delete quorum '~s', not enough nodes "
                        " online to reach a quorum: ~255p."
                        " Attempting force delete.",
                       [rabbit_misc:rs(QName), Errs]),
@@ -1599,23 +1606,6 @@ get_default_quorum_initial_group_size(Arguments) ->
         {_Type, Val} ->
             Val
     end.
-
-select_quorum_nodes(Size, All) when length(All) =< Size ->
-    All;
-select_quorum_nodes(Size, All) ->
-    Node = node(),
-    case lists:member(Node, All) of
-        true ->
-            select_quorum_nodes(Size - 1, lists:delete(Node, All), [Node]);
-        false ->
-            select_quorum_nodes(Size, All, [])
-    end.
-
-select_quorum_nodes(0, _, Selected) ->
-    Selected;
-select_quorum_nodes(Size, Rest, Selected) ->
-    S = lists:nth(rand:uniform(length(Rest)), Rest),
-    select_quorum_nodes(Size - 1, lists:delete(S, Rest), [S | Selected]).
 
 %% member with the current leader first
 members(Q) when ?amqqueue_is_quorum(Q) ->

@@ -685,6 +685,8 @@ add_queue_int(_Queue, R = #resource{kind = queue,
 add_queue_int(Queue, Name, ActingUser) ->
     case rabbit_amqqueue:lookup(Name) of
         {ok, _} ->
+            %% Skip declaring a queue that already exists to avoid
+            %% potentially expensive node and leader selection.
             ok;
         {error, not_found} ->
             rabbit_amqqueue:declare(Name,
