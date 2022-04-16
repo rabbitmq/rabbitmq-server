@@ -579,17 +579,22 @@ add_exchange_int(_Exchange, R = #resource{kind = exchange,
     rabbit_log:warning("Skipping import of an exchange whose name begins with 'amq.', "
                        "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_exchange_int(Exchange, Name, ActingUser) ->
-    Internal = case maps:get(internal, Exchange, undefined) of
-                   undefined -> false; %% =< 2.2.0
-                   I         -> I
-               end,
-    rabbit_exchange:declare(Name,
-                            rabbit_exchange:check_type(maps:get(type, Exchange, undefined)),
-                            maps:get(durable,                         Exchange, undefined),
-                            maps:get(auto_delete,                     Exchange, undefined),
-                            Internal,
-                            args(maps:get(arguments, Exchange, undefined)),
-                            ActingUser).
+    case rabbit_exchange:lookup(Name) of
+        {ok, _} ->
+            ok;
+        {error, not_found} ->
+            Internal = case maps:get(internal, Exchange, undefined) of
+                           undefined -> false; %% =< 2.2.0
+                           I         -> I
+                       end,
+            rabbit_exchange:declare(Name,
+                                    rabbit_exchange:check_type(maps:get(type, Exchange, undefined)),
+                                    maps:get(durable,                         Exchange, undefined),
+                                    maps:get(auto_delete,                     Exchange, undefined),
+                                    Internal,
+                                    args(maps:get(arguments, Exchange, undefined)),
+                                    ActingUser)
+    end.
 
 add_binding(Binding, ActingUser) ->
     DestType = dest_type(Binding),
