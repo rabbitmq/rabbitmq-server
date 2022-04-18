@@ -779,7 +779,7 @@ check_arguments_type_and_value(QueueName, Args, Validators) ->
                           ok             -> ok;
                           {error, Error} -> rabbit_misc:protocol_error(
                                               precondition_failed,
-                                              "invalid arg '~s' for queue ~s: ~255p",
+                                              "invalid arg '~s' for ~s: ~255p",
                                               [Key, rabbit_misc:rs(QueueName),
                                                Error])
                       end
@@ -795,7 +795,7 @@ check_arguments_key(QueueName, QueueType, Args, InvalidArgs) ->
                               true ->
                                   rabbit_misc:protocol_error(
                                     precondition_failed,
-                                    "invalid arg '~s' for queue ~s of type ~s",
+                                    "invalid arg '~s' for ~s of queue type ~s",
                                     [ArgKey, rabbit_misc:rs(QueueName), QueueType])
                           end
                   end, Args).
