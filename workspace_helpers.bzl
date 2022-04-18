@@ -151,8 +151,8 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "observer_cli",
-        version = "1.7.2",
-        sha256 = "a1d280c112bb5443f09b63041d6c5dda39b40829db40b24fdf208e1b86dab353",
+        version = "1.7.3",
+        sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
     )
 
     git_repository(
