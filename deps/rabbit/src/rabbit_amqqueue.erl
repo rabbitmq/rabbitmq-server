@@ -749,19 +749,30 @@ with_exclusive_access_or_die(Name, ReaderPid, F) ->
     with_or_die(Name,
                 fun (Q) -> check_exclusive_access(Q, ReaderPid), F(Q) end).
 
-assert_args_equivalence(Q, RequiredArgs) ->
+assert_args_equivalence(Q, NewArgs) ->
+    ExistingArgs = amqqueue:get_arguments(Q),
     QueueName = amqqueue:get_name(Q),
-    Args = amqqueue:get_arguments(Q),
-    rabbit_misc:assert_args_equivalence(Args, RequiredArgs, QueueName,
-                                        [Key || {Key, _Fun} <- declare_args()]).
+    Type = amqqueue:get_type(Q),
+    QueueTypeArgs = rabbit_queue_type:arguments(queue_arguments, Type),
+    rabbit_misc:assert_args_equivalence(ExistingArgs, NewArgs, QueueName, QueueTypeArgs).
 
 check_declare_arguments(QueueName, Args) ->
-    check_arguments(QueueName, Args, declare_args()).
+    check_arguments_type_and_value(QueueName, Args, [{<<"x-queue-type">>, fun check_queue_type/2}]),
+    Type = get_queue_type(Args),
+    QueueTypeArgs = rabbit_queue_type:arguments(queue_arguments, Type),
+    Validators = lists:filter(fun({Arg, _}) -> lists:member(Arg, QueueTypeArgs) end, declare_args()),
+    check_arguments_type_and_value(QueueName, Args, Validators),
+    InvalidArgs = rabbit_queue_type:arguments(queue_arguments) -- QueueTypeArgs,
+    check_arguments_key(QueueName, Type, Args, InvalidArgs).
 
-check_consume_arguments(QueueName, Args) ->
-    check_arguments(QueueName, Args, consume_args()).
+check_consume_arguments(QueueName, QueueType, Args) ->
+    QueueTypeArgs = rabbit_queue_type:arguments(consumer_arguments, QueueType),
+    Validators = lists:filter(fun({Arg, _}) -> lists:member(Arg, QueueTypeArgs) end, consume_args()),
+    check_arguments_type_and_value(QueueName, Args, Validators),
+    InvalidArgs = rabbit_queue_type:arguments(consumer_arguments) -- QueueTypeArgs,
+    check_arguments_key(QueueName, QueueType, Args, InvalidArgs).
 
-check_arguments(QueueName, Args, Validators) ->
+check_arguments_type_and_value(QueueName, Args, Validators) ->
     [case rabbit_misc:table_lookup(Args, Key) of
          undefined -> ok;
          TypeVal   -> case Fun(TypeVal, Args) of
@@ -774,6 +785,20 @@ check_arguments(QueueName, Args, Validators) ->
                       end
      end || {Key, Fun} <- Validators],
     ok.
+
+check_arguments_key(QueueName, QueueType, Args, InvalidArgs) ->
+    lists:foreach(fun(Arg) ->
+                          ArgKey = element(1, Arg),
+                          case lists:member(ArgKey, InvalidArgs) of
+                              false ->
+                                  ok;
+                              true ->
+                                  rabbit_misc:protocol_error(
+                                    precondition_failed,
+                                    "invalid arg '~s' for ~s of queue type ~s",
+                                    [ArgKey, rabbit_misc:rs(QueueName), QueueType])
+                          end
+                  end, Args).
 
 declare_args() ->
     [{<<"x-expires">>,                 fun check_expires_arg/2},
@@ -1690,11 +1715,9 @@ basic_get(Q, NoAck, LimiterPid, CTag, QStates) ->
 basic_consume(Q, NoAck, ChPid, LimiterPid,
               LimiterActive, ConsumerPrefetchCount, ConsumerTag,
               ExclusiveConsume, Args, OkMsg, ActingUser, QStates) ->
-
     QName = amqqueue:get_name(Q),
-    %% first phase argument validation
-    %% each queue type may do further validations
-    ok = check_consume_arguments(QName, Args),
+    QType = amqqueue:get_type(Q),
+    ok = check_consume_arguments(QName, QType, Args),
     Spec = #{no_ack => NoAck,
              channel_pid => ChPid,
              limiter_pid => LimiterPid,

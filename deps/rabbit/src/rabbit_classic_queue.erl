@@ -444,21 +444,19 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
     [Q || {_, {new, Q}} <- Results].
 
 capabilities() ->
-    #{unsupported_policies => [ %% Stream policies
+    #{unsupported_policies => [%% Stream policies
                                <<"max-age">>, <<"stream-max-segment-size-bytes">>,
                                <<"queue-leader-locator">>, <<"initial-cluster-size">>,
                                %% Quorum policies
-                               <<"dead-letter-strategy">>],
+                               <<"delivery-limit">>, <<"dead-letter-strategy">>],
       queue_arguments => [<<"x-expires">>, <<"x-message-ttl">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
-                          <<"x-max-length-bytes">>, <<"x-max-in-memory-length">>,
-                          <<"x-max-in-memory-bytes">>, <<"x-max-priority">>,
+                          <<"x-max-length-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-queue-version">>,
-                          <<"x-single-active-consumer">>,
-                          <<"x-queue-type">>, <<"x-queue-master-locator">>],
+                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
+                          <<"x-queue-master-locator">>],
       consumer_arguments => [<<"x-cancel-on-ha-failover">>,
-                             <<"x-priority">>, <<"x-credit">>
-                            ],
+                             <<"x-priority">>, <<"x-credit">>],
       server_named => true}.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->

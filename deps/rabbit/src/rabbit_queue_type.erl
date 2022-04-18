@@ -42,6 +42,8 @@
          find_name_from_pid/2,
          is_policy_applicable/2,
          is_server_named_allowed/1,
+         arguments/1,
+         arguments/2,
          notify_decorators/1
          ]).
 
@@ -49,12 +51,17 @@
 -type queue_ref() :: queue_name() | atom().
 -type queue_state() :: term().
 -type msg_tag() :: term().
+-type arguments() :: queue_arguments | consumer_arguments.
+-type queue_type() :: rabbit_classic_queue | rabbit_quorum_queue | rabbit_stream_queue.
 
 -define(STATE, ?MODULE).
 
 %% Recoverable slaves shouldn't really be a generic one, but let's keep it here until
 %% mirrored queues are deprecated.
 -define(DOWN_KEYS, [name, durable, auto_delete, arguments, pid, recoverable_slaves, type, state]).
+
+%% TODO resolve all registered queue types from registry
+-define(QUEUE_TYPES, [rabbit_classic_queue, rabbit_quorum_queue, rabbit_stream_queue]).
 
 -define(QREF(QueueReference),
     (is_tuple(QueueReference) andalso element(1, QueueReference) == resource)
@@ -321,9 +328,23 @@ is_policy_applicable(Q, Policy) ->
                       not lists:member(P, NotApplicable)
               end, Policy).
 
+-spec is_server_named_allowed(queue_type()) -> boolean().
 is_server_named_allowed(Type) ->
     Capabilities = Type:capabilities(),
     maps:get(server_named, Capabilities, false).
+
+-spec arguments(arguments()) -> [binary()].
+arguments(ArgumentType) ->
+    Args0 = lists:map(fun(T) ->
+                              maps:get(ArgumentType, T:capabilities(), [])
+                      end, ?QUEUE_TYPES),
+    Args = lists:flatten(Args0),
+    lists:usort(Args).
+
+-spec arguments(arguments(), queue_type()) -> [binary()].
+arguments(ArgumentType, QueueType) ->
+    Capabilities = QueueType:capabilities(),
+    maps:get(ArgumentType, Capabilities, []).
 
 notify_decorators(Q) ->
     Mod = amqqueue:get_type(Q),
@@ -386,16 +407,15 @@ is_recoverable(Q) ->
     {Recovered :: [amqqueue:amqqueue()],
      Failed :: [amqqueue:amqqueue()]}.
 recover(VHost, Qs) ->
-   ByType = lists:foldl(
-              fun (Q, Acc) ->
-                      T = amqqueue:get_type(Q),
-                      maps:update_with(T, fun (X) ->
-                                                  [Q | X]
-                                          end, Acc)
-                      %% TODO resolve all registered queue types from registry
-              end, #{rabbit_classic_queue => [],
-                     rabbit_quorum_queue => [],
-                     rabbit_stream_queue => []}, Qs),
+    ByType0 = lists:map(fun(T) -> {T, []} end, ?QUEUE_TYPES),
+    ByType1 = maps:from_list(ByType0),
+    ByType = lists:foldl(
+               fun (Q, Acc) ->
+                       T = amqqueue:get_type(Q),
+                       maps:update_with(T, fun (X) ->
+                                                   [Q | X]
+                                           end, Acc)
+               end, ByType1, Qs),
    maps:fold(fun (Mod, Queues, {R0, F0}) ->
                      {Taken, {R, F}} =  timer:tc(Mod, recover, [VHost, Queues]),
                      rabbit_log:info("Recovering ~b queues of type ~s took ~bms",
