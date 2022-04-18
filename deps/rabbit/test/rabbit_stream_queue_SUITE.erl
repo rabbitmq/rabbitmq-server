@@ -84,6 +84,8 @@ all_tests() ->
      declare_max_age,
      declare_invalid_properties,
      declare_server_named,
+     declare_invalid_arg,
+     consume_invalid_arg,
      declare_queue,
      delete_queue,
      publish,
@@ -253,7 +255,7 @@ declare_args(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
-                                 {<<"x-max-length">>, long, 2000}])),
+                                 {<<"x-max-length-bytes">>, long, 2_000_000}])),
     assert_queue_type(Server, Q, rabbit_stream_queue),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
@@ -310,6 +312,37 @@ declare_server_named(Config) ->
        {{shutdown, {server_initiated_close, 406, _}}, _},
        declare(rabbit_ct_client_helpers:open_channel(Config, Server),
                <<"">>, [{<<"x-queue-type">>, longstr, <<"stream">>}])).
+
+declare_invalid_arg(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ExpectedError = <<"PRECONDITION_FAILED - invalid arg 'x-overflow' for queue "
+                      "'declare_invalid_arg' in vhost '/' of queue type rabbit_stream_queue">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                       {<<"x-overflow">>, longstr, <<"reject-publish">>}])).
+
+consume_invalid_arg(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    ExpectedError = <<"PRECONDITION_FAILED - invalid arg 'x-priority' for queue "
+                      "'consume_invalid_arg' in vhost '/' of queue type rabbit_stream_queue">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
+       amqp_channel:subscribe(Ch, #'basic.consume'{
+                                     queue = Q,
+                                     arguments = [{<<"x-priority">>, long, 10}],
+                                     no_ack = false,
+                                     consumer_tag = <<"ctag">>},
+                              self())).
 
 declare_queue(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
