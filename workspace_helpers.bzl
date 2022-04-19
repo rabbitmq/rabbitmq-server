@@ -155,13 +155,12 @@ erlang_app(
         sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
     )
 
-    # v1.2.4 of osiris still assumes bazel-erlang, so we import it via rules_erlang here
     github_erlang_app(
         name = "osiris",
         org = "rabbitmq",
-        ref = "refs/tags/v1.2.4",
-        version = "1.2.4",
-        sha256 = "f225265995ee8ab148c61a98fcbcf61eebc222027a006eb19586b7a6c9d03008",
+        ref = "refs/tags/v1.2.5",
+        version = "1.2.5",
+        sha256 = "6d39f32a39d5d3c67cbce59afc007191197182a95a530b4a0c41b5aacda902b3",
         build_file = rabbitmq_workspace + "//:BUILD.osiris",
     )
 
