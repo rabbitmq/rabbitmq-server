@@ -24,8 +24,6 @@ define HEX_TARBALL_EXTRA_METADATA
 }
 endef
 
-HEX_TARBALL_FILES += $(DEPS_DIR)/../rabbitmq-components.mk
-
 DIALYZER_OPTS += --src -r test -DTEST
 BUILD_DEPS = rabbit_common
 
