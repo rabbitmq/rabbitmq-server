@@ -1058,6 +1058,11 @@ suites = [
             "//deps/rabbit_common:erlang_app",
         ],
     ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "binding_remove_SUITE",
+        size = "small",
+    ),
 ]
 
 assert_suites(

@@ -583,7 +583,7 @@ recover(_Vhost, Queues) ->
                                           "restarted ~w", [Name, Err]),
                        fail
                end,
-         %% we have to ensure the  quorum queue is
+         %% we have to ensure the quorum queue is
          %% present in the rabbit_queue table and not just in
          %% rabbit_durable_queue
          %% So many code paths are dependent on this.

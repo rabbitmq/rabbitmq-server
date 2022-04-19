@@ -33,7 +33,7 @@ serialise_events() -> false.
 
 route(#exchange{name = Name},
       #delivery{message = #basic_message{routing_keys = Routes}}) ->
-    rabbit_router:match_routing_key(Name, Routes).
+    route0(Name, Routes).
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.
@@ -44,3 +44,35 @@ add_binding(_Tx, _X, _B) -> ok.
 remove_bindings(_Tx, _X, _Bs) -> ok.
 assert_args_equivalence(X, Args) ->
     rabbit_exchange:assert_args_equivalence(X, Args).
+
+%% rabbit_router:match_routing_key/2 uses ets:select/2 to get destinations.
+%% ets:select/2 is expensive because it needs to compile the match spec every
+%% time and lookup does not happen by a hash key.
+%%
+%% In contrast, route0/2 increases end-to-end message sending throughput
+%% (i.e. from RabbitMQ client to the queue process) by up to 35% by using ets:lookup_element/3.
+%% Only the direct exchange type uses the rabbit_index_route table to store its
+%% bindings by table key tuple {SourceExchange, RoutingKey}.
+-spec route0(rabbit_types:binding_source(), [rabbit_router:routing_key(), ...]) ->
+    rabbit_router:match_result().
+route0(SrcName, [RoutingKey]) ->
+    %% optimization
+    destinations(SrcName, RoutingKey);
+route0(SrcName, [_|_] = RoutingKeys) ->
+    lists:flatmap(fun(Key) ->
+                          destinations(SrcName, Key)
+                  end, RoutingKeys).
+
+destinations(SrcName, RoutingKey) ->
+    %% Prefer try-catch block over checking Key existence with ets:member/2.
+    %% The latter reduces throughput by a few thousand messages per second because
+    %% of function db_member_hash in file erl_db_hash.c.
+    %% We optimise for the happy path, that is the binding / table key is present.
+    try
+        ets:lookup_element(rabbit_index_route,
+                           {SrcName, RoutingKey},
+                           #index_route.destination)
+    catch
+        error:badarg ->
+            []
+    end.
