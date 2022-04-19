@@ -155,10 +155,18 @@ erlang_app(
         sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
     )
 
-    git_repository(
+    github_erlang_app(
         name = "osiris",
-        branch = "main",
-        remote = "https://github.com/rabbitmq/osiris.git",
+        org = "rabbitmq",
+        ref = "refs/tags/v1.2.5",
+        version = "1.2.5",
+        sha256 = "6d39f32a39d5d3c67cbce59afc007191197182a95a530b4a0c41b5aacda902b3",
+        deps = [
+            "@gen_batch_server//:erlang_app",
+        ],
+        runtime_deps = [
+            "@aten//:erlang_app",
+        ],
     )
 
     hex_pm_erlang_app(
