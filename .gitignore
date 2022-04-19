@@ -65,6 +65,7 @@ erl_crash.dump
 /topic-branch-scratch/
 
 PACKAGES/
+packaging/docker-image/rabbitmq_server-*/
 
 # Source distribution.
 rabbitmq-server-*/
