@@ -10,19 +10,24 @@ define PROJECT_APP_EXTRA_KEYS
 	  ]},
 	{build_tools, ["make", "rebar3"]},
 	{files, [
-	    $(RABBITMQ_HEXPM_DEFAULT_FILES),
-	    "mk"
+	    $(RABBITMQ_HEXPM_DEFAULT_FILES)
 	  ]}
 endef
 
+define HEX_TARBALL_EXTRA_METADATA
+#{
+	licenses => [<<"MPL-2.0">>],
+	links => #{
+		<<"Website">> => <<"https://www.rabbitmq.com">>,
+		<<"GitHub">> => <<"https://github.com/rabbitmq/rabbitmq-server/deps/amqp10_common">>
+	}
+}
+endef
+
+HEX_TARBALL_FILES += $(DEPS_DIR)/../rabbitmq-components.mk
+
 DIALYZER_OPTS += --src -r test
 BUILD_DEPS = rabbit_common
-
-# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
-# reviewed and merged.
-
-ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
-ERLANG_MK_COMMIT = rabbitmq-tmp
 
 # Variables and recipes in development.*.mk are meant to be used from
 # any Git clone. They are excluded from the files published to Hex.pm.
