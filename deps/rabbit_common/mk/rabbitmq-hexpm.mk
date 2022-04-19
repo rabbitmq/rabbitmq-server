@@ -4,14 +4,6 @@
 
 .PHONY: hex-publish hex-publish-docs
 
-HEXPM_URL = https://github.com/rabbitmq/hexpm-cli/releases/latest/download/hexpm
-HEXPM_CLI = $(ERLANG_MK_TMP)/hexpm
-
-$(HEXPM_CLI):
-	$(verbose) mkdir -p $(ERLANG_MK_TMP)
-	$(gen_verbose) $(call core_http_get,$@,$(HEXPM_URL))
-	$(verbose) chmod +x $@
-
 RABBIT_COMMON_HEXPM_VERSION = $(PROJECT_VERSION)
 AMQP10_COMMON_HEXPM_VERSION = $(PROJECT_VERSION)
 AMQP10_CLIENT_HEXPM_VERSION = $(PROJECT_VERSION)
@@ -37,7 +29,7 @@ endef
 RMQ_COMPONENTS_PLAIN = $(DEPS_DIR)/../rabbitmq-components.mk
 RMQ_COMPONENTS_HEXPM = $(DEPS_DIR)/rabbit_common/mk/rabbitmq-components.hexpm.mk
 
-hex-publish: $(HEXPM_CLI) app rebar.config
+hex-publish: app rebar.config
 	$(gen_verbose) echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" \
 		> git-revisions.txt
 	$(verbose) mv \
@@ -59,8 +51,8 @@ hex-publish: $(HEXPM_CLI) app rebar.config
 		    rabbitmq-components.mk.not-hexpm \
 		    $(RMQ_COMPONENTS_PLAIN); \
 		fi' EXIT INT; \
-		$(HEXPM_CLI) publish
+		$(MAKE) hex-release-publish
 
-hex-publish-docs: $(HEXPM_CLI) app docs
+hex-publish-docs: app docs
 	$(gen_verbose) trap 'rm -f rebar.lock' EXIT INT; \
-		$(HEXPM_CLI) docs
+		$(MAKE) hex-docs-publish

@@ -58,6 +58,7 @@
 /sbin/
 /sbin.lock
 erl_crash.dump
+rebar3.crashdump
 .envrc
 *.plt
 *.lock
