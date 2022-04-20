@@ -6,7 +6,7 @@ define PROJECT_APP_EXTRA_KEYS
 	{licenses, ["MPL-2.0"]},
 	{links, [
 	    {"Website", "https://www.rabbitmq.com/"},
-	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/deps/rabbit_common"}
+	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/rabbit_common"}
 	  ]},
 	{build_tools, ["make", "rebar3"]},
 	{files, [
