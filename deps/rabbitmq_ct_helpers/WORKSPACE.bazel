@@ -1,0 +1,18 @@
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "bazel-erlang",
+    sha256 = "422a9222522216f59a01703a13f578c601d6bddf5617bee8da3c43e3b299fc4e",
+    strip_prefix = "bazel-erlang-1.1.0",
+    urls = ["https://github.com/rabbitmq/bazel-erlang/archive/refs/tags/1.1.0.zip"],
+)
+
+http_archive(
+    name = "rabbitmq-server",
+    strip_prefix = "rabbitmq-server-master",
+    urls = ["https://github.com/rabbitmq/rabbitmq-server/archive/master.zip"],
+)
+
+load("@rabbitmq-server//:workspace_helpers.bzl", "rabbitmq_external_deps")
+
+rabbitmq_external_deps()
