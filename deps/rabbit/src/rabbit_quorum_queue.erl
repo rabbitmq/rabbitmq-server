@@ -104,7 +104,7 @@
                     messages_unacknowledged, local_state, type] ++ ?STATISTICS_KEYS).
 
 -define(RPC_TIMEOUT, 1000).
--define(START_CLUSTER_RPC_TIMEOUT, 6000). %% the ra start cluster default is 5000
+-define(START_CLUSTER_RPC_TIMEOUT, 7000). %% the ra start cluster default is 5000
 -define(TICK_TIMEOUT, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(ADD_MEMBER_TIMEOUT, 5000).
@@ -196,7 +196,8 @@ start_cluster(Q) ->
                                                    ?SNAPSHOT_INTERVAL),
             RaConfs = [make_ra_conf(NewQ, ServerId, TickTimeout, SnapshotInterval)
                        || ServerId <- members(NewQ)],
-            try erpc:call(Leader, ra, start_cluster, [?RA_SYSTEM, RaConfs], ?START_CLUSTER_RPC_TIMEOUT) of
+            Timeout = erpc_timeout(Leader, ?START_CLUSTER_RPC_TIMEOUT),
+            try erpc:call(Leader, ra, start_cluster, [?RA_SYSTEM, RaConfs], Timeout) of
                 {ok, _, _} ->
                     %% ensure the latest config is evaluated properly
                     %% even when running the machine version from 0
@@ -1702,3 +1703,11 @@ prepare_content(Content) ->
     %% expiration is set. Therefore, leave properties decoded so that
     %% rabbit_fifo can directly parse it without having to decode again.
     Content.
+
+erpc_timeout(Node, _)
+  when Node =:= node() ->
+    %% Only timeout 'infinity' optimises the local call in OTP 23-25 avoiding a new process being spawned:
+    %% https://github.com/erlang/otp/blob/47f121af8ee55a0dbe2a8c9ab85031ba052bad6b/lib/kernel/src/erpc.erl#L121
+    infinity;
+erpc_timeout(_, Timeout) ->
+    Timeout.
