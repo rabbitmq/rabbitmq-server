@@ -21,7 +21,8 @@
 all() ->
     [
      {group, happy_path},
-     {group, unhappy_path}
+     {group, unhappy_path},
+     {group, scope_aliases}
     ].
 
 groups() ->
@@ -43,6 +44,10 @@ groups() ->
                        test_failed_connection_with_a_token_with_insufficient_resource_permission,
                        test_failed_token_refresh_case1,
                        test_failed_token_refresh_case2
+                      ]},
+
+     {scope_aliases, [], [
+                       test_successful_connection_with_a_token_with_scope_alias_in_extra_scopes_source
                       ]}
     ].
 
@@ -53,6 +58,9 @@ groups() ->
 -define(UTIL_MOD, rabbit_auth_backend_oauth2_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
 -define(EXTRA_SCOPES_SOURCE, <<"additional_rabbitmq_scopes">>).
+-define(CLAIMS_FIELD, <<"claims">>).
+
+-define(SCOPE_ALIAS_NAME, <<"role-1">>).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -66,6 +74,19 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
 
 
+init_per_group(Group, Config) when Group =:= scope_aliases ->
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?CLAIMS_FIELD]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, scope_aliases, #{
+            ?SCOPE_ALIAS_NAME => [
+                <<"rabbitmq.configure:vhost1/*">>,
+                <<"rabbitmq.write:vhost1/*">>,
+                <<"rabbitmq.read:vhost1/*">>
+            ]}
+        ]),
+    Config;
 init_per_group(_Group, Config) ->
     %% The broker is managed by {init,end}_per_testcase().
     lists:foreach(fun(Value) ->
@@ -371,3 +392,15 @@ test_failed_token_refresh_case2(Config) ->
        amqp_connection:open_channel(Conn)),
 
     close_connection(Conn).
+
+
+test_successful_connection_with_a_token_with_scope_alias_in_extra_scopes_source(Config) ->
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+        Config,
+        #{<<"claims">> => ?SCOPE_ALIAS_NAME}
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = <<"one">>, exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
