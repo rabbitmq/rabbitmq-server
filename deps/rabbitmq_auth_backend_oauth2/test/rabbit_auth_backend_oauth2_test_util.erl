@@ -70,10 +70,10 @@ expired_token() ->
     expired_token_with_scopes(full_permission_scopes()).
 
 expired_token_with_scopes(Scopes) ->
-    token_with_scopes_and_expiration(Scopes, os:system_time(seconds) - 10).
+    token_with_scopes_and_expiration(Scopes, seconds_in_the_past(10)).
 
 fixture_token_with_scopes(Scopes) ->
-    token_with_scopes_and_expiration(Scopes, os:system_time(seconds) + 30).
+    token_with_scopes_and_expiration(Scopes, default_expiration_moment()).
 
 token_with_scopes_and_expiration(Scopes, Expiration) ->
     %% expiration is a timestamp with precision in seconds
@@ -97,3 +97,37 @@ fixture_token(ExtraScopes) ->
 
 fixture_token_with_full_permissions() ->
     fixture_token_with_scopes(full_permission_scopes()).
+
+token_with_scope_alias_in_scope_field(Alias) ->
+    %% expiration is a timestamp with precision in seconds
+    #{<<"exp">> => default_expiration_moment(),
+      <<"kid">> => <<"token-key">>,
+      <<"iss">> => <<"unit_test">>,
+      <<"foo">> => <<"bar">>,
+      <<"aud">> => [<<"rabbitmq">>],
+      <<"scope">> => Alias}.
+
+token_with_scope_alias_in_claim_field(Alias, Scopes) ->
+    %% expiration is a timestamp with precision in seconds
+    #{<<"exp">> => default_expiration_moment(),
+      <<"kid">> => <<"token-key">>,
+      <<"iss">> => <<"unit_test">>,
+      <<"foo">> => <<"bar">>,
+      <<"aud">> => [<<"rabbitmq">>],
+      <<"scope">>  => Scopes,
+      <<"claims">> => Alias}.
+
+seconds_in_the_future() ->
+    seconds_in_the_future(30).
+
+seconds_in_the_future(N) ->
+    os:system_time(seconds) + N.
+
+seconds_in_the_past() ->
+    seconds_in_the_past(10).
+
+seconds_in_the_past(N) ->
+    os:system_time(seconds) - N.
+
+default_expiration_moment() ->
+    seconds_in_the_future(30).

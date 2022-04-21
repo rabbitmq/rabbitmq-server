@@ -37,7 +37,7 @@
 %% a term used by the IdentityServer community
 -define(COMPLEX_CLAIM_APP_ENV_KEY, extra_scopes_source).
 %% scope aliases map "role names" to a set of scopes
--define(SCOPE_ALIASES_APP_ENV_KEY, scope_aliases).
+-define(SCOPE_MAPPINGS_APP_ENV_KEY, scope_aliases).
 
 %%
 %% Key JWT fields
@@ -201,7 +201,7 @@ post_process_payload(Payload, AppEnv) when is_map(Payload) ->
 -spec has_configured_scope_aliases(AppEnv :: app_env()) -> boolean().
 has_configured_scope_aliases(AppEnv) ->
     Map = maps:from_list(AppEnv),
-    maps:is_key(scope_mappings, Map).
+    maps:is_key(?SCOPE_MAPPINGS_APP_ENV_KEY, Map).
 
 
 -spec post_process_payload_with_scope_aliases(Payload :: map(), AppEnv :: app_env()) -> map().
@@ -222,7 +222,7 @@ post_process_payload_with_scope_aliases(Payload, AppEnv) ->
                                                            AppEnv :: app_env()) -> map().
 %% First attempt: use the value in the 'scope' field for alias
 post_process_payload_with_scope_alias_in_scope_field(Payload, AppEnv) ->
-    ScopeMappings = proplists:get_value(?SCOPE_ALIASES_APP_ENV_KEY, AppEnv, #{}),
+    ScopeMappings = proplists:get_value(?SCOPE_MAPPINGS_APP_ENV_KEY, AppEnv, #{}),
     post_process_payload_with_scope_alias_field_named(Payload, ?SCOPE_JWT_FIELD, ScopeMappings).
 
 
@@ -232,32 +232,44 @@ post_process_payload_with_scope_alias_in_scope_field(Payload, AppEnv) ->
 post_process_payload_with_scope_alias_in_extra_scopes_source(Payload, AppEnv) ->
     ExtraScopesField = proplists:get_value(?COMPLEX_CLAIM_APP_ENV_KEY, AppEnv, undefined),
     case ExtraScopesField of
-        %% nothing ot inject
+        %% nothing to inject
         undefined -> Payload;
         _         ->
-            ScopeMappings = proplists:get_value(?SCOPE_ALIASES_APP_ENV_KEY, AppEnv, #{}),
+            ScopeMappings = proplists:get_value(?SCOPE_MAPPINGS_APP_ENV_KEY, AppEnv, #{}),
             post_process_payload_with_scope_alias_field_named(Payload, ExtraScopesField, ScopeMappings)
     end.
 
 
 -spec post_process_payload_with_scope_alias_field_named(Payload :: map(),
                                                         Field :: binary(),
-                                                        Scopes :: map()) -> map().
-post_process_payload_with_scope_alias_field_named(Payload, undefined, _AppEnv) ->
+                                                        ScopeAliasMapping :: map()) -> map().
+post_process_payload_with_scope_alias_field_named(Payload, undefined, _ScopeAliasMapping) ->
     Payload;
-post_process_payload_with_scope_alias_field_named(Payload, ScopeAlias, AppEnv) ->
-    AdditionalScopes = case ScopeAlias of
+post_process_payload_with_scope_alias_field_named(Payload, FieldName, ScopeAliasMapping) ->
+    ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
+    AdditionalScopes = case FieldName of
         undefined -> [];
-        _         ->
-            ScopeMappings = proplists:get_value(<<"scope_mappings">>, AppEnv, #{}),
-            maps:get(ScopeAlias, ScopeMappings, [])
+        []        -> [];
+        _Value    ->
+            ScopeAlias = maps:get(FieldName, Payload, undefined),
+            case ScopeAlias of
+                undefined -> [];
+                []        -> [];
+                [Value1]   ->
+                    rabbit_data_coercion:to_list(maps:get(Value1, ScopeAliasMapping, []));
+                Value2 when is_binary(Value2)  ->
+                    maps:get(Value2, ScopeAliasMapping, []);
+                Value3 when is_list(Value3)  ->
+                    maps:get(list_to_binary(Value3), ScopeAliasMapping, [])
+            end
     end,
 
     case AdditionalScopes of
-        [] -> Payload;
-        _  ->
-            ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
-            maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload)
+        []      -> Payload;
+        List when is_list(List) ->
+            maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload);
+        Bin when is_binary(Bin)   ->
+            maps:put(?SCOPE_JWT_FIELD, [Bin | ExistingScopes], Payload)
     end.
 
 
