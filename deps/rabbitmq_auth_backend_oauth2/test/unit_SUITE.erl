@@ -281,7 +281,9 @@ test_successful_access_with_a_token_that_uses_scope_alias_in_scope_field(_) ->
             <<"rabbitmq.write:vhost/two">>,
             <<"rabbitmq.read:vhost/one">>,
             <<"rabbitmq.read:vhost/two">>,
-            <<"rabbitmq.read:vhost/two/abc">>
+            <<"rabbitmq.read:vhost/two/abc">>,
+            <<"rabbitmq.tag:management">>,
+            <<"rabbitmq.tag:custom">>
         ]
     }),
 
@@ -289,7 +291,8 @@ test_successful_access_with_a_token_that_uses_scope_alias_in_scope_field(_) ->
     Username = <<"username">>,
     Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Jwk),
 
-    {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
+    {ok, #auth_user{username = Username, tags = [custom, management]} = AuthUser} =
+        rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
     assert_vhost_access_granted(AuthUser, VHost),
     assert_vhost_access_denied(AuthUser, <<"some-other-vhost">>),
 
