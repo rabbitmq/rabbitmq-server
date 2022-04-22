@@ -22,7 +22,7 @@ all() ->
     [
      {group, basic_happy_path},
      {group, basic_unhappy_path},
-     {group, extra_scope_source},
+     {group, extra_scopes_source},
      {group, scope_aliases}
     ].
 
@@ -43,7 +43,7 @@ groups() ->
                        test_failed_token_refresh_case2
                       ]},
 
-     {extra_scope_source, [], [
+     {extra_scopes_source, [], [
                        test_successful_connection_with_complex_claim_as_a_map,
                        test_successful_connection_with_complex_claim_as_a_list,
                        test_successful_connection_with_complex_claim_as_a_binary,
@@ -135,16 +135,16 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_case1 orelse
                                         Testcase =:= test_failed_token_refresh_case2 ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost4">>),
-    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase),
     Config;
 
 end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_complex_claim_as_a_map orelse
                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
   rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-    [rabbitmq_auth_backend_oauth2, extra_scopes_source, undefined]),
-  rabbit_ct_helpers:testcase_started(Config, Testcase),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
+  rabbit_ct_helpers:testcase_finished(Config, Testcase),
   Config;
 
 end_per_testcase(Testcase, Config) ->
