@@ -55,7 +55,7 @@ groups() ->
      ]},
 
      {scope_aliases, [], [
-                       test_successful_connection_with_a_token_with_scope_alias_in_extra_scopes_source
+                       test_successful_connection_with_with_scope_alias_in_extra_scopes_source
                       ]}
     ].
 
@@ -82,19 +82,6 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
 
 
-init_per_group(Group, Config) when Group =:= scope_aliases ->
-    rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-        [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?CLAIMS_FIELD]),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-        [rabbitmq_auth_backend_oauth2, scope_aliases, #{
-            ?SCOPE_ALIAS_NAME => [
-                <<"rabbitmq.configure:vhost1/*">>,
-                <<"rabbitmq.write:vhost1/*">>,
-                <<"rabbitmq.read:vhost1/*">>
-            ]}
-        ]),
-    Config;
 init_per_group(_Group, Config) ->
     %% The broker is managed by {init,end}_per_testcase().
     lists:foreach(fun(Value) ->
@@ -110,6 +97,10 @@ end_per_group(_Group, Config) ->
                   end,
                   [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>, <<"vhost4">>]),
     Config.
+
+%%
+%% Per-case setup
+%%
 
 init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost orelse
                                          Testcase =:= test_successful_token_refresh ->
@@ -131,9 +122,29 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection
   rabbit_ct_helpers:testcase_started(Config, Testcase),
   Config;
 
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_with_scope_alias_in_extra_scopes_source ->
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?CLAIMS_FIELD]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, scope_aliases, #{
+            ?SCOPE_ALIAS_NAME => [
+                <<"rabbitmq.configure:vhost1/*">>,
+                <<"rabbitmq.write:vhost1/*">>,
+                <<"rabbitmq.read:vhost1/*">>
+            ]}
+        ]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config;
+
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
+
+
+%%
+%% Per-case Teardown
+%%
 
 end_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_case1 orelse
                                         Testcase =:= test_failed_token_refresh_case2 ->
@@ -144,6 +155,13 @@ end_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_c
 end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_complex_claim_as_a_map orelse
                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
+  rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
+  rabbit_ct_helpers:testcase_finished(Config, Testcase),
+  Config;
+
+end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_with_scope_alias_in_extra_scopes_source ->
   rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
     [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
@@ -401,7 +419,7 @@ test_failed_token_refresh_case2(Config) ->
     close_connection(Conn).
 
 
-test_successful_connection_with_a_token_with_scope_alias_in_extra_scopes_source(Config) ->
+test_successful_connection_with_with_scope_alias_in_extra_scopes_source(Config) ->
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
         #{<<"claims">> => ?SCOPE_ALIAS_NAME}
