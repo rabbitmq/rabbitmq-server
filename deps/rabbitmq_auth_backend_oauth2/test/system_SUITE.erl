@@ -20,24 +20,21 @@
 
 all() ->
     [
-     {group, happy_path},
-     {group, unhappy_path},
+     {group, basic_happy_path},
+     {group, basic_unhappy_path},
+     {group, extra_scope_source},
      {group, scope_aliases}
     ].
 
 groups() ->
     [
-     {happy_path, [], [
+     {basic_happy_path, [], [
                        test_successful_connection_with_a_full_permission_token_and_all_defaults,
                        test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
                        test_successful_connection_with_simple_strings_for_aud_and_scope,
-                       test_successful_connection_with_complex_claim_as_a_map,
-                       test_successful_connection_with_complex_claim_as_a_list,
-                       test_successful_connection_with_complex_claim_as_a_binary,
-                       test_successful_connection_with_keycloak_token,
                        test_successful_token_refresh
                       ]},
-     {unhappy_path, [], [
+     {basic_unhappy_path, [], [
                        test_failed_connection_with_expired_token,
                        test_failed_connection_with_a_non_token,
                        test_failed_connection_with_a_token_with_insufficient_vhost_permission,
@@ -45,6 +42,13 @@ groups() ->
                        test_failed_token_refresh_case1,
                        test_failed_token_refresh_case2
                       ]},
+
+     {extra_scope_source, [], [
+                       test_successful_connection_with_complex_claim_as_a_map,
+                       test_successful_connection_with_complex_claim_as_a_list,
+                       test_successful_connection_with_complex_claim_as_a_binary,
+                       test_successful_connection_with_keycloak_token
+     ]},
 
      {scope_aliases, [], [
                        test_successful_connection_with_a_token_with_scope_alias_in_extra_scopes_source
