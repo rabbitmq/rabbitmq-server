@@ -273,6 +273,12 @@ In the OAuth context, tags can be added as part of the scope, using a format lik
 example, if `resource_server_id` is "my_rabbit", a scope to grant access to the management plugin with
 the `monitoring` tag will be `my_rabbit.tag:monitoring`.
 
+### Token Expiration and Refresh
+
+On an existing connection the token can be refreshed by the [update-secret](https://rabbitmq.com/amqp-0-9-1-reference.html#connection.update-secret) AMQP 0.9.1 method. Please check your client whether it supports this method. (Eg. see documentation of the [Java client](https://rabbitmq.com/api-guide.html#oauth2-refreshing-token).) Otherwise the client has to disconnect and reconnect to use a new token.
+
+If the latest token expires on an existing connection, after a limited time the broker will refuse all operations (but it won't disconnect).
+
 ## Examples
 
 The [demo](/deps/rabbitmq_auth_backend_oauth2/demo) directory contains example configuration files which can be used to set up
