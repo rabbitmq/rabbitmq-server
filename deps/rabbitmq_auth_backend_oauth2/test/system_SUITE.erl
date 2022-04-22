@@ -22,6 +22,7 @@ all() ->
     [
      {group, basic_happy_path},
      {group, basic_unhappy_path},
+     {group, token_refresh},
      {group, extra_scopes_source},
      {group, scope_aliases}
     ].
@@ -38,10 +39,13 @@ groups() ->
                        test_failed_connection_with_expired_token,
                        test_failed_connection_with_a_non_token,
                        test_failed_connection_with_a_token_with_insufficient_vhost_permission,
-                       test_failed_connection_with_a_token_with_insufficient_resource_permission,
+                       test_failed_connection_with_a_token_with_insufficient_resource_permission
+                      ]},
+
+     {token_refresh, [], [
                        test_failed_token_refresh_case1,
                        test_failed_token_refresh_case2
-                      ]},
+     ]},
 
      {extra_scopes_source, [], [
                        test_successful_connection_with_complex_claim_as_a_map,
@@ -106,7 +110,6 @@ end_per_group(_Group, Config) ->
                   end,
                   [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>, <<"vhost4">>]),
     Config.
-
 
 init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost orelse
                                          Testcase =:= test_successful_token_refresh ->
