@@ -56,7 +56,9 @@ groups() ->
 
      {scope_aliases, [], [
                        test_successful_connection_with_with_scope_alias_in_extra_scopes_source,
-                       test_successful_connection_with_scope_alias_in_scope_field
+                       test_successful_connection_with_scope_alias_in_scope_field,
+                       test_failed_connection_with_with_non_existent_scope_alias_in_extra_scopes_source,
+                       test_failed_connection_with_non_existent_scope_alias_in_scope_field
                       ]}
     ].
 
@@ -460,3 +462,16 @@ test_successful_connection_with_scope_alias_in_scope_field(Config) ->
     #'queue.declare_ok'{} =
         amqp_channel:call(Ch, #'queue.declare'{queue = <<"one">>, exclusive = true}),
     close_connection_and_channel(Conn, Ch).
+
+test_failed_connection_with_with_non_existent_scope_alias_in_extra_scopes_source(Config) ->
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+        Config,
+        #{<<"claims">> => <<"non-existent alias 24823478374">>}
+    ),
+    ?assertMatch({error, not_allowed},
+                 open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token)).
+
+test_failed_connection_with_non_existent_scope_alias_in_scope_field(Config) ->
+    {_Algo, Token} = generate_valid_token(Config, <<"non-existent alias a8798s7doaisd79">>),
+    ?assertMatch({error, not_allowed},
+                 open_unmanaged_connection(Config, 0, <<"vhost2">>, <<"username">>, Token)).
