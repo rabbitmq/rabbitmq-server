@@ -29,7 +29,11 @@ all() ->
         test_incorrect_kid,
         test_post_process_token_payload,
         test_post_process_token_payload_keycloak,
-        test_post_process_token_payload_complex_claims
+        test_post_process_token_payload_complex_claims,
+        test_successful_access_with_a_token_that_uses_scope_alias_in_scope_field,
+        test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_field,
+        test_successful_access_with_a_token_that_uses_scope_alias_in_extra_scope_source_field,
+        test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_scope_source_field
     ].
 
 init_per_suite(Config) ->
@@ -235,6 +239,8 @@ test_successful_access_with_a_token(_) ->
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+
+    VHost    = <<"vhost">>,
     Username = <<"username">>,
     Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:fixture_token(), Jwk),
 
@@ -244,36 +250,12 @@ test_successful_access_with_a_token(_) ->
         rabbit_auth_backend_oauth2:user_login_authentication(Username, #{password => Token}),
 
     ?assertEqual(true, rabbit_auth_backend_oauth2:check_vhost_access(User, <<"vhost">>, none)),
-    ?assertEqual(true, rabbit_auth_backend_oauth2:check_resource_access(
-             User,
-             #resource{virtual_host = <<"vhost">>,
-                       kind = queue,
-                       name = <<"foo">>},
-             configure,
-             #{})),
-    ?assertEqual(true, rabbit_auth_backend_oauth2:check_resource_access(
-                         User,
-                         #resource{virtual_host = <<"vhost">>,
-                                   kind = exchange,
-                                   name = <<"foo">>},
-                         write,
-                         #{})),
+    assert_resource_access_granted(User, VHost, <<"foo">>, configure),
+    assert_resource_access_granted(User, VHost, <<"foo">>, write),
+    assert_resource_access_granted(User, VHost, <<"bar">>, read),
+    assert_resource_access_granted(User, VHost, custom, <<"bar">>, read),
 
-    ?assertEqual(true, rabbit_auth_backend_oauth2:check_resource_access(
-                         User,
-                         #resource{virtual_host = <<"vhost">>,
-                                   kind = custom,
-                                   name = <<"bar">>},
-                         read,
-                         #{})),
-
-    ?assertEqual(true, rabbit_auth_backend_oauth2:check_topic_access(
-                         User,
-                         #resource{virtual_host = <<"vhost">>,
-                                   kind = topic,
-                                   name = <<"bar">>},
-                         read,
-                         #{routing_key => <<"#/foo">>})).
+    assert_topic_access_granted(User, VHost, <<"bar">>, read, #{routing_key => <<"#/foo">>}).
 
 test_successful_access_with_a_token_that_has_tag_scopes(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
@@ -286,6 +268,155 @@ test_successful_access_with_a_token_that_has_tag_scopes(_) ->
 
     {ok, #auth_user{username = Username, tags = [management, policymaker]}} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]).
+
+test_successful_access_with_a_token_that_uses_scope_alias_in_scope_field(_) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    Alias = <<"client-alias-1">>,
+    application:set_env(rabbitmq_auth_backend_oauth2, scope_aliases, #{
+        Alias => [
+            <<"rabbitmq.configure:vhost/one">>,
+            <<"rabbitmq.write:vhost/two">>,
+            <<"rabbitmq.read:vhost/one">>,
+            <<"rabbitmq.read:vhost/two">>,
+            <<"rabbitmq.read:vhost/two/abc">>,
+            <<"rabbitmq.tag:management">>,
+            <<"rabbitmq.tag:custom">>
+        ]
+    }),
+
+    VHost = <<"vhost">>,
+    Username = <<"username">>,
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Jwk),
+
+    {ok, #auth_user{username = Username, tags = [custom, management]} = AuthUser} =
+        rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
+    assert_vhost_access_granted(AuthUser, VHost),
+    assert_vhost_access_denied(AuthUser, <<"some-other-vhost">>),
+
+    assert_resource_access_granted(AuthUser, VHost, <<"one">>, configure),
+    assert_resource_access_granted(AuthUser, VHost, <<"one">>, read),
+    assert_resource_access_granted(AuthUser, VHost, <<"two">>, read),
+    assert_resource_access_granted(AuthUser, VHost, <<"two">>, write),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, configure),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, read),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, write),
+
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
+    application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
+
+test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_field(_) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    Alias = <<"client-alias-33">>,
+    application:set_env(rabbitmq_auth_backend_oauth2, scope_aliases, #{
+        <<"non-existent-alias-23948sdkfjsdof8">> => [
+            <<"rabbitmq.configure:vhost/one">>,
+            <<"rabbitmq.write:vhost/two">>,
+            <<"rabbitmq.read:vhost/one">>,
+            <<"rabbitmq.read:vhost/two">>,
+            <<"rabbitmq.read:vhost/two/abc">>
+        ]
+    }),
+
+    VHost = <<"vhost">>,
+    Username = <<"username">>,
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), Jwk),
+
+    {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
+    assert_vhost_access_denied(AuthUser, VHost),
+    assert_vhost_access_denied(AuthUser, <<"some-other-vhost">>),
+
+    assert_resource_access_denied(AuthUser, VHost, <<"one">>, configure),
+    assert_resource_access_denied(AuthUser, VHost, <<"one">>, read),
+    assert_resource_access_denied(AuthUser, VHost, <<"two">>, read),
+    assert_resource_access_denied(AuthUser, VHost, <<"two">>, write),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, configure),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, read),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, write),
+
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
+    application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
+
+test_successful_access_with_a_token_that_uses_scope_alias_in_extra_scope_source_field(_) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"claims">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    Alias = <<"client-alias-1">>,
+    application:set_env(rabbitmq_auth_backend_oauth2, scope_aliases, #{
+        Alias => [
+            <<"rabbitmq.configure:vhost/one">>,
+            <<"rabbitmq.write:vhost/two">>,
+            <<"rabbitmq.read:vhost/one">>,
+            <<"rabbitmq.read:vhost/two">>,
+            <<"rabbitmq.read:vhost/two/abc">>
+        ]
+    }),
+
+    VHost = <<"vhost">>,
+    Username = <<"username">>,
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), Jwk),
+
+    {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
+    assert_vhost_access_granted(AuthUser, VHost),
+    assert_vhost_access_denied(AuthUser, <<"some-other-vhost">>),
+
+    assert_resource_access_granted(AuthUser, VHost, <<"one">>, configure),
+    assert_resource_access_granted(AuthUser, VHost, <<"one">>, read),
+    assert_resource_access_granted(AuthUser, VHost, <<"two">>, read),
+    assert_resource_access_granted(AuthUser, VHost, <<"two">>, write),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, configure),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, read),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, write),
+
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
+    application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
+
+test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_scope_source_field(_) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
+    application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"claims">>),
+    application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+    Alias = <<"client-alias-11">>,
+    application:set_env(rabbitmq_auth_backend_oauth2, scope_aliases, #{
+        <<"non-existent-client-alias-9238923789">> => [
+            <<"rabbitmq.configure:vhost/one">>,
+            <<"rabbitmq.write:vhost/two">>,
+            <<"rabbitmq.read:vhost/one">>,
+            <<"rabbitmq.read:vhost/two">>,
+            <<"rabbitmq.read:vhost/two/abc">>
+        ]
+    }),
+
+    VHost = <<"vhost">>,
+    Username = <<"username">>,
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), Jwk),
+
+    {ok, AuthUser} = rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
+    assert_vhost_access_denied(AuthUser, VHost),
+    assert_vhost_access_denied(AuthUser, <<"some-other-vhost">>),
+
+    assert_resource_access_denied(AuthUser, VHost, <<"one">>, configure),
+    assert_resource_access_denied(AuthUser, VHost, <<"one">>, read),
+    assert_resource_access_denied(AuthUser, VHost, <<"two">>, read),
+    assert_resource_access_denied(AuthUser, VHost, <<"two">>, write),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, configure),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, read),
+    assert_resource_access_denied(AuthUser, VHost, <<"three">>, write),
+
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
+    application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
 
 test_unsuccessful_access_with_a_bogus_token(_) ->
     Username = <<"username">>,
@@ -316,6 +447,7 @@ test_restricted_vhost_access_with_a_valid_token(_) ->
     ?assertEqual(false, rabbit_auth_backend_oauth2:check_vhost_access(User, <<"different vhost">>, none)).
 
 test_insufficient_permissions_in_a_valid_token(_) ->
+    VHost = <<"vhost">>,
     Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
 
@@ -328,29 +460,12 @@ test_insufficient_permissions_in_a_valid_token(_) ->
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
 
     %% access to these resources is not granted
-    ?assertEqual(false, rabbit_auth_backend_oauth2:check_resource_access(
-                          User,
-                          #resource{virtual_host = <<"vhost">>,
-                                    kind = queue,
-                                    name = <<"foo1">>},
-                          configure,
-                          #{})),
-    ?assertEqual(false, rabbit_auth_backend_oauth2:check_resource_access(
-                          User,
-                          #resource{virtual_host = <<"vhost">>,
-                                    kind = custom,
-                                    name = <<"bar">>},
-                          write,
-                          #{})),
-    ?assertEqual(false, rabbit_auth_backend_oauth2:check_topic_access(
-                          User,
-                          #resource{virtual_host = <<"vhost">>,
-                                    kind = topic,
-                                    name = <<"bar">>},
-                          read,
-                          #{routing_key => <<"foo/#">>})).
+    assert_resource_access_denied(User, VHost, <<"foo1">>, configure),
+    assert_resource_access_denied(User, VHost, <<"bar">>, write),
+    assert_topic_access_refused(User, VHost, <<"bar">>, read, #{routing_key => <<"foo/#">>}).
 
 test_token_expiration(_) ->
+    VHost = <<"vhost">>,
     Username = <<"username">>,
     Jwk = ?UTIL_MOD:fixture_jwk(),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
@@ -361,32 +476,14 @@ test_token_expiration(_) ->
     Token     = ?UTIL_MOD:sign_token_hs(TokenData, Jwk),
     {ok, #auth_user{username = Username} = User} =
         rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}]),
-    ?assertEqual(true, rabbit_auth_backend_oauth2:check_resource_access(
-             User,
-             #resource{virtual_host = <<"vhost">>,
-                       kind = queue,
-                       name = <<"foo">>},
-             configure,
-             #{})),
-    ?assertEqual(true, rabbit_auth_backend_oauth2:check_resource_access(
-             User,
-             #resource{virtual_host = <<"vhost">>,
-                       kind = exchange,
-                       name = <<"foo">>},
-             write,
-             #{})),
+
+    assert_resource_access_granted(User, VHost, <<"foo">>, configure),
+    assert_resource_access_granted(User, VHost, <<"foo">>, write),
 
     ?UTIL_MOD:wait_for_token_to_expire(),
     #{<<"exp">> := Exp} = TokenData,
     ExpectedError = "Provided JWT token has expired at timestamp " ++ integer_to_list(Exp) ++ " (validated at " ++ integer_to_list(Exp) ++ ")",
-    ?assertEqual({error, ExpectedError},
-                 rabbit_auth_backend_oauth2:check_resource_access(
-                   User,
-                   #resource{virtual_host = <<"vhost">>,
-                             kind = queue,
-                             name = <<"foo">>},
-                   configure,
-                   #{})),
+    assert_resource_access_errors(ExpectedError, User, VHost, <<"foo">>, configure),
 
     ?assertMatch({refused, _, _},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, Token}])).
@@ -549,3 +646,65 @@ test_validate_payload(_) ->
     ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID],
                         <<"scope">> => [<<"bar">>, <<"other.third">>]}},
                  rabbit_auth_backend_oauth2:validate_payload(KnownResourceServerId, ?RESOURCE_SERVER_ID)).
+
+
+%%
+%% Helpers
+%%
+
+assert_vhost_access_granted(AuthUser, VHost) ->
+    assert_vhost_access_response(true, AuthUser, VHost).
+
+assert_vhost_access_denied(AuthUser, VHost) ->
+    assert_vhost_access_response(false, AuthUser, VHost).
+
+assert_vhost_access_response(ExpectedResult, AuthUser, VHost) ->
+    ?assertEqual(ExpectedResult,
+        rabbit_auth_backend_oauth2:check_vhost_access(AuthUser, VHost, none)).
+
+assert_resource_access_granted(AuthUser, VHost, ResourceName, PermissionKind) ->
+        assert_resource_access_response(true, AuthUser, VHost, ResourceName, PermissionKind).
+
+assert_resource_access_denied(AuthUser, VHost, ResourceName, PermissionKind) ->
+        assert_resource_access_response(false, AuthUser, VHost, ResourceName, PermissionKind).
+
+assert_resource_access_errors(ExpectedError, AuthUser, VHost, ResourceName, PermissionKind) ->
+    assert_resource_access_response({error, ExpectedError}, AuthUser, VHost, ResourceName, PermissionKind).
+
+assert_resource_access_response(ExpectedResult, AuthUser, VHost, ResourceName, PermissionKind) ->
+    ?assertEqual(ExpectedResult,
+            rabbit_auth_backend_oauth2:check_resource_access(
+                          AuthUser,
+                          rabbit_misc:r(VHost, queue, ResourceName),
+                          PermissionKind, #{})).
+
+assert_resource_access_granted(AuthUser, VHost, ResourceKind, ResourceName, PermissionKind) ->
+        assert_resource_access_response(true, AuthUser, VHost, ResourceKind, ResourceName, PermissionKind).
+
+assert_resource_access_denied(AuthUser, VHost, ResourceKind, ResourceName, PermissionKind) ->
+        assert_resource_access_response(false, AuthUser, VHost, ResourceKind, ResourceName, PermissionKind).
+
+assert_resource_access_errors(ExpectedError, AuthUser, VHost, ResourceKind, ResourceName, PermissionKind) ->
+    assert_resource_access_response({error, ExpectedError}, AuthUser, VHost, ResourceKind, ResourceName, PermissionKind).
+
+assert_resource_access_response(ExpectedResult, AuthUser, VHost, ResourceKind, ResourceName, PermissionKind) ->
+    ?assertEqual(ExpectedResult,
+            rabbit_auth_backend_oauth2:check_resource_access(
+                          AuthUser,
+                          rabbit_misc:r(VHost, ResourceKind, ResourceName),
+                          PermissionKind, #{})).
+
+assert_topic_access_granted(AuthUser, VHost, ResourceName, PermissionKind, AuthContext) ->
+    assert_topic_access_response(true, AuthUser, VHost, ResourceName, PermissionKind, AuthContext).
+
+assert_topic_access_refused(AuthUser, VHost, ResourceName, PermissionKind, AuthContext) ->
+    assert_topic_access_response(false, AuthUser, VHost, ResourceName, PermissionKind, AuthContext).
+
+assert_topic_access_response(ExpectedResult, AuthUser, VHost, ResourceName, PermissionKind, AuthContext) ->
+        ?assertEqual(ExpectedResult, rabbit_auth_backend_oauth2:check_topic_access(
+                         AuthUser,
+                         #resource{virtual_host = VHost,
+                                   kind = topic,
+                                   name = ResourceName},
+                         PermissionKind,
+                         AuthContext)).
