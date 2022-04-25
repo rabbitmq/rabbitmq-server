@@ -34,6 +34,7 @@ ENV OTP_VERSION ${OTP_VERSION}
 # http://erlang.org/pipermail/erlang-questions/2019-January/097067.html
 ARG OTP_SHA256
 ENV OTP_SOURCE_SHA256=${OTP_SHA256}
+ARG SKIP_OTP_VERIFY=false
 
 # Install dependencies required to build Erlang/OTP from source
 # https://erlang.org/doc/installation_guide/INSTALL.html
@@ -106,7 +107,7 @@ RUN set -eux; \
 # Download, verify & extract OTP_SOURCE
 	mkdir -p "$OTP_PATH"; \
 	wget --progress dot:giga --output-document "$OTP_PATH.tar.gz" "$OTP_SOURCE_URL"; \
-	echo "$OTP_SOURCE_SHA256 *$OTP_PATH.tar.gz" | sha256sum --check --strict -; \
+	test "$SKIP_OTP_VERIFY" == "true" || echo "$OTP_SOURCE_SHA256 *$OTP_PATH.tar.gz" | sha256sum --check --strict -; \
 	tar --extract --file "$OTP_PATH.tar.gz" --directory "$OTP_PATH" --strip-components 1; \
 	\
 # Configure Erlang/OTP for compilation, disable unused features & applications
