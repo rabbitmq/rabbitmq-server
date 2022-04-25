@@ -5,10 +5,10 @@ PROJECT_REGISTERED = amqp_sup
 
 define PROJECT_ENV
 [
-	    {prefer_ipv6, false},
-	    {ssl_options, []},
-	    {writer_gc_threshold, 1000000000}
-	  ]
+    {prefer_ipv6, false},
+    {ssl_options, []},
+    {writer_gc_threshold, 1000000000}
+]
 endef
 
 define PROJECT_APP_EXTRA_KEYS
@@ -16,13 +16,24 @@ define PROJECT_APP_EXTRA_KEYS
 	{licenses, ["MPL-2.0"]},
 	{links, [
 	    {"Website", "https://www.rabbitmq.com/"},
-	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/deps/amqp_client"},
+	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/amqp_client"},
 	    {"User guide", "https://www.rabbitmq.com/erlang-client-user-guide.html"}
 	  ]},
 	{build_tools, ["make", "rebar3"]},
 	{files, [
 	    $(RABBITMQ_HEXPM_DEFAULT_FILES)
 	  ]}
+endef
+
+define HEX_TARBALL_EXTRA_METADATA
+#{
+	licenses => [<<"MPL-2.0">>],
+	links => #{
+		<<"Website">> => <<"https://www.rabbitmq.com">>,
+		<<"GitHub">> => <<"https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/amqp_client">>,
+		<<"User guide">> => <<"https://www.rabbitmq.com/erlang-client-user-guide.html">>
+	}
+}
 endef
 
 # Release artifacts are put in $(PACKAGES_DIR).
@@ -42,13 +53,9 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 
 PLT_APPS = ssl public_key
 
-# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
-# reviewed and merged.
-
-ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
-ERLANG_MK_COMMIT = rabbitmq-tmp
-
 WITHOUT = plugins/proper
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+
+HEX_TARBALL_FILES += $(DEPS_DIR)/../rabbitmq-components.mk

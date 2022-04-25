@@ -7,12 +7,22 @@ define PROJECT_APP_EXTRA_KEYS
 	{licenses, ["MPL-2.0"]},
 	{links, [
 	    {"Website", "https://www.rabbitmq.com/"},
-	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/deps/amqp10_client"}
+	    {"GitHub", "https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/amqp10_client"}
 	  ]},
 	{build_tools, ["make", "rebar3"]},
 	{files, [
 	    $(RABBITMQ_HEXPM_DEFAULT_FILES)
 	  ]}
+endef
+
+define HEX_TARBALL_EXTRA_METADATA
+#{
+	licenses => [<<"MPL-2.0">>],
+	links => #{
+		<<"Website">> => <<"https://www.rabbitmq.com">>,
+		<<"GitHub">> => <<"https://github.com/rabbitmq/rabbitmq-server/tree/master/deps/amqp10_client">>
+	}
+}
 endef
 
 # Release artifacts are put in $(PACKAGES_DIR).
@@ -36,14 +46,10 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-macros.mk \
 DEP_PLUGINS += elvis_mk
 dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
 
-# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
-# reviewed and merged.
-
-ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
-ERLANG_MK_COMMIT = rabbitmq-tmp
-
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+
+HEX_TARBALL_FILES += $(DEPS_DIR)/../rabbitmq-components.mk
 
 # --------------------------------------------------------------------
 # Compiler flags.
