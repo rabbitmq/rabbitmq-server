@@ -56,6 +56,7 @@ jobs:
         with:
           otp-version: ${{ steps.load-info.outputs.otp }}
           elixir-version: ${{ steps.load-info.outputs.elixir }}
+          version-type: strict
 
       - name: MOUNT BAZEL CACHE
         uses: actions/cache@v3.0.2
