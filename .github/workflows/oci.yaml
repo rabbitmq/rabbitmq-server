@@ -47,7 +47,7 @@ jobs:
         run: |
           FILE=packaging/docker-image/otp-versions/${{ matrix.image_tag_suffix }}.yaml
           OTP="$(yq eval '.otp' $FILE)"
-          echo "::set-output name=otp::${OTP%-rc}"
+          echo "::set-output name=otp::${OTP%-rc*}"
           echo "::set-output name=otp_sha256::$(yq eval '.otp_sha256' $FILE)"
           echo "::set-output name=elixir::$(yq eval '.elixir' $FILE)"
 
