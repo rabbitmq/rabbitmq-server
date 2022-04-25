@@ -205,10 +205,11 @@ erlang_app(
         sha256 = "2c7523c8dee91dff41f6b3d63cba2bd49eb6d2fe5bf1eec0df7f87eb5e230e1c",
     )
 
-    hex_pm_erlang_app(
+    hex_archive(
         name = "redbug",
         version = "2.0.7",
         sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
+        build_file = rabbitmq_workspace + "//:BUILD.redbug",
     )
 
     github_erlang_app(

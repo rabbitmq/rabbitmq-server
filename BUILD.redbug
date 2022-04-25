@@ -1,0 +1,7 @@
+load("@rules_erlang//:erlang_app.bzl", "DEFAULT_ERLC_OPTS", "erlang_app")
+load("@rules_erlang//:util.bzl", "without")
+
+erlang_app(
+    app_name = "redbug",
+    erlc_opts = without("-Werror", DEFAULT_ERLC_OPTS),
+)
