@@ -461,7 +461,7 @@ settle(_, _, _, #stream_client{name = Name}) ->
      "basic.nack and basic.reject not supported by stream queues ~s",
      [rabbit_misc:rs(Name)]}.
 
-info(Q, all_items) ->
+info(Q, all_keys) ->
     info(Q, ?INFO_KEYS);
 info(Q, Items) ->
     lists:foldr(fun(Item, Acc) ->
