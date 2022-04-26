@@ -155,20 +155,13 @@ erlang_app(
         sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
     )
 
-    git_repository(
+    github_erlang_app(
         name = "osiris",
-        branch = "main",
-        remote = "https://github.com/rabbitmq/osiris.git",
-        patch_cmds = [
-            """VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into Makefile..."
-sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
-echo "Injecting ${VERSION} into BUILD.bazel..."
-sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
-""",
-            """sed -i"_orig2" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
-""",
-        ],
+        org = "rabbitmq",
+        ref = "refs/tags/v1.2.6",
+        version = "1.2.6",
+        sha256 = "abfe9bc53b0eb1c14713152314f612562ecb76465b9f804313e3510b73e5720b",
+        build_file = rabbitmq_workspace + "//:BUILD.osiris",
     )
 
     hex_pm_erlang_app(
