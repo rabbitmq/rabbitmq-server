@@ -1,0 +1,33 @@
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+NAME = "osiris"
+
+VERSION = "0.1.0"
+
+APP_ENV = """[
+	{data_dir, "/tmp/osiris"},
+	{port_range, {6000, 6500}},
+	{max_segment_size_chunks, 256000}
+]"""
+
+EXTRA_APPS = [
+    "sasl",
+    "crypto",
+]
+
+DEPS = [
+    "@gen_batch_server//:erlang_app",
+]
+
+RUNTIME_DEPS = [
+    "@seshat//:erlang_app",
+]
+
+erlang_app(
+    app_env = APP_ENV,
+    app_name = NAME,
+    app_version = VERSION,
+    extra_apps = EXTRA_APPS,
+    runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
+)
