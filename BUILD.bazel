@@ -153,3 +153,53 @@ pkg_tar(
         "//deps/rabbit:manpages-dir",
     ],
 )
+
+genrule(
+    name = "test-logs",
+    outs = ["open-test-logs.sh"],
+    cmd = """set -euo pipefail
+cat << 'EOF' > $@
+    set -euo pipefail
+    if [ $$# -eq 0 ]; then
+        echo "Usage: bazel run test-logs TEST_LABEL [shard_index]"
+        exit 1
+    fi
+
+    RELATIVE=$${1#//}
+    PACKAGE=$${RELATIVE%%:*}
+    SUITE=$${RELATIVE##*:}
+    OUTPUT_DIR=test.outputs
+    if [ $$# -gt 1 ]; then
+        OUTPUT_DIR=shard_$$2_of_*/test.outputs
+    fi
+    open bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR/index.html
+EOF
+""",
+    executable = True,
+)
+
+genrule(
+    name = "remote-test-logs",
+    outs = ["open-remote-test-logs.sh"],
+    cmd = """set -euo pipefail
+cat << 'EOF' > $@
+    set -euo pipefail
+    if [ $$# -eq 0 ]; then
+        echo "Usage: bazel run remote-test-logs TEST_LABEL [shard_index]"
+        exit 1
+    fi
+
+    RELATIVE=$${1#//}
+    PACKAGE=$${RELATIVE%%:*}
+    SUITE=$${RELATIVE##*:}
+    OUTPUT_DIR=test.outputs
+    if [ $$# -gt 1 ]; then
+        OUTPUT_DIR=shard_$$2_of_*/test.outputs
+    fi
+    TESTLOGS=$$(echo $$(bazel info output_path)/k8-*/testlogs)
+    cd $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR && unzip outputs.zip
+    open $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR/index.html
+EOF
+""",
+    executable = True,
+)
