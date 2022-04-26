@@ -158,6 +158,7 @@ Group `queue_metrics` contains all the metrics for every queue, and can be relat
 | rabbitmq_detailed_queue_messages_unacked_bytes    | Size in bytes of all unacknowledged messages               |
 | rabbitmq_detailed_queue_messages_paged_out        | Messages paged out to disk                                 |
 | rabbitmq_detailed_queue_messages_paged_out_bytes  | Size in bytes of messages paged out to disk                |
+| rabbitmq_detailed_queue_head_message_timestamp    | Timestamp of the first message in the queue, if any  |
 | rabbitmq_detailed_queue_disk_reads_total          | Total number of times queue read messages from disk        |
 | rabbitmq_detailed_queue_disk_writes_total         | Total number of times queue wrote messages to disk         |
 
