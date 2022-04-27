@@ -20,6 +20,7 @@ erlang_package.hex(
 erlang_package.hex(
     name = "aten",
     version = "0.5.7",
+    sha256 = "8b623c8be27b59a911d16ab0af41777b504c147bc0d60a29015fab58321c04b0",
 )
 
 erlang_package.hex(
@@ -60,8 +61,8 @@ erlang_package.hex(
 
 erlang_package.hex(
     name = "eetcd",
-    version = "0.3.3",
-    sha256 = "8fb280156ddd1b7b34d0f446c5711832385bff512c05378dcea8362f4f5060d6",
+    version = "0.3.5",
+    sha256 = "af9d5158ad03a6794d412708d605be5dd1ebd0b8a1271786530d99f165bb0cff",
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 erlang_app(
@@ -125,24 +126,19 @@ erlang_package.git(
 
 erlang_package.hex(
     name = "observer_cli",
-    version = "1.7.2",
-    sha256 = "a1d280c112bb5443f09b63041d6c5dda39b40829db40b24fdf208e1b86dab353",
+    version = "1.7.3",
+    sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
 )
 
 erlang_package.git(
     repository = "rabbitmq/osiris",
-    branch = "main",
-    patch_cmds = ["""
-VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into Makefile..."
-sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/${VERSION}/' src/osiris.app.src
-"""],
+    tag = "v1.2.6",
 )
 
-erlang_package.git(
+erlang_package.hex(
     name = "prometheus",
-    repository = "deadtrickster/prometheus.erl",
-    commit = "06425c21a39c1564164f1cc3fe5bdfa8b23b1f78",
+    version = "4.8.2",
+    sha256 = "c3abd6521e52cec4f0d8eca603cf214dfc84d8a27aa85946639f1424b8554d98",
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 erlang_app(
@@ -169,14 +165,10 @@ erlang_package.hex(
     sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
 )
 
-erlang_package.git(
-    repository = "rabbitmq/ra",
-    branch = "master",
-    patch_cmds = ["""
-VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into ra.app.src..."
-sed -i"_orig" "/vsn,/ s/2\\.[0-9]\\.[0-9]/${VERSION}/" src/ra.app.src
-"""],
+erlang_package.hex(
+    name = "ra",
+    version = "2.0.9",
+    sha256 = "c00bbefe56b7eee6036430f97463a7f500cdab2a72c9b8229ee6ade6a3c22803",
 )
 
 erlang_package.hex(
@@ -199,7 +191,7 @@ erlang_package.hex(
 
 erlang_package.git(
     repository = "rabbitmq/seshat",
-    branch = "main",
+    tag = "0.1.0",
 )
 
 erlang_package.hex(
