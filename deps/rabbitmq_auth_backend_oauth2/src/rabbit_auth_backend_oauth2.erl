@@ -164,7 +164,9 @@ check_token(Token) ->
     Settings = application:get_all_env(?APP),
     case uaa_jwt:decode_and_verify(Token) of
         {error, Reason} -> {refused, {error, Reason}};
-        {true, Payload} -> validate_payload(post_process_payload(Payload, Settings));
+        {true, Payload} ->
+            ct:pal("post_process_payload(Payload, Settings): ~p", [post_process_payload(Payload, Settings)]),
+            validate_payload(post_process_payload(Payload, Settings));
         {false, _}      -> {refused, signature_invalid}
     end.
 
@@ -246,31 +248,25 @@ post_process_payload_with_scope_alias_in_extra_scopes_source(Payload, AppEnv) ->
 post_process_payload_with_scope_alias_field_named(Payload, undefined, _ScopeAliasMapping) ->
     Payload;
 post_process_payload_with_scope_alias_field_named(Payload, FieldName, ScopeAliasMapping) ->
-    ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
-    AdditionalScopes = case FieldName of
-        undefined -> [];
-        []        -> [];
-        _Value    ->
-            ScopeAlias = maps:get(FieldName, Payload, undefined),
-            case ScopeAlias of
-                undefined -> [];
-                []        -> [];
-                [Value1]   ->
-                    rabbit_data_coercion:to_list(maps:get(Value1, ScopeAliasMapping, []));
-                Value2 when is_binary(Value2)  ->
-                    maps:get(Value2, ScopeAliasMapping, []);
-                Value3 when is_list(Value3)  ->
-                    maps:get(list_to_binary(Value3), ScopeAliasMapping, [])
-            end
-    end,
-
-    case AdditionalScopes of
-        []      -> Payload;
-        List when is_list(List) ->
-            maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload);
-        Bin when is_binary(Bin)   ->
-            maps:put(?SCOPE_JWT_FIELD, [Bin | ExistingScopes], Payload)
-    end.
+      Scopes0 = maps:get(FieldName, Payload, []),
+      Scopes = rabbit_data_coercion:to_list_of_binaries(Scopes0),
+      %% for all scopes, look them up in the scope alias map, and if they are
+      %% present, add the alias to the final scope list. Note that we also preserve
+      %% the original scopes, it should not hurt.
+      ExpandedScopes =
+          lists:foldl(fun(ScopeListItem, Acc) ->
+                        case maps:get(ScopeListItem, ScopeAliasMapping, undefined) of
+                            undefined ->
+                                Acc;
+                            MappedList when is_list(MappedList) ->
+                                Binaries = rabbit_data_coercion:to_list_of_binaries(MappedList),
+                                Acc ++ Binaries;
+                            Value ->
+                                Binaries = rabbit_data_coercion:to_list_of_binaries(Value),
+                                Acc ++ Binaries
+                        end
+                      end, Scopes, Scopes),
+       maps:put(?SCOPE_JWT_FIELD, ExpandedScopes, Payload).
 
 
 -spec does_include_complex_claim_field(Payload :: map()) -> boolean().
