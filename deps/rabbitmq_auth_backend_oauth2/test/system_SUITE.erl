@@ -55,9 +55,11 @@ groups() ->
      ]},
 
      {scope_aliases, [], [
-                       test_successful_connection_with_with_scope_alias_in_extra_scopes_source,
+                       test_successful_connection_with_with_single_scope_alias_in_extra_scopes_source,
+                       test_successful_connection_with_with_multiple_scope_aliases_in_extra_scopes_source,
                        test_successful_connection_with_scope_alias_in_scope_field_case1,
                        test_successful_connection_with_scope_alias_in_scope_field_case2,
+                       test_successful_connection_with_scope_alias_in_scope_field_case3,
                        test_failed_connection_with_with_non_existent_scope_alias_in_extra_scopes_source,
                        test_failed_connection_with_non_existent_scope_alias_in_scope_field
                       ]}
@@ -72,7 +74,9 @@ groups() ->
 -define(EXTRA_SCOPES_SOURCE, <<"additional_rabbitmq_scopes">>).
 -define(CLAIMS_FIELD, <<"claims">>).
 
--define(SCOPE_ALIAS_NAME, <<"role-1">>).
+-define(SCOPE_ALIAS_NAME,   <<"role-1">>).
+-define(SCOPE_ALIAS_NAME_2, <<"role-2">>).
+-define(SCOPE_ALIAS_NAME_3, <<"role-3">>).
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -126,7 +130,7 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection
   rabbit_ct_helpers:testcase_started(Config, Testcase),
   Config;
 
-init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_with_scope_alias_in_extra_scopes_source ->
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_with_single_scope_alias_in_extra_scopes_source ->
     rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
         [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?CLAIMS_FIELD]),
@@ -141,6 +145,25 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_with_multiple_scope_aliases_in_extra_scopes_source ->
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost4">>),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, extra_scopes_source, ?CLAIMS_FIELD]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, scope_aliases, #{
+            ?SCOPE_ALIAS_NAME => [
+                <<"rabbitmq.configure:vhost4/*">>
+            ],
+            ?SCOPE_ALIAS_NAME_2 => [
+                <<"rabbitmq.write:vhost4/*">>
+            ],
+            ?SCOPE_ALIAS_NAME_3 => [
+                <<"rabbitmq.read:vhost4/*">>
+            ]
+        }]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config;
+
 init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_scope_alias_in_scope_field_case1 orelse
                                          Testcase =:= test_successful_connection_with_scope_alias_in_scope_field_case2 ->
     rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost2">>),
@@ -152,6 +175,22 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection
                 <<"rabbitmq.read:vhost2/*">>
             ]}
         ]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config;
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_scope_alias_in_scope_field_case3 ->
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost3">>),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, scope_aliases, #{
+            ?SCOPE_ALIAS_NAME => [
+                <<"rabbitmq.configure:vhost3/*">>
+            ],
+            ?SCOPE_ALIAS_NAME_2 => [
+                <<"rabbitmq.write:vhost3/*">>
+            ],
+            ?SCOPE_ALIAS_NAME_3 => [
+                <<"rabbitmq.read:vhost3/*">>
+            ]
+        }]),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
@@ -179,8 +218,17 @@ end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_
   rabbit_ct_helpers:testcase_finished(Config, Testcase),
   Config;
 
-end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_with_scope_alias_in_extra_scopes_source ->
+end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_with_single_scope_alias_in_extra_scopes_source ->
   rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_auth_backend_oauth2, scope_aliases]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
+  rabbit_ct_helpers:testcase_finished(Config, Testcase),
+  Config;
+
+end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_with_multiple_scope_aliases_in_extra_scopes_source ->
+  rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost4">>),
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
         [rabbitmq_auth_backend_oauth2, scope_aliases]),
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
@@ -191,6 +239,13 @@ end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_
 end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_scope_alias_in_scope_field_case1 orelse
                                         Testcase =:= test_successful_connection_with_scope_alias_in_scope_field_case2 ->
   rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost2">>),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_auth_backend_oauth2, scope_aliases]),
+  rabbit_ct_helpers:testcase_finished(Config, Testcase),
+  Config;
+
+end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_scope_alias_in_scope_field_case3 ->
+  rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost3">>),
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
         [rabbitmq_auth_backend_oauth2, scope_aliases]),
   rabbit_ct_helpers:testcase_finished(Config, Testcase),
@@ -447,26 +502,38 @@ test_failed_token_refresh_case2(Config) ->
     close_connection(Conn).
 
 
-test_successful_connection_with_with_scope_alias_in_extra_scopes_source(Config) ->
+test_successful_connection_with_with_single_scope_alias_in_extra_scopes_source(Config) ->
+    test_successful_connection_with_with_scope_aliases_in_extra_scopes_source(Config, ?SCOPE_ALIAS_NAME, <<"vhost1">>).
+
+test_successful_connection_with_with_multiple_scope_aliases_in_extra_scopes_source(Config) ->
+    Claims = [?SCOPE_ALIAS_NAME, ?SCOPE_ALIAS_NAME_2, ?SCOPE_ALIAS_NAME_3],
+    test_successful_connection_with_with_scope_aliases_in_extra_scopes_source(Config, Claims, <<"vhost4">>).
+
+test_successful_connection_with_with_scope_aliases_in_extra_scopes_source(Config, Claims, VHost) ->
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
-        #{<<"claims">> => ?SCOPE_ALIAS_NAME}
+        #{<<"claims">> => Claims}
     ),
-    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, Token),
+    Conn     = open_unmanaged_connection(Config, 0, VHost, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{} =
         amqp_channel:call(Ch, #'queue.declare'{queue = <<"one">>, exclusive = true}),
     close_connection_and_channel(Conn, Ch).
 
+
 test_successful_connection_with_scope_alias_in_scope_field_case1(Config) ->
-    test_successful_connection_with_scope_alias_in_scope_field_case(Config, ?SCOPE_ALIAS_NAME).
+    test_successful_connection_with_scope_alias_in_scope_field_case(Config, ?SCOPE_ALIAS_NAME, <<"vhost2">>).
 
 test_successful_connection_with_scope_alias_in_scope_field_case2(Config) ->
-    test_successful_connection_with_scope_alias_in_scope_field_case(Config, [?SCOPE_ALIAS_NAME]).
+    test_successful_connection_with_scope_alias_in_scope_field_case(Config, [?SCOPE_ALIAS_NAME], <<"vhost2">>).
 
-test_successful_connection_with_scope_alias_in_scope_field_case(Config, Scopes) ->
+test_successful_connection_with_scope_alias_in_scope_field_case3(Config) ->
+    Scopes = [?SCOPE_ALIAS_NAME, ?SCOPE_ALIAS_NAME_2, ?SCOPE_ALIAS_NAME_3],
+    test_successful_connection_with_scope_alias_in_scope_field_case(Config, Scopes, <<"vhost3">>).
+
+test_successful_connection_with_scope_alias_in_scope_field_case(Config, Scopes, VHost) ->
     {_Algo, Token} = generate_valid_token(Config, Scopes),
-    Conn     = open_unmanaged_connection(Config, 0, <<"vhost2">>, <<"username">>, Token),
+    Conn     = open_unmanaged_connection(Config, 0, VHost, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{} =
         amqp_channel:call(Ch, #'queue.declare'{queue = <<"one">>, exclusive = true}),

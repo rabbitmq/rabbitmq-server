@@ -98,16 +98,16 @@ fixture_token(ExtraScopes) ->
 fixture_token_with_full_permissions() ->
     fixture_token_with_scopes(full_permission_scopes()).
 
-token_with_scope_alias_in_scope_field(Alias) ->
+token_with_scope_alias_in_scope_field(Value) ->
     %% expiration is a timestamp with precision in seconds
     #{<<"exp">> => default_expiration_moment(),
       <<"kid">> => <<"token-key">>,
       <<"iss">> => <<"unit_test">>,
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>],
-      <<"scope">> => Alias}.
+      <<"scope">> => Value}.
 
-token_with_scope_alias_in_claim_field(Alias, Scopes) ->
+token_with_scope_alias_in_claim_field(Claims, Scopes) ->
     %% expiration is a timestamp with precision in seconds
     #{<<"exp">> => default_expiration_moment(),
       <<"kid">> => <<"token-key">>,
@@ -115,7 +115,7 @@ token_with_scope_alias_in_claim_field(Alias, Scopes) ->
       <<"foo">> => <<"bar">>,
       <<"aud">> => [<<"rabbitmq">>],
       <<"scope">>  => Scopes,
-      <<"claims">> => Alias}.
+      <<"claims">> => Claims}.
 
 seconds_in_the_future() ->
     seconds_in_the_future(30).
