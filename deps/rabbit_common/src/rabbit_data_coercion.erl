@@ -8,7 +8,7 @@
 -module(rabbit_data_coercion).
 
 -export([to_binary/1, to_list/1, to_atom/1, to_integer/1, to_proplist/1, to_map/1]).
--export([to_atom/2, atomize_keys/1]).
+-export([to_atom/2, atomize_keys/1, to_list_of_binaries/1]).
 
 -spec to_binary(Val :: binary() | list() | atom() | integer()) -> binary().
 to_binary(Val) when is_list(Val)    -> list_to_binary(Val);
@@ -52,3 +52,16 @@ atomize_keys(Val) when is_list(Val) ->
   [{to_atom(K), V} || {K, V} <- Val];
 atomize_keys(Val) when is_map(Val) ->
   maps:from_list(atomize_keys(maps:to_list(Val))).
+
+-spec to_list_of_binaries(Val :: undefined | [atom() | list() | binary() | integer()]) -> [binary()].
+to_list_of_binaries(Value) ->
+    case Value of
+      undefined ->
+          [];
+      List when is_list(List) ->
+          [to_binary(LI) || LI <- List];
+      Bin when is_binary(Bin) ->
+           [Bin];
+      Other ->
+           [to_binary(Other)]
+    end.
