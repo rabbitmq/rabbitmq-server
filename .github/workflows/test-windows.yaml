@@ -32,6 +32,7 @@ jobs:
       run: |
         ERL_PATH="$(which erl)"
         IEX_PATH="$(which iex)"
+        sed -i"_orig" 's/build --experimental_enable_bzlmod//' .bazelrc
         cat << EOF >> user.bazelrc
           startup --output_user_root=C:/tmp
           startup --windows_enable_symlinks
