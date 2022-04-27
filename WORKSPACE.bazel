@@ -84,7 +84,7 @@ pkg_zip(
     name = "inet_tcp_proxy_ez",
     package_dir = "inet_tcp_proxy/ebin",
     srcs = [
-        "@inet_tcp_proxy//:erlang_app",
+        "@rules_erlang.2.5.2.erlang_package.inet_tcp_proxy_dist//:erlang_app",
     ],
     package_file_name = "inet_tcp_proxy-0.1.0.ez",
     visibility = ["//visibility:public"],

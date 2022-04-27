@@ -103,6 +103,7 @@ erlang_app(
     hex_pm_erlang_app(
         name = "gen_batch_server",
         version = "0.8.7",
+        sha256 = "94a49a528486298b009d2a1b452132c0a0d68b3e89d17d3764cb1ec879b7557a",
     )
 
     hex_pm_erlang_app(
@@ -160,6 +161,10 @@ erlang_app(
         name = "osiris",
         branch = "main",
         remote = "https://github.com/rabbitmq/osiris.git",
+        repo_mapping = {
+            "@gen_batch_server": "@rules_erlang.2.5.2.erlang_package.gen_batch_server",
+            "@seshat": "@rules_erlang.2.5.2.erlang_package.seshat",
+        },
     )
 
     hex_pm_erlang_app(
