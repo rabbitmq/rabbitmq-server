@@ -1560,13 +1560,13 @@ but the key-value pair isn't tied to a virtual host.
 .It Ar name
 The name of the global runtime parameter being set.
 .It Ar value
-The value for the global runtime parameter, as a JSON term.
+The value for the global runtime parameter, as a JSON document.
 In most shells you are very likely to need to quote this.
 .El
 .Pp
 For example, this command sets the global runtime parameter
 .Qq mqtt_default_vhosts
-to the JSON term {"O=client,CN=guest":"/"}:
+to the JSON document {"O=client,CN=guest":"/"}:
 .sp
 .Dl rabbitmqctl set_global_parameter mqtt_default_vhosts '{"O=client,CN=guest":"/"}'
 .\" ------------------------------------------------------------------
@@ -1579,7 +1579,7 @@ The name of the component for which the parameter is being set.
 .It Ar name
 The name of the parameter being set.
 .It Ar value
-The value for the parameter, as a JSON term.
+The value for the parameter, as a JSON document.
 In most shells you are very likely to need to quote this.
 .El
 .Pp
@@ -1630,7 +1630,7 @@ The name of the policy.
 The regular expression, which when matches on a given resources causes
 the policy to apply.
 .It Ar definition
-The definition of the policy, as a JSON term.
+The definition of the policy, as a JSON document.
 In most shells you are very likely to need to quote this.
 .It Ar priority
 The priority of the policy as an integer.
@@ -1765,7 +1765,7 @@ virtual host called
 Sets virtual host limits.
 .Bl -tag -width Ds
 .It Ar definition
-The definition of the limits, as a JSON term.
+The definition of the limits, as a JSON document.
 In most shells you are very likely to need to quote this.
 .Pp
 Recognised limits are:
@@ -1801,6 +1801,50 @@ This command disables client connections in vhost
 .Qq qa_env :
 .sp
 .Dl rabbitmqctl set_vhost_limits -p qa_env '{"max-connections": 0}'
+.\" ------------------------------------------------------------------
+.It Cm set_user_limits Oc Ar username Oc Ar definition
+.Pp
+Sets user limits.
+.Bl -tag -width Ds
+.It Ar username
+.It Ar definition
+The definition of the limits, as a JSON document.
+In most shells you are very likely to need to quote this.
+.Pp
+Recognised limits are:
+.Bl -bullet -compact
+.It
+max-connections
+.It
+max-channels
+.El
+.Pp
+Use a negative value to specify "no limit".
+.El
+.Pp
+For example, this command limits the max number of concurrent
+connections a user is allowed to open
+.Qq limited_user
+to 64:
+.sp
+.Dl rabbitmqctl set_user_limits limited_user '{"max-connections": 64}'
+.Pp
+This command limits the max number of channels a user is allowed to open
+on a connection
+.Qq limited_user
+to 16:
+.sp
+.Dl rabbitmqctl set_user_limits limited_user '{"max-channels": 16}'
+.Pp
+This command clears the max number of connections limit for user
+.Qq limited_user :
+.sp
+.Dl rabbitmqctl clear_user_limits limited_user 'max-connections'
+.Pp
+This command disables client connections for user
+.Qq limited_user :
+.sp
+.Dl rabbitmqctl set_user_limits limited_user '{"max-connections": 0}'
 .\" ------------------------------------------------------------------
 .It Cm trace_off Op Fl p Ar vhost
 .Bl -tag -width Ds
