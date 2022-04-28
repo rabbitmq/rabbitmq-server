@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2020 VMware, Inc. or its affiliates.  All rights reserved.
+## Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClearUserLimitsCommand do
   alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
@@ -23,10 +23,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClearUserLimitsCommand do
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def usage, do: "clear_user_limits username <limit_type> | all"
+  def usage, do: "clear_user_limits <username> <limit_type> | all"
 
   def usage_additional() do
     [
+      ["<username>", "Self-explanatory"],
       ["<limit_type>", "Limit type, must be max-connections or max-channels"]
     ]
   end
