@@ -22,7 +22,8 @@ all() ->
 groups() ->
     [
      {tests, [], [
-                  roundtrip_quorum_queue_with_drain
+                  roundtrip_quorum_queue_with_drain,
+                  incoming_credit_accounting
                  ]},
      {metrics, [], [
                     auth_attempt_metrics
@@ -106,12 +107,8 @@ roundtrip_quorum_queue_with_drain(Config) ->
                                                     SenderLinkName,
                                                     Address),
 
-    % wait for credit to be received
-    receive
-        {amqp10_event, {link, Sender, credited}} -> ok
-    after 2000 ->
-              exit(credited_timeout)
-    end,
+    
+    wait_for_credit(Sender),
 
     % create a new message using a delivery-tag, body and indicate
     % it's settlement status (true meaning no disposition confirmation
@@ -145,6 +142,49 @@ roundtrip_quorum_queue_with_drain(Config) ->
               ok
     end,
 
+    flush("final"),
+    ok = amqp10_client:detach_link(Sender),
+
+    ok = amqp10_client:close_connection(Connection),
+    ok.
+
+incoming_credit_accounting(Config) -> 
+    incoming_credit_accounting(Config, 5, on_ack),
+    incoming_credit_accounting(Config, 5, on_publish).
+incoming_credit_accounting(Config, IncomingCredit, AckOn) ->
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_amqp1_0, maximum_incoming_credit, IncomingCredit]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_amqp1_0, grant_credit_on, AckOn]),
+    QName  = atom_to_binary(?FUNCTION_NAME, utf8),
+    Address = <<"/amq/queue/", QName/binary>>,
+    %% declare a quorum queue
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+    % create a configuration map
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => atom_to_binary(?FUNCTION_NAME, utf8),
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    SenderLinkName = <<"test-sender">>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session,
+                                                    SenderLinkName,
+                                                    Address),
+
+    
+    wait_for_credit(Sender),
+    OutMsg = amqp10_msg:new(<<"my-tag">>, <<"my-body">>, false),
+    [ok = amqp10_client:send_msg(Sender, OutMsg) || _ <- lists:seq(0,2)],
+    
+    wait_for_credit(Sender),
+
+    [ok = amqp10_client:send_msg(Sender, OutMsg) || _ <- lists:seq(0,2)],
+   
     flush("final"),
     ok = amqp10_client:detach_link(Sender),
 
@@ -201,3 +241,18 @@ open_and_close_connection(OpnConf) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, _} = amqp10_client:begin_session(Connection),
     ok = amqp10_client:close_connection(Connection).
+
+wait_for_message(Receiver) -> 
+    receive
+        {amqp10_msg, Receiver, _InMsg} -> ok
+    after 2000 ->
+              exit(delivery_timeout)
+    end.
+
+% before we can send messages we have to wait for credit from the server
+wait_for_credit(Sender) -> 
+    receive
+        {amqp10_event, {link, Sender, credited}} -> ok
+    after 2000 ->
+              exit(credited_timeout)
+    end.

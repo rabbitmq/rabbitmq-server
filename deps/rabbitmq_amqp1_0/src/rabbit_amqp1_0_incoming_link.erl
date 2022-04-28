@@ -7,24 +7,25 @@
 
 -module(rabbit_amqp1_0_incoming_link).
 
--export([attach/3, transfer/4]).
+-export([attach/3, transfer/4, ack/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
 -import(rabbit_amqp1_0_util, [protocol_error/3]).
 
-%% Just make these constant for the time being.
--define(INCOMING_CREDIT, 65536).
+-define(INCOMING_CREDIT, application:get_env(rabbitmq_amqp1_0, maximum_incoming_credit, 2)).
+-define(INCOMING_CREDIT_MODE, application:get_env(rabbitmq_amqp1_0, grant_credit_on, on_ack)).
 
 -record(incoming_link, {name, exchange, routing_key,
                         delivery_id = undefined,
                         delivery_count = 0,
                         send_settle_mode = undefined,
                         recv_settle_mode = undefined,
-                        credit_used = ?INCOMING_CREDIT div 2,
+                        credit_remaining = 0,
                         msg_acc = [],
-                        route_state}).
+                        route_state
+                    }).
 
 attach(#'v1_0.attach'{name = Name,
                       handle = Handle,
@@ -56,7 +57,7 @@ attach(#'v1_0.attach'{name = Name,
                         true
                 end,
             Flow = #'v1_0.flow'{ handle = Handle,
-                                 link_credit = {uint, ?INCOMING_CREDIT},
+                                 link_credit = {uint, max_incoming_credit()},
                                  drain = false,
                                  echo = false },
             Attach = #'v1_0.attach'{
@@ -69,7 +70,9 @@ attach(#'v1_0.attach'{name = Name,
               initial_delivery_count = undefined, % must be, I am the receiver
               role = ?RECV_ROLE}, %% server is receiver
             IncomingLink1 =
-                IncomingLink#incoming_link{recv_settle_mode = RcvSettleMode},
+                IncomingLink#incoming_link{
+                    recv_settle_mode = RcvSettleMode
+                },
             {ok, [Attach, Flow], IncomingLink1, Confirm};
         {error, Reason} ->
             %% TODO proper link establishment protocol here?
@@ -127,10 +130,11 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
          #incoming_link{exchange         = X,
                         routing_key      = LinkRKey,
                         delivery_count   = Count,
-                        credit_used      = CreditUsed,
+                        credit_remaining = CreditRemaining,
                         msg_acc          = MsgAcc,
                         send_settle_mode = SSM,
-                        recv_settle_mode = RSM} = Link, BCh) ->
+                        recv_settle_mode = RSM
+                    } = Link, BCh) ->
     MsgBin = iolist_to_binary(lists:reverse([MsgPart | MsgAcc])),
     ?DEBUG("Inbound content:~n  ~p",
            [[amqp10_framing:pprint(Section) ||
@@ -143,38 +147,49 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
     rabbit_amqp1_0_channel:cast_flow(
       BCh, #'basic.publish'{exchange    = X,
                             routing_key = RKey}, Msg),
-    {SendFlow, CreditUsed1} = case CreditUsed - 1 of
-                                  C when C =< 0 ->
-                                      {true,  ?INCOMING_CREDIT div 2};
-                                  D ->
-                                      {false, D}
-                              end,
+
+    EffectiveSendSettleMode = effective_send_settle_mode(Settled, SSM),
+    EffectiveRecvSettleMode = effective_recv_settle_mode(RcvSettleMode, RSM),
+    case not EffectiveSendSettleMode andalso
+            EffectiveRecvSettleMode =:= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND of
+        false -> ok;
+        true  -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
+                                "rcv-settle-mode second not supported", [])
+    end,
+    {SendFlow, CreditRemaining1} = adjust_credits(transfer, CreditRemaining - 1, EffectiveSendSettleMode),
     #incoming_link{delivery_id = DeliveryId} =
       set_delivery_id(DeliveryId0, Link),
+    
     NewLink = Link#incoming_link{
                 delivery_id      = undefined,
                 send_settle_mode = undefined,
                 delivery_count   = rabbit_amqp1_0_util:serial_add(Count, 1),
-                credit_used      = CreditUsed1,
-                msg_acc          = []},
+                credit_remaining      = CreditRemaining1,
+                msg_acc          = []
+            },
     Reply = case SendFlow of
                 true  -> ?DEBUG("sending flow for incoming ~p", [NewLink]),
                          [incoming_flow(NewLink, Handle)];
                 false -> []
             end,
-    EffectiveSendSettleMode = effective_send_settle_mode(Settled, SSM),
-    EffectiveRecvSettleMode = effective_recv_settle_mode(RcvSettleMode, RSM),
-    case not EffectiveSendSettleMode andalso
-         EffectiveRecvSettleMode =:= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND of
-        false -> ok;
-        true  -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
-                                "rcv-settle-mode second not supported", [])
-    end,
+    
     {message, Reply, NewLink, DeliveryId,
      EffectiveSendSettleMode}.
 
 %% TODO default-outcome and outcomes, dynamic lifetimes
 
+ack(Handle, #incoming_link{
+        credit_remaining = CreditRemaining
+    } = Link) ->
+    {SendFlow, CreditRemaining1} = adjust_credits(ack, CreditRemaining, false),
+    Link2 = Link#incoming_link{
+        credit_remaining = CreditRemaining1
+    },
+    Replies = case SendFlow of 
+        true -> [incoming_flow(Link2, Handle)];
+        false -> []
+    end,
+    {ok, Replies, Link2}.
 ensure_target(Target = #'v1_0.target'{address       = Address,
                                       dynamic       = Dynamic,
                                       durable       = Durable,
@@ -187,7 +202,10 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
                      {exclusive, false},
                      {auto_delete, false},
                      {check_exchange, true},
-                     {nowait, false}],
+                     {nowait, false},
+                     {arguments, [
+                         {<<"x-queue-type">>, longstr, <<"quorum">>}
+                     ]}],
     case Dynamic of
         true ->
             protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
@@ -225,4 +243,30 @@ ensure_target(Target = #'v1_0.target'{address       = Address,
 incoming_flow(#incoming_link{ delivery_count = Count }, Handle) ->
     #'v1_0.flow'{handle         = Handle,
                  delivery_count = {uint, Count},
-                 link_credit    = {uint, ?INCOMING_CREDIT}}.
+                 link_credit    = {uint, max_incoming_credit()}}.
+
+max_incoming_credit() -> 
+    ?INCOMING_CREDIT.
+
+
+% If we have no credits remaining then we either give more credits when we
+% publish to the queue or when the queue acked the message.
+adjust_credits(_, CreditRemaining,_) when CreditRemaining > 0 -> 
+    {false, CreditRemaining};
+adjust_credits(Method, CreditRemaining, MessageSettled) when CreditRemaining =< 0 -> 
+    case MessageSettled of 
+        true -> {true, max_incoming_credit() div 2};
+        false -> 
+            GrantCreditOn = ?INCOMING_CREDIT_MODE,
+            case {Method, GrantCreditOn} of 
+                {transfer, on_publish} -> 
+                    {true, max_incoming_credit() div 2};
+                {ack, _} ->
+                    % we grant credit on ack regardless of what's the setting
+                    % as it should have no effect except if some calculations 
+                    % went wrong somewhere 
+                    {true, max_incoming_credit() div 2};
+                {_, _} -> 
+                    {false, CreditRemaining}
+            end
+    end.

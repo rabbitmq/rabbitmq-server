@@ -129,9 +129,14 @@ handle_info(#'basic.credit_drained'{consumer_tag = CTag} = CreditDrained,
 
 handle_info(#'basic.ack'{} = Ack, State = #state{writer_pid = WriterPid,
                                                  session    = Session}) ->
-    {Reply, Session1} = rabbit_amqp1_0_session:ack(Ack, Session),
+    {Reply, LinkHandles, Session1} = rabbit_amqp1_0_session:ack(Ack, Session),
+    FlowReplies = lists:flatmap(fun(LinkHandle) -> 
+            with_link(in, LinkHandle, fun(Link) -> 
+                {ok, _Replies, _Link2} = rabbit_amqp1_0_incoming_link:ack(LinkHandle, Link)
+            end, [])
+        end, LinkHandles),
     [rabbit_amqp1_0_writer:send_command(WriterPid, F) ||
-        F <- rabbit_amqp1_0_session:flow_fields(Reply, Session)],
+        F <- rabbit_amqp1_0_session:flow_fields(Reply ++ FlowReplies, Session)],
     {noreply, state(Session1, State)};
 
 handle_info({bump_credit, Msg}, State) ->
@@ -260,7 +265,7 @@ handle_control({Txfr = #'v1_0.transfer'{handle = Handle},
                 {message, Reply, Link1, DeliveryId, Settled} ->
                     put({in, Handle}, Link1),
                     Session2 = rabbit_amqp1_0_session:record_delivery(
-                                 DeliveryId, Settled, Session1),
+                                 Handle, DeliveryId, Settled, Session1),
                     reply(Reply ++ Flows, state(Session2, State));
                 {ok, Link1} ->
                     put({in, Handle}, Link1),
@@ -429,4 +434,14 @@ with_disposable_channel(Conn, Fun) ->
         Fun(Ch)
     after
         catch amqp_channel:close(Ch)
+    end.
+
+with_link(Type, Handle, Fn, Default) -> 
+    case erlang:get({Type, Handle}) of 
+        undefined -> 
+            Default;
+        Link -> 
+            {ok, Replies, Link1} =  Fn(Link),
+            erlang:put({Type, Handle}, Link1),
+            Replies
     end.
