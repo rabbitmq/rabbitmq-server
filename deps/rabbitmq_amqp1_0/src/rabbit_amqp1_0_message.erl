@@ -14,6 +14,9 @@
 -define(MESSAGE_ANNOTATIONS_HEADER, <<"x-amqp-1.0-message-annotations">>).
 -define(STREAM_OFFSET_HEADER, <<"x-stream-offset">>).
 -define(FOOTER, <<"x-amqp-1.0-footer">>).
+-define(CONVERT_AMQP091_HEADERS_TO_APP_PROPS, application:get_env(rabbitmq_amqp1_0, convert_amqp091_headers_to_app_props, false)).
+-define(CONVERT_APP_PROPS_TO_AMQP091_HEADERS, application:get_env(rabbitmq_amqp1_0, convert_app_props_to_amqp091_headers, false)).
+
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -58,9 +61,17 @@ assemble(properties, {R, P, C}, Else, Uneaten) ->
 assemble(app_properties, {R, P = #'P_basic'{headers = Headers}, C},
          {#'v1_0.application_properties'{}, Rest}, Uneaten) ->
     AppPropsBin = chunk(Rest, Uneaten),
+    Amqp091Headers = case ?CONVERT_APP_PROPS_TO_AMQP091_HEADERS of 
+        true -> 
+            amqp10_app_props_to_amqp091_headers(Headers, AppPropsBin);
+        _ -> 
+            Headers
+    end,
+    AppPropsAdded = set_header(
+        ?APP_PROPERTIES_HEADER,
+        AppPropsBin, Amqp091Headers),
     assemble(body, {R, P#'P_basic'{
-                         headers = set_header(?APP_PROPERTIES_HEADER,
-                                              AppPropsBin, Headers)}, C},
+                         headers = AppPropsAdded}, C},
              decode_section(Rest), Rest);
 assemble(app_properties, {R, P, C}, Else, Uneaten) ->
     assemble(body, {R, P, C}, Else, Uneaten);
@@ -254,7 +265,16 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
             {_, AppProps10Bin} ->
                 AppProps10Bin;
             undefined ->
-                []
+                case ?CONVERT_AMQP091_HEADERS_TO_APP_PROPS of 
+                    true -> 
+                        case amqp091_headers_to_amqp10_app_props(Headers) of
+                            undefined -> [];
+                            Other -> 
+                                amqp10_framing:encode_bin(Other)
+                        end;
+                    _ -> 
+                        []
+                end
         end,
     DataBin = case Props#'P_basic'.type of
                   <<"amqp-1.0">> ->
@@ -282,3 +302,50 @@ map_add(_T, _Key, _Type, undefined, Acc) ->
     Acc;
 map_add(KeyType, Key, Type, Value, Acc) ->
     [{wrap(KeyType, Key), wrap(Type, Value)} | Acc].
+
+amqp10_app_props_to_amqp091_headers(CurrentHeaders,AppPropsBin) -> 
+    case amqp10_framing:decode_bin(AppPropsBin) of 
+        [#'v1_0.application_properties'{ content = AppProps}] when is_list(AppProps) -> 
+            Hs = case CurrentHeaders of 
+                undefined -> [];
+                Headers -> Headers
+            end,
+            lists:foldl(fun(Prop, Acc) -> 
+                case Prop of 
+                    {{utf8, Key}, {ValueType, Value}} -> 
+                        case type10_to_type091(ValueType) of 
+                            undefined -> Acc;
+                            T -> [{Key, T, Value}|Acc]
+                        end;
+                    _ -> Acc
+                end
+            end, Hs, AppProps);
+        _ -> CurrentHeaders
+    end.
+type10_to_type091(utf8) -> longstr;
+type10_to_type091(uint) -> long;
+type10_to_type091(boolean) -> bool;
+type10_to_type091(_) -> undefined.
+
+amqp091_headers_to_amqp10_app_props(undefined) -> undefined;
+amqp091_headers_to_amqp10_app_props(Headers) when is_list(Headers) -> 
+    io:format("Headers: ~p~n", [Headers]),
+    AppPropsOut = lists:foldl(fun(H, Acc) -> 
+        case H of 
+            {Key, Type, Value} -> 
+                case type091_to_type10(Type) of 
+                    undefined -> Acc;
+                    T -> 
+                        [{{utf8, Key}, {T, Value}}|Acc]
+                end;
+            _ -> Acc
+        end
+    end, [], Headers),
+    #'v1_0.application_properties'{content = AppPropsOut}.
+    
+type091_to_type10(longstr) -> binary;
+type091_to_type10(long) -> long;
+type091_to_type10(uint) -> long;
+type091_to_type10(bool) -> boolean;
+type091_to_type10(_) -> undefined.
+

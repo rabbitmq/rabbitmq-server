@@ -50,3 +50,5 @@
                      peer_cert_subject,
                      peer_cert_validity,
                      node]).
+
+-define(AMQP10_DECLARE_ARGUMENTS, application:get_env(rabbitmq_amqp1_0, additional_queue_arguments, [])).

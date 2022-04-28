@@ -10,7 +10,12 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
--export([outcomes/1, ctag_to_handle/1, handle_to_ctag/1, durable/1]).
+-export([outcomes/1, 
+         ctag_to_handle/1, 
+         handle_to_ctag/1, 
+         durable/1,
+         queue_declare_arguments/0
+        ]).
 
 -define(EXCHANGE_SUB_LIFETIME, "delete-on-close").
 -define(DEFAULT_OUTCOME, #'v1_0.released'{}).
@@ -65,3 +70,9 @@ durable(?V_1_0_TERMINUS_DURABILITY_NONE)            -> false;
 %% aren't". We choose to upgrade that.
 durable(?V_1_0_TERMINUS_DURABILITY_CONFIGURATION)   -> true;
 durable(?V_1_0_TERMINUS_DURABILITY_UNSETTLED_STATE) -> true.
+
+queue_declare_arguments() -> 
+    lists:map(fun config_to_arg/1, ?AMQP10_DECLARE_ARGUMENTS).
+
+config_to_arg({'x-queue-type', Value}) -> 
+    {<<"x-queue-type">>, longstr, rabbit_data_coercion:to_binary(Value)}.

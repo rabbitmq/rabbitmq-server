@@ -158,7 +158,9 @@ ensure_source(Source = #'v1_0.source'{address       = Address,
                      {exclusive, false},
                      {auto_delete, false},
                      {check_exchange, true},
-                     {nowait, false}],
+                     {nowait, false},
+                     {arguments, rabbit_amqp1_0_link_util:queue_declare_arguments()}
+                     ],
     case Dynamic of
         true -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
                                "Dynamic sources not supported", []);

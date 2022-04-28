@@ -310,7 +310,6 @@ mapped(cast, #'v1_0.flow'{handle = undefined} = Flow, State0) ->
     {next_state, mapped, State};
 mapped(cast, #'v1_0.flow'{handle = {uint, InHandle}} = Flow,
        #state{links = Links} = State0) ->
-
     State = handle_session_flow(Flow, State0),
 
     {ok, #link{output_handle = OutHandle} = Link0} =
@@ -773,7 +772,6 @@ handle_link_flow(#'v1_0.flow'{delivery_count = MaybeTheirDC,
                   {uint, DC} -> DC
               end,
     LinkCredit = TheirDC + TheirCredit - OurDC,
-
     {ok, Link#link{link_credit = LinkCredit}};
 handle_link_flow(#'v1_0.flow'{delivery_count = TheirDC,
                               available = Available,
@@ -839,9 +837,11 @@ translate_delivery_state(received) -> #'v1_0.received'{}.
 translate_role(sender) -> false;
 translate_role(receiver) -> true.
 
-maybe_notify_link_credit(#link{link_credit = 0, role = sender},
+% There is a bug in the credit bookeeping where link_credit can go below zero.
+% This is caused by OurDeliveryCount going above ServerDeliveryCount + ServerGrantedCredits
+maybe_notify_link_credit(#link{link_credit = OldCredit, role = sender},
                          #link{link_credit = Credit} = Link)
-  when Credit > 0 ->
+  when Credit > 0, OldCredit =< 0 ->
     notify_link(Link, credited);
 maybe_notify_link_credit(_Old, _New) ->
     ok.

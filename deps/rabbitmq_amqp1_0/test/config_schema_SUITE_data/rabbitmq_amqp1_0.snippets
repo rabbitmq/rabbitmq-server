@@ -1,0 +1,23 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2020 VMware, Inc. or its affiliates.  All rights reserved.
+%%
+
+[
+  {rabbitmq_amqp1_0_config,
+   "amqp1_0.maximum_incoming_credit = 4
+    amqp1_0.grant_credit = on_confirm
+    amqp1_0.additional_queue_arguments.x-queue-type = quorum
+    amqp1_0.convert_amqp091_headers_to_app_props = true
+    amqp1_0.convert_app_props_to_amqp091_headers = true",
+   [{rabbitmq_amqp1_0,[
+                          {maximum_incoming_credit, 4},
+                          {grant_credit, on_confirm},
+                          {convert_amqp091_headers_to_app_props, true},
+                          {convert_app_props_to_amqp091_headers, true},
+                          {additional_queue_arguments, [{'x-queue-type', "quorum"}]}
+                         ]}],
+   [rabbitmq_amqp1_0]}
+].
