@@ -133,13 +133,6 @@ erlang_package.hex(
 erlang_package.git(
     repository = "rabbitmq/osiris",
     tag = "v1.2.6",
-    patch_cmds = ["""
-VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into Makefile..."
-sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
-echo "Injecting ${VERSION} into BUILD.bazel..."
-sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
-"""],
 )
 
 erlang_package.hex(
