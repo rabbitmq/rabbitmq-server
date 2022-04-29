@@ -165,7 +165,6 @@ check_token(Token) ->
     case uaa_jwt:decode_and_verify(Token) of
         {error, Reason} -> {refused, {error, Reason}};
         {true, Payload} ->
-            ct:pal("post_process_payload(Payload, Settings): ~p", [post_process_payload(Payload, Settings)]),
             validate_payload(post_process_payload(Payload, Settings));
         {false, _}      -> {refused, signature_invalid}
     end.
