@@ -6722,7 +6722,7 @@ export DIALYZER_PLT
 
 PLT_APPS ?=
 DIALYZER_DIRS ?= --src -r $(wildcard src) $(ALL_APPS_DIRS)
-DIALYZER_OPTS ?= -Werror_handling -Wrace_conditions -Wunmatched_returns # -Wunderspecs
+DIALYZER_OPTS ?= -Werror_handling -Wunmatched_returns # -Wunderspecs
 DIALYZER_PLT_OPTS ?=
 
 # Core targets.
