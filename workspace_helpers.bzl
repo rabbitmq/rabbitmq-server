@@ -161,10 +161,6 @@ erlang_app(
         name = "osiris",
         branch = "main",
         remote = "https://github.com/rabbitmq/osiris.git",
-        repo_mapping = {
-            "@gen_batch_server": "@rules_erlang.2.5.2.erlang_package.gen_batch_server",
-            "@seshat": "@rules_erlang.2.5.2.erlang_package.seshat",
-        },
     )
 
     hex_pm_erlang_app(

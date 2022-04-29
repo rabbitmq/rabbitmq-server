@@ -134,7 +134,9 @@ erlang_package.git(
     patch_cmds = ["""
 VERSION=$(git rev-parse HEAD)
 echo "Injecting ${VERSION} into Makefile..."
-sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/${VERSION}/' src/osiris.app.src
+sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
+echo "Injecting ${VERSION} into BUILD.bazel..."
+sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
 """],
 )
 
@@ -262,8 +264,10 @@ use_repo(
     "jsx",
     "meck",
     "observer_cli",
+    "osiris",
     "prometheus",
     "proper",
+    "ra",
     "ranch",
     "recon",
     "redbug",
