@@ -14,7 +14,7 @@ endif
 # dialyzer
 # --------------------------------------------------------------------
 
-DIALYZER_OPTS ?= -Werror_handling -Wrace_conditions
+DIALYZER_OPTS ?= -Werror_handling
 
 # --------------------------------------------------------------------
 # %-on-concourse dependencies.
