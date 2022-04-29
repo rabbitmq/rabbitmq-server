@@ -166,7 +166,7 @@ handle_cast({node_deleted, Details}) ->
     delete_per_user_tracked_connections_table_for_node(Node).
 
 -spec register_tracked(rabbit_types:tracked_connection()) -> ok.
--dialyzer([{nowarn_function, [register_tracked/1]}, race_conditions]).
+-dialyzer([{nowarn_function, [register_tracked/1]}]).
 
 register_tracked(#tracked_connection{username = Username, vhost = VHost, id = ConnId, node = Node} = Conn) when Node =:= node() ->
     TableName = tracked_connection_table_name_for(Node),
