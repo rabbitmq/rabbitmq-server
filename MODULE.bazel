@@ -19,6 +19,20 @@ erlang_package.hex(
 erlang_package.git(
     repository = "rabbitmq/aten",
     tag = "v0.5.6",
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "aten",
+    extra_apps = [
+        "sasl",
+         "crypto",
+    ],
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+)
+""",
 )
 
 erlang_package.hex(
