@@ -33,7 +33,12 @@ serialise_events() -> false.
 
 route(#exchange{name = Name},
       #delivery{message = #basic_message{routing_keys = Routes}}) ->
-    route0(Name, Routes).
+    case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2, non_blocking) of
+        true ->
+            route_v2(Name, Routes);
+        _ ->
+            rabbit_router:match_routing_key(Name, Routes)
+    end.
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.
@@ -49,16 +54,16 @@ assert_args_equivalence(X, Args) ->
 %% ets:select/2 is expensive because it needs to compile the match spec every
 %% time and lookup does not happen by a hash key.
 %%
-%% In contrast, route0/2 increases end-to-end message sending throughput
+%% In contrast, route_v2/2 increases end-to-end message sending throughput
 %% (i.e. from RabbitMQ client to the queue process) by up to 35% by using ets:lookup_element/3.
 %% Only the direct exchange type uses the rabbit_index_route table to store its
 %% bindings by table key tuple {SourceExchange, RoutingKey}.
--spec route0(rabbit_types:binding_source(), [rabbit_router:routing_key(), ...]) ->
+-spec route_v2(rabbit_types:binding_source(), [rabbit_router:routing_key(), ...]) ->
     rabbit_router:match_result().
-route0(SrcName, [RoutingKey]) ->
+route_v2(SrcName, [RoutingKey]) ->
     %% optimization
     destinations(SrcName, RoutingKey);
-route0(SrcName, [_|_] = RoutingKeys) ->
+route_v2(SrcName, [_|_] = RoutingKeys) ->
     lists:flatmap(fun(Key) ->
                           destinations(SrcName, Key)
                   end, RoutingKeys).

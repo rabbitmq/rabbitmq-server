@@ -1,26 +1,16 @@
--module(binding_remove_SUITE).
+-module(direct_exchange_routing_v2_SUITE).
 
-%% Mnesia table rabbit_index_route is an index table that stores bindings
-%% by table key {SourceExchange, RoutingKey} where SourceExchange is of type
-%% direct exchange.
-%% This test suite tests that these bindings are cleaned up properly.
+%% Test suite for the feature flag direct_exchange_routing_v2
 
--export([all/0, groups/0,
-         init_per_suite/1, end_per_suite/1,
-         init_per_group/2, end_per_group/2,
-         init_per_testcase/2, end_per_testcase/2]).
-
--export([unbind_queue/1,
-         delete_queue/1,
-         delete_queue_multiple/1,
-         delete_exchange/1,
-         node_down_transient_queue/1,
-         node_down_durable_queue/1
-        ]).
+-compile([export_all, nowarn_export_all]).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+
+-define(FEATURE_FLAG, direct_exchange_routing_v2).
+-define(INDEX_TABLE_NAME, rabbit_index_route).
 
 %%%===================================================================
 %%% Common Test callbacks
@@ -28,17 +18,31 @@
 
 all() ->
     [
-     {group, cluster_size_1}
+     {group, cluster_size_1},
+     {group, cluster_size_2}
     ].
 
 groups() ->
     [
-     {cluster_size_1, [], [unbind_queue,
-                           delete_queue,
-                           delete_queue_multiple,
-                           delete_exchange]},
-     {cluster_size_2, [], [node_down_transient_queue,
-                           node_down_durable_queue]}
+     {cluster_size_1, [],
+      [{start_feature_flag_enabled, [], [remove_binding_unbind_queue,
+                                         remove_binding_delete_queue,
+                                         remove_binding_delete_queue_multiple,
+                                         remove_binding_delete_exchange]},
+       {start_feature_flag_disabled, [], [enable_feature_flag]}
+      ]},
+     {cluster_size_2, [],
+      [{start_feature_flag_enabled, [], [remove_binding_node_down_transient_queue,
+                                         remove_binding_node_down_durable_queue
+                                        ]},
+       {start_feature_flag_disabled, [], [enable_feature_flag]}
+      ]}
+    ].
+
+suite() ->
+    [
+     %% If a test hangs, no need to wait for 30 minutes.
+     {timetrap, {minutes, 8}}
     ].
 
 init_per_suite(Config) ->
@@ -48,23 +52,48 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(Group, Config0) ->
-    Size = case Group of
-               cluster_size_1 -> 1;
-               cluster_size_2 -> 2
-           end,
-    Config = rabbit_ct_helpers:set_config(Config0,
-                                          [{rmq_nodes_count, Size},
-                                           {rmq_nodename_suffix, Group}
-                                          ]),
+init_per_group(cluster_size_1, Config) ->
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
+init_per_group(cluster_size_2, Config) ->
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 2});
+
+init_per_group(start_feature_flag_enabled = Group, Config0) ->
+    Config = start_broker(Group, Config0),
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG) of
+        ok ->
+            Config;
+        {skip, _} = Skip ->
+            end_per_group(Group, Config),
+            Skip
+    end;
+init_per_group(start_feature_flag_disabled = Group, Config0) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config0, {rabbit, [{forced_feature_flags_on_init, []}]}),
+    Config = start_broker(Group, Config1),
+    case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, ?FEATURE_FLAG) of
+        true ->
+            Config;
+        false ->
+            end_per_group(Group, Config),
+            {skip, io_lib:format("'~s' feature flag is unsupported", [?FEATURE_FLAG])}
+    end.
+
+start_broker(Group, Config0) ->
+    Size = rabbit_ct_helpers:get_config(Config0, rmq_nodes_count),
+    Config = rabbit_ct_helpers:set_config(Config0, {rmq_nodename_suffix,
+                                                    io_lib:format("cluster_size_~b-~s", [Size, Group])}),
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:setup_steps() ++
                                 rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(_Group, Config) ->
+end_per_group(Group, Config)
+  when Group =:= start_feature_flag_enabled;
+       Group =:= start_feature_flag_disabled ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_client_helpers:teardown_steps() ++
-                                rabbit_ct_broker_helpers:teardown_steps()).
+                                rabbit_ct_broker_helpers:teardown_steps());
+end_per_group(_Group, Config) ->
+    Config.
 
 init_per_testcase(_TestCase, Config) ->
     Config.
@@ -78,14 +107,14 @@ end_per_testcase(_TestCase, Config) ->
                                  rabbit_semi_durable_route,
                                  rabbit_route,
                                  rabbit_reverse_route,
-                                 rabbit_index_route])
+                                 ?INDEX_TABLE_NAME])
                 ).
 
 %%%===================================================================
 %%% Test cases
 %%%===================================================================
 
-unbind_queue(Config) ->
+remove_binding_unbind_queue(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     amqp_channel:call(Ch, #'confirm.select'{}),
@@ -109,7 +138,7 @@ unbind_queue(Config) ->
     delete_queue(Ch, Q),
     ok.
 
-delete_queue(Config) ->
+remove_binding_delete_queue(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     amqp_channel:call(Ch, #'confirm.select'{}),
@@ -132,7 +161,7 @@ delete_queue(Config) ->
     assert_return(),
     ok.
 
-delete_queue_multiple(Config) ->
+remove_binding_delete_queue_multiple(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     amqp_channel:call(Ch, #'confirm.select'{}),
@@ -152,7 +181,7 @@ delete_queue_multiple(Config) ->
 
     %% Table rabbit_index_route stores only bindings
     %% where the source exchange is a direct exchange.
-    ?assertEqual(2, table_size(Config, rabbit_index_route)),
+    ?assertEqual(2, table_size(Config, ?INDEX_TABLE_NAME)),
     publish(Ch, X, RKey),
     assert_confirm(),
 
@@ -167,7 +196,7 @@ delete_queue_multiple(Config) ->
     assert_return(),
     ok.
 
-delete_exchange(Config) ->
+remove_binding_delete_exchange(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
 
     amqp_channel:call(Ch, #'confirm.select'{}),
@@ -197,7 +226,7 @@ delete_exchange(Config) ->
     delete_queue(Ch, Q),
     ok.
 
-node_down_transient_queue(Config) ->
+remove_binding_node_down_transient_queue(Config) ->
     [_Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {_Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     {_Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
@@ -225,7 +254,7 @@ node_down_transient_queue(Config) ->
     delete_queue(Ch1, Q),
     ok.
 
-node_down_durable_queue(Config) ->
+remove_binding_node_down_durable_queue(Config) ->
     [_Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {_Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     {_Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
@@ -251,6 +280,52 @@ node_down_durable_queue(Config) ->
     %% We expect route to come back when durable queue's host node comes back.
     assert_index_table_non_empty(Config),
     delete_queue(Ch1, Q),
+    ok.
+
+enable_feature_flag(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+
+    DirectX = <<"amq.direct">>,
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+    RKey = <<"k">>,
+
+    declare_queue(Ch, Q1, true),
+    bind_queue(Ch, Q1, DirectX, RKey),
+    bind_queue(Ch, Q1, <<"amq.fanout">>, RKey),
+
+    declare_queue(Ch, Q2, false),
+    bind_queue(Ch, Q2, DirectX, RKey),
+
+    amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+
+    %% Publishing via "direct exchange routing v1" works.
+    publish(Ch, DirectX, RKey),
+    assert_confirm(),
+
+    %% Before the feature flag is enabled, there should not be an index table.
+    Tids = rabbit_ct_broker_helpers:rpc_all(Config, ets, whereis, [?INDEX_TABLE_NAME]),
+    ?assert(lists:all(fun(Tid) -> Tid =:= undefined end, Tids)),
+
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG),
+
+    %% The feature flag migration should have created an index table with a ram copy on all nodes.
+    ?assertEqual(lists:sort(Nodes),
+                 lists:sort(rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, table_info, [?INDEX_TABLE_NAME, ram_copies]))),
+    %% The feature flag migration should have populated the index table with all bindings whose source exchange
+    %% is a direct exchange.
+    ?assertEqual([{rabbit_misc:r(<<"/">>, exchange, DirectX), RKey}],
+                 rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, dirty_all_keys, [?INDEX_TABLE_NAME])),
+    ?assertEqual(2, rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, table_info, [?INDEX_TABLE_NAME, size])),
+
+    %% Publishing via "direct exchange routing v2" works.
+    publish(Ch, DirectX, RKey),
+    assert_confirm(),
+
+    delete_queue(Ch, Q1),
+    delete_queue(Ch, Q2),
     ok.
 
 %%%===================================================================
@@ -305,10 +380,10 @@ assert_return() ->
     end.
 
 assert_index_table_empty(Config) ->
-    ?assertEqual(0, table_size(Config, rabbit_index_route)).
+    ?awaitMatch(0, table_size(Config, ?INDEX_TABLE_NAME), 3000).
 
 assert_index_table_non_empty(Config) ->
-    ?assertNotEqual(0, table_size(Config, rabbit_index_route)).
+    ?assertNotEqual(0, table_size(Config, ?INDEX_TABLE_NAME)).
 
 table_size(Config, Table) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [Table, size], 5000).

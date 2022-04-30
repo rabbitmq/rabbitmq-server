@@ -8,7 +8,7 @@
 -module(rabbit_table).
 
 -export([
-    create/0, create/2, ensure_local_copies/1, ensure_table_copy/2,
+    create/0, create/2, ensure_local_copies/1, ensure_table_copy/3,
     wait_for_replicated/1, wait/1, wait/2,
     force_load/0, is_present/0, is_empty/0, needs_default_data/0,
     check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
@@ -65,10 +65,11 @@ ensure_secondary_index(Table, Field) ->
     {aborted, {already_exists, Table, _}} -> ok
   end.
 
--spec ensure_table_copy(mnesia_table(), node()) -> ok | {error, any()}.
-ensure_table_copy(TableName, Node) ->
+-spec ensure_table_copy(mnesia_table(), node(), ram_copies | disc_copies) ->
+    ok | {error, any()}.
+ensure_table_copy(TableName, Node, StorageType) ->
     rabbit_log:debug("Will add a local schema database copy for table '~s'", [TableName]),
-    case mnesia:add_table_copy(TableName, Node, disc_copies) of
+    case mnesia:add_table_copy(TableName, Node, StorageType) of
         {atomic, ok}                              -> ok;
         {aborted,{already_exists, TableName}}     -> ok;
         {aborted, {already_exists, TableName, _}} -> ok;
@@ -345,14 +346,6 @@ definitions() ->
        {type, ordered_set},
        {match, #reverse_route{reverse_binding = reverse_binding_match(),
                               _='_'}}]},
-     {rabbit_index_route,
-      [{record_name, index_route},
-       {attributes, record_info(fields, index_route)},
-       {type, bag},
-       {match, #index_route{source_key = {exchange_name_match(), '_'},
-                            destination = binding_destination_match(),
-                            _='_'}},
-       {storage_properties, [{ets, [{read_concurrency, true}]}]}]},
      {rabbit_topic_trie_node,
       [{record_name, topic_trie_node},
        {attributes, record_info(fields, topic_trie_node)},
