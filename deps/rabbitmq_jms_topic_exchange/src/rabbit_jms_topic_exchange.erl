@@ -99,8 +99,12 @@ serialise_events() -> false.
 route( #exchange{name = XName}
      , #delivery{message = #basic_message{content = MessageContent, routing_keys = RKs}}
      ) ->
-  BindingFuns = get_binding_funs_x(XName),
-  match_bindings(XName, RKs, MessageContent, BindingFuns).
+    case get_binding_funs_x(XName) of
+        not_found ->
+            [];
+        BindingFuns ->
+            match_bindings(XName, RKs, MessageContent, BindingFuns)
+    end.
 
 
 % Before exchange declaration
@@ -232,8 +236,12 @@ selector_match(Selector, Headers) ->
 get_binding_funs_x(XName) ->
   mnesia:async_dirty(
     fun() ->
-      #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} = read_state(XName),
-      BindingFuns
+      case read_state_no_error(XName) of
+          not_found ->
+              not_found;
+          #?JMS_TOPIC_RECORD{x_selector_funs = BindingFuns} ->
+            BindingFuns
+      end
     end,
     []
   ).
@@ -266,15 +274,20 @@ delete_state(XName) ->
 % Basic read for update
 read_state_for_update(XName) -> read_state(XName, write).
 
-% Basic read
-read_state(XName) -> read_state(XName, read).
-
 % Lockable read
 read_state(XName, Lock) ->
   case mnesia:read(?JMS_TOPIC_TABLE, XName, Lock) of
     [Rec] -> Rec;
     _     -> exchange_state_corrupt_error(XName)
   end.
+
+read_state_no_error(XName) ->
+  case mnesia:read(?JMS_TOPIC_TABLE, XName, read) of
+    [Rec] -> Rec;
+    _     -> not_found
+  end.
+
+
 
 % Basic write
 write_state_fun(XName, BFuns) ->
