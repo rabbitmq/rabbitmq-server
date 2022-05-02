@@ -274,9 +274,6 @@ delete_state(XName) ->
 % Basic read for update
 read_state_for_update(XName) -> read_state(XName, write).
 
-% Basic read
-read_state(XName) -> read_state(XName, read).
-
 % Lockable read
 read_state(XName, Lock) ->
   case mnesia:read(?JMS_TOPIC_TABLE, XName, Lock) of
