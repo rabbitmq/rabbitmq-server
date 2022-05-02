@@ -1,0 +1,265 @@
+module(
+    name = "rabbitmq-server",
+    version = "3.10.0",
+)
+
+bazel_dep(name = "rules_erlang", version = "2.5.2")
+
+erlang_package = use_extension(
+    "@rules_erlang//bzlmod:extensions.bzl",
+    "erlang_package",
+)
+
+erlang_package.hex(
+    name = "accept",
+    version = "0.3.5",
+    sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
+)
+
+erlang_package.git(
+    repository = "rabbitmq/aten",
+    tag = "v0.5.6",
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "aten",
+    extra_apps = [
+        "sasl",
+         "crypto",
+    ],
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+)
+""",
+)
+
+erlang_package.hex(
+    name = "base64url",
+    version = "1.0.1",
+    sha256 = "f9b3add4731a02a9b0410398b475b33e7566a695365237a6bdee1bb447719f5c",
+)
+
+erlang_package.hex(
+    name = "cowboy",
+    version = "2.8.0",
+    sha256 = "4643e4fba74ac96d4d152c75803de6fad0b3fa5df354c71afdd6cbeeb15fac8a",
+)
+
+erlang_package.hex(
+    name = "cowlib",
+    version = "2.9.1",
+    sha256 = "e4175dc240a70d996156160891e1c62238ede1729e45740bdd38064dad476170",
+)
+
+erlang_package.git(
+    name = "credentials_obfuscation",
+    repository = "rabbitmq/credentials-obfuscation",
+    tag = "v2.4.0",
+)
+
+erlang_package.git(
+    repository = "extend/ct_helper",
+    branch = "master",
+)
+
+erlang_package.hex(
+    name = "cuttlefish",
+    version = "3.0.1",
+    sha256 = "3feff3ae4ed1f0ca6df87ac89235068fbee9242ee85d2ac17fb1b8ce0e30f1a6",
+)
+
+erlang_package.hex(
+    name = "eetcd",
+    version = "0.3.5",
+    sha256 = "af9d5158ad03a6794d412708d605be5dd1ebd0b8a1271786530d99f165bb0cff",
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "eetcd",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+    runtime_deps = [
+        "@gun//:erlang_app",
+    ],
+)
+""",
+)
+
+erlang_package.git(
+    repository = "rabbitmq/emqttc",
+    branch = "remove-logging",
+)
+
+erlang_package.hex(
+    name = "gen_batch_server",
+    version = "0.8.4",
+    sha256 = "ff6b0ed0f7be945f38b94ddd4784d128f35ff029c34dad6ca0c6cb17ab7bc9c4",
+)
+
+erlang_package.hex(
+    name = "goldrush",
+    version = "0.1.9",
+    sha256 = "99cb4128cffcb3227581e5d4d803d5413fa643f4eb96523f77d9e6937d994ceb",
+)
+
+erlang_package.hex(
+    name = "gun",
+    version = "1.3.3",
+    sha256 = "3106ce167f9c9723f849e4fb54ea4a4d814e3996ae243a1c828b256e749041e0",
+)
+
+erlang_package.git(
+    name = "inet_tcp_proxy_dist",
+    repository = "rabbitmq/inet_tcp_proxy",
+    branch = "master",
+)
+
+erlang_package.git(
+    name = "jose",
+    repository = "potatosalad/erlang-jose",
+    commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
+)
+
+erlang_package.hex(
+    name = "jsx",
+    version = "3.1.0",
+    sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
+)
+
+erlang_package.hex(
+    name = "lager",
+    version = "3.8.2",
+    sha256 = "73329ce700410b423f64aafc5f94583073904899098e4461f3558ed2980462ab",
+)
+
+erlang_package.git(
+    repository = "eproxus/meck",
+    branch = "master",
+)
+
+erlang_package.hex(
+    name = "observer_cli",
+    version = "1.7.3",
+    sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
+)
+
+erlang_package.hex(
+    name = "prometheus",
+    version = "4.8.1",
+    sha256 = "6edfbe928d271c7f657a6f2c46258738086584bd6cae4a000b8b9a6009ba23a5",
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "prometheus",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+    deps = [
+        "@quantile_estimator//:erlang_app",
+    ],
+)
+""",
+)
+
+erlang_package.git(
+    repository = "manopapad/proper",
+    branch = "master",
+)
+
+erlang_package.hex(
+    name = "quantile_estimator",
+    version = "0.2.1",
+    sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
+)
+
+erlang_package.git(
+    repository = "rabbitmq/ra",
+    tag = "v1.1.8",
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "ra",
+    extra_apps = [
+        "sasl",
+         "crypto",
+    ],
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+    deps = [
+        "@aten//:erlang_app",
+        "@gen_batch_server//:erlang_app",
+    ],
+)""",
+)
+
+erlang_package.hex(
+    name = "ranch",
+    version = "2.1.0",
+    sha256 = "244ee3fa2a6175270d8e1fc59024fd9dbc76294a321057de8f803b1479e76916",
+)
+
+erlang_package.hex(
+    name = "recon",
+    version = "2.5.1",
+    sha256 = "5721c6b6d50122d8f68cccac712caa1231f97894bab779eff5ff0f886cb44648",
+)
+
+erlang_package.hex(
+    name = "stdout_formatter",
+    version = "0.2.4",
+    sha256 = "51f1df921b0477275ea712763042155dbc74acc75d9648dbd54985c45c913b29",
+)
+
+erlang_package.git(
+    repository = "schlagert/syslog",
+    tag = "3.4.5",
+)
+
+erlang_package.hex(
+    name = "sysmon_handler",
+    version = "1.3.0",
+    sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
+)
+
+erlang_package.git(
+    name = "trust_store_http",
+    repository = "rabbitmq/trust-store-http",
+    branch = "master",
+)
+
+use_repo(
+    erlang_package,
+    "accept",
+    "aten",
+    "base64url",
+    "cowboy",
+    "cowlib",
+    "credentials_obfuscation",
+    "ct_helper",
+    "cuttlefish",
+    "eetcd",
+    "emqttc",
+    "gen_batch_server",
+    "gun",
+    "inet_tcp_proxy_dist",
+    "jose",
+    "jsx",
+    "meck",
+    "observer_cli",
+    "prometheus",
+    "proper",
+    "ra",
+    "ranch",
+    "recon",
+    "stdout_formatter",
+    "syslog",
+    "sysmon_handler",
+    "trust_store_http",
+)
