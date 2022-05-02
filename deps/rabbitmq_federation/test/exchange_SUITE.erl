@@ -356,6 +356,7 @@ unbind_on_unbind(Config) ->
       end, upstream_downstream()).
 
 user_id(Config) ->
+<<<<<<< HEAD
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     set_policy_upstream(Config, Rabbit, <<"^test$">>,
       rabbit_ct_broker_helpers:node_uri(Config, 1), []),
@@ -468,6 +469,118 @@ user_id(Config) ->
     amqp_connection:close(Conn2),
 
     ok.
+=======
+    case rabbit_ct_helpers:is_mixed_versions() of
+      false ->
+        [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+        await_credentials_obfuscation_seeding_on_two_nodes(Config),
+
+        set_policy_upstream(Config, Rabbit, <<"^test$">>,
+          rabbit_ct_broker_helpers:node_uri(Config, 1), []),
+        Perm = fun (F, A) ->
+                      ok = rpc:call(Hare,
+                                    rabbit_auth_backend_internal, F, A)
+               end,
+        Perm(add_user, [<<"hare-user">>, <<"hare-user">>, <<"acting-user">>]),
+        Perm(set_permissions, [<<"hare-user">>,
+                               <<"/">>, <<".*">>, <<".*">>, <<".*">>,
+                               <<"acting-user">>]),
+
+        Ch = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
+        {ok, Conn2} = amqp_connection:start(
+          #amqp_params_network{
+            username = <<"hare-user">>,
+            password = <<"hare-user">>,
+            port     = rabbit_ct_broker_helpers:get_node_config(Config, Hare,
+              tcp_port_amqp)}),
+        {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+        declare_exchange(Ch2, x(<<"test">>)),
+        declare_exchange(Ch, x(<<"test">>)),
+        Q = bind_queue(Ch, <<"test">>, <<"key">>),
+        await_binding(Config, Hare, <<"test">>, <<"key">>),
+
+        Msg = #amqp_msg{props   = #'P_basic'{user_id = <<"hare-user">>},
+                        payload = <<"HELLO">>},
+
+        SafeUri = fun (H) ->
+                          {array, [{table, Recv}]} =
+                              rabbit_misc:table_lookup(
+                                H, <<"x-received-from">>),
+                          URI = rabbit_ct_broker_helpers:node_uri(Config, 1),
+                          {longstr, URI} =
+                             rabbit_misc:table_lookup(Recv, <<"uri">>)
+                  end,
+        ExpectUser =
+            fun (ExpUser) ->
+                    fun () ->
+                            receive
+                                {#'basic.deliver'{},
+                                 #amqp_msg{props   = Props,
+                                           payload = Payload}} ->
+                                    #'P_basic'{user_id = ActUser,
+                                               headers = Headers} = Props,
+                                    SafeUri(Headers),
+                                    <<"HELLO">> = Payload,
+                                    ExpUser = ActUser
+                            end
+                    end
+            end,
+
+        ?awaitMatch({L1, L2, true} when L1 =/= [] andalso L2 =/= [],
+                    begin
+                        VHost = <<"/">>,
+                        X1s = rabbit_ct_broker_helpers:rpc(
+                                Config, Rabbit, rabbit_exchange, list, [VHost]),
+                        L1 = [X || X <- X1s,
+                                   X#exchange.name =:= #resource{virtual_host = VHost,
+                                                                 kind = exchange,
+                                                                 name = <<"test">>},
+                                   X#exchange.scratches =:= [{federation,
+                                                              [{{<<"upstream-2">>,
+                                                                 <<"test">>},
+                                                                <<"B">>}]}]],
+                        X2s = rabbit_ct_broker_helpers:rpc(
+                                Config, Hare, rabbit_exchange, list, [VHost]),
+                        L2 = [X || X <- X2s,
+                                   X#exchange.type =:= 'x-federation-upstream'],
+                        {L1, L2, has_internal_federated_queue(Config, Hare, VHost)}
+                    end, 90000),
+        publish(Ch2, <<"test">>, <<"key">>, Msg),
+        expect(Ch, Q, ExpectUser(undefined)),
+
+        set_policy_upstream(Config, Rabbit, <<"^test$">>,
+          rabbit_ct_broker_helpers:node_uri(Config, 1),
+          [{<<"trust-user-id">>, true}]),
+        ?awaitMatch({L1, L2, true} when L1 =/= [] andalso L2 =/= [],
+                    begin
+                        VHost = <<"/">>,
+                        X1s = rabbit_ct_broker_helpers:rpc(
+                                Config, Rabbit, rabbit_exchange, list, [VHost]),
+                        L1 = [X || X <- X1s,
+                                   X#exchange.name =:= #resource{virtual_host = VHost,
+                                                                 kind = exchange,
+                                                                 name = <<"test">>},
+                                   X#exchange.scratches =:= [{federation,
+                                                              [{{<<"upstream-2">>,
+                                                                 <<"test">>},
+                                                                <<"A">>}]}]],
+                        X2s = rabbit_ct_broker_helpers:rpc(
+                                Config, Hare, rabbit_exchange, list, [VHost]),
+                        L2 = [X || X <- X2s,
+                                   X#exchange.type =:= 'x-federation-upstream'],
+                        {L1, L2, has_internal_federated_queue(Config, Hare, VHost)}
+                    end, 90000),
+        publish(Ch2, <<"test">>, <<"key">>, Msg),
+        expect(Ch, Q, ExpectUser(<<"hare-user">>)),
+
+        amqp_channel:close(Ch2),
+        amqp_connection:close(Conn2);
+      _ ->
+        %% skip the test in mixed version mode
+        {skip, "Should not run in mixed version environments"}
+    end.
+>>>>>>> 3788011584 (Disable some timing-sensitive tests in mixed version mode)
 
 %% In order to test that unbinds get sent we deliberately set up a
 %% broken config - with topic upstream and fanout downstream. You
@@ -514,136 +627,158 @@ suffix(Config, Node, Name, XName) ->
                         exchange_name = list_to_binary(XName)}, none]).
 
 restart_upstream(Config) ->
-    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Downstream = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-    Upstream   = rabbit_ct_client_helpers:open_channel(Config, Hare),
+    case rabbit_ct_helpers:is_mixed_versions() of
+      false ->
+        [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+        Downstream = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
+        Upstream   = rabbit_ct_client_helpers:open_channel(Config, Hare),
 
-    rabbit_federation_test_util:set_upstream(Config,
-      Rabbit, <<"hare">>, rabbit_ct_broker_helpers:node_uri(Config, 1)),
-    rabbit_federation_test_util:set_upstream_set(Config,
-      Rabbit, <<"upstream">>,
-      [{<<"hare">>, [{<<"exchange">>, <<"upstream">>}]}]),
-    rabbit_federation_test_util:set_policy(Config,
-      Rabbit, <<"hare">>, <<"^hare\\.">>, <<"upstream">>),
+        await_credentials_obfuscation_seeding_on_two_nodes(Config),
 
-    declare_exchange(Upstream, x(<<"upstream">>)),
-    declare_exchange(Downstream, x(<<"hare.downstream">>)),
+        rabbit_federation_test_util:set_upstream(Config,
+          Rabbit, <<"hare">>, rabbit_ct_broker_helpers:node_uri(Config, 1)),
+        rabbit_federation_test_util:set_upstream_set(Config,
+          Rabbit, <<"upstream">>,
+          [{<<"hare">>, [{<<"exchange">>, <<"upstream">>}]}]),
+        rabbit_federation_test_util:set_policy(Config,
+          Rabbit, <<"hare">>, <<"^hare\\.">>, <<"upstream">>),
 
-    Qstays = bind_queue(Downstream, <<"hare.downstream">>, <<"stays">>),
-    Qgoes = bind_queue(Downstream, <<"hare.downstream">>, <<"goes">>),
+        declare_exchange(Upstream, x(<<"upstream">>)),
+        declare_exchange(Downstream, x(<<"hare.downstream">>)),
 
-    rabbit_ct_client_helpers:close_channels_and_connection(Config, Hare),
-    timer:sleep(3000),
-    rabbit_ct_broker_helpers:stop_node(Config, Hare),
+        Qstays = bind_queue(Downstream, <<"hare.downstream">>, <<"stays">>),
+        Qgoes = bind_queue(Downstream, <<"hare.downstream">>, <<"goes">>),
 
-    Qcomes = bind_queue(Downstream, <<"hare.downstream">>, <<"comes">>),
-    unbind_queue(Downstream, Qgoes, <<"hare.downstream">>, <<"goes">>),
+        rabbit_ct_client_helpers:close_channels_and_connection(Config, Hare),
+        timer:sleep(3000),
+        rabbit_ct_broker_helpers:stop_node(Config, Hare),
 
-    rabbit_ct_broker_helpers:start_node(Config, Hare),
-    Upstream1 = rabbit_ct_client_helpers:open_channel(Config, Hare),
+        Qcomes = bind_queue(Downstream, <<"hare.downstream">>, <<"comes">>),
+        unbind_queue(Downstream, Qgoes, <<"hare.downstream">>, <<"goes">>),
 
-    %% Wait for the link to come up and for these bindings
-    %% to be transferred
-    await_binding(Config, Hare, <<"upstream">>, <<"comes">>, 1),
-    await_binding_absent(Config, Hare, <<"upstream">>, <<"goes">>),
-    await_binding(Config, Hare, <<"upstream">>, <<"stays">>, 1),
+        rabbit_ct_broker_helpers:start_node(Config, Hare),
+        Upstream1 = rabbit_ct_client_helpers:open_channel(Config, Hare),
 
-    publish(Upstream1, <<"upstream">>, <<"goes">>, <<"GOES">>),
-    publish(Upstream1, <<"upstream">>, <<"stays">>, <<"STAYS">>),
-    publish(Upstream1, <<"upstream">>, <<"comes">>, <<"COMES">>),
+        %% Wait for the link to come up and for these bindings
+        %% to be transferred
+        await_binding(Config, Hare, <<"upstream">>, <<"comes">>, 1),
+        await_binding_absent(Config, Hare, <<"upstream">>, <<"goes">>),
+        await_binding(Config, Hare, <<"upstream">>, <<"stays">>, 1),
 
-    expect(Downstream, Qstays, [<<"STAYS">>]),
-    expect(Downstream, Qcomes, [<<"COMES">>]),
-    expect_empty(Downstream, Qgoes),
+        publish(Upstream1, <<"upstream">>, <<"goes">>, <<"GOES">>),
+        publish(Upstream1, <<"upstream">>, <<"stays">>, <<"STAYS">>),
+        publish(Upstream1, <<"upstream">>, <<"comes">>, <<"COMES">>),
 
-    delete_exchange(Downstream, <<"hare.downstream">>),
-    delete_exchange(Upstream1, <<"upstream">>),
+        expect(Downstream, Qstays, [<<"STAYS">>]),
+        expect(Downstream, Qcomes, [<<"COMES">>]),
+        expect_empty(Downstream, Qgoes),
 
-    rabbit_federation_test_util:clear_policy(Config,
-      Rabbit, <<"hare">>),
-    rabbit_federation_test_util:clear_upstream_set(Config,
-      Rabbit, <<"upstream">>),
-    rabbit_federation_test_util:clear_upstream(Config,
-      Rabbit, <<"hare">>),
-    ok.
+        delete_exchange(Downstream, <<"hare.downstream">>),
+        delete_exchange(Upstream1, <<"upstream">>),
+
+        rabbit_federation_test_util:clear_policy(Config,
+          Rabbit, <<"hare">>),
+        rabbit_federation_test_util:clear_upstream_set(Config,
+          Rabbit, <<"upstream">>),
+        rabbit_federation_test_util:clear_upstream(Config,
+          Rabbit, <<"hare">>);
+      _ ->
+        %% skip the test in mixed version mode
+        {skip, "Should not run in mixed version environments"}
+    end.
 
 %% flopsy, mopsy and cottontail, connected in a ring with max_hops = 2
 %% for each connection. We should not see any duplicates.
 
 max_hops(Config) ->
-    [Flopsy, Mopsy, Cottontail] = rabbit_ct_broker_helpers:get_node_configs(
-      Config, nodename),
-    [set_policy_upstream(Config, Downstream,
-       <<"^ring$">>,
-       rabbit_ct_broker_helpers:node_uri(Config, Upstream),
-       [{<<"max-hops">>, 2}])
-     || {Downstream, Upstream} <- [{Flopsy, Cottontail},
-                                    {Mopsy, Flopsy},
-                                    {Cottontail, Mopsy}]],
+  case rabbit_ct_helpers:is_mixed_versions() of
+    false ->
+      [Flopsy, Mopsy, Cottontail] = rabbit_ct_broker_helpers:get_node_configs(
+        Config, nodename),
 
-    FlopsyCh     = rabbit_ct_client_helpers:open_channel(Config, Flopsy),
-    MopsyCh      = rabbit_ct_client_helpers:open_channel(Config, Mopsy),
-    CottontailCh = rabbit_ct_client_helpers:open_channel(Config, Cottontail),
+      await_credentials_obfuscation_seeding_on_two_nodes(Config),
 
-    declare_exchange(FlopsyCh,     x(<<"ring">>)),
-    declare_exchange(MopsyCh,      x(<<"ring">>)),
-    declare_exchange(CottontailCh, x(<<"ring">>)),
+      [set_policy_upstream(Config, Downstream,
+         <<"^ring$">>,
+         rabbit_ct_broker_helpers:node_uri(Config, Upstream),
+         [{<<"max-hops">>, 2}])
+       || {Downstream, Upstream} <- [{Flopsy, Cottontail},
+                                      {Mopsy, Flopsy},
+                                      {Cottontail, Mopsy}]],
 
-    Q1 = bind_queue(FlopsyCh,     <<"ring">>, <<"key">>),
-    Q2 = bind_queue(MopsyCh,      <<"ring">>, <<"key">>),
-    Q3 = bind_queue(CottontailCh, <<"ring">>, <<"key">>),
+      FlopsyCh     = rabbit_ct_client_helpers:open_channel(Config, Flopsy),
+      MopsyCh      = rabbit_ct_client_helpers:open_channel(Config, Mopsy),
+      CottontailCh = rabbit_ct_client_helpers:open_channel(Config, Cottontail),
 
-    await_binding(Config, Flopsy,     <<"ring">>, <<"key">>, 3),
-    await_binding(Config, Mopsy,      <<"ring">>, <<"key">>, 3),
-    await_binding(Config, Cottontail, <<"ring">>, <<"key">>, 3),
+      declare_exchange(FlopsyCh,     x(<<"ring">>)),
+      declare_exchange(MopsyCh,      x(<<"ring">>)),
+      declare_exchange(CottontailCh, x(<<"ring">>)),
 
-    publish(FlopsyCh,     <<"ring">>, <<"key">>, <<"HELLO flopsy">>),
-    publish(MopsyCh,      <<"ring">>, <<"key">>, <<"HELLO mopsy">>),
-    publish(CottontailCh, <<"ring">>, <<"key">>, <<"HELLO cottontail">>),
+      Q1 = bind_queue(FlopsyCh,     <<"ring">>, <<"key">>),
+      Q2 = bind_queue(MopsyCh,      <<"ring">>, <<"key">>),
+      Q3 = bind_queue(CottontailCh, <<"ring">>, <<"key">>),
 
-    Msgs = [<<"HELLO flopsy">>, <<"HELLO mopsy">>, <<"HELLO cottontail">>],
-    expect(FlopsyCh,     Q1, Msgs),
-    expect(MopsyCh,      Q2, Msgs),
-    expect(CottontailCh, Q3, Msgs),
-    expect_empty(FlopsyCh,     Q1),
-    expect_empty(MopsyCh,      Q2),
-    expect_empty(CottontailCh, Q3),
-    ok.
+      await_binding(Config, Flopsy,     <<"ring">>, <<"key">>, 3),
+      await_binding(Config, Mopsy,      <<"ring">>, <<"key">>, 3),
+      await_binding(Config, Cottontail, <<"ring">>, <<"key">>, 3),
+
+      publish(FlopsyCh,     <<"ring">>, <<"key">>, <<"HELLO flopsy">>),
+      publish(MopsyCh,      <<"ring">>, <<"key">>, <<"HELLO mopsy">>),
+      publish(CottontailCh, <<"ring">>, <<"key">>, <<"HELLO cottontail">>),
+
+      Msgs = [<<"HELLO flopsy">>, <<"HELLO mopsy">>, <<"HELLO cottontail">>],
+      expect(FlopsyCh,     Q1, Msgs),
+      expect(MopsyCh,      Q2, Msgs),
+      expect(CottontailCh, Q3, Msgs),
+      expect_empty(FlopsyCh,     Q1),
+      expect_empty(MopsyCh,      Q2),
+      expect_empty(CottontailCh, Q3);
+    true ->
+      %% skip the test in mixed version mode
+      {skip, "Should not run in mixed version environments"}
+  end.
 
 %% Two nodes, federated two way with the same virtual hosts, and max_hops set to a
 %% high value.
 message_cycle_detection_case1(Config) ->
-    [Cycle1, Cycle2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    [set_policy_upstream(Config, Downstream,
-       <<"^cycle$">>,
-       rabbit_ct_broker_helpers:node_uri(Config, Upstream),
-       [{<<"max-hops">>, 10}])
-     || {Downstream, Upstream} <- [{Cycle1, Cycle2}, {Cycle2, Cycle1}]],
+    case rabbit_ct_helpers:is_mixed_versions() of
+      false ->
+        [Cycle1, Cycle2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Cycle1Ch = rabbit_ct_client_helpers:open_channel(Config, Cycle1),
-    Cycle2Ch = rabbit_ct_client_helpers:open_channel(Config, Cycle2),
+        await_credentials_obfuscation_seeding_on_two_nodes(Config),
 
-    declare_exchange(Cycle1Ch, x(<<"cycle">>)),
-    declare_exchange(Cycle2Ch, x(<<"cycle">>)),
+        [set_policy_upstream(Config, Downstream,
+           <<"^cycle$">>,
+           rabbit_ct_broker_helpers:node_uri(Config, Upstream),
+           [{<<"max-hops">>, 10}])
+         || {Downstream, Upstream} <- [{Cycle1, Cycle2}, {Cycle2, Cycle1}]],
 
-    Q1 = bind_queue(Cycle1Ch, <<"cycle">>, <<"cycle_detection-key">>),
-    Q2 = bind_queue(Cycle2Ch, <<"cycle">>, <<"cycle_detection-key">>),
+        Cycle1Ch = rabbit_ct_client_helpers:open_channel(Config, Cycle1),
+        Cycle2Ch = rabbit_ct_client_helpers:open_channel(Config, Cycle2),
 
-    %% "key" present twice because once for the local queue and once
-    %% for federation in each case
-    await_binding(Config, Cycle1, <<"cycle">>, <<"cycle_detection-key">>, 2),
-    await_binding(Config, Cycle2, <<"cycle">>, <<"cycle_detection-key">>, 2),
+        declare_exchange(Cycle1Ch, x(<<"cycle">>)),
+        declare_exchange(Cycle2Ch, x(<<"cycle">>)),
 
-    publish(Cycle1Ch, <<"cycle">>, <<"cycle_detection-key">>, <<"HELLO1">>),
-    publish(Cycle2Ch, <<"cycle">>, <<"cycle_detection-key">>, <<"HELLO2">>),
+        Q1 = bind_queue(Cycle1Ch, <<"cycle">>, <<"cycle_detection-key">>),
+        Q2 = bind_queue(Cycle2Ch, <<"cycle">>, <<"cycle_detection-key">>),
 
-    Msgs = [<<"HELLO1">>, <<"HELLO2">>],
-    expect(Cycle1Ch, Q1, Msgs),
-    expect(Cycle2Ch, Q2, Msgs),
-    expect_empty(Cycle1Ch, Q1),
-    expect_empty(Cycle2Ch, Q2),
+        %% "key" present twice because once for the local queue and once
+        %% for federation in each case
+        await_binding(Config, Cycle1, <<"cycle">>, <<"cycle_detection-key">>, 2),
+        await_binding(Config, Cycle2, <<"cycle">>, <<"cycle_detection-key">>, 2),
 
-    ok.
+        publish(Cycle1Ch, <<"cycle">>, <<"cycle_detection-key">>, <<"HELLO1">>),
+        publish(Cycle2Ch, <<"cycle">>, <<"cycle_detection-key">>, <<"HELLO2">>),
+
+        Msgs = [<<"HELLO1">>, <<"HELLO2">>],
+        expect(Cycle1Ch, Q1, Msgs),
+        expect(Cycle2Ch, Q2, Msgs),
+        expect_empty(Cycle1Ch, Q1),
+        expect_empty(Cycle2Ch, Q2);
+      _ ->
+        %% skip the test in mixed version mode
+        {skip, "Should not run in mixed version environments"}
+    end.
 
 node_uri_with_virtual_host(Config, Vhost) ->
     node_uri_with_virtual_host(Config, 0, Vhost).
@@ -777,43 +912,47 @@ message_cycle_detection_case2(Config) ->
 %% that we get rid of everything again.
 
 binding_propagation(Config) ->
-    [Dylan, Bugs, Jessica] = rabbit_ct_broker_helpers:get_node_configs(Config,
-      nodename),
-    set_policy_upstream(Config, Dylan, <<"^x$">>,
-      rabbit_ct_broker_helpers:node_uri(Config, Jessica), []),
-    set_policy_upstream(Config, Bugs, <<"^x$">>,
-      rabbit_ct_broker_helpers:node_uri(Config, Dylan), []),
-    set_policy_upstreams(Config, Jessica, <<"^x$">>, [
-        {rabbit_ct_broker_helpers:node_uri(Config, Dylan), []},
-        {rabbit_ct_broker_helpers:node_uri(Config, Bugs),
-          [{<<"max-hops">>, 2}]}
-      ]),
-    DylanCh   = rabbit_ct_client_helpers:open_channel(Config, Dylan),
-    BugsCh    = rabbit_ct_client_helpers:open_channel(Config, Bugs),
-    JessicaCh = rabbit_ct_client_helpers:open_channel(Config, Jessica),
+  case rabbit_ct_helpers:is_mixed_versions() of
+    false ->
+      [Dylan, Bugs, Jessica] = rabbit_ct_broker_helpers:get_node_configs(Config,
+        nodename),
+      set_policy_upstream(Config, Dylan, <<"^x$">>,
+        rabbit_ct_broker_helpers:node_uri(Config, Jessica), []),
+      set_policy_upstream(Config, Bugs, <<"^x$">>,
+        rabbit_ct_broker_helpers:node_uri(Config, Dylan), []),
+      set_policy_upstreams(Config, Jessica, <<"^x$">>, [
+          {rabbit_ct_broker_helpers:node_uri(Config, Dylan), []},
+          {rabbit_ct_broker_helpers:node_uri(Config, Bugs),
+            [{<<"max-hops">>, 2}]}
+        ]),
+      DylanCh   = rabbit_ct_client_helpers:open_channel(Config, Dylan),
+      BugsCh    = rabbit_ct_client_helpers:open_channel(Config, Bugs),
+      JessicaCh = rabbit_ct_client_helpers:open_channel(Config, Jessica),
 
-    declare_exchange(DylanCh,   x(<<"x">>)),
-    declare_exchange(BugsCh,    x(<<"x">>)),
-    declare_exchange(JessicaCh, x(<<"x">>)),
+      declare_exchange(DylanCh,   x(<<"x">>)),
+      declare_exchange(BugsCh,    x(<<"x">>)),
+      declare_exchange(JessicaCh, x(<<"x">>)),
 
-    Q1 = bind_queue(DylanCh,   <<"x">>, <<"dylan">>),
-    Q2 = bind_queue(BugsCh,    <<"x">>, <<"bugs">>),
-    Q3 = bind_queue(JessicaCh, <<"x">>, <<"jessica">>),
+      Q1 = bind_queue(DylanCh,   <<"x">>, <<"dylan">>),
+      Q2 = bind_queue(BugsCh,    <<"x">>, <<"bugs">>),
+      Q3 = bind_queue(JessicaCh, <<"x">>, <<"jessica">>),
 
-    await_binding(Config,  Dylan,   <<"x">>, <<"jessica">>, 2),
-    await_bindings(Config, Dylan,   <<"x">>, [<<"bugs">>, <<"dylan">>]),
-    await_bindings(Config, Bugs,    <<"x">>, [<<"jessica">>, <<"bugs">>]),
-    await_bindings(Config, Jessica, <<"x">>, [<<"dylan">>, <<"jessica">>]),
+      await_binding(Config,  Dylan,   <<"x">>, <<"jessica">>, 2),
+      await_bindings(Config, Dylan,   <<"x">>, [<<"bugs">>, <<"dylan">>]),
+      await_bindings(Config, Bugs,    <<"x">>, [<<"jessica">>, <<"bugs">>]),
+      await_bindings(Config, Jessica, <<"x">>, [<<"dylan">>, <<"jessica">>]),
 
-    delete_queue(DylanCh,   Q1),
-    delete_queue(BugsCh,    Q2),
-    delete_queue(JessicaCh, Q3),
+      delete_queue(DylanCh,   Q1),
+      delete_queue(BugsCh,    Q2),
+      delete_queue(JessicaCh, Q3),
 
-    await_bindings(Config, Dylan,   <<"x">>, []),
-    await_bindings(Config, Bugs,    <<"x">>, []),
-    await_bindings(Config, Jessica, <<"x">>, []),
-
-    ok.
+      await_bindings(Config, Dylan,   <<"x">>, []),
+      await_bindings(Config, Bugs,    <<"x">>, []),
+      await_bindings(Config, Jessica, <<"x">>, []);
+    true ->
+      %% skip the test in mixed version mode
+      {skip, "Should not run in mixed version environments"}
+  end.
 
 upstream_has_no_federation(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1372,3 +1511,20 @@ connection_pids(Config, Node) ->
 
 upstream_downstream() ->
     [x(<<"upstream">>), x(<<"fed.downstream">>)].
+
+await_credentials_obfuscation_seeding_on_one_node(Config) ->
+    %% give credentials_obfuscation a moment to start and be seeded
+    rabbit_ct_helpers:await_condition(fun() ->
+      rabbit_ct_broker_helpers:rpc(Config, 0, credentials_obfuscation, enabled, [])
+    end),
+
+    timer:sleep(1000).
+
+await_credentials_obfuscation_seeding_on_two_nodes(Config) ->
+      %% give credentials_obfuscation a moment to start and be seeded
+      rabbit_ct_helpers:await_condition(fun() ->
+        rabbit_ct_broker_helpers:rpc(Config, 0, credentials_obfuscation, enabled, []) and
+        rabbit_ct_broker_helpers:rpc(Config, 1, credentials_obfuscation, enabled, [])
+      end),
+
+      timer:sleep(1000).
