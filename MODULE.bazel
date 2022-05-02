@@ -40,10 +40,10 @@ erlang_package.hex(
     sha256 = "e4175dc240a70d996156160891e1c62238ede1729e45740bdd38064dad476170",
 )
 
-erlang_package.git(
+erlang_package.hex(
     name = "credentials_obfuscation",
-    repository = "rabbitmq/credentials-obfuscation",
-    tag = "v2.4.0",
+    version = "3.0.0",
+    sha256 = "bf2060c7058d4e765cdb4319ec94ad71c00d102931d667415b2cd5e991d9d038",
 )
 
 erlang_package.git(
