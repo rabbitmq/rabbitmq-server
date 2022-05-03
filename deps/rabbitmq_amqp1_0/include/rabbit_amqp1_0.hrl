@@ -20,9 +20,9 @@
 -define(SAFE(F),
         ((fun() ->
                   try F
-                  catch __T:__E ->
+                  catch __T:__E:__ST ->
                           io:format("~p:~p thrown debugging~n~p~n",
-                                    [__T, __E, erlang:get_stacktrace()])
+                                    [__T, __E, __ST])
                   end
           end)())).
 
