@@ -149,6 +149,7 @@
 -type file_props() :: [{level, logger:level()} |
                        {file, file:filename() | false} |
                        {date, string()} |
+                       {compress, boolean()} |
                        {size, non_neg_integer()} |
                        {count, non_neg_integer()} |
                        {formatter, {atom(), term()}}].
@@ -180,10 +181,22 @@
 %% A per-category log environment is the parameters in the configuration file
 %% for a specific category log handler. There can be one per category.
 
--type default_cat_env() :: [{level, logger:level()}].
+-type default_cat_env() :: [{level, logger:level()} |
+                            {rotate_on_date, string()} |
+                            {compress_on_rotate, boolean()} |
+                            {max_no_bytes, non_neg_integer()} |
+                            {max_no_files, non_neg_integer()}].
 %% The `default' category log environment is special (read: awkward) in the
 %% configuration file. It is used to change the log level of the main log
 %% handler.
+
+-type file_rotation_spec() :: #{type := file,
+                                rotate_on_date => string(),
+                                compress_on_rotate => boolean(),
+                                max_no_bytes => non_neg_integer(),
+                                max_no_files => non_neg_integer()}.
+%% Rotation spec is the part of logger_std_h config that defines log file rotation. See
+%% `extract_file_rotation_spec/1'.
 
 -type log_app_env() :: [main_log_env() |
                         {categories, [{default, default_cat_env()} |
@@ -534,14 +547,15 @@ get_log_configuration_from_app_env() ->
     DefaultAndCatProps = proplists:get_value(categories, Env, []),
     DefaultProps = proplists:get_value(default, DefaultAndCatProps, []),
     CatProps = proplists:delete(default, DefaultAndCatProps),
+    DefaultFileSpec = extract_file_rotation_spec(DefaultProps),
 
     %% This "normalization" turns the RabbitMQ-specific configuration into a
     %% structure which stores Logger handler configurations. That structure is
     %% later modified to reach the final handler configurations.
     PerCatConfig = maps:from_list(
-                     [{Cat, normalize_per_cat_log_config(Props)}
+                     [{Cat, normalize_per_cat_log_config(Props, DefaultFileSpec)}
                       || {Cat, Props} <- CatProps]),
-    GlobalConfig = normalize_main_log_config(EnvWithoutCats, DefaultProps),
+    GlobalConfig = normalize_main_log_config(EnvWithoutCats, DefaultProps, DefaultFileSpec),
     #{global => GlobalConfig,
       per_category => PerCatConfig}.
 
@@ -550,17 +564,33 @@ get_log_configuration_from_app_env() ->
 get_log_app_env() ->
     application:get_env(rabbit, log, []).
 
--spec normalize_main_log_config(main_log_env(), default_cat_env()) ->
+
+-spec extract_file_rotation_spec(proplists:proplist()) -> file_rotation_spec().
+
+extract_file_rotation_spec(Defaults) ->
+    Spec = lists:filter(fun(Elem) ->
+            case Elem of
+                {rotate_on_date, _}     -> true; 
+                {compress_on_rotate, _} -> true; 
+                {max_no_bytes, _}       -> true; 
+                {max_no_files, _}       -> true; 
+                _ -> false
+            end
+        end, Defaults),
+    SpecMap = rabbit_data_coercion:to_map(Spec),
+    SpecMap#{type => file}.
+
+-spec normalize_main_log_config(main_log_env(), default_cat_env(), file_rotation_spec()) ->
     global_log_config().
 
-normalize_main_log_config(Props, DefaultProps) ->
+normalize_main_log_config(Props, DefaultProps, DefaultFileSpec) ->
     Outputs = case proplists:get_value(level, DefaultProps) of
                   undefined -> #{outputs => []};
                   Level     -> #{outputs => [],
                                  level => Level}
               end,
     Props1 = compute_implicitly_enabled_output(Props),
-    normalize_main_log_config1(Props1, Outputs).
+    normalize_main_log_config1(Props1, Outputs, DefaultFileSpec).
 
 compute_implicitly_enabled_output(Props) ->
     {ConsoleEnabled, Props1} = compute_implicitly_enabled_output(
@@ -618,50 +648,51 @@ is_output_explicitely_enabled(FileProps) ->
     is_list(File) orelse (Level =/= undefined andalso Level =/= none).
 
 normalize_main_log_config1([{Type, Props} | Rest],
-                           #{outputs := Outputs} = LogConfig) ->
-    Outputs1 = normalize_main_output(Type, Props, Outputs),
+                           #{outputs := Outputs} = LogConfig,
+                          DefaultFileSpec) ->
+    Outputs1 = normalize_main_output(Type, Props, Outputs, DefaultFileSpec),
     LogConfig1 = LogConfig#{outputs => Outputs1},
-    normalize_main_log_config1(Rest, LogConfig1);
-normalize_main_log_config1([], LogConfig) ->
+    normalize_main_log_config1(Rest, LogConfig1, DefaultFileSpec);
+normalize_main_log_config1([], LogConfig, _) ->
     LogConfig.
 
 -spec normalize_main_output
-(console, console_props(), [logger:handler_config()]) ->
+(console, console_props(), [logger:handler_config()], file_rotation_spec()) ->
     [logger:handler_config()];
-(exchange, exchange_props(), [logger:handler_config()]) ->
+(exchange, exchange_props(), [logger:handler_config()], file_rotation_spec()) ->
     [logger:handler_config()];
-(file, file_props(), [logger:handler_config()]) ->
+(file, file_props(), [logger:handler_config()], file_rotation_spec()) ->
     [logger:handler_config()];
-(journald, journald_props(), [logger:handler_config()]) ->
+(journald, journald_props(), [logger:handler_config()], file_rotation_spec()) ->
     [logger:handler_config()];
-(syslog, syslog_props(), [logger:handler_config()]) ->
+(syslog, syslog_props(), [logger:handler_config()], file_rotation_spec()) ->
     [logger:handler_config()].
 
-normalize_main_output(console, Props, Outputs) ->
+normalize_main_output(console, Props, Outputs, _) ->
     normalize_main_console_output(
       Props,
       #{module => rabbit_logger_std_h,
         config => #{type => standard_io}},
       Outputs);
-normalize_main_output(exchange, Props, Outputs) ->
+normalize_main_output(exchange, Props, Outputs, _) ->
     normalize_main_exchange_output(
       Props,
       #{module => rabbit_logger_exchange_h,
         config => #{}},
       Outputs);
-normalize_main_output(file, Props, Outputs) ->
+normalize_main_output(file, Props, Outputs, DefaultFileSpec) ->
     normalize_main_file_output(
       Props,
       #{module => rabbit_logger_std_h,
-        config => #{type => file}},
+        config => DefaultFileSpec},
       Outputs);
-normalize_main_output(journald, Props, Outputs) ->
+normalize_main_output(journald, Props, Outputs, _) ->
     normalize_main_journald_output(
       Props,
       #{module => systemd_journal_h,
         config => #{}},
       Outputs);
-normalize_main_output(syslog, Props, Outputs) ->
+normalize_main_output(syslog, Props, Outputs, _) ->
     normalize_main_syslog_output(
       Props,
       #{module => syslog_logger_h,
@@ -924,25 +955,30 @@ remove_main_syslog_output(
           (_)                            -> true
       end, Outputs).
 
--spec normalize_per_cat_log_config(per_cat_env()) -> per_cat_log_config().
+-spec normalize_per_cat_log_config(per_cat_env(), file_rotation_spec()) -> per_cat_log_config().
 
-normalize_per_cat_log_config(Props) ->
-    normalize_per_cat_log_config(Props, #{outputs => []}).
+normalize_per_cat_log_config(Props, DefaultFileSpec) ->
+    CatFileSpec = extract_file_rotation_spec(Props),
+    FileSpec = maps:merge(DefaultFileSpec, CatFileSpec),
+    normalize_per_cat_log_config(Props, #{outputs => []}, FileSpec).
 
-normalize_per_cat_log_config([{level, Level} | Rest], LogConfig) ->
+normalize_per_cat_log_config([{level, Level} | Rest], LogConfig, FileSpec) ->
     LogConfig1 = LogConfig#{level => Level},
-    normalize_per_cat_log_config(Rest, LogConfig1);
+    normalize_per_cat_log_config(Rest, LogConfig1, FileSpec);
 normalize_per_cat_log_config([{file, Filename} | Rest],
-                             #{outputs := Outputs} = LogConfig) ->
-    %% Caution: The `file' property in the per-category configuration only
-    %% accepts a filename. It doesn't support the properties of the `file'
-    %% property at the global configuration level.
+                             #{outputs := Outputs} = LogConfig,
+                            FileSpec) ->
+    %% Caution: The `file' property in the per-category configuration doesn't support all properties
+    %% of the `file' property at the global configuration level.
+    %% FileSpec may carry additional file rotation configuration, taken from the `log.default' part
+    %% of the config.
     Output = #{module => rabbit_logger_std_h,
-               config => #{type => file,
-                           file => Filename}},
+               config => FileSpec#{file => Filename}},
     LogConfig1 = LogConfig#{outputs => [Output | Outputs]},
-    normalize_per_cat_log_config(Rest, LogConfig1);
-normalize_per_cat_log_config([], LogConfig) ->
+    normalize_per_cat_log_config(Rest, LogConfig1, FileSpec);
+normalize_per_cat_log_config([_ | Rest], LogConfig, FileSpec) ->
+    normalize_per_cat_log_config(Rest, LogConfig, FileSpec);
+normalize_per_cat_log_config([], LogConfig, _) ->
     LogConfig.
 
 -spec handle_default_and_overridden_outputs(log_config(),
