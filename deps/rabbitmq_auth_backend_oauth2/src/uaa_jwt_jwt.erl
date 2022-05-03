@@ -6,10 +6,6 @@
 %%
 -module(uaa_jwt_jwt).
 
-%% Transitional step until we can require Erlang/OTP 21 and
-%% use the now recommended try/catch syntax for obtaining the stack trace.
--compile(nowarn_deprecated_function).
-
 -export([decode/1, decode_and_verify/2, get_key_id/1]).
 
 -include_lib("jose/include/jose_jwt.hrl").
