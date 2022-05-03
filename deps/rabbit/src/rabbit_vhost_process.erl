@@ -21,10 +21,6 @@
 
 -module(rabbit_vhost_process).
 
-%% Transitional step until we can require Erlang/OTP 21 and
-%% use the now recommended try/catch syntax for obtaining the stack trace.
--compile(nowarn_deprecated_function).
-
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(TICKTIME_RATIO, 4).
