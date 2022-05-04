@@ -594,15 +594,20 @@ new_segment_file(Segment, SegmentEntryCount, State = #qi{ segments = Segments })
     case file:allocate(Fd, 0, Size) of
         ok ->
             ok;
+        %% For filesystems using copy-on-write such as ZFS, file preallocation
+        %% does not make any sense. For instance, on FreeBSD+ZFS,
+        %% posix_fallocate(2) fails with `EINVAL'.
+        %%
+        %% FIXME: Filling the file with zeroes is counter-productive because
+        %% it eats free space for no benefits and even worsen situations where
+        %% the disk is short on free space. However we still do it because the
+        %% rest of the code assumes that the file is preallocated.
+        {error, einval} ->
+            fill_file_with_zeroes(Fd, Size);
         %% On some platforms file:allocate is not supported (e.g. Windows).
         %% In that case we fill the file with zeroes manually.
         {error, enotsup} ->
-            ok = file:write(Fd, <<0:Size/unit:8>>),
-            {ok, 0} = file:position(Fd, bof),
-            %% We do a full GC immediately after because we do not want
-            %% to keep around the large binary we used to fill the file.
-            _ = garbage_collect(),
-            ok
+            fill_file_with_zeroes(Fd, Size)
     end,
     %% We then write the segment file header. It contains
     %% some useful info and some reserved bytes for future use.
@@ -619,6 +624,14 @@ new_segment_file(Segment, SegmentEntryCount, State = #qi{ segments = Segments })
     %% Keep the file open.
     State#qi{ segments = Segments#{Segment => 1},
               fds = OpenFds#{Segment => Fd} }.
+
+fill_file_with_zeroes(Fd, Size) ->
+    ok = file:write(Fd, <<0:Size/unit:8>>),
+    {ok, 0} = file:position(Fd, bof),
+    %% We do a full GC immediately after because we do not want
+    %% to keep around the large binary we used to fill the file.
+    _ = garbage_collect(),
+    ok.
 
 %% We try to keep the number of FDs open at 4 at a maximum.
 %% Under normal circumstances we will end up with 1 or 2
