@@ -1,6 +1,5 @@
 load("@rules_erlang//:erlang_home.bzl", "ErlangHomeProvider", "ErlangVersionProvider")
 load("@rules_erlang//:util.bzl", "path_join", "windows_path")
-load("@rules_erlang//:ct.bzl", "sanitize_sname")
 load(":rabbitmq_home.bzl", "RabbitmqHomeInfo", "rabbitmq_home_short_path")
 
 def _impl(ctx):
@@ -11,8 +10,6 @@ def _impl(ctx):
         path_join(rabbitmq_home_path, "plugins"),
     ])
 
-    sname = sanitize_sname("sbb-" + ctx.attr.name)
-
     if not ctx.attr.is_windows:
         output = ctx.actions.declare_file(ctx.label.name)
         ctx.actions.expand_template(
@@ -22,7 +19,6 @@ def _impl(ctx):
                 "{RABBITMQ_HOME}": rabbitmq_home_path,
                 "{ERL_LIBS}": erl_libs,
                 "{ERLANG_HOME}": ctx.attr._erlang_home[ErlangHomeProvider].path,
-                "{SNAME}": sname,
             },
             is_executable = True,
         )
@@ -35,7 +31,6 @@ def _impl(ctx):
                 "{RABBITMQ_HOME}": windows_path(rabbitmq_home_path),
                 "{ERL_LIBS}": erl_libs,
                 "{ERLANG_HOME}": windows_path(ctx.attr._erlang_home[ErlangHomeProvider].path),
-                "{SNAME}": sname,
             },
             is_executable = True,
         )
