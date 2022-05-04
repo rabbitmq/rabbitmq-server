@@ -487,7 +487,11 @@ i(consumers, Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
     Spec = [{{{'$1', '_', '_'}, '_', '_', '_', '_', '_', '_'}, [{'==', {QName}, '$1'}], [true]}],
     lists:foldl(fun(N, Acc) ->
-                        case rpc:call(N, ets, select_count,[consumer_created, Spec], 10000) of
+                        case rabbit_misc:rpc_call(N,
+                                                  ets,
+                                                  select_count,
+                                                  [consumer_created, Spec],
+                                                  10000) of
                             Count when is_integer(Count) ->
                                 Acc + Count;
                             _ ->
