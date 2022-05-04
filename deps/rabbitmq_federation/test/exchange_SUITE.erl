@@ -356,120 +356,6 @@ unbind_on_unbind(Config) ->
       end, upstream_downstream()).
 
 user_id(Config) ->
-<<<<<<< HEAD
-    [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    set_policy_upstream(Config, Rabbit, <<"^test$">>,
-      rabbit_ct_broker_helpers:node_uri(Config, 1), []),
-    Perm = fun (F, A) ->
-                  ok = rpc:call(Hare,
-                                rabbit_auth_backend_internal, F, A)
-           end,
-    Perm(add_user, [<<"hare-user">>, <<"hare-user">>, <<"acting-user">>]),
-    Perm(set_permissions, [<<"hare-user">>,
-                           <<"/">>, <<".*">>, <<".*">>, <<".*">>,
-                           <<"acting-user">>]),
-
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Rabbit),
-    {ok, Conn2} = amqp_connection:start(
-      #amqp_params_network{
-        username = <<"hare-user">>,
-        password = <<"hare-user">>,
-        port     = rabbit_ct_broker_helpers:get_node_config(Config, Hare,
-          tcp_port_amqp)}),
-    {ok, Ch2} = amqp_connection:open_channel(Conn2),
-
-    declare_exchange(Ch2, x(<<"test">>)),
-    declare_exchange(Ch, x(<<"test">>)),
-    Q = bind_queue(Ch, <<"test">>, <<"key">>),
-    await_binding(Config, Hare, <<"test">>, <<"key">>),
-
-    Msg = #amqp_msg{props   = #'P_basic'{user_id = <<"hare-user">>},
-                    payload = <<"HELLO">>},
-
-    SafeUri = fun (H) ->
-                      {array, [{table, Recv}]} =
-                          rabbit_misc:table_lookup(
-                            H, <<"x-received-from">>),
-                      URI = rabbit_ct_broker_helpers:node_uri(Config, 1),
-                      {longstr, URI} =
-                         rabbit_misc:table_lookup(Recv, <<"uri">>)
-              end,
-    ExpectUser =
-        fun (ExpUser) ->
-                fun () ->
-                        receive
-                            {#'basic.deliver'{},
-                             #amqp_msg{props   = Props,
-                                       payload = Payload}} ->
-                                #'P_basic'{user_id = ActUser,
-                                           headers = Headers} = Props,
-                                SafeUri(Headers),
-                                <<"HELLO">> = Payload,
-                                ExpUser = ActUser
-                        end
-                end
-        end,
-
-    wait_for_federation(
-      90,
-      fun() ->
-              VHost = <<"/">>,
-              X1s = rabbit_ct_broker_helpers:rpc(
-                      Config, Rabbit, rabbit_exchange, list, [VHost]),
-              L1 =
-              [X || X <- X1s,
-               X#exchange.name =:= #resource{virtual_host = VHost,
-                                             kind = exchange,
-                                             name = <<"test">>},
-               X#exchange.scratches =:= [{federation,
-                                          [{{<<"upstream-2">>,
-                                             <<"test">>},
-                                            <<"B">>}]}]],
-              X2s = rabbit_ct_broker_helpers:rpc(
-                      Config, Hare, rabbit_exchange, list, [VHost]),
-              L2 =
-              [X || X <- X2s,
-                    X#exchange.type =:= 'x-federation-upstream'],
-              [] =/= L1 andalso [] =/= L2 andalso
-              has_internal_federated_queue(Config, Hare, VHost)
-      end),
-    publish(Ch2, <<"test">>, <<"key">>, Msg),
-    expect(Ch, Q, ExpectUser(undefined)),
-
-    set_policy_upstream(Config, Rabbit, <<"^test$">>,
-      rabbit_ct_broker_helpers:node_uri(Config, 1),
-      [{<<"trust-user-id">>, true}]),
-    wait_for_federation(
-      90,
-      fun() ->
-              VHost = <<"/">>,
-              X1s = rabbit_ct_broker_helpers:rpc(
-                      Config, Rabbit, rabbit_exchange, list, [VHost]),
-              L1 =
-              [X || X <- X1s,
-               X#exchange.name =:= #resource{virtual_host = VHost,
-                                             kind = exchange,
-                                             name = <<"test">>},
-               X#exchange.scratches =:= [{federation,
-                                          [{{<<"upstream-2">>,
-                                             <<"test">>},
-                                            <<"A">>}]}]],
-              X2s = rabbit_ct_broker_helpers:rpc(
-                      Config, Hare, rabbit_exchange, list, [VHost]),
-              L2 =
-              [X || X <- X2s,
-                    X#exchange.type =:= 'x-federation-upstream'],
-              [] =/= L1 andalso [] =/= L2 andalso
-              has_internal_federated_queue(Config, Hare, VHost)
-      end),
-    publish(Ch2, <<"test">>, <<"key">>, Msg),
-    expect(Ch, Q, ExpectUser(<<"hare-user">>)),
-
-    amqp_channel:close(Ch2),
-    amqp_connection:close(Conn2),
-
-    ok.
-=======
     case rabbit_ct_helpers:is_mixed_versions() of
       false ->
         [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -580,7 +466,6 @@ user_id(Config) ->
         %% skip the test in mixed version mode
         {skip, "Should not run in mixed version environments"}
     end.
->>>>>>> 3788011584 (Disable some timing-sensitive tests in mixed version mode)
 
 %% In order to test that unbinds get sent we deliberately set up a
 %% broken config - with topic upstream and fanout downstream. You
