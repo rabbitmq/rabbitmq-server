@@ -338,11 +338,6 @@ endif
 
 RMQCTL_WAIT_TIMEOUT ?= 60
 
-define rmq_started
-true = rpc:call('$(1)', rabbit, is_running, []),
-halt().
-endef
-
 start-background-node: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
 	  RABBITMQ_NODE_ONLY=true \
@@ -358,7 +353,7 @@ start-background-broker: node-tmpdir $(DIST_TARGET)
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE) && \
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
-	  $(call erlang,$(call rmq_started,$(RABBITMQ_NODENAME)),-sname sbb-$$$$ -hidden)
+	  $(RABBITMQCTL) --node $(RABBITMQ_NODENAME) await_startup
 
 start-rabbit-on-node:
 	$(exec_verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
