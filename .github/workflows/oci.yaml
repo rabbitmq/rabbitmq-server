@@ -140,7 +140,7 @@ jobs:
           echo "::set-output name=TAG_2::${GITHUB_REF##*/}-${{ matrix.image_tag_suffix }}"
 
       - name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           context: packaging/docker-image
           push: ${{ steps.authorized.outputs.PUSH }}
