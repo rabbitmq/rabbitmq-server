@@ -40,6 +40,8 @@
 %%  * rabbit_registry
 %%  * rabbit_event
 
+-include_lib("khepri/include/khepri.hrl").
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([parse_set/5, set/5, set_any/5, clear/4, clear_any/4, list/0, list/1,
@@ -49,6 +51,10 @@
 -export([parse_set_global/3, set_global/3, value_global/1, value_global/2,
          list_global/0, list_global_formatted/0, list_global_formatted/2,
          lookup_global/1, global_info_keys/0, clear_global/2]).
+
+-export([clear_data_in_khepri/0,
+         mnesia_write_to_khepri/1,
+         mnesia_delete_to_khepri/1]).
 
 %%----------------------------------------------------------------------------
 
@@ -103,7 +109,7 @@ parse_set_global(Name, String, ActingUser) ->
 set_global(Name, Term, ActingUser)  ->
     NameAsAtom = rabbit_data_coercion:to_atom(Name),
     rabbit_log:debug("Setting global parameter '~s' to ~p", [NameAsAtom, Term]),
-    mnesia_update(NameAsAtom, Term),
+    record_update(NameAsAtom, Term),
     event_notify(parameter_set, none, global, [{name,  NameAsAtom},
                                                {value, Term},
                                                {user_who_performed_action, ActingUser}]),
@@ -131,7 +137,7 @@ set_any0(VHost, Component, Name, Term, User) ->
             case flatten_errors(
                    Mod:validate(VHost, Component, Name, Term, get_user(User))) of
                 ok ->
-                    case mnesia_update(VHost, Component, Name, Term) of
+                    case record_update(VHost, Component, Name, Term) of
                         {old, Term} ->
                             ok;
                         _           ->
@@ -164,12 +170,23 @@ get_username(none) ->
 get_username(Any) ->
     Any.
 
+record_update(Key, Term) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> mnesia_update(Key, Term) end,
+      fun() -> khepri_update(Key, Term) end).
+
+record_update(VHost, Comp, Name, Term) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> mnesia_update(VHost, Comp, Name, Term) end,
+      fun() -> khepri_update(VHost, Comp, Name, Term) end).
+
 mnesia_update(Key, Term) ->
     rabbit_misc:execute_mnesia_transaction(mnesia_update_fun(Key, Term)).
 
 mnesia_update(VHost, Comp, Name, Term) ->
     rabbit_misc:execute_mnesia_transaction(
-      rabbit_vhost:with(VHost, mnesia_update_fun({VHost, Comp, Name}, Term))).
+      rabbit_vhost:with_in_mnesia(
+        VHost, mnesia_update_fun({VHost, Comp, Name}, Term))).
 
 mnesia_update_fun(Key, Term) ->
     fun () ->
@@ -179,6 +196,25 @@ mnesia_update_fun(Key, Term) ->
                       end,
             ok = mnesia:write(?TABLE, c(Key, Term), write),
             Res
+    end.
+
+khepri_update(Key, Term) ->
+    rabbit_khepri:transaction(khepri_update_fun(Key, Term)).
+
+khepri_update(VHost, Comp, Name, Term) ->
+    rabbit_khepri:transaction(
+      rabbit_vhost:with_in_khepri(
+        VHost, khepri_update_fun({VHost, Comp, Name}, Term))).
+
+khepri_update_fun(Key, Term) ->
+    Path = khepri_rp_path(Key),
+    fun () ->
+            case khepri_tx:put(Path, c(Key, Term)) of
+                {ok, #{Path := #{data := Params}}} ->
+                    {old, Params#runtime_parameters.value};
+                {ok, _} ->
+                    new
+            end
     end.
 
 -spec clear(rabbit_types:vhost(), binary(), binary(), rabbit_types:username())
@@ -201,11 +237,8 @@ clear_global(Key, ActingUser) ->
         not_found ->
             {error_string, "Parameter does not exist"};
         _         ->
-            F = fun () ->
-                ok = mnesia:delete(?TABLE, KeyAsAtom, write)
-                end,
-            ok = rabbit_misc:execute_mnesia_transaction(F),
-            case mnesia:is_transaction() of
+            record_clear(KeyAsAtom),
+            case is_transaction() of
                 true  -> Notify;
                 false -> Notify()
             end
@@ -239,18 +272,57 @@ clear_any(VHost, Component, Name, ActingUser) ->
              end,
     case lookup(VHost, Component, Name) of
         not_found -> {error_string, "Parameter does not exist"};
-        _         -> mnesia_clear(VHost, Component, Name),
-                     case mnesia:is_transaction() of
+        _         -> record_clear(VHost, Component, Name),
+                     case is_transaction() of
                          true  -> Notify;
                          false -> Notify()
                      end
     end.
 
+is_transaction() ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> mnesia:is_transaction() end,
+      fun() -> khepri_tx:is_transaction() end).
+
+record_clear(Key) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> mnesia_clear(Key) end,
+      fun() -> khepri_clear(Key) end).
+
+record_clear(VHost, Comp, Name) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> mnesia_clear(VHost, Comp, Name) end,
+      fun() -> khepri_clear(VHost, Comp, Name) end).
+
+mnesia_clear(Key) ->
+    F = fun () ->
+                ok = mnesia:delete(?TABLE, Key, write)
+        end,
+    ok = rabbit_misc:execute_mnesia_transaction(F).
+
 mnesia_clear(VHost, Component, Name) ->
     F = fun () ->
                 ok = mnesia:delete(?TABLE, {VHost, Component, Name}, write)
         end,
-    ok = rabbit_misc:execute_mnesia_transaction(rabbit_vhost:with(VHost, F)).
+    ok = rabbit_misc:execute_mnesia_transaction(
+           rabbit_vhost:with_in_mnesia(VHost, F)).
+
+khepri_clear(Key) ->
+    Path = khepri_rp_path(Key),
+    F = fun () ->
+                {ok, _} = khepri_tx:delete(Path),
+                ok
+        end,
+    ok = rabbit_khepri:transaction(F).
+
+khepri_clear(VHost, Component, Name) ->
+    Path = khepri_rp_path({VHost, Component, Name}),
+    F = fun () ->
+                {ok, _} = khepri_tx:delete(Path),
+                ok
+        end,
+    ok = rabbit_khepri:transaction(
+           rabbit_vhost:with_in_khepri(VHost, F)).
 
 event_notify(_Event, _VHost, <<"policy">>, _Props) ->
     ok;
@@ -263,8 +335,19 @@ event_notify(Event, VHost, Component, Props) ->
 -spec list() -> [rabbit_types:infos()].
 
 list() ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> list_in_mnesia() end,
+      fun() -> list_in_khepri() end).
+
+list_in_mnesia() ->
     [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <-
              rabbit_misc:dirty_read_all(?TABLE), Comp /= <<"policy">>].
+
+list_in_khepri() ->
+    Path = khepri_vhost_rp_path(?STAR, ?STAR, ?STAR),
+    {ok, Map} = rabbit_khepri:match_and_get_data(Path),
+    [p(P) || #runtime_parameters{ key = {_VHost, Comp, _Name}} = P <- maps:values(Map),
+             Comp /= <<"policy">>].
 
 -spec list(rabbit_types:vhost() | '_') -> [rabbit_types:infos()].
 
@@ -280,6 +363,11 @@ list_component(Component) -> list('_',   Component).
                 -> [rabbit_types:infos()].
 
 list(VHost, Component) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> list_in_mnesia(VHost, Component) end,
+      fun() -> list_in_khepri(VHost, Component) end).
+
+list_in_mnesia(VHost, Component) ->
     mnesia:async_dirty(
       fun () ->
               case VHost of
@@ -293,7 +381,38 @@ list(VHost, Component) ->
                        Comp =/= <<"policy">> orelse Component =:= <<"policy">>]
       end).
 
+list_in_khepri('_', Component) ->
+    list_in_khepri(?STAR, Component);
+list_in_khepri(VHost, '_') ->
+    list_in_khepri(VHost, ?STAR);
+list_in_khepri(VHost, Component) ->
+    Path = khepri_vhost_rp_path(VHost, Component, ?STAR),
+    rabbit_khepri:transaction(
+      fun() ->
+              case VHost of
+                  ?STAR -> ok;
+                  %% Inside of a transaction, using `rabbit_vhost:exists` will cause
+                  %% a deadlock and timeout on the transaction, as it uses `rabbit_khepri:exists`.
+                  %% The `with` function uses the `khepri_tx` API instead
+                  _     -> rabbit_vhost:with_in_khepri(VHost, fun() -> ok end)
+              end,
+              case khepri_tx:get(Path) of
+                  {ok, Result} ->
+              [p(P) || #{data := #runtime_parameters{key = {_VHost, Comp, _Name}}} = #{data := P} <-
+                           maps:values(Result),
+                       Comp =/= <<"policy">> orelse Component =:= <<"policy">>];
+                  _ ->
+                      []
+              end
+      end, ro).
+
 list_global() ->
+    %% list only atom keys
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> list_global_in_mnesia() end,
+      fun() -> list_global_in_khepri() end).
+
+list_global_in_mnesia() ->
     %% list only atom keys
     mnesia:async_dirty(
         fun () ->
@@ -301,6 +420,20 @@ list_global() ->
             [p(P) || P <- mnesia:match_object(?TABLE, Match, read),
                 is_atom(P#runtime_parameters.key)]
         end).
+
+list_global_in_khepri() ->
+    %% list only atom keys
+    Path = khepri_global_rp_path(?STAR),
+    rabbit_khepri:transaction(
+        fun () ->
+                case khepri_tx:get(Path) of
+                    {ok, Result} ->
+                        [p(P) || #{data := P} <- maps:values(Result),
+                                 is_atom(P#runtime_parameters.key)];
+                    _ ->
+                        []
+                end
+        end, ro).
 
 -spec list_formatted(rabbit_types:vhost()) -> [rabbit_types:infos()].
 
@@ -378,12 +511,29 @@ value0(Key, Default) ->
     Params#runtime_parameters.value.
 
 lookup0(Key, DefaultFun) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> lookup0_in_mnesia(Key, DefaultFun) end,
+      fun() -> lookup0_in_khepri(Key, DefaultFun) end).
+
+lookup0_in_mnesia(Key, DefaultFun) ->
     case mnesia:dirty_read(?TABLE, Key) of
         []  -> DefaultFun();
         [R] -> R
     end.
 
+lookup0_in_khepri(Key, DefaultFun) ->
+    Path = khepri_rp_path(Key),
+    case rabbit_khepri:get(Path) of
+        {ok, #{data := R}}           -> R;
+        {error, {node_not_found, _}} -> DefaultFun()
+    end.
+
 lookup_missing(Key, Default) ->
+    rabbit_khepri:try_mnesia_or_khepri(
+      fun() -> lookup_missing_in_mnesia(Key, Default) end,
+      fun() -> lookup_missing_in_khepri(Key, Default) end).
+
+lookup_missing_in_mnesia(Key, Default) ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               case mnesia:read(?TABLE, Key, read) of
@@ -391,6 +541,20 @@ lookup_missing(Key, Default) ->
                          mnesia:write(?TABLE, Record, write),
                          Record;
                   [R] -> R
+              end
+      end).
+
+lookup_missing_in_khepri(Key, Default) ->
+    Path = khepri_rp_path(Key),
+    rabbit_khepri:transaction(
+      fun () ->
+              case khepri_tx:get(Path) of
+                  {ok, #{Path := #{data := R}}} ->
+                      R;
+                  {ok, _} ->
+                      Record = c(Key, Default),
+                      khepri_tx:put(Path, Record),
+                      Record
               end
       end).
 
@@ -407,6 +571,57 @@ p(#runtime_parameters{key = {VHost, Component, Name}, value = Value}) ->
 p(#runtime_parameters{key = Key, value = Value}) when is_atom(Key) ->
     [{name,      Key},
      {value,     Value}].
+
+khepri_rp_path() ->
+    [?MODULE].
+
+khepri_rp_path({VHost, Component, Name}) ->
+    khepri_vhost_rp_path(VHost, Component, Name);
+khepri_rp_path(Key) ->
+    khepri_global_rp_path(Key).
+
+khepri_global_rp_path(Key) ->
+    [?MODULE, global, Key].
+
+khepri_vhost_rp_path(VHost, Component, Name) ->
+    [?MODULE, per_vhost, VHost, Component, Name].
+
+clear_data_in_khepri() ->
+    Path = khepri_rp_path(),
+    case rabbit_khepri:delete(Path) of
+        {ok, _} -> ok;
+        Error -> throw(Error)
+    end.
+
+mnesia_write_to_khepri(
+  #runtime_parameters{key = {VHost, Comp, Name}} = RuntimeParam) ->
+    Path = khepri_vhost_rp_path(VHost, Comp, Name),
+    case rabbit_khepri:put(Path, RuntimeParam) of
+        {ok, _} -> ok;
+        Error -> throw(Error)
+    end;
+mnesia_write_to_khepri(
+  #runtime_parameters{key = Key} = RuntimeParam) ->
+    Path = khepri_global_rp_path(Key),
+    case rabbit_khepri:put(Path, RuntimeParam) of
+        {ok, _} -> ok;
+        Error -> throw(Error)
+    end.
+
+mnesia_delete_to_khepri(
+  #runtime_parameters{key = {VHost, Comp, Name}}) ->
+    Path = khepri_vhost_rp_path(VHost, Comp, Name),
+    case rabbit_khepri:delete(Path) of
+        {ok, _} -> ok;
+        Error -> throw(Error)
+    end;
+mnesia_delete_to_khepri(
+  #runtime_parameters{key = Key}) ->
+    Path = khepri_global_rp_path(Key),
+    case rabbit_khepri:delete(Path) of
+        {ok, _} -> ok;
+        Error -> throw(Error)
+    end.
 
 -spec info_keys() -> rabbit_types:info_keys().
 

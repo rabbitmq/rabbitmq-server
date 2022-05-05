@@ -363,6 +363,10 @@ run_prelaunch_second_phase() ->
 
     ok = rabbit_ra_systems:setup(Context),
 
+    %% Khepri requires the "coordination" Ra system to be started by the
+    %% previous call, but will ensure it runs anyway.
+    ok = rabbit_khepri:setup(Context),
+
     ?LOG_DEBUG(""),
     ?LOG_DEBUG("== Prelaunch DONE =="),
 
