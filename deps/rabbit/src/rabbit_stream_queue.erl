@@ -49,7 +49,8 @@
 
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
-                    policy, operator_policy, effective_policy_definition, type, memory]).
+                    policy, operator_policy, effective_policy_definition, type, memory,
+                    consumers]).
 
 -type appender_seq() :: non_neg_integer().
 
@@ -486,6 +487,22 @@ i(leader, Q) when ?is_amqqueue(Q) ->
 i(members, Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
     Nodes;
+i(consumers, Q) when ?is_amqqueue(Q) ->
+    QName = amqqueue:get_name(Q),
+    #{nodes := Nodes} = amqqueue:get_type_state(Q),
+    Spec = [{{{'$1', '_', '_'}, '_', '_', '_', '_', '_', '_'}, [{'==', {QName}, '$1'}], [true]}],
+    lists:foldl(fun(N, Acc) ->
+                        case rabbit_misc:rpc_call(N,
+                                                  ets,
+                                                  select_count,
+                                                  [consumer_created, Spec],
+                                                  10000) of
+                            Count when is_integer(Count) ->
+                                Acc + Count;
+                            _ ->
+                                Acc
+                        end
+                end, 0, Nodes);
 i(memory, Q) when ?is_amqqueue(Q) ->
     %% Return writer memory. It's not the full memory usage (we also have replica readers on
     %% the writer node), but might be good enough
