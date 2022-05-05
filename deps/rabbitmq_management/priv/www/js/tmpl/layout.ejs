@@ -8,12 +8,12 @@
          <option value="5000">Refresh every 5 seconds</option>
         <% } else { %>
          <option value="5000">Refresh every 5 seconds</option>
-        <% } %>      
+        <% } %>
         <option value="10000">Refresh every 10 seconds</option>
         <option value="30000">Refresh every 30 seconds</option>
         <% if(!disable_stats) { %>
          <option value="">Do not refresh</option>
-        <% } %>      
+        <% } %>
       </select>
     </li>
     <li id="vhost">
@@ -23,8 +23,8 @@
       </select>
     </li>
     <li id="logout">
-    <% if (enable_uaa) { %>
-      <input type="submit" id="loginWindow" onclick="uaa_logout_window()" value="Log out"/>
+    <% if (oauth.enable) { %>
+      <input type="submit" id="loginWindow" onclick="initiateLogout()" value="Log out"/>
     <% } else { %>
       <form action="#/logout" method="put">
         <input type="submit" value="Log out"/>

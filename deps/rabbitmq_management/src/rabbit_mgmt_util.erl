@@ -83,7 +83,7 @@ is_authorized_admin(ReqData, Context) ->
 is_authorized_admin(ReqData, Context, Token) ->
     is_authorized(ReqData, Context,
                   rabbit_data_coercion:to_binary(
-                    application:get_env(rabbitmq_management, uaa_client_id, "")),
+                    application:get_env(rabbitmq_management, oauth_client_id, "")),
                   Token, <<"Not administrator user">>,
                   fun(#user{tags = Tags}) -> is_admin(Tags) end).
 
@@ -230,7 +230,7 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun) ->
             end;
         {bearer, Token} ->
             Username = rabbit_data_coercion:to_binary(
-                         application:get_env(rabbitmq_management, uaa_client_id, "")),
+                         application:get_env(rabbitmq_management, oauth_client_id, "")),
             is_authorized(ReqData, Context, Username, Token, ErrorMsg, Fun);
         _ ->
             case is_basic_auth_disabled() of
