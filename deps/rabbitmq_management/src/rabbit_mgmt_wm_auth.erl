@@ -26,21 +26,30 @@ content_types_provided(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     EnableUAA = application:get_env(rabbitmq_management, enable_uaa, false),
-    Data = case EnableUAA of
+    EnableOAUTH = application:get_env(rabbitmq_management, oauth_enable, false),
+    Data = case EnableOAUTH of
                true ->
-                   UAAClientId = application:get_env(rabbitmq_management, uaa_client_id, ""),
-                   UAALocation = application:get_env(rabbitmq_management, uaa_location, ""),
-                   case is_invalid([UAAClientId, UAALocation]) of
+                   OAuthClientId = application:get_env(rabbitmq_management, oauth_client_id, ""),
+                   OAuthClientSecret = application:get_env(rabbitmq_management, oauth_client_secret, ""),
+                   OAuthProviderUrl = application:get_env(rabbitmq_management, oauth_provider_url, ""),
+                   OAuthMetadataUrl = application:get_env(rabbitmq_management, oauth_metadata_url, ""),
+                   OAuthResourceId = application:get_env(rabbitmq_auth_backend_oauth2, resource_server_id, ""),
+                   case is_invalid([OAuthClientId, OAuthClientSecret, OAuthResourceId, OAuthProviderUrl]) of
                        true ->
                            rabbit_log:warning("Disabling OAuth 2 authorization, relevant configuration settings are missing", []),
-                           [{enable_uaa, false}, {uaa_client_id, <<>>}, {uaa_location, <<>>}];
+                           [{oauth_enable, false}, {oauth_client_id, <<>>}, {oauth_url, <<>>}];
                        false ->
-                           [{enable_uaa, true},
-                            {uaa_client_id, rabbit_data_coercion:to_binary(UAAClientId)},
-                            {uaa_location, rabbit_data_coercion:to_binary(UAALocation)}]
+                           [{oauth_enable, true},
+                            {enable_uaa, rabbit_data_coercion:to_binary(EnableUAA)},
+                            {oauth_client_id, rabbit_data_coercion:to_binary(OAuthClientId)},
+                            {oauth_client_secret, rabbit_data_coercion:to_binary(OAuthClientSecret)},
+                            {oauth_provider_url, rabbit_data_coercion:to_binary(OAuthProviderUrl)},
+                            {oauth_metadata_url, rabbit_data_coercion:to_binary(OAuthMetadataUrl)},
+                            {oauth_resource_id, rabbit_data_coercion:to_binary(OAuthResourceId)}
+                            ]
                    end;
                false ->
-                   [{enable_uaa, false}, {uaa_client_id, <<>>}, {uaa_location, <<>>}]
+                   [{enable_oauth, false}]
            end,
     rabbit_mgmt_util:reply(Data, ReqData, Context).
 

@@ -289,7 +289,8 @@ dispatcher_add(function(sammy) {
         // clear a local storage value used by earlier versions
         clear_pref('auth');
         clear_cookie_value('auth');
-        if (uaa_logged_in) {
+        clear_cookie_value('m');
+        if (oauth.logged_in) {
             clear_pref('uaa_token');
             var redirect;
             if (window.location.hash != "") {
@@ -297,9 +298,8 @@ dispatcher_add(function(sammy) {
             } else {
                 redirect = window.location.href
             };
-            uaa_logged_in = false;
-            var logoutRedirectUrl = Singular.properties.uaaLocation + '/logout.do?client_id=' + Singular.properties.clientId + '&redirect=' + redirect;
-            get(logoutRedirectUrl, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", function(req) { });
+            oauth.logged_in = false;
+            initiateLogout();
         }
         location.reload();
     });

@@ -16,44 +16,34 @@
     <script src="js/prefs.js" type="text/javascript"></script>
     <script src="js/formatters.js" type="text/javascript"></script>
     <script src="js/charts.js" type="text/javascript"></script>
-    <script src="js/singular/singular.js" type="application/javascript"></script>
-    
+    <script src="js/oidc-oauth/oidc-client-ts.js" type="text/javascript"></script>
+    <script src="js/oidc-oauth/helper.js"></script>
+
     <link href="css/main.css" rel="stylesheet" type="text/css"/>
     <link href="favicon.ico" rel="shortcut icon" type="image/x-icon"/>
-    
+
     <script type="application/javascript">
-      var uaa_logged_in = false;
-      var uaa_invalid = false;
-      var auth = JSON.parse(sync_get('/auth'));
-      enable_uaa = auth.enable_uaa;
-      uaa_client_id = auth.uaa_client_id;
-      uaa_location = auth.uaa_location;
-      if (enable_uaa) {
-        Singular.init({
-         singularLocation: './js/singular/',
-         uaaLocation: uaa_location,
-         clientId: uaa_client_id,
-         onIdentityChange: function (identity) {
-          uaa_logged_in = true;
-          start_app_login();
-         },
-         onLogout: function () {
-          uaa_logged_in = false;
-          var hash = window.location.hash.substring(1);
-          var params = {}
-          hash.split('&').map(hk => {
-           let temp = hk.split('=');
-           params[temp[0]] = temp[1]
-          });
-          if (params.error) {
-           uaa_invalid = true;
-           replace_content('login-status', '<p class="warning">' + decodeURIComponent(params.error) + ':' + decodeURIComponent(params.error_description) + '</p> <button id="loginWindow" onclick="uaa_login_window()">Click here to log out</button>');
-          } else {
-           replace_content('login-status', '<button id="loginWindow" onclick="uaa_login_window()">Click here to log in</button>');
+      var oauth = initializeOAuthIfRequired();
+
+      if (oauth.enable) {
+        isLoggedIn().then( status => {
+          if (!status.loggedIn) {
+            replace_content('outer', format('login_uaa', {}));
+          }  else {
+
+            oauth.logged_in = true
+            oauth.access_token = status.user.access_token
+            oauth.expires_at = status.user.expires_at
+            oauth.user_name = status.user.profile["user_name"]
+            oauth.scopes = status.user.scope
+            //start_app_login();
           }
-         }
-      });
+        });
+      }else {
+        replace_content('outer', format('login', {}));
+        start_app_login();
       }
+
     </script>
 
 <!--[if lte IE 8]>
