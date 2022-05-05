@@ -87,6 +87,7 @@ all_tests() -> [
     exchanges_test,
     queues_test,
     quorum_queues_test,
+    stream_queues_have_consumers_field,
     queues_well_formed_json_test,
     bindings_test,
     bindings_post_test,
@@ -239,7 +240,13 @@ init_per_testcase(Testcase = permissions_vhost_test, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost1">>),
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"myvhost2">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
-
+init_per_testcase(Testcase = stream_queues_have_consumers_field, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "mixed version clusters are not supported"};
+        _ ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase)
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_SUITE:init_per_testcase">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -1093,6 +1100,26 @@ quorum_queues_test_loop(Config, N) ->
     http_delete(Config, "/queues/%2f/qq", {group, '2xx'}),
     close_connection(Conn),
     quorum_queues_test_loop(Config, N-1).
+
+stream_queues_have_consumers_field(Config) ->
+    Good = [{durable, true}, {arguments, [{'x-queue-type', 'stream'}]}],
+    http_get(Config, "/queues/%2f/sq", ?NOT_FOUND),
+    http_put(Config, "/queues/%2f/sq", Good, {group, '2xx'}),
+
+    wait_until(fun() ->
+                       Qs = http_get(Config, "/queues/%2F"),
+                       length(Qs) == 1 andalso maps:is_key(consumers, lists:nth(1, Qs))
+               end, 50),
+
+    Queues = http_get(Config, "/queues/%2F"),
+    assert_list([#{name        => <<"sq">>,
+                   arguments => #{'x-queue-type' => <<"stream">>},
+                   consumers   => 0}],
+                Queues),
+
+
+    http_delete(Config, "/queues/%2f/sq", {group, '2xx'}),
+    ok.
 
 queues_well_formed_json_test(Config) ->
     %% TODO This test should be extended to the whole API

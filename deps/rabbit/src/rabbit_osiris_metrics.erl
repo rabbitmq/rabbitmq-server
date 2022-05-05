@@ -26,7 +26,8 @@
          online,
          members,
          memory,
-         readers
+         readers,
+         consumers
         ]).
 
 -record(state, {timeout :: non_neg_integer()}).
@@ -78,7 +79,6 @@ handle_info(tick, #state{timeout = Timeout} = State) ->
                               %% down `rabbit_sup` and the whole `rabbit` app.
                               []
                       end,
-
 
               rabbit_core_metrics:queue_stats(QName, Infos),
               rabbit_event:notify(queue_stats, Infos ++ [{name, QName},
