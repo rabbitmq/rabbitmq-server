@@ -30,13 +30,13 @@
           if (!status.loggedIn) {
             replace_content('outer', format('login_uaa', {}));
           }  else {
-
             oauth.logged_in = true
             oauth.access_token = status.user.access_token
-            oauth.expires_at = status.user.expires_at
+            oauth.expiryDate = new Date(status.user.expires_at * 1000)  // it is epoch in seconds
+            console.log("token expires at : " + oauth.expires_at);
             oauth.user_name = status.user.profile["user_name"]
+            if (!oauth.user_name || oauth.user_name == "") oauth.user_name = status.user.profile["sub"]
             oauth.scopes = status.user.scope
-            //start_app_login();
           }
         });
       }else {
