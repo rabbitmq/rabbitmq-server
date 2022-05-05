@@ -42,6 +42,7 @@ function initializeOAuth(authSettings) {
 
         response_type: "code",
         filterProtocolClaims: true,
+        automaticSilentRenew: true,
         revokeAccessTokenOnSignout: true,
     };
     if (authSettings.oauth_metadata_url != "") oidcSettings.metadataUrl = authSettings.oauth_metadata_url
@@ -59,6 +60,16 @@ function initializeOAuth(authSettings) {
 
     oidc.Log.setLogger(console);
     oidc.Log.setLevel(oidc.Log.INFO);
+
+    mgr.events.addAccessTokenExpiring(function() {
+        console.log("token expiring...");
+    });
+      mgr.events.addAccessTokenExpired(function() {
+          console.log("token expired !!");
+      });
+    mgr.events.addSilentRenewError(function(err) {
+        console.log("token expiring failed due to " + err);
+    });
 
     return oauth;
 }
