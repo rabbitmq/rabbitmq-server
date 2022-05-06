@@ -51,6 +51,7 @@
          formatting_without_colors_works/1,
 
          logging_to_exchange_works/1,
+         update_log_exchange_config/1,
 
          logging_to_syslog_works/1]).
 
@@ -96,7 +97,8 @@ groups() ->
        formatting_without_colors_works]},
 
      {exchange_output, [],
-      [logging_to_exchange_works]},
+      [logging_to_exchange_works,
+       update_log_exchange_config]},
 
      {syslog_output, [],
       [logging_to_syslog_works]}
@@ -143,11 +145,8 @@ init_per_testcase(Testcase, Config) ->
         %% The exchange output requires RabbitMQ to run. All testcases in this
         %% group will run in the context of that RabbitMQ node.
         exchange_output ->
-            ExchProps = case Testcase of
-                            logging_to_exchange_works ->
-                                [{enabled, true},
-                                 {level, info}]
-                        end,
+            ExchProps = [{enabled, true},
+                         {level, info}] ,
             Config1 = rabbit_ct_helpers:set_config(
                         Config,
                         [{rmq_nodes_count, 1},
@@ -161,7 +160,7 @@ init_per_testcase(Testcase, Config) ->
               rabbit_ct_broker_helpers:setup_steps() ++
               rabbit_ct_client_helpers:setup_steps());
 
-        %% Other groups and testcases runs the tested code directly without a
+        %% Other groups and testcases run the tested code directly without a
         %% RabbitMQ node running.
         _ ->
             remove_all_handlers(),
@@ -1068,8 +1067,68 @@ logging_to_exchange_works(Config) ->
     ?assertNot(ping_log(rmq_1_file_2, info,
                         #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config)),
 
+    %% increase log level
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0,
+           rabbit_prelaunch_logging, set_log_level, [debug]),
+
+    ?assert(ping_log(rmq_1_exchange, debug, Config1)),
+    ?assert(ping_log(rmq_1_exchange, debug,
+                     #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config1)),
+
+    %% decrease log level
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0,
+           rabbit_prelaunch_logging, set_log_level, [error]),
+
+    ?assert(ping_log(rmq_1_exchange, error, Config1)),
+    ?assert(ping_log(rmq_1_exchange, error,
+                     #{domain => ?RMQLOG_DOMAIN_GLOBAL}, Config1)),
+
+    ?assertNot(ping_log(rmq_1_exchange, info, Config1)),
+
     amqp_channel:call(Chan, #'queue.delete'{queue = QName}),
     rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
+    ok.
+
+%% Logging configuration should be manipulated via RabbitMQ.
+%% Still if someone would modify log exchange config directly via the
+%% OTP logger API, that should work too.
+update_log_exchange_config(Config) ->
+    {ok, OrigHandlerConfig} =
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          logger, get_handler_config, [rmq_1_exchange]),
+
+    %% change single_line config
+    ok =
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          logger, update_formatter_config, [rmq_1_exchange, #{single_line => true}]),
+    {ok, HandlerConfig1} =
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          logger, get_handler_config, [rmq_1_exchange]),
+
+    %% single_line config changed from false to true
+    ?assertMatch(#{formatter := {_, #{single_line := false}}}, OrigHandlerConfig),
+    ?assertMatch(#{formatter := {_, #{single_line := true}}}, HandlerConfig1),
+    %% no other formatter config changed
+    ?assertEqual(
+       maps:without([single_line], element(2, maps:get(formatter, OrigHandlerConfig))),
+       maps:without([single_line], element(2, maps:get(formatter, HandlerConfig1)))),
+    %% no other handler config changed
+    ?assertEqual(
+       maps:without([formatter], OrigHandlerConfig),
+       maps:without([formatter], HandlerConfig1)),
+
+    %% should not be possible to change exchange resource or setup_proc in config
+    logger:update_handler_config(rmq_1_exchange, config, #{exchange => "foo", setup_proc => self()}),
+    {ok, HandlerConfig2} =
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          logger, get_handler_config, [rmq_1_exchange]),
+    ?assertEqual(HandlerConfig1, HandlerConfig2),
     ok.
 
 logging_to_syslog_works(Config) ->
