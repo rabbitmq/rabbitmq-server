@@ -8,6 +8,8 @@
 -module(cluster_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("amqqueue.hrl").
 
@@ -26,7 +28,8 @@
 
 all() ->
     [
-      {group, cluster_tests}
+      {group, cluster_tests},
+      {group, stop_app_tests}
     ].
 
 groups() ->
@@ -34,6 +37,9 @@ groups() ->
       {cluster_tests, [], [
           {from_cluster_node1, [], ?CLUSTER_TESTCASES},
           {from_cluster_node2, [], ?CLUSTER_TESTCASES}
+        ]},
+        {stop_app_tests, [], [
+            credentials_obfuscation
         ]}
     ].
 
@@ -305,3 +311,30 @@ queue_name(Config, Name) ->
 
 queue_name(Name) ->
     rabbit_misc:r(<<"/">>, queue, Name).
+
+credentials_obfuscation(Config) -> 
+    Value = <<"amqp://something">>,
+    Obfuscated0 = obfuscate_secret(Config, 0, Value),
+    Obfuscated1 = obfuscate_secret(Config, 1, Value),
+    
+    ok = rabbit_ct_broker_helpers:restart_broker(Config, 1),
+
+    ?assertEqual(Value, deobfuscate_secret(Config, 0, Obfuscated0)),
+    ?assertEqual(Value, deobfuscate_secret(Config, 1, Obfuscated1)),
+    ?assertEqual(Value, deobfuscate_secret(Config, 0, Obfuscated1)),
+    ?assertEqual(Value, deobfuscate_secret(Config, 1, Obfuscated1)),
+
+    Obfuscated2 = obfuscate_secret(Config, 1, Value),
+    
+    ok = rabbit_ct_broker_helpers:restart_broker(Config, 0),
+
+    ?assertEqual(Value, deobfuscate_secret(Config, 0, Obfuscated2)),
+    ok.
+obfuscate_secret(Config, Node, Value) -> 
+    {encrypted, _} = Result = rabbit_ct_broker_helpers:rpc(Config, Node, 
+        credentials_obfuscation, encrypt, [Value]),
+    Result.
+
+deobfuscate_secret(Config, Node, Encrypted) ->
+    rabbit_ct_broker_helpers:rpc(Config, Node, 
+        credentials_obfuscation, decrypt, [Encrypted]).

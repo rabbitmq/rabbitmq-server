@@ -66,10 +66,16 @@ setup(Context) ->
                     #{config_files => [],
                       config_advanced_file => undefined}
             end,
+<<<<<<< HEAD
     ok = override_with_hard_coded_critical_config(),
     ok = set_credentials_obfuscation_secret(),
     _ = rabbit_log_prelaunch:debug(
       "Saving config state to application env: ~p", [State]),
+=======
+    ?LOG_DEBUG(
+      "Saving config state to application env: ~p", [State],
+      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+>>>>>>> fe1e1668a2 (implement fallback secret for credentials obfuscation)
     store_config_state(State).
 
 store_config_state(ConfigState) ->
@@ -379,6 +385,7 @@ apply_app_env_vars(App, [{Var, Value} | Rest]) ->
 apply_app_env_vars(_, []) ->
     ok.
 
+<<<<<<< HEAD
 set_credentials_obfuscation_secret() ->
     _ = rabbit_log_prelaunch:debug(
       "Refreshing credentials obfuscation configuration from env: ~p",
@@ -388,6 +395,32 @@ set_credentials_obfuscation_secret() ->
     _ = rabbit_log_prelaunch:debug(
       "Setting credentials obfuscation secret to '~s'", [CookieBin]),
     ok = credentials_obfuscation:set_secret(CookieBin).
+=======
+log_app_env_var(password = Var, _) ->
+    ?LOG_DEBUG("    - ~s = ********", [Var],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+log_app_env_var(Var, Value) when is_list(Value) ->
+    %% To redact sensitive entries,
+    %% e.g. {password,"********"} for stream replication over TLS
+    Redacted = redact_env_var(Value),
+    ?LOG_DEBUG("    - ~s = ~p", [Var, Redacted],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+log_app_env_var(Var, Value) ->
+    ?LOG_DEBUG("    - ~s = ~p", [Var, Value],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}).
+
+redact_env_var(Value) when is_list(Value) ->
+    redact_env_var(Value, []);
+redact_env_var(Value) ->
+    Value.
+
+redact_env_var([], Acc) ->
+    lists:reverse(Acc);
+redact_env_var([{password, _Value} | Rest], Acc) ->
+    redact_env_var(Rest, Acc ++ [{password, "********"}]);
+redact_env_var([AppVar | Rest], Acc) ->
+    redact_env_var(Rest, [AppVar | Acc]).
+>>>>>>> 8b67133dd2 (implement fallback secret for credentials obfuscation)
 
 %% -------------------------------------------------------------------
 %% Config decryption.
