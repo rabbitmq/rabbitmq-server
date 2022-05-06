@@ -71,7 +71,6 @@ setup(Context) ->
                     #{config_files => [],
                       config_advanced_file => undefined}
             end,
-    ok = set_credentials_obfuscation_secret(),
     ?LOG_DEBUG(
       "Saving config state to application env: ~p", [State],
       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
@@ -444,18 +443,6 @@ redact_env_var([{password, _Value} | Rest], Acc) ->
     redact_env_var(Rest, Acc ++ [{password, "********"}]);
 redact_env_var([AppVar | Rest], Acc) ->
     redact_env_var(Rest, [AppVar | Acc]).
-
-set_credentials_obfuscation_secret() ->
-    ?LOG_DEBUG(
-      "Refreshing credentials obfuscation configuration from env: ~p",
-      [application:get_all_env(credentials_obfuscation)],
-      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ok = credentials_obfuscation:refresh_config(),
-    CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
-    ?LOG_DEBUG(
-      "Setting credentials obfuscation secret to '~s'", [CookieBin],
-      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ok = credentials_obfuscation:set_secret(CookieBin).
 
 %% -------------------------------------------------------------------
 %% Config decryption.
