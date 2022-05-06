@@ -32,6 +32,8 @@ setup(#{nodename := Node, nodename_type := NameType} = Context) ->
             throw({error, {erlang_dist_running_with_unexpected_nodename,
                            Unexpected, Node}})
     end,
+    ok = set_credentials_obfuscation_secret(),
+
     ok.
 
 do_setup(#{nodename := Node,
@@ -131,3 +133,21 @@ dist_port_use_check_fail(Port, Host) ->
         [Name] ->
             throw({error, {dist_port_already_used, Port, Name, Host}})
     end.
+
+set_credentials_obfuscation_secret() ->
+    ?LOG_DEBUG(
+        "Refreshing credentials obfuscation configuration from env: ~p",
+        [application:get_all_env(credentials_obfuscation)],
+        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    ok = credentials_obfuscation:refresh_config(),
+    CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
+    ?LOG_DEBUG(
+        "Setting credentials obfuscation secret to '~s'", [CookieBin],
+        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    ok = credentials_obfuscation:set_secret(CookieBin),
+    Fallback = application:get_env(rabbit, 
+                                   credentials_obfuscation_fallback_secret, 
+                                   <<"nocookie">>),
+    ok = credentials_obfuscation:set_fallback_secret(Fallback).
+
+    
