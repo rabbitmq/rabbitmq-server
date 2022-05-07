@@ -27,6 +27,8 @@
          logging_with_default_config_works/1,
          setting_log_levels_in_env_works/1,
          setting_log_levels_in_config_works/1,
+         setting_log_rotation_in_config_works/1,
+         setting_log_rotation_defaults_in_config_works/1,
          setting_log_levels_in_config_with_output_overridden_in_env_works/1,
          setting_message_format_works/1,
          setting_level_format_works/1,
@@ -69,6 +71,8 @@ groups() ->
       [logging_with_default_config_works,
        setting_log_levels_in_env_works,
        setting_log_levels_in_config_works,
+       setting_log_rotation_in_config_works,
+       setting_log_rotation_defaults_in_config_works,
        setting_log_levels_in_config_with_output_overridden_in_env_works,
        setting_message_format_works,
        setting_level_format_works,
@@ -381,6 +385,100 @@ setting_log_levels_in_config_works(Config) ->
                      #{domain => ?RMQLOG_DOMAIN_UPGRADE})),
     ?assertNot(ping_log(rmq_1_file_2, GlobalLevel,
                         #{domain => ?RMQLOG_DOMAIN_GLOBAL})),
+    ok.
+
+setting_log_rotation_in_config_works(Config) ->
+    Context = default_context(Config),
+    ok = application:set_env(
+           rabbit, log, 
+           [{file, [{date, "$D0"},
+                    {compress, true},
+                    {size, 100},
+                    {count, 1}
+                    ]},
+            {categories, [{queue, [{file, "queue.log"},
+                                   {rotate_on_date, "$D0"},
+                                   {compress_on_rotate, true},
+                                   {max_no_bytes, 200},
+                                   {max_no_files, 2}
+                                  ]}]}],
+           [{persistent, true}]),
+    rabbit_prelaunch_logging:clear_config_run_number(),
+    rabbit_prelaunch_logging:setup(Context),
+
+    Handlers = logger:get_handler_config(),
+    MainFileHandler = get_handler_by_id(Handlers, rmq_1_file_2),
+    MainFile = main_log_file_in_context(Context),
+    ?assertNotEqual(undefined, MainFileHandler),
+    ?assertMatch(
+       #{config := #{file := MainFile,
+                     type := file,
+                     rotate_on_date := "$D0",
+                     compress_on_rotate := true,
+                     max_no_bytes := 100,
+                     max_no_files := 1
+                    }},
+       MainFileHandler,
+      "rotation config present in the main handler"),
+
+    QueueFileHandler = get_handler_by_id(Handlers, rmq_1_file_1),
+    QueueFile = log_file_in_context(Context, "queue.log"),
+    ?assertNotEqual(undefined, QueueFileHandler),
+    ?assertMatch(
+       #{config := #{file := QueueFile,
+                     type := file,
+                     rotate_on_date := "$D0",
+                     compress_on_rotate := true,
+                     max_no_bytes := 200,
+                     max_no_files := 2
+                    }},
+       QueueFileHandler,
+      "rotation config present in the cat handler"),
+    ok.
+
+setting_log_rotation_defaults_in_config_works(Config) ->
+    Context = default_context(Config),
+    ok = application:set_env(
+           rabbit, log, 
+           [{file, []},
+            {categories, [{queue, [{file, "queue.log"}]},
+                          {default, [{rotate_on_date, "$D0"},
+                                     {compress_on_rotate, true},
+                                     {max_no_bytes, 300},
+                                     {max_no_files, 3}
+                                    ]}]}],
+           [{persistent, true}]),
+    rabbit_prelaunch_logging:clear_config_run_number(),
+    rabbit_prelaunch_logging:setup(Context),
+
+    Handlers = logger:get_handler_config(),
+    MainFileHandler = get_handler_by_id(Handlers, rmq_1_file_2),
+    MainFile = main_log_file_in_context(Context),
+    ?assertNotEqual(undefined, MainFileHandler),
+    ?assertMatch(
+       #{config := #{file := MainFile,
+                     type := file,
+                     rotate_on_date := "$D0",
+                     compress_on_rotate := true,
+                     max_no_bytes := 300,
+                     max_no_files := 3
+                    }},
+       MainFileHandler,
+      "rotation config present in the main handler"),
+
+    QueueFileHandler = get_handler_by_id(Handlers, rmq_1_file_1),
+    QueueFile = log_file_in_context(Context, "queue.log"),
+    ?assertNotEqual(undefined, QueueFileHandler),
+    ?assertMatch(
+       #{config := #{file := QueueFile,
+                     type := file,
+                     rotate_on_date := "$D0",
+                     compress_on_rotate := true,
+                     max_no_bytes := 300,
+                     max_no_files := 3
+                    }},
+       QueueFileHandler,
+      "rotation config present in the queue handler"),
     ok.
 
 setting_log_levels_in_config_with_output_overridden_in_env_works(Config) ->
@@ -1049,6 +1147,9 @@ main_log_file_in_context(#{log_base_dir := LogBaseDir,
 upgrade_log_file_in_context(#{log_base_dir := LogBaseDir,
                               upgrade_log_file := UpgradeLogFile}) ->
     filename:join(LogBaseDir, UpgradeLogFile).
+
+log_file_in_context(#{log_base_dir := LogBaseDir}, FileName) ->
+    filename:join(LogBaseDir, FileName).
 
 get_handler_by_id([#{id := Id} = Handler | _], Id) ->
     Handler;
