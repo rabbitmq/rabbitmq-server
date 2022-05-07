@@ -1777,59 +1777,169 @@ end}.
          rabbit_prelaunch_early_logging:translate_formatter_conf("log.file.formatter", Conf)
  end}.
 
-%% Log categories
-
+%% Connection log.
 {mapping, "log.connection.level", "rabbit.log.categories.connection.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 {mapping, "log.connection.file", "rabbit.log.categories.connection.file", [
     {datatype, string}
 ]}.
+{mapping, "log.connection.rotation.date", "rabbit.log.categories.connection.rotate_on_date", [
+    {datatype, string}
+]}.
+{mapping, "log.connection.rotation.compress", "rabbit.log.categories.connection.compress_on_rotate", [
+    {default, false},
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.connection.rotation.size", "rabbit.log.categories.connection.max_no_bytes", [
+    {datatype, integer}
+]}.
+{mapping, "log.connection.rotation.count", "rabbit.log.categories.connection.max_no_files", [
+    {datatype, integer}
+]}.
 
+%% Channel log.
 {mapping, "log.channel.level", "rabbit.log.categories.channel.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 {mapping, "log.channel.file", "rabbit.log.categories.channel.file", [
     {datatype, string}
 ]}.
+{mapping, "log.channel.rotation.date", "rabbit.log.categories.channel.rotate_on_date", [
+    {datatype, string}
+]}.
+{mapping, "log.channel.rotation.compress", "rabbit.log.categories.channel.compress_on_rotate", [
+    {default, false},
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.channel.rotation.size", "rabbit.log.categories.channel.max_no_bytes", [
+    {datatype, integer}
+]}.
+{mapping, "log.channel.rotation.count", "rabbit.log.categories.channel.max_no_files", [
+    {datatype, integer}
+]}.
 
+%% Mirroring log.
 {mapping, "log.mirroring.level", "rabbit.log.categories.mirroring.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 {mapping, "log.mirroring.file", "rabbit.log.categories.mirroring.file", [
     {datatype, string}
 ]}.
+{mapping, "log.mirroring.rotation.date", "rabbit.log.categories.mirroring.rotate_on_date", [
+    {datatype, string}
+]}.
+{mapping, "log.mirroring.rotation.compress", "rabbit.log.categories.mirroring.compress_on_rotate", [
+    {default, false},
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.mirroring.rotation.size", "rabbit.log.categories.mirroring.max_no_bytes", [
+    {datatype, integer}
+]}.
+{mapping, "log.mirroring.rotation.count", "rabbit.log.categories.mirroring.max_no_files", [
+    {datatype, integer}
+]}.
 
+%% Queue log.
 {mapping, "log.queue.level", "rabbit.log.categories.queue.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 {mapping, "log.queue.file", "rabbit.log.categories.queue.file", [
     {datatype, string}
 ]}.
+{mapping, "log.queue.rotation.date", "rabbit.log.categories.queue.rotate_on_date", [
+    {datatype, string}
+]}.
+{mapping, "log.queue.rotation.compress", "rabbit.log.categories.queue.compress_on_rotate", [
+    {default, false},
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.queue.rotation.size", "rabbit.log.categories.queue.max_no_bytes", [
+    {datatype, integer}
+]}.
+{mapping, "log.queue.rotation.count", "rabbit.log.categories.queue.max_no_files", [
+    {datatype, integer}
+]}.
 
+%% Federation log.
 {mapping, "log.federation.level", "rabbit.log.categories.federation.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 {mapping, "log.federation.file", "rabbit.log.categories.federation.file", [
     {datatype, string}
 ]}.
+{mapping, "log.federation.rotation.date", "rabbit.log.categories.federation.rotate_on_date", [
+    {datatype, string}
+]}.
+{mapping, "log.federation.rotation.compress", "rabbit.log.categories.federation.compress_on_rotate", [
+    {default, false},
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.federation.rotation.size", "rabbit.log.categories.federation.max_no_bytes", [
+    {datatype, integer}
+]}.
+{mapping, "log.federation.rotation.count", "rabbit.log.categories.federation.max_no_files", [
+    {datatype, integer}
+]}.
 
+%% Upgrade log.
 {mapping, "log.upgrade.level", "rabbit.log.categories.upgrade.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 {mapping, "log.upgrade.file", "rabbit.log.categories.upgrade.file", [
     {datatype, string}
 ]}.
+{mapping, "log.upgrade.rotation.date", "rabbit.log.categories.upgrade.rotate_on_date", [
+    {datatype, string}
+]}.
+{mapping, "log.upgrade.rotation.compress", "rabbit.log.categories.upgrade.compress_on_rotate", [
+    {default, false},
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.upgrade.rotation.size", "rabbit.log.categories.upgrade.max_no_bytes", [
+    {datatype, integer}
+]}.
+{mapping, "log.upgrade.rotation.count", "rabbit.log.categories.upgrade.max_no_files", [
+    {datatype, integer}
+]}.
 
+%% Ra log.
 {mapping, "log.ra.level", "rabbit.log.categories.ra.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
 ]}.
 {mapping, "log.ra.file", "rabbit.log.categories.ra.file", [
     {datatype, string}
 ]}.
+{mapping, "log.ra.rotation.date", "rabbit.log.categories.ra.rotate_on_date", [
+    {datatype, string}
+]}.
+{mapping, "log.ra.rotation.compress", "rabbit.log.categories.ra.compress_on_rotate", [
+    {default, false},
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.ra.rotation.size", "rabbit.log.categories.ra.max_no_bytes", [
+    {datatype, integer}
+]}.
+{mapping, "log.ra.rotation.count", "rabbit.log.categories.ra.max_no_files", [
+    {datatype, integer}
+]}.
 
+%% Default logging config.
 {mapping, "log.default.level", "rabbit.log.categories.default.level", [
     {datatype, {enum, [debug, info, notice, warning, error, critical, alert, emergency, none]}}
+]}.
+{mapping, "log.default.rotation.date", "rabbit.log.categories.default.rotate_on_date", [
+    {datatype, string}
+]}.
+{mapping, "log.default.rotation.compress", "rabbit.log.categories.default.compress_on_rotate", [
+    {default, false},
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "log.default.rotation.size", "rabbit.log.categories.default.max_no_bytes", [
+    {datatype, integer}
+]}.
+{mapping, "log.default.rotation.count", "rabbit.log.categories.default.max_no_files", [
+    {datatype, integer}
 ]}.
 
 % ==========================
