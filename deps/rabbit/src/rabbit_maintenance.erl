@@ -64,8 +64,7 @@ boot() ->
             try
                 _ = rabbit_table:create(
                     TableName,
-                    status_table_definition()),
-                _ = rabbit_table:ensure_table_copy(TableName, node())
+                    status_table_definition())
             catch throw:Reason  ->
                 rabbit_log:error(
                     "Failed to create maintenance status table: ~p",
