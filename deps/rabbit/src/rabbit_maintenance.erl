@@ -29,7 +29,8 @@
     transfer_leadership_of_quorum_queues/1,
     transfer_leadership_of_classic_mirrored_queues/1,
     status_table_name/0,
-    status_table_definition/0
+    status_table_definition/0,
+    boot/0
 ]).
 
 -define(TABLE, rabbit_node_maintenance_states).
@@ -43,6 +44,38 @@
 -export_type([
     maintenance_status/0
 ]).
+
+%%
+%% Boot
+%%
+
+-rabbit_boot_step({rabbit_maintenance_mode_state,
+    [{description, "initializes maintenance mode state"},
+        {mfa,         {?MODULE, boot, []}},
+        {requires,    networking}]}).
+
+boot() ->
+    case rabbit_feature_flags:is_enabled(?FEATURE_FLAG, non_blocking) of
+        true ->
+            TableName = status_table_name(),
+            rabbit_log:info(
+                "Creating table ~s for feature flag `~s`",
+                [TableName, ?FEATURE_FLAG]),
+            try
+                _ = rabbit_table:create(
+                    TableName,
+                    status_table_definition())
+            catch throw:Reason  ->
+                rabbit_log:error(
+                    "Failed to create maintenance status table: ~p",
+                    [Reason])
+            end;
+        false ->
+            ok;
+        state_changing ->
+            %% feature flag migration will do the job for us
+            ok
+    end.
 
 %%
 %% API
