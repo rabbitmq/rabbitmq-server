@@ -167,7 +167,7 @@ erlang_package.hex(
 
 erlang_package.git(
     repository = "rabbitmq/ra",
-    tag = "v2.0.9",
+    tag = "v2.0.11",
 )
 
 erlang_package.hex(
