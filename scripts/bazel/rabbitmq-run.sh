@@ -164,11 +164,9 @@ case $CMD in
             --timeout ${RMQCTL_WAIT_TIMEOUT} \
             ${RABBITMQ_PID_FILE}
 
-        {ERLANG_HOME}/bin/erl \
-            -noinput \
-            -eval "true = rpc:call('${RABBITMQ_NODENAME}', rabbit, is_running, []), halt()." \
-            -sname {SNAME} \
-            -hidden
+        ${RABBITMQ_SCRIPTS_DIR}/rabbitmqctl \
+            --node ${RABBITMQ_NODENAME} \
+            await_startup
         ;;
     stop-node)
         pid=$(test -f $RABBITMQ_PID_FILE && cat $RABBITMQ_PID_FILE); \

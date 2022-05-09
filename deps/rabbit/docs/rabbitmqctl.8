@@ -1807,6 +1807,7 @@ This command disables client connections in vhost
 Sets user limits.
 .Bl -tag -width Ds
 .It Ar username
+The name of the user to apply limits to
 .It Ar definition
 The definition of the limits, as a JSON document.
 In most shells you are very likely to need to quote this.
@@ -1845,6 +1846,34 @@ This command disables client connections for user
 .Qq limited_user :
 .sp
 .Dl rabbitmqctl set_user_limits limited_user '{"max-connections": 0}'
+.\" ------------------------------------------------------------------
+.It Cm clear_user_limits Oc Ar username Oc Ar limit
+.Pp
+Clears user limits.
+.Bl -tag -width Ds
+.It Ar username
+The name of the user to clear limits of
+.It Ar limit
+The name of the limit or "all" to clear all limits at once.
+.El
+.Pp
+Recognised limits are:
+.Bl -bullet -compact
+.It
+max-connections
+.It
+max-channels
+.El
+.Pp
+For example, this command clears max connection limits of user
+.Qq limited_user :
+.sp
+.Dl rabbitmqctl clear_user_limits limited_user 'max-connections'
+.Pp
+This command clears all limits of user
+.Qq limited_user :
+.sp
+.Dl rabbitmqctl clear_user_limits limited_user all
 .\" ------------------------------------------------------------------
 .It Cm trace_off Op Fl p Ar vhost
 .Bl -tag -width Ds

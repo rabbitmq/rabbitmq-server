@@ -124,7 +124,7 @@ handle_cast({node_deleted, Details}) ->
     delete_per_user_tracked_channels_table_for_node(Node).
 
 -spec register_tracked(rabbit_types:tracked_channel()) -> ok.
--dialyzer([{nowarn_function, [register_tracked/1]}, race_conditions]).
+-dialyzer([{nowarn_function, [register_tracked/1]}]).
 
 register_tracked(TrackedCh =
   #tracked_channel{node = Node, name = Name, username = Username}) ->
