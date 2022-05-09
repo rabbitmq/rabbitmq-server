@@ -205,13 +205,13 @@ EOF
 )
 
 genrule(
-    name = "test-node-logs",
-    outs = ["open-test-node-logs.sh"],
+    name = "test-node-data",
+    outs = ["open-test-node-data.sh"],
     cmd = """set -euo pipefail
 cat << 'EOF' > $@
     set -euo pipefail
     if [ $$# -eq 0 ]; then
-        echo "Usage: bazel run test-node-logs TEST_LABEL [shard_index]"
+        echo "Usage: bazel run test-node-data TEST_LABEL [shard_index]"
         exit 1
     fi
 
@@ -231,13 +231,13 @@ EOF
 # NOTE: this rule may not work properly if --remote_download_minimal has been used,
 #       which is currently the default for remote runs
 genrule(
-    name = "remote-test-node-logs",
-    outs = ["open-remote-test-node-logs.sh"],
+    name = "remote-test-node-data",
+    outs = ["open-remote-test-node-data.sh"],
     cmd = """set -euo pipefail
 cat << 'EOF' > $@
     set -euo pipefail
     if [ $$# -eq 0 ]; then
-        echo "Usage: bazel run remote-test-node-logs TEST_LABEL [shard_index]"
+        echo "Usage: bazel run remote-test-node-data TEST_LABEL [shard_index]"
         exit 1
     fi
 
