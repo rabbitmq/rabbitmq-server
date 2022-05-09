@@ -192,3 +192,56 @@ EOF
 """,
     executable = True,
 )
+
+genrule(
+    name = "test-node-logs",
+    outs = ["open-test-node-logs.sh"],
+    cmd = """set -euo pipefail
+cat << 'EOF' > $@
+    set -euo pipefail
+    if [ $$# -eq 0 ]; then
+        echo "Usage: bazel run test-node-logs TEST_LABEL [shard_index]"
+        exit 1
+    fi
+
+    RELATIVE=$${1#//}
+    PACKAGE=$${RELATIVE%%:*}
+    SUITE=$${RELATIVE##*:}
+    OUTPUT_DIR=test.outputs
+    if [ $$# -gt 1 ]; then
+        OUTPUT_DIR=shard_$$2_of_*/test.outputs
+    fi
+    open bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR/ct_run.*/deps.*/run.*/log_private
+EOF
+""",
+    executable = True,
+)
+
+# NOTE: this rule may not work properly if --remote_download_minimal has been used,
+#       which is currently the default for remote runs
+genrule(
+    name = "remote-test-node-logs",
+    outs = ["open-remote-test-node-logs.sh"],
+    cmd = """set -euo pipefail
+cat << 'EOF' > $@
+    set -euo pipefail
+    if [ $$# -eq 0 ]; then
+        echo "Usage: bazel run remote-test-node-logs TEST_LABEL [shard_index]"
+        exit 1
+    fi
+
+    RELATIVE=$${1#//}
+    PACKAGE=$${RELATIVE%%:*}
+    SUITE=$${RELATIVE##*:}
+    OUTPUT_DIR=test.outputs
+    if [ $$# -gt 1 ]; then
+        OUTPUT_DIR=shard_$$2_of_*/test.outputs
+    fi
+    TESTLOGS=$$(echo $$(bazel info output_path)/k8-*/testlogs)
+    cd $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR && unzip outputs.zip
+    open $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR/index.html
+    open $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR/ct_run.*/deps.*/run.*/log_private
+EOF
+""",
+    executable = True,
+)
