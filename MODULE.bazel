@@ -164,7 +164,7 @@ erlang_package.hex(
 )
 
 erlang_package.hex(
-    repository = "rabbitmq/ra",
+    name = "ra",
     version = "2.0.10",
     sha256 = "82d84c083ae8918aee7b0de6822a5821ae89b765c4dbdbe39a8db3194c271f16",
 )
