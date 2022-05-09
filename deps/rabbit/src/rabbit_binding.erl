@@ -466,7 +466,10 @@ sync_transient_route(Route, ShouldIndexTable, Fun) ->
     sync_index_route(Route, ShouldIndexTable, Fun).
 
 sync_index_route(Route, true, Fun) ->
-    case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2) of
+    %% Do not block as blocking will cause a dead lock when
+    %% function rabbit_binding:populate_index_route_table/0
+    %% (i.e. feature flag migration) runs in parallel.
+    case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2, non_blocking) of
         true ->
             ok = Fun(rabbit_index_route, index_route(Route), write);
         _ ->
