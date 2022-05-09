@@ -126,28 +126,26 @@
 %% If the output is syslog, the location is the string `"syslog:"' with the
 %% syslog server hostname appended.
 
+-type category_name() :: atom().
 %% The name of a log category.
 %% Erlang Logger uses the concept of "domain" which is an ordered list of
 %% atoms. A category is mapped to the domain `[?RMQLOG_SUPER_DOMAIN_NAME,
 %% Category]'. In other words, a category is a subdomain of the `rabbitmq'
 %% domain.
--type category_name() :: atom().
 
-%% Console properties are the parameters in the configuration file for a
-%% console-based handler.
 -type console_props() :: [{level, logger:level()} |
                           {enabled, boolean()} |
                           {stdio, stdout | stderr} |
                           {formatter, {atom(), term()}}].
+%% Console properties are the parameters in the configuration file for a
+%% console-based handler.
 
-%% Exchange properties are the parameters in the configuration file for an
-%% exchange-based handler.
 -type exchange_props() :: [{level, logger:level()} |
                            {enabled, boolean()} |
                            {formatter, {atom(), term()}}].
+%% Exchange properties are the parameters in the configuration file for an
+%% exchange-based handler.
 
-%% File properties are the parameters in the configuration file for a
-%% file-based handler.
 -type file_props() :: [{level, logger:level()} |
                        {file, file:filename() | false} |
                        {date, string()} |
@@ -155,75 +153,77 @@
                        {size, non_neg_integer()} |
                        {count, non_neg_integer()} |
                        {formatter, {atom(), term()}}].
+%% File properties are the parameters in the configuration file for a
+%% file-based handler.
 
-%% journald properties are the parameters in the configuration file for a
-%% journald-based handler.
 -type journald_props() :: [{level, logger:level()} |
                            {enabled, boolean()} |
                            {fields, proplists:proplist()}].
+%% journald properties are the parameters in the configuration file for a
+%% journald-based handler.
 
-%% Syslog properties are the parameters in the configuration file for a
-%% syslog-based handler.
 -type syslog_props() :: [{level, logger:level()} |
                          {enabled, boolean()} |
                          {formatter, {atom(), term()}}].
+%% Syslog properties are the parameters in the configuration file for a
+%% syslog-based handler.
 
-%% The main log environment is the parameters in the configuration file for
-%% the main log handler (i.e. where all messages go by default).
 -type main_log_env() :: [{console, console_props()} |
                          {exchange, exchange_props()} |
                          {file, file_props()} |
                          {journald, journald_props()} |
                          {syslog, syslog_props()}].
+%% The main log environment is the parameters in the configuration file for
+%% the main log handler (i.e. where all messages go by default).
 
-%% A per-category log environment is the parameters in the configuration file
-%% for a specific category log handler. There can be one per category.
 -type per_cat_env() :: [{level, logger:level()} |
                         {file, file:filename()}].
+%% A per-category log environment is the parameters in the configuration file
+%% for a specific category log handler. There can be one per category.
 
-%% The `default' category log environment is special (read: awkward) in the
-%% configuration file. It is used to change the log level of the main log
-%% handler.
 -type default_cat_env() :: [{level, logger:level()} |
                             {rotate_on_date, string()} |
                             {compress_on_rotate, boolean()} |
                             {max_no_bytes, non_neg_integer()} |
                             {max_no_files, non_neg_integer()}].
+%% The `default' category log environment is special (read: awkward) in the
+%% configuration file. It is used to change the log level of the main log
+%% handler.
 
-%% Rotation spec is the part of logger_std_h config that defines log file rotation. See
-%% `extract_file_rotation_spec/1'.
 -type file_rotation_spec() :: #{type := file,
                                 rotate_on_date => string(),
                                 compress_on_rotate => boolean(),
                                 max_no_bytes => non_neg_integer(),
                                 max_no_files => non_neg_integer()}.
+%% Rotation spec is the part of logger_std_h config that defines log file rotation. See
+%% `extract_file_rotation_spec/1'.
 
-%% The value for the `log' key in the `rabbit' application environment.
 -type log_app_env() :: [main_log_env() |
                         {categories, [{default, default_cat_env()} |
                                       {category_name(), per_cat_env()}]}].
+%% The value for the `log' key in the `rabbit' application environment.
 
-%% This is the internal structure used to prepare the handlers for the
-%% main/global messages (i.e. not marked with a specific category).
 -type global_log_config() :: #{level => logger:level() | all | none,
                                outputs := [logger:handler_config()]}.
+%% This is the internal structure used to prepare the handlers for the
+%% main/global messages (i.e. not marked with a specific category).
 
+-type per_cat_log_config() :: global_log_config().
 %% This is the internal structure used to prepare the handlers for
 %% category-specific messages.
--type per_cat_log_config() :: global_log_config().
 
-%% This is the internal structure to store the global and per-category
-%% configurations, to prepare the final handlers.
 -type log_config() :: #{global := global_log_config(),
                         per_category := #{
                           category_name() => per_cat_log_config()}}.
+%% This is the internal structure to store the global and per-category
+%% configurations, to prepare the final handlers.
 
-%% Key used to deduplicate handlers before they are installed in Logger.
 -type handler_key() :: atom().
+%% Key used to deduplicate handlers before they are installed in Logger.
 
-%% State used while assigning IDs to handlers.
 -type id_assignment_state() :: #{config_run_number := pos_integer(),
                                  next_file := pos_integer()}.
+%% State used while assigning IDs to handlers.
 
 -spec setup(rabbit_env:context()) -> ok.
 %% @doc
