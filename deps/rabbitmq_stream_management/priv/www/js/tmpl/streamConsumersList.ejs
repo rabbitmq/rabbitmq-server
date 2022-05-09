@@ -8,6 +8,9 @@
           <th>Offset</th>
           <th>Offset Lag</th>
           <th>Credits</th>
+          <th>Active</span></th>
+          <th>Activity status</th>
+          <th>Properties</th>
         </tr>
       </thead>
 <%
@@ -21,6 +24,9 @@
         <td class="c"><%= consumer.offset %></td>
         <td class="c"><%= consumer.offset_lag %></td>
         <td class="c"><%= consumer.credits %></td>
+        <td class="c"><%= fmt_boolean(consumer.active, "&#9679;") %></td>
+        <td class="c"><%= fmt_activity_status(consumer.activity_status, "up") %></td>
+        <td class="c"><%= fmt_table_short(consumer.properties) %></td>
       </tr>
 <% } %>
     </table>

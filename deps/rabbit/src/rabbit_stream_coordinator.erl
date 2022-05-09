@@ -40,6 +40,10 @@
 -export([log_overview/1]).
 -export([replay/1]).
 
+%% for SAC coordinator
+-export([process_command/1,
+         sac_state/1]).
+
 %% for testing and debugging
 -export([eval_listeners/3,
          state/0]).
@@ -88,6 +92,7 @@
                    {member_stopped, stream_id(), args()} |
                    {retention_updated, stream_id(), args()} |
                    {mnesia_updated, stream_id(), args()} |
+                   {sac, rabbit_stream_sac_coordinator:command()} |
                    ra_machine:effect().
 
 -export_type([command/0]).
@@ -170,6 +175,9 @@ delete_replica(StreamId, Node) ->
 policy_changed(Q) when ?is_amqqueue(Q) ->
     StreamId = maps:get(name, amqqueue:get_type_state(Q)),
     process_command({policy_changed, StreamId, #{queue => Q}}).
+
+sac_state(#?MODULE{single_active_consumer = SacState}) ->
+    SacState.
 
 %% for debugging
 state() ->
@@ -338,15 +346,15 @@ all_coord_members() ->
     Nodes = rabbit_mnesia:cluster_nodes(running) -- [node()],
     [{?MODULE, Node} || Node <- [node() | Nodes]].
 
-version() -> 2.
+version() -> 3.
 
 which_module(_) ->
     ?MODULE.
 
 init(_Conf) ->
-    #?MODULE{}.
+    #?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()}.
 
--spec apply(map(), command(), state()) ->
+-spec apply(ra_machine:command_meta_data(), command(), state()) ->
     {state(), term(), ra_machine:effects()}.
 apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
       {_CmdTag, StreamId, #{}} = Cmd,
@@ -380,11 +388,18 @@ apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
         Reply ->
             return(Meta, State0, Reply, [])
     end;
+apply(Meta, {sac, SacCommand}, #?MODULE{single_active_consumer = SacState0,
+                                        monitors = Monitors0} = State0) ->
+    {SacState1, Reply, Effects0} = rabbit_stream_sac_coordinator:apply(SacCommand, SacState0),
+    {SacState2, Monitors1, Effects1} =
+         rabbit_stream_sac_coordinator:ensure_monitors(SacCommand, SacState1, Monitors0, Effects0),
+    return(Meta, State0#?MODULE{single_active_consumer = SacState2,
+                                 monitors = Monitors1}, Reply, Effects1);
 apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
       #?MODULE{streams = Streams0,
                monitors = Monitors0,
-               listeners = StateListeners0} = State) ->
-
+               listeners = StateListeners0,
+               single_active_consumer = SacState0 } = State) ->
     Effects0 = case Reason of
                    noconnection ->
                        [{monitor, node, node(Pid)}];
@@ -438,6 +453,10 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                     return(Meta, State#?MODULE{streams = Streams0,
                                                monitors = Monitors1}, ok, Effects0)
             end;
+        {sac, Monitors1} ->
+            {SacState1, Effects} = rabbit_stream_sac_coordinator:handle_connection_down(Pid, SacState0),
+            return(Meta, State#?MODULE{single_active_consumer = SacState1,
+                                       monitors = Monitors1}, ok, Effects);
         error ->
             return(Meta, State, ok, Effects0)
     end;
@@ -1784,6 +1803,9 @@ machine_version(1, 2, State = #?MODULE{streams = Streams0,
     {State#?MODULE{streams = Streams1,
                    monitors = Monitors2,
                    listeners = undefined}, Effects};
+machine_version(2, 3, State) ->
+    rabbit_log:info("Stream coordinator machine version changes from 2 to 3, updating state."),
+    {State#?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()}, []};
 machine_version(From, To, State) ->
     rabbit_log:info("Stream coordinator machine version changes from ~p to ~p, no state changes required.",
                     [From, To]),

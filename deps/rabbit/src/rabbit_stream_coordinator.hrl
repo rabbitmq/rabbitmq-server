@@ -59,10 +59,11 @@
 -record(rabbit_stream_coordinator, {streams = #{} :: #{stream_id() => #stream{}},
                                     monitors = #{} :: #{pid() => {stream_id() | %% v0 & v1
                                                                   #{stream_id() => ok}, %% v2
-                                                                  monitor_role()}},
+                                                                  monitor_role()} |
+                                                        sac},
                                     %% not used as of v2
                                     listeners = #{} :: undefined | #{stream_id() =>
                                                                      #{pid() := queue_ref()}},
+                                    single_active_consumer = undefined :: undefined | rabbit_stream_sac_coordinator:state(),
                                     %% future extensibility
-                                    reserved_1,
                                     reserved_2}).

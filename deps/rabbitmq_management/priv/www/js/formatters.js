@@ -150,7 +150,9 @@ function fmt_features_short(obj) {
     return res;
 }
 
-function fmt_activity_status(obj) {
+function fmt_activity_status(obj, unknown) {
+    if (unknown == undefined) unknown = UNKNOWN_REPR;
+    if (obj == undefined) return unknown;
     return obj.replace('_', ' ');
 }
 

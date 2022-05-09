@@ -27,7 +27,9 @@
          check_read_permitted/3,
          extract_stream_list/2,
          sort_partitions/1,
-         strip_cr_lf/1]).
+         strip_cr_lf/1,
+         is_sac_ff_enabled/0,
+         consumer_activity_status/2]).
 
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 
@@ -240,3 +242,17 @@ sort_partitions(Partitions) ->
 
 strip_cr_lf(NameBin) ->
     binary:replace(NameBin, [<<"\n">>, <<"\r">>], <<"">>, [global]).
+
+is_sac_ff_enabled() ->
+    rabbit_feature_flags:is_enabled(stream_single_active_consumer).
+
+consumer_activity_status(Active, Properties) ->
+    case {rabbit_stream_reader:single_active_consumer(Properties), Active}
+    of
+        {false, true} ->
+            up;
+        {true, true} ->
+            single_active;
+        {true, false} ->
+            waiting
+    end.

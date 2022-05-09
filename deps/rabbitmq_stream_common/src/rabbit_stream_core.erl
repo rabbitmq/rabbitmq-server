@@ -63,6 +63,7 @@
 -type credit() :: non_neg_integer().
 -type offset_ref() :: binary().
 -type endpoint() :: {Host :: binary(), Port :: non_neg_integer()}.
+-type active() :: boolean().
 -type command() ::
     {publish,
      publisher_id(),
@@ -98,7 +99,8 @@
      {open, VirtualHost :: binary()} |
      {close, Code :: non_neg_integer(), Reason :: binary()} |
      {route, RoutingKey :: binary(), SuperStream :: binary()} |
-     {partitions, SuperStream :: binary()}} |
+     {partitions, SuperStream :: binary()} |
+     {consumer_update, subscription_id(), active()}} |
     {response, correlation_id(),
      {declare_publisher |
       delete_publisher |
@@ -124,7 +126,8 @@
       HeartBeat :: non_neg_integer()} |
      {credit, response_code(), subscription_id()} |
      {route, response_code(), stream_name()} |
-     {partitions, response_code(), [stream_name()]}} |
+     {partitions, response_code(), [stream_name()]} |
+     {consumer_update, response_code(), none | offset_spec()}} |
     {unknown, binary()}.
 
 -spec init(term()) -> state().
@@ -423,7 +426,24 @@ response_body({route = Tag, Code, Stream}) ->
     {command_id(Tag), <<Code:16, ?STRING(Stream)>>};
 response_body({partitions = Tag, Code, Streams}) ->
     StreamsBin = [<<?STRING(Stream)>> || Stream <- Streams],
-    {command_id(Tag), [<<Code:16, (length(Streams)):32>>, StreamsBin]}.
+    {command_id(Tag), [<<Code:16, (length(Streams)):32>>, StreamsBin]};
+response_body({consumer_update = Tag, Code, OffsetSpec}) ->
+    OffsetSpecBin =
+        case OffsetSpec of
+            none ->
+                <<?OFFSET_TYPE_NONE:16>>;
+            first ->
+                <<?OFFSET_TYPE_FIRST:16>>;
+            last ->
+                <<?OFFSET_TYPE_LAST:16>>;
+            next ->
+                <<?OFFSET_TYPE_NEXT:16>>;
+            Offset when is_integer(Offset) ->
+                <<?OFFSET_TYPE_OFFSET, Offset:64/unsigned>>;
+            {timestamp, Ts} ->
+                <<?OFFSET_TYPE_TIMESTAMP, Ts:64/signed>>
+        end,
+    {command_id(Tag), [<<Code:16, OffsetSpecBin/binary>>]}.
 
 request_body({declare_publisher = Tag,
               PublisherId,
@@ -510,7 +530,16 @@ request_body({close = Tag, Code, Reason}) ->
 request_body({route = Tag, RoutingKey, SuperStream}) ->
     {Tag, <<?STRING(RoutingKey), ?STRING(SuperStream)>>};
 request_body({partitions = Tag, SuperStream}) ->
-    {Tag, <<?STRING(SuperStream)>>}.
+    {Tag, <<?STRING(SuperStream)>>};
+request_body({consumer_update = Tag, SubscriptionId, Active}) ->
+    ActiveBin =
+        case Active of
+            true ->
+                1;
+            false ->
+                0
+        end,
+    {Tag, <<SubscriptionId:8, ActiveBin:8>>}.
 
 append_data(Prev, Data) when is_binary(Prev) ->
     [Prev, Data];
@@ -748,6 +777,20 @@ parse_request(<<?REQUEST:1,
                 CorrelationId:32,
                 ?STRING(StreamSize, SuperStream)>>) ->
     request(CorrelationId, {partitions, SuperStream});
+parse_request(<<?REQUEST:1,
+                ?COMMAND_CONSUMER_UPDATE:15,
+                ?VERSION_1:16,
+                CorrelationId:32,
+                SubscriptionId:8,
+                ActiveBin:8>>) ->
+    Active =
+        case ActiveBin of
+            0 ->
+                false;
+            1 ->
+                true
+        end,
+    request(CorrelationId, {consumer_update, SubscriptionId, Active});
 parse_request(Bin) ->
     {unknown, Bin}.
 
@@ -823,7 +866,30 @@ parse_response_body(?COMMAND_ROUTE,
 parse_response_body(?COMMAND_PARTITIONS,
                     <<ResponseCode:16, _Count:32, PartitionsBin/binary>>) ->
     Partitions = list_of_strings(PartitionsBin),
-    {partitions, ResponseCode, Partitions}.
+    {partitions, ResponseCode, Partitions};
+parse_response_body(?COMMAND_CONSUMER_UPDATE,
+                    <<ResponseCode:16, OffsetType:16/signed,
+                      OffsetValue/binary>>) ->
+    OffsetSpec = offset_spec(OffsetType, OffsetValue),
+    {consumer_update, ResponseCode, OffsetSpec}.
+
+offset_spec(OffsetType, OffsetValueBin) ->
+    case OffsetType of
+        ?OFFSET_TYPE_NONE ->
+            none;
+        ?OFFSET_TYPE_FIRST ->
+            first;
+        ?OFFSET_TYPE_LAST ->
+            last;
+        ?OFFSET_TYPE_NEXT ->
+            next;
+        ?OFFSET_TYPE_OFFSET ->
+            <<Offset:64/unsigned>> = OffsetValueBin,
+            Offset;
+        ?OFFSET_TYPE_TIMESTAMP ->
+            <<Timestamp:64/signed>> = OffsetValueBin,
+            {timestamp, Timestamp}
+    end.
 
 request(Corr, Cmd) ->
     {request, Corr, Cmd}.
@@ -941,7 +1007,9 @@ command_id(heartbeat) ->
 command_id(route) ->
     ?COMMAND_ROUTE;
 command_id(partitions) ->
-    ?COMMAND_PARTITIONS.
+    ?COMMAND_PARTITIONS;
+command_id(consumer_update) ->
+    ?COMMAND_CONSUMER_UPDATE.
 
 parse_command_id(?COMMAND_DECLARE_PUBLISHER) ->
     declare_publisher;
@@ -992,7 +1060,9 @@ parse_command_id(?COMMAND_HEARTBEAT) ->
 parse_command_id(?COMMAND_ROUTE) ->
     route;
 parse_command_id(?COMMAND_PARTITIONS) ->
-    partitions.
+    partitions;
+parse_command_id(?COMMAND_CONSUMER_UPDATE) ->
+    consumer_update.
 
 element_index(Element, List) ->
     element_index(Element, List, 0).

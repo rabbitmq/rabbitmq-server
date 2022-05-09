@@ -35,7 +35,8 @@
          lookup_local_member/2,
          topology/2,
          route/3,
-         partitions/2]).
+         partitions/2,
+         partition_index/3]).
 
 -record(state, {configuration}).
 
@@ -117,6 +118,12 @@ route(RoutingKey, VirtualHost, SuperStream) ->
                     {ok, [binary()]} | {error, stream_not_found}.
 partitions(VirtualHost, SuperStream) ->
     gen_server:call(?MODULE, {partitions, VirtualHost, SuperStream}).
+
+-spec partition_index(binary(), binary(), binary()) ->
+                         {ok, integer()} | {error, stream_not_found}.
+partition_index(VirtualHost, SuperStream, Stream) ->
+    gen_server:call(?MODULE,
+                    {partition_index, VirtualHost, SuperStream, Stream}).
 
 stream_queue_arguments(Arguments) ->
     stream_queue_arguments([{<<"x-queue-type">>, longstr, <<"stream">>}],
@@ -418,12 +425,66 @@ handle_call({route, RoutingKey, VirtualHost, SuperStream}, _From,
           catch
               exit:Error ->
                   rabbit_log:error("Error while looking up exchange ~p, ~p",
-                                   [ExchangeName, Error]),
+                                   [rabbit_misc:rs(ExchangeName), Error]),
                   {error, stream_not_found}
           end,
     {reply, Res, State};
 handle_call({partitions, VirtualHost, SuperStream}, _From, State) ->
     Res = super_stream_partitions(VirtualHost, SuperStream),
+    {reply, Res, State};
+handle_call({partition_index, VirtualHost, SuperStream, Stream},
+            _From, State) ->
+    ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
+    rabbit_log:debug("Looking for partition index of stream ~p in super "
+                     "stream ~p (virtual host ~p)",
+                     [Stream, SuperStream, VirtualHost]),
+    Res = try
+              rabbit_exchange:lookup_or_die(ExchangeName),
+              UnorderedBindings =
+                  [Binding
+                   || Binding = #binding{destination = #resource{name = Q} = D}
+                          <- rabbit_binding:list_for_source(ExchangeName),
+                      is_resource_stream_queue(D), Q == Stream],
+              OrderedBindings =
+                  rabbit_stream_utils:sort_partitions(UnorderedBindings),
+              rabbit_log:debug("Bindings: ~p", [OrderedBindings]),
+              case OrderedBindings of
+                  [] ->
+                      {error, stream_not_found};
+                  Bindings ->
+                      Binding = lists:nth(1, Bindings),
+                      #binding{args = Args} = Binding,
+                      case rabbit_misc:table_lookup(Args,
+                                                    <<"x-stream-partition-order">>)
+                      of
+                          {_, Order} ->
+                              Index = rabbit_data_coercion:to_integer(Order),
+                              {ok, Index};
+                          _ ->
+                              Pattern = <<"-">>,
+                              Size = byte_size(Pattern),
+                              case string:find(Stream, Pattern, trailing) of
+                                  nomatch ->
+                                      {ok, -1};
+                                  <<Pattern:Size/binary, Rest/binary>> ->
+                                      try
+                                          Index = binary_to_integer(Rest),
+                                          {ok, Index}
+                                      catch
+                                          error:_ ->
+                                              {ok, -1}
+                                      end;
+                                  _ ->
+                                      {ok, -1}
+                              end
+                      end
+              end
+          catch
+              exit:Error ->
+                  rabbit_log:error("Error while looking up exchange ~p, ~p",
+                                   [ExchangeName, Error]),
+                  {error, stream_not_found}
+          end,
     {reply, Res, State};
 handle_call(which_children, _From, State) ->
     {reply, [], State}.
