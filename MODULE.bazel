@@ -163,9 +163,10 @@ erlang_package.hex(
     sha256 = "282a8a323ca2a845c9e6f787d166348f776c1d4a41ede63046d72d422e3da946",
 )
 
-erlang_package.git(
+erlang_package.hex(
     repository = "rabbitmq/ra",
-    tag = "v2.0.9",
+    version = "2.0.10",
+    sha256 = "82d84c083ae8918aee7b0de6822a5821ae89b765c4dbdbe39a8db3194c271f16",
 )
 
 erlang_package.hex(
