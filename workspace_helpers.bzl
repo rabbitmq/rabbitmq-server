@@ -193,8 +193,8 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "ra",
-        version = "2.0.9",
-        sha256 = "c00bbefe56b7eee6036430f97463a7f500cdab2a72c9b8229ee6ade6a3c22803",
+        version = "2.0.11",
+        sha256 = "7eaed6e7402052ebce42fea28afbeb02d22b090a9a639f881d27c93893f45419",
         first_srcs = [
             "src/ra_machine.erl",
             "src/ra_snapshot.erl",
