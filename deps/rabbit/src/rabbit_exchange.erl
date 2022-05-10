@@ -10,7 +10,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -export([recover/1, policy_changed/2, callback/4, declare/7,
-         assert_equivalence/6, assert_args_equivalence/2, check_type/1,
+         assert_equivalence/6, assert_args_equivalence/2, check_type/1, exists/1,
          lookup/1, lookup_many/1, lookup_or_die/1, list/0, list/1, lookup_scratch/2,
          update_scratch/3, update_decorators/1, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4,
@@ -219,6 +219,10 @@ assert_args_equivalence(#exchange{ name = Name, arguments = Args },
     %% "alternate-exchange".
     rabbit_misc:assert_args_equivalence(Args, RequiredArgs, Name,
                                         [<<"alternate-exchange">>]).
+
+-spec exists(name()) -> boolean().
+exists(Name) ->
+    ets:member(rabbit_exchange, Name).
 
 -spec lookup
         (name()) -> rabbit_types:ok(rabbit_types:exchange()) |
