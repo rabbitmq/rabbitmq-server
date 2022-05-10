@@ -213,10 +213,10 @@ wait_for_queue_deleted(QRef, 0) ->
     rabbit_log:debug("Received deletion event for ~s but queue still exists in ETS table.",
                      [rabbit_misc:rs(QRef)]);
 wait_for_queue_deleted(QRef, N) ->
-    case rabbit_amqqueue:lookup(QRef) of
-        {error, not_found} ->
+    case rabbit_amqqueue:exists(QRef) of
+        false ->
             ok;
-        _ ->
+        true ->
             timer:sleep(50),
             wait_for_queue_deleted(QRef, N-1)
     end.

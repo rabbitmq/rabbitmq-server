@@ -683,10 +683,10 @@ add_queue_int(_Queue, R = #resource{kind = queue,
     rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
                        "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_queue_int(Queue, Name, ActingUser) ->
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, _} ->
+    case rabbit_amqqueue:exists(Name) of
+        true ->
             ok;
-        {error, not_found} ->
+        false ->
             rabbit_amqqueue:declare(Name,
                                     maps:get(durable, Queue, undefined),
                                     maps:get(auto_delete, Queue, undefined),
@@ -709,10 +709,10 @@ add_exchange_int(_Exchange, R = #resource{kind = exchange,
     rabbit_log:warning("Skipping import of an exchange whose name begins with 'amq.', "
                        "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_exchange_int(Exchange, Name, ActingUser) ->
-    case rabbit_exchange:lookup(Name) of
-        {ok, _} ->
+    case rabbit_exchange:exists(Name) of
+        true ->
             ok;
-        {error, not_found} ->
+        false ->
             Internal = case maps:get(internal, Exchange, undefined) of
                            undefined -> false; %% =< 2.2.0
                            I         -> I
@@ -782,10 +782,7 @@ filter_out_existing_queues(Queues) ->
 filter_out_existing_queues(VHost, Queues) ->
     Pred = fun(Queue) ->
                Rec = rv(VHost, queue, <<"name">>, Queue),
-               case rabbit_amqqueue:lookup(Rec) of
-                   {ok, _} -> false;
-                   {error, not_found} -> true
-               end
+               not rabbit_amqqueue:exists(Rec)
            end,
     lists:filter(Pred, Queues).
 
@@ -798,11 +795,11 @@ build_filtered_map([], AccMap) ->
     {ok, AccMap};
 build_filtered_map([Queue|Rest], AccMap0) ->
     {Rec, VHost} = build_queue_data(Queue),
-    case rabbit_amqqueue:lookup(Rec) of
-        {error, not_found} ->
+    case rabbit_amqqueue:exists(Rec) of
+        false ->
             AccMap1 = maps:update_with(VHost, fun(V) -> V + 1 end, 1, AccMap0),
             build_filtered_map(Rest, AccMap1);
-        {ok, _} ->
+        true ->
             build_filtered_map(Rest, AccMap0)
     end.
 

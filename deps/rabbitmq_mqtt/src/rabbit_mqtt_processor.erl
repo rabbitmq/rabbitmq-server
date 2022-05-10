@@ -548,13 +548,10 @@ maybe_clean_sess(PState = #proc_state { clean_sess = true,
             end
     end.
 
-session_present(VHost, ClientId)  ->
+session_present(VHost, ClientId) ->
     {_, QueueQ1} = rabbit_mqtt_util:subcription_queue_name(ClientId),
     QueueName = rabbit_misc:r(VHost, queue, QueueQ1),
-    case rabbit_amqqueue:lookup(QueueName) of
-        {ok, _} -> true;
-        {error, not_found} -> false
-    end.
+    rabbit_amqqueue:exists(QueueName).
 
 make_will_msg(#mqtt_frame_connect{ will_flag   = false }) ->
     undefined;
