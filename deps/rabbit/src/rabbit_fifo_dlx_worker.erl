@@ -312,7 +312,8 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
                                  RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
                                  {RouteToQs1, Cycles} = rabbit_dead_letter:detect_cycles(Reason, Msg, RouteToQs0),
                                  State1 = log_cycles(Cycles, RKeys, State0),
-                                 RouteToQs = rabbit_amqqueue:lookup(RouteToQs1),
+                                 RouteToQs2 = rabbit_amqqueue:lookup(RouteToQs1),
+                                 RouteToQs = rabbit_amqqueue:prepend_extra_bcc(RouteToQs2),
                                  State2 = case RouteToQs of
                                               [] ->
                                                   log_no_route_once(State1);
@@ -459,26 +460,29 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
   when is_list(DLRKeys) ->
     Delivery = Delivery0#delivery{message = BasicMsg#basic_message{exchange_name = DLXRef,
                                                                    routing_keys  = DLRKeys}},
-    RouteToQs0 = rabbit_exchange:route(DLX, Delivery),
-    %% rabbit_exchange:route/2 can route to target queues that do not exist (e.g. in case of default exchange).
+    %% rabbit_exchange:route/2 can route to target queues that do not exist
+    %% (feature flag implicit_default_bindings).
     %% Therefore, filter out non-existent target queues.
-    RouteToQs1 = queue_names(rabbit_amqqueue:lookup(RouteToQs0)),
-    case {RouteToQs1, Settled} of
+    RouteToQs0 = queue_names(
+                   rabbit_amqqueue:prepend_extra_bcc(
+                     rabbit_amqqueue:lookup(
+                       rabbit_exchange:route(DLX, Delivery)))),
+    case {RouteToQs0, Settled} of
         {[], [_|_]} ->
             %% Routes changed dynamically so that we don't await any publisher confirms anymore.
-            %% Since we also received at least once publisher confirm (mandatory flag semantics),
-            %% we can ack the messasge to the source quorum queue.
+            %% Since we also received at least one publisher confirm (mandatory flag semantics),
+            %% we can ack the message to the source quorum queue.
             State0#state{pendings = maps:remove(OutSeq, Pendings),
                          settled_ids = [ConsumedId | SettledIds]};
         _ ->
             %% Do not redeliver message to a target queue
             %% 1. for which we already received a publisher confirm, or
-            Unsettled = RouteToQs1 -- Settled,
+            Unsettled = RouteToQs0 -- Settled,
             %% 2. whose queue client redelivers on our behalf.
             %% Note that a quorum queue client does not redeliver on our behalf if it previously
             %% rejected the message. This is why we always redeliver rejected messages here.
-            RouteToQs2 = Unsettled -- clients_redeliver(Unsettled0, QTypeState),
-            {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, BasicMsg, RouteToQs2),
+            RouteToQs1 = Unsettled -- clients_redeliver(Unsettled0, QTypeState),
+            {RouteToQs, Cycles} = rabbit_dead_letter:detect_cycles(Reason, BasicMsg, RouteToQs1),
             State1 = log_cycles(Cycles, DLRKeys, State0),
             case RouteToQs of
                 [] ->
