@@ -503,6 +503,7 @@ add_queue_int(_Queue, R = #resource{kind = queue,
                        "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_queue_int(Queue, Name, ActingUser) ->
 <<<<<<< HEAD
+<<<<<<< HEAD
     case rabbit_amqqueue:lookup(Name) of
         {ok, _} ->
 <<<<<<< HEAD
@@ -514,6 +515,10 @@ add_queue_int(Queue, Name, ActingUser) ->
         true ->
 >>>>>>> 20677395cd (Check queue and exchange existence with ets:member/2)
 >>>>>>> ef19dc48ae (Check queue and exchange existence with ets:member/2)
+=======
+    case rabbit_amqqueue:exists(Name) of
+        true ->
+>>>>>>> 5b5174e9b2 (Resolve a conflict)
             ok;
         false ->
             rabbit_amqqueue:declare(Name,
