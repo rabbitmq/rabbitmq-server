@@ -75,3 +75,6 @@ callgrand*
 
 /user.bazelrc
 /bazel-*
+
+.vscode
+.idea
