@@ -692,15 +692,8 @@ add_queue_int(_Queue, R = #resource{kind = queue,
     rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
                        "name: ~s, acting user: ~s", [Name, ActingUser]);
 add_queue_int(Queue, Name, ActingUser) ->
-<<<<<<< HEAD
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, _} ->
-            %% Skip declaring a queue that already exists to avoid
-            %% potentially expensive node and leader selection.
-=======
     case rabbit_amqqueue:exists(Name) of
         true ->
->>>>>>> 20677395cd (Check queue and exchange existence with ets:member/2)
             ok;
         false ->
             rabbit_amqqueue:declare(Name,
