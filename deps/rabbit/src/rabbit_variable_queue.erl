@@ -478,28 +478,6 @@
 %% rabbit_amqqueue_process need fairly fresh rates.
 -define(MSGS_PER_RATE_CALC, 100).
 
-%% we define the garbage collector threshold
-%% it needs to tune the `reduce_memory_use` calls. Thus, the garbage collection.
-%% see: rabbitmq-server-973 and rabbitmq-server-964
--define(DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD, 1000).
--define(EXPLICIT_GC_RUN_OP_THRESHOLD(Mode),
-    case get(explicit_gc_run_operation_threshold) of
-        undefined ->
-            Val = explicit_gc_run_operation_threshold_for_mode(Mode),
-            put(explicit_gc_run_operation_threshold, Val),
-            Val;
-        Val       -> Val
-    end).
-
-explicit_gc_run_operation_threshold_for_mode(Mode) ->
-    {Key, Fallback} = case Mode of
-        lazy -> {lazy_queue_explicit_gc_run_operation_threshold,
-                 ?DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD};
-        _    -> {queue_explicit_gc_run_operation_threshold,
-                 ?DEFAULT_EXPLICIT_GC_RUN_OP_THRESHOLD}
-    end,
-    rabbit_misc:get_env(rabbit, Key, Fallback).
-
 %%----------------------------------------------------------------------------
 %% Public API
 %%----------------------------------------------------------------------------
@@ -697,27 +675,27 @@ publish(Msg, MsgProps, IsDelivered, ChPid, Flow, State) ->
         publish1(Msg, MsgProps, IsDelivered, ChPid, Flow,
                  fun maybe_write_to_disk/4,
                  State),
-    a(maybe_reduce_memory_use(maybe_update_rates(State1))).
+    a(maybe_update_rates(State1)).
 
 batch_publish(Publishes, ChPid, Flow, State) ->
     {ChPid, Flow, State1} =
         lists:foldl(fun batch_publish1/2, {ChPid, Flow, State}, Publishes),
     State2 = ui(State1),
-    a(maybe_reduce_memory_use(maybe_update_rates(State2))).
+    a(maybe_update_rates(State2)).
 
 publish_delivered(Msg, MsgProps, ChPid, Flow, State) ->
     {SeqId, State1} =
         publish_delivered1(Msg, MsgProps, ChPid, Flow,
                            fun maybe_write_to_disk/4,
                            State),
-    {SeqId, a(maybe_reduce_memory_use(maybe_update_rates(State1)))}.
+    {SeqId, a(maybe_update_rates(State1))}.
 
 batch_publish_delivered(Publishes, ChPid, Flow, State) ->
     {ChPid, Flow, SeqIds, State1} =
         lists:foldl(fun batch_publish_delivered1/2,
                     {ChPid, Flow, [], State}, Publishes),
     State2 = ui(State1),
-    {lists:reverse(SeqIds), a(maybe_reduce_memory_use(maybe_update_rates(State2)))}.
+    {lists:reverse(SeqIds), a(maybe_update_rates(State2))}.
 
 discard(_MsgId, _ChPid, _Flow, State) -> State.
 
@@ -830,12 +808,12 @@ requeue(AckTags, #vqstate { delta      = Delta,
     {Delta1, MsgIds1, State2}     = delta_merge(SeqIds, Delta, MsgIds,
                                                 State1),
     MsgCount = length(MsgIds1),
-    {MsgIds1, a(maybe_reduce_memory_use(
+    {MsgIds1, a(
                   maybe_update_rates(ui(
                     State2 #vqstate { delta      = Delta1,
                                       q3         = Q3a,
                                       in_counter = InCounter + MsgCount,
-                                      len        = Len + MsgCount }))))}.
+                                      len        = Len + MsgCount })))}.
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, StateN} =
@@ -861,28 +839,10 @@ is_empty(State) -> 0 == len(State).
 depth(State) ->
     len(State) + count_pending_acks(State).
 
-set_ram_duration_target(
-  DurationTarget, State = #vqstate {
-                    rates = #rates { in      = AvgIngressRate,
-                                     out     = AvgEgressRate,
-                                     ack_in  = AvgAckIngressRate,
-                                     ack_out = AvgAckEgressRate },
-                    target_ram_count = TargetRamCount }) ->
-    Rate =
-        AvgEgressRate + AvgIngressRate + AvgAckEgressRate + AvgAckIngressRate,
-    TargetRamCount1 =
-        case DurationTarget of
-            infinity  -> infinity;
-            _         -> trunc(DurationTarget * Rate) %% msgs = sec * msgs/sec
-        end,
-    State1 = State #vqstate { target_ram_count = TargetRamCount1 },
-    a(case TargetRamCount1 == infinity orelse
-          (TargetRamCount =/= infinity andalso
-           TargetRamCount1 >= TargetRamCount) of
-          true  -> State1;
-          false -> reduce_memory_use(State1)
-      end).
+set_ram_duration_target(_DurationTarget, State) ->
+    State.
 
+%% @todo Do we need this? Not for reduce_memory_use type of stuff.
 maybe_update_rates(State = #vqstate{ in_counter  = InCount,
                                      out_counter = OutCount })
   when InCount + OutCount > ?MSGS_PER_RATE_CALC ->
@@ -922,6 +882,7 @@ update_rate(Now, TS, Count, Rate) ->
                                                 Count / Time, Rate)
     end.
 
+%% @todo Remove this as well.
 ram_duration(State) ->
     State1 = #vqstate { rates = #rates { in      = AvgIngressRate,
                                          out     = AvgEgressRate,
@@ -971,7 +932,7 @@ handle_pre_hibernate(State = #vqstate { index_mod   = IndexMod,
     State #vqstate { index_state = IndexMod:flush(IndexState),
                      store_state = rabbit_classic_queue_store_v2:sync(StoreState) }.
 
-resume(State) -> a(reduce_memory_use(State)).
+resume(State) -> a(State).
 
 msg_rates(#vqstate { rates = #rates { in  = AvgIngressRate,
                                       out = AvgEgressRate } }) ->
@@ -2712,22 +2673,6 @@ ifold(Fun, Acc, Its0, State0) ->
 %%----------------------------------------------------------------------------
 %% Phase changes
 %%----------------------------------------------------------------------------
-
-maybe_reduce_memory_use(State = #vqstate {memory_reduction_run_count = MRedRunCount}) ->
-    case MRedRunCount >= ?EXPLICIT_GC_RUN_OP_THRESHOLD(lazy) of
-        true -> State1 = reduce_memory_use(State),
-                State1#vqstate{memory_reduction_run_count =  0};
-        false -> State#vqstate{memory_reduction_run_count =  MRedRunCount + 1}
-    end.
-
-reduce_memory_use(State0 = #vqstate{ index_mod   = IndexMod,
-                                     index_state = IndexState,
-                                     store_state = StoreState }) ->
-    State = State0#vqstate{ index_state = IndexMod:flush(IndexState),
-                            store_state = rabbit_classic_queue_store_v2:sync(StoreState) },
-    garbage_collect(),
-    %% @todo Get rid of target ram count?
-    State.
 
 fetch_from_q3(State = #vqstate { delta = #delta { count = DeltaCount },
                                  q3    = Q3 }) ->
