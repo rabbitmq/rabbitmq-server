@@ -70,13 +70,13 @@ init([Table]) ->
                             proplists:get_value(global, Policies)},
                 rates_mode = RatesMode,
                 old_aggr_stats = #{},
-                lookup_queue = fun queue_exists/1,
-                lookup_exchange = fun exchange_exists/1,
+                lookup_queue = fun rabbit_amqqueue:exists/1,
+                lookup_exchange = fun rabbit_exchange:exists/1,
                 filter_aggregated_queue_metrics_pattern = FilterPattern}}.
 
 handle_call(reset_lookups, _From, State) ->
-    {reply, ok, State#state{lookup_queue = fun queue_exists/1,
-                            lookup_exchange = fun exchange_exists/1}};
+    {reply, ok, State#state{lookup_queue = fun rabbit_amqqueue:exists/1,
+                            lookup_exchange = fun rabbit_exchange:exists/1}};
 handle_call({override_lookups, Lookups}, _From, State) ->
     {reply, ok, State#state{lookup_queue = pget(queue, Lookups),
                             lookup_exchange = pget(exchange, Lookups)}};
@@ -649,22 +649,6 @@ vhost({queue_stats, #resource{virtual_host = VHost}}) ->
     VHost;
 vhost({TName, Pid}) ->
     pget(vhost, lookup_element(TName, Pid, 2)).
-
-exchange_exists(Name) ->
-    case rabbit_exchange:lookup(Name) of
-        {ok, _} ->
-            true;
-        _ ->
-            false
-    end.
-
-queue_exists(Name) ->
-    case rabbit_amqqueue:lookup(Name) of
-        {ok, _} ->
-            true;
-        _ ->
-            false
-    end.
 
 insert_with_index(Table, Key, Tuple) ->
     Insert = ets:insert(Table, Tuple),
