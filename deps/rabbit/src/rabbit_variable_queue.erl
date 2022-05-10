@@ -2104,6 +2104,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
          MsgProps = #message_properties { needs_confirming = NeedsConfirming },
          IsDelivered, _ChPid, _Flow, PersistFun,
          State = #vqstate { q3 = Q3, delta = Delta = #delta { count = DeltaCount },
+                            len                 = Len,
                             version             = Version,
                             qi_embed_msgs_below = IndexMaxSize,
                             next_seq_id         = SeqId,
@@ -2113,8 +2114,9 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                             unconfirmed         = UC }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(Version, IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
-    State4 = case {DeltaCount, ?QUEUE:len(Q3)} of
-                 {0, Q3Len} when Q3Len < 16384 -> %% @todo It would be interesting to get a dynamic max size.
+    State4 = case DeltaCount of
+                 %% Len is the same as Q3Len when DeltaCount =:= 0.
+                 0 when Len < 16384 -> %% @todo It would be interesting to get a dynamic max size.
                      {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
                      State2 = State1 #vqstate { q3 = ?QUEUE:in(m(MsgStatus1), Q3) },
                      %% @todo I am not sure about the stats from this.
