@@ -643,12 +643,7 @@ exchange_exists(VirtualHost, Name) ->
     case rabbit_stream_utils:enforce_correct_name(Name) of
         {ok, CorrectName} ->
             ExchangeName = rabbit_misc:r(VirtualHost, exchange, CorrectName),
-            case rabbit_exchange:lookup(ExchangeName) of
-                {ok, _} ->
-                    {ok, true};
-                {error, not_found} ->
-                    {ok, false}
-            end;
+            {ok, rabbit_exchange:exists(ExchangeName)};
         error ->
             {error, validation_failed}
     end.
@@ -657,12 +652,7 @@ queue_exists(VirtualHost, Name) ->
     case rabbit_stream_utils:enforce_correct_name(Name) of
         {ok, CorrectName} ->
             QueueName = rabbit_misc:r(VirtualHost, queue, CorrectName),
-            case rabbit_amqqueue:lookup(QueueName) of
-                {ok, _} ->
-                    {ok, true};
-                {error, not_found} ->
-                    {ok, false}
-            end;
+            {ok, rabbit_amqqueue:exists(QueueName)};
         error ->
             {error, validation_failed}
     end.
