@@ -498,6 +498,7 @@ maybe_clean_sess(PState = #proc_state { clean_sess = true,
                                         client_id  = ClientId }) ->
     {_, Queue} = rabbit_mqtt_util:subcription_queue_name(ClientId),
     {ok, Channel} = amqp_connection:open_channel(Conn),
+<<<<<<< HEAD
     ok = try amqp_channel:call(Channel, #'queue.delete'{ queue = Queue }) of
              #'queue.delete_ok'{} -> ok
          catch
@@ -519,6 +520,30 @@ session_present(Conn, ClientId)  ->
     catch exit:{{shutdown, {server_initiated_close, ?NOT_FOUND, _Text}}, _} ->
             false
     end.
+=======
+    case session_present(VHost, ClientId) of
+        false ->
+            {{?CONNACK_ACCEPT, false}, PState};
+        true ->
+            try amqp_channel:call(Channel, #'queue.delete'{ queue = Queue }) of
+                #'queue.delete_ok'{} -> {{?CONNACK_ACCEPT, false}, PState}
+            catch
+                exit:({{shutdown, {server_initiated_close, 403, _}}, _}) ->
+                    %% Connection is not yet propagated to #proc_state{}, let's close it here
+                    catch amqp_connection:close(Conn),
+                    rabbit_log_connection:error("MQTT cannot start a clean session: "
+                                                "`configure` permission missing for queue `~p`", [Queue]),
+                    {?CONNACK_SERVER, PState}
+            after
+                catch amqp_channel:close(Channel)
+            end
+    end.
+
+session_present(VHost, ClientId) ->
+    {_, QueueQ1} = rabbit_mqtt_util:subcription_queue_name(ClientId),
+    QueueName = rabbit_misc:r(VHost, queue, QueueQ1),
+    rabbit_amqqueue:exists(QueueName).
+>>>>>>> d9142be0e2 (Check queue and exchange existence with ets:member/2)
 
 make_will_msg(#mqtt_frame_connect{ will_flag   = false }) ->
     undefined;

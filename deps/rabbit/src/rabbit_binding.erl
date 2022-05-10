@@ -139,10 +139,7 @@ exists(#binding{source = ?DEFAULT_EXCHANGE(_),
                 destination = #resource{kind = queue, name = QName} = Queue,
                 key = QName,
                 args = []}) ->
-    case rabbit_amqqueue:lookup(Queue) of
-        {ok, _} -> true;
-        {error, not_found} -> false
-    end;
+    rabbit_amqqueue:exists(Queue);
 exists(Binding) ->
     binding_action(
       Binding, fun (_Src, _Dst, B) ->
