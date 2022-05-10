@@ -805,7 +805,4 @@ var chart_data = {};
 // because things were deleted between refreshes
 var last_page_out_of_range_error = 0;
 
-var enable_uaa;
-var uaa_client_id;
-var uaa_location;
 var oauth;

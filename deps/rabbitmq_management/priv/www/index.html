@@ -23,12 +23,12 @@
     <link href="favicon.ico" rel="shortcut icon" type="image/x-icon"/>
 
     <script type="application/javascript">
-      var oauth = initializeOAuthIfRequired();
+      var oauth = oauth_initialize_if_required();
 
       if (oauth.enable) {
-        isLoggedIn().then( status => {
+        oauth_is_logged_in().then( status => {
           if (!status.loggedIn) {
-            replace_content('outer', format('login_uaa', {}));
+            replace_content('outer', format('login_oauth', {}));
           }  else {
             oauth.logged_in = true
             oauth.access_token = status.user.access_token

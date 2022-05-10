@@ -3278,28 +3278,28 @@ stats_redirect_test(Config) ->
 oauth_test(Config) ->
     Map1 = http_get(Config, "/auth", ?OK),
     %% Defaults
-    ?assertEqual(false, maps:get(enable_uaa, Map1)),
-    ?assertEqual(<<>>, maps:get(uaa_client_id, Map1)),
-    ?assertEqual(<<>>, maps:get(uaa_location, Map1)),
+    ?assertEqual(false, maps:get(oauth_enable, Map1)),
+    ?assertEqual(<<>>, maps:get(oauth_client_id, Map1)),
+    ?assertEqual(<<>>, maps:get(oauth_provider_url, Map1)),
     %% Misconfiguration
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, enable_uaa, true]),
+                                 [rabbitmq_management, oauth_enable, true]),
     Map2 = http_get(Config, "/auth", ?OK),
-    ?assertEqual(false, maps:get(enable_uaa, Map2)),
-    ?assertEqual(<<>>, maps:get(uaa_client_id, Map2)),
-    ?assertEqual(<<>>, maps:get(uaa_location, Map2)),
+    ?assertEqual(false, maps:get(oauth_enable, Map2)),
+    ?assertEqual(<<>>, maps:get(oauth_client_id, Map2)),
+    ?assertEqual(<<>>, maps:get(oauth_provider_url, Map2)),
     %% Valid config
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, uaa_client_id, "rabbit_user"]),
+                                 [rabbitmq_management, oauth_client_id, "rabbit_user"]),
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, uaa_location, "http://localhost:8080/uaa"]),
+                                 [rabbitmq_management, oauth_provider_url, "http://localhost:8080/uaa"]),
     Map3 = http_get(Config, "/auth", ?OK),
-    ?assertEqual(true, maps:get(enable_uaa, Map3)),
-    ?assertEqual(<<"rabbit_user">>, maps:get(uaa_client_id, Map3)),
-    ?assertEqual(<<"http://localhost:8080/uaa">>, maps:get(uaa_location, Map3)),
+    ?assertEqual(true, maps:get(oauth_enable, Map3)),
+    ?assertEqual(<<"rabbit_user">>, maps:get(oauth_client_id, Map3)),
+    ?assertEqual(<<"http://localhost:8080/uaa">>, maps:get(oauth_provider_url, Map3)),
     %% cleanup
     rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-                                 [rabbitmq_management, enable_uaa]).
+                                 [rabbitmq_management, oauth_enable]).
 
 login_test(Config) ->
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},

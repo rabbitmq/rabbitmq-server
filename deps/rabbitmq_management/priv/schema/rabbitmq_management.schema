@@ -432,15 +432,27 @@ end}.
 %% ===========================================================================
 %% Authorization
 
+%% Configure OAuth2 in the management ui to work with old versions of UAA (which versions?)
 {mapping, "management.enable_uaa", "rabbitmq_management.enable_uaa",
     [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "management.oauth_readiness_uri", "rabbitmq_management.oauth_readiness_uri",
-    [{datatype, string}]}.
+%% Your client application's identifier as registered with the OIDC/OAuth2. Deprecated, switch to oauth_client_id
+{mapping, "management.uaa_client_id", "rabbitmq_management.uaa_client_id",
+      [{datatype, string}]}.
+{mapping, "management.uaa_client_secret", "rabbitmq_management.uaa_client_secret",
+      [{datatype, string}]}.
+
+%% The URL of the OIDC/OAuth2 provider
+{mapping, "management.uaa_location", "rabbitmq_management.uaa_location",
+      [{datatype, string}]}.
 
 %% Enable OAuth2 in the management ui
 {mapping, "management.oauth_enable", "rabbitmq_management.oauth_enable",
     [{datatype, {enum, [true, false]}}]}.
+
+%% The URL of the OIDC/OAuth2 provider
+{mapping, "management.oauth_provider_url", "rabbitmq_management.oauth_provider_url",
+      [{datatype, string}]}.
 
 %% Your client application's identifier as registered with the OIDC/OAuth2
 {mapping, "management.oauth_client_id", "rabbitmq_management.oauth_client_id",
@@ -448,13 +460,17 @@ end}.
 {mapping, "management.oauth_client_secret", "rabbitmq_management.oauth_client_secret",
       [{datatype, string}]}.
 
-%% The URL of the OIDC/OAuth2 provider
-{mapping, "management.oauth_provider_url", "rabbitmq_management.oauth_provider_url",
+%% Configure OAuth2 authorization flow (defaults to code)
+{mapping, "management.oauth_response_type", "rabbitmq_management.oauth_response_type",
+    [{datatype, string}]}.
+
+%% The scopes RabbitMq should claim during the authorization flow. Defaults to "openid profile"
+{mapping, "management.oauth_scope", "rabbitmq_management.oauth_scope",
       [{datatype, string}]}.
 
 %% The URL of the OIDC discovery url where the provider is listening on
 %% by default it is <oauth_provider_url>/.well-known/openid-configuration which is the
-%% default OIDC discovery endpoint 
+%% default OIDC discovery endpoint
 {mapping, "management.oauth_metadata_url", "rabbitmq_management.oauth_metadata_url",
       [{datatype, string}]}.
 
