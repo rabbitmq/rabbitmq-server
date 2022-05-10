@@ -3,10 +3,10 @@ $(document).ready(function() {
     if (oauth.enable && !oauth.logged_in) {
         get(oauth.readiness_url, "application/json", function(req) {
             if (req.status !== 200) {
-                replace_content('outer', format('login_uaa', {}));
-                replace_content('login-status', '<p class="warning">' + oauth.url + " does not appear to be a running UAA instance or may not have a trusted SSL certificate"  + '</p> <button id="loginWindow" onclick="initiateLogin()">Single Sign On</button>');
+                replace_content('outer', format('login_oauth', {}));
+                replace_content('login-status', '<p class="warning">' + oauth.url + " does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate"  + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Single Sign On</button>');
             } else {
-                replace_content('outer', format('login_uaa', {}));
+                replace_content('outer', format('login_oauth', {}));
             }
         });
     } else {
@@ -75,7 +75,6 @@ function start_app_login() {
         var token = oauth.access_token; //getAccessToken();
         if (token != null) {
             set_auth_pref_with_expiry(oauth.user_name + ':' + oauth.access_token, oauth.expiryDate);
-            store_pref('uaa_token', oauth.access_token);
             check_login();
         } else if(has_auth_cookie_value()) {
             check_login();
@@ -89,22 +88,14 @@ function start_app_login() {
 }
 
 
-function uaa_logout_window() {
-    uaa_invalid = true;
-    initiateLogin();
-}
-
-
 function check_login() {
     user = JSON.parse(sync_get('/whoami'));
     if (user == false) {
         // clear a local storage value used by earlier versions
         clear_pref('auth');
-        clear_pref('uaa_token');
         clear_cookie_value('auth');
         if (oauth.enable) {
-            // mr:    uaa_invalid = true;
-            replace_content('login-status', '<button id="loginWindow" onclick="initiateLogin()">Log out</button>');
+            replace_content('login-status', '<button id="loginWindow" onclick="oauth_initiateLogin()">Log out</button>');
         } else {
             replace_content('login-status', '<p>Login failed</p>');
         }
@@ -606,7 +597,7 @@ function submit_import(form) {
             }
 
             if (oauth.enable) {
-                var form_action = "/definitions" + vhost_part + '?token=' + get_pref('uaa_token');
+                var form_action = "/definitions" + vhost_part + '?token=' + oauth.access_token;
             } else {
                 var form_action = "/definitions" + vhost_part + '?auth=' + get_cookie_value('auth');
             };
@@ -652,7 +643,7 @@ function postprocess() {
         if (oauth.enable) {
             var path = 'api/definitions' + vhost + '?download=' +
                 esc($('#download-filename').val()) +
-                '&token=' + get_pref('uaa_token');
+                '&token=' + oauth.access_token;
             } else {
                 var path = 'api/definitions' + vhost + '?download=' +
                     esc($('#download-filename').val()) +
@@ -1193,7 +1184,7 @@ function has_auth_cookie_value() {
 
 function auth_header() {
     if(has_auth_cookie_value() && oauth.enable) {
-        return "Bearer " + decodeURIComponent(get_pref('uaa_token'));
+        return "Bearer " + decodeURIComponent(oauth.access_token);
     } else {
         if(has_auth_cookie_value()) {
             return "Basic " + decodeURIComponent(get_cookie_value('auth'));

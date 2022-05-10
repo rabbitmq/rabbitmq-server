@@ -291,7 +291,6 @@ dispatcher_add(function(sammy) {
         clear_cookie_value('auth');
         clear_cookie_value('m');
         if (oauth.logged_in) {
-            clear_pref('uaa_token');
             var redirect;
             if (window.location.hash != "") {
                 redirect = window.location.href.split(window.location.hash)[0];
@@ -299,7 +298,7 @@ dispatcher_add(function(sammy) {
                 redirect = window.location.href
             };
             oauth.logged_in = false;
-            initiateLogout();
+            oauth_initiateLogout();
         }
         location.reload();
     });

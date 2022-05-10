@@ -5,7 +5,7 @@
 
 var mgr;
 
-function initializeOAuthIfRequired() {
+function oauth_initialize_if_required() {
     rabbit_port = window.location.port ? ":" +  window.location.port : ""
     rabbit_base_uri = window.location.protocol + "//" + window.location.hostname + rabbit_port
 
@@ -13,41 +13,71 @@ function initializeOAuthIfRequired() {
     request.open('GET', rabbit_base_uri + '/api/auth', false);
     request.send(null);
     if (request.status === 200) {
-        return initializeOAuth(JSON.parse(request.responseText));
+        return oauth_initialize(JSON.parse(request.responseText));
     }else {
         return { "enable" : false };
     }
 
 }
+function auth_settings_apply_defaults(authSettings) {
+  if (authSettings.enable_uaa == true) {
+
+    if (!authSettings.oauth_response_type) {
+      authSettings.oauth_response_type = "token"  // TODO Test it
+    }
+    if (!authSettings.oauth_provider_url) {
+      authSettings.oauth_provider_url = authSettings.uaa_location
+    }
+    if (!authSettings.oauth_client_id) {
+      authSettings.oauth_client_id = authSettings.uaa_client_id
+    }
+    if (!authSettings.oauth_client_secret) {
+      authSettings.oauth_client_secret = authSettings.uaa_client_secret
+    }
+  }
+  if (!authSettings.oauth_response_type) {
+    authSettings.oauth_response_type = "code"; // although the default value in oidc client
+  }
+
+  if (!authSettings.oauth_scope) {
+    authSettings.oauth_scope = "openid profile";
+  }
 
 
-function initializeOAuth(authSettings) {
+
+  return authSettings;
+
+}
+
+function oauth_initialize(authSettings) {
     oauth = {
       "logged_in": false,
       "enable" : authSettings.oauth_enable
+
     }
 
     if (!oauth.enable) return oauth;
+
+    authSettings = auth_settings_apply_defaults(authSettings);
 
     oidcSettings = {
         //userStore: new WebStorageStateStore({ store: window.localStorage }),
         authority: authSettings.oauth_provider_url,
         client_id: authSettings.oauth_client_id,
         client_secret: authSettings.oauth_client_secret,
-        response_type: "code",
-        scope: "openid profile rabbitmq.*",
+        response_type: authSettings.oauth_response_type,
+        scope: authSettings.oauth_scope, // for uaa we may need to include <resource-server-id>.*
         resource: authSettings.oauth_resource_id,
         redirect_uri: rabbit_base_uri + "/js/oidc-oauth/login-callback.html",
         post_logout_redirect_uri: rabbit_base_uri + "/js/oidc-oauth/logout-callback.html",
 
-        response_type: "code",
         filterProtocolClaims: true,
         automaticSilentRenew: true,
         revokeAccessTokenOnSignout: true,
     };
     if (authSettings.oauth_metadata_url != "") oidcSettings.metadataUrl = authSettings.oauth_metadata_url
 
-    if (authSettings.enable_uaa) {
+    if (authSettings.enable_uaa == true) {
       // This is required for old versions of UAA because the newer ones do expose
       // the end_session_endpoint on the oidc discovery endpoint, .a.k.a. metadataUrl
       oidcSettings.metadataSeed = {
@@ -91,7 +121,7 @@ function log() {
 
 
 
-function registerCallbacks() {
+function oauth_registerCallbacks() {
   mgr.events.addUserLoaded(function (user) {
       console.log("addUserLoaded=> ", user);
       mgr.getUser().then(function() {
@@ -110,7 +140,7 @@ function registerCallbacks() {
   });
 
 }
-function isLoggedIn() {
+function oauth_is_logged_in() {
     return mgr.getUser().then(user => {
         if (!user) {
             return { "loggedIn": false };
@@ -120,7 +150,7 @@ function isLoggedIn() {
 }
 
 
-function initiateLogin() {
+function oauth_initiateLogin() {
     mgr.signinRedirect({ state: { foo: "bar" } /*, useReplaceToNavigate: true*/ }).then(function() {
         log("signinRedirect done");
     }).catch(function(err) {
@@ -128,22 +158,22 @@ function initiateLogin() {
         log(err);
     });
 }
-function redirectToHome() {
+function oauth_redirectToHome() {
   location.href = "/"
 }
-function redirectToLogin() {
+function oauth_redirectToLogin() {
   location.href = "/"
 }
-function completeLogin() {
-    mgr.signinRedirectCallback().then(user => redirectToHome()).catch(function(err) {
+function oauth_completeLogin() {
+    mgr.signinRedirectCallback().then(user => oauth_redirectToHome()).catch(function(err) {
         console.error(err);
         log(err);
     });
 }
 
-function initiateLogout() {
+function oauth_initiateLogout() {
     mgr.signoutRedirect();
 }
-function completeLogout() {
-    mgr.signoutRedirectCallback().then(_ => redirectToLogin());
+function oauth_completeLogout() {
+    mgr.signoutRedirectCallback().then(_ => oauth_redirectToLogin());
 }
