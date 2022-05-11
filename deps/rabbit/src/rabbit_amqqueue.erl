@@ -67,6 +67,8 @@
 
 -export([deactivate_limit_all/2]).
 
+-export([prepend_extra_bcc/1]).
+
 %% internal
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          set_ram_duration_target/2, set_maximum_since_use/2,
@@ -2086,4 +2088,25 @@ get_quorum_nodes(Q) ->
             Nodes;
         _ ->
             []
+    end.
+
+-spec prepend_extra_bcc([amqqueue:amqqueue()]) -> [amqqueue:amqqueue()].
+prepend_extra_bcc([]) ->
+    [];
+prepend_extra_bcc([Q] = Qs) ->
+    prepend_extra_bcc(Q, Qs);
+prepend_extra_bcc(Qs) ->
+    lists:foldl(fun(Q, Acc) ->
+                        prepend_extra_bcc(Q, Acc)
+                end, Qs, Qs).
+
+prepend_extra_bcc(Q, Qs) ->
+    case amqqueue:get_options(Q) of
+        #{extra_bcc := BCC} ->
+            #resource{virtual_host = VHost} = amqqueue:get_name(Q),
+            BCCQueueName = rabbit_misc:r(VHost, queue, BCC),
+            BCCQueue = rabbit_amqqueue:lookup([BCCQueueName]),
+            BCCQueue ++ Qs;
+        _ ->
+            Qs
     end.
