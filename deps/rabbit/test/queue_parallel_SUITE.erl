@@ -58,13 +58,15 @@ groups() ->
                                                  trigger_message_store_compaction]},
        {quorum_queue, [parallel], AllTests ++ [
            delete_immediately_by_pid_fails,
-           extra_bcc_option
+           extra_bcc_option,
+           extra_bcc_option_multiple
        ]},
        {quorum_queue_in_memory_limit, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
        {quorum_queue_in_memory_bytes, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
        {stream_queue, [parallel], [publish,
                                    subscribe,
-                                   extra_bcc_option]}
+                                   extra_bcc_option,
+                                   extra_bcc_option_multiple]}
 
       ]}
     ].
@@ -704,6 +706,35 @@ extra_bcc_option(Config) ->
     delete_queue(Ch, QName),
     delete_queue(Ch, ExtraBCC).
 
+%% Test single message being routed to 2 target queues where 1 target queue
+%% has an extra BCC.
+extra_bcc_option_multiple(Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Exchange = <<"amq.fanout">>,
+
+    QName1 = <<"queue_with_extra_bcc">>,
+    declare_queue(Ch, Config, QName1),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = QName1,
+                                             exchange = Exchange}),
+    ExtraBCC = <<"my_extra_bcc">>,
+    declare_bcc_queue(Ch, ExtraBCC),
+    set_queue_options(Config, QName1, #{extra_bcc => ExtraBCC}),
+    QName2 = <<"queue_without_extra_bcc">>,
+    declare_queue(Ch, Config, QName2),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = QName2,
+                                             exchange = Exchange}),
+
+    publish(Ch, <<"ignore">>, [<<"msg">>], Exchange),
+    wait_for_messages(Config, [[QName1, <<"1">>, <<"1">>, <<"0">>]]),
+    wait_for_messages(Config, [[QName2, <<"1">>, <<"1">>, <<"0">>]]),
+    wait_for_messages(Config, [[ExtraBCC, <<"1">>, <<"1">>, <<"0">>]]),
+
+    delete_queue(Ch, QName1),
+    delete_queue(Ch, QName2),
+    delete_queue(Ch, ExtraBCC).
+
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Test helpers
 %%%%%%%%%%%%%%%%%%%%%%%%
@@ -723,7 +754,13 @@ delete_queue(Ch, QName) ->
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}).
 
 publish(Ch, QName, Payloads) ->
-    [amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload})
+    publish(Ch, QName, Payloads, <<"">>).
+
+publish(Ch, QName, Payloads, Exchange) ->
+    [amqp_channel:call(Ch,
+                       #'basic.publish'{exchange = Exchange,
+                                        routing_key = QName},
+                       #amqp_msg{payload = Payload})
      || Payload <- Payloads].
 
 consume(Ch, QName, Payloads) ->

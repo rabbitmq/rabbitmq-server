@@ -2173,12 +2173,10 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                                         mandatory  = Mandatory,
                                         confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
-                   _RoutedToQueueNames = [QName]}, State0 = #ch{queue_states = QueueStates0}) -> %% optimisation when there is one queue
-    {QueueNames, Qs} = case rabbit_amqqueue:lookup(QName) of
-                           {ok, Q} ->
-                               {[QName], [Q]};
-                           _ -> {[], []}
-                       end,
+                   RoutedToQueueNames = [QName]}, State0 = #ch{queue_states = QueueStates0}) -> %% optimisation when there is one queue
+    Qs0 = rabbit_amqqueue:lookup(RoutedToQueueNames),
+    Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
+    QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
             rabbit_global_counters:messages_routed(amqp091, erlang:min(1, length(Qs))),
@@ -2213,7 +2211,8 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                                         confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
                    RoutedToQueueNames}, State0 = #ch{queue_states = QueueStates0}) ->
-    Qs = rabbit_amqqueue:lookup(RoutedToQueueNames),
+    Qs0 = rabbit_amqqueue:lookup(RoutedToQueueNames),
+    Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
     QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
