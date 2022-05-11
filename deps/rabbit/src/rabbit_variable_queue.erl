@@ -1999,11 +1999,7 @@ count_pending_acks(#vqstate { ram_pending_ack   = RPA,
     gb_trees:size(RPA) + gb_trees:size(DPA) + gb_trees:size(QPA).
 
 purge_betas_and_deltas(DelsAndAcksFun, State = #vqstate { mode = Mode }) ->
-    State0 = #vqstate { q3 = Q3 } =
-        case Mode of
-            lazy -> maybe_deltas_to_betas(DelsAndAcksFun, State);
-            _    -> State
-        end,
+    State0 = #vqstate { q3 = Q3 } = maybe_deltas_to_betas(DelsAndAcksFun, State),
 
     case ?QUEUE:is_empty(Q3) of
         true  -> State0;
