@@ -1058,6 +1058,11 @@ suites = [
             "//deps/rabbit_common:erlang_app",
         ],
     ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "direct_exchange_routing_v2_SUITE",
+        size = "medium",
+    ),
 ]
 
 assert_suites(

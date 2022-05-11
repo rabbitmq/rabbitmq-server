@@ -8,7 +8,7 @@
 -module(rabbit_table).
 
 -export([
-    create/0, create/2, ensure_local_copies/1, ensure_table_copy/2,
+    create/0, create/2, ensure_local_copies/1, ensure_table_copy/3,
     wait_for_replicated/1, wait/1, wait/2,
     force_load/0, is_present/0, is_empty/0, needs_default_data/0,
     check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
@@ -65,10 +65,11 @@ ensure_secondary_index(Table, Field) ->
     {aborted, {already_exists, Table, _}} -> ok
   end.
 
--spec ensure_table_copy(mnesia_table(), node()) -> ok | {error, any()}.
-ensure_table_copy(TableName, Node) ->
+-spec ensure_table_copy(mnesia_table(), node(), ram_copies | disc_copies) ->
+    ok | {error, any()}.
+ensure_table_copy(TableName, Node, StorageType) ->
     rabbit_log:debug("Will add a local schema database copy for table '~s'", [TableName]),
-    case mnesia:add_table_copy(TableName, Node, disc_copies) of
+    case mnesia:add_table_copy(TableName, Node, StorageType) of
         {atomic, ok}                              -> ok;
         {aborted,{already_exists, TableName}}     -> ok;
         {aborted, {already_exists, TableName, _}} -> ok;

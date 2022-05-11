@@ -555,7 +555,7 @@ internal_delete(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSourc
     ok = mnesia:delete({rabbit_exchange_serial, XName}),
     mnesia:delete({rabbit_durable_exchange, XName}),
     Bindings = case RemoveBindingsForSource of
-        true  -> rabbit_binding:remove_for_source(XName);
+        true  -> rabbit_binding:remove_for_source(X);
         false -> []
     end,
     {deleted, X, Bindings, rabbit_binding:remove_for_destination(

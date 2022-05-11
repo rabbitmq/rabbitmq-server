@@ -32,7 +32,7 @@ match_bindings(SrcName, Match) ->
         Routes, Match(Binding)].
 
 -spec match_routing_key(rabbit_types:binding_source(),
-                             [routing_key()] | ['_']) ->
+                        [routing_key(), ...] | ['_']) ->
     match_result().
 
 match_routing_key(SrcName, [RoutingKey]) ->
