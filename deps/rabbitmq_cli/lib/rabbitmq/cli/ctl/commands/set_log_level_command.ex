@@ -7,6 +7,8 @@
 defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   @behaviour RabbitMQ.CLI.CommandBehaviour
+  # This command allows all log levels that the OTP logger defines
+  # but intentionally only documents those which are actually used in RabbitMQ
   @known_levels [
     "debug",
     "info",
@@ -34,7 +36,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
         :ok
 
       false ->
-        {:error, "level #{level} is not supported. Try one of debug, info, warning, error, none"}
+        {:error, "level #{level} is not supported. Try one of debug, info, warning, error, critical, none"}
     end
   end
 
@@ -67,7 +69,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetLogLevelCommand do
 
   def output({:error, {:invalid_log_level, level}}, _opts) do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
-     "level #{level} is not supported. Try one of debug, info, warning, error, none"}
+     "level #{level} is not supported. Try one of debug, info, warning, error, critical, none"}
   end
 
   use RabbitMQ.CLI.DefaultOutput
