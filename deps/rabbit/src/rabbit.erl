@@ -649,11 +649,16 @@ maybe_print_boot_progress(true, IterationsLeft) ->
 
 status() ->
     Version = base_product_version(),
+    CryptoLibInfo = case crypto:info_lib() of
+        [Tuple] when is_tuple(Tuple) -> Tuple;
+        Tuple   when is_tuple(Tuple) -> Tuple
+    end,
     S1 = [{pid,                  list_to_integer(os:getpid())},
           %% The timeout value used is twice that of gen_server:call/2.
           {running_applications, rabbit_misc:which_applications()},
           {os,                   os:type()},
           {rabbitmq_version,     Version},
+          {crypto_lib_info,      CryptoLibInfo},
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
           {alarms,               alarms()},
