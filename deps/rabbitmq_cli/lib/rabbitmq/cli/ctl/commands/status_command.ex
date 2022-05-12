@@ -94,6 +94,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       "RabbitMQ version: #{m[:rabbitmq_version]}",
       "Node name: #{node_name}",
       "Erlang configuration: #{m[:erlang_version]}",
+      "Crypto library: #{m[:crypto_lib_version]}",
       "Erlang processes: #{m[:processes][:used]} used, #{m[:processes][:limit]} limit",
       "Scheduler run queue: #{m[:run_queue]}",
       "Cluster heartbeat timeout (net_ticktime): #{m[:net_ticktime]}"
@@ -204,6 +205,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
   #
 
   defp result_map(result) do
+    crypto_lib_version = case Keyword.get(result, :crypto_lib_info) do
+      {_, _, version} -> version
+      other           -> other
+    end
+
     %{
       os: os_name(Keyword.get(result, :os)),
       pid: Keyword.get(result, :pid),
@@ -211,6 +217,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       product_version: Keyword.get(result, :product_version) |> to_string,
       rabbitmq_version: Keyword.get(result, :rabbitmq_version) |> to_string,
       erlang_version: Keyword.get(result, :erlang_version) |> to_string |> String.trim_trailing,
+      crypto_lib_version: crypto_lib_version,
       uptime: Keyword.get(result, :uptime),
       is_under_maintenance: Keyword.get(result, :is_under_maintenance, false),
       processes: Enum.into(Keyword.get(result, :processes), %{}),
