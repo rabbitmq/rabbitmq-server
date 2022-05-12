@@ -842,7 +842,6 @@ depth(State) ->
 set_ram_duration_target(_DurationTarget, State) ->
     State.
 
-%% @todo Do we need this? Not for reduce_memory_use type of stuff.
 maybe_update_rates(State = #vqstate{ in_counter  = InCount,
                                      out_counter = OutCount })
   when InCount + OutCount > ?MSGS_PER_RATE_CALC ->
@@ -882,33 +881,33 @@ update_rate(Now, TS, Count, Rate) ->
                                                 Count / Time, Rate)
     end.
 
-%% @todo Remove this as well.
+%% @todo Should be renamed since it's only used to update_rates.
 ram_duration(State) ->
-    State1 = #vqstate { rates = #rates { in      = AvgIngressRate,
-                                         out     = AvgEgressRate,
-                                         ack_in  = AvgAckIngressRate,
-                                         ack_out = AvgAckEgressRate },
-                        ram_msg_count      = RamMsgCount,
-                        ram_msg_count_prev = RamMsgCountPrev,
-                        ram_pending_ack    = RPA,
-                        qi_pending_ack     = QPA,
-                        ram_ack_count_prev = RamAckCountPrev } =
+    State1 = %#vqstate { rates = #rates { in      = AvgIngressRate,
+             %                            out     = AvgEgressRate,
+             %                            ack_in  = AvgAckIngressRate,
+             %                            ack_out = AvgAckEgressRate },
+             %           ram_msg_count      = RamMsgCount,
+             %           ram_msg_count_prev = RamMsgCountPrev,
+             %           ram_pending_ack    = RPA,
+             %           qi_pending_ack     = QPA,
+             %           ram_ack_count_prev = RamAckCountPrev } =
         update_rates(State),
 
-    RamAckCount = gb_trees:size(RPA) + gb_trees:size(QPA),
+%    RamAckCount = gb_trees:size(RPA) + gb_trees:size(QPA),
+%
+%    Duration = %% msgs+acks / (msgs+acks/sec) == sec
+%        case lists:all(fun (X) -> X < 0.01 end,
+%                       [AvgEgressRate, AvgIngressRate,
+%                        AvgAckEgressRate, AvgAckIngressRate]) of
+%            true  -> infinity;
+%            false -> (RamMsgCountPrev + RamMsgCount +
+%                          RamAckCount + RamAckCountPrev) /
+%                         (4 * (AvgEgressRate + AvgIngressRate +
+%                                   AvgAckEgressRate + AvgAckIngressRate))
+%        end,
 
-    Duration = %% msgs+acks / (msgs+acks/sec) == sec
-        case lists:all(fun (X) -> X < 0.01 end,
-                       [AvgEgressRate, AvgIngressRate,
-                        AvgAckEgressRate, AvgAckIngressRate]) of
-            true  -> infinity;
-            false -> (RamMsgCountPrev + RamMsgCount +
-                          RamAckCount + RamAckCountPrev) /
-                         (4 * (AvgEgressRate + AvgIngressRate +
-                                   AvgAckEgressRate + AvgAckIngressRate))
-        end,
-
-    {Duration, State1}.
+    {infinity, State1}.
 
 needs_timeout(#vqstate { index_mod   = IndexMod,
                          index_state = IndexState }) ->
@@ -1974,6 +1973,7 @@ count_pending_acks(#vqstate { ram_pending_ack   = RPA,
                               qi_pending_ack    = QPA }) ->
     gb_trees:size(RPA) + gb_trees:size(DPA) + gb_trees:size(QPA).
 
+%% @todo This should set the out rate to infinity temporarily while we drop deltas.
 purge_betas_and_deltas(DelsAndAcksFun, State = #vqstate { mode = Mode }) ->
     State0 = #vqstate { q3 = Q3 } = maybe_deltas_to_betas(DelsAndAcksFun, State),
 
@@ -2044,12 +2044,17 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                             next_deliver_seq_id = NextDeliverSeqId,
                             in_counter          = InCount,
                             durable             = IsDurable,
-                            unconfirmed         = UC }) ->
+                            unconfirmed         = UC,
+                            rates               = #rates{ out = OutRate }}) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(Version, IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
+    %% We allow from 1 to 2048 messages in memory depending on the consume rate. The lower
+    %% limit is at 1 because the queue process will need to access this message to know
+    %% expiration information.
+    MemoryLimit = min(1 + floor(2 * OutRate), 2048),
     State4 = case DeltaCount of
                  %% Len is the same as Q3Len when DeltaCount =:= 0.
-                 0 when Len < 16384 -> %% @todo It would be interesting to get a dynamic max size.
+                 0 when Len < MemoryLimit ->
                      {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
                      State2 = State1 #vqstate { q3 = ?QUEUE:in(m(MsgStatus1), Q3) },
                      %% @todo I am not sure about the stats from this.
@@ -2582,6 +2587,9 @@ next({delta, #delta{start_seq_id = SeqId,
 next({delta, #delta{start_seq_id = SeqId,
                     end_seq_id   = SeqIdEnd} = Delta, State = #vqstate{index_mod = IndexMod}}, IndexState) ->
     SeqIdB = IndexMod:next_segment_boundary(SeqId),
+    %% It may make sense to limit this based on rate. But this
+    %% is not called outside of CMQs so I will leave it alone
+    %% for the time being.
     SeqId1 = lists:min([SeqIdB,
                         %% We must limit the number of messages read at once
                         %% otherwise the queue will attempt to read up to segment_entry_count()
@@ -2672,18 +2680,21 @@ maybe_deltas_to_betas(DelsAndAcksFun,
                         ram_bytes            = RamBytes,
                         disk_read_count      = DiskReadCount,
                         delta_transient_bytes = DeltaTransientBytes,
-                        transient_threshold  = TransientThreshold }) ->
+                        transient_threshold  = TransientThreshold,
+                        rates                = #rates{ out = OutRate }}) ->
     #delta { start_seq_id = DeltaSeqId,
              count        = DeltaCount,
              transient    = Transient,
              end_seq_id   = DeltaSeqIdEnd } = Delta,
+    %% We allow from 1 to 2048 messages in memory depending on the consume rate.
+    MemoryLimit = min(1 + floor(2 * OutRate), 2048),
     DeltaSeqId1 =
         lists:min([IndexMod:next_segment_boundary(DeltaSeqId),
                    %% We must limit the number of messages read at once
                    %% otherwise the queue will attempt to read up to segment_entry_count()
-                   %% messages from the index each time. The value
-                   %% chosen here is arbitrary.
-                   DeltaSeqId + 2048,
+                   %% messages from the index each time. The value is determined
+                   %% using the consuming rate.
+                   DeltaSeqId + MemoryLimit,
                    DeltaSeqIdEnd]),
     {List, IndexState1} = IndexMod:read(DeltaSeqId, DeltaSeqId1, IndexState),
     {Q3a, RamCountsInc, RamBytesInc, State1, TransientCount, TransientBytes} =
