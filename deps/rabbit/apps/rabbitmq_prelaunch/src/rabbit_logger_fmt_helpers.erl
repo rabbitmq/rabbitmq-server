@@ -73,7 +73,7 @@ format_level1(Level, #{level_format := lc4}) ->
 format_level1(Level, #{level_format := uc4}) ->
     level_4letter_uc_name(Level);
 format_level1(Level, _) ->
-    level_4letter_lc_name(Level).
+    level_lc_name(Level).
 
 level_lc_name(debug)     -> "debug";
 level_lc_name(info)      -> "info";

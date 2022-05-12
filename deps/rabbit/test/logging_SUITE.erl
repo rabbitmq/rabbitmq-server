@@ -551,7 +551,7 @@ setting_message_format_works(Config) ->
 
     RandomMsgBin = list_to_binary(RandomMsg),
     ?assertEqual(
-       <<"level=warn ",
+       <<"level=warning ",
          "md_key=md_value ",
          "unknown_field=<unknown unknown_field> "
          "msg=", RandomMsgBin/binary>>,
