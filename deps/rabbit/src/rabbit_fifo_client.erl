@@ -292,7 +292,10 @@ settle(ConsumerTag, [_|_] = MsgIds,
     %% sent once we have seen enough notifications
     Unsent = maps:update_with(ConsumerId,
                               fun ({Settles, Returns, Discards}) ->
-                                      {Settles ++ MsgIds, Returns, Discards}
+                                      %% MsgIds has fewer elements than Settles.
+                                      %% Therefore put it on the left side of the ++ operator.
+                                      %% The order in which messages are settled does not matter.
+                                      {MsgIds ++ Settles, Returns, Discards}
                               end, {MsgIds, [], []}, Unsent0),
     {State0#state{unsent_commands = Unsent}, []}.
 
