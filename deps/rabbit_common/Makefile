@@ -28,7 +28,7 @@ endef
 LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl
 DEPS = lager jsx recon credentials_obfuscation
 
-dep_credentials_obfuscation = hex 3.0.0
+dep_credentials_obfuscation = hex 3.1.0
 
 # Variables and recipes in development.*.mk are meant to be used from
 # any Git clone. They are excluded from the files published to Hex.pm.
