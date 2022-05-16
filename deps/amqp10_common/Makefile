@@ -24,19 +24,8 @@ define HEX_TARBALL_EXTRA_METADATA
 }
 endef
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
 HEX_TARBALL_FILES += $(DEPS_DIR)/../rabbitmq-components.mk
 
->>>>>>> 6ac08e2881 (Increase receiving throughput from a stream via AMQP)
-DIALYZER_OPTS += --src -r test
-=======
-=======
-HEX_TARBALL_FILES += $(DEPS_DIR)/../rabbitmq-components.mk
-
->>>>>>> 56f8000f61 (Resolve conflict)
 DIALYZER_OPTS += --src -r test -DTEST
 BUILD_DEPS = rabbit_common
 
