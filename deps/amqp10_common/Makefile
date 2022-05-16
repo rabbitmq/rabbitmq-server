@@ -24,7 +24,16 @@ define HEX_TARBALL_EXTRA_METADATA
 }
 endef
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+HEX_TARBALL_FILES += $(DEPS_DIR)/../rabbitmq-components.mk
+
+>>>>>>> 6ac08e2881 (Increase receiving throughput from a stream via AMQP)
 DIALYZER_OPTS += --src -r test
+=======
+DIALYZER_OPTS += --src -r test -DTEST
+>>>>>>> 4472ddf71c (Increase receiving throughput from a stream via AMQP)
 BUILD_DEPS = rabbit_common
 
 # Variables and recipes in development.*.mk are meant to be used from
