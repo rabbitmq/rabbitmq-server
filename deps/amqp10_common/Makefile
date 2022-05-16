@@ -26,7 +26,7 @@ endef
 
 HEX_TARBALL_FILES += $(DEPS_DIR)/../rabbitmq-components.mk
 
-DIALYZER_OPTS += --src -r test
+DIALYZER_OPTS += --src -r test -DTEST
 BUILD_DEPS = rabbit_common
 
 # Variables and recipes in development.*.mk are meant to be used from
