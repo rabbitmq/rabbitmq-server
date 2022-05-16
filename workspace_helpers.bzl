@@ -49,8 +49,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     hex_pm_erlang_app(
         name = "credentials_obfuscation",
-        version = "3.0.0",
-        sha256 = "bf2060c7058d4e765cdb4319ec94ad71c00d102931d667415b2cd5e991d9d038",
+        version = "3.1.0",
+        sha256 = "04884e62b1c6cdfba999d4d6b3e99bc0a59d5e439517bc5c01767255afb7b778",
     )
 
     github_erlang_app(
