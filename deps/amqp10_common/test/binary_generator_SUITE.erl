@@ -20,11 +20,13 @@ all() ->
 
 all_tests() ->
     [
+     null,
      booleans,
      symbol,
      timestamp,
      numerals,
      utf8,
+     char,
      list,
      map,
      described,
@@ -33,7 +35,7 @@ all_tests() ->
 
 groups() ->
     [
-     {tests, [], all_tests()}
+     {tests, [parallel], all_tests()}
     ].
 
 init_per_suite(Config) ->
@@ -58,6 +60,10 @@ end_per_testcase(_TestCase, _Config) ->
 %%% Test cases
 %%%===================================================================
 
+null(_Config) ->
+    roundtrip(null),
+    ok.
+
 booleans(_Config) ->
     roundtrip(true),
     roundtrip(false),
@@ -77,7 +83,8 @@ numerals(_Config) ->
     roundtrip({ubyte, 16#FF}),
     roundtrip({ushort, 0}),
     roundtrip({ushort, 16#FFFF}),
-    roundtrip({uint, 0}),
+    roundtrip({uint, 0}), %% uint:uint0
+    roundtrip({uint, 1}), %% uint:smalluint
     roundtrip({uint, 16#FFFFFFFF}),
     roundtrip({ulong, 0}),
     roundtrip({ulong, 16#FFFFFFFFFFFFFFFF}),
@@ -106,7 +113,14 @@ utf8(_Config) ->
     roundtrip({utf8, binary:copy(<<"asdfghjk">>, 64)}),
     ok.
 
+char(_Config) ->
+    roundtrip({char, <<$A/utf32>>}),
+    ok.
+
 list(_Config) ->
+    %% list:list0
+    roundtrip({list, []}),
+    %% list:list8
     roundtrip({list, [{utf8, <<"hi">>},
                       {int, 123},
                       {binary, <<"data">>},
@@ -115,6 +129,8 @@ list(_Config) ->
                        {utf8, <<"URL">>},
                        {utf8, <<"http://example.org/hello-world">>}}
                      ]}),
+    %% list:list32
+    roundtrip({list, [true || _ <- lists:seq(1, 256)]}),
     ok.
 
 map(_Config) ->
@@ -122,6 +138,7 @@ map(_Config) ->
                      {{utf8, <<"key1">>}, {utf8, <<"value1">>}},
                      {{utf8, <<"key2">>}, {int, 33}}
                     ]}),
+    roundtrip({map, [{{int, N}, {utf8, <<"value">>}} || N <- lists:seq(1, 256)]}),
     ok.
 
 
@@ -157,6 +174,8 @@ array(_Config) ->
     roundtrip({array, {described, Desc, utf8},
                [{described, Desc, {utf8, <<"http://example.org/hello">>}}]}),
     roundtrip({array, {described, Desc, utf8}, []}),
+    %% array:array32
+    roundtrip({array, boolean, [{boolean, true} || _ <- lists:seq(1, 256)]}),
     ok.
 
 %% Utility
@@ -164,4 +183,5 @@ array(_Config) ->
 roundtrip(Term) ->
     Bin = iolist_to_binary(amqp10_binary_generator:generate(Term)),
     % generate returns an iolist but parse expects a binary
-    ?assertMatch({Term, _}, amqp10_binary_parser:parse(Bin)).
+    ?assertMatch({Term, _}, amqp10_binary_parser:parse(Bin)),
+    ?assertMatch([Term | _], amqp10_binary_parser:parse_all(Bin)).
