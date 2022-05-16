@@ -24,7 +24,7 @@ define HEX_TARBALL_EXTRA_METADATA
 }
 endef
 
-DIALYZER_OPTS += --src -r test
+DIALYZER_OPTS += --src -r test -DTEST
 BUILD_DEPS = rabbit_common
 
 # Variables and recipes in development.*.mk are meant to be used from
