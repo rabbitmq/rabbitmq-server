@@ -826,8 +826,7 @@ consume(Config) ->
             ok = amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DeliveryTag,
                                                      multiple = false}),
             _ = amqp_channel:call(Ch1, #'basic.cancel'{consumer_tag = <<"ctag">>}),
-            ok = amqp_channel:close(Ch1),
-            ok
+            ok = amqp_channel:close(Ch1)
     after 5000 ->
             exit(timeout)
     end,
