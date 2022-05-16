@@ -42,7 +42,7 @@
               state/0
               ]).
 
-%% this module acts as a wrapper / converter for the internal binar storage format
+%% this module acts as a wrapper / converter for the internal binary storage format
 %% (AMQP 1.0) and any format it needs to be converted to / from.
 %% Efficiency is key. No unnecessary allocations or work should be done until it
 %% is absolutely needed
