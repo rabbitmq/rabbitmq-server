@@ -1,5 +1,17 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+
+http_archive(
+    name = "bazel_skylib",
+    sha256 = "af87959afe497dc8dfd4c6cb66e1279cb98ccc84284619ebfec27d9c09a903de",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.2.0/bazel-skylib-1.2.0.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.2.0/bazel-skylib-1.2.0.tar.gz",
+    ],
+)
+
+load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
+
+bazel_skylib_workspace()
 
 http_archive(
     name = "rules_pkg",
@@ -32,40 +44,37 @@ buildbuddy(
     llvm = True,
 )
 
-git_repository(
-    name = "rbe_23",
-    commit = "d50764600e0fed0debc86f714f2c36b571e98719",
-    remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
-)
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 git_repository(
-    name = "rbe_24",
-    commit = "38aa3c971edd4f051948ee9911fa316d9c2b62e4",
+    name = "rbe",
+    commit = "6a2899b87ee4f4dc0ef6f0012be6c3f94e6c9c2f",  # linux-rbe branch
     remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
 )
-
-http_archive(
-    name = "rules_pkg",
-    sha256 = "038f1caa773a7e35b3663865ffb003169c6a71dc995e39bf4815792f385d837d",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_pkg/releases/download/0.4.0/rules_pkg-0.4.0.tar.gz",
-        "https://github.com/bazelbuild/rules_pkg/releases/download/0.4.0/rules_pkg-0.4.0.tar.gz",
-    ],
-)
-
-load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
-
-rules_pkg_dependencies()
 
 git_repository(
     name = "rules_erlang",
-    commit = "371d4adb83a3588e2d49403e1c6c6c7ba22e225d",
+    commit = "8eaf098114d25ca4f97094bbd38ac360b1b8774f",
     remote = "https://github.com/rabbitmq/rules_erlang.git",
 )
 
-load("@rules_erlang//:rules_erlang.bzl", "rules_erlang_dependencies")
+load(
+    "@rules_erlang//:rules_erlang.bzl",
+    "rules_erlang_dependencies",
+)
 
 rules_erlang_dependencies()
+
+register_toolchains(
+    "//bazel/toolchains:erlang_toolchain_external",
+    "//bazel/toolchains:erlang_toolchain_23",
+    "//bazel/toolchains:erlang_toolchain_24",
+    "//bazel/toolchains:erlang_toolchain_25",
+    "//bazel/toolchains:erlang_toolchain_git_master",
+    "//bazel/toolchains:elixir_toolchain_external",
+    "//bazel/toolchains:elixir_toolchain_1_10",
+    "//bazel/toolchains:elixir_toolchain_1_13",
+)
 
 load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
 
@@ -84,7 +93,7 @@ pkg_zip(
     name = "inet_tcp_proxy_ez",
     package_dir = "inet_tcp_proxy/ebin",
     srcs = [
-        "@rules_erlang.2.5.2.erlang_package.inet_tcp_proxy_dist//:erlang_app",
+        "@inet_tcp_proxy_dist//:erlang_app",
     ],
     package_file_name = "inet_tcp_proxy-0.1.0.ez",
     visibility = ["//visibility:public"],
@@ -102,6 +111,9 @@ http_archive(
     name = "rabbitmq-server-generic-unix-3.9",
     build_file = "@//:BUILD.package_generic_unix",
     patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
+    repo_mapping = {
+        "@inet_tcp_proxy_dist": "@rules_erlang.erlang_package.inet_tcp_proxy_dist",
+    },
     sha256 = "4672fad92a815b879cc78a5a9fd28445152b61745d68acd50432c15f96792171",
     strip_prefix = "rabbitmq_server-3.9.13",
     urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.9.13/rabbitmq-server-generic-unix-3.9.13.tar.xz"],

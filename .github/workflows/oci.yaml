@@ -5,8 +5,8 @@ on:
   workflow_dispatch:
 env:
   GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/bazel-bin/package-generic-unix.tar.xz
-  RABBITMQ_VERSION: ${{ github.sha }}
-  VERSION: ${{ github.sha }}
+  RABBITMQ_VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
+  VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
 jobs:
 
   # This job will build one docker image per supported Erlang major version.
@@ -30,14 +30,6 @@ jobs:
           image_tag_suffix:
             - otp-min
             - otp-max
-            #! - otp-rc
-          include:
-            - image_tag_suffix: otp-min
-              skip_otp_verify: false
-            - image_tag_suffix: otp-max
-              skip_otp_verify: false
-            #! - image_tag_suffix: otp-rc
-            #!   skip_otp_verify: true
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -45,28 +37,21 @@ jobs:
       - name: Load version info
         id: load-info
         run: |
+          # TODO: de-duplicate the info these files and MODULE.bazel
           FILE=packaging/docker-image/otp-versions/${{ matrix.image_tag_suffix }}.yaml
           echo "::set-output name=otp::$(yq eval '.otp' $FILE)"
+          echo "::set-output name=otp_major::$(yq eval '.otp_major' $FILE)"
           echo "::set-output name=otp_sha256::$(yq eval '.otp_sha256' $FILE)"
           echo "::set-output name=elixir::$(yq eval '.elixir' $FILE)"
 
-      - name: Set up Erlang & Elixir
-        uses: erlef/setup-beam@v1.11
-        with:
-          otp-version: ${{ steps.load-info.outputs.otp }}
-          elixir-version: ${{ steps.load-info.outputs.elixir }}
-          version-type: strict
-
-      - name: MOUNT BAZEL CACHE
-        uses: actions/cache@v3.0.4
+      - name: Mount Bazel Cache
+        uses: actions/cache@v3.0.2
         with:
           path: "/home/runner/repo-cache/"
           key: repo-cache
 
-      - name: CONFIGURE BAZEL
+      - name: Configure Bazel
         run: |
-          ERLANG_HOME="$(dirname $(dirname $(which erl)))"
-          ELIXIR_HOME="$(dirname $(dirname $(which iex)))"
           if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
           cat << EOF >> user.bazelrc
             build:buildbuddy --remote_header=x-buildbuddy-api-key=${{ secrets.BUILDBUDDY_API_KEY }}
@@ -75,20 +60,29 @@ jobs:
           cat << EOF >> user.bazelrc
             build:buildbuddy --build_metadata=ROLE=CI
             build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-            build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-oci
             build:buildbuddy --repository_cache=/home/runner/repo-cache/
             build:buildbuddy --color=yes
             build:buildbuddy --disk_cache=
 
-            build --@rules_erlang//:erlang_version=${{ steps.load-info.outputs.otp }}
-            build --@rules_erlang//:erlang_home=${ERLANG_HOME}
-            build --//:elixir_home=${ELIXIR_HOME}
+            build:buildbuddy --remote_download_toplevel
           EOF
+
+      - name: Check for otp & elixir version exact match
+        run: |
+          bazelisk build :otp_version --config=rbe-${{ steps.load-info.outputs.otp_major }}
+          if [ ! "$(cat bazel-bin/otp_version.txt)" == "${{ steps.load-info.outputs.otp }}" ]; then
+            exit 1
+          fi
+          bazelisk build :elixir_version --config=rbe-${{ steps.load-info.outputs.otp_major }}
+          if [ ! "$(cat bazel-bin/elixir_version.txt)" == "${{ steps.load-info.outputs.elixir }}" ]; then
+            exit 1
+          fi
 
       - name: Build generic unix package
         run: |
-          sed -i"_orig" -E '/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ github.sha }}/' rabbitmq.bzl
-          bazelisk build :package-generic-unix
+          sed -i"_orig" -E '/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ github.event.pull_request.head.sha || github.sha }}/' rabbitmq.bzl
+          bazelisk build :package-generic-unix \
+            --config=rbe-${{ steps.load-info.outputs.otp_major }}
 
       - name: Resolve generic unix package path
         run: |
@@ -108,7 +102,7 @@ jobs:
         uses: actions/cache@v3.0.4
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-${{ github.sha }}
+          key: ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-${{ github.event.pull_request.head.sha || github.sha }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.image_tag_suffix }}-buildx-
 
@@ -131,12 +125,12 @@ jobs:
       - name: Expand generic-unix-package
         working-directory: packaging/docker-image
         run: |
-          xzcat ${GENERIC_UNIX_ARCHIVE} | tar xvf -
+          xzcat ${{ steps.resolve-artifact-path.outputs.ARTIFACT_PATH }} | tar xvf -
 
       - name: Compute image tags
         id: compute-tags
         run: |
-          echo "::set-output name=TAG_1::${{ github.sha }}-${{ matrix.image_tag_suffix }}"
+          echo "::set-output name=TAG_1::${{ github.event.pull_request.head.sha || github.sha }}-${{ matrix.image_tag_suffix }}"
           echo "::set-output name=TAG_2::${GITHUB_REF##*/}-${{ matrix.image_tag_suffix }}"
 
       - name: Build and push
@@ -152,8 +146,7 @@ jobs:
             PGP_KEYSERVER=pgpkeys.eu
             OTP_VERSION=${{ steps.load-info.outputs.otp }}
             OTP_SHA256=${{ steps.load-info.outputs.otp_sha256 }}
-            SKIP_OTP_VERIFY=${{ matrix.skip_otp_verify }}
-            RABBITMQ_BUILD=rabbitmq_server-${{ github.sha }}
+            RABBITMQ_BUILD=rabbitmq_server-${{ github.event.pull_request.head.sha || github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
 

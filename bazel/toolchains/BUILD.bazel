@@ -1,0 +1,50 @@
+load(
+    "@rules_erlang//tools:erlang.bzl",
+    "erlang_toolchain_external",
+    "erlang_toolchain_from_github_release",
+    "erlang_toolchain_from_http_archive",
+)
+load(
+    "//bazel/elixir:elixir.bzl",
+    "elixir_toolchain_external",
+    "elixir_toolchain_from_github_release",
+)
+
+erlang_toolchain_external()
+
+erlang_toolchain_from_github_release(
+    name_suffix = "_23",
+    sha256 = "35123f366ded534775a05db8ad6c06c20519ae228af1b5952132b10845621f21",
+    version = "23.3.4.14",
+)
+
+erlang_toolchain_from_github_release(
+    name_suffix = "_24",
+    sha256 = "76fcca5ba6f11eb9caac32bf053badc46b5d66f867150eef077f4f0d7944ecd7",
+    version = "24.3.4",
+)
+
+erlang_toolchain_from_github_release(
+    name_suffix = "_25",
+    sha256 = "2d7678c9bc6fcf3a1242c4d1c3864855d85e73ade792cd80adb8a9f379996711",
+    version = "25.0",
+)
+
+erlang_toolchain_from_http_archive(
+    erlang_constraint = "//bazel/platforms:erlang_git_master",
+    name_suffix = "_git_master",
+    strip_prefix = "otp-master",
+    url = "https://github.com/erlang/otp/archive/refs/heads/master.tar.gz",
+)
+
+elixir_toolchain_external()
+
+elixir_toolchain_from_github_release(
+    name_suffix = "_1_10",
+    version = "1.10.4",
+)
+
+elixir_toolchain_from_github_release(
+    name_suffix = "_1_13",
+    version = "1.13.4",
+)

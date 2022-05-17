@@ -1,10 +1,9 @@
 load("@rules_erlang//:xref.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
-load("//:rabbitmq_home.bzl", "rabbitmq_home")
-load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
     "assert_suites",
+    "broker_for_integration_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
     "rabbitmq_suite",
@@ -60,7 +59,7 @@ rabbitmq_app(
     deps = DEPS,
 )
 
-xref(tags = ["xref"])
+xref()
 
 plt(
     name = "base_plt",
@@ -71,20 +70,10 @@ plt(
 
 dialyze(
     plt = ":base_plt",
-    tags = ["dialyze"],
 )
 
-rabbitmq_home(
-    name = "broker-for-tests-home",
-    plugins = [
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbitmq_amqp1_0:erlang_app",
-    ],
-)
-
-rabbitmq_run(
-    name = "rabbitmq-for-tests-run",
-    home = ":broker-for-tests-home",
+broker_for_integration_suites(
+    extra_plugins = ["//deps/rabbitmq_amqp1_0:erlang_app"],
 )
 
 PACKAGE = "deps/amqp10_client"
