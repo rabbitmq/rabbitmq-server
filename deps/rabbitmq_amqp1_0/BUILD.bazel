@@ -102,6 +102,10 @@ suites = [
             "TMPDIR": "$TEST_TMPDIR",
         },
     ),
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "config_schema_SUITE",
+    ),
     rabbitmq_suite(
         name = "unit_SUITE",
         size = "small",
