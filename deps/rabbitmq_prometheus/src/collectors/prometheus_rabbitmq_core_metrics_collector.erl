@@ -39,7 +39,7 @@
 %% ==How to determine if a metric should be of type GAUGE or COUNTER?==
 %%
 %% * GAUGE if you care about its value rather than rate of change
-%%   - value can decrease as well as decrease
+%%   - value can increase as well as decrease
 %% * COUNTER if you care about the rate of change
 %%   - value can only increase
 %%
