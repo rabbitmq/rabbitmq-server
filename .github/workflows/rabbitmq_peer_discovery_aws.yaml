@@ -9,8 +9,7 @@ jobs:
       matrix:
         include:
         - image_tag_suffix: otp-max
-          erlang_version: "24"
-          rbe_default_branch: linux-erlang-24.1
+          erlang_version: "25"
     timeout-minutes: 45
     steps:
     - name: CHECKOUT REPOSITORY
@@ -34,7 +33,6 @@ jobs:
 
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-aws-${{ matrix.erlang_version }}
           build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=

@@ -8,7 +8,7 @@ DEPS = [
 
 erlang_app(
     app_description = "Plugin to test feature flags",
-    app_extra = BROKER_VERSION_REQUIREMENTS_ANY,
+    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
     app_name = "my_plugin",
     app_version = "1.0.0",
     deps = DEPS,
