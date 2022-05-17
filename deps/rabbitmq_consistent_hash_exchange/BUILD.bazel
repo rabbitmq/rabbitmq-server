@@ -35,9 +35,7 @@ rabbitmq_app(
     deps = DEPS,
 )
 
-xref(
-    additional_libs = BUILD_DEPS,
-)
+xref()
 
 plt(
     name = "base_plt",

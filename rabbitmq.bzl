@@ -1,5 +1,8 @@
 load(
-
+    "@rules_erlang//:erlang_bytecode.bzl",
+    "erlang_bytecode",
+)
+load(
     "@rules_erlang//:erlang_app.bzl",
     "DEFAULT_ERLC_OPTS",
     "DEFAULT_TEST_ERLC_OPTS",
@@ -7,7 +10,14 @@ load(
     "test_erlang_app",
 
 )
-load("@rules_erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
+
+load(
+    "@rules_erlang//:ct.bzl",
+    "ct_suite",
+    "ct_suite_variant",
+    _assert_suites = "assert_suites",
+)
+
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 
@@ -107,6 +117,8 @@ def rabbitmq_app(
         app_env = "",
         app_extra_keys = "",
         extra_apps = [],
+        extra_hdrs = [],
+        extra_srcs = [],
         extra_priv = [],
         build_deps = [],
         deps = [],
@@ -118,7 +130,7 @@ def rabbitmq_app(
         app_module = app_module,
         app_registered = app_registered,
         app_env = app_env,
-        app_extra = app_extra_keys,
+        app_extra_keys = app_extra_keys,
         extra_apps = extra_apps,
         extra_hdrs = extra_hdrs,
         extra_srcs = extra_srcs,
@@ -139,7 +151,7 @@ def rabbitmq_app(
         app_module = app_module,
         app_registered = app_registered,
         app_env = app_env,
-        app_extra = app_extra_keys,
+        app_extra_keys = app_extra_keys,
         extra_apps = extra_apps,
         extra_hdrs = extra_hdrs,
         extra_srcs = extra_srcs,
@@ -170,7 +182,7 @@ def broker_for_integration_suites(extra_plugins = []):
         plugins = [
             "//deps/rabbit:erlang_app",
             ":erlang_app",
-        ],
+        ] + extra_plugins,
         testonly = True,
     )
 
@@ -234,7 +246,7 @@ def rabbitmq_integration_suite(
             ":rabbitmq-for-tests-run",
         ] + tools,
         runtime_deps = [
-            "//deps/rabbitmq_cli:elixir_app",
+            "//bazel/elixir:erlang_app",
             "//deps/rabbitmq_cli:rabbitmqctl",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
@@ -273,7 +285,7 @@ def rabbitmq_integration_suite(
             "@rabbitmq-server-generic-unix-3.10//:rabbitmq-run",
         ] + tools,
         runtime_deps = [
-            "//deps/rabbitmq_cli:elixir_app",
+            "//bazel/elixir:erlang_app",
             "//deps/rabbitmq_cli:rabbitmqctl",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,

@@ -51,11 +51,7 @@ rabbitmq_app(
     deps = DEPS,
 )
 
-xref(
-    additional_libs = [
-        "//deps/rabbitmq_cli:rabbitmqctl",
-    ],
-)
+xref()
 
 plt(
     name = "base_plt",

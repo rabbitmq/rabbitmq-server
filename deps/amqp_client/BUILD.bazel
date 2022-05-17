@@ -61,7 +61,6 @@ xref(
     additional_libs = [
         "@ranch//:erlang_app",
     ],
-    tags = ["xref"],
 )
 
 plt(

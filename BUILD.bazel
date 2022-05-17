@@ -2,14 +2,15 @@ load(
     "@bazel_skylib//rules:common_settings.bzl",
     "string_flag",
 )
-load("@rules_pkg//:pkg.bzl", "pkg_tar")
+
 load("@rules_erlang//:dialyze.bzl", "plt")
 load("@rules_erlang//:shell.bzl", "shell")
-load("elixir_home.bzl", "elixir_home")
+load("@rules_erlang//:erl_eval.bzl", "erl_eval")
+load("//bazel/elixir:iex_eval.bzl", "iex_eval")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
-load(":dist.bzl", "package_generic_unix", "source_archive")
+load(":dist.bzl", "package_generic_unix")
 load(":rabbitmq.bzl", "all_plugins")
 
 exports_files([
@@ -37,6 +38,11 @@ plt(
 
 PLUGINS = all_plugins(
     rabbitmq_workspace = "",
+)
+
+rabbitmq_home(
+    name = "broker-home",
+    plugins = PLUGINS,
 )
 
 rabbitmq_run(
@@ -103,43 +109,7 @@ iex_eval(
     expression = """File.write!(System.get_env("OUTS"), System.version()); System.halt()""",
 )
 
-filegroup(
-    name = "root-licenses",
-    srcs = glob(
-        ["LICENSE*"],
-        exclude = [
-            "LICENSE.md",
-            "LICENSE.txt",
-        ],
-    ),
-    visibility = ["//visibility:public"],
-)
-
-pkg_tar(
-    name = "scripts-tar",
-    srcs = [
-        "scripts/bash_autocomplete.sh",
-        "scripts/rabbitmq-script-wrapper",
-        "scripts/rabbitmqctl-autocomplete.sh",
-        "scripts/zsh_autocomplete.sh",
-    ],
-    package_dir = "scripts",
-    visibility = ["//visibility:public"],
-)
-
-pkg_tar(
-    name = "release-notes-tar",
-    srcs = glob([
-        "release-notes/*.md",
-        "release-notes/*.txt",
-    ]),
-    package_dir = "release-notes",
-    visibility = ["//visibility:public"],
-)
-
-package_generic_unix(plugins = PLUGINS)
-
-source_archive(plugins = PLUGINS)
+package_generic_unix(PLUGINS)
 
 genrule(
     name = "test-logs",

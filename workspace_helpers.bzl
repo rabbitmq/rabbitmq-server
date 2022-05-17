@@ -4,8 +4,6 @@ load("@rules_erlang//:github.bzl", "github_erlang_app")
 load("@rules_erlang//:hex_archive.bzl", "hex_archive")
 load("@rules_erlang//:hex_pm.bzl", "hex_pm_erlang_app")
 
-load("//:rabbitmq.bzl", "APP_VERSION")
-
 def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_erlang_app(
         name = "accept",
@@ -131,9 +129,6 @@ erlang_app(
         org = "potatosalad",
         ref = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
         version = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
-        first_srcs = [
-            "src/jose_block_encryptor.erl",
-        ],
         sha256 = "7816f39d00655f2605cfac180755e97e268dba86c2f71037998ff63792ca727b",
         build_file = rabbitmq_workspace + "//:BUILD.jose",
     )
@@ -188,10 +183,6 @@ erlang_app(
         name = "ra",
         version = "2.0.13",
         sha256 = "c7c2ff1325095cbf3b95be20a8bea1e81d68da7c3f3cc329331bc71af9d3c8db",
-        first_srcs = [
-            "src/ra_machine.erl",
-            "src/ra_snapshot.erl",
-        ],
         deps = [
             "@gen_batch_server//:erlang_app",
         ],

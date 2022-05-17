@@ -48,14 +48,14 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 git_repository(
     name = "rbe",
-    commit = "3dea2dea9721349ba06938a34e52d683e04e975b",  # linux-rbe branch
+    commit = "6a2899b87ee4f4dc0ef6f0012be6c3f94e6c9c2f",  # linux-rbe branch
     remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
 )
 
 git_repository(
     name = "rules_erlang",
     remote = "https://github.com/rabbitmq/rules_erlang.git",
-    tag = "3.2.0",
+    tag = "3.1.0",
 )
 
 load(
@@ -63,20 +63,19 @@ load(
     "rules_erlang_dependencies",
 )
 
-load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
-
-rules_pkg_dependencies()
-
-http_archive(
-    name = "rules_erlang",
-    sha256 = "ce4b3b028c8d77e2175767c19d69636d78fa13fdb11279d70f3c2ab01bc32953",
-    strip_prefix = "rules_erlang-2.5.2",
-    urls = ["https://github.com/rabbitmq/rules_erlang/archive/refs/tags/2.5.2.zip"],
-)
-
-load("@rules_erlang//:rules_erlang.bzl", "rules_erlang_dependencies")
-
 rules_erlang_dependencies()
+
+register_toolchains(
+    "//bazel/toolchains:erlang_toolchain_external",
+    "//bazel/toolchains:erlang_toolchain_23",
+    "//bazel/toolchains:erlang_toolchain_24",
+    "//bazel/toolchains:erlang_toolchain_25",
+    "//bazel/toolchains:erlang_toolchain_git_master",
+    "//bazel/toolchains:elixir_toolchain_external",
+    "//bazel/toolchains:elixir_toolchain_1_10",
+    "//bazel/toolchains:elixir_toolchain_1_12",
+    "//bazel/toolchains:elixir_toolchain_1_13",
+)
 
 load("//:workspace_helpers.bzl", "rabbitmq_external_deps")
 
@@ -92,7 +91,7 @@ pkg_zip(
     name = "inet_tcp_proxy_ez",
     package_dir = "inet_tcp_proxy/ebin",
     srcs = [
-        "@rules_erlang.2.5.2.erlang_package.inet_tcp_proxy_dist//:erlang_app",
+        "@inet_tcp_proxy_dist//:erlang_app",
     ],
     package_file_name = "inet_tcp_proxy.ez",
     visibility = ["//visibility:public"],
@@ -110,6 +109,11 @@ http_archive(
     name = "rabbitmq-server-generic-unix-3.8.22",
     build_file = "@//:BUILD.package_generic_unix",
     patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
-    strip_prefix = "rabbitmq_server-3.8.22",
-    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.22/rabbitmq-server-generic-unix-3.8.22.tar.xz"],
+
+    repo_mapping = {
+        "@inet_tcp_proxy_dist": "@rules_erlang.erlang_package.inet_tcp_proxy_dist",
+    },
+    sha256 = "4672fad92a815b879cc78a5a9fd28445152b61745d68acd50432c15f96792171",
+    strip_prefix = "rabbitmq_server-3.9.13",
+    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.9.13/rabbitmq-server-generic-unix-3.9.13.tar.xz"],
 )

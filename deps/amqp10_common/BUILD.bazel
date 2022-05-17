@@ -1,6 +1,3 @@
-load("@rules_erlang//:app_file.bzl", "app_file")
-load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
-load("@rules_erlang//:erlc.bzl", "erlc")
 load("@rules_erlang//:xref.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze")
 load(
@@ -64,28 +61,9 @@ APP_EXTRA_KEYS = """%% Hex.pm package informations.
     ]}
 """
 
-erlang_app_info(
-    name = "erlang_app",
-    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
-    app = ":app_file",
-    app_name = "amqp10_common",
-    beam = [":beam_files"],
-    visibility = ["//visibility:public"],
-)
-
-erlc(
-    name = "test_beam_files",
-    srcs = ["src/amqp10_framing0.erl"] + glob(["src/*.erl"]),
-    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-)
-
-erlang_app_info(
-    name = "test_erlang_app",
-    testonly = True,
-    hdrs = ["include/amqp10_framing.hrl"] + glob(["include/*.hrl"]),
-    app = ":app_file",
+rabbitmq_app(
+    app_description = "Modules shared by rabbitmq-amqp1.0 and rabbitmq-amqp1.0-client",
+    app_extra_keys = APP_EXTRA_KEYS,
     app_name = "amqp10_common",
     extra_hdrs = ["include/amqp10_framing.hrl"],
     extra_srcs = ["src/amqp10_framing0.erl"],

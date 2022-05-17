@@ -1,49 +1,100 @@
-load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 load(
-    ":secondary_umbrella.bzl",
-    fetch_secondary_umbrella = "secondary_umbrella",
+    "@bazel_tools//tools/build_defs/repo:git.bzl",
+    "new_git_repository",
+)
+load(
+    "@rules_erlang//:hex_archive.bzl",
+    "hex_archive",
 )
 
-def _rbe(ctx):
-    rbe_repo_props = []
+def _installation_suffix(erlang_installation):
+    wn = erlang_installation.workspace_name
+    return wn.removeprefix("rules_erlang").removeprefix(".erlang_package.")
+
+def _merge_package(props, packages):
+    for p in packages:
+        if props["name"] == p["name"]:
+            if props != p:
+                fail("package conflict: {} and {}".format(props, p))
+            return packages
+    return packages + [props]
+
+def _hex():
+    new_git_repository(
+        name = "hex",
+        remote = "https://github.com/hexpm/hex.git",
+        tag = "v1.0.1",
+        build_file_content = MIX_PACKAGE_BUILD_FILE_CONTENT.format(
+            name = "hex",
+            deps = [],
+        ),
+    )
+
+def _impl(ctx):
+    _hex()
+
+    hex_packages = []
     for mod in ctx.modules:
-        for repo in mod.tags.git_repository:
-            props = {"remote": repo.remote}
-            if repo.commit != "":
-                props["commit"] = repo.commit
-            if repo.tag != "":
-                props["tag"] = repo.tag
-            if repo.branch != "":
-                props["branch"] = repo.branch
-            if not props in rbe_repo_props:
-                rbe_repo_props.append(props)
+        for package in mod.tags.hex_package:
+            props = {
+                "name": package.name,
+                "version": package.version,
+                "sha256": package.sha256,
+                "deps": package.deps,
+                "build_file_content": package.build_file_content,
+                "patch_cmds": package.patch_cmds,
+            }
+            hex_packages = _merge_package(props, hex_packages)
 
-    if len(rbe_repo_props) > 1:
-        fail("Multiple definitions for @rbe exist: {}".format(rbe_repo_props))
-
-    if len(rbe_repo_props) > 0:
-        git_repository(
-            name = "rbe",
-            **rbe_repo_props[0]
+    for props in hex_packages:
+        name = props["name"]
+        deps = props.pop("deps")
+        if props["build_file_content"] == "":
+            props["build_file_content"] = MIX_PACKAGE_BUILD_FILE_CONTENT.format(
+                name = name,
+                deps = deps + ["@hex//:elixir_app"],
+            )
+        hex_archive(
+            package_name = name,
+            **props
         )
 
-git_repository_tag = tag_class(attrs = {
-    "remote": attr.string(),
-    "branch": attr.string(),
-    "tag": attr.string(),
-    "commit": attr.string(),
+hex_package = tag_class(attrs = {
+    "name": attr.string(),
+    "version": attr.string(),
+    "sha256": attr.string(),
+    "deps": attr.string_list(),
+    "build_file_content": attr.string(),
+    "patch_cmds": attr.string_list(),
 })
 
-rbe = module_extension(
-    implementation = _rbe,
+elixir = module_extension(
+    implementation = _impl,
     tag_classes = {
-        "git_repository": git_repository_tag,
+        "hex_package": hex_package,
     },
 )
 
-def _secondary_umbrella(ctx):
-    fetch_secondary_umbrella()
-
-secondary_umbrella = module_extension(
-    implementation = _secondary_umbrella,
+MIX_PACKAGE_BUILD_FILE_CONTENT = """load(
+    "@rabbitmq-server//bazel/mix:mix_app.bzl",
+    "mix_app",
 )
+
+filegroup(
+    name = "srcs",
+    srcs = glob([
+        "mix.exs",
+        "lib/**/*",
+    ]),
+    visibility = ["//visibility:public"],
+)
+
+mix_app(
+    name = "elixir_app",
+    app_name = "{name}",
+    srcs = [":srcs"],
+    license_files = glob(["LICENSE*"]),
+    deps = {deps},
+    visibility = ["//visibility:public"],
+)
+"""

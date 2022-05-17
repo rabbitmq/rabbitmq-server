@@ -55,9 +55,7 @@ rabbitmq_app(
     deps = DEPS,
 )
 
-xref(
-    additional_libs = BUILD_DEPS,
-)
+xref()
 
 plt_apps = list(EXTRA_APPS)
 

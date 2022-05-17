@@ -46,7 +46,7 @@ rabbitmq_app(
 )
 
 xref(
-    additional_libs = BUILD_DEPS,
+    size = "small",
 )
 
 plt(

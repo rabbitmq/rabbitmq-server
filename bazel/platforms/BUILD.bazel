@@ -37,7 +37,7 @@ platform(
         "@rules_erlang//platforms:erlang_external",
         ":elixir_external",
     ],
-    parents = ["@local_config_platform//:host"],
+    parents = ["@rbe//config:platform"],
 )
 
 platform(

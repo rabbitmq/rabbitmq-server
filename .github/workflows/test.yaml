@@ -32,7 +32,7 @@ jobs:
         erlang_major:
         - "23"
         - "24"
-        #! - "25"
+        - "25"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -79,8 +79,8 @@ jobs:
           elixir_version: 1.10.4
         - erlang_version: "24"
           elixir_version: 1.12.3
-        #! - erlang_version: "25"
-        #!   elixir_version: 1.13.4
+        - erlang_version: "25"
+          elixir_version: 1.13.4
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
@@ -106,7 +106,7 @@ jobs:
         fi
         cat << EOF >> user.bazelrc
           build:buildbuddy --build_metadata=ROLE=CI
-          build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
+          build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
           build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=

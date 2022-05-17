@@ -1,7 +1,12 @@
-load("@rules_erlang//:erlang_home.bzl", "ErlangHomeProvider")
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
 load("@rules_erlang//:util.bzl", "path_join")
 load("@rules_erlang//:ct.bzl", "additional_file_dest_relative_path")
+load(
+    "@rules_erlang//tools:erlang_toolchain.bzl",
+    "erlang_dirs",
+    "maybe_install_erlang",
+)
 load(
     ":rabbitmq_home.bzl",
     "RABBITMQ_HOME_ATTRS",
@@ -220,26 +225,7 @@ versioned_plugins_dir_private = rule(
     toolchains = ["@rules_erlang//tools:toolchain_type"],
 )
 
-def versioned_plugins_dir(**kwargs):
-    versioned_plugins_dir_private(
-        is_windows = select({
-            "@bazel_tools//src/conditions:host_windows": True,
-            "//conditions:default": False,
-        }),
-        **kwargs
-    )
-
-def package_generic_unix(
-        plugins = None,
-        rabbitmq_workspace = "@",
-        package_dir = "rabbitmq_server-{}".format(APP_VERSION)):
-    collect_licenses(
-        name = "licenses",
-        srcs = [
-            rabbitmq_workspace + "//:root-licenses",
-        ],
-        deps = plugins,
-    )
+    scripts = [_copy_script(ctx, script) for script in ctx.files._scripts]
 
     pkg_tar(
         name = "license-files-tar",
@@ -269,9 +255,8 @@ def package_generic_unix(
 
 versioned_rabbitmq_home_private = rule(
     implementation = _versioned_rabbitmq_home_impl,
-    attrs = dict(RABBITMQ_HOME_ATTRS.items() + {
-        "_erlang_home": attr.label(default = "@rules_erlang//:erlang_home"),
-    }.items()),
+    attrs = RABBITMQ_HOME_ATTRS,
+    toolchains = ["@rules_erlang//tools:toolchain_type"],
 )
 
 def versioned_rabbitmq_home(**kwargs):
@@ -281,4 +266,71 @@ def versioned_rabbitmq_home(**kwargs):
             "//conditions:default": False,
         }),
         **kwargs
+    )
+
+# This macro must be invoked from the top level BUILD.bazel of rabbitmq-server
+def package_generic_unix(plugins):
+    collect_licenses(
+        name = "licenses",
+        srcs = native.glob(
+            ["LICENSE*"],
+            exclude = [
+                "LICENSE.md",
+                "LICENSE.txt",
+            ],
+        ),
+        deps = plugins,
+    )
+
+    pkg_tar(
+        name = "license-files",
+        srcs = [
+            ":licenses",
+            "//deps/rabbit:INSTALL",
+        ],
+        visibility = ["//visibility:public"],
+    )
+
+    pkg_tar(
+        name = "scripts",
+        srcs = [
+            "scripts/bash_autocomplete.sh",
+            "scripts/rabbitmq-script-wrapper",
+            "scripts/rabbitmqctl-autocomplete.sh",
+            "scripts/zsh_autocomplete.sh",
+        ],
+        package_dir = "scripts",
+        visibility = ["//visibility:public"],
+    )
+
+    pkg_tar(
+        name = "release-notes",
+        srcs = native.glob([
+            "release-notes/*.md",
+            "release-notes/*.txt",
+        ]),
+        package_dir = "release-notes",
+        visibility = ["//visibility:public"],
+    )
+
+    versioned_rabbitmq_home(
+        name = "dist-home",
+        plugins = plugins,
+    )
+
+    pkg_tar(
+        name = "package-generic-unix",
+        srcs = [
+            ":dist-home",
+        ],
+        extension = "tar.xz",
+        package_dir = "rabbitmq_server-{}".format(APP_VERSION),
+        strip_prefix = "dist-home",
+        visibility = ["//visibility:public"],
+        deps = [
+            ":license-files",
+            ":release-notes",
+            ":scripts",
+            "//deps/rabbit:manpages-dir",
+        ],
     )
