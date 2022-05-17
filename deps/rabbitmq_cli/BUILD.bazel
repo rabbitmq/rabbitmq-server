@@ -1,27 +1,26 @@
 load(":rabbitmqctl.bzl", "rabbitmqctl")
 load(":rabbitmqctl_test.bzl", "rabbitmqctl_test")
-load(":elixir.bzl", "elixir")
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load("//:rabbitmq.bzl", "STARTS_BACKGROUND_BROKER_TAG")
 
-# This rule simply exposes elixir as a runtime lib for tests in erlang
-elixir(
-    name = "elixir_app",
-    visibility = ["//visibility:public"],
-)
-
 # Note: All the various rabbitmq-* scripts are just copies of rabbitmqctl
 rabbitmqctl(
     name = "rabbitmqctl",
-    srcs = glob([
+    srcs = [
         "mix.exs",
         "config/config.exs",
+    ] + glob([
         "lib/**/*.ex",
     ]),
     visibility = ["//visibility:public"],
     deps = [
         "//deps/rabbit_common:erlang_app",
+        "@csv//:elixir_app",
+        "@hex//:elixir_app",
+        "@json//:elixir_app",
+        "@observer_cli//:erlang_app",
+        "@stdout_formatter//:erlang_app",
     ],
 )
 
@@ -46,9 +45,10 @@ rabbitmq_run(
 rabbitmqctl_test(
     name = "rabbitmqctl_tests",
     size = "large",
-    srcs = glob([
+    srcs = [
         "mix.exs",
         "config/config.exs",
+    ] + glob([
         "lib/**/*.ex",
         "test/**/*.exs",
     ]),
@@ -60,5 +60,13 @@ rabbitmqctl_test(
         "//deps/amqp_client:erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
+        "@amqp//:elixir_app",
+        "@csv//:elixir_app",
+        "@hex//:elixir_app",
+        "@json//:elixir_app",
+        "@observer_cli//:erlang_app",
+        "@stdout_formatter//:erlang_app",
+        "@temp//:elixir_app",
+        "@x509//:elixir_app",
     ],
 )

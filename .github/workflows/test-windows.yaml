@@ -10,9 +10,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        erlang_version:
-        #! - "23"
-        - "24"
+        include:
+        - erlang_version: "24"
+          elixir_version: 1.12.3
+        - erlang_version: "25"
+          elixir_version: 1.13.4
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -21,7 +23,7 @@ jobs:
       uses: erlef/setup-beam@v1.11
       with:
         otp-version: ${{ matrix.erlang_version }}
-        elixir-version: 1.12.3
+        elixir-version: ${{ matrix.elixir_version }}
     #! - name: MOUNT BAZEL CACHE
     #!   uses: actions/cache@v1
     #!   with:
@@ -42,7 +44,7 @@ jobs:
 
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
-          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-windows-${{ matrix.erlang_version }}
+          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-windows
           # build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=
@@ -50,6 +52,8 @@ jobs:
           build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@rules_erlang//:erlang_home="${ERL_PATH/\/bin\/erl/}"
           build --//:elixir_home="${IEX_PATH/\/bin\/iex/}"
+          build --platforms=//bazel/platforms:erlang_external_platform
+          build --extra_execution_platforms=//bazel/platforms:erlang_external_platform
         EOF
 
         bazelisk info release

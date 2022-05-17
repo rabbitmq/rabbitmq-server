@@ -1,0 +1,14 @@
+load(
+    ":elixir_as_app.bzl",
+    "elixir_as_app",
+)
+
+toolchain_type(
+    name = "toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
+elixir_as_app(
+    name = "erlang_app",
+    visibility = ["//visibility:public"],
+)

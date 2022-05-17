@@ -35,7 +35,7 @@ rabbitmq_app(
     deps = DEPS,
 )
 
-xref(tags = ["xref"])
+xref()
 
 plt(
     name = "base_plt",
@@ -45,5 +45,4 @@ plt(
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    tags = ["dialyze"],
 )
