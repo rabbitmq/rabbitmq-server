@@ -1265,8 +1265,14 @@ sequence_error([T])                      -> T;
 sequence_error([{error, _} = Error | _]) -> Error;
 sequence_error([_ | Rest])               -> sequence_error(Rest).
 
-check_expiry(N) when N < 0                 -> {error, {value_negative, N}};
-check_expiry(_N)                           -> ok.
+check_expiry(N)
+  when N < 0 ->
+    {error, {value_negative, N}};
+check_expiry(N)
+  when N > 315_360_000_000 -> %% 10 years in milliseconds
+    {error, {value_too_large, N}};
+check_expiry(_N) ->
+    ok.
 
 base64url(In) ->
     lists:reverse(lists:foldl(fun ($\+, Acc) -> [$\- | Acc];
