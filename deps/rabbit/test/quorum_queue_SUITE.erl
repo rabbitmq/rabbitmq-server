@@ -2527,7 +2527,7 @@ per_message_ttl_expiration_too_high(Config) ->
     MonitorRef = erlang:monitor(process, Ch),
 
     ok =  amqp_channel:cast(Ch, #'basic.publish'{},
-                            #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(100*365*24*60*60*1000+1)}}),
+                            #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(10*365*24*60*60*1000+1)}}),
     receive
         {'DOWN', MonitorRef, process, Ch,
          {shutdown, {server_initiated_close, 406, <<"PRECONDITION_FAILED - invalid expiration", _/binary>>}}} ->
