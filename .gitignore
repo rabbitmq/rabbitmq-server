@@ -2,6 +2,7 @@
 .sw?
 .*.sw?
 /.erlang.mk/
+/_build/
 /ebin/
 /bin/
 /deps/*
