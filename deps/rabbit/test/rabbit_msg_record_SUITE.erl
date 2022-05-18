@@ -72,6 +72,7 @@ ampq091_roundtrip(_Config) ->
                                   {<<"x-timestamp">>, timestamp, 1},
                                   {<<"x-double">>, double, 1.0},
                                   {<<"x-float">>, float, 1.0},
+                                  {<<"x-void">>, void, undefined},
                                   {<<"x-binary">>, binary, <<"data">>}
                                  ],
                        delivery_mode = 2,
