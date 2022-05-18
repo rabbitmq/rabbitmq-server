@@ -1269,7 +1269,7 @@ check_expiry(N)
   when N < 0 ->
     {error, {value_negative, N}};
 check_expiry(N)
-  when N > 3_153_600_000_000 -> %% 100 years in milliseconds
+  when N > 315_360_000_000 -> %% 10 years in milliseconds
     {error, {value_too_large, N}};
 check_expiry(_N) ->
     ok.
