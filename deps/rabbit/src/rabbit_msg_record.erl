@@ -10,7 +10,7 @@
          message_annotation/3
          ]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
+% -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
@@ -333,7 +333,10 @@ to_091(Key, {timestamp, V}) -> {Key, timestamp, V div 1000};
 to_091(Key, {binary, V}) -> {Key, binary, V};
 to_091(Key, {boolean, V}) -> {Key, bool, V};
 to_091(Key, true) -> {Key, bool, true};
-to_091(Key, false) -> {Key, bool, false}.
+to_091(Key, false) -> {Key, bool, false};
+%% TODO
+to_091(Key, undefined) -> {Key, void, undefined};
+to_091(Key, null) -> {Key, void, undefined}.
 
 from_091(longstr, V) when is_binary(V) -> {utf8, V};
 from_091(long, V) -> {long, V};
@@ -347,7 +350,8 @@ from_091(float, V) -> {float, V};
 from_091(bool, V) -> {boolean, V};
 from_091(binary, V) -> {binary, V};
 from_091(timestamp, V) -> {timestamp, V * 1000};
-from_091(byte, V) -> {byte, V}.
+from_091(byte, V) -> {byte, V};
+from_091(void, _V) -> null.
 
 % convert_header(signedint, V) -> [$I, <<V:32/signed>>];
 % convert_header(decimal, V) -> {Before, After} = V,
