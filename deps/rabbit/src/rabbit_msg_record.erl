@@ -10,7 +10,6 @@
          message_annotation/3
          ]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
@@ -32,9 +31,7 @@
 %% holds static or rarely changing fields
 -record(cfg, {}).
 -record(?MODULE, {cfg :: #cfg{},
-                  msg :: #msg{},
-                  %% holds a list of modifications to various sections
-                  changes = [] :: list()}).
+                  msg :: #msg{}}).
 
 -opaque state() :: #?MODULE{}.
 
@@ -333,7 +330,10 @@ to_091(Key, {timestamp, V}) -> {Key, timestamp, V div 1000};
 to_091(Key, {binary, V}) -> {Key, binary, V};
 to_091(Key, {boolean, V}) -> {Key, bool, V};
 to_091(Key, true) -> {Key, bool, true};
-to_091(Key, false) -> {Key, bool, false}.
+to_091(Key, false) -> {Key, bool, false};
+%% TODO
+to_091(Key, undefined) -> {Key, void, undefined};
+to_091(Key, null) -> {Key, void, undefined}.
 
 from_091(longstr, V) when is_binary(V) -> {utf8, V};
 from_091(long, V) -> {long, V};
@@ -347,23 +347,8 @@ from_091(float, V) -> {float, V};
 from_091(bool, V) -> {boolean, V};
 from_091(binary, V) -> {binary, V};
 from_091(timestamp, V) -> {timestamp, V * 1000};
-from_091(byte, V) -> {byte, V}.
-
-% convert_header(signedint, V) -> [$I, <<V:32/signed>>];
-% convert_header(decimal, V) -> {Before, After} = V,
-%                               [$D, Before, <<After:32>>];
-% convert_header(timestamp, V) -> [$T, <<V:64>>];
-% % convert_header(table, V) -> [$F | table_to_binary(V)];
-% % convert_header(array, V) -> [$A | array_to_binary(V)];
-% convert_header(byte, V) -> [$b, <<V:8/signed>>];
-% convert_header(double, V) -> [$d, <<V:64/float>>];
-% convert_header(float, V) -> [$f, <<V:32/float>>];
-% convert_header(short, V) -> [$s, <<V:16/signed>>];
-% convert_header(binary, V) -> [$x | long_string_to_binary(V)];
-% convert_header(unsignedbyte, V) -> [$B, <<V:8/unsigned>>];
-% convert_header(unsignedshort, V) -> [$u, <<V:16/unsigned>>];
-% convert_header(unsignedint, V) -> [$i, <<V:32/unsigned>>];
-% convert_header(void, _V) -> [$V].
+from_091(byte, V) -> {byte, V};
+from_091(void, _V) -> null.
 
 utf8(T) -> {utf8, T}.
 symbol(T) -> {symbol, T}.
