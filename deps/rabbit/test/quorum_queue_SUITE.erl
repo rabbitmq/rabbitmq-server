@@ -144,6 +144,7 @@ all_tests() ->
      message_ttl,
      per_message_ttl,
      per_message_ttl_mixed_expiry,
+     per_message_ttl_expiration_too_high,
      consumer_priorities,
      cancel_consumer_gh_3729
     ].
@@ -2518,6 +2519,22 @@ per_message_ttl_mixed_expiry(Config) ->
               ok
     end,
     ok.
+
+per_message_ttl_expiration_too_high(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    MonitorRef = erlang:monitor(process, Ch),
+
+    ok =  amqp_channel:cast(Ch, #'basic.publish'{},
+                            #amqp_msg{props = #'P_basic'{expiration = integer_to_binary(100*365*24*60*60*1000+1)}}),
+    receive
+        {'DOWN', MonitorRef, process, Ch,
+         {shutdown, {server_initiated_close, 406, <<"PRECONDITION_FAILED - invalid expiration", _/binary>>}}} ->
+            ok
+    after 1000 ->
+              ct:fail("expected channel error")
+    end.
 
 consumer_metrics(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
