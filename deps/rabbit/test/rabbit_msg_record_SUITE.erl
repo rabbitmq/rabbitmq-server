@@ -5,7 +5,6 @@
 -export([
          ]).
 
--include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -72,6 +71,7 @@ ampq091_roundtrip(_Config) ->
                                   {<<"x-timestamp">>, timestamp, 1},
                                   {<<"x-double">>, double, 1.0},
                                   {<<"x-float">>, float, 1.0},
+                                  {<<"x-void">>, void, undefined},
                                   {<<"x-binary">>, binary, <<"data">>}
                                  ],
                        delivery_mode = 2,
