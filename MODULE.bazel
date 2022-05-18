@@ -245,6 +245,12 @@ erlang_package.git(
     branch = "master",
 )
 
+erlang_package.git(
+    name = "ra",
+    repository = "rabbitmq/ra",
+    branch = "main",
+)
+
 use_repo(
     erlang_package,
     "accept",
@@ -267,7 +273,6 @@ use_repo(
     "osiris",
     "prometheus",
     "proper",
-    "ra",
     "ranch",
     "recon",
     "redbug",
