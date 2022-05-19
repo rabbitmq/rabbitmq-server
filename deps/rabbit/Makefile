@@ -125,15 +125,16 @@ define PROJECT_ENV
 	    {track_auth_attempt_source, false}
 =======
 	    {stream_messages_soft_limit, 256},
-<<<<<<< HEAD
-        {track_auth_attempt_source, false}
-=======
       {track_auth_attempt_source, false},
+<<<<<<< HEAD
 			{credentials_obfuscation_fallback_secret, <<"nocookie">>},
       {dead_letter_worker_consumer_prefetch, 32},
       {dead_letter_worker_publisher_confirm_timeout, 180000}
 >>>>>>> 8b67133dd2 (implement fallback secret for credentials obfuscation)
 >>>>>>> fe1e1668a2 (implement fallback secret for credentials obfuscation)
+=======
+			{credentials_obfuscation_fallback_secret, <<"nocookie">>}
+>>>>>>> eaa0d85e95 (Resolve conflicts)
 	  ]
 endef
 

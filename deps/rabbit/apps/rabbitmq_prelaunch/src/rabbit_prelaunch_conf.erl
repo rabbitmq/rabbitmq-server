@@ -386,6 +386,7 @@ apply_app_env_vars(_, []) ->
     ok.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 set_credentials_obfuscation_secret() ->
     _ = rabbit_log_prelaunch:debug(
       "Refreshing credentials obfuscation configuration from env: ~p",
@@ -422,6 +423,8 @@ redact_env_var([AppVar | Rest], Acc) ->
     redact_env_var(Rest, [AppVar | Acc]).
 >>>>>>> 8b67133dd2 (implement fallback secret for credentials obfuscation)
 
+=======
+>>>>>>> eaa0d85e95 (Resolve conflicts)
 %% -------------------------------------------------------------------
 %% Config decryption.
 %% -------------------------------------------------------------------
