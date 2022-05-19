@@ -1974,7 +1974,7 @@ count_pending_acks(#vqstate { ram_pending_ack   = RPA,
     gb_trees:size(RPA) + gb_trees:size(DPA) + gb_trees:size(QPA).
 
 %% @todo This should set the out rate to infinity temporarily while we drop deltas.
-purge_betas_and_deltas(DelsAndAcksFun, State = #vqstate { mode = Mode }) ->
+purge_betas_and_deltas(DelsAndAcksFun, State) ->
     State0 = #vqstate { q3 = Q3 } = maybe_deltas_to_betas(DelsAndAcksFun, State),
 
     case ?QUEUE:is_empty(Q3) of
