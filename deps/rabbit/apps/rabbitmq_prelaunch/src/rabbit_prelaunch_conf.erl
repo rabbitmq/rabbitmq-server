@@ -71,7 +71,6 @@ setup(Context) ->
                     #{config_files => [],
                       config_advanced_file => undefined}
             end,
-    ok = set_credentials_obfuscation_secret(),
     ?LOG_DEBUG(
       "Saving config state to application env: ~p", [State],
       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
@@ -395,24 +394,35 @@ apply_erlang_term_based_config([]) ->
     ok.
 
 apply_app_env_vars(App, [{Var, Value} | Rest]) ->
-    ?LOG_DEBUG("    - ~s = ~p", [Var, Value],
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    log_app_env_var(Var, Value),
     ok = application:set_env(App, Var, Value, [{persistent, true}]),
     apply_app_env_vars(App, Rest);
 apply_app_env_vars(_, []) ->
     ok.
 
-set_credentials_obfuscation_secret() ->
-    ?LOG_DEBUG(
-      "Refreshing credentials obfuscation configuration from env: ~p",
-      [application:get_all_env(credentials_obfuscation)],
-      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ok = credentials_obfuscation:refresh_config(),
-    CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
-    ?LOG_DEBUG(
-      "Setting credentials obfuscation secret to '~s'", [CookieBin],
-      #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ok = credentials_obfuscation:set_secret(CookieBin).
+log_app_env_var(password = Var, _) ->
+    ?LOG_DEBUG("    - ~s = ~p", [Var, "********"],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+log_app_env_var(Var, Value) when is_list(Value) ->
+    % to redact sensitive entries, e.g. {password,"********"} for stream replication over TLS
+    Redacted = redact_env_var(Value),
+    ?LOG_DEBUG("    - ~s = ~p", [Var, Redacted],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
+log_app_env_var(Var, Value) ->
+    ?LOG_DEBUG("    - ~s = ~p", [Var, Value],
+               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}).
+
+redact_env_var(Value) when is_list(Value) ->
+    redact_env_var(Value, []);
+redact_env_var(Value) ->
+    Value.
+
+redact_env_var([], Acc) ->
+    Acc;
+redact_env_var([{password, _V} | T], Acc) ->
+    redact_env_var(T, Acc ++ [{password, "********"}]);
+redact_env_var([H | T], Acc) ->
+    redact_env_var(T, Acc ++ [H]).
 
 %% -------------------------------------------------------------------
 %% Config decryption.
