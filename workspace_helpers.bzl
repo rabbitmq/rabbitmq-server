@@ -11,12 +11,10 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
         sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
     )
 
-    github_erlang_app(
+    hex_pm_erlang_app(
         name = "aten",
-        org = "rabbitmq",
-        sha256 = "f27453bfa270538e1b48a9111206847e19a5ad51b4ded4f03fcb0184fbb555be",
-        ref = "v0.5.7",
-        version = "0.5.7",
+        sha256 = "64d40a8cf0ddfea4e13af00b7327f0925147f83612d0627d9506cbffe90c13ef",
+        version = "0.5.8",
     )
 
     hex_pm_erlang_app(
