@@ -106,15 +106,13 @@ dist_port_use_check_fail(Port, Host) ->
     end.
 
 set_credentials_obfuscation_secret() ->
-    ?LOG_DEBUG(
+    _ = rabbit_log_prelaunch:debug(
         "Refreshing credentials obfuscation configuration from env: ~p",
-        [application:get_all_env(credentials_obfuscation)],
-        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+        [application:get_all_env(credentials_obfuscation)]),
     ok = credentials_obfuscation:refresh_config(),
     CookieBin = rabbit_data_coercion:to_binary(erlang:get_cookie()),
-    ?LOG_DEBUG(
-        "Setting credentials obfuscation secret to '~s'", [CookieBin],
-        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+    _ = rabbit_log_prelaunch:debug(
+        "Setting credentials obfuscation secret to '~s'", [CookieBin]),
     ok = credentials_obfuscation:set_secret(CookieBin),
     Fallback = application:get_env(rabbit, 
                                    credentials_obfuscation_fallback_secret, 
