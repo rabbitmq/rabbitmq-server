@@ -121,7 +121,8 @@ define PROJECT_ENV
 	    {writer_gc_threshold, 1000000000},
 	    %% interval at which connection/channel tracking executes post operations
 	    {tracking_execution_timeout, 15000},
-	    {track_auth_attempt_source, false}
+	    {track_auth_attempt_source, false},
+			{credentials_obfuscation_fallback_secret, <<"nocookie">>}
 	  ]
 endef
 
