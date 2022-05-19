@@ -449,7 +449,7 @@ delete_segments(Segments, State0 = #qs{ write_segment = WriteSegment,
     end,
     %% Then we delete the files.
     _ = [
-        case file:delete(segment_file(Segment, State)) of
+        case prim_file:delete(segment_file(Segment, State)) of
             ok -> ok;
             %% The file might not have been created. This is the case
             %% if all messages were sent to the per-vhost store for example.
