@@ -16,30 +16,10 @@ erlang_package.hex(
     sha256 = "11b18c220bcc2eab63b5470c038ef10eb6783bcb1fcdb11aa4137defa5ac1bb8",
 )
 
-<<<<<<< HEAD
-erlang_package.git(
-    repository = "rabbitmq/aten",
-    tag = "v0.5.6",
-    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-erlang_app(
-    app_name = "aten",
-    extra_apps = [
-        "sasl",
-         "crypto",
-    ],
-    erlc_opts = [
-        "+deterministic",
-        "+debug_info",
-    ],
-)
-""",
-=======
 erlang_package.hex(
     name = "aten",
     version = "0.5.8",
     sha256 = "64d40a8cf0ddfea4e13af00b7327f0925147f83612d0627d9506cbffe90c13ef",
->>>>>>> 516822e4fc (Bump Aten to 0.5.8)
 )
 
 erlang_package.hex(
