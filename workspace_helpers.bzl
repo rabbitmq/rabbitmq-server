@@ -14,10 +14,8 @@ def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
 
     github_erlang_app(
         name = "aten",
-        org = "rabbitmq",
-        sha256 = "27f6b2ec2e78027ea852a8ac6bcf49df4a599d5506a86dc9f0cb6b5d6e45989e",
-        ref = "v0.5.6",
-        version = "0.5.6",
+        sha256 = "64d40a8cf0ddfea4e13af00b7327f0925147f83612d0627d9506cbffe90c13ef",
+        version = "0.5.8",
     )
 
     hex_pm_erlang_app(
