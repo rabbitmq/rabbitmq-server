@@ -588,7 +588,7 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
             %% Something bad happened to that queue, we are bailing out
             %% on processing current request.
             E({absent, Q, timeout});
-        {ok, Q} when ?amqqueue_state_is(Q, stopped) andalso RetriesLeft =:= 0 ->
+        {ok, Q = #amqqueue{state = stopped}} andalso RetriesLeft =:= 0 ->
             %% The queue was stopped and not migrated
             E({absent, Q, stopped});
         %% The queue process has crashed with unknown error
@@ -608,13 +608,12 @@ with(#resource{} = Name, F, E, RetriesLeft) ->
         {ok, Q} when ?amqqueue_state_is(Q, live) ->
             %% We check is_process_alive(QPid) in case we receive a
             %% nodedown (for example) in F() that has nothing to do
-            %% with the QPid. F() should be written s.t. that this
-            %% cannot happen, so we bail if it does since that
-            %% indicates a code bug and we don't want to get stuck in
-            %% the retry loop.
+            %% with the QPid.
             rabbit_misc:with_exit_handler(
-              fun () -> retry_wait(Q, F, E, RetriesLeft) end,
-              fun () -> F(Q) end);
+                fun () -> false = rabbit_mnesia:is_process_alive(QPid),
+                    timer:sleep(30),
+                    with(Name, F, E, RetriesLeft - 1)
+                end, fun () -> F(Q) end);
         {error, not_found} ->
             E(not_found_or_absent_dirty(Name))
     end.
