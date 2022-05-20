@@ -331,7 +331,7 @@ recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, [Segment|Ta
                 keep ->
                     StoreState1;
                 delete ->
-                    _ = file:delete(SegmentFile),
+                    _ = prim_file:delete(SegmentFile),
                     rabbit_classic_queue_store_v2:delete_segments([Segment], StoreState1)
             end,
             recover_segments(State, ContainsCheckFun, StoreState, CountersRef, Tail);
@@ -341,7 +341,7 @@ recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, [Segment|Ta
             rabbit_log:warning("Deleting invalid v2 segment file ~s (file has invalid header)",
                                [SegmentFile]),
             ok = file:close(Fd),
-            _ = file:delete(SegmentFile),
+            _ = prim_file:delete(SegmentFile),
             StoreState = rabbit_classic_queue_store_v2:delete_segments([Segment], StoreState0),
             recover_segments(State0, ContainsCheckFun, StoreState, CountersRef, Tail)
     end.
@@ -861,7 +861,7 @@ delete_segment(Segment, State0 = #qi{ fds = OpenFds0 }) ->
             State0
     end,
     %% Then we can delete the segment file.
-    case file:delete(segment_file(Segment, State)) of
+    case prim_file:delete(segment_file(Segment, State)) of
         ok -> ok;
         %% It's possible that the file already does not exist:
         %% following a crash, and due to rabbit_variable_queue's
