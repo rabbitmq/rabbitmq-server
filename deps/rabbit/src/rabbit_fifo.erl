@@ -1343,6 +1343,7 @@ return(#{index := IncomingRaftIdx} = Meta, ConsumerId, Returned,
     {State, ok, Effects} = checkout(Meta, State0, State2, Effects1, false),
     update_smallest_raft_index(IncomingRaftIdx, State, Effects).
 
+<<<<<<< HEAD
 % used to processes messages that are finished
 complete(Meta, ConsumerId, Discarded,
          #consumer{checked_out = Checked} = Con0, Effects,
@@ -1367,6 +1368,52 @@ complete(Meta, ConsumerId, Discarded,
     {State2#?MODULE{ra_indexes = Indexes}, Effects}.
 
 increase_credit(#consumer{lifetime = once,
+=======
+% used to process messages that are finished
+complete(Meta, ConsumerId, [DiscardedMsgId],
+         #consumer{checked_out = Checked0} = Con0,
+         #?MODULE{ra_indexes = Indexes0,
+                  msg_bytes_checkout = BytesCheckout,
+                  messages_total = Tot} = State0) ->
+    case maps:take(DiscardedMsgId, Checked0) of
+        {?MSG(Idx, Hdr), Checked} ->
+            SettledSize = get_header(size, Hdr),
+            Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
+            Con = Con0#consumer{checked_out = Checked,
+                                credit = increase_credit(Con0, 1)},
+            State1 = update_or_remove_sub(Meta, ConsumerId, Con, State0),
+            State1#?MODULE{ra_indexes = Indexes,
+                           msg_bytes_checkout = BytesCheckout - SettledSize,
+                           messages_total = Tot - 1};
+        error ->
+            State0
+    end;
+complete(Meta, ConsumerId, DiscardedMsgIds,
+         #consumer{checked_out = Checked0} = Con0,
+         #?MODULE{ra_indexes = Indexes0,
+                  msg_bytes_checkout = BytesCheckout,
+                  messages_total = Tot} = State0) ->
+    {SettledSize, Checked, Indexes}
+        = lists:foldl(
+            fun (MsgId, {S0, Ch0, Idxs}) ->
+                    case maps:take(MsgId, Ch0) of
+                        {?MSG(Idx, Hdr), Ch} ->
+                            S = get_header(size, Hdr) + S0,
+                            {S, Ch, rabbit_fifo_index:delete(Idx, Idxs)};
+                        error ->
+                            {S0, Ch0, Idxs}
+                    end
+            end, {0, Checked0, Indexes0}, DiscardedMsgIds),
+    Len = map_size(Checked0) - map_size(Checked),
+    Con = Con0#consumer{checked_out = Checked,
+                        credit = increase_credit(Con0, Len)},
+    State1 = update_or_remove_sub(Meta, ConsumerId, Con, State0),
+    State1#?MODULE{ra_indexes = Indexes,
+                   msg_bytes_checkout = BytesCheckout - SettledSize,
+                   messages_total = Tot - Len}.
+
+increase_credit(#consumer{cfg = #consumer_cfg{lifetime = once},
+>>>>>>> 9b0a27f5f5 (Optimise rabbit_fifo:complete function)
                           credit = Credit}, _) ->
     %% once consumers cannot increment credit
     Credit;
