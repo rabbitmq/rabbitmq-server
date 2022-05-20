@@ -6,6 +6,7 @@
 
  * AMQP 0-9-1
  * AMQP 1.0
+ * [RabbitMQ Stream Protocol](https://rabbitmq.com/streams.html)
  * MQTT 3.1.1
  * STOMP 1.0 through 1.2
 
