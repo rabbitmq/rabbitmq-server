@@ -94,10 +94,10 @@ map(F, #?MODULE{data = Data} = State) ->
 find_next(Next, Last, _Map) when Next > Last ->
     undefined;
 find_next(Next, Last, Map) ->
-    case Map of
-        #{Next := _} ->
+    case is_map_key(Next, Map) of
+        true ->
             Next;
-        _ ->
+        false ->
             % in degenerate cases the range here could be very large
             % and hence this could be very slow
             % the typical case should ideally be better
