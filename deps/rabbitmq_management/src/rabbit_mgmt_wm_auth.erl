@@ -33,6 +33,7 @@ to_json(ReqData, Context) ->
                    OAuthClientSecret = application:get_env(rabbitmq_management, oauth_client_secret, ""),
                    OAuthProviderUrl = application:get_env(rabbitmq_management, oauth_provider_url, ""),
                    OAuthMetadataUrl = application:get_env(rabbitmq_management, oauth_metadata_url, ""),
+                   OAuthScopes = application:get_env(rabbitmq_management, oauth_scopes, ""),
                    OAuthResourceId = application:get_env(rabbitmq_auth_backend_oauth2, resource_server_id, ""),
                    case is_invalid([OAuthClientId, OAuthClientSecret, OAuthResourceId, OAuthProviderUrl]) of
                        true ->
@@ -44,6 +45,7 @@ to_json(ReqData, Context) ->
                             {oauth_client_id, rabbit_data_coercion:to_binary(OAuthClientId)},
                             {oauth_client_secret, rabbit_data_coercion:to_binary(OAuthClientSecret)},
                             {oauth_provider_url, rabbit_data_coercion:to_binary(OAuthProviderUrl)},
+                            {oauth_scopes, rabbit_data_coercion:to_binary(OAuthScopes)},
                             {oauth_metadata_url, rabbit_data_coercion:to_binary(OAuthMetadataUrl)},
                             {oauth_resource_id, rabbit_data_coercion:to_binary(OAuthResourceId)}
                             ]

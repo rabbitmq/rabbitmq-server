@@ -20,11 +20,8 @@ function oauth_initialize_if_required() {
 
 }
 function auth_settings_apply_defaults(authSettings) {
-  if (authSettings.enable_uaa == true) {
+  if (authSettings.enable_uaa == "true") {
 
-    if (!authSettings.oauth_response_type) {
-      authSettings.oauth_response_type = "token"  // TODO Test it
-    }
     if (!authSettings.oauth_provider_url) {
       authSettings.oauth_provider_url = authSettings.uaa_location
     }
@@ -34,13 +31,17 @@ function auth_settings_apply_defaults(authSettings) {
     if (!authSettings.oauth_client_secret) {
       authSettings.oauth_client_secret = authSettings.uaa_client_secret
     }
+    if (!authSettings.oauth_scopes) {
+      authSettings.oauth_scopes = "openid profile " + authSettings.oauth_resource_id + ".*";
+    }
+
   }
   if (!authSettings.oauth_response_type) {
     authSettings.oauth_response_type = "code"; // although the default value in oidc client
   }
 
-  if (!authSettings.oauth_scope) {
-    authSettings.oauth_scope = "openid profile";
+  if (!authSettings.oauth_scopes) {
+    authSettings.oauth_scopes = "openid profile";
   }
 
 
@@ -66,7 +67,7 @@ function oauth_initialize(authSettings) {
         client_id: authSettings.oauth_client_id,
         client_secret: authSettings.oauth_client_secret,
         response_type: authSettings.oauth_response_type,
-        scope: authSettings.oauth_scope, // for uaa we may need to include <resource-server-id>.*
+        scope: authSettings.oauth_scopes, // for uaa we may need to include <resource-server-id>.*
         resource: authSettings.oauth_resource_id,
         redirect_uri: rabbit_base_uri + "/js/oidc-oauth/login-callback.html",
         post_logout_redirect_uri: rabbit_base_uri + "/js/oidc-oauth/logout-callback.html",
