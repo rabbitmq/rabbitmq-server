@@ -2175,7 +2175,8 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                                         msg_seq_no = MsgSeqNo},
                    RoutedToQueueNames = [QName]}, State0 = #ch{queue_states = QueueStates0}) -> %% optimisation when there is one queue
     Qs0 = rabbit_amqqueue:lookup(RoutedToQueueNames),
-    Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
+    Qs1 = rabbit_amqqueue:prepend_extra_bcc(Qs0),
+    Qs = lists:filter(fun(Q) -> amqqueue:get_state(Q) =:= live end, Qs1),	
     QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
@@ -2212,7 +2213,8 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                                         msg_seq_no = MsgSeqNo},
                    RoutedToQueueNames}, State0 = #ch{queue_states = QueueStates0}) ->
     Qs0 = rabbit_amqqueue:lookup(RoutedToQueueNames),
-    Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
+    Qs1 = rabbit_amqqueue:prepend_extra_bcc(Qs0),
+    Qs = lists:filter(fun(Q) -> amqqueue:get_state(Q) =:= live end, Qs1),	
     QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
         {ok, QueueStates, Actions}  ->
