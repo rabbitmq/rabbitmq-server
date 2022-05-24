@@ -30,8 +30,13 @@ adding_handler(Config) ->
     Config1 = start_setup_proc(Config),
     {ok, Config1}.
 
-changing_config(_SetOrUpdate, OldConfig, _NewConfig) ->
-    {ok, OldConfig}.
+changing_config(_SetOrUpdate, OldConfig, NewConfig) ->
+    %% Keep exchange and setup_proc unchanged in the internal config,
+    %% if they are defined.
+    #{config := OldInternalConfig} = OldConfig,
+    #{config := NewInternalConfig0} = NewConfig,
+    NewInternalConfig = maps:merge(NewInternalConfig0, maps:with([exchange, setup_proc], OldInternalConfig)),
+    {ok, NewConfig#{config := NewInternalConfig}}.
 
 filter_config(Config) ->
     Config.
