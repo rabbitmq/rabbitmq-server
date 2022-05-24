@@ -465,7 +465,7 @@ end}.
     [{datatype, string}]}.
 
 %% The scopes RabbitMq should claim during the authorization flow. Defaults to "openid profile"
-{mapping, "management.oauth_scope", "rabbitmq_management.oauth_scope",
+{mapping, "management.oauth_scopes", "rabbitmq_management.oauth_scopes",
       [{datatype, string}]}.
 
 %% The URL of the OIDC discovery url where the provider is listening on
