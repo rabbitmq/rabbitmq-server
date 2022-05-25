@@ -1651,17 +1651,17 @@ handle_frame_post_auth(Transport,
                                                       User, #{})
         of
             ok ->
-                case rabbit_stream_manager:lookup_local_member(VirtualHost,
-                                                               Stream)
+                case rabbit_stream_manager:lookup_leader(VirtualHost,
+                                                         Stream)
                 of
                     {error, not_found} ->
                         rabbit_global_counters:increase_protocol_counter(stream,
                                                                          ?STREAM_DOES_NOT_EXIST,
                                                                          1),
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0};
-                    {ok, LocalMemberPid} ->
+                    {ok, LeaderPid} ->
                         {?RESPONSE_CODE_OK,
-                         case osiris:fetch_writer_seq(LocalMemberPid, Reference)
+                         case osiris:fetch_writer_seq(LeaderPid, Reference)
                          of
                              undefined ->
                                  0;
