@@ -1100,23 +1100,21 @@ update_log_exchange_config(Config) ->
           Config, 0,
           logger, get_handler_config, [rmq_1_exchange]),
 
-    %% change single_line config
-    ok =
-        rabbit_ct_broker_helpers:rpc(
+    ok = rabbit_ct_broker_helpers:rpc(
           Config, 0,
-          logger, update_formatter_config, [rmq_1_exchange, #{single_line => true}]),
+          logger, update_formatter_config, [rmq_1_exchange, #{use_colors => true}]),
     {ok, HandlerConfig1} =
         rabbit_ct_broker_helpers:rpc(
           Config, 0,
           logger, get_handler_config, [rmq_1_exchange]),
 
-    %% single_line config changed from false to true
-    ?assertMatch(#{formatter := {_, #{single_line := false}}}, OrigHandlerConfig),
-    ?assertMatch(#{formatter := {_, #{single_line := true}}}, HandlerConfig1),
+    %% use_colors config changed from false to true
+    ?assertMatch(#{formatter := {_, #{use_colors := false}}}, OrigHandlerConfig),
+    ?assertMatch(#{formatter := {_, #{use_colors := true}}}, HandlerConfig1),
     %% no other formatter config changed
     ?assertEqual(
-       maps:without([single_line], element(2, maps:get(formatter, OrigHandlerConfig))),
-       maps:without([single_line], element(2, maps:get(formatter, HandlerConfig1)))),
+       maps:without([use_colors], element(2, maps:get(formatter, OrigHandlerConfig))),
+       maps:without([use_colors], element(2, maps:get(formatter, HandlerConfig1)))),
     %% no other handler config changed
     ?assertEqual(
        maps:without([formatter], OrigHandlerConfig),
