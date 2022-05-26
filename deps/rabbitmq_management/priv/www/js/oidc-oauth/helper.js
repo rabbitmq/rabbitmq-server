@@ -53,8 +53,8 @@ function auth_settings_apply_defaults(authSettings) {
 function oauth_initialize(authSettings) {
     oauth = {
       "logged_in": false,
-      "enable" : authSettings.oauth_enable
-
+      "enable" : authSettings.oauth_enable,
+      "authority" : authSettings.oauth_provider_url
     }
 
     if (!oauth.enable) return oauth;
@@ -159,16 +159,21 @@ function oauth_initiateLogin() {
         log(err);
     });
 }
-function oauth_redirectToHome() {
+function oauth_redirectToHome(oauth) {
+  set_auth_pref(oauth.user_name + ':' + oauth.access_token);
   location.href = "/"
 }
-function oauth_redirectToLogin() {
-  location.href = "/"
+function oauth_redirectToLogin(error) {
+  if (!error) location.href = "/"
+  else {
+    location.href = "/?error=" + error
+  }
 }
 function oauth_completeLogin() {
-    mgr.signinRedirectCallback().then(user => oauth_redirectToHome()).catch(function(err) {
+    mgr.signinRedirectCallback().then(user => oauth_redirectToHome(user)).catch(function(err) {
         console.error(err);
         log(err);
+        oauth_redirectToLogin(err)
     });
 }
 

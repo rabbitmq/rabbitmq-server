@@ -27,16 +27,23 @@
 
       if (oauth.enable) {
         oauth_is_logged_in().then( status => {
-          if (!status.loggedIn) {
-            replace_content('outer', format('login_oauth', {}));
-          }  else {
-            oauth.logged_in = true
-            oauth.access_token = status.user.access_token
-            oauth.expiryDate = new Date(status.user.expires_at * 1000)  // it is epoch in seconds
-            console.log("token expires at : " + oauth.expiryDate);
-            oauth.user_name = status.user.profile["user_name"]
-            if (!oauth.user_name || oauth.user_name == "") oauth.user_name = status.user.profile["sub"]
-            oauth.scopes = status.user.scope
+          if (status.loggedIn && !has_auth_cookie_value()) {
+            console.log("Session has expired");
+            oauth.logged_in = false;
+            oauth_initiateLogout();
+            location.reload();
+          }else {
+            if (!status.loggedIn) {
+              replace_content('outer', format('login_oauth', {}));
+            }  else {
+              oauth.logged_in = true
+              oauth.access_token = status.user.access_token
+              oauth.expiryDate = new Date(status.user.expires_at * 1000)  // it is epoch in seconds
+              console.log("token expires at : " + oauth.expiryDate);
+              oauth.user_name = status.user.profile["user_name"]
+              if (!oauth.user_name || oauth.user_name == "") oauth.user_name = status.user.profile["sub"]
+              oauth.scopes = status.user.scope
+            }
           }
         });
       }else {
