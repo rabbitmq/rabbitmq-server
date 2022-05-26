@@ -14,7 +14,16 @@ dispatcher_add(function(sammy) {
             }
             render(reqs, 'overview', '#/');
         });
-
+    sammy.get('#/', function() {
+        var reqs = {'overview': {path:    '/overview',
+                                 options: {ranges: ['lengths-over',
+                                                    'msg-rates-over']}},
+                    'vhosts': '/vhosts'};
+        if (user_monitor) {
+            reqs['nodes'] = '/nodes';
+        }
+        render(reqs, 'overview', '#/');
+    });
     path('#/cluster-name', {'cluster_name': '/cluster-name'}, 'cluster-name');
     sammy.put('#/cluster-name', function() {
             if (sync_put(this, '/cluster-name')) {
@@ -291,12 +300,6 @@ dispatcher_add(function(sammy) {
         clear_cookie_value('auth');
         clear_cookie_value('m');
         if (oauth.logged_in) {
-            var redirect;
-            if (window.location.hash != "") {
-                redirect = window.location.href.split(window.location.hash)[0];
-            } else {
-                redirect = window.location.href
-            };
             oauth.logged_in = false;
             oauth_initiateLogout();
         }

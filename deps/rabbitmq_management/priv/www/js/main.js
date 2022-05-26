@@ -1,17 +1,29 @@
 
 $(document).ready(function() {
-    if (oauth.enable && !oauth.logged_in) {
-        get(oauth.readiness_url, "application/json", function(req) {
-            if (req.status !== 200) {
-                replace_content('outer', format('login_oauth', {}));
-                replace_content('login-status', '<p class="warning">' + oauth.url + " does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate"  + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Single Sign On</button>');
-            } else {
-                replace_content('outer', format('login_oauth', {}));
-            }
-        });
-    } else {
-        replace_content('outer', format('login', {}));
-        start_app_login();
+   var url_string = window.location.href;
+   var url = new URL(url_string);
+   var error = url.searchParams.get("error");
+   if (error) {
+     replace_content('outer', format('login_oauth', {}));
+     replace_content('login-status', '<p class="warning">' + error  + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Single Sign On</button>');
+   }else {
+      if (oauth.enable) {
+        if (!oauth.logged_in ) {
+          get(oauth.readiness_url, "application/json", function(req) {
+              if (req.status !== 200) {
+                  replace_content('outer', format('login_oauth', {}));
+                  replace_content('login-status', '<p class="warning">' + oauth.authority + " does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate"  + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Single Sign On</button>');
+              } else {
+                  replace_content('outer', format('login_oauth', {}));
+              }
+          });
+        }else {
+          start_app_login();
+        }
+      } else {
+          replace_content('outer', format('login', {}));
+          start_app_login();
+      }
     }
 });
 
@@ -30,26 +42,20 @@ function dispatcher() {
 }
 
 function set_auth_pref(userinfo) {
-  set_auth_pref_with_expiry(userinfo, null)
-}
-function set_auth_pref_with_expiry(userinfo, expiryDate) {
     // clear a local storage value used by earlier versions
     clear_local_pref('auth');
 
     var b64 = b64_encode_utf8(userinfo);
+    var date  = new Date();
+    var login_session_timeout = get_login_session_timeout();
 
-    if (!expiryDate) {
-      expiryDate = new Date();
-      var login_session_timeout = get_login_session_timeout();
-
-      if (login_session_timeout) {
-          expiryDate.setMinutes(date.getMinutes() + login_session_timeout);
-      } else {
-          // 8 hours from now
-          expiryDate.setHours(date.getHours() + 8);
-      }
+    if (login_session_timeout) {
+        date.setMinutes(date.getMinutes() + login_session_timeout);
+    } else {
+        // 8 hours from now
+        date.setHours(date.getHours() + 8);
     }
-    store_cookie_value_with_expiration('auth', encodeURIComponent(b64), expiryDate);
+    store_cookie_value_with_expiration('auth', encodeURIComponent(b64), date);
 }
 
 function getParameterByName(name) {
@@ -62,6 +68,7 @@ function getAccessToken() {
 }
 
 function start_app_login() {
+    console.log("start_app_login begin");
     app = new Sammy.Application(function () {
         this.get('#/', function() {});
         this.put('#/login', function() {
@@ -72,9 +79,9 @@ function start_app_login() {
         });
     });
     if (oauth.enable) {
-        var token = oauth.access_token; //getAccessToken();
+        var token = oauth.access_token;
         if (token != null) {
-            set_auth_pref_with_expiry(oauth.user_name + ':' + oauth.access_token, oauth.expiryDate);
+            set_auth_pref(oauth.user_name + ':' + oauth.access_token);
             check_login();
         } else if(has_auth_cookie_value()) {
             check_login();
@@ -85,6 +92,7 @@ function start_app_login() {
             check_login();
         }
     }
+    console.log("start_app_login end");
 }
 
 
@@ -113,8 +121,7 @@ function check_login() {
         // Update auth login_session_timeout if changed
         if (has_auth_cookie_value() && !isNaN(user_login_session_timeout) &&
             user_login_session_timeout !== get_login_session_timeout()) {
-            if (oauth.enable && oauth.expiryDate) update_login_session_with_expiry(oauth.expiryDate);
-            else update_login_session_with_timeout(user_login_session_timeout);
+            update_login_session_timeout(user_login_session_timeout);
         }
         setup_global_vars();
         setup_constant_events();
@@ -123,12 +130,20 @@ function check_login() {
         setup_extensions();
     }
 }
+function print_logging_session_info(user_login_session_timeout) {
+  let var_has_auth_cookie_value = has_auth_cookie_value()
+  let login_session_timeout = get_login_session_timeout()
+  console.log("user_login_session_timeout: " + user_login_session_timeout)
+  console.log("has_auth_cookie_value: " + var_has_auth_cookie_value)
+  console.log("login_session_timeout: " + login_session_timeout)
+  console.log("isNaN(user_login_session_timeout): " + isNaN(user_login_session_timeout))
+}
 
 function get_login_session_timeout() {
     parseInt(get_cookie_value('login_session_timeout'));
 }
 
-function update_login_session_with_timeout(login_session_timeout) {
+function update_login_session_timeout(login_session_timeout) {
     var auth_info = get_cookie_value('auth');
     var date = new Date();
     date.setMinutes(date.getMinutes() + login_session_timeout);
@@ -164,8 +179,7 @@ function start_app() {
     // just leave the history here.
     //Sammy.HashLocationProxy._interval = null;
 
-    app = new Sammy.Application(dispatcher);
-    app.run();
+
 
     var url = this.location.toString();
     var hash = this.location.hash;
@@ -179,6 +193,9 @@ function start_app() {
         // so we can redirect to `/#/`
         this.location = url.replace(/#token_type.+/gi, "#/");
     }
+
+    app = new Sammy.Application(dispatcher);
+    app.run();
 }
 
 function setup_constant_events() {
