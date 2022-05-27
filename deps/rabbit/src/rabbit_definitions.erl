@@ -125,6 +125,22 @@ all_definitions() ->
         exchanges         => Xs
     }.
 
+<<<<<<< HEAD
+=======
+-spec has_configured_definitions_to_load() -> boolean().
+has_configured_definitions_to_load() ->
+    has_configured_definitions_to_load_via_classic_option() or
+        has_configured_definitions_to_load_via_modern_option() or
+        has_configured_definitions_to_load_via_management_option().
+
+%% Retained for backwards compatibility, implicitly assumes the local filesystem source
+maybe_load_definitions(App, Key) ->
+    maybe_load_definitions_from_local_filesystem(App, Key).
+
+maybe_load_definitions_from(IsDir, Path) ->
+    rabbit_definitions_import_local_filesystem:load(IsDir, Path).
+
+>>>>>>> 12bc4e867f (Skip default defs when management.load_definitions is set)
 %%
 %% Implementation
 %%
@@ -137,7 +153,18 @@ has_configured_definitions_to_load() ->
         {ok, _Path} -> true
     end.
 
+<<<<<<< HEAD
 maybe_load_definitions(App, Key) ->
+=======
+has_configured_definitions_to_load_via_management_option() ->
+    case application:get_env(rabbitmq_management, load_definitions) of
+        undefined   -> false;
+        {ok, none}  -> false;
+        {ok, _Path} -> true
+    end.
+
+maybe_load_definitions_from_local_filesystem(App, Key) ->
+>>>>>>> 12bc4e867f (Skip default defs when management.load_definitions is set)
     case application:get_env(App, Key) of
         undefined  ->
             _ = rabbit_log:debug("No definition file configured to import via load_definitions"),
