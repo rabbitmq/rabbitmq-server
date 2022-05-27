@@ -737,8 +737,8 @@ bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
 
 not_authenticated(Reason, ReqData, Context) ->
-    ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
-    halt_response(401, not_authorized, Reason, ReqData1, Context).
+%    ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
+    halt_response(401, not_authorized, Reason, ReqData, Context).
 
 not_authorised(Reason, ReqData, Context) ->
     %% TODO: consider changing to 403 in 4.0

@@ -134,7 +134,7 @@ function store_cookie_with_expiration(dict, expiration_date) {
         enc.push(k + ':' + escape(dict[k]));
     }
     document.cookie = 'm=' + enc.join('|') + '; expires=' + expiration_date.toUTCString() + "; path=/";
-    console.log("Cookie m expires at " + expiration_date);
+//    console.log("Cookie m expires at " + expiration_date);
 }
 
 function get_cookie(key) {

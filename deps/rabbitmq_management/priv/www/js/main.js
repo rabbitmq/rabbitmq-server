@@ -4,15 +4,13 @@ $(document).ready(function() {
    var url = new URL(url_string);
    var error = url.searchParams.get("error");
    if (error) {
-     replace_content('outer', format('login_oauth', {}));
-     replace_content('login-status', '<p class="warning">' + error  + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Single Sign On</button>');
+     renderWarningMessageInLoginStatus(error);
    }else {
       if (oauth.enable) {
         if (!oauth.logged_in ) {
           get(oauth.readiness_url, "application/json", function(req) {
               if (req.status !== 200) {
-                  replace_content('outer', format('login_oauth', {}));
-                  replace_content('login-status', '<p class="warning">' + oauth.authority + " does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate"  + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Single Sign On</button>');
+                  renderWarningMessageInLoginStatus(oauth.authority + " does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate" );
               } else {
                   replace_content('outer', format('login_oauth', {}));
               }
@@ -27,6 +25,10 @@ $(document).ready(function() {
     }
 });
 
+function renderWarningMessageInLoginStatus(message) {
+  replace_content('outer', format('login_oauth', {}));
+  replace_content('login-status', '<p class="warning">' + message  + '</p> <button id="loginWindow" onclick="oauth_initiateLogin()">Single Sign On</button>');
+}
 
 function dispatcher_add(fun) {
     dispatcher_modules.push(fun);
@@ -68,7 +70,7 @@ function getAccessToken() {
 }
 
 function start_app_login() {
-    console.log("start_app_login begin");
+    //console.log("start_app_login begin");
     app = new Sammy.Application(function () {
         this.get('#/', function() {});
         this.put('#/login', function() {
@@ -92,18 +94,18 @@ function start_app_login() {
             check_login();
         }
     }
-    console.log("start_app_login end");
+    //console.log("start_app_login end");
 }
 
 
 function check_login() {
     user = JSON.parse(sync_get('/whoami'));
-    if (user == false) {
+    if (user.error) {
         // clear a local storage value used by earlier versions
         clear_pref('auth');
         clear_cookie_value('auth');
         if (oauth.enable) {
-            replace_content('login-status', '<button id="loginWindow" onclick="oauth_initiateLogin()">Log out</button>');
+            renderWarningMessageInLoginStatus("Not authorized");
         } else {
             replace_content('login-status', '<p>Login failed</p>');
         }
@@ -1293,6 +1295,8 @@ function sync_req(type, params0, path_template, options) {
             });
         }
     }
+
+
 
     try {
         if (type == 'GET')
