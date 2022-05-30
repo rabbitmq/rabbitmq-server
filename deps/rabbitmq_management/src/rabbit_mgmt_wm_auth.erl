@@ -51,7 +51,7 @@ to_json(ReqData, Context) ->
                             ]
                    end;
                false ->
-                   [{enable_oauth, false}]
+                   [{oauth_enable, false}]
            end,
     rabbit_mgmt_util:reply(Data, ReqData, Context).
 
