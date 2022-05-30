@@ -100,7 +100,7 @@ function start_app_login() {
 
 function check_login() {
     user = JSON.parse(sync_get('/whoami'));
-    if (user.error) {
+    if (user == false || user.error) {
         // clear a local storage value used by earlier versions
         clear_pref('auth');
         clear_cookie_value('auth');
@@ -1342,7 +1342,7 @@ function check_bad_response(req, full_page_404) {
         var error = JSON.parse(req.responseText).error;
         if (typeof(error) != 'string') error = JSON.stringify(error);
 
-        if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised') {
+        if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised' || error == 'not_authorized') {
             show_popup('warn', fmt_escape_html(reason));
         } else if (error == 'page_out_of_range') {
             var seconds = 60;
