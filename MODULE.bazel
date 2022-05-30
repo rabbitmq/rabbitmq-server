@@ -200,7 +200,7 @@ erlang_package.hex(
 
 erlang_package.git(
     repository = "rabbitmq/seshat",
-    branch = "main",
+    tag = "0.1.0",
 )
 
 erlang_package.hex(
