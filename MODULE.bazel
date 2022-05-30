@@ -135,11 +135,6 @@ erlang_package.git(
     tag = "v1.2.6",
 )
 
-erlang_package.git(
-    repository = "rabbitmq/seshat",
-    tag = "0.1.0",
-)
-
 erlang_package.hex(
     name = "prometheus",
     version = "4.8.2",
@@ -266,6 +261,7 @@ use_repo(
     "ranch",
     "recon",
     "redbug",
+    "seshat",
     "stdout_formatter",
     "syslog",
     "sysmon_handler",
