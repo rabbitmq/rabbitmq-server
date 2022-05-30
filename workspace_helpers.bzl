@@ -212,8 +212,8 @@ erlang_app(
     github_erlang_app(
         name = "seshat",
         org = "rabbitmq",
-        ref = "main",
-        version = "main",
+        ref = "0.1.0",
+        version = "0.1.0",
         extra_apps = [
             "sasl",
             "crypto",
