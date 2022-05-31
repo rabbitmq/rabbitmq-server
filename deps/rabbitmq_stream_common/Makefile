@@ -1,11 +1,14 @@
-PROJECT = rabbitmq_federation_management
-PROJECT_DESCRIPTION = RabbitMQ Federation Management
+PROJECT = rabbitmq_stream_common
+PROJECT_DESCRIPTION = RabbitMQ Stream Common
+PROJECT_MOD = rabbit_stream_common
 
-define PROJECT_APP_EXTRA_KEYS
-	{broker_version_requirements, []}
+define PROJECT_ENV
+[
+]
 endef
 
-DEPS = rabbit_common rabbit rabbitmq_management rabbitmq_federation
+
+DEPS =
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk

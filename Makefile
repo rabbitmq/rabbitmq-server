@@ -29,11 +29,11 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 
 DISABLE_DISTCLEAN = 1
 
-# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
-# reviewed and merged.
+XREF_SCOPE = app deps
+XREF_EXTRA_APP_DIRS = $(filter-out deps/rabbitmq_cli/_build/dev/lib/rabbit_common/,$(wildcard deps/rabbitmq_cli/_build/dev/lib/*/)) deps/rabbit/apps/rabbitmq_prelaunch/
 
-ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
-ERLANG_MK_COMMIT = rabbitmq-tmp
+# Include Elixir libraries in the Xref checks.
+xref: ERL_LIBS := $(ERL_LIBS):$(CURDIR)/apps:$(CURDIR)/deps:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
 
 ifneq ($(wildcard deps/.hex/cache.erl),)
 deps:: restore-hex-cache-ets-file
