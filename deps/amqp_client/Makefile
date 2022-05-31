@@ -53,8 +53,6 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
 
 PLT_APPS = ssl public_key
 
-WITHOUT = plugins/proper
-
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
