@@ -11,10 +11,11 @@
 -export([to_atom/2, atomize_keys/1, to_list_of_binaries/1]).
 
 -spec to_binary(Val :: binary() | list() | atom() | integer()) -> binary().
-to_binary(Val) when is_list(Val)    -> list_to_binary(Val);
-to_binary(Val) when is_atom(Val)    -> atom_to_binary(Val, utf8);
-to_binary(Val) when is_integer(Val) -> integer_to_binary(Val);
-to_binary(Val)                      -> Val.
+to_binary(Val) when is_list(Val)     -> list_to_binary(Val);
+to_binary(Val) when is_atom(Val)     -> atom_to_binary(Val, utf8);
+to_binary(Val) when is_integer(Val)  -> integer_to_binary(Val);
+to_binary(Val) when is_function(Val) -> list_to_binary(io_lib:format("~w", [Val]));
+to_binary(Val)                       -> Val.
 
 -spec to_list(Val :: integer() | list() | binary() | atom() | map()) -> list().
 to_list(Val) when is_list(Val)    -> Val;

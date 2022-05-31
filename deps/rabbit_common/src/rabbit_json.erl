@@ -44,14 +44,12 @@ encode(Term) ->
 
 -spec encode(jsx:json_term(), jsx_to_json:config()) -> jsx:json_text().
 encode(Term, Opts) ->
-    jsx:encode(Term, Opts).
-
+    jsx:encode(fixup_terms(Term), Opts).
 
 -spec try_encode(jsx:json_term()) -> {ok, jsx:json_text()} | 
 				     {error, Reason :: term()}.
 try_encode(Term) ->
     try_encode(Term, []).
-
 
 -spec try_encode(jsx:json_term(), jsx_to_term:config()) ->
 			{ok, jsx:json_text()} | {error, Reason :: term()}.
@@ -61,3 +59,23 @@ try_encode(Term, Opts) ->
     catch error: Reason ->
 	    {error, Reason}
     end.
+
+%% Fixup for JSON encoding. Transforms any Funs into strings
+%% See rabbit_mgmt_format:format_nulls/1
+fixup_terms(Items) when is_list(Items) ->
+    [fixup_item(Pair) || Pair <- Items];
+fixup_terms(Item) ->
+    fixup_item(Item).
+
+fixup_item({Key, Value}) when is_function(Value) ->
+    {Key, rabbit_data_coercion:to_binary(Value)};
+fixup_item({Key, Value}) when is_list(Value) ->
+    {Key, fixup_terms(Value)};
+fixup_item({Key, Value}) ->
+    {Key, Value};
+fixup_item([{_K, _V} | _T] = L) ->
+    fixup_terms(L);
+fixup_item(Value) when is_function(Value) ->
+    rabbit_data_coercion:to_binary(Value);
+fixup_item(Value) ->
+    Value.

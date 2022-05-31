@@ -46,6 +46,12 @@ dialyze(
     warnings_as_errors = False,
 )
 
-rabbitmq_suite(
-    name = "rabbit_logger_std_h_SUITE",
-)
+suites = [
+    rabbitmq_suite(
+        name = "rabbit_logger_std_h_SUITE",
+    ),
+    rabbitmq_suite(
+        name = "rabbit_prelaunch_file_SUITE",
+        size = "small",
+    ),
+]
