@@ -216,6 +216,7 @@ erlang_app(
         sha256 = "2c7523c8dee91dff41f6b3d63cba2bd49eb6d2fe5bf1eec0df7f87eb5e230e1c",
     )
 
+<<<<<<< HEAD
     github_erlang_app(
         name = "seshat",
         org = "rabbitmq",
@@ -226,6 +227,17 @@ erlang_app(
             "crypto",
         ],
         sha256 = "fd20039322eabed814d0dfe75743652846007ec93faae3e141c9602c21152b14",
+=======
+    hex_pm_erlang_app(
+        name = "redbug",
+        version = "2.0.7",
+        sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
+    )
+
+    hex_pm_erlang_app(
+        name = "seshat",
+        version = "0.3.2",
+>>>>>>> 0a1afe35f4 (Replace uses of osiris_counters:overview/0 with overview/1)
     )
 
     hex_pm_erlang_app(

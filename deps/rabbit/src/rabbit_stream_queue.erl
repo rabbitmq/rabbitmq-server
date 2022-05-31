@@ -45,8 +45,6 @@
          tracking_status/2,
          get_overview/1]).
 
--export([check_max_segment_size_bytes/1]).
-
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
