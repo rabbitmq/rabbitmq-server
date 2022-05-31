@@ -209,15 +209,9 @@ erlang_app(
         sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
     )
 
-    github_erlang_app(
+    hex_pm_erlang_app(
         name = "seshat",
-        org = "rabbitmq",
-        ref = "0.1.0",
-        version = "0.1.0",
-        extra_apps = [
-            "sasl",
-            "crypto",
-        ],
+        version = "0.3.2",
     )
 
     hex_pm_erlang_app(
