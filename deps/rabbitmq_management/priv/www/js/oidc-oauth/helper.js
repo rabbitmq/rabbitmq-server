@@ -75,6 +75,9 @@ function oauth_initialize(authSettings) {
         filterProtocolClaims: true,
         automaticSilentRenew: true,
         revokeAccessTokenOnSignout: true,
+        extraQueryParams: {
+          audience: authSettings.oauth_resource_id, // required by oauth0
+        },
     };
     if (authSettings.oauth_metadata_url != "") oidcSettings.metadataUrl = authSettings.oauth_metadata_url
 
