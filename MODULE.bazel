@@ -130,8 +130,7 @@ erlang_package.hex(
 
 erlang_package.git(
     repository = "rabbitmq/osiris",
-    tag = "v1.2.7",
-    # branch = "main",
+    branch = "main",
     patch_cmds = ["""
 VERSION=$(git rev-parse HEAD)
 echo "Injecting ${VERSION} into Makefile..."
@@ -199,9 +198,9 @@ erlang_package.hex(
     sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
 )
 
-erlang_package.git(
-    repository = "rabbitmq/seshat",
-    tag = "0.1.0",
+erlang_package.hex(
+    name = "seshat",
+    version = "0.3.2",
 )
 
 erlang_package.hex(
