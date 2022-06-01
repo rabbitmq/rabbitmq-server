@@ -1057,8 +1057,7 @@ invalid_policy(Config) ->
     Info = rpc:call(Server, rabbit_quorum_queue, infos,
                     [rabbit_misc:r(<<"/">>, queue, QQ)]),
     ?assertEqual('', proplists:get_value(policy, Info)),
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ha">>),
-    ok.
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"ha">>).
 
 pre_existing_invalid_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
