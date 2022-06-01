@@ -156,7 +156,7 @@ erlang_app(
 
     git_repository(
         name = "osiris",
-        tag  = "v1.2.7",
+        branch = "main",
         remote = "https://github.com/rabbitmq/osiris.git",
     )
 
