@@ -150,8 +150,12 @@ discard(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
               fun (Log) ->
                       Lookup = maps:from_list(lists:zip(Idxs, Log)),
                       Msgs = [begin
-                                  {enqueue, _, _, Msg} = maps:get(Idx, Lookup),
-                                  Msg
+                                  case maps:get(Idx, Lookup) of
+                                      {enqueue, _, _, Msg} ->
+                                          Msg;
+                                      {requeue, _, _, _, _, Msg} ->
+                                          Msg
+                                  end
                               end || ?MSG(Idx, _) <- Msgs0],
                       [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
@@ -225,6 +229,8 @@ delivery_effects(CPid, Msgs0) ->
     [{log, RaftIdxs,
       fun(Log) ->
               Msgs = lists:zipwith(fun ({enqueue, _, _, Msg}, {Reason, MsgId}) ->
+                                           {MsgId, {Reason, Msg}};
+                                       ({requeue, _, _, _, _, Msg}, {Reason, MsgId}) ->
                                            {MsgId, {Reason, Msg}}
                                    end, Log, RsnIds),
               [{send_msg, CPid, {dlx_delivery, Msgs}, [ra_event]}]

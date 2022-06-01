@@ -87,7 +87,7 @@
                   msg_id :: msg_id(),
                   index :: ra:index(),
                   header :: msg_header(),
-                  msg :: msg()}).
+                  msg :: raw_msg()}).
 -record(register_enqueuer, {pid :: pid()}).
 -record(checkout, {consumer_id :: consumer_id(),
                    spec :: checkout_spec(),
