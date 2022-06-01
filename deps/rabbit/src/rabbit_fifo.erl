@@ -55,6 +55,7 @@
          normalize/1,
          get_msg_header/1,
          get_header/2,
+         get_msg/1,
 
          %% protocol helpers
          make_enqueue/3,
@@ -87,7 +88,7 @@
                   msg_id :: msg_id(),
                   index :: ra:index(),
                   header :: msg_header(),
-                  msg :: msg()}).
+                  msg :: raw_msg()}).
 -record(register_enqueuer, {pid :: pid()}).
 -record(checkout, {consumer_id :: consumer_id(),
                    spec :: checkout_spec(),
@@ -985,10 +986,7 @@ handle_aux(leader, cast, {#return{msg_ids = MsgIds,
                           %% crashed and the message got removed
                           case ra_log:fetch(Idx, L0) of
                               {{_, _, {_, _, Cmd, _}}, L} ->
-                                  Msg = case Cmd of
-                                            #enqueue{msg = M} -> M;
-                                            #requeue{msg = M} -> M
-                                        end,
+                                  Msg = get_msg(Cmd),
                                   {L, [{MsgId, Idx, Header, Msg} | Acc]};
                               {undefined, L} ->
                                   {L, Acc}
@@ -1056,10 +1054,7 @@ handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
         {ok, ?MSG(Idx, Header)} ->
             %% need to re-hydrate from the log
             {{_, _, {_, _, Cmd, _}}, Log} = ra_log:fetch(Idx, Log0),
-            Msg = case Cmd of
-                      #enqueue{msg = M} -> M;
-                      #requeue{msg = M} -> M
-                  end,
+            Msg = get_msg(Cmd),
             {reply, {ok, {Header, Msg}}, Aux0, Log};
         Err ->
             {reply, Err, Aux0, Log0}
@@ -1920,26 +1915,18 @@ delivery_effect({CTag, CPid}, Msgs, _State) ->
     {log, RaftIdxs,
      fun(Log) ->
              DelMsgs = lists:zipwith(
-                      fun (#enqueue{msg = Msg},
-                           {MsgId, Header}) ->
-                              {MsgId, {Header, Msg}};
-                          (#requeue{msg = Msg},
-                           {MsgId, Header}) ->
-                              {MsgId, {Header, Msg}}
-                      end, Log, Data),
+                         fun (Cmd, {MsgId, Header}) ->
+                                 {MsgId, {Header, get_msg(Cmd)}}
+                         end, Log, Data),
              [{send_msg, CPid, {delivery, CTag, DelMsgs}, [local, ra_event]}]
      end,
      {local, node(CPid)}}.
 
 reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
     {log, [RaftIdx],
-     fun
-         ([#enqueue{msg = Msg}]) ->
+     fun ([Cmd]) ->
              [{reply, From, {wrap_reply,
-                             {dequeue, {MsgId, {Header, Msg}}, Ready}}}];
-         ([#requeue{msg = Msg}]) ->
-             [{reply, From, {wrap_reply,
-                             {dequeue, {MsgId, {Header, Msg}}, Ready}}}]
+                             {dequeue, {MsgId, {Header, get_msg(Cmd)}}, Ready}}}]
      end}.
 
 checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
@@ -2421,3 +2408,8 @@ can_immediately_deliver(#?MODULE{service_queue = SQ,
 
 incr(I) ->
    I + 1.
+
+get_msg(#enqueue{msg = M}) ->
+    M;
+get_msg(#requeue{msg = M}) ->
+    M.

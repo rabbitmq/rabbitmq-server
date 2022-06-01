@@ -150,8 +150,8 @@ discard(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
               fun (Log) ->
                       Lookup = maps:from_list(lists:zip(Idxs, Log)),
                       Msgs = [begin
-                                  {enqueue, _, _, Msg} = maps:get(Idx, Lookup),
-                                  Msg
+                                  Cmd = maps:get(Idx, Lookup),
+                                  rabbit_fifo:get_msg(Cmd)
                               end || ?MSG(Idx, _) <- Msgs0],
                       [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
@@ -224,8 +224,8 @@ delivery_effects(CPid, Msgs0) ->
     {RaftIdxs, RsnIds} = lists:unzip(Msgs1),
     [{log, RaftIdxs,
       fun(Log) ->
-              Msgs = lists:zipwith(fun ({enqueue, _, _, Msg}, {Reason, MsgId}) ->
-                                           {MsgId, {Reason, Msg}}
+              Msgs = lists:zipwith(fun (Cmd, {Reason, MsgId}) ->
+                                           {MsgId, {Reason, rabbit_fifo:get_msg(Cmd)}}
                                    end, Log, RsnIds),
               [{send_msg, CPid, {dlx_delivery, Msgs}, [ra_event]}]
       end}].

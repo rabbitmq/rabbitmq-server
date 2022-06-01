@@ -32,6 +32,7 @@ groups() ->
                        dead_letter_reject_many,
                        dead_letter_reject_requeue,
                        dead_letter_max_length_drop_head,
+                       dead_letter_reject_requeue_reject_norequeue,
                        dead_letter_missing_exchange,
                        dead_letter_routing_key,
                        dead_letter_routing_key_header_CC,
@@ -116,8 +117,7 @@ init_per_group(quorum_queue, Config) ->
         ok ->
             rabbit_ct_helpers:set_config(
               Config,
-              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                             {<<"x-delivery-limit">>, long, 100}]},
+              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
                {queue_durable, true}]);
         Skip ->
             Skip
@@ -411,6 +411,11 @@ dead_letter_reject_requeue(Config) ->
     DLXQName = ?config(queue_name_dlx, Config),
     declare_dead_letter_queues(Ch, Config, QName, DLXQName),
 
+    %% Setting a delivery-limit will cause a quorum queue to requeue at the head of the queue
+    %% (same behaviour as in classic queues).
+    ok = rabbit_ct_broker_helpers:set_policy(Config, 0, ?config(policy, Config), QName,
+                                             <<"queues">>, [{<<"delivery-limit">>, 50}]),
+
     P1 = <<"msg1">>,
     P2 = <<"msg2">>,
     P3 = <<"msg3">>,
@@ -470,6 +475,38 @@ dead_letter_max_length_drop_head(Config) ->
     _ = consume(Ch, DLXQName, [P1, P2]),
     consume_empty(Ch, DLXQName),
     ?assertEqual(2, counted(messages_dead_lettered_maxlen_total, Config)).
+
+%% https://github.com/rabbitmq/rabbitmq-server/issues/4940
+dead_letter_reject_requeue_reject_norequeue(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    QName = ?config(queue_name, Config),
+    DLXQName = ?config(queue_name_dlx, Config),
+    declare_dead_letter_queues(Ch, Config, QName, DLXQName),
+
+    P = <<"msg">>,
+    publish(Ch, QName, [P]),
+
+    %% Reject with requeue
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+    [DTag0] = consume(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag0,
+                                          requeue      = true}),
+
+    %% If QName is a quorum queue, Ra log contains #requeue{} command
+    %% instead of #enqueue{} command because no delivery-limit is set.
+    wait_for_messages(Config, [[QName, <<"1">>, <<"1">>, <<"0">>]]),
+
+    %% Reject without requeue
+    [DTag1] = consume(Ch, QName, [P]),
+    wait_for_messages(Config, [[QName, <<"1">>, <<"0">>, <<"1">>]]),
+    amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag1,
+                                          requeue      = false}),
+    wait_for_messages(Config, [[DLXQName, <<"1">>, <<"1">>, <<"0">>]]),
+    _ = consume(Ch, DLXQName, [P]),
+    consume_empty(Ch, DLXQName),
+    consume_empty(Ch, QName),
+    ?assertEqual(1, counted(messages_dead_lettered_rejected_total, Config)).
 
 %% Another strategy: reject-publish-dlx
 dead_letter_max_length_reject_publish_dlx(Config) ->
