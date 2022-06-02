@@ -2,7 +2,7 @@
 # Framing sources generation.
 # --------------------------------------------------------------------
 
-PYTHON       ?= python
+PYTHON       ?= python3
 CODEGEN       = $(CURDIR)/codegen.py
 CODEGEN_DIR  ?= $(DEPS_DIR)/rabbitmq_codegen
 CODEGEN_AMQP  = $(CODEGEN_DIR)/amqp_codegen.py
