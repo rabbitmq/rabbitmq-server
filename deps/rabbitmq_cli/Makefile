@@ -21,19 +21,6 @@ ifeq ($(VERBOSE_TEST),true)
 MIX_TEST := $(MIX_TEST) --trace
 endif
 
-# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
-# reviewed and merged.
-
-ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
-ERLANG_MK_COMMIT = rabbitmq-tmp
-
-WITHOUT = plugins/cover \
-	  plugins/ct \
-	  plugins/dialyzer \
-	  plugins/eunit \
-	  plugins/proper \
-	  plugins/triq
-
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 

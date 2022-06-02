@@ -29,11 +29,24 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
 
 DISABLE_DISTCLEAN = 1
 
-# FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
-# reviewed and merged.
+XREF_SCOPE = app deps
 
-ERLANG_MK_REPO = https://github.com/rabbitmq/erlang.mk.git
-ERLANG_MK_COMMIT = rabbitmq-tmp
+# We add all the applications that are in non-standard paths
+# so they are included in the analyses as well.
+XREF_EXTRA_APP_DIRS = $(filter-out deps/rabbitmq_cli/_build/dev/lib/rabbit_common/,$(wildcard deps/rabbitmq_cli/_build/dev/lib/*/)) deps/rabbit/apps/rabbitmq_prelaunch/
+
+# For Elixir protocols the right fix is to include the consolidated/
+# folders in addition to ebin/. However this creates conflicts because
+# some modules are duplicated. So instead we ignore warnings from
+# protocols directly.
+XREF_IGNORE = [ \
+    {'Elixir.CSV.Encode',impl_for,1}, \
+    {'Elixir.JSON.Decoder',impl_for,1}, \
+    {'Elixir.JSON.Encoder',impl_for,1}, \
+    {'Elixir.RabbitMQ.CLI.Core.DataCoercion',impl_for,1}]
+
+# Include Elixir libraries in the Xref checks.
+xref: ERL_LIBS := $(ERL_LIBS):$(CURDIR)/apps:$(CURDIR)/deps:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
 
 ifneq ($(wildcard deps/.hex/cache.erl),)
 deps:: restore-hex-cache-ets-file
