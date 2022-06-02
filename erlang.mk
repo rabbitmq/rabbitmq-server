@@ -17,7 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-ERLANG_MK_VERSION = 2019.07.01-53-gd80984c
+ERLANG_MK_VERSION = bf7a194
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -2735,7 +2735,7 @@ pkg_mochiweb_description = MochiWeb is an Erlang library for building lightweigh
 pkg_mochiweb_homepage = https://github.com/mochi/mochiweb
 pkg_mochiweb_fetch = git
 pkg_mochiweb_repo = https://github.com/mochi/mochiweb
-pkg_mochiweb_commit = master
+pkg_mochiweb_commit = main
 
 PACKAGES += mochiweb_xpath
 pkg_mochiweb_xpath_name = mochiweb_xpath
@@ -3391,7 +3391,7 @@ pkg_relx_description = Sane, simple release creation for Erlang
 pkg_relx_homepage = https://github.com/erlware/relx
 pkg_relx_fetch = git
 pkg_relx_repo = https://github.com/erlware/relx
-pkg_relx_commit = master
+pkg_relx_commit = main
 
 PACKAGES += resource_discovery
 pkg_resource_discovery_name = resource_discovery
@@ -4959,9 +4959,12 @@ endef
 define dep_autopatch_appsrc_script.erl
 	AppSrc = "$(call core_native_path,$(DEPS_DIR)/$1/src/$1.app.src)",
 	AppSrcScript = AppSrc ++ ".script",
-	{ok, Conf0} = file:consult(AppSrc),
+	Conf1 = case file:consult(AppSrc) of
+		{ok, Conf0} -> Conf0;
+		{error, enoent} -> []
+	end,
 	Bindings0 = erl_eval:new_bindings(),
-	Bindings1 = erl_eval:add_binding('CONFIG', Conf0, Bindings0),
+	Bindings1 = erl_eval:add_binding('CONFIG', Conf1, Bindings0),
 	Bindings = erl_eval:add_binding('SCRIPT', AppSrcScript, Bindings1),
 	Conf = case file:script(AppSrcScript, Bindings) of
 		{ok, [C]} -> C;
@@ -5829,6 +5832,8 @@ endef
 
 define bs_relx_config
 {release, {$p_release, "1"}, [$p, sasl, runtime_tools]}.
+{dev_mode, false}.
+{include_erts, true}.
 {extended_start_script, true}.
 {sys_config, "config/sys.config"}.
 {vm_args, "config/vm.args"}.
@@ -6185,6 +6190,8 @@ endif
 	$(verbose) mkdir config/
 	$(verbose) $(call core_render,bs_sys_config,config/sys.config)
 	$(verbose) $(call core_render,bs_vm_args,config/vm.args)
+	$(verbose) awk '/^include erlang.mk/ && !ins {print "BUILD_DEPS += relx";ins=1};{print}' Makefile > Makefile.bak
+	$(verbose) mv Makefile.bak Makefile
 
 new-app:
 ifndef in
@@ -7460,27 +7467,19 @@ endif
 # Copyright (c) 2013-2016, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
+ifeq ($(filter relx,$(BUILD_DEPS) $(DEPS) $(REL_DEPS)),relx)
 .PHONY: relx-rel relx-relup distclean-relx-rel run
 
 # Configuration.
 
-RELX ?= $(ERLANG_MK_TMP)/relx
 RELX_CONFIG ?= $(CURDIR)/relx.config
 
-RELX_URL ?= https://erlang.mk/res/relx-v3.27.0
-RELX_OPTS ?=
 RELX_OUTPUT_DIR ?= _rel
 RELX_REL_EXT ?=
 RELX_TAR ?= 1
 
 ifdef SFX
 	RELX_TAR = 1
-endif
-
-ifeq ($(firstword $(RELX_OPTS)),-o)
-	RELX_OUTPUT_DIR = $(word 2,$(RELX_OPTS))
-else
-	RELX_OPTS += -o $(RELX_OUTPUT_DIR)
 endif
 
 # Core targets.
@@ -7497,21 +7496,59 @@ distclean:: distclean-relx-rel
 
 # Plugin-specific targets.
 
-$(RELX): | $(ERLANG_MK_TMP)
-	$(gen_verbose) $(call core_http_get,$(RELX),$(RELX_URL))
-	$(verbose) chmod +x $(RELX)
+define relx_release.erl
+	{ok, Config} = file:consult("$(call core_native_path,$(RELX_CONFIG))"),
+	{release, {Name, Vsn0}, _} = lists:keyfind(release, 1, Config),
+	Vsn = case Vsn0 of
+		{cmd, Cmd} -> os:cmd(Cmd);
+		semver -> "";
+		{semver, _} -> "";
+		VsnStr -> Vsn0
+	end,
+	{ok, _} = relx:build_release(#{name => Name, vsn => Vsn}, Config),
+	halt(0).
+endef
 
-relx-rel: $(RELX) rel-deps app
-	$(verbose) $(RELX) $(if $(filter 1,$V),-V 3) -c $(RELX_CONFIG) $(RELX_OPTS) release
+define relx_tar.erl
+	{ok, Config} = file:consult("$(call core_native_path,$(RELX_CONFIG))"),
+	{release, {Name, Vsn0}, _} = lists:keyfind(release, 1, Config),
+	Vsn = case Vsn0 of
+		{cmd, Cmd} -> os:cmd(Cmd);
+		semver -> "";
+		{semver, _} -> "";
+		VsnStr -> Vsn0
+	end,
+	{ok, _} = relx:build_tar(#{name => Name, vsn => Vsn}, Config),
+	halt(0).
+endef
+
+define relx_relup.erl
+	{ok, Config} = file:consult("$(call core_native_path,$(RELX_CONFIG))"),
+	{release, {Name, Vsn0}, _} = lists:keyfind(release, 1, Config),
+	Vsn = case Vsn0 of
+		{cmd, Cmd} -> os:cmd(Cmd);
+		semver -> "";
+		{semver, _} -> "";
+		VsnStr -> Vsn0
+	end,
+	{ok, _} = relx:build_relup(Name, Vsn, undefined, Config ++ [{output_dir, "$(RELX_OUTPUT_DIR)"}]),
+	halt(0).
+endef
+
+relx-rel: rel-deps app
+	$(call erlang,$(call relx_release.erl),-pa ebin/)
 	$(verbose) $(MAKE) relx-post-rel
 ifeq ($(RELX_TAR),1)
-	$(verbose) $(RELX) $(if $(filter 1,$V),-V 3) -c $(RELX_CONFIG) $(RELX_OPTS) tar
+	$(call erlang,$(call relx_tar.erl),-pa ebin/)
 endif
 
-relx-relup: $(RELX) rel-deps app
-	$(verbose) $(RELX) $(if $(filter 1,$V),-V 3) -c $(RELX_CONFIG) $(RELX_OPTS) release
+relx-relup: rel-deps app
+	$(call erlang,$(call relx_release.erl),-pa ebin/)
 	$(MAKE) relx-post-rel
-	$(verbose) $(RELX) $(if $(filter 1,$V),-V 3) -c $(RELX_CONFIG) $(RELX_OPTS) relup $(if $(filter 1,$(RELX_TAR)),tar)
+	$(call erlang,$(call relx_relup.erl),-pa ebin/)
+ifeq ($(RELX_TAR),1)
+	$(call erlang,$(call relx_tar.erl),-pa ebin/)
+endif
 
 distclean-relx-rel:
 	$(gen_verbose) rm -rf $(RELX_OUTPUT_DIR)
@@ -7567,6 +7604,7 @@ help::
 		"Relx targets:" \
 		"  run         Compile the project, build the release and run it"
 
+endif
 endif
 
 # Copyright (c) 2015-2016, Loïc Hoguin <essen@ninenines.eu>
@@ -7739,45 +7777,224 @@ triq: test-build cover-data-dir
 endif
 endif
 
-# Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
-# Copyright (c) 2015, Erlang Solutions Ltd.
+# Copyright (c) 2022, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-.PHONY: xref distclean-xref
+.PHONY: xref
 
 # Configuration.
 
-ifeq ($(XREF_CONFIG),)
-	XREFR_ARGS :=
-else
-	XREFR_ARGS := -c $(XREF_CONFIG)
-endif
+# We do not use locals_not_used or deprecated_function_calls
+# because the compiler will error out by default in those
+# cases with Erlang.mk. Deprecated functions may make sense
+# in some cases but few libraries define them. We do not
+# use exports_not_used by default because it hinders more
+# than it helps library projects such as Cowboy. Finally,
+# undefined_functions provides little that undefined_function_calls
+# doesn't already provide, so it's not enabled by default.
+XREF_CHECKS ?= [undefined_function_calls]
 
-XREFR ?= $(CURDIR)/xrefr
-export XREFR
+# Instead of predefined checks a query can be evaluated
+# using the Xref DSL. The $q variable is used in that case.
 
-XREFR_URL ?= https://github.com/inaka/xref_runner/releases/download/1.1.0/xrefr
+# The scope is a list of keywords that correspond to
+# application directories, being essentially an easy way
+# to configure which applications to analyze. With:
+#
+# - app:  .
+# - apps: $(ALL_APPS_DIRS)
+# - deps: $(ALL_DEPS_DIRS)
+# - otp:  Built-in Erlang/OTP applications.
+#
+# The default is conservative (app) and will not be
+# appropriate for all types of queries (for example
+# application_call requires adding all applications
+# that might be called or they will not be found).
+XREF_SCOPE ?= app # apps deps otp
+
+# If the above is not enough, additional application
+# directories can be configured.
+XREF_EXTRA_APP_DIRS ?=
+
+# As well as additional non-application directories.
+XREF_EXTRA_DIRS ?=
+
+# Erlang.mk supports -ignore_xref([...]) with forms
+# {M, F, A} | {F, A} | M, the latter ignoring whole
+# modules. Ignores can also be provided project-wide.
+XREF_IGNORE ?= []
+
+# All callbacks may be ignored. Erlang.mk will ignore
+# them automatically for exports_not_used (unless it
+# is explicitly disabled by the user).
+XREF_IGNORE_CALLBACKS ?=
 
 # Core targets.
 
 help::
 	$(verbose) printf '%s\n' '' \
 		'Xref targets:' \
-		'  xref        Run Xrefr using $$XREF_CONFIG as config file if defined'
-
-distclean:: distclean-xref
+		'  xref         Analyze the project using Xref' \
+		'  xref q=QUERY Evaluate an Xref query'
 
 # Plugin-specific targets.
 
-$(XREFR):
-	$(gen_verbose) $(call core_http_get,$(XREFR),$(XREFR_URL))
-	$(verbose) chmod +x $(XREFR)
+define xref.erl
+	{ok, Xref} = xref:start([]),
+	Scope = [$(call comma_list,$(XREF_SCOPE))],
+	AppDirs0 = [$(call comma_list,$(foreach d,$(XREF_EXTRA_APP_DIRS),"$d"))],
+	AppDirs1 = case lists:member(otp, Scope) of
+		false -> AppDirs0;
+		true ->
+			RootDir = code:root_dir(),
+			AppDirs0 ++ [filename:dirname(P) || P <- code:get_path(), lists:prefix(RootDir, P)]
+	end,
+	AppDirs2 = case lists:member(deps, Scope) of
+		false -> AppDirs1;
+		true -> [$(call comma_list,$(foreach d,$(ALL_DEPS_DIRS),"$d"))] ++ AppDirs1
+	end,
+	AppDirs3 = case lists:member(apps, Scope) of
+		false -> AppDirs2;
+		true -> [$(call comma_list,$(foreach d,$(ALL_APPS_DIRS),"$d"))] ++ AppDirs2
+	end,
+	AppDirs = case lists:member(app, Scope) of
+		false -> AppDirs3;
+		true -> ["../$(notdir $(CURDIR))"|AppDirs3]
+	end,
+	[{ok, _} = xref:add_application(Xref, AppDir, [{builtins, true}]) || AppDir <- AppDirs],
+	ExtraDirs = [$(call comma_list,$(foreach d,$(XREF_EXTRA_DIRS),"$d"))],
+	[{ok, _} = xref:add_directory(Xref, ExtraDir, [{builtins, true}]) || ExtraDir <- ExtraDirs],
+	ok = xref:set_library_path(Xref, code:get_path() -- (["ebin", "."] ++ AppDirs ++ ExtraDirs)),
+	Checks = case {$1, is_list($2)} of
+		{check, true} -> $2;
+		{check, false} -> [$2];
+		{query, _} -> [$2]
+	end,
+	FinalRes = [begin
+		IsInformational = case $1 of
+			query -> true;
+			check ->
+				is_tuple(Check) andalso
+					lists:member(element(1, Check),
+						[call, use, module_call, module_use, application_call, application_use])
+		end,
+		{ok, Res0} = case $1 of
+			check -> xref:analyze(Xref, Check);
+			query -> xref:q(Xref, Check)
+		end,
+		Res = case IsInformational of
+			true -> Res0;
+			false ->
+				lists:filter(fun(R) ->
+					{Mod, InMFA, MFA} = case R of
+						{InMFA0 = {M, _, _}, MFA0} -> {M, InMFA0, MFA0};
+						{M, _, _} -> {M, R, R}
+					end,
+					Attrs = try
+						Mod:module_info(attributes)
+					catch error:undef ->
+						[]
+					end,
+					InlineIgnores = lists:flatten([
+						[case V of
+							M when is_atom(M) -> {M, '_', '_'};
+							{F, A} -> {Mod, F, A};
+							_ -> V
+						end || V <- Values]
+					|| {ignore_xref, Values} <- Attrs]),
+					BuiltinIgnores = [
+						{eunit_test, wrapper_test_exported_, 0}
+					],
+					DoCallbackIgnores = case {Check, "$(strip $(XREF_IGNORE_CALLBACKS))"} of
+						{exports_not_used, ""} -> true;
+						{_, "0"} -> false;
+						_ -> true
+					end,
+					CallbackIgnores = case DoCallbackIgnores of
+						false -> [];
+						true ->
+							Behaviors = lists:flatten([
+								[BL || {behavior, BL} <- Attrs],
+								[BL || {behaviour, BL} <- Attrs]
+							]),
+							[{Mod, CF, CA} || B <- Behaviors, {CF, CA} <- B:behaviour_info(callbacks)]
+					end,
+					WideIgnores = if
+						is_list($(XREF_IGNORE)) ->
+							[if is_atom(I) -> {I, '_', '_'}; true -> I end
+								|| I <- $(XREF_IGNORE)];
+						true -> [$(XREF_IGNORE)]
+					end,
+					Ignores = InlineIgnores ++ BuiltinIgnores ++ CallbackIgnores ++ WideIgnores,
+					not (lists:member(InMFA, Ignores)
+					orelse lists:member(MFA, Ignores)
+					orelse lists:member({Mod, '_', '_'}, Ignores))
+				end, Res0)
+		end,
+		case Res of
+			[] -> ok;
+			_ when IsInformational ->
+				case Check of
+					{call, {CM, CF, CA}} ->
+						io:format("Functions that ~s:~s/~b calls:~n", [CM, CF, CA]);
+					{use, {CM, CF, CA}} ->
+						io:format("Function ~s:~s/~b is called by:~n", [CM, CF, CA]);
+					{module_call, CMod} ->
+						io:format("Modules that ~s calls:~n", [CMod]);
+					{module_use, CMod} ->
+						io:format("Module ~s is used by:~n", [CMod]);
+					{application_call, CApp} ->
+						io:format("Applications that ~s calls:~n", [CApp]);
+					{application_use, CApp} ->
+						io:format("Application ~s is used by:~n", [CApp]);
+					_ when $1 =:= query ->
+						io:format("Query ~s returned:~n", [Check])
+				end,
+				[case R of
+					{{InM, InF, InA}, {M, F, A}} ->
+						io:format("- ~s:~s/~b called by ~s:~s/~b~n",
+							[M, F, A, InM, InF, InA]);
+					{M, F, A} ->
+						io:format("- ~s:~s/~b~n", [M, F, A]);
+					ModOrApp ->
+						io:format("- ~s~n", [ModOrApp])
+				end || R <- Res],
+				ok;
+			_ ->
+				[case {Check, R} of
+					{undefined_function_calls, {{InM, InF, InA}, {M, F, A}}} ->
+						io:format("Undefined function ~s:~s/~b called by ~s:~s/~b~n",
+							[M, F, A, InM, InF, InA]);
+					{undefined_functions, {M, F, A}} ->
+						io:format("Undefined function ~s:~s/~b~n", [M, F, A]);
+					{locals_not_used, {M, F, A}} ->
+						io:format("Unused local function ~s:~s/~b~n", [M, F, A]);
+					{exports_not_used, {M, F, A}} ->
+						io:format("Unused exported function ~s:~s/~b~n", [M, F, A]);
+					{deprecated_function_calls, {{InM, InF, InA}, {M, F, A}}} ->
+						io:format("Deprecated function ~s:~s/~b called by ~s:~s/~b~n",
+							[M, F, A, InM, InF, InA]);
+					{deprecated_functions, {M, F, A}} ->
+						io:format("Deprecated function ~s:~s/~b~n", [M, F, A]);
+					_ ->
+						io:format("~p: ~p~n", [Check, R])
+				end || R <- Res],
+				error
+		end
+	end || Check <- Checks],
+	stopped = xref:stop(Xref),
+	case lists:usort(FinalRes) of
+		[ok] -> halt(0);
+		_ -> halt(1)
+	end
+endef
 
-xref: deps app $(XREFR)
-	$(gen_verbose) $(XREFR) $(XREFR_ARGS)
-
-distclean-xref:
-	$(gen_verbose) rm -rf $(XREFR)
+xref: deps app
+ifdef q
+	$(verbose) $(call erlang,$(call xref.erl,query,"$q"),-pa ebin/)
+else
+	$(verbose) $(call erlang,$(call xref.erl,check,$(XREF_CHECKS)),-pa ebin/)
+endif
 
 # Copyright (c) 2016, Loïc Hoguin <essen@ninenines.eu>
 # Copyright (c) 2015, Viktor Söderqvist <viktor@zuiderkwast.se>
