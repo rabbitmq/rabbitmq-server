@@ -3,6 +3,11 @@
 We are using Selenium webdriver to simulate running the management ui in a browser.
 And Mocha as the testing framework for Javascript.
 
+To run the tests we need:
+- make
+- docker
+- Ruby (needed to install `uaac` via `gem`)
+
 # Run the tests
 
 To run the tests first we run the following command to launch Selenium for Chrome.
