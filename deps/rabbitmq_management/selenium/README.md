@@ -28,5 +28,4 @@ we have another subfolder, `tests/oauth/with-uaa` to group all the tests cases w
 
 At the moment, there are no smart around discovering all the tests under subfolders. That will come later.
 For now, the command `make run-tests` runs just the test cases under `oauth/with-uaa`. But first, the script `setup.sh` is
-invoked which initializes the fixtures for the tests under `oauth/with-uaa`. More specifically, it launches rabbitmq
-configured with UAA, and also UAA configured with a number of users, permissions, and clients.
+invoked which launches a container running RabbitMQ configured with UAA, and another container running UAA configured with a number of users, permissions, and clients.
