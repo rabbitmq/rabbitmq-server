@@ -1,0 +1,23 @@
+.ONESHELL:# single shell invocation for all lines in the recipe
+SHELL = bash# we depend on bash expansion for e.g. queue patterns
+
+.DEFAULT_GOAL = help
+
+
+SELENIUM_VERSION := 102.0
+
+### TARGETS ###
+
+help:
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+run-chrome: ## Install Selenium Chrome
+	@(echo "Installing Selenium Chrome")
+	@(docker network inspect rabbitmq_selenimum_net >/dev/null 2>&1 || docker network create rabbitmq_selenimum_net)
+	@(docker rm -f selenium 2>/dev/null || echo "selenium was not running")
+	@(docker run -d --name selenium --net rabbitmq_selenimum_net -p 4444:4444 --shm-size=2g selenium/standalone-chrome:$(SELENIUM_VERSION))
+	@(echo "Selenium Standalone is running on http://localhost:4444/")
+
+run-tests: ## Run tests
+	@(tests/oauth/with-uaa/setup.sh)
+	@(./node_modules/.bin/mocha tests/oauth/with-uaa/landing.js)

@@ -1,0 +1,22 @@
+{
+  "name": "selenium",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "chromedriver": "^101.0.0",
+    "geckodriver": "^3.0.1",
+    "selenium-webdriver": "^4.2.0"
+  },
+  "devDependencies": {
+    "chai": "^4.3.6",
+    "mocha": "^10.0.0",
+    "request": "^2.88.2"
+  }
+}

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# switch to admin so taht we can perform the next operations
+uaac context admin
+
+echo "Creating groups for RabbitMQ supported scopes...."
+uaac group add "rabbitmq.read:*/*"
+uaac group add "rabbitmq.write:*/*"
+uaac group add "rabbitmq.configure:*/*"
+uaac group add "rabbitmq.tag:management"
+uaac group add "rabbitmq.tag:monitoring"
+uaac group add "rabbitmq.tag:administrator"
+uaac group add "rabbitmq.write:%2F/*"
+
+echo "Creating users ...."
+uaac user add rabbit_admin -p rabbit_admin --email rabbit_admin@example.com
+
+uaac member add "rabbitmq.read:*/*" rabbit_admin
+uaac member add "rabbitmq.write:*/*" rabbit_admin
+uaac member add "rabbitmq.configure:*/*" rabbit_admin
+uaac member add "rabbitmq.tag:administrator" rabbit_admin
+
+uaac client add rabbit_client_code --name rabbit_client_code \
+  --scope 'rabbitmq.*,openid,profile' \
+  --authorized_grant_types authorization_code  \
+  --authorities 'uaa.resource,rabbitmq' \
+  --redirect_uri 'http://localhost:15672' \
+  --secret rabbit_client_code

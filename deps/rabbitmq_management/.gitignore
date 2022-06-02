@@ -26,3 +26,6 @@ rabbitmq_management.d
 
 test/config_schema_SUITE_data/schema/
 .vscode/*
+
+selenium/node_modules
+selenium/package-lock.json
