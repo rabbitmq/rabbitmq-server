@@ -1,4 +1,4 @@
-load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq.bzl", "APP_VERSION", "rabbitmq_app")
 
@@ -25,8 +25,12 @@ rabbitmq_app(
 
 xref(
     additional_libs = [
+<<<<<<< HEAD
         "@cuttlefish//:erlang_app",
         "@ranch//:erlang_app",
+=======
+        "@systemd//:erlang_app",
+>>>>>>> 285740bfb6 (Use the new xref2 macro from rules_erlang)
     ],
 )
 

@@ -4,39 +4,35 @@ load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
 load(
     "//:rabbitmq.bzl",
-    "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
 )
 
-APP_NAME = "rabbitmq_shovel_management"
+APP_NAME = "rabbitmq_stream_management"
 
-APP_DESCRIPTION = "Management extension for the Shovel plugin"
+APP_DESCRIPTION = "RabbitMQ Stream Management"
+
+APP_MODULE = "rabbit_stream_management"
 
 BUILD_DEPS = [
     "//deps/amqp_client:erlang_app",
+    "//deps/rabbit_common:erlang_app",
     "//deps/rabbitmq_management_agent:erlang_app",
 ]
 
 DEPS = [
-    "//deps/rabbit_common:erlang_app",
     "//deps/rabbitmq_management:erlang_app",
-    "@lager//:erlang_app",
-]
-
-RUNTIME_DEPS = [
+    "//deps/rabbitmq_stream:erlang_app",
     "//deps/rabbit:erlang_app",
-    "//deps/rabbitmq_shovel:erlang_app",
 ]
 
 rabbitmq_app(
     app_description = APP_DESCRIPTION,
-    app_extra_keys = BROKER_VERSION_REQUIREMENTS_ANY,
+    app_module = APP_MODULE,
     app_name = APP_NAME,
     build_deps = BUILD_DEPS,
-    runtime_deps = RUNTIME_DEPS,
     deps = DEPS,
 )
 
@@ -50,6 +46,7 @@ plt(
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
+    warnings_as_errors = False,
 )
 
 rabbitmq_home(
@@ -66,7 +63,7 @@ rabbitmq_run(
     home = ":broker-for-tests-home",
 )
 
-PACKAGE = "deps/rabbitmq_shovel_management"
+PACKAGE = "deps/rabbitmq_stream_management"
 
 suites = [
     rabbitmq_integration_suite(
