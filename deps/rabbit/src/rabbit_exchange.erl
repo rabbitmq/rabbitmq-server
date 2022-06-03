@@ -167,8 +167,7 @@ store(X = #exchange{durable = false}) ->
 
 store_ram(X) ->
     X1 = rabbit_exchange_decorator:set(X),
-    ok = mnesia:write(rabbit_exchange, rabbit_exchange_decorator:set(X1),
-                      write),
+    ok = mnesia:write(rabbit_exchange, X1, write),
     X1.
 
 %% Used with binaries sent over the wire; the type may not exist.
