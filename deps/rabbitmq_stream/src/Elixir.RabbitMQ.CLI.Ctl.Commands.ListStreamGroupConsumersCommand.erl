@@ -11,9 +11,9 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is GoPivotal, Inc.
-%% Copyright (c) 2020-2022 VMware, Inc. or its affiliates.  All rights reserved.
+%% Copyright (c) 2022 VMware, Inc. or its affiliates.  All rights reserved.
 
--module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamConnectionsCommand').
+-module('Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamGroupConsumersCommand').
 
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
@@ -41,40 +41,47 @@ scopes() ->
     [ctl, diagnostics, streams].
 
 switches() ->
-    [{verbose, boolean}].
+    [{verbose, boolean}, {stream, string}, {reference, string}].
 
 aliases() ->
     [{'V', verbose}].
 
 description() ->
-    <<"Lists stream connections">>.
+    <<"Lists consumers of a stream consumer group in "
+      "a vhost">>.
 
 help_section() ->
     {plugin, stream}.
 
-validate(Args, _) ->
+validate(Args, #{stream := _, reference := _}) ->
     case 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':validate_info_keys(Args,
-                                                               ?INFO_ITEMS)
+                                                               ?GROUP_CONSUMER_INFO_ITEMS)
     of
         {ok, _} ->
             ok;
         Error ->
             Error
-    end.
+    end;
+validate(_, _) ->
+    {validation_failure, not_enough_args}.
 
 merge_defaults([], Opts) ->
-    merge_defaults([<<"conn_name">>], Opts);
+    merge_defaults([rabbit_data_coercion:to_binary(Item)
+                    || Item <- ?GROUP_CONSUMER_INFO_ITEMS],
+                   Opts);
 merge_defaults(Args, Opts) ->
-    {Args, maps:merge(#{verbose => false}, Opts)}.
+    {Args, maps:merge(#{verbose => false, vhost => <<"/">>}, Opts)}.
 
 usage() ->
-    <<"list_stream_connections [<column> ...]">>.
+    <<"list_stream_consumer_groups --stream <stream> "
+      "--reference <reference> [--vhost <vhost> [<column> "
+      "...]">>.
 
 usage_additional() ->
     Prefix = <<" must be one of ">>,
     InfoItems =
         'Elixir.Enum':join(
-            lists:usort(?INFO_ITEMS), <<", ">>),
+            lists:usort(?GROUP_CONSUMER_INFO_ITEMS), <<", ">>),
     [{<<"<column>">>, <<Prefix/binary, InfoItems/binary>>}].
 
 usage_doc_guides() ->
@@ -82,27 +89,34 @@ usage_doc_guides() ->
 
 run(Args,
     #{node := NodeName,
+      vhost := VHost,
+      stream := Stream,
+      reference := Reference,
       timeout := Timeout,
       verbose := Verbose}) ->
     InfoKeys =
         case Verbose of
             true ->
-                ?INFO_ITEMS;
+                ?GROUP_CONSUMER_INFO_ITEMS;
             false ->
                 'Elixir.RabbitMQ.CLI.Ctl.InfoKeys':prepare_info_keys(Args)
         end,
-    Nodes = 'Elixir.RabbitMQ.CLI.Core.Helpers':nodes_in_cluster(NodeName),
 
-    'Elixir.RabbitMQ.CLI.Ctl.RpcStream':receive_list_items(NodeName,
-                                                           rabbit_stream,
-                                                           emit_connection_info_all,
-                                                           [Nodes, InfoKeys],
-                                                           Timeout,
-                                                           InfoKeys,
-                                                           length(Nodes)).
+    rabbit_misc:rpc_call(NodeName,
+                         rabbit_stream_sac_coordinator,
+                         group_consumers,
+                         [VHost, Stream, Reference, InfoKeys],
+                         Timeout).
 
 banner(_, _) ->
-    <<"Listing stream connections ...">>.
+    <<"Listing group consumers ...">>.
 
+output({ok, []}, _Opts) ->
+    ok;
+output([], _Opts) ->
+    ok;
+output({error, not_found}, _Opts) ->
+    'Elixir.RabbitMQ.CLI.DefaultOutput':output({error_string,
+                                                <<"The group does not exist">>});
 output(Result, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(Result).

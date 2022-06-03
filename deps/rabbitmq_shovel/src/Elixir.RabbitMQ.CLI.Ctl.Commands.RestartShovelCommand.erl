@@ -11,8 +11,6 @@
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
--ignore_xref({'Elixir.RabbitMQ.CLI.DefaultOutput', output, 1}).
-
 -export([
          usage/0,
          usage_additional/0,
