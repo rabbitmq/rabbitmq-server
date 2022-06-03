@@ -23,6 +23,7 @@ uaac member add "rabbitmq.tag:administrator" rabbit_admin
 uaac client add rabbit_client_code --name rabbit_client_code \
   --scope 'rabbitmq.*,openid,profile' \
   --authorized_grant_types authorization_code  \
+  --autoapprove "true" \
   --authorities 'uaa.resource,rabbitmq' \
   --redirect_uri 'http://localhost:15672' \
   --secret rabbit_client_code
