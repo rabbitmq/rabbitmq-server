@@ -19,7 +19,7 @@ include plugins.mk
 # Note: When including NIFs in a release make sure to build
 # them on the appropriate platform for the target environment.
 # For example build looking_glass on Linux when targeting Docker.
-ADDITIONAL_PLUGINS ?=
+ADDITIONAL_PLUGINS ?= looking_glass
 
 DEPS = rabbit_common rabbit $(PLUGINS) $(ADDITIONAL_PLUGINS)
 

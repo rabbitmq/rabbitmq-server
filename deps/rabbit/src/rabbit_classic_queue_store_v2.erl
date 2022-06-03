@@ -265,6 +265,9 @@ sync(State = #qs{ confirms = Confirms,
 -spec read(rabbit_variable_queue:seq_id(), msg_location(), State)
         -> {rabbit_types:basic_message(), State} when State::state().
 
+%% @todo We should try to have a read_many for when reading many from the index
+%%       so that we fetch many different messages in a single file:pread. See
+%%       if that helps improve the performance.
 read(SeqId, DiskLocation, State = #qs{ cache = Cache }) ->
     ?DEBUG("~0p ~0p ~0p", [SeqId, DiskLocation, State]),
     case Cache of
