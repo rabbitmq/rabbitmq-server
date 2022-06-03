@@ -19,7 +19,7 @@ run-chrome: ## Install Selenium Chrome
 	@(echo "Selenium Standalone is running on http://localhost:4444/")
 
 run-tests: ## Run tests
-	#@(tests/oauth/with-uaa/setup.sh)
-	#@(./node_modules/.bin/mocha tests/oauth/with-uaa/landing.js)
+	@(tests/oauth/with-uaa/setup.sh)
+	@(./node_modules/.bin/mocha tests/oauth/with-uaa/landing.js)
 	@(tests/oauth/with-uaa/setup.sh)
 	@(./node_modules/.bin/mocha tests/oauth/with-uaa/happy-login.js)

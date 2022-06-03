@@ -6,7 +6,7 @@ var buildDriver = function(caps) {
   return new Builder().forBrowser('chrome').build();
 };
 
-describe("An UAA user with administrator tag", function() {
+describe("When a logged in user", function() {
   var driver;
   var page;
   this.timeout(10000);
@@ -14,10 +14,7 @@ describe("An UAA user with administrator tag", function() {
   before(function(done) {
     driver = buildDriver();
     page = driver.get("http://localhost:15672");
-    done();
-  });
 
-  it("can access the management ui", function(done) {
       driver.wait(until.elementLocated(By.id("loginWindow")))
         .then( button => {
             button.click();
@@ -34,6 +31,19 @@ describe("An UAA user with administrator tag", function() {
             assert.equal("User rabbit_admin", logout);
             done();
        })
+
+  });
+
+  it("logs out", function(done) {
+      driver.wait(until.elementLocated(By.id("logout"))).findElement(By.tagName("input"))
+        .then( button => {
+            button.click();
+            return driver.wait(until.elementLocated(By.id("loginWindow"))).getText()
+        })
+       .then( text => {
+           assert.equal(text, "Click here to log in");
+           done();
+         })
   });
 
 
