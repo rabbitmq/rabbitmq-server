@@ -1,5 +1,5 @@
 load("@rules_erlang//:eunit.bzl", "eunit")
-load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq.bzl", "RABBITMQ_TEST_ERLC_OPTS", "rabbitmq_app")
 
@@ -36,10 +36,6 @@ rabbitmq_app(
 xref(
     additional_libs = [
         "//deps/rabbit_common:erlang_app",
-        "@credentials_obfuscation//:erlang_app",
-        "@jsx//:erlang_app",
-        "@ranch//:erlang_app",
-        "@recon//:erlang_app",
     ],
 )
 

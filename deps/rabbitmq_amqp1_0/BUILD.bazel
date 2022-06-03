@@ -1,4 +1,4 @@
-load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
@@ -46,7 +46,7 @@ rabbitmq_app(
 )
 
 xref(
-    size = "small",
+    additional_libs = BUILD_DEPS,
 )
 
 plt(
