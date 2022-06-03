@@ -29,3 +29,9 @@
 fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("amqp1_0.default_vhost", Conf))
 end}.
+
+{mapping, "amqp1_0.convert_amqp091_headers_to_app_props", "rabbitmq_amqp1_0.convert_amqp091_headers_to_app_props", 
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping, "amqp1_0.convert_app_props_to_amqp091_headers", "rabbitmq_amqp1_0.convert_app_props_to_amqp091_headers", 
+    [{datatype, {enum, [true, false]}}]}.
