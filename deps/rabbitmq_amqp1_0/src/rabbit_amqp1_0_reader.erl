@@ -672,6 +672,9 @@ auth_phase_1_0(Response,
             case rabbit_access_control:check_user_loopback(Username, Sock) of
                 ok ->
                     rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
+                    rabbit_log:info(
+                        "AMQP 1.0: user '~s' authenticated",
+                        [Username]),
                     ok;
                 not_allowed ->
                     rabbit_core_metrics:auth_attempt_failed(<<>>, Username, amqp10),
@@ -709,7 +712,9 @@ send_to_new_1_0_session(Channel, Frame, State) ->
             put({channel, Channel}, {ch_fr_pid, ChFrPid}),
             put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
             put({ch_fr_pid, ChFrPid}, {channel, Channel}),
-            ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame);
+            ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame),
+            rabbit_log:info("AMQP 1.0: user '~s' authorized on vhost '~s'",
+                [User#user.username, vhost(Hostname)]);
         {error, {not_allowed, _}} ->
             rabbit_log:error("AMQP 1.0: user '~s' is not allowed to access virtual host '~s'",
                 [User#user.username, vhost(Hostname)]),
