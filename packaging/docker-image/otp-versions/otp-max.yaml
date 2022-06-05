@@ -5,4 +5,4 @@ otp_sha256: e59bedbb871af52244ca5284fd0a572d52128abd4decf4347fe2aef047b65c58
 # https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
 # Which is the latest Elixir release?
 # https://github.com/elixir-lang/elixir/tags
-elixir: '1.13.3'
+elixir: '1.13.4'
