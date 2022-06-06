@@ -672,8 +672,7 @@ auth_phase_1_0(Response,
             case rabbit_access_control:check_user_loopback(Username, Sock) of
                 ok ->
                     rabbit_log_connection:info(
-                        "AMQP 1.0 connection ~p (~s): "
-                        "user '~s' authenticated and granted access to vhost '~s'",
+                        "AMQP 1.0 connection ~p: user '~s' authenticated",
                         [self(), Username]),
                     rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
                     ok;
@@ -714,7 +713,7 @@ send_to_new_1_0_session(Channel, Frame, State) ->
             put({ch_sup_pid, ChSupPid}, {{channel, Channel}, {ch_fr_pid, ChFrPid}}),
             put({ch_fr_pid, ChFrPid}, {channel, Channel}),
             rabbit_log_connection:info(
-                        "AMQP 1.0 connection ~p (~s): "
+                        "AMQP 1.0 connection ~p: "
                         "user '~s' authenticated and granted access to vhost '~s'",
                         [self(), User#user.username, vhost(Hostname)]),
             ok = rabbit_amqp1_0_session:process_frame(ChFrPid, Frame);
