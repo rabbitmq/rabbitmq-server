@@ -130,9 +130,6 @@ erlang_package.hex(
 
 erlang_package.git(
     repository = "rabbitmq/osiris",
-<<<<<<< HEAD
-    tag = "v1.2.6",
-=======
     branch = "main",
     patch_cmds = ["""
 VERSION=$(git rev-parse HEAD)
@@ -141,7 +138,6 @@ sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Ma
 echo "Injecting ${VERSION} into BUILD.bazel..."
 sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
 """],
->>>>>>> 140441740d (Switch osiris back to main)
 )
 
 erlang_package.hex(
