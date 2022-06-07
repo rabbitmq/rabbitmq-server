@@ -7,11 +7,12 @@
 -record(msg_status, {pending :: [pid()],
                      confirmed = [] :: [pid()]}).
 
--record(?MODULE, {pid :: undefined | pid(), %% the current master pid
-                  qref :: term(), %% TODO
-                  unconfirmed = #{} ::
-                  #{non_neg_integer() => #msg_status{}}}).
 -define(STATE, ?MODULE).
+-record(?STATE, {pid :: undefined | pid(), %% the current master pid
+                 qref :: term(), %% TODO
+                 unconfirmed = #{} ::
+                 #{non_neg_integer() => #msg_status{}}}).
+
 
 -opaque state() :: #?STATE{}.
 
@@ -300,9 +301,13 @@ settlement_action(Type, QRef, MsgSeqs, Acc) ->
     {[{amqqueue:amqqueue(), state()}], rabbit_queue_type:actions()}.
 deliver(Qs0, #delivery{flow = Flow,
                        msg_seq_no = MsgNo,
-                       message = #basic_message{exchange_name = _Ex},
-                       confirm = Confirm} = Delivery) ->
-    %% TODO: record master and slaves for confirm processing
+                       message = #basic_message{} = Msg0,
+                       confirm = Confirm} = Delivery0) ->
+    %% add guid to content here instead of in rabbit_basic:message/3,
+    %% as classic queues are the only ones that need it
+    Msg = Msg0#basic_message{id = rabbit_guid:gen()},
+    Delivery = Delivery0#delivery{message = Msg},
+
     {MPids, SPids, Qs, Actions} = qpids(Qs0, Confirm, MsgNo),
     QPids = MPids ++ SPids,
     case Flow of
