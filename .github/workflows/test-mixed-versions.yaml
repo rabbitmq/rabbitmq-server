@@ -64,6 +64,7 @@ jobs:
         bazelisk test //... \
           --config=rbe-${{ matrix.erlang_major }} \
           --test_tag_filters=mixed-version-cluster,-exclusive,-aws \
+          --build_tests_only \
           --verbose_failures
   test-exclusive-mixed-versions:
     name: Test (Exclusive Tests with Mixed Version Cluster)
