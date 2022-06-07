@@ -75,8 +75,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        #! - erlang_version: "23"
-        #!   elixir_version: 1.10.4
+        - erlang_version: "23"
+          elixir_version: 1.10.4
         - erlang_version: "24"
           elixir_version: 1.12.3
         - erlang_version: "25"
