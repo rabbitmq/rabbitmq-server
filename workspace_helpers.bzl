@@ -152,13 +152,10 @@ erlang_app(
         sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
     )
 
-    github_erlang_app(
+    git_repository(
         name = "osiris",
-        org = "rabbitmq",
-        ref = "refs/tags/v1.2.6",
-        version = "1.2.6",
-        sha256 = "abfe9bc53b0eb1c14713152314f612562ecb76465b9f804313e3510b73e5720b",
-        build_file = rabbitmq_workspace + "//:BUILD.osiris",
+        branch = "main",
+        remote = "https://github.com/rabbitmq/osiris.git",
     )
 
     hex_pm_erlang_app(
@@ -213,16 +210,15 @@ erlang_app(
         sha256 = "2c7523c8dee91dff41f6b3d63cba2bd49eb6d2fe5bf1eec0df7f87eb5e230e1c",
     )
 
-    github_erlang_app(
+    hex_pm_erlang_app(
+        name = "redbug",
+        version = "2.0.7",
+        sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
+    )
+
+    hex_pm_erlang_app(
         name = "seshat",
-        org = "rabbitmq",
-        ref = "0.1.0",
-        version = "0.1.0",
-        extra_apps = [
-            "sasl",
-            "crypto",
-        ],
-        sha256 = "fd20039322eabed814d0dfe75743652846007ec93faae3e141c9602c21152b14",
+        version = "0.3.2",
     )
 
     hex_pm_erlang_app(

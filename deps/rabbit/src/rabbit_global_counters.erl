@@ -186,23 +186,23 @@ init(Labels) ->
     init(Labels, []).
 
 init(Labels = [{protocol, Protocol}, {queue_type, QueueType}], Extra) ->
-    _ = seshat_counters:new_group(?MODULE),
-    Counters = seshat_counters:new(?MODULE, Labels, ?PROTOCOL_QUEUE_TYPE_COUNTERS ++ Extra),
+    _ = seshat:new_group(?MODULE),
+    Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_QUEUE_TYPE_COUNTERS ++ Extra),
     persistent_term:put({?MODULE, Protocol, QueueType}, Counters);
 init(Labels = [{protocol, Protocol}], Extra) ->
-    _ = seshat_counters:new_group(?MODULE),
-    Counters = seshat_counters:new(?MODULE, Labels, ?PROTOCOL_COUNTERS ++ Extra),
+    _ = seshat:new_group(?MODULE),
+    Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_COUNTERS ++ Extra),
     persistent_term:put({?MODULE, Protocol}, Counters);
 init(Labels = [{queue_type, QueueType}, {dead_letter_strategy, DLS}], Extra) ->
-    _ = seshat_counters:new_group(?MODULE),
-    Counters = seshat_counters:new(?MODULE, Labels, ?MESSAGES_DEAD_LETTERED_COUNTERS ++ Extra),
+    _ = seshat:new_group(?MODULE),
+    Counters = seshat:new(?MODULE, Labels, ?MESSAGES_DEAD_LETTERED_COUNTERS ++ Extra),
     persistent_term:put({?MODULE, QueueType, DLS}, Counters).
 
 overview() ->
-    seshat_counters:overview(?MODULE).
+    seshat:overview(?MODULE).
 
 prometheus_format() ->
-    seshat_counters:prometheus_format(?MODULE).
+    seshat:format(?MODULE).
 
 increase_protocol_counter(Protocol, Counter, Num) ->
     counters:add(fetch(Protocol), Counter, Num).

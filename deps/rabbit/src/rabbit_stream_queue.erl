@@ -42,7 +42,8 @@
 -export([parse_offset_arg/1]).
 
 -export([status/2,
-         tracking_status/2]).
+         tracking_status/2,
+         get_overview/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
@@ -561,9 +562,13 @@ i(committed_offset, Q) ->
     %% TODO should it be on a metrics table?
     %% The queue could be removed between the list() and this call
     %% to retrieve the overview. Let's default to '' if it's gone.
-    Data = osiris_counters:overview(),
-    maps:get(committed_offset,
-             maps:get({osiris_writer, amqqueue:get_name(Q)}, Data, #{}), '');
+    Key = {osiris_writer, amqqueue:get_name(Q)},
+    case osiris_counters:overview(Key) of
+        undefined ->
+            '';
+        Data ->
+            maps:get(committed_offset, Data, '')
+    end;
 i(policy, Q) ->
     case rabbit_policy:name(Q) of
         none   -> '';
@@ -602,7 +607,6 @@ status(Vhost, QueueName) ->
             {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             _Pid = amqqueue:get_pid(Q),
-            % Max = maps:get(max_segment_size_bytes, Conf, osiris_log:get_default_max_segment_size_bytes()),
             [begin
                  [{role, Role},
                   get_key(node, C),
@@ -624,32 +628,30 @@ get_counters(Q) ->
     {ok, Members} = rabbit_stream_coordinator:members(StreamId),
     QName = amqqueue:get_name(Q),
     Counters = [begin
-                    Data = safe_get_overview(Node),
-                    get_counter(QName, Data, #{node => Node})
+                    safe_get_overview(Node, QName)
                 end || Node <- maps:keys(Members)],
     lists:filter(fun (X) -> X =/= undefined end, Counters).
 
-safe_get_overview(Node) ->
-    case rpc:call(Node, osiris_counters, overview, []) of
+safe_get_overview(Node, QName) ->
+    case rpc:call(Node, ?MODULE, get_overview, [QName]) of
         {badrpc, _} ->
             #{node => Node};
-        Data ->
-            Data
+        Result ->
+            Result
     end.
 
-get_counter(QName, Data, Add) ->
-    case maps:get({osiris_writer, QName}, Data, undefined) of
+get_overview(QName) ->
+    case osiris_counters:overview({osiris_writer, QName}) of
         undefined ->
-            case maps:get({osiris_replica, QName}, Data, undefined) of
+            case osiris_counters:overview({osiris_replica, QName}) of
                 undefined ->
-                    {undefined, Add};
+                    undefined;
                 M ->
-                    {replica, maps:merge(Add, M)}
+                    {replica, M#{node => node()}}
             end;
         M ->
-            {writer, maps:merge(Add, M)}
+            {writer, M#{node => node()}}
     end.
-
 
 -spec tracking_status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
     [[{atom(), term()}]] | {error, term()}.
@@ -679,13 +681,8 @@ tracking_status(Vhost, QueueName) ->
 
 readers(QName) ->
     try
-        Data = osiris_counters:overview(),
-        Readers = case maps:get({osiris_writer, QName}, Data, not_found) of
-                      not_found ->
-                          maps:get(readers, maps:get({osiris_replica, QName}, Data, #{}), 0);
-                      Map ->
-                          maps:get(readers, Map, 0)
-                  end,
+        {_Role, Counters} = get_overview(QName),
+        Readers = maps:get(readers, Counters, 0),
         {node(), Readers}
     catch
         _:_ ->
