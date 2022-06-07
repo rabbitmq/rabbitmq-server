@@ -54,8 +54,7 @@
          is_enabled/1,
          nodes_if_khepri_enabled/0,
          try_mnesia_or_khepri/2]).
--export([do_add_member/1,
-         priv_reset/0]).
+-export([do_join/1]).
 
 -ifdef(TEST).
 -export([force_metadata_store/1,
@@ -85,7 +84,9 @@ setup() ->
 setup(_) ->
     ?LOG_DEBUG("Starting Khepri-based " ?RA_FRIENDLY_NAME),
     ok = ensure_ra_system_started(),
-    case khepri:start(?RA_SYSTEM, ?RA_CLUSTER_NAME, ?RA_FRIENDLY_NAME) of
+    RaServerConfig = #{cluster_name => ?RA_CLUSTER_NAME,
+                       friendly_name => ?RA_FRIENDLY_NAME},
+    case khepri:start(?RA_SYSTEM, RaServerConfig) of
         {ok, ?STORE_ID} ->
             ?LOG_DEBUG(
                "Khepri-based " ?RA_FRIENDLY_NAME " ready",
@@ -125,12 +126,13 @@ wait_for_leader(Fun, Timeout) ->
             Error
     end.
 
-add_member(JoiningNode, JoinedNode) when JoinedNode =:= node() ->
-    Ret = do_add_member(JoiningNode),
+add_member(JoiningNode, JoinedNode)
+  when JoiningNode =:= node() andalso is_atom(JoinedNode) ->
+    Ret = do_join(JoinedNode),
     post_add_member(JoiningNode, JoinedNode, Ret);
 add_member(JoiningNode, JoinedNode) when is_atom(JoinedNode) ->
     Ret = rabbit_misc:rpc_call(
-            JoinedNode, rabbit_khepri, do_add_member, [JoiningNode]),
+            JoiningNode, rabbit_khepri, do_join, [JoinedNode]),
     post_add_member(JoiningNode, JoinedNode, Ret);
 add_member(JoiningNode, [_ | _] = Cluster) ->
     case lists:member(JoiningNode, Cluster) of
@@ -158,79 +160,59 @@ pick_node_in_cluster(Cluster) when is_list(Cluster) ->
         false -> hd(Cluster)
     end.
 
-do_add_member(NewNode) when NewNode =/= node() ->
+do_join(RemoteNode) when RemoteNode =/= node() ->
+    ThisNode = node(),
+
     ?LOG_DEBUG(
-       "Khepri clustering: Trying to add node ~p to cluster \"~s\" through "
-       "node ~p",
-       [NewNode, ?RA_CLUSTER_NAME, node()],
+       "Khepri clustering: Trying to add this node (~p) to cluster \"~s\" "
+       "through node ~p",
+       [ThisNode, ?RA_CLUSTER_NAME, RemoteNode],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
 
-    %% Check if the node is already part of the cluster. We query the local Ra
-    %% server only, in case the cluster can't elect a leader right now.
-    CurrentNodes = locally_known_nodes(),
-    case lists:member(NewNode, CurrentNodes) of
-        false ->
-            %% Ensure the remote node is reachable before we add it.
-            pong = net_adm:ping(NewNode),
+    %% Ensure the local Khepri store is running before we can reset it. It
+    %% could be stopped if RabbitMQ is not running for instance.
+    ok = setup(),
+    khepri:info(?RA_CLUSTER_NAME),
 
-            ?LOG_DEBUG(
-               "Khepri clustering: Resetting Khepri on remote node ~p",
-               [NewNode],
-               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    %% We don't verify the cluster membership before adding this node to the
+    %% remote cluster because such a check would not be atomic: the membership
+    %% could well change between the check and the actual join.
 
-            %% If the remote node to add is running RabbitMQ, we need to put
-            %% it in maintenance mode at least. We remember that state to
-            %% revive the node only if it was fully running before this code.
-            RemoteIsRunning = rabbit:is_running(NewNode),
-            RemoteAlreadyBeingDrained =
-            rabbit_maintenance:is_being_drained_consistent_read(NewNode),
-            NeedToReviveRemote =
-            RemoteIsRunning andalso not RemoteAlreadyBeingDrained,
-            maybe_drain_node(NewNode, RemoteIsRunning),
+    ?LOG_DEBUG(
+       "Adding this node (~p) to Khepri cluster \"~s\" through "
+       "node ~p",
+       [ThisNode, ?RA_CLUSTER_NAME, RemoteNode],
+       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
 
-            Ret1 = rabbit_misc:rpc_call(
-                     NewNode, rabbit_khepri, priv_reset, []),
-            case Ret1 of
-                ok ->
-                    ?LOG_DEBUG(
-                       "Adding remote node ~s to Khepri cluster \"~s\"",
-                       [NewNode, ?RA_CLUSTER_NAME],
-                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-                    ok = ensure_ra_system_started(),
-                    Ret2 = khepri_cluster:add_member(
-                             ?RA_SYSTEM, ?RA_CLUSTER_NAME, ?RA_FRIENDLY_NAME,
-                             NewNode),
+    %% Ensure the remote node is reachable before we add it.
+    pong = net_adm:ping(RemoteNode),
 
-                    %% Revive the remote node if it was running and not under
-                    %% maintenance before we changed the cluster membership.
-                    maybe_revive_node(NewNode, NeedToReviveRemote),
+    %% If the remote node to add is running RabbitMQ, we need to put
+    %% it in maintenance mode at least. We remember that state to
+    %% revive the node only if it was fully running before this code.
+    IsRunning = rabbit:is_running(ThisNode),
+    AlreadyBeingDrained =
+    rabbit_maintenance:is_being_drained_consistent_read(ThisNode),
+    NeedToRevive = IsRunning andalso not AlreadyBeingDrained,
+    maybe_drain_node(IsRunning),
 
-                    Ret2;
-                Error ->
-                    ?LOG_ERROR(
-                       "Khepri clustering: Failed to reset Khepri on node "
-                       "~p: ~p",
-                       [NewNode, Error],
-                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    %% Joining a cluster includes a reset of the local Khepri store.
+    Ret = khepri_cluster:join(?RA_CLUSTER_NAME, RemoteNode),
 
-                    %% Revive the remote node if it was running and not under
-                    %% maintenance before we changed the cluster membership.
-                    maybe_revive_node(NewNode, NeedToReviveRemote),
+    %% Revive the remote node if it was running and not under
+    %% maintenance before we changed the cluster membership.
+    maybe_revive_node(NeedToRevive),
 
-                    Error
-            end;
-        true ->
-            {error, {already_member, CurrentNodes}}
-    end.
+    Ret.
 
-maybe_drain_node(Node, true) ->
-    ok = rabbit_misc:rpc_call(Node, rabbit_maintenance, drain, []);
-maybe_drain_node(_Node, false) ->
+maybe_drain_node(true) ->
+    ok = rabbit_maintenance:drain();
+maybe_drain_node(false) ->
     ok.
 
-maybe_revive_node(Node, true) ->
-    ok = rabbit_misc:rpc_call(Node, rabbit_maintenance, revive, []);
-maybe_revive_node(_Node, false) ->
+maybe_revive_node(true) ->
+    ok = rabbit_maintenance:revive();
+maybe_revive_node(false) ->
     ok.
 
 post_add_member(JoiningNode, JoinedNode, ok) ->
@@ -250,9 +232,7 @@ post_add_member(
     {ok, already_member};
 post_add_member(
   JoiningNode, JoinedNode,
-  {badrpc, {'EXIT', {undef, [{rabbit_khepri, Function, _, _}]}}} = Error)
-  when Function =:= do_add_member orelse
-       Function =:= priv_reset ->
+  {badrpc, {'EXIT', {undef, [{rabbit_khepri, do_join, _, _}]}}} = Error) ->
     ?LOG_INFO(
        "Khepri clustering: Can't add node ~p to cluster \"~s\"; "
        "Khepri unavailable on node ~p: ~p",
@@ -287,10 +267,8 @@ remove_member(NodeToRemove) when NodeToRemove =/= node() ->
                [NodeToRemove, ?RA_CLUSTER_NAME],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             ok = ensure_ra_system_started(),
-            Ret = khepri_cluster:remove_member(?RA_CLUSTER_NAME, NodeToRemove),
-            %% FIXME: Stop the Ra server? Apparently it's still running after
-            %% calling this function and answers queries (like the list of
-            %% locally known members).
+            Ret = rabbit_misc:rpc_call(
+                    NodeToRemove, khepri_cluster, reset, [?RA_CLUSTER_NAME]),
             case Ret of
                 ok ->
                     ?LOG_DEBUG(
@@ -298,7 +276,7 @@ remove_member(NodeToRemove) when NodeToRemove =/= node() ->
                        [NodeToRemove, ?RA_CLUSTER_NAME],
                        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
                     ok;
-                {error, _} = Error ->
+                Error ->
                     ?LOG_ERROR(
                        "Failed to remove remote node ~s from Khepri "
                        "cluster \"~s\": ~p",
@@ -314,21 +292,6 @@ remove_member(NodeToRemove) when NodeToRemove =/= node() ->
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             ok
     end.
-
-priv_reset() ->
-    %% To reset the content of Khepri, we need RabbitMQ to be under
-    %% maintenance or stopped. The reason is we can't let RabbitMQ do any
-    %% reads from or writes to Khepri because the content will be garbage.
-    %%
-    %% Stopping RabbitMQ would be done by the `stop_app' CLI command.
-    %%
-    %% If RabbitMQ is running, the node is put under maintenance by the
-    %% `add_member/1' function above.
-    ?assert(
-       not rabbit:is_running() orelse
-       rabbit_maintenance:is_being_drained_consistent_read(node())),
-    ok = ensure_ra_system_started(),
-    ok = khepri:reset(?RA_SYSTEM, ?RA_CLUSTER_NAME).
 
 ensure_ra_system_started() ->
     {ok, _} = application:ensure_all_started(khepri),

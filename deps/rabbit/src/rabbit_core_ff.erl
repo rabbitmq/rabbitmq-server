@@ -393,7 +393,15 @@ expand_khepri_cluster(FeatureName, AllMnesiaNodes) ->
     %%       therefore, we skip this cluster to consider the following one,
     %%       [Node2].
     KhepriCluster = find_largest_khepri_cluster(FeatureName),
-    add_nodes_to_khepri_cluster(FeatureName, KhepriCluster, AllMnesiaNodes).
+    NodesToAdd = AllMnesiaNodes -- KhepriCluster,
+    ?LOG_DEBUG(
+       "Feature flags `~s`:   selected Khepri cluster: ~p",
+       [FeatureName, KhepriCluster]),
+    ?LOG_DEBUG(
+       "Feature flags `~s`:   Mnesia nodes to add to the Khepri cluster "
+       "above: ~p",
+       [FeatureName, NodesToAdd]),
+    add_nodes_to_khepri_cluster(FeatureName, KhepriCluster, NodesToAdd).
 
 add_nodes_to_khepri_cluster(FeatureName, KhepriCluster, [Node | Rest]) ->
     add_node_to_khepri_cluster(FeatureName, KhepriCluster, Node),
