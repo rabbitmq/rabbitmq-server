@@ -96,36 +96,6 @@ setup(_) ->
             exit(Error)
     end.
 
-%% TODO: Move this logic to Khepri itself, it could be useful to any user,
-%% right?
--define(wait(Code), wait_for_leader(fun() -> Code end, 20000)).
-
-wait_for_leader(Fun, Timeout) ->
-    T0 = erlang:monotonic_time(),
-    case Fun() of
-        {ok, _} = Ret->
-            Ret;
-        {error, ra_leader_unknown} when Timeout >= 0 ->
-            ?LOG_INFO(
-               "Waiting for " ?RA_FRIENDLY_NAME " leader to be elected "
-               "for ~b milliseconds before retrying Khepri call",
-               [Timeout],
-               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            timer:sleep(500),
-            T1 = erlang:monotonic_time(),
-            TDiff = erlang:convert_time_unit(T1 - T0, native, millisecond),
-            TimeLeft = Timeout - TDiff,
-            wait_for_leader(Fun, TimeLeft);
-        {error, ra_leader_unknown} = Error ->
-            ?LOG_ERROR(
-               "Khepri call imeout while waiting for " ?RA_FRIENDLY_NAME " "
-               "leader to be elected",
-               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            Error;
-        Error ->
-            Error
-    end.
-
 add_member(JoiningNode, JoinedNode)
   when JoiningNode =:= node() andalso is_atom(JoinedNode) ->
     Ret = do_join(JoinedNode),
@@ -327,13 +297,13 @@ dir() ->
 %% They are some additional functions too, because they are useful in
 %% RabbitMQ. They might be moved to Khepri in the future.
 
-create(Path, Data) -> ?wait(khepri:create(?STORE_ID, Path, Data)).
-update(Path, Data) -> ?wait(khepri:update(?STORE_ID, Path, Data)).
+create(Path, Data) -> khepri:create(?STORE_ID, Path, Data).
+update(Path, Data) -> khepri:update(?STORE_ID, Path, Data).
 cas(Path, Pattern, Data) ->
-    ?wait(khepri:compare_and_swap(?STORE_ID, Path, Pattern, Data)).
+    khepri:compare_and_swap(?STORE_ID, Path, Pattern, Data).
 
 get(Path) ->
-    case ?wait(khepri:get(?STORE_ID, Path, #{expect_specific_node => true})) of
+    case khepri:get(?STORE_ID, Path, #{expect_specific_node => true}) of
         {ok, Result} ->
             [PropsAndData] = maps:values(Result),
             {ok, PropsAndData};
@@ -348,7 +318,7 @@ get_data(Path) ->
         Error                 -> Error
     end.
 
-match(Path) -> ?wait(khepri:get(?STORE_ID, Path)).
+match(Path) -> khepri:get(?STORE_ID, Path).
 
 match_and_get_data(Path) ->
     Ret = match(Path),
@@ -358,15 +328,15 @@ tx_match_and_get_data(Path) ->
     Ret = khepri_tx:get(Path),
     keep_data_only_in_result(Ret).
 
-exists(Path) -> ?wait(khepri:exists(?STORE_ID, Path)).
-find(Path, Condition) -> ?wait(khepri:find(?STORE_ID, Path, Condition)).
+exists(Path) -> khepri:exists(?STORE_ID, Path).
+find(Path, Condition) -> khepri:find(?STORE_ID, Path, Condition).
 
-list(Path) -> ?wait(khepri:list(?STORE_ID, Path)).
+list(Path) -> khepri:list(?STORE_ID, Path).
 
 list_child_nodes(Path) ->
     Options = #{expect_specific_node => true,
                 include_child_names => true},
-    case ?wait(khepri:get(?STORE_ID, Path, Options)) of
+    case khepri:get(?STORE_ID, Path, Options) of
         {ok, Result} ->
             [#{child_names := ChildNames}] = maps:values(Result),
             {ok, ChildNames};
@@ -391,8 +361,8 @@ keep_data_only_in_result({ok, Result}) ->
 keep_data_only_in_result(Error) ->
     Error.
 
-clear_payload(Path) -> ?wait(khepri:clear_payload(?STORE_ID, Path)).
-delete(Path) -> ?wait(khepri:delete(?STORE_ID, Path)).
+clear_payload(Path) -> khepri:clear_payload(?STORE_ID, Path).
+delete(Path) -> khepri:delete(?STORE_ID, Path).
 
 delete_or_fail(Path) ->
     case khepri:delete(?STORE_ID, Path) of
@@ -417,13 +387,13 @@ transaction(Fun) ->
     transaction(Fun, auto).
 
 transaction(Fun, ReadWrite) ->
-    ?wait(case khepri:transaction(?STORE_ID, Fun, ReadWrite) of
-              {atomic, Result} -> Result;
-              {aborted, Reason} -> throw({error, Reason})
-          end).
+    case khepri:transaction(?STORE_ID, Fun, ReadWrite) of
+        {atomic, Result} -> Result;
+        {aborted, Reason} -> throw({error, Reason})
+    end.
 
 clear_store() ->
-    ?wait(khepri:clear_store(?STORE_ID)).
+    khepri:clear_store(?STORE_ID).
 
 info() ->
     ok = setup(),
