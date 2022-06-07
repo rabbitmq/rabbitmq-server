@@ -145,11 +145,7 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck prop
 PLT_APPS += mnesia
 
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
-<<<<<<< HEAD
-dep_osiris = git https://github.com/rabbitmq/osiris v1.2.6
-=======
 dep_osiris = git https://github.com/rabbitmq/osiris main
->>>>>>> 140441740d (Switch osiris back to main)
 dep_systemd = hex 0.6.1
 
 dep_seshat = hex 0.3.2
