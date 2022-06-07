@@ -71,10 +71,14 @@ jobs:
         run: |
           bazelisk build :otp_version --config=rbe-${{ steps.load-info.outputs.otp_major }}
           if [ ! "$(cat bazel-bin/otp_version.txt)" == "${{ steps.load-info.outputs.otp }}" ]; then
+            echo "The version of erlang specified via bazel is $(cat bazel-bin/otp_version.txt),
+            echo "but ${{ steps.load-info.outputs.otp }} is expected."
             exit 1
           fi
           bazelisk build :elixir_version --config=rbe-${{ steps.load-info.outputs.otp_major }}
           if [ ! "$(cat bazel-bin/elixir_version.txt)" == "${{ steps.load-info.outputs.elixir }}" ]; then
+            echo "The version of elixir specified via bazel is $(cat bazel-bin/elixir_version.txt),
+            echo "but ${{ steps.load-info.outputs.elixir }} is expected."
             exit 1
           fi
 

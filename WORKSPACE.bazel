@@ -73,6 +73,7 @@ register_toolchains(
     "//bazel/toolchains:erlang_toolchain_git_master",
     "//bazel/toolchains:elixir_toolchain_external",
     "//bazel/toolchains:elixir_toolchain_1_10",
+    "//bazel/toolchains:elixir_toolchain_1_12",
     "//bazel/toolchains:elixir_toolchain_1_13",
 )
 

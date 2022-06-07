@@ -22,6 +22,11 @@ constraint_value(
 )
 
 constraint_value(
+    name = "elixir_1_12",
+    constraint_setting = ":elixir_version",
+)
+
+constraint_value(
     name = "elixir_1_13",
     constraint_setting = ":elixir_version",
 )
@@ -48,7 +53,7 @@ platform(
     name = "erlang_24_platform",
     constraint_values = [
         "@rules_erlang//platforms:erlang_24",
-        ":elixir_1_13",
+        ":elixir_1_12",
     ],
     parents = ["@rbe//config:platform"],
 )

@@ -45,6 +45,11 @@ elixir_toolchain_from_github_release(
 )
 
 elixir_toolchain_from_github_release(
+    name_suffix = "_1_12",
+    version = "1.12.3",
+)
+
+elixir_toolchain_from_github_release(
     name_suffix = "_1_13",
     version = "1.13.4",
 )
