@@ -91,6 +91,7 @@ set_default_config() ->
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
     OsirisConfig =
         case osiris_util:get_replication_configuration_from_tls_dist(
+                fun rabbit_prelaunch_file:consult_file/1,
                 fun osiris_log/3) of
             [] ->
                 [];
