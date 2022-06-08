@@ -125,13 +125,21 @@ def _elixir_external_impl(ctx):
 
     version_file = ctx.actions.declare_file(ctx.label.name + "_version")
 
+    (erlang_home, _, runfiles) = erlang_dirs(ctx)
+
     ctx.actions.run_shell(
-        inputs = [],
+        inputs = runfiles.files,
         outputs = [version_file],
         command = """set -euo pipefail
 
+{maybe_install_erlang}
+
+export PATH="{erlang_home}"/bin:${{PATH}}
+
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
+            maybe_install_erlang = maybe_install_erlang(ctx),
+            erlang_home = erlang_home,
             elixir_home = elixir_home,
             version_file = version_file.path,
         ),
