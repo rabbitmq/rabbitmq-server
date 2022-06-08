@@ -17,9 +17,10 @@
 
 -export_type([frame/0]).
 
--type frame_type() :: ?FRAME_METHOD | ?FRAME_HEADER | ?FRAME_BODY |
-                      ?FRAME_OOB_METHOD | ?FRAME_OOB_HEADER | ?FRAME_OOB_BODY |
-                      ?FRAME_TRACE | ?FRAME_HEARTBEAT.
+-type frame_type() :: ?FRAME_METHOD | ?FRAME_HEADER | ?FRAME_BODY
+                      % ?FRAME_OOB_METHOD | ?FRAME_OOB_HEADER | ?FRAME_OOB_BODY |
+                      % ?FRAME_TRACE
+                      | ?FRAME_HEARTBEAT.
 -type protocol()   :: rabbit_framing:protocol().
 -type method()     :: rabbit_framing:amqp_method_record().
 -type class_id()   :: rabbit_framing:amqp_class_id().
