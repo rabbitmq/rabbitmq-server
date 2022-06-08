@@ -27,6 +27,7 @@
 -compile(export_all).
 
 -define(WAIT, 5000).
+-define(SOCKET_OPTS, [{active, false}, {mode, binary}, {packet, 4}]).
 
 all() ->
     [{group, single_node}, {group, single_node_1}, {group, cluster}].
@@ -223,40 +224,32 @@ test_gc_publishers(Config) ->
 
 unauthenticated_client_rejected_tcp_connected(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    {ok, S} = gen_tcp:connect("localhost", Port, ?SOCKET_OPTS),
     ?assertEqual(ok, gen_tcp:send(S, <<"invalid data">>)),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 timeout_tcp_connected(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    {ok, S} = gen_tcp:connect("localhost", Port, ?SOCKET_OPTS),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 unauthenticated_client_rejected_peer_properties_exchanged(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
-    C0 = rabbit_stream_core:init(0),
-    test_peer_properties(gen_tcp, S, C0),
+    {ok, S} = gen_tcp:connect("localhost", Port, ?SOCKET_OPTS),
+    test_peer_properties(gen_tcp, S),
     ?assertEqual(ok, gen_tcp:send(S, <<"invalid data">>)),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 timeout_peer_properties_exchanged(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
-    C0 = rabbit_stream_core:init(0),
-    test_peer_properties(gen_tcp, S, C0),
+    {ok, S} = gen_tcp:connect("localhost", Port, ?SOCKET_OPTS),
+    test_peer_properties(gen_tcp, S),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 unauthenticated_client_rejected_authenticating(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
-    C0 = rabbit_stream_core:init(0),
-    test_peer_properties(gen_tcp, S, C0),
+    {ok, S} = gen_tcp:connect("localhost", Port, ?SOCKET_OPTS),
+    test_peer_properties(gen_tcp, S),
     SaslHandshakeFrame =
         rabbit_stream_core:frame({request, 1, sasl_handshake}),
     ?assertEqual(ok, gen_tcp:send(S, SaslHandshakeFrame)),
@@ -265,46 +258,38 @@ unauthenticated_client_rejected_authenticating(Config) ->
 
 timeout_authenticating(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
-    C0 = rabbit_stream_core:init(0),
-    test_peer_properties(gen_tcp, S, C0),
+    {ok, S} = gen_tcp:connect("localhost", Port, ?SOCKET_OPTS),
+    test_peer_properties(gen_tcp, S),
     _Frame = rabbit_stream_core:frame({request, 1, sasl_handshake}),
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 timeout_close_sent(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
-    C0 = rabbit_stream_core:init(0),
-    C1 = test_peer_properties(gen_tcp, S, C0),
-    C2 = test_authenticate(gen_tcp, S, C1),
+    {ok, S} = gen_tcp:connect("localhost", Port, ?SOCKET_OPTS),
+    test_peer_properties(gen_tcp, S),
+    test_authenticate(gen_tcp, S),
     % Trigger rabbit_stream_reader to transition to state close_sent
     NonExistentCommand = 999,
     IOData = <<?REQUEST:1, NonExistentCommand:15, ?VERSION_1:16>>,
     Size = iolist_size(IOData),
     Frame = [<<Size:32>> | IOData],
     ok = gen_tcp:send(S, Frame),
-    {{request, _CorrelationID,
-      {close, ?RESPONSE_CODE_UNKNOWN_FRAME, <<"unknown frame">>}},
-     _Config} =
-        receive_commands(gen_tcp, S, C2),
+    {request, _CorrelationID,
+     {close, ?RESPONSE_CODE_UNKNOWN_FRAME, <<"unknown frame">>}} = receive_command(gen_tcp, S),
     % Now, rabbit_stream_reader is in state close_sent.
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
 sac_ff(Config) ->
     Port = get_stream_port(Config),
-    {ok, S} =
-        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
-    C = rabbit_stream_core:init(0),
-    test_peer_properties(gen_tcp, S, C),
-    test_authenticate(gen_tcp, S, C),
+    {ok, S} = gen_tcp:connect("localhost", Port, ?SOCKET_OPTS),
+    test_peer_properties(gen_tcp, S),
+    test_authenticate(gen_tcp, S),
     Stream = <<"stream1">>,
-    test_create_stream(gen_tcp, S, Stream, C),
-    test_declare_publisher(gen_tcp, S, 1, Stream, C),
+    test_create_stream(gen_tcp, S, Stream),
+    test_declare_publisher(gen_tcp, S, 1, Stream),
     ?awaitMatch(#{publishers := 1}, get_global_counters(Config), ?WAIT),
     Body = <<"hello">>,
-    test_publish_confirm(gen_tcp, S, 1, Body, C),
+    test_publish_confirm(gen_tcp, S, 1, Body),
 
     SubscriptionId = 42,
     SubCmd =
@@ -318,24 +303,20 @@ sac_ff(Config) ->
             <<"name">> => <<"foo">>}}},
     SubscribeFrame = rabbit_stream_core:frame(SubCmd),
     ok = gen_tcp:send(S, SubscribeFrame),
-    {Cmd, C} = receive_commands(gen_tcp, S, C),
     ?assertMatch({response, 1,
                   {subscribe, ?RESPONSE_CODE_PRECONDITION_FAILED}},
-                 Cmd),
-    test_delete_stream(gen_tcp, S, Stream, C),
-    test_close(gen_tcp, S, C),
+                 receive_command(gen_tcp, S)),
+    test_delete_stream(gen_tcp, S, Stream),
+    test_close(gen_tcp, S),
     closed = wait_for_socket_close(gen_tcp, S, 10),
     ok.
 
 max_segment_size_bytes_validation(Config) ->
     Transport = gen_tcp,
     Port = get_stream_port(Config),
-    {ok, S} =
-        Transport:connect("localhost", Port,
-                          [{active, false}, {mode, binary}]),
-    C0 = rabbit_stream_core:init(0),
-    C1 = test_peer_properties(Transport, S, C0),
-    C2 = test_authenticate(Transport, S, C1),
+    {ok, S} = Transport:connect("localhost", Port, ?SOCKET_OPTS),
+    test_peer_properties(Transport, S),
+    test_authenticate(Transport, S),
     Stream = <<"stream-max-segment-size">>,
     CreateStreamFrame =
         rabbit_stream_core:frame({request, 1,
@@ -343,11 +324,10 @@ max_segment_size_bytes_validation(Config) ->
                                    #{<<"stream-max-segment-size-bytes">> =>
                                          <<"3000000001">>}}}),
     ok = Transport:send(S, CreateStreamFrame),
-    {Cmd, C3} = receive_commands(Transport, S, C2),
     ?assertMatch({response, 1,
                   {create_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
-                 Cmd),
-    test_close(Transport, S, C3),
+                 receive_command(Transport, S)),
+    test_close(Transport, S),
     ok.
 
 consumer_count(Config) ->
@@ -415,52 +395,47 @@ test_server(Transport, Config) ->
                 application:ensure_all_started(ssl),
                 get_stream_port_tls(Config)
         end,
-    {ok, S} =
-        Transport:connect("localhost", Port,
-                          [{active, false}, {mode, binary}]),
-    C0 = rabbit_stream_core:init(0),
-    C1 = test_peer_properties(Transport, S, C0),
-    C2 = test_authenticate(Transport, S, C1),
+    {ok, S} = Transport:connect("localhost", Port, ?SOCKET_OPTS),
+    test_peer_properties(Transport, S),
+    test_authenticate(Transport, S),
     Stream = <<"stream1">>,
-    C3 = test_create_stream(Transport, S, Stream, C2),
+    test_create_stream(Transport, S, Stream),
     PublisherId = 42,
     ?assertMatch(#{publishers := 0}, get_global_counters(Config)),
-    C4 = test_declare_publisher(Transport, S, PublisherId, Stream, C3),
+    test_declare_publisher(Transport, S, PublisherId, Stream),
     ?awaitMatch(#{publishers := 1}, get_global_counters(Config), ?WAIT),
     Body = <<"hello">>,
-    C5 = test_publish_confirm(Transport, S, PublisherId, Body, C4),
-    C6 = test_publish_confirm(Transport, S, PublisherId, Body, C5),
+    test_publish_confirm(Transport, S, PublisherId, Body),
+    test_publish_confirm(Transport, S, PublisherId, Body),
     SubscriptionId = 42,
     ?assertMatch(#{consumers := 0}, get_global_counters(Config)),
-    C7 = test_subscribe(Transport, S, SubscriptionId, Stream, C6),
+    test_subscribe(Transport, S, SubscriptionId, Stream),
     ?awaitMatch(#{consumers := 1}, get_global_counters(Config), ?WAIT),
-    C8 = test_deliver(Transport, S, SubscriptionId, 0, Body, C7),
-    C9 = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
-    C10 = test_delete_stream(Transport, S, Stream, C9),
-    _C11 = test_close(Transport, S, C10),
+    test_deliver(Transport, S, SubscriptionId, 0, Body),
+    test_deliver(Transport, S, SubscriptionId, 1, Body),
+    test_delete_stream(Transport, S, Stream),
+    test_close(Transport, S),
     closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
-test_peer_properties(Transport, S, C0) ->
+test_peer_properties(Transport, S) ->
     PeerPropertiesFrame =
-        rabbit_stream_core:frame({request, 1, {peer_properties, #{}}}),
+    rabbit_stream_core:frame({request, 1, {peer_properties, #{}}}),
     ok = Transport:send(S, PeerPropertiesFrame),
-    {Cmd, C} = receive_commands(Transport, S, C0),
+    Cmd = receive_command(Transport, S),
     ?assertMatch({response, 1, {peer_properties, ?RESPONSE_CODE_OK, _}},
-                 Cmd),
-    C.
+                 Cmd).
 
-test_authenticate(Transport, S, C0) ->
+test_authenticate(Transport, S) ->
     SaslHandshakeFrame =
-        rabbit_stream_core:frame({request, 1, sasl_handshake}),
+    rabbit_stream_core:frame({request, 1, sasl_handshake}),
     ok = Transport:send(S, SaslHandshakeFrame),
     Plain = <<"PLAIN">>,
     AmqPlain = <<"AMQPLAIN">>,
-    {Cmd, C1} = receive_commands(Transport, S, C0),
-    case Cmd of
+    case receive_command(Transport, S) of
         {response, _, {sasl_handshake, ?RESPONSE_CODE_OK, Mechanisms}} ->
             ?assertEqual([AmqPlain, Plain], lists:sort(Mechanisms));
-        _ ->
+        Cmd ->
             ct:fail("invalid cmd ~p", [Cmd])
     end,
 
@@ -473,10 +448,9 @@ test_authenticate(Transport, S, C0) ->
         rabbit_stream_core:frame({request, 2,
                                   {sasl_authenticate, Plain, PlainSasl}}),
     ok = Transport:send(S, SaslAuthenticateFrame),
-    {SaslAuth, C2} = receive_commands(Transport, S, C1),
+    SaslAuth = receive_command(Transport, S),
     {response, 2, {sasl_authenticate, ?RESPONSE_CODE_OK}} = SaslAuth,
-    {Tune, C3} = receive_commands(Transport, S, C2),
-    {tune, ?DEFAULT_FRAME_MAX, ?DEFAULT_HEARTBEAT} = Tune,
+    {tune, ?DEFAULT_FRAME_MAX, ?DEFAULT_HEARTBEAT} = receive_command(Transport, S),
 
     TuneFrame =
         rabbit_stream_core:frame({response, 0,
@@ -487,82 +461,68 @@ test_authenticate(Transport, S, C0) ->
     OpenFrame =
         rabbit_stream_core:frame({request, 3, {open, VirtualHost}}),
     ok = Transport:send(S, OpenFrame),
-    {{response, 3, {open, ?RESPONSE_CODE_OK, _ConnectionProperties}},
-     C4} =
-        receive_commands(Transport, S, C3),
-    C4.
+    {response, 3, {open, ?RESPONSE_CODE_OK, _ConnectionProperties}} = receive_command(Transport, S).
 
-test_create_stream(Transport, S, Stream, C0) ->
-    CreateStreamFrame =
-        rabbit_stream_core:frame({request, 1, {create_stream, Stream, #{}}}),
+test_create_stream(Transport, S, Stream) ->
+    CreateStreamFrame = rabbit_stream_core:frame({request, 1, {create_stream, Stream, #{}}}),
     ok = Transport:send(S, CreateStreamFrame),
-    {Cmd, C} = receive_commands(Transport, S, C0),
-    ?assertMatch({response, 1, {create_stream, ?RESPONSE_CODE_OK}}, Cmd),
-    C.
+    ?assertMatch({response, 1, {create_stream, ?RESPONSE_CODE_OK}},
+                 receive_command(Transport, S)).
 
-test_delete_stream(Transport, S, Stream, C0) ->
+test_delete_stream(Transport, S, Stream) ->
     DeleteStreamFrame =
-        rabbit_stream_core:frame({request, 1, {delete_stream, Stream}}),
+    rabbit_stream_core:frame({request, 1, {delete_stream, Stream}}),
     ok = Transport:send(S, DeleteStreamFrame),
-    {Cmd, C1} = receive_commands(Transport, S, C0),
-    ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, Cmd),
-    test_metadata_update_stream_deleted(Transport, S, Stream, C1).
+    ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}},
+                 receive_command(Transport, S)),
+    test_metadata_update_stream_deleted(Transport, S, Stream).
 
-test_metadata_update_stream_deleted(Transport, S, Stream, C0) ->
-    {Meta, C1} = receive_commands(Transport, S, C0),
-    {metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE} = Meta,
-    C1.
+test_metadata_update_stream_deleted(Transport, S, Stream) ->
+    ?assertEqual({metadata_update, Stream, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE},
+                 receive_command(Transport, S)).
 
-test_declare_publisher(Transport, S, PublisherId, Stream, C0) ->
+test_declare_publisher(Transport, S, PublisherId, Stream) ->
     DeclarePublisherFrame =
-        rabbit_stream_core:frame({request, 1,
-                                  {declare_publisher,
-                                   PublisherId,
-                                   <<>>,
-                                   Stream}}),
+    rabbit_stream_core:frame({request, 1,
+                              {declare_publisher,
+                               PublisherId,
+                               <<>>,
+                               Stream}}),
     ok = Transport:send(S, DeclarePublisherFrame),
-    {Cmd, C} = receive_commands(Transport, S, C0),
     ?assertMatch({response, 1, {declare_publisher, ?RESPONSE_CODE_OK}},
-                 Cmd),
-    C.
+                 receive_command(Transport, S)).
 
-test_publish_confirm(Transport, S, PublisherId, Body, C0) ->
+test_publish_confirm(Transport, S, PublisherId, Body) ->
     BodySize = byte_size(Body),
     Messages = [<<1:64, 0:1, BodySize:31, Body:BodySize/binary>>],
     PublishFrame =
-        rabbit_stream_core:frame({publish, PublisherId, 1, Messages}),
+    rabbit_stream_core:frame({publish, PublisherId, 1, Messages}),
     ok = Transport:send(S, PublishFrame),
-    {Cmd, C} = receive_commands(Transport, S, C0),
-    ?assertMatch({publish_confirm, PublisherId, [1]}, Cmd),
-    C.
+    ?assertMatch({publish_confirm, PublisherId, [1]},
+                 receive_command(Transport, S)).
 
-test_subscribe(Transport, S, SubscriptionId, Stream, C0) ->
+test_subscribe(Transport, S, SubscriptionId, Stream) ->
     test_subscribe(Transport,
                    S,
                    SubscriptionId,
                    Stream,
-                   #{<<"random">> => <<"thing">>},
-                   C0).
+                   #{<<"random">> => <<"thing">>}).
 
 test_subscribe(Transport,
                S,
                SubscriptionId,
                Stream,
-               SubscriptionProperties,
-               C0) ->
+               SubscriptionProperties) ->
     SubCmd =
-        {request, 1,
-         {subscribe, SubscriptionId, Stream, 0, 10, SubscriptionProperties}},
+    {request, 1,
+     {subscribe, SubscriptionId, Stream, 0, 10, SubscriptionProperties}},
     SubscribeFrame = rabbit_stream_core:frame(SubCmd),
     ok = Transport:send(S, SubscribeFrame),
-    {Cmd, C} = receive_commands(Transport, S, C0),
-    ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_OK}}, Cmd),
-    C.
+    ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_OK}},
+                 receive_command(Transport, S)).
 
-test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
-    ct:pal("test_deliver ", []),
-    {{deliver, SubscriptionId, Chunk}, C} =
-        receive_commands(Transport, S, C0),
+test_deliver(Transport, S, SubscriptionId, COffset, Body) ->
+    {deliver, SubscriptionId, Chunk} = receive_command(Transport, S),
     <<5:4/unsigned,
       0:4/unsigned,
       0:8,
@@ -577,19 +537,14 @@ test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
       _ReservedBytes:32,
       0:1,
       BodySize:31/unsigned,
-      Body:BodySize/binary>> =
-        Chunk,
-    C.
+      Body:BodySize/binary>> = Chunk.
 
-test_close(Transport, S, C0) ->
+test_close(Transport, S) ->
     CloseReason = <<"OK">>,
-    CloseFrame =
-        rabbit_stream_core:frame({request, 1,
-                                  {close, ?RESPONSE_CODE_OK, CloseReason}}),
+    CloseFrame = rabbit_stream_core:frame({request, 1,
+                                           {close, ?RESPONSE_CODE_OK, CloseReason}}),
     ok = Transport:send(S, CloseFrame),
-    {{response, 1, {close, ?RESPONSE_CODE_OK}}, C} =
-        receive_commands(Transport, S, C0),
-    C.
+    {response, 1, {close, ?RESPONSE_CODE_OK}} = receive_command(Transport, S).
 
 wait_for_socket_close(_Transport, _S, 0) ->
     not_closed;
@@ -601,25 +556,12 @@ wait_for_socket_close(Transport, S, Attempt) ->
             closed
     end.
 
-receive_commands(Transport, S, C0) ->
-    case rabbit_stream_core:next_command(C0) of
-        empty ->
-            case Transport:recv(S, 0, 5000) of
-                {ok, Data} ->
-                    C1 = rabbit_stream_core:incoming_data(Data, C0),
-                    case rabbit_stream_core:next_command(C1) of
-                        empty ->
-                            {ok, Data2} = Transport:recv(S, 0, 5000),
-                            rabbit_stream_core:next_command(
-                                rabbit_stream_core:incoming_data(Data2, C1));
-                        Res ->
-                            Res
-                    end;
-                {error, Err} ->
-                    ct:fail("error receiving data ~w", [Err])
-            end;
-        Res ->
-            Res
+receive_command(Transport, S) ->
+    case Transport:recv(S, 0, 5000) of
+        {ok, Data} ->
+            rabbit_stream_core:parse_command(Data);
+        {error, Err} ->
+            ct:fail("error receiving data ~w", [Err])
     end.
 
 get_global_counters(Config) ->

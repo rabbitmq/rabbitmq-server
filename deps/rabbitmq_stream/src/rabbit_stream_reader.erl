@@ -47,8 +47,7 @@
          log :: undefined | osiris_log:state(),
          last_listener_offset = undefined :: undefined | osiris:offset()}).
 -record(stream_connection_state,
-        {data :: rabbit_stream_core:state(), blocked :: boolean(),
-         consumers :: #{subscription_id() => #consumer{}}}).
+        {blocked :: boolean(), consumers :: #{subscription_id() => #consumer{}}}).
 -record(stream_connection,
         {name :: binary(),
          %% server host
@@ -245,11 +244,9 @@ init([KeepaliveSup,
                                    correlation_id_sequence = 0,
                                    outstanding_requests = #{}},
             State =
-                #stream_connection_state{consumers = #{},
-                                         blocked = false,
-                                         data =
-                                             rabbit_stream_core:init(undefined)},
-            Transport:setopts(RealSocket, [{active, once}]),
+            #stream_connection_state{consumers = #{},
+                                     blocked = false},
+            Transport:setopts(RealSocket, [{active, once}, {packet, 4}]),
             rabbit_alarm:register(self(), {?MODULE, resource_alarm, []}),
             ConnectionNegotiationStepTimeout =
                 application:get_env(rabbitmq_stream,
@@ -1208,16 +1205,11 @@ handle_inbound_data_post_close(Transport, Connection, State, Data) ->
 
 handle_inbound_data(Transport,
                     Connection,
-                    #stream_connection_state{data = CoreState0} = State,
+                    State,
                     Data,
                     HandleFrameFun) ->
-    CoreState1 = rabbit_stream_core:incoming_data(Data, CoreState0),
-    {Commands, CoreState} = rabbit_stream_core:all_commands(CoreState1),
-    lists:foldl(fun(Command, {C, S}) ->
-                   HandleFrameFun(Transport, C, S, Command)
-                end,
-                {Connection, State#stream_connection_state{data = CoreState}},
-                Commands).
+    Command = rabbit_stream_core:parse_command(Data),
+    HandleFrameFun(Transport, Connection, State, Command).
 
 publishing_ids_from_messages(<<>>) ->
     [];
@@ -2439,15 +2431,13 @@ handle_frame_post_auth(Transport,
                                                                  1),
                 {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, <<0:32>>}
         end,
-
     Frame =
         <<?COMMAND_ROUTE:16,
           ?VERSION_1:16,
           CorrelationId:32,
           ResponseCode:16,
           StreamBin/binary>>,
-    FrameSize = byte_size(Frame),
-    Transport:send(S, <<FrameSize:32, Frame/binary>>),
+    send(Transport, S, Frame),
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S,
@@ -2481,8 +2471,7 @@ handle_frame_post_auth(Transport,
           CorrelationId:32,
           ResponseCode:16,
           PartitionsBin/binary>>,
-    FrameSize = byte_size(Frame),
-    Transport:send(S, <<FrameSize:32, Frame/binary>>),
+    send(Transport, S, Frame),
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{transport = ConnTransport,
@@ -2626,7 +2615,7 @@ handle_frame_post_auth(Transport,
     Frame =
         rabbit_stream_core:frame({response, CorrelationId,
                                   {close, ?RESPONSE_CODE_OK}}),
-    Transport:send(S, Frame),
+    send(Transport, S, Frame),
     {Connection#stream_connection{connection_step = closing},
      State}; %% we ignore any subsequent frames
 handle_frame_post_auth(_Transport, Connection, State, heartbeat) ->
@@ -3126,7 +3115,7 @@ send_file_callback(Transport,
              ?COMMAND_DELIVER:15,
              ?VERSION_1:16,
              SubscriptionId:8/unsigned>>,
-       Transport:send(S, FrameBeginning),
+       send(Transport, S, FrameBeginning),
        atomics:add(Counter, 1, Size),
        increase_messages_consumed(Counters, NumEntries),
        set_consumer_offset(Counters, FirstOffsetInChunk)
@@ -3166,16 +3155,28 @@ send_chunks(_Transport,
                        credit = 0,
                        last_listener_offset = LastLstOffset}};
 send_chunks(Transport,
-            #consumer{configuration = #consumer_configuration{socket = S}} =
-                Consumer,
+            #consumer{configuration = #consumer_configuration{socket = S}} = Consumer,
             Log,
             Credit,
             LastLstOffset,
             Retry,
             Counter) ->
-    case osiris_log:send_file(S, Log,
-                              send_file_callback(Transport, Consumer, Counter))
-    of
+    %% send_file_callback/3 writes only the beginning of the frame (packet),
+    %% the remaining chunk bytes will be written by osiris_log:send_file/3.
+    %% Since the Erlang runtime does not know that these two operations together
+    %% make up a single frame, we have to prepend the header size on our own.
+    %% Hence, we use socket option {packet, raw}.
+    %%
+    %% Additionally, because we use {packet, raw}, we must ensure the socket is in
+    %% passive mode. If it were in active mode, it happens sporadically that the Erlang runtime
+    %% concurrently parses a new incoming packet NOT stripping off the size header (because the socket
+    %% is in raw mode) and sending it as a message to our mailbox in which case we won't be able
+    %% to parse it because we always rely on the size header of incoming packets to be stripped off.
+    {ok, [{active, Active}]} = Transport:getopts(S, [active]),
+    Transport:setopts(S, [{active, false}, {packet, raw}]),
+    Result = osiris_log:send_file(S, Log, send_file_callback(Transport, Consumer, Counter)),
+    Transport:setopts(S, [{active, Active}, {packet, 4}]),
+    case Result of
         {ok, Log1} ->
             send_chunks(Transport,
                         Consumer,

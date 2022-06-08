@@ -119,7 +119,7 @@ list_connections_run(Config) ->
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
 
-    {S1, C1} = start_stream_connection(StreamPort),
+    S1 = start_stream_connection(StreamPort),
     ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     [[{conn_name, _}]] =
@@ -127,7 +127,7 @@ list_connections_run(Config) ->
     [[{ssl, false}]] =
         to_list(?COMMAND_LIST_CONNECTIONS:run([<<"ssl">>], Opts)),
 
-    {S2, C2} = start_stream_connection(StreamPort),
+    S2 = start_stream_connection(StreamPort),
     ?awaitMatch(2, connection_count(Config), ?WAIT),
 
     [[{conn_name, _}], [{conn_name, _}]] =
@@ -166,8 +166,8 @@ list_connections_run(Config) ->
     ?assertEqual([], Keys -- ?INFO_ITEMS),
     ?assertEqual([], ?INFO_ITEMS -- Keys),
 
-    rabbit_stream_SUITE:test_close(gen_tcp, S1, C1),
-    rabbit_stream_SUITE:test_close(gen_tcp, S2, C2),
+    rabbit_stream_SUITE:test_close(gen_tcp, S1),
+    rabbit_stream_SUITE:test_close(gen_tcp, S2),
     ok.
 
 list_tls_connections_run(Config) ->
@@ -183,7 +183,7 @@ list_tls_connections_run(Config) ->
     StreamTlsPort = rabbit_stream_SUITE:get_stream_port_tls(Config),
     application:ensure_all_started(ssl),
 
-    {S1, C1} = start_stream_tls_connection(StreamTlsPort),
+    S1 = start_stream_tls_connection(StreamTlsPort),
     ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     [[{conn_name, _}]] =
@@ -191,7 +191,7 @@ list_tls_connections_run(Config) ->
     [[{ssl, true}]] =
         to_list(?COMMAND_LIST_CONNECTIONS:run([<<"ssl">>], Opts)),
 
-    rabbit_stream_SUITE:test_close(ssl, S1, C1),
+    rabbit_stream_SUITE:test_close(ssl, S1),
     ok.
 
 list_consumers_merge_defaults(_Config) ->
@@ -221,19 +221,19 @@ list_consumers_run(Config) ->
     [] = to_list(?COMMAND_LIST_CONSUMERS:run([], Opts)),
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
-    {S1, C1} = start_stream_connection(StreamPort),
+    S1 = start_stream_connection(StreamPort),
     ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     Stream = <<"list_consumers_run">>,
-    C1_1 = create_stream(S1, Stream, C1),
+    create_stream(S1, Stream),
     SubId = 42,
-    C1_2 = subscribe(S1, SubId, Stream, C1_1),
+    subscribe(S1, SubId, Stream),
 
     ?awaitMatch(1, consumer_count(Config), ?WAIT),
 
-    {S2, C2} = start_stream_connection(StreamPort),
+    S2 = start_stream_connection(StreamPort),
     ?awaitMatch(2, connection_count(Config), ?WAIT),
-    C2_1 = subscribe(S2, SubId, Stream, C2),
+    subscribe(S2, SubId, Stream),
 
     ?awaitMatch(2, consumer_count(Config), ?WAIT),
 
@@ -255,11 +255,11 @@ list_consumers_run(Config) ->
     ?assertEqual([], Keys -- InfoItems),
     ?assertEqual([], InfoItems -- Keys),
 
-    C1_3 = delete_stream(S1, Stream, C1_2),
+    delete_stream(S1, Stream),
     % metadata_update_stream_deleted(S1, Stream),
-    metadata_update_stream_deleted(S2, Stream, C2_1),
-    close(S1, C1_3),
-    close(S2, C2_1),
+    metadata_update_stream_deleted(S2, Stream),
+    close(S1),
+    close(S2),
     ?awaitMatch(0, consumer_count(Config), ?WAIT),
     ok.
 
@@ -290,19 +290,19 @@ list_publishers_run(Config) ->
     [] = to_list(?COMMAND_LIST_PUBLISHERS:run([], Opts)),
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
-    {S1, C1} = start_stream_connection(StreamPort),
+    S1 = start_stream_connection(StreamPort),
     ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     Stream = <<"list_publishers_run">>,
-    C1_1 = create_stream(S1, Stream, C1),
+    create_stream(S1, Stream),
     PubId = 42,
-    C1_2 = declare_publisher(S1, PubId, Stream, C1_1),
+    declare_publisher(S1, PubId, Stream),
 
     ?awaitMatch(1, publisher_count(Config), ?WAIT),
 
-    {S2, C2} = start_stream_connection(StreamPort),
+    S2 = start_stream_connection(StreamPort),
     ?awaitMatch(2, connection_count(Config), ?WAIT),
-    C2_1 = declare_publisher(S2, PubId, Stream, C2),
+    declare_publisher(S2, PubId, Stream),
 
     ?awaitMatch(2, publisher_count(Config), ?WAIT),
 
@@ -324,11 +324,11 @@ list_publishers_run(Config) ->
     ?assertEqual([], Keys -- InfoItems),
     ?assertEqual([], InfoItems -- Keys),
 
-    C1_3 = delete_stream(S1, Stream, C1_2),
+    delete_stream(S1, Stream),
     % metadata_update_stream_deleted(S1, Stream),
-    C2_2 = metadata_update_stream_deleted(S2, Stream, C2_1),
-    close(S1, C1_3),
-    close(S2, C2_2),
+    metadata_update_stream_deleted(S2, Stream),
+    close(S1),
+    close(S2),
     ?awaitMatch(0, publisher_count(Config), ?WAIT),
     ok.
 
@@ -359,7 +359,7 @@ list_consumer_groups_run(Config) ->
     {ok, []} = ?COMMAND_LIST_CONSUMER_GROUPS:run([], Opts),
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
-    {S, C} = start_stream_connection(StreamPort),
+    S = start_stream_connection(StreamPort),
     ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     ConsumerReference = <<"foo">>,
@@ -368,11 +368,11 @@ list_consumer_groups_run(Config) ->
           <<"name">> => ConsumerReference},
 
     Stream1 = <<"list_consumer_groups_run_1">>,
-    create_stream(S, Stream1, C),
-    subscribe(S, 0, Stream1, SubProperties, C),
-    handle_consumer_update(S, C, 0),
-    subscribe(S, 1, Stream1, SubProperties, C),
-    subscribe(S, 2, Stream1, SubProperties, C),
+    create_stream(S, Stream1),
+    subscribe(S, 0, Stream1, SubProperties),
+    handle_consumer_update(S, 0),
+    subscribe(S, 1, Stream1, SubProperties),
+    subscribe(S, 2, Stream1, SubProperties),
 
     ?awaitMatch(3, consumer_count(Config), ?WAIT),
 
@@ -380,11 +380,11 @@ list_consumer_groups_run(Config) ->
     assertConsumerGroup(Stream1, ConsumerReference, -1, 3, CG1),
 
     Stream2 = <<"list_consumer_groups_run_2">>,
-    create_stream(S, Stream2, C),
-    subscribe(S, 3, Stream2, SubProperties, C),
-    handle_consumer_update(S, C, 3),
-    subscribe(S, 4, Stream2, SubProperties, C),
-    subscribe(S, 5, Stream2, SubProperties, C),
+    create_stream(S, Stream2),
+    subscribe(S, 3, Stream2, SubProperties),
+    handle_consumer_update(S, 3),
+    subscribe(S, 4, Stream2, SubProperties),
+    subscribe(S, 5, Stream2, SubProperties),
 
     ?awaitMatch(3 + 3, consumer_count(Config), ?WAIT),
 
@@ -392,10 +392,10 @@ list_consumer_groups_run(Config) ->
     assertConsumerGroup(Stream1, ConsumerReference, -1, 3, CG1),
     assertConsumerGroup(Stream2, ConsumerReference, -1, 3, CG2),
 
-    delete_stream(S, Stream1, C),
-    delete_stream(S, Stream2, C),
+    delete_stream(S, Stream1),
+    delete_stream(S, Stream2),
 
-    close(S, C),
+    close(S),
     {ok, []} = ?COMMAND_LIST_CONSUMER_GROUPS:run([], Opts),
     ok.
 
@@ -454,18 +454,18 @@ list_group_consumers_run(Config) ->
         ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup1),
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
-    {S, C} = start_stream_connection(StreamPort),
+    S = start_stream_connection(StreamPort),
     ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     SubProperties =
         #{<<"single-active-consumer">> => <<"true">>,
           <<"name">> => ConsumerReference},
 
-    create_stream(S, Stream1, C),
-    subscribe(S, 0, Stream1, SubProperties, C),
-    handle_consumer_update(S, C, 0),
-    subscribe(S, 1, Stream1, SubProperties, C),
-    subscribe(S, 2, Stream1, SubProperties, C),
+    create_stream(S, Stream1),
+    subscribe(S, 0, Stream1, SubProperties),
+    handle_consumer_update(S, 0),
+    subscribe(S, 1, Stream1, SubProperties),
+    subscribe(S, 2, Stream1, SubProperties),
 
     ?awaitMatch(3, consumer_count(Config), ?WAIT),
 
@@ -481,11 +481,11 @@ list_group_consumers_run(Config) ->
         maps:merge(#{stream => Stream2, reference => ConsumerReference},
                    Opts),
 
-    create_stream(S, Stream2, C),
-    subscribe(S, 3, Stream2, SubProperties, C),
-    handle_consumer_update(S, C, 3),
-    subscribe(S, 4, Stream2, SubProperties, C),
-    subscribe(S, 5, Stream2, SubProperties, C),
+    create_stream(S, Stream2),
+    subscribe(S, 3, Stream2, SubProperties),
+    handle_consumer_update(S, 3),
+    subscribe(S, 4, Stream2, SubProperties),
+    subscribe(S, 5, Stream2, SubProperties),
 
     ?awaitMatch(3 + 3, consumer_count(Config), ?WAIT),
 
@@ -496,23 +496,22 @@ list_group_consumers_run(Config) ->
                   [{subscription_id, 5}, {state, inactive}]],
                  Consumers2),
 
-    delete_stream(S, Stream1, C),
-    delete_stream(S, Stream2, C),
+    delete_stream(S, Stream1),
+    delete_stream(S, Stream2),
 
     {error, not_found} =
         ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup2),
 
-    close(S, C),
+    close(S),
     ok.
 
-handle_consumer_update(S, C0, SubId) ->
-    {{request, CorrId, {consumer_update, SubId, true}}, C1} =
-        rabbit_stream_SUITE:receive_commands(gen_tcp, S, C0),
+handle_consumer_update(S, SubId) ->
+    {request, CorrId, {consumer_update, SubId, true}} =
+        rabbit_stream_SUITE:receive_command(gen_tcp, S),
     ConsumerUpdateCmd =
         {response, CorrId, {consumer_update, ?RESPONSE_CODE_OK, next}},
     ConsumerUpdateFrame = rabbit_stream_core:frame(ConsumerUpdateCmd),
-    ok = gen_tcp:send(S, ConsumerUpdateFrame),
-    C1.
+    ok = gen_tcp:send(S, ConsumerUpdateFrame).
 
 assertConsumerGroup(S, R, PI, Cs, Record) ->
     ?assertEqual(S, proplists:get_value(stream, Record)),
@@ -689,38 +688,35 @@ partitions(Config, Name) ->
                                  partitions,
                                  [<<"/">>, Name]).
 
-create_stream(S, Stream, C0) ->
-    rabbit_stream_SUITE:test_create_stream(gen_tcp, S, Stream, C0).
+create_stream(S, Stream) ->
+    rabbit_stream_SUITE:test_create_stream(gen_tcp, S, Stream).
 
-subscribe(S, SubId, Stream, SubProperties, C) ->
+subscribe(S, SubId, Stream, SubProperties) ->
     rabbit_stream_SUITE:test_subscribe(gen_tcp,
                                        S,
                                        SubId,
                                        Stream,
-                                       SubProperties,
-                                       C).
+                                       SubProperties).
 
-subscribe(S, SubId, Stream, C) ->
-    rabbit_stream_SUITE:test_subscribe(gen_tcp, S, SubId, Stream, C).
+subscribe(S, SubId, Stream) ->
+    rabbit_stream_SUITE:test_subscribe(gen_tcp, S, SubId, Stream).
 
-declare_publisher(S, PubId, Stream, C) ->
+declare_publisher(S, PubId, Stream) ->
     rabbit_stream_SUITE:test_declare_publisher(gen_tcp,
                                                S,
                                                PubId,
-                                               Stream,
-                                               C).
+                                               Stream).
 
-delete_stream(S, Stream, C) ->
-    rabbit_stream_SUITE:test_delete_stream(gen_tcp, S, Stream, C).
+delete_stream(S, Stream) ->
+    rabbit_stream_SUITE:test_delete_stream(gen_tcp, S, Stream).
 
-metadata_update_stream_deleted(S, Stream, C) ->
+metadata_update_stream_deleted(S, Stream) ->
     rabbit_stream_SUITE:test_metadata_update_stream_deleted(gen_tcp,
                                                             S,
-                                                            Stream,
-                                                            C).
+                                                            Stream).
 
-close(S, C) ->
-    rabbit_stream_SUITE:test_close(gen_tcp, S, C).
+close(S) ->
+    rabbit_stream_SUITE:test_close(gen_tcp, S).
 
 options(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -769,13 +765,11 @@ start_stream_tls_connection(Port) ->
     start_stream_connection(ssl, Port).
 
 start_stream_connection(Transport, Port) ->
-    {ok, S} =
-        Transport:connect("localhost", Port,
-                          [{active, false}, {mode, binary}]),
-    C0 = rabbit_stream_core:init(0),
-    C1 = rabbit_stream_SUITE:test_peer_properties(Transport, S, C0),
-    C = rabbit_stream_SUITE:test_authenticate(Transport, S, C1),
-    {S, C}.
+    {ok, S} = Transport:connect("localhost", Port,
+                                [{active, false}, {mode, binary}, {packet, 4}]),
+    rabbit_stream_SUITE:test_peer_properties(Transport, S),
+    rabbit_stream_SUITE:test_authenticate(Transport, S),
+    S.
 
 start_amqp_connection(Type, Node, Port) ->
     Params = amqp_params(Type, Node, Port),

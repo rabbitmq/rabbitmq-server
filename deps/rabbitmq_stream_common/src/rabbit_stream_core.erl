@@ -2,35 +2,14 @@
 
 -include("rabbit_stream.hrl").
 
--export([init/1,
-         incoming_data/2,
-         next_command/1,
-         all_commands/1,
-         frame/1,
+-export([frame/1,
          parse_command/1]).
-
-%% holds static or rarely changing fields
--record(cfg, {}).
--record(?MODULE,
-        {cfg :: #cfg{},
-         frames = [] :: [iodata()],
-         %% partial data
-         data ::
-             undefined |
-             %% this is only if the binary is smaller than 4 bytes
-             binary() |
-             {RemainingBytes :: non_neg_integer(), iodata()},
-         commands = queue:new() :: queue:queue(command())}).
-
--opaque state() :: #?MODULE{}.
 
 %% for parsing
 -define(STRING(Size, Str), Size:16, Str:Size / binary).
 %% for pickling
 -define(STRING(Str), (byte_size(Str)):16, Str / binary).
 -define(DATASTR(Str), (byte_size(Str)):32, Str / binary).
-
--export_type([state/0]).
 
 -type correlation_id() :: non_neg_integer().
 %% publishing sequence number
@@ -130,82 +109,6 @@
      {consumer_update, response_code(), none | offset_spec()}} |
     {unknown, binary()}.
 
--spec init(term()) -> state().
-init(_) ->
-    #?MODULE{cfg = #cfg{}}.
-
--spec next_command(state()) -> {command(), state()} | empty.
-next_command(#?MODULE{commands = Commands0} = State) ->
-    case queue:out(Commands0) of
-        {{value, Cmd}, Commands} ->
-            {Cmd, State#?MODULE{commands = Commands}};
-        {empty, _} ->
-            empty
-    end.
-
--spec all_commands(state()) -> {[command()], state()}.
-all_commands(#?MODULE{commands = Commands0} = State) ->
-    {queue:to_list(Commands0), State#?MODULE{commands = queue:new()}}.
-
-%% returns frames
--spec incoming_data(binary(), state()) -> state().
-%% TODO: check max frame size
-incoming_data(<<>>,
-              #?MODULE{frames = Frames, commands = Commands} = State) ->
-    State#?MODULE{frames = [], commands = parse_frames(Frames, Commands)};
-incoming_data(<<Size:32, Frame:Size/binary, Rem/binary>>,
-              #?MODULE{frames = Frames, data = undefined} = State) ->
-    incoming_data(Rem,
-                  State#?MODULE{frames = [Frame | Frames], data = undefined});
-incoming_data(<<Size:32, Rem/binary>>,
-              #?MODULE{frames = Frames,
-                       data = undefined,
-                       commands = Commands} =
-                  State) ->
-    %% not enough data to complete frame, stash and await more data
-    State#?MODULE{frames = [],
-                  data = {Size - byte_size(Rem), Rem},
-                  commands = parse_frames(Frames, Commands)};
-incoming_data(Data,
-              #?MODULE{frames = Frames,
-                       data = undefined,
-                       commands = Commands} =
-                  State)
-    when byte_size(Data) < 4 ->
-    %% not enough data to even know the size required
-    %% just stash binary and hit last clause next
-    State#?MODULE{frames = [],
-                  data = Data,
-                  commands = parse_frames(Frames, Commands)};
-incoming_data(Data,
-              #?MODULE{frames = Frames,
-                       data = {Size, Partial},
-                       commands = Commands} =
-                  State) ->
-    case Data of
-        <<Part:Size/binary, Rem/binary>> ->
-            incoming_data(Rem,
-                          State#?MODULE{frames =
-                                            [append_data(Partial, Part)
-                                             | Frames],
-                                        data = undefined});
-        Rem ->
-            State#?MODULE{frames = [],
-                          data =
-                              {Size - byte_size(Rem),
-                               append_data(Partial, Rem)},
-                          commands = parse_frames(Frames, Commands)}
-    end;
-incoming_data(Data, #?MODULE{data = Partial} = State)
-    when is_binary(Partial) ->
-    incoming_data(<<Partial/binary, Data/binary>>,
-                  State#?MODULE{data = undefined}).
-
-parse_frames(Frames, Queue) ->
-    lists:foldr(fun(Frame, Acc) -> queue:in(parse_command(Frame), Acc)
-                end,
-                Queue, Frames).
-
 -spec frame(command()) -> iodata().
 frame({publish_confirm, PublisherId, PublishingIds}) ->
     PubIds =
@@ -213,101 +116,101 @@ frame({publish_confirm, PublisherId, PublishingIds}) ->
                     end,
                     <<>>, PublishingIds),
     PublishingIdCount = length(PublishingIds),
-    wrap_in_frame([<<?REQUEST:1,
-                     ?COMMAND_PUBLISH_CONFIRM:15,
-                     ?VERSION_1:16,
-                     PublisherId:8,
-                     PublishingIdCount:32>>,
-                   PubIds]);
+    [<<?REQUEST:1,
+       ?COMMAND_PUBLISH_CONFIRM:15,
+       ?VERSION_1:16,
+       PublisherId:8,
+       PublishingIdCount:32>>,
+     PubIds];
 frame({publish, PublisherId, MessageCount, Payload}) ->
-    wrap_in_frame([<<?REQUEST:1,
-                     ?COMMAND_PUBLISH:15,
-                     ?VERSION_1:16,
-                     PublisherId:8,
-                     MessageCount:32>>,
-                   Payload]);
+    [<<?REQUEST:1,
+       ?COMMAND_PUBLISH:15,
+       ?VERSION_1:16,
+       PublisherId:8,
+       MessageCount:32>>,
+     Payload];
 frame({deliver, SubscriptionId, Chunk}) ->
-    wrap_in_frame([<<?REQUEST:1,
-                     ?COMMAND_DELIVER:15,
-                     ?VERSION_1:16,
-                     SubscriptionId:8>>,
-                   Chunk]);
+    [<<?REQUEST:1,
+       ?COMMAND_DELIVER:15,
+       ?VERSION_1:16,
+       SubscriptionId:8>>,
+     Chunk];
 frame({metadata_update, Stream, ResponseCode}) ->
     StreamSize = byte_size(Stream),
-    wrap_in_frame(<<?REQUEST:1,
-                    ?COMMAND_METADATA_UPDATE:15,
-                    ?VERSION_1:16,
-                    ResponseCode:16,
-                    StreamSize:16,
-                    Stream/binary>>);
+    <<?REQUEST:1,
+      ?COMMAND_METADATA_UPDATE:15,
+      ?VERSION_1:16,
+      ResponseCode:16,
+      StreamSize:16,
+      Stream/binary>>;
 frame({store_offset, Reference, Stream, Offset}) ->
     ReferenceSize = byte_size(Reference),
     StreamSize = byte_size(Stream),
-    wrap_in_frame(<<?REQUEST:1,
-                    ?COMMAND_STORE_OFFSET:15,
-                    ?VERSION_1:16,
-                    ReferenceSize:16,
-                    Reference/binary,
-                    StreamSize:16,
-                    Stream/binary,
-                    Offset:64>>);
+    <<?REQUEST:1,
+      ?COMMAND_STORE_OFFSET:15,
+      ?VERSION_1:16,
+      ReferenceSize:16,
+      Reference/binary,
+      StreamSize:16,
+      Stream/binary,
+      Offset:64>>;
 frame(heartbeat) ->
-    wrap_in_frame(<<?REQUEST:1, ?COMMAND_HEARTBEAT:15, ?VERSION_1:16>>);
+    <<?REQUEST:1, ?COMMAND_HEARTBEAT:15, ?VERSION_1:16>>;
 frame({credit, SubscriptionId, Credit}) ->
-    wrap_in_frame(<<?REQUEST:1,
-                    ?COMMAND_CREDIT:15,
-                    ?VERSION_1:16,
-                    SubscriptionId:8,
-                    Credit:16/signed>>);
+    <<?REQUEST:1,
+      ?COMMAND_CREDIT:15,
+      ?VERSION_1:16,
+      SubscriptionId:8,
+      Credit:16/signed>>;
 frame({tune, FrameMax, Heartbeat}) ->
     %% tune can also be a response, which is weird
-    wrap_in_frame(<<?REQUEST:1,
-                    ?COMMAND_TUNE:15,
-                    ?VERSION_1:16,
-                    FrameMax:32,
-                    Heartbeat:32>>);
+    <<?REQUEST:1,
+      ?COMMAND_TUNE:15,
+      ?VERSION_1:16,
+      FrameMax:32,
+      Heartbeat:32>>;
 frame({publish_error, PublisherId, ErrCode, PublishingIds}) ->
-    Details =
-        iolist_to_binary(lists:foldr(fun(PubId, Acc) ->
-                                        [<<PubId:64, ErrCode:16>> | Acc]
-                                     end,
-                                     [], PublishingIds)),
-    wrap_in_frame(<<?REQUEST:1,
-                    ?COMMAND_PUBLISH_ERROR:15,
-                    ?VERSION_1:16,
-                    PublisherId:8,
-                    (length(PublishingIds)):32,
-                    Details/binary>>);
+    Details = iolist_to_binary(
+                lists:foldr(fun(PubId, Acc) ->
+                                    [<<PubId:64, ErrCode:16>> | Acc]
+                            end,
+                            [], PublishingIds)),
+    <<?REQUEST:1,
+      ?COMMAND_PUBLISH_ERROR:15,
+      ?VERSION_1:16,
+      PublisherId:8,
+      (length(PublishingIds)):32,
+      Details/binary>>;
 frame({request, CorrelationId, Body}) ->
     {CmdTag, BodyBin} = request_body(Body),
     CmdId = command_id(CmdTag),
-    wrap_in_frame([<<?REQUEST:1,
-                     CmdId:15,
-                     ?VERSION_1:16,
-                     CorrelationId:32>>,
-                   BodyBin]);
+    [<<?REQUEST:1,
+       CmdId:15,
+       ?VERSION_1:16,
+       CorrelationId:32>>,
+     BodyBin];
 frame({response, _CorrelationId, {credit, Code, SubscriptionId}}) ->
     %% specical case as credit response does not write correlationid!
-    wrap_in_frame(<<?RESPONSE:1,
-                    ?COMMAND_CREDIT:15,
-                    ?VERSION_1:16,
-                    Code:16,
-                    SubscriptionId:8>>);
+    <<?RESPONSE:1,
+      ?COMMAND_CREDIT:15,
+      ?VERSION_1:16,
+      Code:16,
+      SubscriptionId:8>>;
 frame({response, CorrelationId, {Tag, Code}})
     when is_integer(Code) andalso is_atom(Tag) ->
     %% standard response without payload
     CmdId = command_id(Tag),
-    wrap_in_frame(<<?RESPONSE:1,
-                    CmdId:15,
-                    ?VERSION_1:16,
-                    CorrelationId:32,
-                    Code:16>>);
+    <<?RESPONSE:1,
+      CmdId:15,
+      ?VERSION_1:16,
+      CorrelationId:32,
+      Code:16>>;
 frame({response, _Corr, {tune, FrameMax, Heartbeat}}) ->
-    wrap_in_frame(<<?RESPONSE:1,
-                    ?COMMAND_TUNE:15,
-                    ?VERSION_1:16,
-                    FrameMax:32,
-                    Heartbeat:32>>);
+    <<?RESPONSE:1,
+      ?COMMAND_TUNE:15,
+      ?VERSION_1:16,
+      FrameMax:32,
+      Heartbeat:32>>;
 frame({response, Corr, {open, ResponseCode, ConnectionProperties}}) ->
     ConnPropsCount = map_size(ConnectionProperties),
     ConnectionPropertiesBin =
@@ -318,19 +221,19 @@ frame({response, Corr, {open, ResponseCode, ConnectionProperties}}) ->
                 PropsBin = generate_map(ConnectionProperties),
                 [<<ConnPropsCount:32>>, PropsBin]
         end,
-    wrap_in_frame([<<?RESPONSE:1,
-                     ?COMMAND_OPEN:15,
-                     ?VERSION_1:16,
-                     Corr:32,
-                     ResponseCode:16>>,
-                   ConnectionPropertiesBin]);
+    [<<?RESPONSE:1,
+       ?COMMAND_OPEN:15,
+       ?VERSION_1:16,
+       Corr:32,
+       ResponseCode:16>>,
+     ConnectionPropertiesBin];
 frame({response, CorrelationId, Body}) ->
     {CommandId, BodyBin} = response_body(Body),
-    wrap_in_frame([<<?RESPONSE:1,
-                     CommandId:15,
-                     ?VERSION_1:16,
-                     CorrelationId:32>>,
-                   BodyBin]);
+    [<<?RESPONSE:1,
+       CommandId:15,
+       ?VERSION_1:16,
+       CorrelationId:32>>,
+     BodyBin];
 frame(Command) ->
     exit({not_impl, Command}).
 
@@ -541,24 +444,11 @@ request_body({consumer_update = Tag, SubscriptionId, Active}) ->
         end,
     {Tag, <<SubscriptionId:8, ActiveBin:8>>}.
 
-append_data(Prev, Data) when is_binary(Prev) ->
-    [Prev, Data];
-append_data(Prev, Data) when is_list(Prev) ->
-    Prev ++ [Data].
-
-wrap_in_frame(IOData) ->
-    Size = iolist_size(IOData),
-    [<<Size:32>> | IOData].
-
+-spec parse_command(binary()) -> command().
 parse_command(<<?REQUEST:1, _:15, _/binary>> = Bin) ->
     parse_request(Bin);
 parse_command(<<?RESPONSE:1, _:15, _/binary>> = Bin) ->
-    parse_response(Bin);
-parse_command(Data) when is_list(Data) ->
-    %% TODO: most commands are rare or small and likely to be a single
-    %% binary, however publish and delivery should be parsed from the
-    %% iodata rather than turned into a binary
-    parse_command(iolist_to_binary(Data)).
+    parse_response(Bin).
 
 -spec parse_request(binary()) -> command().
 parse_request(<<?REQUEST:1,
