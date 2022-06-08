@@ -9,5 +9,8 @@ TEST_DEPS = proper
 EXTRA_SOURCES += include/rabbit_framing.hrl				\
 		 src/rabbit_framing_amqp_0_9_1.erl
 
-.DEFAULT_GOAL = all
-$(PROJECT).d:: $(EXTRA_SOURCES)
+codegen-clean:
+	$(gen_verbose) rm -f $(EXTRA_SOURCES)
+
+# .DEFAULT_GOAL = all
+codegen :: codegen-clean $(EXTRA_SOURCES)

@@ -12,38 +12,38 @@ load(
     "rabbitmq_suite",
 )
 
-py_binary(
-    name = "codegen",
-    srcs = [
-        "codegen.py",
-    ],
-    imports = ["../../deps/rabbitmq_codegen"],
-    deps = [
-        "//deps/rabbitmq_codegen:amqp_codegen",
-    ],
-)
+# py_binary(
+#     name = "codegen",
+#     srcs = [
+#         "codegen.py",
+#     ],
+#     imports = ["../../deps/rabbitmq_codegen"],
+#     deps = [
+#         "//deps/rabbitmq_codegen:amqp_codegen",
+#     ],
+# )
 
-genrule(
-    name = "generated_headers",
-    srcs = [
-        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
-        "//deps/rabbitmq_codegen:credit_extension.json",
-    ],
-    outs = ["include/rabbit_framing.hrl"],
-    cmd = "$(location :codegen) --ignore-conflicts header $(SRCS) $@",
-    tools = [":codegen"],
-)
+# genrule(
+#     name = "generated_headers",
+#     srcs = [
+#         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
+#         "//deps/rabbitmq_codegen:credit_extension.json",
+#     ],
+#     outs = ["include/rabbit_framing.hrl"],
+#     cmd = "$(location :codegen) --ignore-conflicts header $(SRCS) $@",
+#     tools = [":codegen"],
+# )
 
-genrule(
-    name = "rabbit_framing_amqp_0_9_1.erl",
-    srcs = [
-        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
-        "//deps/rabbitmq_codegen:credit_extension.json",
-    ],
-    outs = ["src/rabbit_framing_amqp_0_9_1.erl"],
-    cmd = "$(location :codegen) body $(SRCS) $@",
-    tools = [":codegen"],
-)
+# genrule(
+#     name = "rabbit_framing_amqp_0_9_1.erl",
+#     srcs = [
+#         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
+#         "//deps/rabbitmq_codegen:credit_extension.json",
+#     ],
+#     outs = ["src/rabbit_framing_amqp_0_9_1.erl"],
+#     cmd = "$(location :codegen) body $(SRCS) $@",
+#     tools = [":codegen"],
+# )
 
 DEPS = []
 

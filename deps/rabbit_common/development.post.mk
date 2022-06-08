@@ -21,7 +21,4 @@ src/rabbit_framing_amqp_0_9_1.erl:: $(CODEGEN) $(CODEGEN_AMQP) \
 	$(gen_verbose) env PYTHONPATH=$(CODEGEN_DIR) \
 	 $(PYTHON) $(CODEGEN) body $(AMQP_SPEC_JSON_FILES_0_9_1) $@
 
-clean:: clean-extra-sources
-
-clean-extra-sources:
-	$(gen_verbose) rm -f $(EXTRA_SOURCES)
+clean::
