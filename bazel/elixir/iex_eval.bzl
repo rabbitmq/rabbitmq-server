@@ -2,7 +2,7 @@ load(
     ":elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_symlink_erlang",
+    "maybe_copy_erlang",
 )
 
 def _impl(ctx):
@@ -16,7 +16,7 @@ def _impl(ctx):
 
     script = """set -euo pipefail
 
-{maybe_symlink_erlang}
+{maybe_copy_erlang}
 
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
@@ -31,7 +31,7 @@ export OUTS="{outs}"
 
 ${{ABS_ELIXIR_HOME}}/bin/iex --eval "$1"
 """.format(
-        maybe_symlink_erlang = maybe_symlink_erlang(ctx),
+        maybe_copy_erlang = maybe_copy_erlang(ctx),
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         srcs = ctx.configuration.host_path_separator.join([src.path for src in ctx.files.srcs]),

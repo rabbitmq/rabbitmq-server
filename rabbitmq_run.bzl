@@ -6,7 +6,6 @@ load(
 load(
     "@rules_erlang//tools:erlang_toolchain.bzl",
     "erlang_dirs",
-    "maybe_symlink_erlang",
 )
 load(
     ":rabbitmq_home.bzl",

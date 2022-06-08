@@ -15,7 +15,7 @@ load(
     "//bazel/elixir:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_symlink_erlang",
+    "maybe_copy_erlang",
 )
 
 def find_mix_exs(files):
@@ -60,7 +60,7 @@ def _impl(ctx):
 
     script = """set -euo pipefail
 
-{maybe_symlink_erlang}
+{maybe_copy_erlang}
 
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
@@ -92,7 +92,7 @@ fi
 # is not used, and bazel does not allow them
 find ${{MIX_BUILD_PATH}} -type l -delete
 """.format(
-        maybe_symlink_erlang = maybe_symlink_erlang(ctx),
+        maybe_copy_erlang = maybe_copy_erlang(ctx),
         package = ctx.label.package,
         erlang_home = erlang_home,
         elixir_home = elixir_home,

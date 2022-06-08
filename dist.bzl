@@ -5,7 +5,7 @@ load("@rules_erlang//:ct.bzl", "additional_file_dest_relative_path")
 load(
     "@rules_erlang//tools:erlang_toolchain.bzl",
     "erlang_dirs",
-    "maybe_symlink_erlang",
+    "maybe_install_erlang",
 )
 load(
     ":rabbitmq_home.bzl",
@@ -85,7 +85,7 @@ def _plugins_dir(ctx, plugins):
     commands = [
         "set -euo pipefail",
         "",
-        maybe_symlink_erlang(ctx),
+        maybe_install_erlang(ctx),
     ]
 
     for plugin in plugins:

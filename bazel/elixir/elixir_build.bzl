@@ -5,7 +5,7 @@ load(
 load(
     "@rules_erlang//tools:erlang_toolchain.bzl",
     "erlang_dirs",
-    "maybe_symlink_erlang",
+    "maybe_install_erlang",
 )
 
 ElixirInfo = provider(
@@ -61,7 +61,7 @@ fi
         outputs = [release_dir, build_dir, version_file],
         command = """set -euo pipefail
 
-{maybe_symlink_erlang}
+{maybe_install_erlang}
 
 export PATH="{erlang_home}"/bin:${{PATH}}
 
@@ -83,7 +83,7 @@ cp -r lib $ABS_RELEASE_DIR/
 
 $ABS_RELEASE_DIR/bin/iex --version > $ABS_VERSION_FILE
 """.format(
-            maybe_symlink_erlang = maybe_symlink_erlang(ctx),
+            maybe_install_erlang = maybe_install_erlang(ctx),
             erlang_home = erlang_home,
             archive_path = downloaded_archive.path,
             strip_prefix = strip_prefix,

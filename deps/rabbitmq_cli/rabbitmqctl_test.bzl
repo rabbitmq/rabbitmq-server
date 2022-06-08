@@ -15,7 +15,7 @@ load(
     "//bazel/elixir:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_symlink_erlang",
+    "maybe_install_erlang",
 )
 
 def _impl(ctx):
@@ -40,7 +40,7 @@ def _impl(ctx):
 export LANG="en_US.UTF-8"
 export LC_ALL="en_US.UTF-8"
 
-{maybe_symlink_erlang}
+{maybe_install_erlang}
 
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
@@ -96,7 +96,7 @@ set -x
     --max-failures 1 \\
     ${{TEST_FILE}}
     """.format(
-            maybe_symlink_erlang = maybe_symlink_erlang(ctx, short_path = True),
+            maybe_install_erlang = maybe_install_erlang(ctx, short_path = True),
             erlang_home = erlang_home,
             elixir_home = elixir_home,
             package_dir = package_dir,

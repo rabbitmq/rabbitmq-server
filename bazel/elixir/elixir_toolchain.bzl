@@ -49,7 +49,7 @@ def elixir_dirs(ctx, short_path = False):
         p = info.release_dir.short_path if short_path else info.release_dir.path
         return (p, ctx.runfiles([info.release_dir, info.version_file]))
 
-def maybe_symlink_erlang(ctx, short_path = False):
+def maybe_copy_erlang(ctx, short_path = False):
     info = _build_info(ctx)
     release_dir = info.release_dir
     if release_dir == None:
