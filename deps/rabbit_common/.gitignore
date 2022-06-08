@@ -26,4 +26,3 @@
 /rabbit_common.d
 
 # Generated source files.
-/include/rabbit_framing.hrl
