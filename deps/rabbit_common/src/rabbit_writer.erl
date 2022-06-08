@@ -25,7 +25,7 @@
 %% When a socket write fails, writer will exit.
 
 -include("rabbit.hrl").
--include("rabbit_framing.hrl").
+% -include("rabbit_framing.hrl").
 
 -export([start/6, start_link/6, start/7, start_link/7, start/8, start_link/8]).
 
