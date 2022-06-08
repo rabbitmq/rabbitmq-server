@@ -1,14 +1,9 @@
-load("@rules_erlang//:app_file.bzl", "app_file")
-load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
-load("@rules_erlang//:erlc.bzl", "erlc")
 load("@rules_erlang//:xref.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
-    "APP_VERSION",
-    "RABBITMQ_ERLC_OPTS",
-    "RABBITMQ_TEST_ERLC_OPTS",
     "assert_suites",
+    "rabbitmq_app",
     "rabbitmq_suite",
 )
 
@@ -56,8 +51,6 @@ genrule(
     tools = [":codegen"],
 )
 
-DEPS = []
-
 RUNTIME_DEPS = [
     "@jsx//:erlang_app",
     "@recon//:erlang_app",
@@ -98,78 +91,25 @@ EXTRA_APPS = [
     "xmerl",
 ]
 
-HDRS = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"]
-
-app_file(
-    name = "app_file",
+rabbitmq_app(
     app_description = "Modules shared by rabbitmq-server and rabbitmq-erlang-client",
-    app_extra = APP_EXTRA_KEYS,
+    app_extra_keys = APP_EXTRA_KEYS,
     app_name = APP_NAME,
-    app_version = APP_VERSION,
     extra_apps = EXTRA_APPS,
-    modules = [":beam_files"],
-    deps = DEPS + RUNTIME_DEPS,
-)
-
-erlc(
-    name = "beam_files",
-    srcs = glob(
-        ["src/*.erl"],
-    ) + [
+    extra_hdrs = [
+        "include/rabbit_framing.hrl",
+    ],
+    extra_srcs = [
         "src/rabbit_framing_amqp_0_8.erl",
         "src/rabbit_framing_amqp_0_9_1.erl",
     ],
-    hdrs = HDRS,
-    dest = "ebin",
-    erlc_opts = RABBITMQ_ERLC_OPTS,
-    deps = DEPS,
-)
-
-erlang_app_info(
-    name = "erlang_app",
-    hdrs = HDRS,
-    app = ":app_file",
-    app_name = APP_NAME,
-    beam = [
-        ":beam_files",
-    ],
-    visibility = ["//visibility:public"],
-    deps = DEPS + RUNTIME_DEPS,
-)
-
-erlc(
-    name = "test_beam_files",
-    testonly = True,
-    srcs = glob(
-        ["src/*.erl"],
-    ) + [
-        "src/rabbit_framing_amqp_0_8.erl",
-        "src/rabbit_framing_amqp_0_9_1.erl",
-    ],
-    hdrs = HDRS,
-    dest = "src",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-    deps = DEPS,
-)
-
-erlang_app_info(
-    name = "test_erlang_app",
-    testonly = True,
-    hdrs = HDRS,
-    app = ":app_file",
-    app_name = APP_NAME,
-    beam = [
-        ":test_beam_files",
-    ],
-    visibility = ["//:__subpackages__"],
-    deps = DEPS + RUNTIME_DEPS,
+    runtime_deps = RUNTIME_DEPS,
 )
 
 xref(
     additional_libs = [
         "@ranch//:erlang_app",
     ],
-    tags = ["xref"],
 )
 
 plt(
@@ -184,7 +124,6 @@ plt(
 
 dialyze(
     plt = ":base_plt",
-    tags = ["dialyze"],
     warnings_as_errors = False,
 )
 

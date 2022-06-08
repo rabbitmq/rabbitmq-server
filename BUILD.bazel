@@ -1,12 +1,16 @@
-load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load(
+    "@bazel_skylib//rules:common_settings.bzl",
+    "string_flag",
+)
 load("@rules_erlang//:dialyze.bzl", "plt")
 load("@rules_erlang//:shell.bzl", "shell")
-load("elixir_home.bzl", "elixir_home")
+load("@rules_erlang//:erl_eval.bzl", "erl_eval")
+load("//bazel/elixir:iex_eval.bzl", "iex_eval")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
-load(":rabbitmq.bzl", "APP_VERSION", "all_plugins")
-load(":dist.bzl", "collect_licenses", "versioned_rabbitmq_home")
+load(":dist.bzl", "package_generic_unix")
+load(":rabbitmq.bzl", "all_plugins")
 
 exports_files([
     "scripts/bazel/rabbitmq-run.sh",
@@ -20,27 +24,10 @@ config_setting(
     },
 )
 
-# This allows us to
-# `bazel build //my/target \
-#    --//:elixir_home=/path/to/elixir/installation`
-elixir_home(
+string_flag(
     name = "elixir_home",
-    build_setting_default = "~/.kiex/elixirs/elixir-1.10.4",
+    build_setting_default = "",
     visibility = ["//visibility:public"],
-)
-
-platform(
-    name = "erlang_git_platform",
-    constraint_values = [
-        "@platforms//os:linux",
-        "@platforms//cpu:x86_64",
-        "@bazel_tools//tools/cpp:clang",
-    ],
-    exec_properties = {
-        "OSFamily": "Linux",
-        # linux-erlang-git-master
-        "container-image": "docker://pivotalrabbitmq/rabbitmq-server-buildenv@sha256:5d4fa38f723186668a497a8ee57e22010187e9347add5d4a7cc199dc13f1493f",
-    },
 )
 
 plt(
@@ -48,9 +35,13 @@ plt(
     visibility = ["//visibility:public"],
 )
 
+PLUGINS = all_plugins(
+    rabbitmq_workspace = "",
+)
+
 rabbitmq_home(
     name = "broker-home",
-    plugins = all_plugins(rabbitmq_workspace = ""),
+    plugins = PLUGINS,
 )
 
 rabbitmq_run(
@@ -86,73 +77,22 @@ rabbitmqctl(
 
 shell(
     name = "repl",
-    deps = all_plugins(rabbitmq_workspace = ""),
+    deps = PLUGINS,
 )
 
-collect_licenses(
-    name = "licenses",
-    srcs = glob(
-        ["LICENSE*"],
-        exclude = [
-            "LICENSE.md",
-            "LICENSE.txt",
-        ],
-    ),
-    deps = all_plugins(rabbitmq_workspace = ""),
+erl_eval(
+    name = "otp_version",
+    outs = ["otp_version.txt"],
+    expression = """{ok, Version} = file:read_file(filename:join([code:root_dir(), "releases", erlang:system_info(otp_release), "OTP_VERSION"])), file:write_file(os:getenv("OUTS"), Version), halt().""",
 )
 
-versioned_rabbitmq_home(
-    name = "dist-home",
-    plugins = all_plugins(rabbitmq_workspace = ""),
+iex_eval(
+    name = "elixir_version",
+    outs = ["elixir_version.txt"],
+    expression = """File.write!(System.get_env("OUTS"), System.version()); System.halt()""",
 )
 
-pkg_tar(
-    name = "license-files",
-    srcs = [
-        ":licenses",
-        "//deps/rabbit:INSTALL",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pkg_tar(
-    name = "scripts",
-    srcs = [
-        "scripts/bash_autocomplete.sh",
-        "scripts/rabbitmq-script-wrapper",
-        "scripts/rabbitmqctl-autocomplete.sh",
-        "scripts/zsh_autocomplete.sh",
-    ],
-    package_dir = "scripts",
-    visibility = ["//visibility:public"],
-)
-
-pkg_tar(
-    name = "release-notes",
-    srcs = glob([
-        "release-notes/*.md",
-        "release-notes/*.txt",
-    ]),
-    package_dir = "release-notes",
-    visibility = ["//visibility:public"],
-)
-
-pkg_tar(
-    name = "package-generic-unix",
-    srcs = [
-        ":dist-home",
-    ],
-    extension = "tar.xz",
-    package_dir = "rabbitmq_server-{}".format(APP_VERSION),
-    strip_prefix = "dist-home",
-    visibility = ["//visibility:public"],
-    deps = [
-        ":license-files",
-        ":release-notes",
-        ":scripts",
-        "//deps/rabbit:manpages-dir",
-    ],
-)
+package_generic_unix(PLUGINS)
 
 genrule(
     name = "test-logs",
