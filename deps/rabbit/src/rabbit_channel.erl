@@ -1315,7 +1315,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                      SeqNo = State0#ch.publish_seqno,
                      {SeqNo, State0#ch{publish_seqno = SeqNo + 1}}
         end,
-    case rabbit_basic:message(ExchangeName, RoutingKey, DecodedContent) of
+    case rabbit_basic:message_no_id(ExchangeName, RoutingKey, DecodedContent) of
         {ok, Message} ->
             Delivery = rabbit_basic:delivery(
                          Mandatory, DoConfirm, Message, MsgSeqNo),
