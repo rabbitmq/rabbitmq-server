@@ -10,7 +10,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -export([publish/4, publish/5, publish/1,
-         message/3, message/4, properties/1, prepend_table_header/3,
+         message/3, message_no_id/3, message/4, properties/1, prepend_table_header/3,
          extract_headers/1, extract_timestamp/1, map_headers/2, delivery/4,
          header_routes/1, parse_expiration/1, header/2, header/3]).
 -export([build_content/2, from_content/1, msg_size/1,
@@ -130,19 +130,17 @@ strip_header(#content{properties = Props = #'P_basic'{headers = Headers}}
         (rabbit_exchange:name(), rabbit_router:routing_key(),
          rabbit_types:decoded_content()) ->
             rabbit_types:ok_or_error2(rabbit_types:message(), any()).
+message(XName, RoutingKey, Content) ->
+    make_message(XName, RoutingKey, Content, rabbit_guid:gen()).
 
-message(XName, RoutingKey, #content{properties = Props} = DecodedContent) ->
-    try
-        {ok, #basic_message{
-           exchange_name = XName,
-           content       = strip_header(DecodedContent, ?DELETED_HEADER),
-           id            = rabbit_guid:gen(),
-           is_persistent = is_message_persistent(DecodedContent),
-           routing_keys  = [RoutingKey |
-                            header_routes(Props#'P_basic'.headers)]}}
-    catch
-        {error, _Reason} = Error -> Error
-    end.
+%% only used by channel to avoid unnecessarily generating a guid when
+%% queue types do not need them
+-spec message_no_id
+        (rabbit_exchange:name(), rabbit_router:routing_key(),
+         rabbit_types:decoded_content()) ->
+            rabbit_types:ok_or_error2(rabbit_types:message(), any()).
+ message_no_id(XName, RoutingKey, Content) ->
+    make_message(XName, RoutingKey, Content, <<>>).
 
 -spec message
         (rabbit_exchange:name(), rabbit_router:routing_key(), properties_input(),
@@ -352,3 +350,17 @@ header_key(A) ->
 
 binary_prefix_64(Bin, Len) ->
     binary:part(Bin, 0, min(byte_size(Bin), Len)).
+
+make_message(XName, RoutingKey, #content{properties = Props} = DecodedContent, Guid) ->
+    try
+        {ok, #basic_message{
+           exchange_name = XName,
+           content       = strip_header(DecodedContent, ?DELETED_HEADER),
+           id            = Guid,
+           is_persistent = is_message_persistent(DecodedContent),
+           routing_keys  = [RoutingKey |
+                            header_routes(Props#'P_basic'.headers)]}}
+    catch
+        {error, _Reason} = Error -> Error
+    end.
+
