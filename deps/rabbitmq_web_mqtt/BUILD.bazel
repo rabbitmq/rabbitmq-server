@@ -1,4 +1,3 @@
-load("@rules_erlang//:erlc.bzl", "erlc")
 load("@rules_erlang//:xref.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
@@ -9,6 +8,7 @@ load(
     "broker_for_integration_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",
+    "rabbitmq_test_helper",
 )
 
 APP_NAME = "rabbitmq_web_mqtt"
@@ -51,7 +51,7 @@ rabbitmq_app(
     deps = DEPS,
 )
 
-xref(tags = ["xref"])
+xref()
 
 plt(
     name = "base_plt",
@@ -61,7 +61,6 @@ plt(
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":base_plt",
-    tags = ["dialyze"],
     warnings_as_errors = False,
 )
 
@@ -69,12 +68,10 @@ broker_for_integration_suites()
 
 PACKAGE = "deps/rabbitmq_web_mqtt"
 
-erlc(
+rabbitmq_test_helper(
     name = "test_utils",
     srcs = glob(["test/src/*.erl"]),
     hdrs = glob(["test/src/*.hrl"]),
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
 )
 
 suites = [

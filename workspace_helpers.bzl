@@ -3,7 +3,6 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_r
 load("@rules_erlang//:github.bzl", "github_erlang_app")
 load("@rules_erlang//:hex_archive.bzl", "hex_archive")
 load("@rules_erlang//:hex_pm.bzl", "hex_pm_erlang_app")
-load("//:rabbitmq.bzl", "APP_VERSION")
 
 def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_erlang_app(
@@ -131,9 +130,6 @@ erlang_app(
         org = "potatosalad",
         ref = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
         version = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
-        first_srcs = [
-            "src/jose_block_encryptor.erl",
-        ],
         sha256 = "7816f39d00655f2605cfac180755e97e268dba86c2f71037998ff63792ca727b",
     )
 

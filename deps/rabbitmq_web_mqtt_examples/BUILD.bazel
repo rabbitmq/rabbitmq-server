@@ -31,10 +31,9 @@ rabbitmq_app(
     runtime_deps = RUNTIME_DEPS,
 )
 
-xref(tags = ["xref"])
+xref()
 
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = "//:base_plt",
-    tags = ["dialyze"],
 )

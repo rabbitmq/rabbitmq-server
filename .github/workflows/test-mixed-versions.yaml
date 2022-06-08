@@ -29,9 +29,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        erlang_version:
-        - "23"
+        erlang_major:
         - "24"
+        - "25"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -51,7 +51,6 @@ jobs:
         cat << EOF >> user.bazelrc
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
-          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-${{ matrix.erlang_version }}
           build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=
@@ -63,17 +62,20 @@ jobs:
         sudo sysctl -w net.ipv4.tcp_keepalive_time=60
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
-          --config=rbe-${{ matrix.erlang_version }} \
+          --config=rbe-${{ matrix.erlang_major }} \
           --test_tag_filters=mixed-version-cluster,-exclusive,-aws \
+          --build_tests_only \
           --verbose_failures
   test-exclusive-mixed-versions:
     name: Test (Exclusive Tests with Mixed Version Cluster)
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        erlang_version:
-        - "23"
-        - "24"
+        include:
+        - erlang_version: "24"
+          elixir_version: 1.12.3
+        - erlang_version: "25"
+          elixir_version: 1.13.4
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
@@ -82,7 +84,7 @@ jobs:
       uses: erlef/setup-beam@v1.11
       with:
         otp-version: ${{ matrix.erlang_version }}
-        elixir-version: 1.12.3
+        elixir-version: ${{ matrix.elixir_version }}
     - name: MOUNT BAZEL CACHE
       uses: actions/cache@v3.0.4
       with:
@@ -100,7 +102,6 @@ jobs:
         cat << EOF >> user.bazelrc
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PRIVATE
-          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-exclusive-${{ matrix.erlang_version }}
           build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=
@@ -108,6 +109,8 @@ jobs:
           build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@rules_erlang//:erlang_home=${ERLANG_HOME}
           build --//:elixir_home=${ELIXIR_HOME}
+          build --platforms=//bazel/platforms:erlang_external_platform
+          build --extra_execution_platforms=//bazel/platforms:erlang_external_platform
         EOF
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
