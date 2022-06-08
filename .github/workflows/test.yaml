@@ -32,7 +32,6 @@ jobs:
         erlang_major:
         - "23"
         - "24"
-        - "25"
     timeout-minutes: 120
     steps:
     - name: CHECKOUT REPOSITORY
@@ -79,8 +78,6 @@ jobs:
           elixir_version: 1.10.4
         - erlang_version: "24"
           elixir_version: 1.12.3
-        - erlang_version: "25"
-          elixir_version: 1.13.4
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY

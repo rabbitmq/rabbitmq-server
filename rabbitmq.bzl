@@ -179,17 +179,14 @@ def broker_for_integration_suites(extra_plugins = []):
         plugins = [
             "//deps/rabbit:erlang_app",
             ":erlang_app",
-<<<<<<< HEAD
-        ],
-=======
         ] + extra_plugins,
         testonly = True,
->>>>>>> f98196ca8f (Make rabbitmq-server work with rules_erlang 3)
     )
 
     rabbitmq_run(
         name = "rabbitmq-for-tests-run",
         home = ":broker-for-tests-home",
+        testonly = True,
     )
 
 def rabbitmq_test_helper(

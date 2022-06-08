@@ -136,20 +136,10 @@ erlang_package.hex_package(
 
 erlang_package.git_package(
     repository = "rabbitmq/osiris",
-<<<<<<< HEAD
     tag = "v1.2.6",
-=======
-    branch = "main",
     patch_cmds = ["""
-VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into Makefile..."
-sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
-echo "Injecting ${VERSION} into BUILD.bazel..."
-sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
-
-sed -i"_orig2" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
+sed -i"_orig" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
 """],
->>>>>>> f98196ca8f (Make rabbitmq-server work with rules_erlang 3)
 )
 
 erlang_package.hex_package(
@@ -184,10 +174,7 @@ erlang_package.hex_package(
 
 erlang_package.git_package(
     repository = "rabbitmq/ra",
-<<<<<<< HEAD
     tag = "v2.0.11",
-=======
-    tag = "v2.0.13",
     patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
 """],
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
@@ -214,7 +201,6 @@ erlang_app(
     deps = DEPS,
 )
 """
->>>>>>> f98196ca8f (Make rabbitmq-server work with rules_erlang 3)
 )
 
 erlang_package.hex_package(
@@ -235,16 +221,9 @@ erlang_package.hex_package(
     sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
 )
 
-<<<<<<< HEAD
-erlang_package.git(
+erlang_package.git_package(
     repository = "rabbitmq/seshat",
     tag = "0.1.0",
-=======
-erlang_package.hex_package(
-    name = "seshat",
-    version = "0.3.2",
-    sha256 = "20d820acbeef9d07298ee863d0c9d06f8e620acba100939ebb2925e4d6b0dfc7",
->>>>>>> f98196ca8f (Make rabbitmq-server work with rules_erlang 3)
 )
 
 erlang_package.hex_package(

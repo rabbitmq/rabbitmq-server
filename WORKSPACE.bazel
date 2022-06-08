@@ -112,16 +112,10 @@ http_archive(
     name = "rabbitmq-server-generic-unix-3.8",
     build_file = "@//:BUILD.package_generic_unix",
     patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
-<<<<<<< HEAD
-    sha256 = "55569e00710ae54ff2801c1bac18c0360e00ecceee2949744be1a3e2f362f4c8",
-    strip_prefix = "rabbitmq_server-3.8.27",
-    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.27/rabbitmq-server-generic-unix-3.8.27.tar.xz"],
-=======
     repo_mapping = {
         "@inet_tcp_proxy_dist": "@rules_erlang.erlang_package.inet_tcp_proxy_dist",
     },
-    sha256 = "4672fad92a815b879cc78a5a9fd28445152b61745d68acd50432c15f96792171",
-    strip_prefix = "rabbitmq_server-3.9.13",
-    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.9.13/rabbitmq-server-generic-unix-3.9.13.tar.xz"],
->>>>>>> f98196ca8f (Make rabbitmq-server work with rules_erlang 3)
+    sha256 = "55569e00710ae54ff2801c1bac18c0360e00ecceee2949744be1a3e2f362f4c8",
+    strip_prefix = "rabbitmq_server-3.8.27",
+    urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.27/rabbitmq-server-generic-unix-3.8.27.tar.xz"],
 )
