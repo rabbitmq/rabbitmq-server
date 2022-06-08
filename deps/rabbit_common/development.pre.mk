@@ -6,11 +6,15 @@
 BUILD_DEPS = rabbitmq_codegen
 TEST_DEPS = proper
 
-EXTRA_SOURCES += include/rabbit_framing.hrl				\
-		 src/rabbit_framing_amqp_0_9_1.erl
+CODEGEN_SOURCES += include/rabbit_framing.hrl				\
+				   src/rabbit_framing_amqp_0_9_1.erl
 
 codegen-clean:
-	$(gen_verbose) rm -f $(EXTRA_SOURCES)
+	$(gen_verbose) rm -f $(CODEGEN_SOURCES)
 
-# .DEFAULT_GOAL = all
-codegen :: codegen-clean $(EXTRA_SOURCES)
+codegen: codegen-clean
+	$(CODEGEN_SOURCES)
+
+.PHONY: codegen codegen-clean
+
+$(PROJECT).d:: $(EXTRA_SOURCES)

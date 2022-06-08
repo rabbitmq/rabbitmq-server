@@ -172,8 +172,7 @@ content_transcoding(_Config) ->
          sequence_with_content([ClearEncoded, Op]),
          sequence_with_content([ClearDecoded, Op])
      end || Op <- [ClearDecoded, ClearEncoded, EnsureDecoded,
-                   EnsureEncoded(rabbit_framing_amqp_0_9_1),
-                   EnsureEncoded(rabbit_framing_amqp_0_8)]],
+                   EnsureEncoded(rabbit_framing_amqp_0_9_1)]],
     passed.
 
 sequence_with_content(Sequence) ->
