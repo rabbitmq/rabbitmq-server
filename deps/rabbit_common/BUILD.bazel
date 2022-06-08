@@ -87,7 +87,7 @@ EXTRA_APPS = [
     "xmerl",
 ]
 
-HDRS = glob(["include/*.hrl"]) + ["include/rabbit_framing.hrl"]
+HDRS = glob(["include/*.hrl"])
 
 app_file(
     name = "app_file",
