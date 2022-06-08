@@ -289,9 +289,9 @@
           %% seq_id() of first undelivered message
           %% everything before this seq_id() was delivered at least once
           next_deliver_seq_id,
-          ram_pending_ack,    %% msgs using store, still in RAM
+          ram_pending_ack,    %% msgs still in RAM
           disk_pending_ack,   %% msgs in store, paged out
-          qi_pending_ack,     %% msgs using qi, *can't* be paged out
+          qi_pending_ack, %% Unused.
           index_mod,
           index_state,
           store_state,
@@ -783,6 +783,7 @@ ack(AckTags, State) ->
         lists:foldl(
           fun (SeqId, {Acc, State2}) ->
                   %% @todo When acking many messages we should update stats once not for every.
+                  %%       Also remove the pending acks all at once instead of every.
                   case remove_pending_ack(true, SeqId, State2) of
                       {none, _} ->
                           {Acc, State2};
@@ -833,8 +834,7 @@ fold(Fun, Acc, State = #vqstate{index_state = IndexState}) ->
     {Its, IndexState1} = lists:foldl(fun inext/2, {[], IndexState},
                                      [msg_iterator(State),
                                       disk_ack_iterator(State),
-                                      ram_ack_iterator(State),
-                                      qi_ack_iterator(State)]),
+                                      ram_ack_iterator(State)]),
     ifold(Fun, Acc, Its, State#vqstate{index_state = IndexState1}).
 
 len(#vqstate { len = Len }) -> Len.
@@ -895,7 +895,6 @@ ram_duration(State) ->
              %           ram_msg_count      = RamMsgCount,
              %           ram_msg_count_prev = RamMsgCountPrev,
              %           ram_pending_ack    = RPA,
-             %           qi_pending_ack     = QPA,
              %           ram_ack_count_prev = RamAckCountPrev } =
         update_rates(State),
 
@@ -944,9 +943,8 @@ msg_rates(#vqstate { rates = #rates { in  = AvgIngressRate,
 
 info(messages_ready_ram, #vqstate{ram_msg_count = RamMsgCount}) ->
     RamMsgCount;
-info(messages_unacknowledged_ram, #vqstate{ram_pending_ack = RPA,
-                                           qi_pending_ack  = QPA}) ->
-    gb_trees:size(RPA) + gb_trees:size(QPA);
+info(messages_unacknowledged_ram, #vqstate{ram_pending_ack = RPA}) ->
+    gb_trees:size(RPA);
 info(messages_ram, State) ->
     info(messages_ready_ram, State) + info(messages_unacknowledged_ram, State);
 info(messages_persistent, #vqstate{persistent_count = PersistentCount}) ->
@@ -968,9 +966,8 @@ info(message_bytes_paged_out, #vqstate{delta_transient_bytes = PagedOutBytes}) -
     PagedOutBytes;
 info(head_message_timestamp, #vqstate{
           q3               = Q3,
-          ram_pending_ack  = RPA,
-          qi_pending_ack   = QPA}) ->
-          head_message_timestamp(Q3, RPA, QPA);
+          ram_pending_ack  = RPA}) ->
+    head_message_timestamp(Q3, RPA);
 info(disk_reads, #vqstate{disk_read_count = Count}) ->
     Count;
 info(disk_writes, #vqstate{disk_write_count = Count}) ->
@@ -1066,25 +1063,20 @@ convert_from_v1_to_v2_in_memory(State = #vqstate{ q1 = Q1b,
                                                   q3 = Q3b,
                                                   q4 = Q4b,
                                                   ram_pending_ack  = RPAb,
-                                                  disk_pending_ack = DPAb,
-                                                  qi_pending_ack   = QPAb }) ->
+                                                  disk_pending_ack = DPAb }) ->
     Q1 = convert_from_v1_to_v2_queue(Q1b),
     Q2 = convert_from_v1_to_v2_queue(Q2b),
     Q3 = convert_from_v1_to_v2_queue(Q3b),
     Q4 = convert_from_v1_to_v2_queue(Q4b),
     %% We also must convert the #msg_status entries in the pending_ack fields.
-    %% Because v2 does not embed messages we must move the entries from
-    %% qi_pending_ack to ram_pending_ack where they are expected.
-    RPAc = convert_from_v1_to_v2_tree(RPAb),
-    DPA  = convert_from_v1_to_v2_tree(DPAb),
-    RPA  = convert_from_v1_to_v2_merge_tree(RPAc, QPAb),
+    RPA = convert_from_v1_to_v2_tree(RPAb),
+    DPA = convert_from_v1_to_v2_tree(DPAb),
     State#vqstate{ q1 = Q1,
                    q2 = Q2,
                    q3 = Q3,
                    q4 = Q4,
                    ram_pending_ack  = RPA,
-                   disk_pending_ack = DPA,
-                   qi_pending_ack   = gb_trees:empty() }.
+                   disk_pending_ack = DPA }.
 
 %% We change where the message is expected to be persisted to.
 %% We do not need to worry about the message location because
@@ -1096,19 +1088,6 @@ convert_from_v1_to_v2_queue(Q) ->
 
 convert_from_v1_to_v2_tree(T) ->
     gb_trees:map(fun (_, MsgStatus) -> convert_from_v1_to_v2_msg_status(MsgStatus) end, T).
-
-%% This function converts QPA and merges it into RPA.
-convert_from_v1_to_v2_merge_tree(RPA, QPA) ->
-    convert_from_v1_to_v2_merge_tree_loop(RPA, gb_trees:iterator(QPA)).
-
-convert_from_v1_to_v2_merge_tree_loop(T, Iterator0) ->
-    case gb_trees:next(Iterator0) of
-        none ->
-            T;
-        {Key, Value0, Iterator} ->
-            Value = convert_from_v1_to_v2_msg_status(Value0),
-            convert_from_v1_to_v2_merge_tree_loop(gb_trees:insert(Key, Value, T), Iterator)
-    end.
 
 convert_from_v1_to_v2_msg_status(MsgStatus) ->
     case MsgStatus of
@@ -1200,8 +1179,7 @@ convert_from_v2_to_v1_in_memory(State0 = #vqstate{ q1 = Q1b,
                                                    q3 = Q3b,
                                                    q4 = Q4b,
                                                    ram_pending_ack  = RPAb,
-                                                   disk_pending_ack = DPAb,
-                                                   qi_pending_ack   = QPAb }) ->
+                                                   disk_pending_ack = DPAb }) ->
     {Q1, State1} = convert_from_v2_to_v1_queue(Q1b, State0),
     {Q2, State2} = convert_from_v2_to_v1_queue(Q2b, State1),
     {Q3, State3} = convert_from_v2_to_v1_queue(Q3b, State2),
@@ -1209,16 +1187,14 @@ convert_from_v2_to_v1_in_memory(State0 = #vqstate{ q1 = Q1b,
     %% We also must convert the #msg_status entries in the pending_ack fields.
     %% We must separate entries in the queue index from other entries as
     %% that is what is expected from the v1 index.
-    true               = gb_trees:is_empty(QPAb), %% assert
-    {RPA, QPA, State5} = convert_from_v2_to_v1_split_tree(RPAb, State4),
-    {DPA, State6}      = convert_from_v2_to_v1_tree(DPAb, State5),
+    {RPA, State5} = convert_from_v2_to_v1_tree(RPAb, State4),
+    {DPA, State6} = convert_from_v2_to_v1_tree(DPAb, State5),
     State6#vqstate{ q1 = Q1,
                     q2 = Q2,
                     q3 = Q3,
                     q4 = Q4,
                     ram_pending_ack  = RPA,
-                    disk_pending_ack = DPA,
-                    qi_pending_ack   = QPA }.
+                    disk_pending_ack = DPA }.
 
 %% We fetch the message from the per-queue store if necessary
 %% and mark all messages as delivered to make the v1 index happy.
@@ -1239,23 +1215,6 @@ convert_from_v2_to_v1_tree_loop(Iterator0, Acc, State0) ->
         {Key, Value0, Iterator} ->
             {Value, State} = convert_from_v2_to_v1_msg_status(Value0, State0, false),
             convert_from_v2_to_v1_tree_loop(Iterator, gb_trees:insert(Key, Value, Acc), State)
-    end.
-
-convert_from_v2_to_v1_split_tree(T, State) ->
-    convert_from_v2_to_v1_split_tree_loop(gb_trees:iterator(T), gb_trees:empty(), gb_trees:empty(), State).
-
-convert_from_v2_to_v1_split_tree_loop(Iterator0, RPAAcc, QPAAcc, State0) ->
-    case gb_trees:next(Iterator0) of
-        none ->
-            {RPAAcc, QPAAcc, State0};
-        {Key, Value0, Iterator} ->
-            {Value, State} = convert_from_v2_to_v1_msg_status(Value0, State0, false),
-            case Value of
-                #msg_status{ persist_to = queue_index } ->
-                    convert_from_v2_to_v1_split_tree_loop(Iterator, RPAAcc, gb_trees:insert(Key, Value, QPAAcc), State);
-                _ ->
-                    convert_from_v2_to_v1_split_tree_loop(Iterator, gb_trees:insert(Key, Value, RPAAcc), QPAAcc, State)
-            end
     end.
 
 convert_from_v2_to_v1_msg_status(MsgStatus0, State1 = #vqstate{ store_state = StoreState0,
@@ -1344,12 +1303,13 @@ convert_from_v2_to_v1_loop(QueueName, V1Index0, V2Index0, V2Store0,
 %% forcing it to happen.  Pending ack msgs are included as they are
 %% regarded as unprocessed until acked, this also prevents the result
 %% apparently oscillating during repeated rejects.
-head_message_timestamp(Q3, RPA, QPA) ->
+%%
+%% @todo OK I think we can do this differently
+head_message_timestamp(Q3, RPA) ->
     HeadMsgs = [ HeadMsgStatus#msg_status.msg ||
                    HeadMsgStatus <-
                        [ get_q_head(Q3),
-                         get_pa_head(RPA),
-                         get_pa_head(QPA) ],
+                         get_pa_head(RPA) ],
                    HeadMsgStatus /= undefined,
                    HeadMsgStatus#msg_status.msg /= undefined ],
 
@@ -1570,11 +1530,9 @@ next_deliver_seq_id(_, NextDeliverSeqId) ->
     NextDeliverSeqId.
 
 is_msg_in_pending_acks(SeqId, #vqstate { ram_pending_ack  = RPA,
-                                         disk_pending_ack = DPA,
-                                         qi_pending_ack   = QPA }) ->
-    (gb_trees:is_defined(SeqId, RPA) orelse
-     gb_trees:is_defined(SeqId, DPA) orelse
-     gb_trees:is_defined(SeqId, QPA)).
+                                         disk_pending_ack = DPA }) ->
+    gb_trees:is_defined(SeqId, RPA) orelse
+    gb_trees:is_defined(SeqId, DPA).
 
 expand_delta(SeqId, ?BLANK_DELTA_PATTERN(X), IsPersistent) ->
     d(#delta { start_seq_id = SeqId, count = 1, end_seq_id = SeqId + 1,
@@ -2032,9 +1990,8 @@ is_unconfirmed_empty(#vqstate { unconfirmed = UC }) ->
     gb_sets:is_empty(UC).
 
 count_pending_acks(#vqstate { ram_pending_ack   = RPA,
-                              disk_pending_ack  = DPA,
-                              qi_pending_ack    = QPA }) ->
-    gb_trees:size(RPA) + gb_trees:size(DPA) + gb_trees:size(QPA).
+                              disk_pending_ack  = DPA }) ->
+    gb_trees:size(RPA) + gb_trees:size(DPA).
 
 %% @todo This should set the out rate to infinity temporarily while we drop deltas.
 %% @todo When doing maybe_deltas_to_betas stats are updated. Then stats
@@ -2358,33 +2315,22 @@ prepare_to_store(Msg) ->
 record_pending_ack(#msg_status { seq_id = SeqId } = MsgStatus,
                    State = #vqstate { ram_pending_ack  = RPA,
                                       disk_pending_ack = DPA,
-                                      qi_pending_ack   = QPA,
                                       ack_in_counter   = AckInCount}) ->
     Insert = fun (Tree) -> gb_trees:insert(SeqId, MsgStatus, Tree) end,
-    {RPA1, DPA1, QPA1} =
-        case {msg_in_ram(MsgStatus), persist_to(MsgStatus)} of
-            {false, _}           -> {RPA, Insert(DPA), QPA};
-            {_,     queue_index} -> {RPA, DPA, Insert(QPA)};
-            %% The per-queue store behaves more like the per-vhost store
-            %% than the v1 index embedding. We can page out to disk the
-            %% pending per-queue store messages.
-            {_,     queue_store} -> {Insert(RPA), DPA, QPA};
-            {_,     msg_store}   -> {Insert(RPA), DPA, QPA}
+    {RPA1, DPA1} =
+        case msg_in_ram(MsgStatus) of
+            false -> {RPA, Insert(DPA)};
+            _     -> {Insert(RPA), DPA}
         end,
     State #vqstate { ram_pending_ack  = RPA1,
                      disk_pending_ack = DPA1,
-                     qi_pending_ack   = QPA1,
                      ack_in_counter   = AckInCount + 1}.
 
 lookup_pending_ack(SeqId, #vqstate { ram_pending_ack  = RPA,
-                                     disk_pending_ack = DPA,
-                                     qi_pending_ack   = QPA}) ->
+                                     disk_pending_ack = DPA}) ->
     case gb_trees:lookup(SeqId, RPA) of
         {value, V} -> V;
-        none       -> case gb_trees:lookup(SeqId, DPA) of
-                          {value, V} -> V;
-                          none       -> gb_trees:get(SeqId, QPA)
-                      end
+        none       -> gb_trees:get(SeqId, DPA)
     end.
 
 %% First parameter = UpdateStats
@@ -2397,8 +2343,7 @@ remove_pending_ack(true, SeqId, State) ->
             {MsgStatus, stats_acked_pending(MsgStatus, State1)}
     end;
 remove_pending_ack(false, SeqId, State = #vqstate{ram_pending_ack  = RPA,
-                                                  disk_pending_ack = DPA,
-                                                  qi_pending_ack   = QPA}) ->
+                                                  disk_pending_ack = DPA}) ->
     case gb_trees:lookup(SeqId, RPA) of
         {value, V} -> RPA1 = gb_trees:delete(SeqId, RPA),
                       {V, State #vqstate { ram_pending_ack = RPA1 }};
@@ -2407,13 +2352,7 @@ remove_pending_ack(false, SeqId, State = #vqstate{ram_pending_ack  = RPA,
                               DPA1 = gb_trees:delete(SeqId, DPA),
                               {V, State#vqstate{disk_pending_ack = DPA1}};
                           none ->
-                              case gb_trees:lookup(SeqId, QPA) of
-                                  {value, V} ->
-                                      QPA1 = gb_trees:delete(SeqId, QPA),
-                                      {V, State#vqstate{qi_pending_ack = QPA1}};
-                                  none ->
-                                      {none, State}
-                              end
+                              {none, State}
                       end
     end.
 
@@ -2449,17 +2388,14 @@ purge_pending_ack_delete_and_terminate(
                       store_state = StoreState1 }.
 
 purge_pending_ack1(State = #vqstate { ram_pending_ack   = RPA,
-                                      disk_pending_ack  = DPA,
-                                      qi_pending_ack    = QPA }) ->
+                                      disk_pending_ack  = DPA }) ->
     F = fun (_SeqId, MsgStatus, Acc) -> accumulate_ack(MsgStatus, Acc) end,
     {IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, _AllMsgIds} =
         rabbit_misc:gb_trees_fold(
           F, rabbit_misc:gb_trees_fold(
-               F,  rabbit_misc:gb_trees_fold(
-                     F, accumulate_ack_init(), RPA), DPA), QPA),
+               F, accumulate_ack_init(), RPA), DPA),
     State1 = State #vqstate { ram_pending_ack  = gb_trees:empty(),
-                              disk_pending_ack = gb_trees:empty(),
-                              qi_pending_ack   = gb_trees:empty()},
+                              disk_pending_ack = gb_trees:empty()},
     {IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, State1}.
 
 %% MsgIdsByStore is an map with two keys:
@@ -2634,9 +2570,6 @@ ram_ack_iterator(State) ->
 
 disk_ack_iterator(State) ->
     {ack, gb_trees:iterator(State#vqstate.disk_pending_ack)}.
-
-qi_ack_iterator(State) ->
-    {ack, gb_trees:iterator(State#vqstate.qi_pending_ack)}.
 
 msg_iterator(State) -> istate(start, State).
 
