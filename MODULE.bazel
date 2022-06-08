@@ -5,10 +5,10 @@ module(
 
 bazel_dep(name = "rules_erlang", version = "3.0.1")
 
-git_override(
+archive_override(
     module_name = "rules_erlang",
-    remote = "https://github.com/rabbitmq/rules_erlang.git",
-    commit = "ff558e15ab6dc90e9d7e4aabebb5b519447c3318",
+    urls = ["https://github.com/rabbitmq/rules_erlang/archive/refs/tags/3.1.0.zip"],
+    strip_prefix = "rules_erlang-3.1.0",
 )
 
 erlang_package = use_extension(
@@ -180,7 +180,7 @@ erlang_package.hex_package(
 
 erlang_package.git_package(
     repository = "rabbitmq/ra",
-    commit = "fcaad359a4e64f87357acbcc84f01e0377706ce3",
+    branch = "main",
     patch_cmds = ["""
 VERSION=$(git rev-parse HEAD)
 echo "Injecting ${VERSION} into ra.app.src..."

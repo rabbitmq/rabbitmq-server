@@ -54,8 +54,8 @@ git_repository(
 
 git_repository(
     name = "rules_erlang",
-    commit = "ff558e15ab6dc90e9d7e4aabebb5b519447c3318",
     remote = "https://github.com/rabbitmq/rules_erlang.git",
+    tag = "3.1.0",
 )
 
 load(
