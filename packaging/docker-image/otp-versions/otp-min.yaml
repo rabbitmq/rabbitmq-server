@@ -1,4 +1,5 @@
 otp: '23.2'
+otp_major: '23'
 # make -C packaging/docker-image find-otp-sha256 OTP_VERSION_MATCH=23.2
 otp_sha256: 79f2233a960cc427607d52a7b7e9e5b08afba96a4d87ced4efb64e902b44160c
 # Which is the min supported Elixir?

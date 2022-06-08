@@ -1,2 +1,3 @@
 otp: '25.0-rc3'
+otp_major: '25'
 elixir: '1.13.4'
