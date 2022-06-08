@@ -13,9 +13,9 @@ jobs:
     strategy:
       matrix:
         erlang_version:
-        - "24"
+        - "23"
         include:
-        - erlang_version: "24"
+        - erlang_version: "23"
           cache_name: ci-bazel-cache-analysis
     timeout-minutes: 120
     steps:
@@ -48,9 +48,9 @@ jobs:
     strategy:
       matrix:
         erlang_version:
-        - "24"
+        - "23"
         include:
-        - erlang_version: "24"
+        - erlang_version: "23"
           cache_name: ci-bazel-cache-analysis
     timeout-minutes: 120
     steps:
