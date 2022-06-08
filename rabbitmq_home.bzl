@@ -68,23 +68,11 @@ def _plugins_dir_links(ctx, plugin):
 
     return links
 
-def unique_versions(plugins):
-    erlang_versions = []
-    for plugin in plugins:
-        erlang_version = plugin[ErlangAppInfo].erlang_version
-        if not erlang_version in erlang_versions:
-            erlang_versions.append(erlang_version)
-    return erlang_versions
-
 def flatten(list_of_lists):
     return [item for sublist in list_of_lists for item in sublist]
 
 def _impl(ctx):
     plugins = flat_deps(ctx.attr.plugins)
-
-    erlang_versions = unique_versions(plugins)
-    if len(erlang_versions) > 1:
-        fail("plugins do not have a unified erlang version", erlang_versions)
 
     if not ctx.attr.is_windows:
         source_scripts = ctx.files._scripts

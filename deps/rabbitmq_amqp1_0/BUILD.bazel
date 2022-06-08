@@ -48,7 +48,6 @@ rabbitmq_app(
 
 xref(
     size = "small",
-    tags = ["xref"],
 )
 
 plt(
@@ -62,7 +61,6 @@ dialyze(
     size = "medium",
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_behaviours"],
     plt = ":base_plt",
-    tags = ["dialyze"],
     warnings_as_errors = False,
 )
 

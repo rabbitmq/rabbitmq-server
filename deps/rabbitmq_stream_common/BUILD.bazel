@@ -1,0 +1,36 @@
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "rabbitmq_app",
+    "rabbitmq_suite",
+)
+
+APP_NAME = "rabbitmq_stream_common"
+
+APP_DESCRIPTION = "RabbitMQ Stream Common"
+
+rabbitmq_app(
+    app_description = APP_DESCRIPTION,
+    app_name = APP_NAME,
+)
+
+xref()
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = "//:base_plt",
+)
+
+suites = [
+    rabbitmq_suite(
+        name = "rabbit_stream_core_SUITE",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

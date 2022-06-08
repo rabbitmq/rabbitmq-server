@@ -1,0 +1,78 @@
+load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+load("//:rabbitmq_home.bzl", "rabbitmq_home")
+load("//:rabbitmq_run.bzl", "rabbitmq_run")
+load(
+    "//:rabbitmq.bzl",
+    "RABBITMQ_DIALYZER_OPTS",
+    "assert_suites",
+    "rabbitmq_app",
+    "rabbitmq_integration_suite",
+)
+
+APP_NAME = "rabbitmq_stream_management"
+
+APP_DESCRIPTION = "RabbitMQ Stream Management"
+
+APP_MODULE = "rabbit_stream_management"
+
+BUILD_DEPS = [
+    "//deps/amqp_client:erlang_app",
+    "//deps/rabbit_common:erlang_app",
+    "//deps/rabbitmq_management_agent:erlang_app",
+]
+
+DEPS = [
+    "//deps/rabbitmq_management:erlang_app",
+    "//deps/rabbitmq_stream:erlang_app",
+    "//deps/rabbit:erlang_app",
+]
+
+rabbitmq_app(
+    app_description = APP_DESCRIPTION,
+    app_module = APP_MODULE,
+    app_name = APP_NAME,
+    build_deps = BUILD_DEPS,
+    deps = DEPS,
+)
+
+xref()
+
+plt(
+    name = "base_plt",
+    deps = BUILD_DEPS + DEPS,
+)
+
+dialyze(
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
+    plt = ":base_plt",
+    warnings_as_errors = False,
+)
+
+rabbitmq_home(
+    name = "broker-for-tests-home",
+    plugins = [
+        "//deps/rabbit:erlang_app",
+        "//deps/rabbitmq_amqp1_0:erlang_app",
+        ":erlang_app",
+    ],
+)
+
+rabbitmq_run(
+    name = "rabbitmq-for-tests-run",
+    home = ":broker-for-tests-home",
+)
+
+PACKAGE = "deps/rabbitmq_stream_management"
+
+suites = [
+    rabbitmq_integration_suite(
+        PACKAGE,
+        name = "http_SUITE",
+    ),
+]
+
+assert_suites(
+    suites,
+    glob(["test/**/*_SUITE.erl"]),
+)

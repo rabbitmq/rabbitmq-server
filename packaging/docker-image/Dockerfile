@@ -3,11 +3,21 @@
 FROM ubuntu:20.04
 
 RUN set -eux; \
-	apt-get update; \
-	apt-get install -y --no-install-recommends \
+        apt-get update; \
+        apt-get install -y lsb-release ubuntu-dbgsym-keyring; \
+        echo "deb http://ddebs.ubuntu.com $(lsb_release -cs) main restricted universe multiverse" > /etc/apt/sources.list.d/ddebs.list; \
+        echo "deb http://ddebs.ubuntu.com $(lsb_release -cs)-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/ddebs.list; \
+        echo "deb http://ddebs.ubuntu.com $(lsb_release -cs)-proposed main restricted universe multiverse" >> /etc/apt/sources.list.d/ddebs.list; \
+        apt-get update; \
+        apt-get install -y --no-install-recommends \
 # grab gosu for easy step-down from root
-		gosu \
-	; \
+        gosu \
+        libc6-dbg \
+        libgcc-s1-dbgsym \
+        libstdc++6-dbgsym \
+        libtinfo6-dbgsym \
+        zlib1g-dbgsym \
+        ; \
 	rm -rf /var/lib/apt/lists/*; \
 # verify that the "gosu" binary works
 	gosu nobody true
