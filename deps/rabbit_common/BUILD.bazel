@@ -28,7 +28,6 @@ genrule(
     srcs = [
         "//deps/rabbitmq_codegen:amqp-rabbitmq-0.9.1.json",
         "//deps/rabbitmq_codegen:credit_extension.json",
-        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
     ],
     outs = ["include/rabbit_framing.hrl"],
     cmd = "$(location :codegen) --ignore-conflicts header $(SRCS) $@",
@@ -42,16 +41,6 @@ genrule(
         "//deps/rabbitmq_codegen:credit_extension.json",
     ],
     outs = ["src/rabbit_framing_amqp_0_9_1.erl"],
-    cmd = "$(location :codegen) body $(SRCS) $@",
-    tools = [":codegen"],
-)
-
-genrule(
-    name = "rabbit_framing_amqp_0_8.erl",
-    srcs = [
-        "//deps/rabbitmq_codegen:amqp-rabbitmq-0.8.json",
-    ],
-    outs = ["src/rabbit_framing_amqp_0_8.erl"],
     cmd = "$(location :codegen) body $(SRCS) $@",
     tools = [":codegen"],
 )
@@ -116,7 +105,6 @@ erlc(
     srcs = glob(
         ["src/*.erl"],
     ) + [
-        "src/rabbit_framing_amqp_0_8.erl",
         "src/rabbit_framing_amqp_0_9_1.erl",
     ],
     hdrs = HDRS,
@@ -143,7 +131,6 @@ erlc(
     srcs = glob(
         ["src/*.erl"],
     ) + [
-        "src/rabbit_framing_amqp_0_8.erl",
         "src/rabbit_framing_amqp_0_9_1.erl",
     ],
     hdrs = HDRS,

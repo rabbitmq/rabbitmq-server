@@ -1067,17 +1067,6 @@ handshake({0, 0, 9, 1}, State) ->
 handshake({1, 1, 0, 9}, State) ->
     start_connection({0, 9, 0}, rabbit_framing_amqp_0_9_1, State);
 
-%% This is what most clients send for 0-8.  The 0-8 spec, confusingly,
-%% defines the version as 8-0.
-handshake({1, 1, 8, 0}, State) ->
-    start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
-
-%% The 0-8 spec as on the AMQP web site actually has this as the
-%% protocol header; some libraries e.g., py-amqplib, send it when they
-%% want 0-8.
-handshake({1, 1, 9, 1}, State) ->
-    start_connection({8, 0, 0}, rabbit_framing_amqp_0_8, State);
-
 %% ... and finally, the 1.0 spec is crystal clear!
 handshake({Id, 1, 0, 0}, State) ->
     become_1_0(Id, State);
@@ -1123,9 +1112,9 @@ ensure_stats_timer(State) ->
 %%--------------------------------------------------------------------------
 
 handle_method0(MethodName, FieldsBin,
-               State = #v1{connection = #connection{protocol = Protocol}}) ->
+               State = #v1{connection = #connection{}}) ->
     try
-        handle_method0(Protocol:decode_method_fields(MethodName, FieldsBin),
+        handle_method0(rabbit_framing_amqp_0_9_1:decode_method_fields(MethodName, FieldsBin),
                        State)
     catch throw:{inet_error, E} when E =:= closed; E =:= enotconn ->
             maybe_emit_stats(State),

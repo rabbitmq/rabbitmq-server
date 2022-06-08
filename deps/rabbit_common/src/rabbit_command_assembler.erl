@@ -69,10 +69,10 @@ init(Protocol) -> {ok, {method, Protocol}}.
 
 process({method, MethodName, FieldsBin}, {method, Protocol}) ->
     try
-        Method = Protocol:decode_method_fields(MethodName, FieldsBin),
-        case Protocol:method_has_content(MethodName) of
-            true  -> {ClassId, _MethodId} = Protocol:method_id(MethodName),
-                     {ok, {content_header, Method, ClassId, Protocol}};
+        Method = rabbit_framing_amqp_0_9_1:decode_method_fields(MethodName, FieldsBin),
+        case  rabbit_framing_amqp_0_9_1:method_has_content(MethodName) of
+            true  -> {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id(MethodName),
+                     {ok, {content_header, Method, ClassId, rabbit_framing_amqp_0_9_1}};
             false -> {ok, Method, {method, Protocol}}
         end
     catch exit:#amqp_error{} = Reason -> {error, Reason}
