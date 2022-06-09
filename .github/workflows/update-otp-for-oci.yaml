@@ -10,10 +10,8 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        erlang_version:
-        - "24.3"
         include:
-        - erlang_version: "24.3"
+        - erlang_version: "25.0"
           image_tag_suffix: 'otp-max'
     timeout-minutes: 10
     steps:
@@ -63,6 +61,5 @@ jobs:
         labels: |
           backport-v3.10.x
           backport-v3.9.x
-          backport-v3.8.x
         branch: bump-otp-for-oci
         delete-branch: true
