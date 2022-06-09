@@ -43,7 +43,7 @@ def _impl(ctx):
     escript = ctx.actions.declare_file(path_join("escript", "rabbitmqctl"))
     ebin = ctx.actions.declare_directory("ebin")
     mix_invocation_dir = ctx.actions.declare_directory("{}_mix".format(ctx.label.name))
-    fetched_srcs = ctx.actions.declare_directory("fetched_srcs")
+    fetched_srcs = ctx.actions.declare_file("deps.tar")
 
     deps = flat_deps(ctx.attr.deps)
 
@@ -67,7 +67,7 @@ else
 fi
 ABS_EBIN_DIR=$PWD/{ebin_dir}
 ABS_ESCRIPT_PATH=$PWD/{escript_path}
-ABS_FETCHED_SRCS_DIR=$PWD/{fetched_srcs}
+ABS_FETCHED_SRCS=$PWD/{fetched_srcs}
 
 export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 
@@ -101,7 +101,12 @@ cp escript/rabbitmqctl ${{ABS_ESCRIPT_PATH}}
 cp _build/${{MIX_ENV}}/lib/rabbitmqctl/ebin/* ${{ABS_EBIN_DIR}}
 cp _build/${{MIX_ENV}}/lib/rabbitmqctl/consolidated/* ${{ABS_EBIN_DIR}}
 
-cp -r deps/* ${{ABS_FETCHED_SRCS_DIR}}
+tar --sort=name \\
+    --owner=root:0 \\
+    --group=root:0 \\
+    --mtime='UTC 2019-01-01' \\
+    --file ${{ABS_FETCHED_SRCS}} \\
+    --create deps
 
 # remove symlinks from the _build directory since it
 # is not used, and bazel does not allow them
@@ -145,15 +150,16 @@ find . -type l -delete
     return [
         DefaultInfo(
             executable = escript,
-            files = depset([ebin]),
+            files = depset([ebin, fetched_srcs]),
             runfiles = runfiles,
         ),
         ErlangAppInfo(
-            app_name = ctx.attr.name,
+            app_name = "rabbitmq_cli",
             include = [],
             beam = [ebin],
             priv = [],
-            srcs = ctx.files.srcs + [fetched_srcs],
+            license_files = ctx.files.license_files,
+            srcs = ctx.files.srcs,
             deps = deps,
         ),
     ]
@@ -161,9 +167,19 @@ find . -type l -delete
 rabbitmqctl_private = rule(
     implementation = _impl,
     attrs = {
-        "is_windows": attr.bool(mandatory = True),
-        "srcs": attr.label_list(allow_files = True),
-        "deps": attr.label_list(providers = [ErlangAppInfo]),
+        "is_windows": attr.bool(
+            mandatory = True,
+        ),
+        "srcs": attr.label_list(
+            mandatory = True,
+            allow_files = True,
+        ),
+        "license_files": attr.label_list(
+            allow_files = True,
+        ),
+        "deps": attr.label_list(
+            providers = [ErlangAppInfo],
+        ),
     },
     toolchains = [
         "//bazel/elixir:toolchain_type",

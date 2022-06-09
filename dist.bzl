@@ -7,6 +7,7 @@ load(
     "erlang_dirs",
     "maybe_install_erlang",
 )
+load("@rules_erlang//:source_tree.bzl", "source_tree")
 load(
     ":rabbitmq_home.bzl",
     "RABBITMQ_HOME_ATTRS",
@@ -281,4 +282,46 @@ def package_generic_unix(plugins):
             ":scripts",
             "//deps/rabbit:manpages-dir",
         ],
+    )
+
+# This macro must be invoked from the top level BUILD.bazel of rabbitmq-server
+def source_archive(plugins):
+    source_tree(
+        name = "source-tree",
+        deps = plugins,
+    )
+
+    native.filegroup(
+        name = "root-licenses",
+        srcs = native.glob(["LICENSE*"]),
+        visibility = ["//visibility:public"],
+    )
+
+    pkg_tar(
+        name = "deps-archive",
+        srcs = [
+            ":source-tree",
+        ],
+        package_dir = "deps",
+        strip_prefix = "source-tree",
+    )
+
+    pkg_tar(
+        name = "cli-deps-archive",
+        deps = [
+            "//deps/rabbitmq_cli:fetched_srcs",
+        ],
+        package_dir = "deps/rabbitmq_cli",
+    )
+
+    pkg_tar(
+        name = "source_archive",
+        srcs = [
+            ":root-licenses",
+        ],
+        deps = [
+            ":deps-archive",
+            ":cli-deps-archive",
+        ],
+        visibility = ["//visibility:public"],
     )
