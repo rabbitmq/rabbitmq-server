@@ -1463,7 +1463,7 @@ motd_file_from_node(#{from_remote_node := Remote} = Context) ->
 %%   Override the default username.
 %%   Default: unset (i.e. <<"guest">>).
 %%
-%% RABBITMQ_MOTD_FILE
+%% RABBITMQ_DEFAULT_PASS
 %%   Override the default user's password.
 %%   Default: unset (i.e. <<"guest">>).
 
