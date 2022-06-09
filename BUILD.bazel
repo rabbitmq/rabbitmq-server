@@ -17,12 +17,6 @@ exports_files([
     "scripts/bazel/rabbitmq-run.bat",
 ])
 
-<<<<<<< HEAD
-# This allows us to
-# `bazel build //my/target \
-#    --//:elixir_home=/path/to/elixir/installation`
-elixir_home(
-=======
 config_setting(
     name = "debug_build",
     values = {
@@ -31,7 +25,6 @@ config_setting(
 )
 
 string_flag(
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
     name = "elixir_home",
     build_setting_default = "",
     visibility = ["//visibility:public"],

@@ -64,14 +64,9 @@ rabbitmq_test_helper(
     srcs = [
         "test/rabbit_auth_backend_oauth2_test_util.erl",
     ],
-<<<<<<< HEAD
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         "@lager//:erlang_app",
     ],
-=======
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
 )
 
 PACKAGE = "deps/rabbitmq_auth_backend_oauth2"

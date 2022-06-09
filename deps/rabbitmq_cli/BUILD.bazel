@@ -16,16 +16,12 @@ rabbitmqctl(
     visibility = ["//visibility:public"],
     deps = [
         "//deps/rabbit_common:erlang_app",
-<<<<<<< HEAD
-        "@goldrush//:erlang_app",
         "@lager//:erlang_app",
-=======
         "@csv//:elixir_app",
         "@hex//:elixir_app",
         "@json//:elixir_app",
         "@observer_cli//:erlang_app",
         "@stdout_formatter//:erlang_app",
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
     ],
 )
 
@@ -65,10 +61,7 @@ rabbitmqctl_test(
         "//deps/amqp_client:erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
-<<<<<<< HEAD
-        "@goldrush//:erlang_app",
         "@lager//:erlang_app",
-=======
         "@amqp//:elixir_app",
         "@csv//:elixir_app",
         "@hex//:elixir_app",
@@ -77,6 +70,5 @@ rabbitmqctl_test(
         "@stdout_formatter//:erlang_app",
         "@temp//:elixir_app",
         "@x509//:elixir_app",
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
     ],
 )

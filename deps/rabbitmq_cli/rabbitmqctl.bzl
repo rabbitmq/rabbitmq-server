@@ -74,60 +74,11 @@ mv escript/rabbitmqctl ${{ABS_ESCRIPT_PATH}}
 if [ -n "$(ls ${{MIX_BUILD_PATH}}/lib/{app_name}/consolidated)" ]; then
     cp ${{MIX_BUILD_PATH}}/lib/{app_name}/consolidated/* ${{ABS_EBIN_DIR}}
 fi
-<<<<<<< HEAD
-
-export DEPS_DIR={mix_deps_dir}
-
-# mix can error on windows regarding permissions for a symlink at this path
-# deps/rabbitmq_cli/rabbitmqctl_mix/_build/dev/lib/rabbit_common/ebin
-# so instead we'll try skip that
-mkdir -p _build/dev/lib/rabbit_common
-mkdir _build/dev/lib/rabbit_common/include
-cp ${{DEPS_DIR}}/rabbit_common/include/* \\
-    _build/dev/lib/rabbit_common/include
-mkdir _build/dev/lib/rabbit_common/ebin
-cp ${{DEPS_DIR}}/rabbit_common/ebin/* \\
-    _build/dev/lib/rabbit_common/ebin
-
-mkdir -p _build/dev/lib/lager
-mkdir _build/dev/lib/lager/include
-cp ${{DEPS_DIR}}/lager/include/* \\
-    _build/dev/lib/lager/include
-mkdir _build/dev/lib/lager/ebin
-cp ${{DEPS_DIR}}/lager/ebin/* \\
-    _build/dev/lib/lager/ebin
-
-mkdir -p _build/dev/lib/goldrush
-mkdir _build/dev/lib/goldrush/ebin
-cp ${{DEPS_DIR}}/goldrush/ebin/* \\
-    _build/dev/lib/goldrush/ebin
-
-export ERL_COMPILER_OPTIONS=deterministic
-"{elixir_home}"/bin/mix local.hex --force
-"{elixir_home}"/bin/mix local.rebar --force
-"{elixir_home}"/bin/mix make_all_in_src_archive
-
-cd ${{OLDPWD}}
-cp ${{MIX_INVOCATION_DIR}}/escript/rabbitmqctl {escript_path}
-
-mkdir -p {ebin_dir}
-mv ${{MIX_INVOCATION_DIR}}/_build/dev/lib/rabbitmqctl/ebin/* {ebin_dir}
-mv ${{MIX_INVOCATION_DIR}}/_build/dev/lib/rabbitmqctl/consolidated/* {ebin_dir}
-
-rm -dR ${{MIX_INVOCATION_DIR}}
-mkdir ${{MIX_INVOCATION_DIR}}
-touch ${{MIX_INVOCATION_DIR}}/placeholder
-    """.format(
-        begins_with_fun = BEGINS_WITH_FUN,
-        query_erlang_version = QUERY_ERL_VERSION,
-        erlang_version = erlang_version,
-=======
 if [ -n "$(ls ${{MIX_BUILD_PATH}}/lib/{app_name}/ebin)" ]; then
     cp ${{MIX_BUILD_PATH}}/lib/{app_name}/ebin/* ${{ABS_EBIN_DIR}}
 fi
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         home = home.path,

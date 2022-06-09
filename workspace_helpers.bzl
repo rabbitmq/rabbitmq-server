@@ -139,9 +139,6 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "lager",
-        first_srcs = [
-            "src/lager_rotator_behaviour.erl",
-        ],
         version = "3.8.2",
         sha256 = "73329ce700410b423f64aafc5f94583073904899098e4461f3558ed2980462ab",
         runtime_deps = [
@@ -191,17 +188,8 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "ra",
-<<<<<<< HEAD
         version = "1.1.8",
         sha256 = "d7e399f8a09c8420bc90953f3464127063e53cef39f27e0af452ec51ad26ea9e",
-        first_srcs = [
-            "src/ra_machine.erl",
-            "src/ra_snapshot.erl",
-        ],
-=======
-        version = "2.0.13",
-        sha256 = "c7c2ff1325095cbf3b95be20a8bea1e81d68da7c3f3cc329331bc71af9d3c8db",
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
         deps = [
             "@gen_batch_server//:erlang_app",
         ],

@@ -133,13 +133,8 @@ def rabbitmq_app(
         app_env = "",
         app_extra_keys = "",
         extra_apps = [],
-<<<<<<< HEAD
-        erlc_opts = RABBITMQ_ERLC_OPTS,
-        test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
-=======
         extra_hdrs = [],
         extra_srcs = [],
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
         extra_priv = [],
         build_deps = [],
         deps = [],
@@ -156,7 +151,7 @@ def rabbitmq_app(
         extra_hdrs = extra_hdrs,
         extra_srcs = extra_srcs,
         extra_priv = extra_priv,
-        erlc_opts = erlc_opts,
+        erlc_opts = RABBITMQ_ERLC_OPTS,
         build_deps = build_deps,
         deps = deps,
         runtime_deps = runtime_deps,
@@ -174,7 +169,7 @@ def rabbitmq_app(
         extra_hdrs = extra_hdrs,
         extra_srcs = extra_srcs,
         extra_priv = extra_priv,
-        erlc_opts = test_erlc_opts,
+        erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
         build_deps = with_test_versions(build_deps),
         deps = with_test_versions(deps),
         runtime_deps = with_test_versions(runtime_deps),

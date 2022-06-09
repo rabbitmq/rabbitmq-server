@@ -71,11 +71,7 @@ plt(
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_behaviours"],
     plt = ":base_plt",
-<<<<<<< HEAD
-    tags = ["dialyze"],
     warnings_as_errors = False,
-=======
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
 )
 
 rabbitmq_home(
@@ -97,14 +93,9 @@ rabbitmq_test_helper(
     srcs = [
         "test/shovel_test_utils.erl",
     ],
-<<<<<<< HEAD
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         "@lager//:erlang_app",
     ],
-=======
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
 )
 
 PACKAGE = "deps/rabbitmq_shovel"

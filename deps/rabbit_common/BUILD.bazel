@@ -51,13 +51,10 @@ genrule(
     tools = [":codegen"],
 )
 
-<<<<<<< HEAD
 DEPS = [
     "@lager//:erlang_app",
 ]
 
-=======
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
 RUNTIME_DEPS = [
     "@jsx//:erlang_app",
     "@recon//:erlang_app",
@@ -111,6 +108,7 @@ rabbitmq_app(
         "src/rabbit_framing_amqp_0_9_1.erl",
     ],
     runtime_deps = RUNTIME_DEPS,
+    deps = DEPS,
 )
 
 xref(

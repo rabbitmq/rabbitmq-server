@@ -316,7 +316,7 @@ make_conn_and_chan(URIs, ShovelName) ->
     try do_make_conn_and_chan(URIs, ShovelName) of
         Val -> Val
     catch throw:{error, Reason, URI} ->
-        log_connection_failure(Reason, URI, ShovelName),
+        _ = log_connection_failure(Reason, URI, ShovelName),
         make_conn_and_chan(lists:usort(URIs -- [URI]), ShovelName)
     end.
 

@@ -36,7 +36,7 @@ maybe_start_link(_, Name, Config) ->
 init([Name, Config0]) ->
     Config  = rabbit_data_coercion:to_proplist(Config0),
     Delay   = pget(<<"reconnect-delay">>, Config, ?DEFAULT_RECONNECT_DELAY),
-    case Name of
+    _ = case Name of
       {VHost, ShovelName} -> _ = rabbit_log:debug("Shovel '~s' in virtual host '~s' will use reconnection delay of ~p", [ShovelName, VHost, Delay]);
       ShovelName          -> _ = rabbit_log:debug("Shovel '~s' will use reconnection delay of ~s", [ShovelName, Delay])
     end,

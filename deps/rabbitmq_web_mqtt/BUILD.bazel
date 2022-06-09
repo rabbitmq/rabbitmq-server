@@ -73,14 +73,9 @@ rabbitmq_test_helper(
     name = "test_utils",
     srcs = glob(["test/src/*.erl"]),
     hdrs = glob(["test/src/*.hrl"]),
-<<<<<<< HEAD
-    dest = "test",
-    erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
     deps = [
         "@lager//:erlang_app",
     ],
-=======
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
 )
 
 suites = [

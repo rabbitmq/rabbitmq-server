@@ -101,6 +101,7 @@ rabbitmq_test_helper(
     ],
     deps = [
         "//deps/rabbit_common:erlang_app",
+        "@lager//:erlang_app",
     ],
 )
 

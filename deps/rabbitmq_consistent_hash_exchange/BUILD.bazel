@@ -46,11 +46,7 @@ plt(
 dialyze(
     dialyzer_opts = RABBITMQ_DIALYZER_OPTS + ["-Wno_behaviours"],
     plt = ":base_plt",
-<<<<<<< HEAD
-    tags = ["dialyze"],
     warnings_as_errors = False,
-=======
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
 )
 
 broker_for_integration_suites()

@@ -87,29 +87,16 @@ erlang_package.git_package(
     branch = "remove-logging",
 )
 
-<<<<<<< HEAD
-erlang_package.hex(
+erlang_package.hex_package(
     name = "gen_batch_server",
     version = "0.8.4",
     sha256 = "ff6b0ed0f7be945f38b94ddd4784d128f35ff029c34dad6ca0c6cb17ab7bc9c4",
 )
 
-erlang_package.hex(
+erlang_package.hex_package(
     name = "goldrush",
     version = "0.1.9",
     sha256 = "99cb4128cffcb3227581e5d4d803d5413fa643f4eb96523f77d9e6937d994ceb",
-=======
-erlang_package.hex_package(
-    name = "enough",
-    version = "0.1.0",
-    sha256 = "0460c7abda5f5e0ea592b12bc6976b8a5c4b96e42f332059cd396525374bf9a1",
-)
-
-erlang_package.hex_package(
-    name = "gen_batch_server",
-    version = "0.8.7",
-    sha256 = "94a49a528486298b009d2a1b452132c0a0d68b3e89d17d3764cb1ec879b7557a",
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
 )
 
 erlang_package.hex_package(
@@ -136,17 +123,13 @@ erlang_package.hex_package(
     sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
 )
 
-<<<<<<< HEAD
-erlang_package.hex(
+erlang_package.hex_package(
     name = "lager",
     version = "3.8.2",
     sha256 = "73329ce700410b423f64aafc5f94583073904899098e4461f3558ed2980462ab",
 )
 
-erlang_package.git(
-=======
 erlang_package.git_package(
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
     repository = "eproxus/meck",
     branch = "master",
 )
@@ -157,19 +140,7 @@ erlang_package.hex_package(
     sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
 )
 
-<<<<<<< HEAD
-erlang_package.hex(
-=======
-erlang_package.git_package(
-    repository = "rabbitmq/osiris",
-    tag = "v1.2.6",
-    patch_cmds = ["""
-sed -i"_orig" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
-"""],
-)
-
 erlang_package.hex_package(
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
     name = "prometheus",
     version = "4.8.1",
     sha256 = "6edfbe928d271c7f657a6f2c46258738086584bd6cae4a000b8b9a6009ba23a5",
@@ -201,29 +172,7 @@ erlang_package.hex_package(
 
 erlang_package.git_package(
     repository = "rabbitmq/ra",
-<<<<<<< HEAD
     tag = "v1.1.8",
-    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-erlang_app(
-    app_name = "ra",
-    extra_apps = [
-        "sasl",
-         "crypto",
-    ],
-    erlc_opts = [
-        "+deterministic",
-        "+debug_info",
-    ],
-    deps = [
-        "@aten//:erlang_app",
-        "@gen_batch_server//:erlang_app",
-    ],
-)""",
-=======
-    tag = "v2.0.11",
-    patch_cmds = ["""sed -i"_orig" -E 's/erlc/erlang_bytecode/g' ra.bzl
-"""],
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 NAME = "ra"
@@ -248,7 +197,6 @@ erlang_app(
     deps = DEPS,
 )
 """
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
 )
 
 erlang_package.hex_package(
@@ -259,24 +207,8 @@ erlang_package.hex_package(
 
 erlang_package.hex_package(
     name = "recon",
-<<<<<<< HEAD
     version = "2.5.1",
     sha256 = "5721c6b6d50122d8f68cccac712caa1231f97894bab779eff5ff0f886cb44648",
-=======
-    version = "2.5.2",
-    sha256 = "2c7523c8dee91dff41f6b3d63cba2bd49eb6d2fe5bf1eec0df7f87eb5e230e1c",
-)
-
-erlang_package.hex_package(
-    name = "redbug",
-    version = "2.0.7",
-    sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
-)
-
-erlang_package.git_package(
-    repository = "rabbitmq/seshat",
-    tag = "0.1.0",
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
 )
 
 erlang_package.hex_package(
@@ -296,30 +228,7 @@ erlang_package.hex_package(
     sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
 )
 
-<<<<<<< HEAD
-erlang_package.git(
-=======
-erlang_package.hex_package(
-    name = "systemd",
-    version = "0.6.1",
-    sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
-    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
-
-erlang_app(
-    app_name = "systemd",
-    erlc_opts = [
-        "+deterministic",
-        "+debug_info",
-    ],
-    deps = [
-        "@enough//:erlang_app",
-    ],
-)
-""",
-)
-
 erlang_package.git_package(
->>>>>>> 82997f7ff6 (Use rules_erlang 3 (backport #4884) (backport #5000) (#5002))
     name = "trust_store_http",
     repository = "rabbitmq/trust-store-http",
     branch = "master",
