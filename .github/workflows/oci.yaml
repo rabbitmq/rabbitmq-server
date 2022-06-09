@@ -45,7 +45,7 @@ jobs:
           echo "::set-output name=elixir::$(yq eval '.elixir' $FILE)"
 
       - name: Mount Bazel Cache
-        uses: actions/cache@v3.0.2
+        uses: actions/cache@v3.0.4
         with:
           path: "/home/runner/repo-cache/"
           key: repo-cache
