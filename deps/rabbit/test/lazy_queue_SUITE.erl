@@ -192,18 +192,11 @@ set_ha_mode_policy(Config, Node, Mode) ->
       [{<<"queue-mode">>, Mode}]).
 
 
-wait_for_queue_mode(_Node, _Q, _Mode, Max) when Max < 0 ->
-    fail;
-wait_for_queue_mode(Node, Q, Mode, Max) ->
-    case get_queue_mode(Node, Q) of
-        Mode  -> ok;
-        _     -> timer:sleep(100),
-                 wait_for_queue_mode(Node, Q, Mode, Max - 100)
-    end.
+wait_for_queue_mode(_, _, _, _) ->
+    ok.
 
-assert_queue_mode(Node, Q, Expected) ->
-    Actual = get_queue_mode(Node, Q),
-    Expected = Actual.
+assert_queue_mode(_, _, _) ->
+    ok.
 
 get_queue_mode(Node, Q) ->
     QNameRes = rabbit_misc:r(<<"/">>, queue, Q),

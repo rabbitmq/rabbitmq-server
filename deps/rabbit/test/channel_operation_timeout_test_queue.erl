@@ -149,9 +149,9 @@
              q3                    :: ?QUEUE:?QUEUE(),
              q4                    :: ?QUEUE:?QUEUE(),
              next_seq_id           :: seq_id(),
-             ram_pending_ack       :: gb_trees:tree(),
-             disk_pending_ack      :: gb_trees:tree(),
-             qi_pending_ack        :: gb_trees:tree(),
+             ram_pending_ack       :: map(),
+             disk_pending_ack      :: map(),
+             qi_pending_ack        :: map(),
              index_state           :: any(),
              msg_store_clients     :: 'undefined' | {{any(), binary()},
                                                     {any(), binary()}},
@@ -211,7 +211,7 @@ delete_and_terminate(Reason, State) ->
 delete_crashed(Q) ->
     rabbit_variable_queue:delete_crashed(Q).
 
-purge(State = #vqstate { qi_pending_ack= QPA }) ->
+purge(State = #vqstate { ram_pending_ack= QPA }) ->
     maybe_delay(QPA),
     rabbit_variable_queue:purge(State);
 %% For v3.9.x and below because the state has changed.
@@ -255,7 +255,7 @@ drop(AckRequired, State) ->
 ack(List, State) ->
     rabbit_variable_queue:ack(List, State).
 
-requeue(AckTags, #vqstate { qi_pending_ack = QPA } = State) ->
+requeue(AckTags, #vqstate { ram_pending_ack = QPA } = State) ->
     maybe_delay(QPA),
     rabbit_variable_queue:requeue(AckTags, State);
 %% For v3.9.x and below because the state has changed.
@@ -270,7 +270,7 @@ ackfold(MsgFun, Acc, State, AckTags) ->
 fold(Fun, Acc, State) ->
     rabbit_variable_queue:fold(Fun, Acc, State).
 
-len(#vqstate { qi_pending_ack = QPA } = State) ->
+len(#vqstate { ram_pending_ack = QPA } = State) ->
     maybe_delay(QPA),
     rabbit_variable_queue:len(State);
 %% For v3.9.x and below because the state has changed.
@@ -325,7 +325,7 @@ zip_msgs_and_acks(Msgs, AckTags, Accumulator, State) ->
 
 %% Delay
 maybe_delay(QPA) ->
-  case is_timeout_test(gb_trees:values(QPA)) of
+  case is_timeout_test(maps:values(QPA)) of
     true -> receive
               %% The queue received an EXIT message, it's probably the
               %% node being stopped with "rabbitmqctl stop". Thus, abort
