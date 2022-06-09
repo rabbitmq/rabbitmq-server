@@ -11,19 +11,6 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v3
-    - name: UPDATE RBE IMAGE SHA
-      env:
-        IMAGE: pivotalrabbitmq/rabbitmq-server-buildenv
-        TAG: linux-erlang-git-master
-      run: |
-        # buildbuddy caches the container image, so we must use a specific sha to ensure
-        # the latest is used
-        DIGEST="$(skopeo inspect --format '{{.Digest}}' docker://${IMAGE}:${TAG})"
-        echo "Will use ${IMAGE}@${DIGEST}"
-        sudo npm install --global --silent @bazel/buildozer
-        npx buildozer \
-          "dict_set exec_properties container-image:docker://${IMAGE}@${DIGEST}" \
-          //:erlang_git_platform
     - name: MOUNT BAZEL CACHE
       uses: actions/cache@v3.0.4
       with:
@@ -39,21 +26,15 @@ jobs:
         cat << EOF >> user.bazelrc
           build:buildbuddy --build_metadata=ROLE=CI
           build:buildbuddy --build_metadata=VISIBILITY=PUBLIC
-          build:buildbuddy --remote_instance_name=buildbuddy-io/buildbuddy/ci-erlang-git
           build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=
 
-          build:rbe-git --config=rbe
-          build:rbe-git --crosstool_top=@buildbuddy_toolchain//:toolchain
-          build:rbe-git --extra_toolchains=@buildbuddy_toolchain//:cc_toolchain
-
-          build:rbe-git --host_platform=//:erlang_git_platform
-          build:rbe-git --platforms=//:erlang_git_platform
-          build:rbe-git --extra_execution_platforms=//:erlang_git_platform
-          build:rbe-git --@rules_erlang//:erlang_home=/usr/local/lib/erlang
-          build:rbe-git --@rules_erlang//:erlang_version=25
+          build:rbe --platforms=//bazel/platforms:erlang_git_master_platform
+          build:rbe --extra_execution_platforms=//bazel/platforms:erlang_git_master_platform
         EOF
+
+        bazelisk info release
     #! - name: Setup tmate session
     #!   uses: mxschmitt/action-tmate@v3
     - name: RUN TESTS
@@ -61,6 +42,6 @@ jobs:
         sudo sysctl -w net.ipv4.tcp_keepalive_time=60
         sudo ethtool -K eth0 tso off gso off gro off tx off rx off lro off
         bazelisk test //... \
-          --config=rbe-git \
+          --config=rbe \
           --test_tag_filters=-mixed-version-cluster,-exclusive,-aws \
           --verbose_failures

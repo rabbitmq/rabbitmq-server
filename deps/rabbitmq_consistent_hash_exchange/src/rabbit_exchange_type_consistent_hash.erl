@@ -54,7 +54,7 @@ init() ->
                                                  {type, ordered_set}]),
     mnesia:add_table_copy(?HASH_RING_STATE_TABLE, node(), ram_copies),
     rabbit_table:wait([?HASH_RING_STATE_TABLE]),
-    recover(),
+    _ = recover(),
     ok.
 
 info(_X) -> [].

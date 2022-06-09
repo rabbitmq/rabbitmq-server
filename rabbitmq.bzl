@@ -1,4 +1,8 @@
 load(
+    "@rules_erlang//:erlang_bytecode.bzl",
+    "erlang_bytecode",
+)
+load(
     "@rules_erlang//:erlang_app.bzl",
     "DEFAULT_ERLC_OPTS",
     "DEFAULT_TEST_ERLC_OPTS",
@@ -6,7 +10,7 @@ load(
     "test_erlang_app",
 )
 load(
-    "@rules_erlang//:ct_sharded.bzl",
+    "@rules_erlang//:ct.bzl",
     "ct_suite",
     "ct_suite_variant",
     _assert_suites = "assert_suites",
@@ -106,7 +110,10 @@ LABELS_WITH_TEST_VERSIONS = [
 ]
 
 def all_plugins(rabbitmq_workspace = "@rabbitmq-server"):
-    return [rabbitmq_workspace + p for p in ALL_PLUGINS]
+    return [
+        Label("{}{}".format(rabbitmq_workspace, p))
+        for p in ALL_PLUGINS
+    ]
 
 def with_test_versions(deps):
     r = []
@@ -126,8 +133,8 @@ def rabbitmq_app(
         app_env = "",
         app_extra_keys = "",
         extra_apps = [],
-        erlc_opts = RABBITMQ_ERLC_OPTS,
-        test_erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+        extra_hdrs = [],
+        extra_srcs = [],
         extra_priv = [],
         build_deps = [],
         deps = [],
@@ -139,10 +146,12 @@ def rabbitmq_app(
         app_module = app_module,
         app_registered = app_registered,
         app_env = app_env,
-        app_extra = app_extra_keys,
+        app_extra_keys = app_extra_keys,
         extra_apps = extra_apps,
+        extra_hdrs = extra_hdrs,
+        extra_srcs = extra_srcs,
         extra_priv = extra_priv,
-        erlc_opts = erlc_opts,
+        erlc_opts = RABBITMQ_ERLC_OPTS,
         build_deps = build_deps,
         deps = deps,
         runtime_deps = runtime_deps,
@@ -155,10 +164,12 @@ def rabbitmq_app(
         app_module = app_module,
         app_registered = app_registered,
         app_env = app_env,
-        app_extra = app_extra_keys,
+        app_extra_keys = app_extra_keys,
         extra_apps = extra_apps,
+        extra_hdrs = extra_hdrs,
+        extra_srcs = extra_srcs,
         extra_priv = extra_priv,
-        erlc_opts = test_erlc_opts,
+        erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
         build_deps = with_test_versions(build_deps),
         deps = with_test_versions(deps),
         runtime_deps = with_test_versions(runtime_deps),
@@ -176,18 +187,30 @@ def rabbitmq_suite(deps = [], erlc_opts = [], test_env = {}, **kwargs):
     )
     return kwargs["name"]
 
-def broker_for_integration_suites():
+def broker_for_integration_suites(extra_plugins = []):
     rabbitmq_home(
         name = "broker-for-tests-home",
         plugins = [
             "//deps/rabbit:erlang_app",
             ":erlang_app",
-        ],
+        ] + extra_plugins,
+        testonly = True,
     )
 
     rabbitmq_run(
         name = "rabbitmq-for-tests-run",
         home = ":broker-for-tests-home",
+        testonly = True,
+    )
+
+def rabbitmq_test_helper(
+        erlc_opts = RABBITMQ_TEST_ERLC_OPTS,
+        **kwargs):
+    erlang_bytecode(
+        testonly = True,
+        dest = "test",
+        erlc_opts = erlc_opts,
+        **kwargs
     )
 
 def rabbitmq_integration_suite(
@@ -232,7 +255,7 @@ def rabbitmq_integration_suite(
             ":rabbitmq-for-tests-run",
         ] + tools,
         runtime_deps = [
-            "//deps/rabbitmq_cli:elixir_app",
+            "//bazel/elixir:erlang_app",
             "//deps/rabbitmq_cli:rabbitmqctl",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,
@@ -260,7 +283,7 @@ def rabbitmq_integration_suite(
             "@rabbitmq-server-generic-unix-3.7.28//:rabbitmq-run",
         ] + tools,
         runtime_deps = [
-            "//deps/rabbitmq_cli:elixir_app",
+            "//bazel/elixir:erlang_app",
             "//deps/rabbitmq_cli:rabbitmqctl",
             "//deps/rabbitmq_ct_client_helpers:erlang_app",
         ] + runtime_deps,

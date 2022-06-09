@@ -3,7 +3,6 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "new_git_repository")
 load("@rules_erlang//:github.bzl", "github_erlang_app")
 load("@rules_erlang//:hex_archive.bzl", "hex_archive")
 load("@rules_erlang//:hex_pm.bzl", "hex_pm_erlang_app")
-load("//:rabbitmq.bzl", "APP_VERSION")
 
 def rabbitmq_external_deps(rabbitmq_workspace = "@rabbitmq-server"):
     hex_pm_erlang_app(
@@ -129,9 +128,6 @@ erlang_app(
         org = "potatosalad",
         ref = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
         version = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
-        first_srcs = [
-            "src/jose_block_encryptor.erl",
-        ],
         sha256 = "7816f39d00655f2605cfac180755e97e268dba86c2f71037998ff63792ca727b",
     )
 
@@ -143,9 +139,6 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "lager",
-        first_srcs = [
-            "src/lager_rotator_behaviour.erl",
-        ],
         version = "3.8.2",
         sha256 = "73329ce700410b423f64aafc5f94583073904899098e4461f3558ed2980462ab",
         runtime_deps = [
@@ -197,10 +190,6 @@ erlang_app(
         name = "ra",
         version = "1.1.8",
         sha256 = "d7e399f8a09c8420bc90953f3464127063e53cef39f27e0af452ec51ad26ea9e",
-        first_srcs = [
-            "src/ra_machine.erl",
-            "src/ra_snapshot.erl",
-        ],
         deps = [
             "@gen_batch_server//:erlang_app",
         ],
