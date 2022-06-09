@@ -186,6 +186,10 @@ write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
     %%       after reading it back from disk. But we have to support
     %%       going back to v1 for the time being. When rolling back
     %%       to v1 is no longer possible, set `id = undefined` here.
+    %% @todo We should manage flushing to disk ourselves so that we
+    %%       only do term_to_iovec if the message is going to hit
+    %%       the disk. If it won't, we can replace it with an empty
+    %%       binary. The size can be estimated via erlang:external_size/1.
     MsgIovec = term_to_iovec(Msg),
     Size = iolist_size(MsgIovec),
     %% Calculate the CRC for the data if configured to do so.

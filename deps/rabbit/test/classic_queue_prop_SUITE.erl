@@ -23,7 +23,6 @@
 -record(cq, {
     amq = undefined :: amqqueue:amqqueue(),
     name :: atom(),
-    mode :: classic | lazy,
     version :: 1 | 2,
 
     %% We have one queue per way of publishing messages (such as channels).
@@ -80,9 +79,7 @@ groups() ->
     [{classic_queue_tests, [], [
 %        manual%,
         classic_queue_v1,
-        lazy_queue_v1,
-        classic_queue_v2,
-        lazy_queue_v2
+        classic_queue_v2
      ]},
      {classic_queue_regressions, [], [
         reg_v1_full_recover_only_journal
@@ -136,10 +133,10 @@ instrs_to_manual([Instrs]) ->
     io:format("~ndo_manual(Config) ->~n~n"),
     lists:foreach(fun
         ({init, CQ}) ->
-            #cq{name=Name, mode=Mode, version=Version} = CQ,
-            io:format("    St0 = #cq{name=~0p, mode=~0p, version=~0p,~n"
+            #cq{name=Name, version=Version} = CQ,
+            io:format("    St0 = #cq{name=~0p, version=~0p,~n"
                       "              config=minimal_config(Config)},~n~n",
-                      [Name, Mode, Version]);
+                      [Name, Version]);
         ({set, {var,Var}, {call, ?MODULE, cmd_setup_queue, _}}) ->
             Res = "Res" ++ integer_to_list(Var),
             PrevSt = "St" ++ integer_to_list(Var - 1),
@@ -206,30 +203,12 @@ do_classic_queue_v1(Config) ->
                              [{on_output, on_output_fun()},
                               {numtests, ?NUM_TESTS}]).
 
-lazy_queue_v1(Config) ->
-    true = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, do_lazy_queue_v1, [Config]).
-
-do_lazy_queue_v1(Config) ->
-    true = proper:quickcheck(prop_lazy_queue_v1(Config),
-                             [{on_output, on_output_fun()},
-                              {numtests, ?NUM_TESTS}]).
-
 classic_queue_v2(Config) ->
     true = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, do_classic_queue_v2, [Config]).
 
 do_classic_queue_v2(Config) ->
     true = proper:quickcheck(prop_classic_queue_v2(Config),
-                             [{on_output, on_output_fun()},
-                              {numtests, ?NUM_TESTS}]).
-
-lazy_queue_v2(Config) ->
-    true = rabbit_ct_broker_helpers:rpc(Config, 0,
-        ?MODULE, do_lazy_queue_v2, [Config]).
-
-do_lazy_queue_v2(Config) ->
-    true = proper:quickcheck(prop_lazy_queue_v2(Config),
                              [{on_output, on_output_fun()},
                               {numtests, ?NUM_TESTS}]).
 
@@ -245,25 +224,13 @@ on_output_fun() ->
 
 prop_classic_queue_v1(Config) ->
     {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
-    InitialState = #cq{name=?FUNCTION_NAME, mode=default, version=1,
-                       config=minimal_config(Config), limiter=LimiterPid},
-    prop_common(InitialState).
-
-prop_lazy_queue_v1(Config) ->
-    {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
-    InitialState = #cq{name=?FUNCTION_NAME, mode=lazy, version=1,
+    InitialState = #cq{name=?FUNCTION_NAME, version=1,
                        config=minimal_config(Config), limiter=LimiterPid},
     prop_common(InitialState).
 
 prop_classic_queue_v2(Config) ->
     {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
-    InitialState = #cq{name=?FUNCTION_NAME, mode=default, version=2,
-                       config=minimal_config(Config), limiter=LimiterPid},
-    prop_common(InitialState).
-
-prop_lazy_queue_v2(Config) ->
-    {ok, LimiterPid} = rabbit_limiter:start_link(no_id),
-    InitialState = #cq{name=?FUNCTION_NAME, mode=lazy, version=2,
+    InitialState = #cq{name=?FUNCTION_NAME, version=2,
                        config=minimal_config(Config), limiter=LimiterPid},
     prop_common(InitialState).
 
@@ -317,9 +284,7 @@ command(St) ->
         %% These change internal configuration.
         { 10, {call, ?MODULE, cmd_set_v2_check_crc32, [boolean()]}},
         %% These set policies.
-        { 50, {call, ?MODULE, cmd_set_mode, [St, oneof([default, lazy])]}},
-        { 50, {call, ?MODULE, cmd_set_version, [St, oneof([1, 2])]}},
-        { 50, {call, ?MODULE, cmd_set_mode_version, [oneof([default, lazy]), oneof([1, 2])]}},
+        { 50, {call, ?MODULE, cmd_set_version, [oneof([1, 2])]}},
         %% These are direct operations using internal functions.
         { 50, {call, ?MODULE, cmd_publish_msg, [St, integer(0, 1024*1024), integer(1, 2), boolean(), expiration()]}},
         { 50, {call, ?MODULE, cmd_basic_get_msg, [St]}},
@@ -375,12 +340,8 @@ next_state(St=#cq{q=Q0, confirmed=Confirmed, uncertain=Uncertain0}, AMQ, {call, 
     St#cq{amq=AMQ, q=Q, restarted=true, crashed=true, uncertain=Uncertain};
 next_state(St, _, {call, _, cmd_set_v2_check_crc32, _}) ->
     St;
-next_state(St, _, {call, _, cmd_set_mode, [_, Mode]}) ->
-    St#cq{mode=Mode};
-next_state(St, _, {call, _, cmd_set_version, [_, Version]}) ->
+next_state(St, _, {call, _, cmd_set_version, [Version]}) ->
     St#cq{version=Version};
-next_state(St, _, {call, _, cmd_set_mode_version, [Mode, Version]}) ->
-    St#cq{mode=Mode, version=Version};
 next_state(St=#cq{q=Q}, Msg, {call, _, cmd_publish_msg, _}) ->
     IntQ = maps:get(internal, Q, queue:new()),
     St#cq{q=Q#{internal => queue:in(Msg, IntQ)}};
@@ -566,14 +527,8 @@ postcondition(_, {call, _, Cmd, _}, Q) when
     element(1, Q) =:= amqqueue;
 postcondition(_, {call, _, cmd_set_v2_check_crc32, _}, Res) ->
     Res =:= ok;
-postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode, [_, Mode]}, _) ->
-    do_check_queue_mode(AMQ, Mode) =:= ok;
-postcondition(#cq{amq=AMQ}, {call, _, cmd_set_version, [_, Version]}, _) ->
+postcondition(#cq{amq=AMQ}, {call, _, cmd_set_version, [Version]}, _) ->
     do_check_queue_version(AMQ, Version) =:= ok;
-postcondition(#cq{amq=AMQ}, {call, _, cmd_set_mode_version, [Mode, Version]}, _) ->
-    (do_check_queue_mode(AMQ, Mode) =:= ok)
-    andalso
-    (do_check_queue_version(AMQ, Version) =:= ok);
 postcondition(_, {call, _, cmd_publish_msg, _}, Msg) ->
     is_record(Msg, amqp_msg);
 postcondition(_, {call, _, cmd_purge, _}, Res) ->
@@ -736,22 +691,20 @@ crashed_and_previously_received(#cq{crashed=Crashed, received=Received}, Msg) ->
 
 %% Helpers.
 
-cmd_setup_queue(St=#cq{name=Name, mode=Mode, version=Version}) ->
+cmd_setup_queue(St=#cq{name=Name, version=Version}) ->
     ?DEBUG("~0p", [St]),
     IsDurable = true, %% We want to be able to restart the queue process.
     IsAutoDelete = false,
-    %% We cannot use args to set mode/version as the arguments override
+    %% We cannot use args to set the version as the arguments override
     %% the policies and we also want to test policy changes.
-    cmd_set_mode_version(Mode, Version),
+    cmd_set_version(Version),
     Args = [
-%        {<<"x-queue-mode">>, longstr, atom_to_binary(Mode, utf8)},
 %        {<<"x-queue-version">>, long, Version}
     ],
     QName = rabbit_misc:r(<<"/">>, queue, iolist_to_binary([atom_to_binary(Name, utf8), $_,
                                                             integer_to_binary(erlang:unique_integer([positive]))])),
     {new, AMQ} = rabbit_amqqueue:declare(QName, IsDurable, IsAutoDelete, Args, none, <<"acting-user">>),
-    %% We check that the queue was creating with the right mode/version.
-    ok = do_check_queue_mode(AMQ, Mode),
+    %% We check that the queue was creating with the right version.
     ok = do_check_queue_version(AMQ, Version),
     AMQ.
 
@@ -768,7 +721,7 @@ cmd_teardown_queue(St=#cq{amq=AMQ, channels=Channels}) ->
         || Ch <- maps:keys(Channels)],
     %% Then we can delete the queue.
     rabbit_amqqueue:delete(AMQ, false, false, <<"acting-user">>),
-    rabbit_policy:delete(<<"/">>, <<"queue-mode-version-policy">>, <<"acting-user">>),
+    rabbit_policy:delete(<<"/">>, <<"queue-version-policy">>, <<"acting-user">>),
     ok.
 
 cmd_restart_vhost_clean(St=#cq{amq=AMQ0}) ->
@@ -812,27 +765,11 @@ do_wait_updated_amqqueue(Name, Pid) ->
 cmd_set_v2_check_crc32(Value) ->
     application:set_env(rabbit, classic_queue_store_v2_check_crc32, Value).
 
-cmd_set_mode(St=#cq{version=Version}, Mode) ->
-    ?DEBUG("~0p ~0p", [St, Mode]),
-    do_set_policy(Mode, Version).
-
-%% We loop until the queue has switched mode.
-do_check_queue_mode(AMQ, Mode) ->
-    do_check_queue_mode(AMQ, Mode, 1000).
-
-do_check_queue_mode(_, _, 0) ->
-    error;
-do_check_queue_mode(AMQ, Mode, N) ->
-    timer:sleep(1),
-    [{backing_queue_status, Status}] = rabbit_amqqueue:info(AMQ, [backing_queue_status]),
-    case proplists:get_value(mode, Status) of
-        Mode -> ok;
-        _ -> do_check_queue_mode(AMQ, Mode, N - 1)
-    end.
-
-cmd_set_version(St=#cq{mode=Mode}, Version) ->
-    ?DEBUG("~0p ~0p", [St, Version]),
-    do_set_policy(Mode, Version).
+cmd_set_version(Version) ->
+    ?DEBUG("~0p ~0p", [Version]),
+    rabbit_policy:set(<<"/">>, <<"queue-version-policy">>, <<".*">>,
+        [{<<"queue-version">>, Version}],
+        0, <<"queues">>, <<"acting-user">>).
 
 %% We loop until the queue has switched version.
 do_check_queue_version(AMQ, Version) ->
@@ -847,16 +784,6 @@ do_check_queue_version(AMQ, Version, N) ->
         Version -> ok;
         _ -> do_check_queue_version(AMQ, Version, N - 1)
     end.
-
-cmd_set_mode_version(Mode, Version) ->
-    ?DEBUG("~0p ~0p", [Mode, Version]),
-    do_set_policy(Mode, Version).
-
-do_set_policy(Mode, Version) ->
-    rabbit_policy:set(<<"/">>, <<"queue-mode-version-policy">>, <<".*">>,
-        [{<<"queue-mode">>, atom_to_binary(Mode, utf8)},
-         {<<"queue-version">>, Version}],
-        0, <<"queues">>, <<"acting-user">>).
 
 cmd_publish_msg(St=#cq{amq=AMQ}, PayloadSize, DeliveryMode, Mandatory, Expiration) ->
     ?DEBUG("~0p ~0p ~0p ~0p ~0p", [St, PayloadSize, DeliveryMode, Mandatory, Expiration]),

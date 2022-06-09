@@ -1222,6 +1222,7 @@ convert_from_v2_to_v1_msg_status(MsgStatus0, State1 = #vqstate{ store_state = St
                                                                 ram_bytes = RamBytes }, Ready) ->
     case MsgStatus0 of
         #msg_status{ seq_id = SeqId,
+                     msg = undefined,
                      msg_location = MsgLocation = {rabbit_classic_queue_store_v2, _, _} } ->
             {Msg, StoreState} = rabbit_classic_queue_store_v2:read(SeqId, MsgLocation, StoreState0),
             MsgStatus = MsgStatus0#msg_status{ msg = Msg,
