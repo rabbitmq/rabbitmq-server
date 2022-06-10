@@ -1,10 +1,9 @@
-load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load(
     "//:rabbitmq.bzl",
     "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
-    "RABBITMQ_TEST_ERLC_OPTS",
     "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_app",
@@ -68,7 +67,9 @@ rabbitmq_app(
     deps = DEPS,
 )
 
-xref()
+xref(
+    additional_libs = BUILD_DEPS,
+)
 
 plt(
     name = "base_plt",
