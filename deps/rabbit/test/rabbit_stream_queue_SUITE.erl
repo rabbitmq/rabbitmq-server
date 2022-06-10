@@ -112,6 +112,7 @@ all_tests() ->
      max_age_policy,
      max_segment_size_bytes_validation,
      max_segment_size_bytes_policy,
+     max_segment_size_bytes_policy_validation,
      purge,
      update_retention_policy,
      queue_info,
@@ -2071,6 +2072,25 @@ queue_info(Config) ->
                   (lists:sort(Servers) == lists:sort(proplists:get_value(online, Info)))
       end),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+max_segment_size_bytes_policy_validation(Config) ->
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"segment">>, <<"max_segment_size_bytes.*">>, <<"queues">>,
+           [{<<"stream-max-segment-size-bytes">>, ?MAX_STREAM_MAX_SEGMENT_SIZE - 1_000}]),
+
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"segment">>),
+
+    {error_string, _} = rabbit_ct_broker_helpers:rpc(
+                          Config, 0,
+                          rabbit_policy, set,
+                          [<<"/">>,
+                           <<"segment">>,
+                           <<"max_segment_size_bytes.*">>,
+                           [{<<"stream-max-segment-size-bytes">>, ?MAX_STREAM_MAX_SEGMENT_SIZE + 1_000}],
+                           0,
+                           <<"queues">>,
+                           <<"acting-user">>]),
+    ok.
 
 max_segment_size_bytes_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
