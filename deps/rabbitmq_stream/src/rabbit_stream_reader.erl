@@ -777,6 +777,7 @@ open(info, {OK, S, Data},
              StatemData#statem_data{connection = Connection1,
                                     connection_state = State2}}
     end;
+
 open(info,
      {sac, {{subscription_id, SubId}, {active, Active}, {extra, Extra}}},
      #statem_data{transport = Transport,
@@ -841,6 +842,7 @@ open(info,
     {keep_state,
      State#statem_data{connection = Connection1,
                        connection_state = ConnState1}};
+
 open(info, {Closed, Socket}, #statem_data{connection = Connection})
     when Closed =:= tcp_closed; Closed =:= ssl_closed ->
     demonitor_all_streams(Connection),
