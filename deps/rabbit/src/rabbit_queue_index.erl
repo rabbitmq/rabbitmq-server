@@ -249,7 +249,7 @@
                                unacked            :: non_neg_integer()
                              }).
 -type seg_map() :: {map(), [segment()]}.
--type on_sync_fun() :: fun ((gb_sets:set()) -> ok).
+-type on_sync_fun() :: fun ((sets:set()) -> ok).
 -type qistate() :: #qistate { dir                 :: file:filename(),
                               segments            :: 'undefined' | seg_map(),
                               journal_handle      :: hdl(),
@@ -257,8 +257,8 @@
                               max_journal_entries :: non_neg_integer(),
                               on_sync             :: on_sync_fun(),
                               on_sync_msg         :: on_sync_fun(),
-                              unconfirmed         :: gb_sets:set(),
-                              unconfirmed_msg     :: gb_sets:set(),
+                              unconfirmed         :: sets:set(),
+                              unconfirmed_msg     :: sets:set(),
                               pre_publish_cache   :: list(),
                               delivered_cache     :: list()
                             }.
@@ -439,9 +439,9 @@ maybe_needs_confirming(MsgProps, MsgOrId,
             end,
     ?MSG_ID_BYTES = size(MsgId),
     case {MsgProps#message_properties.needs_confirming, MsgOrId} of
-      {true,  MsgId} -> UC1  = gb_sets:add_element(MsgId, UC),
+      {true,  MsgId} -> UC1  = sets:add_element(MsgId, UC),
                         State#qistate{unconfirmed     = UC1};
-      {true,  _}     -> UCM1 = gb_sets:add_element(MsgId, UCM),
+      {true,  _}     -> UCM1 = sets:add_element(MsgId, UCM),
                         State#qistate{unconfirmed_msg = UCM1};
       {false, _}     -> State
     end.
@@ -474,7 +474,7 @@ needs_sync(#qistate{journal_handle = undefined}) ->
 needs_sync(#qistate{journal_handle  = JournalHdl,
                     unconfirmed     = UC,
                     unconfirmed_msg = UCM}) ->
-    case gb_sets:is_empty(UC) andalso gb_sets:is_empty(UCM) of
+    case sets:is_empty(UC) andalso sets:is_empty(UCM) of
         true  -> case file_handle_cache:needs_sync(JournalHdl) of
                      true  -> other;
                      false -> false
@@ -623,8 +623,8 @@ blank_state_name_dir_funs(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
                max_journal_entries = MaxJournal,
                on_sync             = OnSyncFun,
                on_sync_msg         = OnSyncMsgFun,
-               unconfirmed         = gb_sets:new(),
-               unconfirmed_msg     = gb_sets:new(),
+               unconfirmed         = sets:new([{version,2}]),
+               unconfirmed_msg     = sets:new([{version,2}]),
                pre_publish_cache   = [],
                delivered_cache     = [],
                queue_name          = Name }.
@@ -1101,15 +1101,15 @@ notify_sync(State = #qistate{unconfirmed     = UC,
                              unconfirmed_msg = UCM,
                              on_sync         = OnSyncFun,
                              on_sync_msg     = OnSyncMsgFun}) ->
-    State1 = case gb_sets:is_empty(UC) of
+    State1 = case sets:is_empty(UC) of
                  true  -> State;
                  false -> OnSyncFun(UC),
-                          State#qistate{unconfirmed = gb_sets:new()}
+                          State#qistate{unconfirmed = sets:new([{version,2}])}
              end,
-    case gb_sets:is_empty(UCM) of
+    case sets:is_empty(UCM) of
         true  -> State1;
         false -> OnSyncMsgFun(UCM),
-                 State1#qistate{unconfirmed_msg = gb_sets:new()}
+                 State1#qistate{unconfirmed_msg = sets:new([{version,2}])}
     end.
 
 %%----------------------------------------------------------------------------

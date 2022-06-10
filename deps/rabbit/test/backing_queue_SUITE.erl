@@ -368,7 +368,7 @@ on_disk_capture([_|_], _Awaiting, Pid) ->
 on_disk_capture(OnDisk, Awaiting, Pid) ->
     receive
         {on_disk, MsgIdsS} ->
-            MsgIds = gb_sets:to_list(MsgIdsS),
+            MsgIds = sets:to_list(MsgIdsS),
             on_disk_capture(OnDisk ++ (MsgIds -- Awaiting), Awaiting -- MsgIds,
                             Pid);
         stop ->
@@ -481,7 +481,7 @@ test_msg_store_confirm_timer() ->
         ?PERSISTENT_MSG_STORE,
         Ref,
         fun (MsgIds, _ActionTaken) ->
-            case gb_sets:is_member(MsgId, MsgIds) of
+            case sets:is_element(MsgId, MsgIds) of
                 true  -> Self ! on_disk;
                 false -> ok
             end
@@ -1673,23 +1673,23 @@ publish_and_confirm(Q, Payload, Count) ->
               {ok, Acc, _Actions} = rabbit_queue_type:deliver([Q], Delivery, Acc0),
               Acc
       end, QTState0, Seqs),
-    wait_for_confirms(gb_sets:from_list(Seqs)),
+    wait_for_confirms(sets:from_list(Seqs)),
     QTState.
 
 wait_for_confirms(Unconfirmed) ->
-    case gb_sets:is_empty(Unconfirmed) of
+    case sets:is_empty(Unconfirmed) of
         true  -> ok;
         false ->
             receive
                 {'$gen_cast',
                  {queue_event, _QName, {confirm, Confirmed, _}}} ->
                     wait_for_confirms(
-                      rabbit_misc:gb_sets_difference(
-                        Unconfirmed, gb_sets:from_list(Confirmed)));
+                      sets:subtract(
+                        Unconfirmed, sets:from_list(Confirmed)));
                 {'$gen_cast', {confirm, Confirmed, _}} ->
                     wait_for_confirms(
-                      rabbit_misc:gb_sets_difference(
-                        Unconfirmed, gb_sets:from_list(Confirmed)))
+                      sets:subtract(
+                        Unconfirmed, sets:from_list(Confirmed)))
             after ?TIMEOUT ->
                       flush(),
                       exit(timeout_waiting_for_confirm)

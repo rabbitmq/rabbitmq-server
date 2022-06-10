@@ -122,7 +122,7 @@
     %% publisher confirms will be sent at regular
     %% intervals after the index has been flushed
     %% to disk.
-    confirms = gb_sets:new() :: gb_sets:set(),
+    confirms = sets:new([{version,2}]) :: sets:set(),
     on_sync :: on_sync_fun()
 }).
 
@@ -131,7 +131,7 @@
 -type msg_location() :: {?MODULE, non_neg_integer(), non_neg_integer()}.
 -export_type([msg_location/0]).
 
--type on_sync_fun() :: fun ((gb_sets:set(), 'written' | 'ignored') -> any()).
+-type on_sync_fun() :: fun ((sets:set(), 'written' | 'ignored') -> any()).
 
 -spec init(rabbit_amqqueue:name(), on_sync_fun()) -> state().
 
@@ -248,7 +248,7 @@ maybe_cache(SeqId, MsgSize, Msg, State = #qs{ cache = Cache,
 
 maybe_mark_unconfirmed(MsgId, #message_properties{ needs_confirming = true },
         State = #qs { confirms = Confirms }) ->
-    State#qs{ confirms = gb_sets:add_element(MsgId, Confirms) };
+    State#qs{ confirms = sets:add_element(MsgId, Confirms) };
 maybe_mark_unconfirmed(_, _, State) ->
     State.
 
@@ -258,12 +258,12 @@ sync(State = #qs{ confirms = Confirms,
                   on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State]),
     flush_write_fd(State),
-    case gb_sets:is_empty(Confirms) of
+    case sets:is_empty(Confirms) of
         true ->
             State;
         false ->
             OnSyncFun(Confirms, written),
-            State#qs{ confirms = gb_sets:new() }
+            State#qs{ confirms = sets:new([{version,2}]) }
     end.
 
 -spec read(rabbit_variable_queue:seq_id(), msg_location(), State)

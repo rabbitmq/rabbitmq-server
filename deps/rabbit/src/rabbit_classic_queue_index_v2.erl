@@ -111,7 +111,7 @@
     %% and there are outstanding unconfirmed messages.
     %% In that case the buffer is flushed to disk when
     %% the queue requests a sync (after a timeout).
-    confirms = gb_sets:new() :: gb_sets:set(),
+    confirms = sets:new([{version,2}]) :: sets:set(),
 
     %% Segments we currently know of along with the
     %% number of unacked messages remaining in the
@@ -156,7 +156,7 @@
 
 %% Types copied from rabbit_queue_index.
 
--type on_sync_fun() :: fun ((gb_sets:set()) -> ok).
+-type on_sync_fun() :: fun ((sets:set()) -> ok).
 -type contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean()).
 -type shutdown_terms() :: list() | 'non_clean_shutdown'.
 
@@ -658,7 +658,7 @@ reduce_fd_usage(SegmentToOpen, State = #qi{ fds = OpenFds0 }) ->
 
 maybe_mark_unconfirmed(MsgId, #message_properties{ needs_confirming = true },
         State = #qi { confirms = Confirms }) ->
-    State#qi{ confirms = gb_sets:add_element(MsgId, Confirms) };
+    State#qi{ confirms = sets:add_element(MsgId, Confirms) };
 maybe_mark_unconfirmed(_, _, State) ->
     State.
 
@@ -1055,19 +1055,19 @@ sync(State0 = #qi{ confirms = Confirms,
                    on_sync = OnSyncFun }) ->
     ?DEBUG("~0p", [State0]),
     State = flush_buffer(State0, full, segment_entry_count()),
-    _ = case gb_sets:is_empty(Confirms) of
+    _ = case sets:is_empty(Confirms) of
         true ->
             ok;
         false ->
             OnSyncFun(Confirms)
     end,
-    State#qi{ confirms = gb_sets:new() }.
+    State#qi{ confirms = sets:new([{version,2}]) }.
 
 -spec needs_sync(state()) -> 'false'.
 
 needs_sync(State = #qi{ confirms = Confirms }) ->
     ?DEBUG("~0p", [State]),
-    case gb_sets:is_empty(Confirms) of
+    case sets:is_empty(Confirms) of
         true -> false;
         false -> confirms
     end.

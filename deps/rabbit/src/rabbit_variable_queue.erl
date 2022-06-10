@@ -443,10 +443,10 @@
              out_counter           :: non_neg_integer(),
              in_counter            :: non_neg_integer(),
              rates                 :: rates(),
-             msgs_on_disk          :: gb_sets:set(),
-             msg_indices_on_disk   :: gb_sets:set(),
-             unconfirmed           :: gb_sets:set(),
-             confirmed             :: gb_sets:set(),
+             msgs_on_disk          :: sets:set(),
+             msg_indices_on_disk   :: sets:set(),
+             unconfirmed           :: sets:set(),
+             confirmed             :: sets:set(),
              ack_out_counter       :: non_neg_integer(),
              ack_in_counter        :: non_neg_integer(),
              disk_read_count       :: non_neg_integer(),
@@ -700,10 +700,10 @@ batch_publish_delivered(Publishes, ChPid, Flow, State) ->
 discard(_MsgId, _ChPid, _Flow, State) -> State.
 
 drain_confirmed(State = #vqstate { confirmed = C }) ->
-    case gb_sets:is_empty(C) of
+    case sets:is_empty(C) of
         true  -> {[], State}; %% common case
-        false -> {gb_sets:to_list(C), State #vqstate {
-                                        confirmed = gb_sets:new() }}
+        false -> {sets:to_list(C), State #vqstate {
+                                        confirmed = sets:new([{version, 2}]) }}
     end.
 
 dropwhile(Pred, State) ->
@@ -1385,8 +1385,8 @@ one_if(false) -> 0.
 cons_if(true,   E, L) -> [E | L];
 cons_if(false, _E, L) -> L.
 
-gb_sets_maybe_insert(false, _Val, Set) -> Set;
-gb_sets_maybe_insert(true,   Val, Set) -> gb_sets:add(Val, Set).
+sets_maybe_insert(false, _Val, Set) -> Set;
+sets_maybe_insert(true,   Val, Set) -> sets:add_element(Val, Set).
 
 msg_status(Version, IsPersistent, IsDelivered, SeqId,
            Msg = #basic_message {id = MsgId}, MsgProps, IndexMaxSize) ->
@@ -1625,10 +1625,10 @@ init(QueueVsn, IsDurable, IndexMod, IndexState, StoreState, DeltaCount, DeltaByt
       out_counter         = 0,
       in_counter          = 0,
       rates               = blank_rates(Now),
-      msgs_on_disk        = gb_sets:new(),
-      msg_indices_on_disk = gb_sets:new(),
-      unconfirmed         = gb_sets:new(),
-      confirmed           = gb_sets:new(),
+      msgs_on_disk        = sets:new([{version,2}]),
+      msg_indices_on_disk = sets:new([{version,2}]),
+      unconfirmed         = sets:new([{version,2}]),
+      confirmed           = sets:new([{version,2}]),
       ack_out_counter     = 0,
       ack_in_counter      = 0,
       disk_read_count     = 0,
@@ -1987,7 +1987,7 @@ is_pending_ack_empty(State) ->
     count_pending_acks(State) =:= 0.
 
 is_unconfirmed_empty(#vqstate { unconfirmed = UC }) ->
-    gb_sets:is_empty(UC).
+    sets:is_empty(UC).
 
 count_pending_acks(#vqstate { ram_pending_ack   = RPA,
                               disk_pending_ack  = DPA }) ->
@@ -2088,7 +2088,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                      State2 = State1 #vqstate { delta = Delta1 },
                      stats_published_disk(MsgStatus1, State2)
              end,
-    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    UC1 = sets_maybe_insert(NeedsConfirming, MsgId, UC),
     State4#vqstate{ next_seq_id         = SeqId + 1,
                     next_deliver_seq_id = maybe_next_deliver_seq_id(SeqId, NextDeliverSeqId, IsDelivered),
                     in_counter          = InCount + 1,
@@ -2119,7 +2119,7 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent, id = Msg
     MsgStatus = msg_status(Version, IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
-    UC1 = gb_sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    UC1 = sets_maybe_insert(NeedsConfirming, MsgId, UC),
     {SeqId,
      stats_published_pending_acks(MsgStatus1,
            State2#vqstate{ next_seq_id         = SeqId + 1,
@@ -2444,10 +2444,10 @@ record_confirms(MsgIdSet, State = #vqstate { msgs_on_disk        = MOD,
                                              unconfirmed         = UC,
                                              confirmed           = C }) ->
     State #vqstate {
-      msgs_on_disk        = rabbit_misc:gb_sets_difference(MOD,  MsgIdSet),
-      msg_indices_on_disk = rabbit_misc:gb_sets_difference(MIOD, MsgIdSet),
-      unconfirmed         = rabbit_misc:gb_sets_difference(UC,   MsgIdSet),
-      confirmed           = gb_sets:union(C, MsgIdSet) }.
+      msgs_on_disk        = sets:subtract(MOD,  MsgIdSet),
+      msg_indices_on_disk = sets:subtract(MIOD, MsgIdSet),
+      unconfirmed         = sets:subtract(UC,   MsgIdSet),
+      confirmed           = sets:union(C, MsgIdSet) }.
 
 msgs_written_to_disk(Callback, MsgIdSet, ignored) ->
     Callback(?MODULE,
@@ -2463,11 +2463,11 @@ msgs_written_to_disk(Callback, MsgIdSet, written) ->
                      %%       this intersection call.
                      %%
                      %%       The same may apply to msg_indices_written_to_disk as well.
-                     Confirmed = gb_sets:intersection(UC, MsgIdSet),
-                     record_confirms(gb_sets:intersection(MsgIdSet, MIOD),
+                     Confirmed = sets:intersection(UC, MsgIdSet),
+                     record_confirms(sets:intersection(MsgIdSet, MIOD),
                                      State #vqstate {
                                        msgs_on_disk =
-                                           gb_sets:union(MOD, Confirmed) })
+                                           sets:union(MOD, Confirmed) })
              end).
 
 msg_indices_written_to_disk(Callback, MsgIdSet) ->
@@ -2475,11 +2475,11 @@ msg_indices_written_to_disk(Callback, MsgIdSet) ->
              fun (?MODULE, State = #vqstate { msgs_on_disk        = MOD,
                                               msg_indices_on_disk = MIOD,
                                               unconfirmed         = UC }) ->
-                     Confirmed = gb_sets:intersection(UC, MsgIdSet),
-                     record_confirms(gb_sets:intersection(MsgIdSet, MOD),
+                     Confirmed = sets:intersection(UC, MsgIdSet),
+                     record_confirms(sets:intersection(MsgIdSet, MOD),
                                      State #vqstate {
                                        msg_indices_on_disk =
-                                           gb_sets:union(MIOD, Confirmed) })
+                                           sets:union(MIOD, Confirmed) })
              end).
 
 msgs_and_indices_written_to_disk(Callback, MsgIdSet) ->
