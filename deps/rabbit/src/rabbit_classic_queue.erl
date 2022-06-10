@@ -514,7 +514,7 @@ update_msg_status(down, Pid, #msg_status{pending = P} = S) ->
 confirm_to_sender(Pid, QName, MsgSeqNos) ->
     %% the stream queue included the queue type refactoring and thus requires
     %% a different message format
-    Evt = case rabbit_ff_registry:is_enabled(stream_queue) of
+    Evt = case rabbit_feature_flags:is_enabled(stream_queue) of
               true ->
                   {queue_event, QName, {confirm, MsgSeqNos, self()}};
               false ->
@@ -523,7 +523,7 @@ confirm_to_sender(Pid, QName, MsgSeqNos) ->
     gen_server2:cast(Pid, Evt).
 
 send_rejection(Pid, QName, MsgSeqNo) ->
-    case rabbit_ff_registry:is_enabled(stream_queue) of
+    case rabbit_feature_flags:is_enabled(stream_queue) of
         true ->
             gen_server2:cast(Pid, {queue_event, QName,
                                    {reject_publish, MsgSeqNo, self()}});
