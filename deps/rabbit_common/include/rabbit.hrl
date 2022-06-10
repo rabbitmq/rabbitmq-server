@@ -272,3 +272,7 @@
 
 %% 3.6, 3.7, early 3.8
 -define(LEGACY_INDEX_SEGMENT_ENTRY_COUNT, 16384).
+
+%% Max value for stream max segment size
+-define(MAX_STREAM_MAX_SEGMENT_SIZE, 3_000_000_000).
+

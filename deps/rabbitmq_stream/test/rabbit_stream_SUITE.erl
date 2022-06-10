@@ -44,7 +44,8 @@ groups() ->
        timeout_peer_properties_exchanged,
        unauthenticated_client_rejected_authenticating,
        timeout_authenticating,
-       timeout_close_sent]},
+       timeout_close_sent,
+       max_segment_size_bytes_validation]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
      {single_node_1, [], [test_global_counters]},
@@ -324,6 +325,29 @@ sac_ff(Config) ->
     test_delete_stream(gen_tcp, S, Stream, C),
     test_close(gen_tcp, S, C),
     closed = wait_for_socket_close(gen_tcp, S, 10),
+    ok.
+
+max_segment_size_bytes_validation(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    {ok, S} =
+        Transport:connect("localhost", Port,
+                          [{active, false}, {mode, binary}]),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = test_authenticate(Transport, S, C1),
+    Stream = <<"stream-max-segment-size">>,
+    CreateStreamFrame =
+        rabbit_stream_core:frame({request, 1,
+                                  {create_stream, Stream,
+                                   #{<<"stream-max-segment-size-bytes">> =>
+                                         <<"3000000001">>}}}),
+    ok = Transport:send(S, CreateStreamFrame),
+    {Cmd, C3} = receive_commands(Transport, S, C2),
+    ?assertMatch({response, 1,
+                  {create_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd),
+    test_close(Transport, S, C3),
     ok.
 
 consumer_count(Config) ->
