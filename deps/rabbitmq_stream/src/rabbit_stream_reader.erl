@@ -819,11 +819,11 @@ open(info,
 
                         Conn1 =
                             maybe_send_consumer_update(Transport,
-                                                  Connection0,
-                                                  SubId,
-                                                  Active,
-                                                  true,
-                                                  Extra),
+                                                       Connection0,
+                                                       SubId,
+                                                       Active,
+                                                       true,
+                                                       Extra),
                         {Conn1,
                          ConnState0#stream_connection_state{consumers =
                                                                 Consumers0#{SubId
@@ -1738,9 +1738,7 @@ handle_frame_post_auth(Transport,
                                                       User, #{})
         of
             ok ->
-                case rabbit_stream_manager:lookup_leader(VirtualHost,
-                                                         Stream)
-                of
+                case rabbit_stream_manager:lookup_leader(VirtualHost, Stream) of
                     {error, not_found} ->
                         rabbit_global_counters:increase_protocol_counter(stream,
                                                                          ?STREAM_DOES_NOT_EXIST,
@@ -1748,8 +1746,7 @@ handle_frame_post_auth(Transport,
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0};
                     {ok, LeaderPid} ->
                         {?RESPONSE_CODE_OK,
-                         case osiris:fetch_writer_seq(LeaderPid, Reference)
-                         of
+                         case osiris:fetch_writer_seq(LeaderPid, Reference) of
                              undefined ->
                                  0;
                              Offt ->
@@ -2777,15 +2774,16 @@ maybe_register_consumer(VirtualHost,
 maybe_send_consumer_update(_, Connection, _, _, false = _Sac, _) ->
     Connection;
 maybe_send_consumer_update(Transport,
-                      #stream_connection{socket = S,
-                                         correlation_id_sequence = CorrIdSeq,
-                                         outstanding_requests =
-                                             OutstandingRequests0} =
-                          Connection,
-                      SubscriptionId,
-                      Active,
-                      true = _Sac,
-                      Extra) ->
+                           #stream_connection{socket = S,
+                                              correlation_id_sequence =
+                                                  CorrIdSeq,
+                                              outstanding_requests =
+                                                  OutstandingRequests0} =
+                               Connection,
+                           SubscriptionId,
+                           Active,
+                           true = _Sac,
+                           Extra) ->
     rabbit_log:debug("SAC subscription ~p, active = ~p",
                      [SubscriptionId, Active]),
     Frame =

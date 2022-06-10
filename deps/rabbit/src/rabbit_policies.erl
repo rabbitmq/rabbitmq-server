@@ -185,7 +185,7 @@ validate_policy0(<<"initial-cluster-size">>, Value) ->
     {error, "~p is not a valid cluster size", [Value]};
 
 validate_policy0(<<"stream-max-segment-size-bytes">>, Value)
-  when is_integer(Value), Value >= 0 ->
+  when is_integer(Value), Value >= 0, Value =< ?MAX_STREAM_MAX_SEGMENT_SIZE ->
     ok;
 validate_policy0(<<"stream-max-segment-size-bytes">>, Value) ->
     {error, "~p is not a valid segment size", [Value]}.
