@@ -169,7 +169,9 @@ validate_stream_queue_arguments([{<<"x-initial-cluster-size">>, long,
 validate_stream_queue_arguments([{<<"x-queue-leader-locator">>,
                                   longstr, Locator}
                                  | T]) ->
-    case lists:member(Locator, rabbit_queue_location:queue_leader_locators()) of
+    case lists:member(Locator,
+                      rabbit_queue_location:queue_leader_locators())
+    of
         true ->
             validate_stream_queue_arguments(T);
         false ->
@@ -477,7 +479,15 @@ create_stream(VirtualHost, Reference, Arguments, Username) ->
                                 {error, Err} ->
                                     rabbit_log:warning("Error while creating ~p stream, ~p",
                                                        [Reference, Err]),
-                                    {error, internal_error}
+                                    {error, internal_error};
+                                {protocol_error,
+                                 precondition_failed,
+                                 Msg,
+                                 Args} ->
+                                    rabbit_log:warning("Error while creating ~p stream, "
+                                                       ++ Msg,
+                                                       [Reference] ++ Args),
+                                    {error, validation_failed}
                             end
                         catch
                             exit:Error ->

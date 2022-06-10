@@ -757,6 +757,73 @@ open(info, {OK, S, Data},
              StatemData#statem_data{connection = Connection1,
                                     connection_state = State2}}
     end;
+<<<<<<< HEAD
+=======
+open(info,
+     {sac, {{subscription_id, SubId}, {active, Active}, {extra, Extra}}},
+     #statem_data{transport = Transport,
+                  connection = Connection0,
+                  connection_state = ConnState0} =
+         State) ->
+    rabbit_log:debug("Subscription ~p instructed to become active: ~p",
+                     [SubId, Active]),
+    #stream_connection_state{consumers = Consumers0} = ConnState0,
+    {Connection1, ConnState1} =
+        case Consumers0 of
+            #{SubId :=
+                  #consumer{configuration =
+                                #consumer_configuration{properties =
+                                                            Properties} =
+                                    Conf0,
+                            log = Log0} =
+                      Consumer0} ->
+                case single_active_consumer(Properties) of
+                    true ->
+                        Log1 =
+                            case {Active, Log0} of
+                                {false, undefined} ->
+                                    undefined;
+                                {false, L} ->
+                                    rabbit_log:debug("Closing Osiris segment of subscription ~p for "
+                                                     "now",
+                                                     [SubId]),
+                                    osiris_log:close(L),
+                                    undefined;
+                                _ ->
+                                    Log0
+                            end,
+                        Consumer1 =
+                            Consumer0#consumer{configuration =
+                                                   Conf0#consumer_configuration{active
+                                                                                    =
+                                                                                    Active},
+                                               log = Log1},
+
+                        Conn1 =
+                            maybe_send_consumer_update(Transport,
+                                                       Connection0,
+                                                       SubId,
+                                                       Active,
+                                                       true,
+                                                       Extra),
+                        {Conn1,
+                         ConnState0#stream_connection_state{consumers =
+                                                                Consumers0#{SubId
+                                                                                =>
+                                                                                Consumer1}}};
+                    false ->
+                        rabbit_log:warning("Received SAC event for subscription ~p, which "
+                                           "is not a SAC. Not doing anything.",
+                                           [SubId]),
+                        {Connection0, ConnState0}
+                end;
+            _ ->
+                {Connection0, ConnState0}
+        end,
+    {keep_state,
+     State#statem_data{connection = Connection1,
+                       connection_state = ConnState1}};
+>>>>>>> e44b65957d (Limit stream max segment size to 3 GB)
 open(info, {Closed, Socket}, #statem_data{connection = Connection})
     when Closed =:= tcp_closed; Closed =:= ssl_closed ->
     demonitor_all_streams(Connection),
@@ -1651,9 +1718,7 @@ handle_frame_post_auth(Transport,
                                                       User, #{})
         of
             ok ->
-                case rabbit_stream_manager:lookup_leader(VirtualHost,
-                                                         Stream)
-                of
+                case rabbit_stream_manager:lookup_leader(VirtualHost, Stream) of
                     {error, not_found} ->
                         rabbit_global_counters:increase_protocol_counter(stream,
                                                                          ?STREAM_DOES_NOT_EXIST,
@@ -1661,8 +1726,7 @@ handle_frame_post_auth(Transport,
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0};
                     {ok, LeaderPid} ->
                         {?RESPONSE_CODE_OK,
-                         case osiris:fetch_writer_seq(LeaderPid, Reference)
-                         of
+                         case osiris:fetch_writer_seq(LeaderPid, Reference) of
                              undefined ->
                                  0;
                              Offt ->
@@ -2409,6 +2473,192 @@ handle_frame_post_auth(Transport,
                                                      ?UNKNOWN_FRAME, 1),
     {Connection#stream_connection{connection_step = close_sent}, State}.
 
+<<<<<<< HEAD
+=======
+init_reader(ConnectionTransport,
+            LocalMemberPid,
+            QueueResource,
+            SubscriptionId,
+            Properties,
+            OffsetSpec) ->
+    CounterSpec = {{?MODULE, QueueResource, SubscriptionId, self()}, []},
+    Options =
+        #{transport => ConnectionTransport,
+          chunk_selector => get_chunk_selector(Properties)},
+    {ok, Segment} =
+        osiris:init_reader(LocalMemberPid, OffsetSpec, CounterSpec, Options),
+    rabbit_log:debug("Next offset for subscription ~p is ~p",
+                     [SubscriptionId, osiris_log:next_offset(Segment)]),
+    Segment.
+
+single_active_consumer(#{<<"single-active-consumer">> :=
+                             <<"true">>}) ->
+    true;
+single_active_consumer(_Properties) ->
+    false.
+
+consumer_name(#{<<"name">> := Name}) ->
+    Name;
+consumer_name(_Properties) ->
+    undefined.
+
+maybe_dispatch_on_subscription(Transport,
+                               State,
+                               ConsumerState,
+                               Connection,
+                               Consumers,
+                               Stream,
+                               SubscriptionId,
+                               SubscriptionProperties,
+                               SendFileOct,
+                               false = _Sac) ->
+    rabbit_log:debug("Distributing existing messages to subscription ~p",
+                     [SubscriptionId]),
+    case send_chunks(Transport, ConsumerState, SendFileOct) of
+        {error, closed} ->
+            rabbit_log_connection:info("Stream protocol connection has been closed by "
+                                       "peer",
+                                       []),
+            throw({stop, normal});
+        {ok, #consumer{log = Log1, credit = Credit1} = ConsumerState1} ->
+            Consumers1 = Consumers#{SubscriptionId => ConsumerState1},
+
+            #consumer{configuration =
+                          #consumer_configuration{counters =
+                                                      ConsumerCounters1}} =
+                ConsumerState1,
+
+            ConsumerOffset = osiris_log:next_offset(Log1),
+            ConsumerOffsetLag = consumer_i(offset_lag, ConsumerState1),
+
+            rabbit_log:debug("Subscription ~p is now at offset ~p with ~p message(s) "
+                             "distributed after subscription",
+                             [SubscriptionId, ConsumerOffset,
+                              messages_consumed(ConsumerCounters1)]),
+
+            rabbit_stream_metrics:consumer_created(self(),
+                                                   stream_r(Stream, Connection),
+                                                   SubscriptionId,
+                                                   Credit1,
+                                                   messages_consumed(ConsumerCounters1),
+                                                   ConsumerOffset,
+                                                   ConsumerOffsetLag,
+                                                   true,
+                                                   SubscriptionProperties),
+            State#stream_connection_state{consumers = Consumers1}
+    end;
+maybe_dispatch_on_subscription(_Transport,
+                               State,
+                               ConsumerState,
+                               Connection,
+                               Consumers,
+                               Stream,
+                               SubscriptionId,
+                               SubscriptionProperties,
+                               _SendFileOct,
+                               true = _Sac) ->
+    rabbit_log:debug("No initial dispatch for subscription ~p for now, "
+                     "waiting for consumer update response from client "
+                     "(single active consumer)",
+                     [SubscriptionId]),
+    #consumer{credit = Credit,
+              configuration =
+                  #consumer_configuration{offset = Offset, active = Active}} =
+        ConsumerState,
+
+    rabbit_stream_metrics:consumer_created(self(),
+                                           stream_r(Stream, Connection),
+                                           SubscriptionId,
+                                           Credit,
+                                           0, %% messages consumed
+                                           Offset,
+                                           0, %% offset lag
+                                           Active,
+                                           SubscriptionProperties),
+    Consumers1 = Consumers#{SubscriptionId => ConsumerState},
+    State#stream_connection_state{consumers = Consumers1}.
+
+maybe_register_consumer(_, _, _, _, _, _, false = _Sac) ->
+    true;
+maybe_register_consumer(VirtualHost,
+                        Stream,
+                        ConsumerName,
+                        ConnectionName,
+                        SubscriptionId,
+                        Properties,
+                        true) ->
+    PartitionIndex = partition_index(VirtualHost, Stream, Properties),
+    {ok, Active} =
+        rabbit_stream_sac_coordinator:register_consumer(VirtualHost,
+                                                        Stream,
+                                                        PartitionIndex,
+                                                        ConsumerName,
+                                                        self(),
+                                                        ConnectionName,
+                                                        SubscriptionId),
+    Active.
+
+maybe_send_consumer_update(_, Connection, _, _, false = _Sac, _) ->
+    Connection;
+maybe_send_consumer_update(Transport,
+                           #stream_connection{socket = S,
+                                              correlation_id_sequence =
+                                                  CorrIdSeq,
+                                              outstanding_requests =
+                                                  OutstandingRequests0} =
+                               Connection,
+                           SubscriptionId,
+                           Active,
+                           true = _Sac,
+                           Extra) ->
+    rabbit_log:debug("SAC subscription ~p, active = ~p",
+                     [SubscriptionId, Active]),
+    Frame =
+        rabbit_stream_core:frame({request, CorrIdSeq,
+                                  {consumer_update, SubscriptionId, Active}}),
+
+    OutstandingRequests1 =
+        maps:put(CorrIdSeq,
+                 {{subscription_id, SubscriptionId}, {extra, Extra}},
+                 OutstandingRequests0),
+    send(Transport, S, Frame),
+    Connection#stream_connection{correlation_id_sequence = CorrIdSeq + 1,
+                                 outstanding_requests = OutstandingRequests1}.
+
+maybe_unregister_consumer(_, _, false = _Sac) ->
+    ok;
+maybe_unregister_consumer(VirtualHost,
+                          #consumer{configuration =
+                                        #consumer_configuration{stream = Stream,
+                                                                properties =
+                                                                    Properties,
+                                                                subscription_id
+                                                                    =
+                                                                    SubscriptionId}},
+                          true = _Sac) ->
+    ConsumerName = consumer_name(Properties),
+    rabbit_stream_sac_coordinator:unregister_consumer(VirtualHost,
+                                                      Stream,
+                                                      ConsumerName,
+                                                      self(),
+                                                      SubscriptionId).
+
+partition_index(VirtualHost, Stream, Properties) ->
+    case Properties of
+        #{<<"super-stream">> := SuperStream} ->
+            case rabbit_stream_manager:partition_index(VirtualHost, SuperStream,
+                                                       Stream)
+            of
+                {ok, Index} ->
+                    Index;
+                _ ->
+                    -1
+            end;
+        _ ->
+            -1
+    end.
+
+>>>>>>> e44b65957d (Limit stream max segment size to 3 GB)
 notify_connection_closed(#statem_data{connection =
                                           #stream_connection{name = Name,
                                                              publishers =
