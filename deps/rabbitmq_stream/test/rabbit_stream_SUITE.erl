@@ -44,7 +44,8 @@ groups() ->
        timeout_peer_properties_exchanged,
        unauthenticated_client_rejected_authenticating,
        timeout_authenticating,
-       timeout_close_sent]},
+       timeout_close_sent,
+       max_segment_size_bytes_validation]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
      {single_node_1, [], [test_global_counters]},
@@ -262,6 +263,67 @@ timeout_close_sent(Config) ->
     % Now, rabbit_stream_reader is in state close_sent.
     ?assertEqual(closed, wait_for_socket_close(gen_tcp, S, 1)).
 
+<<<<<<< HEAD
+=======
+sac_ff(Config) ->
+    Port = get_stream_port(Config),
+    {ok, S} =
+        gen_tcp:connect("localhost", Port, [{active, false}, {mode, binary}]),
+    C = rabbit_stream_core:init(0),
+    test_peer_properties(gen_tcp, S, C),
+    test_authenticate(gen_tcp, S, C),
+    Stream = <<"stream1">>,
+    test_create_stream(gen_tcp, S, Stream, C),
+    test_declare_publisher(gen_tcp, S, 1, Stream, C),
+    ?awaitMatch(#{publishers := 1}, get_global_counters(Config), ?WAIT),
+    Body = <<"hello">>,
+    test_publish_confirm(gen_tcp, S, 1, Body, C),
+
+    SubscriptionId = 42,
+    SubCmd =
+        {request, 1,
+         {subscribe,
+          SubscriptionId,
+          Stream,
+          0,
+          10,
+          #{<<"single-active-consumer">> => <<"true">>,
+            <<"name">> => <<"foo">>}}},
+    SubscribeFrame = rabbit_stream_core:frame(SubCmd),
+    ok = gen_tcp:send(S, SubscribeFrame),
+    {Cmd, C} = receive_commands(gen_tcp, S, C),
+    ?assertMatch({response, 1,
+                  {subscribe, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd),
+    test_delete_stream(gen_tcp, S, Stream, C),
+    test_close(gen_tcp, S, C),
+    closed = wait_for_socket_close(gen_tcp, S, 10),
+    ok.
+
+max_segment_size_bytes_validation(Config) ->
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    {ok, S} =
+        Transport:connect("localhost", Port,
+                          [{active, false}, {mode, binary}]),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = test_authenticate(Transport, S, C1),
+    Stream = <<"stream-max-segment-size">>,
+    CreateStreamFrame =
+        rabbit_stream_core:frame({request, 1,
+                                  {create_stream, Stream,
+                                   #{<<"stream-max-segment-size-bytes">> =>
+                                         <<"3000000001">>}}}),
+    ok = Transport:send(S, CreateStreamFrame),
+    {Cmd, C3} = receive_commands(Transport, S, C2),
+    ?assertMatch({response, 1,
+                  {create_stream, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd),
+    test_close(Transport, S, C3),
+    ok.
+
+>>>>>>> e44b65957d (Limit stream max segment size to 3 GB)
 consumer_count(Config) ->
     ets_count(Config, ?TABLE_CONSUMER).
 
