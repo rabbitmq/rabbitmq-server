@@ -62,11 +62,11 @@ assemble(app_properties, {R, P = #'P_basic'{headers = Headers}, C},
          {#'v1_0.application_properties'{}, Rest}, Uneaten) ->
     AppPropsBin = chunk(Rest, Uneaten),
     Amqp091Headers = case ?CONVERT_APP_PROPS_TO_AMQP091_HEADERS of 
-        true -> 
-            amqp10_app_props_to_amqp091_headers(Headers, AppPropsBin);
-        _ -> 
-            Headers
-    end,
+                        true -> 
+                            amqp10_app_props_to_amqp091_headers(Headers, AppPropsBin);
+                        _ -> 
+                            Headers
+                     end,
     AppPropsAdded = set_header(
         ?APP_PROPERTIES_HEADER,
         AppPropsBin, Amqp091Headers),
@@ -311,15 +311,15 @@ amqp10_app_props_to_amqp091_headers(CurrentHeaders, AppPropsBin) ->
                 Headers -> Headers
             end,
             lists:foldl(fun(Prop, Acc) -> 
-                case Prop of 
-                    {{utf8, Key}, {ValueType, Value}} -> 
-                        case type10_to_type091(Key, ValueType, Value) of 
-                            undefined -> Acc;
-                            Typed -> [Typed |Acc]
-                        end;
-                    _ -> Acc
-                end
-            end, Hs, AppProps);
+                            case Prop of 
+                                {{utf8, Key}, {ValueType, Value}} -> 
+                                    case type10_to_type091(Key, ValueType, Value) of 
+                                        undefined -> Acc;
+                                        Typed -> [Typed |Acc]
+                                    end;
+                                _ -> Acc
+                            end
+                         end, Hs, AppProps);
         _ -> CurrentHeaders
     end.
 type10_to_type091(Key, Type, Value) -> 
