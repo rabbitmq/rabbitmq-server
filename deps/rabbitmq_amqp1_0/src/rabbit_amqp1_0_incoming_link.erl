@@ -171,7 +171,7 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
                                 "rcv-settle-mode second not supported", [])
     end,
     {message, Reply, NewLink, DeliveryId,
-     EffectiveSendSettleMode}.
+EffectiveSendSettleMode}.
 
 %% TODO default-outcome and outcomes, dynamic lifetimes
 

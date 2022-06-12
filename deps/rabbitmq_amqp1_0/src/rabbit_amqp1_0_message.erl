@@ -18,6 +18,8 @@
 -define(CONVERT_AMQP091_HEADERS_TO_APP_PROPS, application:get_env(rabbitmq_amqp1_0, convert_amqp091_headers_to_app_props, false)).
 -define(CONVERT_APP_PROPS_TO_AMQP091_HEADERS, application:get_env(rabbitmq_amqp1_0, convert_app_props_to_amqp091_headers, false)).
 
+-define(HEADER_APP_PROP_TO, <<"x-amqp-1.0-properties-to">>).
+-define(HEADER_APP_PROP_SUBJECT, <<"x-amqp-1.0-properties-subject">>).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
@@ -156,7 +158,7 @@ translate_properties(Props10, Props10Bin,
                      Props = #'P_basic'{headers = Headers}) ->
     Props#'P_basic'{
       headers          = set_header(?PROPERTIES_HEADER, Props10Bin,
-                                     Headers),
+                                     interop_headers_in(Props10, Headers)),
       content_type     = unwrap(Props10#'v1_0.properties'.content_type),
       content_encoding = unwrap(Props10#'v1_0.properties'.content_encoding),
       correlation_id   = unwrap(Props10#'v1_0.properties'.correlation_id),
@@ -167,6 +169,13 @@ translate_properties(Props10, Props10Bin,
       message_id       = unwrap(Props10#'v1_0.properties'.message_id),
       user_id          = unwrap(Props10#'v1_0.properties'.user_id),
       timestamp        = unwrap(Props10#'v1_0.properties'.creation_time)}.
+
+interop_headers_in(Props10, Headers) -> 
+    Headers1 = set_header_defined(?HEADER_APP_PROP_TO,  
+                                  unwrap(Props10#'v1_0.properties'.to), Headers),
+    Headers2 = set_header_defined(?HEADER_APP_PROP_SUBJECT, 
+                                  unwrap(Props10#'v1_0.properties'.subject), Headers1),
+    Headers2.
 
 routing_key(Props10) ->
     unwrap(Props10#'v1_0.properties'.subject).
@@ -192,6 +201,10 @@ set_header(Header, Value, undefined) ->
     set_header(Header, Value, []);
 set_header(Header, Value, Headers) ->
     rabbit_misc:set_table_value(Headers, Header, longstr, Value).
+
+set_header_defined(Header, undefined, Headers) -> Headers;
+set_header_defined(Header, Value, Headers) -> 
+    set_header(Header, Value, Headers).
 
 set_1_0_type(Type, Props = #'P_basic'{}) ->
     Props#'P_basic'{type = Type}.
@@ -248,8 +261,14 @@ annotated_message(RKey, #'basic.deliver'{redelivered = Redelivered},
                 Props10 = #'v1_0.properties'{
                   message_id = wrap(utf8, Props#'P_basic'.message_id),
                   user_id = wrap(utf8, Props#'P_basic'.user_id),
-                  to = undefined,
-                  subject = wrap(utf8, RKey),
+                  to = case table_lookup(Headers, ?HEADER_APP_PROP_TO) of
+                          undefined -> wrap(utf8, RKey);
+                          {longstr, V} -> wrap(utf8, V)
+                       end,
+                  subject = case table_lookup(Headers, ?HEADER_APP_PROP_SUBJECT) of
+                                undefined -> wrap(utf8, RKey);
+                                {longstr, V} -> wrap(utf8, V)
+                            end,
                   reply_to = case Props#'P_basic'.reply_to of
                                  undefined ->
                                      undefined;
