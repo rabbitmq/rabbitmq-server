@@ -18,6 +18,9 @@
 
 -behaviour(gen_event).
 
+-export([add_handler/0,
+         delete_handler/0]).
+
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
          terminate/2, code_change/3]).
 
@@ -25,15 +28,43 @@
 
 -rabbit_boot_step({?MODULE,
                    [{description, "channel tracking event handler"},
-                    {mfa,         {gen_event, add_handler,
-                                   [rabbit_event, ?MODULE, []]}},
-                    {cleanup,     {gen_event, delete_handler,
-                                   [rabbit_event, ?MODULE, []]}},
+                    {mfa,         {?MODULE, add_handler, []}},
+                    {cleanup,     {?MODULE, delete_handler, []}},
                     {requires,    [channel_tracking]},
                     {enables,     recovery}]}).
 
 %%
 %% API
+%%
+
+-spec add_handler() -> ok | {error, term()}.
+add_handler() ->
+    case rabbit_feature_flags:is_enabled(user_limits) of
+        true ->
+            %% channel-tracking is only used by per-user max-channel limits
+            %% hence the handler is not enabled if that feature is disabled
+            case gen_event:add_handler(rabbit_event, ?MODULE, []) of
+                ok ->
+                    ok;
+                {'EXIT', Reason} ->
+                    {error, Reason}
+            end;
+        false ->
+            ok
+    end.
+
+-spec delete_handler() -> ok.
+delete_handler() ->
+    case gen_event:delete_handler(rabbit_event, ?MODULE, []) of
+        {error, module_not_found} ->
+            %% the channel_tracking_handler is not installed
+            ok;
+        Result ->
+            Result
+    end.
+
+%%
+%% gen_event callbacks
 %%
 
 init([]) ->

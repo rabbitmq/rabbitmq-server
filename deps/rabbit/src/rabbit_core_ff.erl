@@ -202,7 +202,8 @@ user_limits_migration(_FeatureName, _FeatureProps, enable) ->
     rabbit_table:wait([Tab], _Retry = true),
     Fun = fun(Row) -> internal_user:upgrade_to(internal_user_v2, Row) end,
     case mnesia:transform_table(Tab, Fun, internal_user:fields(internal_user_v2)) of
-        {atomic, ok}      -> ok;
+        {atomic, ok}      ->
+            rabbit_channel_tracking_handler:add_handler();
         {aborted, Reason} -> {error, Reason}
     end;
 user_limits_migration(_FeatureName, _FeatureProps, is_enabled) ->
