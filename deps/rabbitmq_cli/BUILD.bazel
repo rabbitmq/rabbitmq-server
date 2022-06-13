@@ -16,11 +16,6 @@ rabbitmqctl(
     visibility = ["//visibility:public"],
     deps = [
         "//deps/rabbit_common:erlang_app",
-        "@csv//:elixir_app",
-        "@hex//:elixir_app",
-        "@json//:elixir_app",
-        "@observer_cli//:erlang_app",
-        "@stdout_formatter//:erlang_app",
     ],
 )
 
@@ -60,13 +55,5 @@ rabbitmqctl_test(
         "//deps/amqp_client:erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
-        "@amqp//:elixir_app",
-        "@csv//:elixir_app",
-        "@hex//:elixir_app",
-        "@json//:elixir_app",
-        "@observer_cli//:erlang_app",
-        "@stdout_formatter//:erlang_app",
-        "@temp//:elixir_app",
-        "@x509//:elixir_app",
     ],
 )
