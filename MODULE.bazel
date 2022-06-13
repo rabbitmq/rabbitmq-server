@@ -7,8 +7,8 @@ bazel_dep(name = "rules_erlang", version = "3.0.1")
 
 archive_override(
     module_name = "rules_erlang",
-    urls = ["https://github.com/rabbitmq/rules_erlang/archive/refs/tags/3.1.0.zip"],
-    strip_prefix = "rules_erlang-3.1.0",
+    urls = ["https://github.com/rabbitmq/rules_erlang/archive/refs/tags/3.2.0.zip"],
+    strip_prefix = "rules_erlang-3.2.0",
 )
 
 erlang_package = use_extension(
