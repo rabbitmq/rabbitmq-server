@@ -9,11 +9,7 @@ load(
 )
 load(
     "@rules_erlang//private:util.bzl",
-    "erl_libs_contents",
-)
-load(
-    "//bazel/mix:mix_app.bzl",
-    "find_mix_exs",
+    "additional_file_dest_relative_path",
 )
 load(
     "//bazel/elixir:elixir_toolchain.bzl",
@@ -22,30 +18,45 @@ load(
     "maybe_install_erlang",
 )
 
+def deps_dir_contents(ctx, deps, dir):
+    files = []
+    for dep in deps:
+        lib_info = dep[ErlangAppInfo]
+        for src in lib_info.include + lib_info.beam + lib_info.srcs:
+            rp = additional_file_dest_relative_path(dep.label, src)
+            f = ctx.actions.declare_file(path_join(
+                dir,
+                lib_info.app_name,
+                rp,
+            ))
+            ctx.actions.symlink(
+                output = f,
+                target_file = src,
+            )
+            files.append(f)
+    return files
+
 def _impl(ctx):
-    mix_exs = find_mix_exs(ctx.files.srcs)
-
-    escript = ctx.actions.declare_file(path_join("escript", ctx.label.name))
-    ebin = ctx.actions.declare_directory("ebin")
-    home = ctx.actions.declare_directory("mix_home")
-    build_dir = ctx.actions.declare_directory("_build")
-
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx)
 
-    erl_libs_dir = ctx.label.name + "_apps"
-    erl_libs_files = erl_libs_contents(
-        ctx,
-        headers = True,
-        dir = erl_libs_dir,
+    escript = ctx.actions.declare_file(path_join("escript", "rabbitmqctl"))
+    ebin = ctx.actions.declare_directory("ebin")
+    mix_invocation_dir = ctx.actions.declare_directory("{}_mix".format(ctx.label.name))
+    fetched_srcs = ctx.actions.declare_directory("fetched_srcs")
+
+    deps = flat_deps(ctx.attr.deps)
+
+    deps_dir = ctx.label.name + "_deps"
+
+    deps_dir_files = deps_dir_contents(ctx, deps, deps_dir)
+
+    package_dir = path_join(
+        ctx.label.workspace_root,
+        ctx.label.package,
     )
 
-    package_dir = path_join(ctx.label.workspace_root, ctx.label.package)
-
     script = """set -euo pipefail
-
-export LANG="en_US.UTF-8"
-export LC_ALL="en_US.UTF-8"
 
 {maybe_install_erlang}
 
@@ -54,41 +65,57 @@ if [[ "{elixir_home}" == /* ]]; then
 else
     ABS_ELIXIR_HOME=$PWD/{elixir_home}
 fi
-ABS_EBIN_DIR=$PWD/{ebin}
+ABS_EBIN_DIR=$PWD/{ebin_dir}
 ABS_ESCRIPT_PATH=$PWD/{escript_path}
+ABS_FETCHED_SRCS_DIR=$PWD/{fetched_srcs}
 
 export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
-export HOME=$PWD/{home}
-export MIX_BUILD_PATH=$PWD/{build_dir}
+
+export LANG="en_US.UTF-8"
+export LC_ALL="en_US.UTF-8"
+
+MIX_INVOCATION_DIR="{mix_invocation_dir}"
+
+cp -R {package_dir}/config ${{MIX_INVOCATION_DIR}}/config
+cp -R {package_dir}/lib ${{MIX_INVOCATION_DIR}}/lib
+cp    {package_dir}/mix.exs ${{MIX_INVOCATION_DIR}}/mix.exs
+
+cd ${{MIX_INVOCATION_DIR}}
+export IS_BAZEL=true
+export HOME=${{PWD}}
+export DEPS_DIR=$(dirname $ABS_EBIN_DIR)/{deps_dir}
 export MIX_ENV=prod
-export DEPS_DIR=$(dirname ${{ABS_EBIN_DIR}})/{erl_libs_dir}
-export ERL_LIBS=${{DEPS_DIR}}
-
-cd $(dirname {mix_exs})
-
 export ERL_COMPILER_OPTIONS=deterministic
-"${{ABS_ELIXIR_HOME}}"/bin/mix compile --no-deps-check
-"${{ABS_ELIXIR_HOME}}"/bin/mix escript.build --no-deps-check
+"${{ABS_ELIXIR_HOME}}"/bin/mix local.hex --force
+"${{ABS_ELIXIR_HOME}}"/bin/mix local.rebar --force
+"${{ABS_ELIXIR_HOME}}"/bin/mix deps.get
+if [ ! -d _build/${{MIX_ENV}}/lib/rabbit_common ]; then
+    cp -r ${{DEPS_DIR}}/* _build/${{MIX_ENV}}/lib
+fi
+"${{ABS_ELIXIR_HOME}}"/bin/mix deps.compile
+"${{ABS_ELIXIR_HOME}}"/bin/mix compile
+"${{ABS_ELIXIR_HOME}}"/bin/mix escript.build
 
-mv escript/rabbitmqctl ${{ABS_ESCRIPT_PATH}}
-if [ -n "$(ls ${{MIX_BUILD_PATH}}/lib/{app_name}/consolidated)" ]; then
-    cp ${{MIX_BUILD_PATH}}/lib/{app_name}/consolidated/* ${{ABS_EBIN_DIR}}
-fi
-if [ -n "$(ls ${{MIX_BUILD_PATH}}/lib/{app_name}/ebin)" ]; then
-    cp ${{MIX_BUILD_PATH}}/lib/{app_name}/ebin/* ${{ABS_EBIN_DIR}}
-fi
+cp escript/rabbitmqctl ${{ABS_ESCRIPT_PATH}}
+
+cp _build/${{MIX_ENV}}/lib/rabbitmqctl/ebin/* ${{ABS_EBIN_DIR}}
+cp _build/${{MIX_ENV}}/lib/rabbitmqctl/consolidated/* ${{ABS_EBIN_DIR}}
+
+cp -r deps/* ${{ABS_FETCHED_SRCS_DIR}}
+
+# remove symlinks from the _build directory since it
+# is not used, and bazel does not allow them
+find . -type l -delete
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         erlang_home = erlang_home,
         elixir_home = elixir_home,
-        home = home.path,
-        build_dir = build_dir.path,
+        mix_invocation_dir = mix_invocation_dir.path,
         package_dir = package_dir,
-        erl_libs_dir = erl_libs_dir,
-        mix_exs = mix_exs.path,
-        app_name = "rabbitmqctl",
+        deps_dir = deps_dir,
         escript_path = escript.path,
-        ebin = ebin.path,
+        ebin_dir = ebin.path,
+        fetched_srcs = fetched_srcs.path,
     )
 
     inputs = depset(
@@ -96,29 +123,24 @@ fi
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
-            depset(erl_libs_files),
+            depset(deps_dir_files),
         ],
     )
 
     ctx.actions.run_shell(
         inputs = inputs,
-        outputs = [escript, ebin, home, build_dir],
+        outputs = [escript, ebin, mix_invocation_dir, fetched_srcs],
         command = script,
         mnemonic = "MIX",
     )
 
-    deps = flat_deps(ctx.attr.deps)
-
-    runfiles = ctx.runfiles([ebin])
-    runfiles = runfiles.merge_all(
-        [
-            erlang_runfiles,
-            elixir_runfiles,
-        ] + [
-            dep[DefaultInfo].default_runfiles
-            for dep in deps
-        ],
-    )
+    runfiles = ctx.runfiles([ebin]).merge_all([
+        erlang_runfiles,
+        elixir_runfiles,
+    ] + [
+        dep[DefaultInfo].default_runfiles
+        for dep in deps
+    ])
 
     return [
         DefaultInfo(
@@ -131,6 +153,7 @@ fi
             include = [],
             beam = [ebin],
             priv = [],
+            srcs = ctx.files.srcs + [fetched_srcs],
             deps = deps,
         ),
     ]
@@ -138,16 +161,9 @@ fi
 rabbitmqctl_private = rule(
     implementation = _impl,
     attrs = {
-        "is_windows": attr.bool(
-            mandatory = True,
-        ),
-        "srcs": attr.label_list(
-            mandatory = True,
-            allow_files = True,
-        ),
-        "deps": attr.label_list(
-            providers = [ErlangAppInfo],
-        ),
+        "is_windows": attr.bool(mandatory = True),
+        "srcs": attr.label_list(allow_files = True),
+        "deps": attr.label_list(providers = [ErlangAppInfo]),
     },
     toolchains = [
         "//bazel/elixir:toolchain_type",
