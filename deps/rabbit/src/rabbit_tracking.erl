@@ -13,15 +13,16 @@
 %%  * rabbit_connection_tracking
 %%  * rabbit_channel_tracking
 
+%% callback specific id returned by `register_tracked/1'
+-type id() :: term().
+
 -callback boot() -> ok.
 -callback update_tracked(term()) -> ok.
 -callback handle_cast(term()) -> ok.
 -callback register_tracked(
               rabbit_types:tracked_connection() |
-                  rabbit_types:tracked_channel()) -> 'ok'.
--callback unregister_tracked(
-              rabbit_types:tracked_connection_id() |
-                  rabbit_types:tracked_channel_id()) -> 'ok'.
+                  rabbit_types:tracked_channel()) -> id().
+-callback unregister_tracked(id()) -> 'ok'.
 -callback count_tracked_items_in(term()) -> non_neg_integer().
 -callback clear_tracking_tables() -> 'ok'.
 -callback shutdown_tracked_items(list(), term()) -> ok.

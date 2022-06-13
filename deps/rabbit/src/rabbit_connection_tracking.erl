@@ -59,6 +59,9 @@
 
 -export([close_connections/3]).
 
+%% primary key of tracked connections
+-type id() :: rabbit_types:tracked_connection_id().
+
 %%
 %% API
 %%
@@ -165,8 +168,7 @@ handle_cast({node_deleted, Details}) ->
     delete_per_vhost_tracked_connections_table_for_node(Node),
     delete_per_user_tracked_connections_table_for_node(Node).
 
--spec register_tracked(rabbit_types:tracked_connection()) -> ok.
--dialyzer([{nowarn_function, [register_tracked/1]}]).
+-spec register_tracked(rabbit_types:tracked_connection()) -> id().
 
 register_tracked(#tracked_connection{username = Username, vhost = VHost, id = ConnId, node = Node} = Conn) when Node =:= node() ->
     TableName = tracked_connection_table_name_for(Node),
@@ -181,9 +183,9 @@ register_tracked(#tracked_connection{username = Username, vhost = VHost, id = Co
         [#tracked_connection{}] ->
             ok
     end,
-    ok.
+    ConnId.
 
--spec unregister_tracked(rabbit_types:tracked_connection_id()) -> ok.
+-spec unregister_tracked(id()) -> ok.
 
 unregister_tracked(ConnId = {Node, _Name}) when Node =:= node() ->
     TableName = tracked_connection_table_name_for(Node),

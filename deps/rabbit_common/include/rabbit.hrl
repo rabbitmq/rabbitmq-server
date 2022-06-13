@@ -193,12 +193,12 @@
 %% Used to track detailed information
 %% about channels.
 -record(tracked_channel, {
+            pid, %% key in channel tracking table
             %% {Node, ChannelName}
             id,
             node,
             vhost,
             name,
-            pid,
             username,
             connection}).
 
