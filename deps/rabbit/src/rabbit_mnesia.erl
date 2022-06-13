@@ -186,7 +186,6 @@ join_discovered_peers_with_retries(TryNodes, NodeType, RetriesLeft, DelayInterva
             rabbit_log:info("Node '~s' selected for auto-clustering", [Node]),
             {ok, {_, DiscNodes, _}} = discover_cluster0(Node),
             init_db_and_upgrade(DiscNodes, NodeType, true, _Retry = true),
-            rabbit_connection_tracking:boot(),
             rabbit_node_monitor:notify_joined_cluster();
         none ->
             RetriesLeft1 = RetriesLeft - 1,
@@ -238,7 +237,6 @@ join_cluster(DiscoveryNode, NodeType) ->
                                     [ClusterNodes, NodeType]),
                     ok = init_db_with_mnesia(ClusterNodes, NodeType,
                                              true, true, _Retry = true),
-                    rabbit_connection_tracking:boot(),
                     rabbit_node_monitor:notify_joined_cluster(),
                     ok;
                 {error, Reason} ->
