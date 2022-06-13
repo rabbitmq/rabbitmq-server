@@ -1,4 +1,4 @@
-load("@rules_erlang//:xref.bzl", "xref")
+load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
 load("//:rabbitmq.bzl", "APP_VERSION", "rabbitmq_app")
 
@@ -26,7 +26,6 @@ rabbitmq_app(
 xref(
     additional_libs = [
         "@cuttlefish//:erlang_app",
-        "@ranch//:erlang_app",
     ],
 )
 
