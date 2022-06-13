@@ -7,14 +7,8 @@
 
 -module(rabbit).
 
-<<<<<<< HEAD
--ignore_xref({rabbit_direct, force_event_refresh, 1}).
--ignore_xref({rabbit_networking, force_connection_event_refresh, 1}).
-=======
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("kernel/include/logger.hrl").
--include_lib("rabbit_common/include/logging.hrl").
->>>>>>> 7a4868a738 (Remove an additional -ignore_xref)
 
 -behaviour(application).
 

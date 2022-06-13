@@ -25,12 +25,7 @@ rabbitmq_app(
 
 xref(
     additional_libs = [
-<<<<<<< HEAD
         "@cuttlefish//:erlang_app",
-        "@ranch//:erlang_app",
-=======
-        "@systemd//:erlang_app",
->>>>>>> 285740bfb6 (Use the new xref2 macro from rules_erlang)
     ],
 )
 
