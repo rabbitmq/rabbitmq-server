@@ -99,7 +99,7 @@ setup_federation_with_upstream_params(Config, ExtraParams) ->
         {<<"federation-upstream-set">>, <<"upstream">>}]),
 
     rabbit_ct_broker_helpers:set_policy(Config, 0,
-      <<"fed12">>, <<"^fed12\.">>, <<"all">>, [
+      <<"xfed12">>, <<"^xfed12\.">>, <<"all">>, [
         {<<"federation-upstream-set">>, <<"upstream12">>}]),
 
     rabbit_ct_broker_helpers:set_policy(Config, 0,

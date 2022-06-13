@@ -222,14 +222,14 @@ single_channel_mode(Config) ->
 multiple_upstreams(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              Q = bind_queue(Ch, <<"fed12.downstream">>, <<"key">>),
+              Q = bind_queue(Ch, <<"xfed12.downstream">>, <<"key">>),
               await_binding(Config, 0, <<"upstream">>, <<"key">>),
               await_binding(Config, 0, <<"upstream2">>, <<"key">>),
               publish_expect(Ch, <<"upstream">>, <<"key">>, Q, <<"HELLO1">>),
               publish_expect(Ch, <<"upstream2">>, <<"key">>, Q, <<"HELLO2">>)
       end, [x(<<"upstream">>),
             x(<<"upstream2">>),
-            x(<<"fed12.downstream">>)]).
+            x(<<"xfed12.downstream">>)]).
 
 multiple_upstreams_pattern(Config) ->
     set_upstream(Config, 0, <<"local453x">>,
@@ -314,7 +314,7 @@ multiple_downstreams(Config) ->
     with_ch(Config,
       fun (Ch) ->
               Q1 = bind_queue(Ch, <<"fed.downstream">>, <<"key">>),
-              Q12 = bind_queue(Ch, <<"fed12.downstream2">>, <<"key">>),
+              Q12 = bind_queue(Ch, <<"xfed12.downstream2">>, <<"key">>),
               await_binding(Config, 0, <<"upstream">>, <<"key">>, 2),
               await_binding(Config, 0, <<"upstream2">>, <<"key">>),
               publish(Ch, <<"upstream">>, <<"key">>, <<"HELLO1">>),
@@ -323,7 +323,7 @@ multiple_downstreams(Config) ->
               expect(Ch, Q12, [<<"HELLO1">>, <<"HELLO2">>])
       end, upstream_downstream() ++
           [x(<<"upstream2">>),
-           x(<<"fed12.downstream2">>)]).
+           x(<<"xfed12.downstream2">>)]).
 
 e2e(Config) ->
     with_ch(Config,
