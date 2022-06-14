@@ -57,9 +57,8 @@ delete(VirtualHost, Reference, Username) ->
     gen_server:call(?MODULE, {delete, VirtualHost, Reference, Username}).
 
 -spec lookup_leader(binary(), binary()) ->
-    {ok, pid()} | {error, not_available} |
-    {error, not_found}.
-
+                       {ok, pid()} | {error, not_available} |
+                       {error, not_found}.
 lookup_leader(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {lookup_leader, VirtualHost, Stream}).
 
@@ -195,7 +194,15 @@ handle_call({create, VirtualHost, Reference, Arguments, Username},
                                 {error, Err} ->
                                     rabbit_log:warning("Error while creating ~p stream, ~p",
                                                        [Reference, Err]),
-                                    {reply, {error, internal_error}, State}
+                                    {reply, {error, internal_error}, State};
+                                {protocol_error,
+                                 precondition_failed,
+                                 Msg,
+                                 Args} ->
+                                    rabbit_log:warning("Error while creating ~p stream, "
+                                                       ++ Msg,
+                                                       [Reference] ++ Args),
+                                    {reply, {error, validation_failed}, State}
                             end
                         catch
                             exit:Error ->

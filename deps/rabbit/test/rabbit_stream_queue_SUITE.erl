@@ -110,7 +110,9 @@ all_tests() ->
      max_age,
      invalid_policy,
      max_age_policy,
+     max_segment_size_bytes_validation,
      max_segment_size_bytes_policy,
+     max_segment_size_bytes_policy_validation,
      purge,
      update_retention_policy,
      queue_info,
@@ -1541,6 +1543,25 @@ max_length_bytes(Config) ->
     ?assert(length(receive_batch()) < 200),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
+max_segment_size_bytes_validation(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                                 {<<"x-stream-max-segment-size-bytes">>, long, 10_000_000}])),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]),
+
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406, _}}, _},
+       declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>},
+                       {<<"x-stream-max-segment-size-bytes">>, long, ?MAX_STREAM_MAX_SEGMENT_SIZE + 1_000}])),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+
 max_age(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -2051,6 +2072,25 @@ queue_info(Config) ->
                   (lists:sort(Servers) == lists:sort(proplists:get_value(online, Info)))
       end),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+max_segment_size_bytes_policy_validation(Config) ->
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"segment">>, <<"max_segment_size_bytes.*">>, <<"queues">>,
+           [{<<"stream-max-segment-size-bytes">>, ?MAX_STREAM_MAX_SEGMENT_SIZE - 1_000}]),
+
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"segment">>),
+
+    {error_string, _} = rabbit_ct_broker_helpers:rpc(
+                          Config, 0,
+                          rabbit_policy, set,
+                          [<<"/">>,
+                           <<"segment">>,
+                           <<"max_segment_size_bytes.*">>,
+                           [{<<"stream-max-segment-size-bytes">>, ?MAX_STREAM_MAX_SEGMENT_SIZE + 1_000}],
+                           0,
+                           <<"queues">>,
+                           <<"acting-user">>]),
+    ok.
 
 max_segment_size_bytes_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

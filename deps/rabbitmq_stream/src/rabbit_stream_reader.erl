@@ -1651,9 +1651,7 @@ handle_frame_post_auth(Transport,
                                                       User, #{})
         of
             ok ->
-                case rabbit_stream_manager:lookup_leader(VirtualHost,
-                                                         Stream)
-                of
+                case rabbit_stream_manager:lookup_leader(VirtualHost, Stream) of
                     {error, not_found} ->
                         rabbit_global_counters:increase_protocol_counter(stream,
                                                                          ?STREAM_DOES_NOT_EXIST,
@@ -1661,8 +1659,7 @@ handle_frame_post_auth(Transport,
                         {?RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 0};
                     {ok, LeaderPid} ->
                         {?RESPONSE_CODE_OK,
-                         case osiris:fetch_writer_seq(LeaderPid, Reference)
-                         of
+                         case osiris:fetch_writer_seq(LeaderPid, Reference) of
                              undefined ->
                                  0;
                              Offt ->

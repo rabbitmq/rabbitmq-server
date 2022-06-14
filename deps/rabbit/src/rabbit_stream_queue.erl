@@ -44,6 +44,8 @@
 -export([status/2,
          tracking_status/2]).
 
+-export([check_max_segment_size_bytes/1]).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
@@ -91,12 +93,25 @@ declare(Q0, Node) when ?amqqueue_is_stream(Q0) ->
     case rabbit_queue_type_util:run_checks(
            [fun rabbit_queue_type_util:check_auto_delete/1,
             fun rabbit_queue_type_util:check_exclusive/1,
-            fun rabbit_queue_type_util:check_non_durable/1],
+            fun rabbit_queue_type_util:check_non_durable/1,
+            fun rabbit_stream_queue:check_max_segment_size_bytes/1],
            Q0) of
         ok ->
             create_stream(Q0, Node);
         Err ->
             Err
+    end.
+
+check_max_segment_size_bytes(Q) ->
+    Args = amqqueue:get_arguments(Q),
+    case rabbit_misc:table_lookup(Args, <<"x-stream-max-segment-size-bytes">>) of
+        undefined ->
+            ok;
+        {_Type, Val} when Val > ?MAX_STREAM_MAX_SEGMENT_SIZE ->
+            {protocol_error, precondition_failed, "Exceeded max value for x-stream-max-segment-size-bytes",
+             []};
+        _ ->
+            ok
     end.
 
 create_stream(Q0, Node) ->
