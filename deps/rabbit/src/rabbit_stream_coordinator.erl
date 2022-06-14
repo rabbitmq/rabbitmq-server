@@ -724,9 +724,9 @@ handle_aux(leader, _, {down, Pid, Reason},
     %% An action has failed - report back to the state machine
     case maps:get(Pid, Monitors0, undefined) of
         {StreamId, Action, #{node := Node, epoch := Epoch} = Args} ->
-            rabbit_log:warning("~s: error while executing action for stream queue ~s, "
+            rabbit_log:warning("~s: error while executing action ~w for stream queue ~s, "
                                " node ~s, epoch ~b Err: ~w",
-                               [?MODULE, StreamId, Node, Epoch, Reason]),
+                               [?MODULE, Action, StreamId, Node, Epoch, Reason]),
             Monitors = maps:remove(Pid, Monitors0),
             Cmd = {action_failed, StreamId, Args#{action => Action}},
             send_self_command(Cmd),
