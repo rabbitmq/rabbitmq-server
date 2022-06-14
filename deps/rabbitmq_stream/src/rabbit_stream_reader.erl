@@ -484,8 +484,8 @@ handle_info(Msg,
                                          NewConnectionStep]),
             Transition(NewConnectionStep, StatemData, Connection1, State1);
         {Closed, S} ->
-            rabbit_log_connection:warning("Stream protocol connection socket ~w closed",
-                                          [S]),
+            rabbit_log_connection:debug("Stream protocol connection socket ~w closed",
+                                        [S]),
             stop;
         {Error, S, Reason} ->
             rabbit_log_connection:warning("Socket error ~p [~w]", [Reason, S]),
