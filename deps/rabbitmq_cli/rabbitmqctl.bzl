@@ -101,11 +101,7 @@ cp escript/rabbitmqctl ${{ABS_ESCRIPT_PATH}}
 cp _build/${{MIX_ENV}}/lib/rabbitmqctl/ebin/* ${{ABS_EBIN_DIR}}
 cp _build/${{MIX_ENV}}/lib/rabbitmqctl/consolidated/* ${{ABS_EBIN_DIR}}
 
-tar --sort=name \\
-    --owner=root:0 \\
-    --group=root:0 \\
-    --mtime='UTC 2019-01-01' \\
-    --file ${{ABS_FETCHED_SRCS}} \\
+tar --file ${{ABS_FETCHED_SRCS}} \\
     --create deps
 
 # remove symlinks from the _build directory since it
