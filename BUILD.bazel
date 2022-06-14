@@ -9,7 +9,7 @@ load("//bazel/elixir:iex_eval.bzl", "iex_eval")
 load(":rabbitmq_home.bzl", "rabbitmq_home")
 load(":rabbitmq_run.bzl", "rabbitmq_run", "rabbitmq_run_command")
 load(":rabbitmqctl.bzl", "rabbitmqctl")
-load(":dist.bzl", "package_generic_unix")
+load(":dist.bzl", "package_generic_unix", "source_archive")
 load(":rabbitmq.bzl", "all_plugins")
 
 exports_files([
@@ -93,6 +93,8 @@ iex_eval(
 )
 
 package_generic_unix(PLUGINS)
+
+source_archive(PLUGINS + ["//deps/rabbitmq_cli:rabbitmqctl"])
 
 genrule(
     name = "test-logs",
