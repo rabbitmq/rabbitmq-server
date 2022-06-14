@@ -56,6 +56,7 @@ rabbitmqctl_test(
         "//deps/amqp_client:erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
+        "@goldrush//:erlang_app",
         "@lager//:erlang_app",
     ],
 )
