@@ -102,9 +102,6 @@ declare(Q0, Node) when ?amqqueue_is_stream(Q0) ->
             Err
     end.
 
-<<<<<<< HEAD
-create_stream(Q0, Node) ->
-=======
 check_max_segment_size_bytes(Q) ->
     Args = amqqueue:get_arguments(Q),
     case rabbit_misc:table_lookup(Args, <<"x-stream-max-segment-size-bytes">>) of
@@ -117,8 +114,7 @@ check_max_segment_size_bytes(Q) ->
             ok
     end.
 
-create_stream(Q0) ->
->>>>>>> 273cc50eb6 (Limit stream max segment size to 3 GB)
+create_stream(Q0, Node) ->
     Arguments = amqqueue:get_arguments(Q0),
     QName = amqqueue:get_name(Q0),
     Opts = amqqueue:get_options(Q0),
