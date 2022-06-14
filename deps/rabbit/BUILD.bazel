@@ -327,7 +327,7 @@ suites = [
     rabbitmq_integration_suite(
         PACKAGE,
         name = "cluster_SUITE",
-        size = "small",
+        size = "medium",
     ),
     rabbitmq_integration_suite(
         PACKAGE,
