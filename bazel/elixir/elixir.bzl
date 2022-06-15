@@ -32,7 +32,7 @@ def elixir_toolchain_external():
             elixir_constraint,
         ],
         toolchain = ":elixir_external",
-        toolchain_type = Label("@rabbitmq-server//bazel/elixir:toolchain_type"),
+        toolchain_type = Label("//bazel/elixir:toolchain_type"),
         visibility = ["//visibility:public"],
     )
 
@@ -69,7 +69,7 @@ def elixir_toolchain_from_http_archive(
             elixir_constraint,
         ],
         toolchain = ":elixir{}".format(name_suffix),
-        toolchain_type = Label("@rabbitmq-server//bazel/elixir:toolchain_type"),
+        toolchain_type = Label("//bazel/elixir:toolchain_type"),
         visibility = ["//visibility:public"],
     )
 
@@ -78,7 +78,7 @@ def elixir_toolchain_from_github_release(
         version = None,
         sha256 = None):
     [major, minor, patch] = version.split(".")
-    elixir_constraint = Label("@rabbitmq-server//bazel/platforms:elixir_{}_{}".format(major, minor))
+    elixir_constraint = Label("//bazel/platforms:elixir_{}_{}".format(major, minor))
     url = "https://github.com/elixir-lang/elixir/archive/refs/tags/v{}.tar.gz".format(version)
     elixir_toolchain_from_http_archive(
         name_suffix = name_suffix,
