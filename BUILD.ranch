@@ -1,14 +1,17 @@
 load("@rules_erlang//:app_file.bzl", "app_file")
 load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
 load("@rules_erlang//:erlang_app.bzl", "DEFAULT_ERLC_OPTS")
-load("@rules_erlang//:erlc.bzl", "erlc")
+load("@rules_erlang//:erlang_bytecode.bzl", "erlang_bytecode")
 
-erlc(
+erlang_bytecode(
     name = "beam_files",
-    hdrs = glob(["include/**/*.hrl", "src/**/*.hrl"]),
     srcs = glob(["src/**/*.erl"]),
-    erlc_opts = DEFAULT_ERLC_OPTS,
+    hdrs = glob([
+        "include/**/*.hrl",
+        "src/**/*.hrl",
+    ]),
     dest = "ebin",
+    erlc_opts = DEFAULT_ERLC_OPTS,
 )
 
 genrule(
@@ -27,9 +30,12 @@ app_file(
 
 erlang_app_info(
     name = "erlang_app",
-    app_name = "ranch",
-    app = ":app_file",
     hdrs = glob(["include/**/*.hrl"]),
-    beam = [":beam_files", ":appup"],
+    app = ":app_file",
+    app_name = "ranch",
+    beam = [
+        ":beam_files",
+        ":appup",
+    ],
     visibility = ["//visibility:public"],
 )
