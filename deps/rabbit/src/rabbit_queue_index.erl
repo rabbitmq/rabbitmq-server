@@ -734,7 +734,7 @@ recover_index_v2_dirty(State0 = #qistate { queue_name = Name,
 recover_index_v2_common(State0 = #qistate { queue_name = Name, dir = Dir },
                         V2State, CountersRef) ->
     %% Use a temporary per-queue store state to read embedded messages.
-    StoreState0 = rabbit_classic_queue_store_v2:init(Name, fun(_, _) -> ok end),
+    StoreState0 = rabbit_classic_queue_store_v2:init(Name),
     %% Go through the v2 index and publish messages to v1 index.
     {LoSeqId, HiSeqId, _} = rabbit_classic_queue_index_v2:bounds(V2State),
     %% When resuming after a crash we need to double check the messages that are both
