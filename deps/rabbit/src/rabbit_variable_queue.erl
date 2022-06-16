@@ -315,6 +315,11 @@
           out_counter,
           in_counter,
           rates,
+          %% There are two confirms paths: either store/index produce confirms
+          %% separately (v1 and v2 with per-vhost message store) or the confirms
+          %% are produced all at once while syncing/flushing (v2 with per-queue
+          %% message store). The latter is more efficient as it avoids many
+          %% sets operations.
           msgs_on_disk,
           msg_indices_on_disk,
           unconfirmed,
@@ -331,10 +336,13 @@
           %% default queue or lazy queue
           mode, %% Unused.
           version = 1,
-          %% number of reduce_memory_usage executions, once it
-          %% reaches a threshold the queue will manually trigger a runtime GC
-          %% see: maybe_execute_gc/1
-          memory_reduction_run_count, %% Unused.
+          %% Fast path for confirms handling. Instead of having
+          %% index/store keep track of confirms separately and
+          %% doing intersect/subtract/union we just put the messages
+          %% here and on sync move them to 'confirmed'.
+          %%
+          %% Note: This field used to be 'memory_reduction_run_count'.
+          unconfirmed_simple,
           %% Queue data is grouped by VHost. We need to store it
           %% to work with queue index.
           virtual_host,
@@ -455,7 +463,7 @@
              io_batch_size         :: pos_integer(),
              mode                  :: 'default' | 'lazy',
              version               :: 1 | 2,
-             memory_reduction_run_count :: non_neg_integer()}.
+             unconfirmed_simple    :: sets:set()}.
 
 -define(BLANK_DELTA, #delta { start_seq_id = undefined,
                               count        = 0,
@@ -543,7 +551,7 @@ init(Q, new, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun) w
     %% between queue versions unnecessarily.
     IndexMod = index_mod(Q),
     IndexState = IndexMod:init(QueueName, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun),
-    StoreState = rabbit_classic_queue_store_v2:init(QueueName, MsgOnDiskFun),
+    StoreState = rabbit_classic_queue_store_v2:init(QueueName),
     VHost = QueueName#resource.virtual_host,
     init(queue_version(Q),
          IsDurable, IndexMod, IndexState, StoreState, 0, 0, [],
@@ -586,7 +594,7 @@ init(Q, Terms, AsyncCallback, MsgOnDiskFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun)
               ?PERSISTENT_MSG_STORE),
           ContainsCheckFun, MsgIdxOnDiskFun, MsgAndIdxOnDiskFun,
           main),
-    StoreState = rabbit_classic_queue_store_v2:init(QueueName, MsgOnDiskFun),
+    StoreState = rabbit_classic_queue_store_v2:init(QueueName),
     init(queue_version(Q),
          IsDurable, IndexMod, IndexState, StoreState, DeltaCount, DeltaBytes, RecoveryTerms,
          PersistentClient, TransientClient, VHost).
@@ -914,26 +922,38 @@ ram_duration(State) ->
     {infinity, State1}.
 
 needs_timeout(#vqstate { index_mod   = IndexMod,
-                         index_state = IndexState }) ->
-    case IndexMod:needs_sync(IndexState) of
-        confirms -> timed;
-        other    -> idle;
-        false    -> false
+                         index_state = IndexState,
+                         unconfirmed_simple = UCS }) ->
+    case {IndexMod:needs_sync(IndexState), sets:is_empty(UCS)} of
+        {false, false} -> timed;
+        {confirms, _}  -> timed;
+        {other, _}     -> idle;
+        {false, true}  -> false
     end.
 
 timeout(State = #vqstate { index_mod   = IndexMod,
                            index_state = IndexState0,
-                           store_state = StoreState0 }) ->
-    StoreState = rabbit_classic_queue_store_v2:sync(StoreState0),
+                           store_state = StoreState0,
+                           unconfirmed_simple = UCS,
+                           confirmed   = C }) ->
     IndexState = IndexMod:sync(IndexState0),
+    StoreState = rabbit_classic_queue_store_v2:sync(StoreState0),
     State #vqstate { index_state = IndexState,
-                     store_state = StoreState }.
+                     store_state = StoreState,
+                     unconfirmed_simple = sets:new([{version,2}]),
+                     confirmed   = sets:union(C, UCS) }.
 
 handle_pre_hibernate(State = #vqstate { index_mod   = IndexMod,
-                                        index_state = IndexState,
-                                        store_state = StoreState }) ->
-    State #vqstate { index_state = IndexMod:flush(IndexState),
-                     store_state = rabbit_classic_queue_store_v2:sync(StoreState) }.
+                                        index_state = IndexState0,
+                                        store_state = StoreState0,
+                                        unconfirmed_simple = UCS,
+                                        confirmed   = C }) ->
+    IndexState = IndexMod:flush(IndexState0),
+    StoreState = rabbit_classic_queue_store_v2:sync(StoreState0),
+    State #vqstate { index_state = IndexState,
+                     store_state = StoreState,
+                     unconfirmed_simple = sets:new([{version,2}]),
+                     confirmed   = sets:union(C, UCS) }.
 
 resume(State) -> a(State).
 
@@ -1385,9 +1405,6 @@ one_if(false) -> 0.
 cons_if(true,   E, L) -> [E | L];
 cons_if(false, _E, L) -> L.
 
-sets_maybe_insert(false, _Val, Set) -> Set;
-sets_maybe_insert(true,   Val, Set) -> sets:add_element(Val, Set).
-
 msg_status(Version, IsPersistent, IsDelivered, SeqId,
            Msg = #basic_message {id = MsgId}, MsgProps, IndexMaxSize) ->
     #msg_status{seq_id        = SeqId,
@@ -1628,6 +1645,7 @@ init(QueueVsn, IsDurable, IndexMod, IndexState, StoreState, DeltaCount, DeltaByt
       msgs_on_disk        = sets:new([{version,2}]),
       msg_indices_on_disk = sets:new([{version,2}]),
       unconfirmed         = sets:new([{version,2}]),
+      unconfirmed_simple  = sets:new([{version,2}]),
       confirmed           = sets:new([{version,2}]),
       ack_out_counter     = 0,
       ack_in_counter      = 0,
@@ -1638,7 +1656,6 @@ init(QueueVsn, IsDurable, IndexMod, IndexState, StoreState, DeltaCount, DeltaByt
 
       mode                = default,
       version             = QueueVsn,
-      memory_reduction_run_count = 0,
       virtual_host        = VHost},
     a(maybe_deltas_to_betas(State)).
 
@@ -1986,8 +2003,8 @@ reset_qi_state(State = #vqstate{ index_mod   = IndexMod,
 is_pending_ack_empty(State) ->
     count_pending_acks(State) =:= 0.
 
-is_unconfirmed_empty(#vqstate { unconfirmed = UC }) ->
-    sets:is_empty(UC).
+is_unconfirmed_empty(#vqstate { unconfirmed = UC, unconfirmed_simple = UCS }) ->
+    sets:is_empty(UC) andalso sets:is_empty(UCS).
 
 count_pending_acks(#vqstate { ram_pending_ack   = RPA,
                               disk_pending_ack  = DPA }) ->
@@ -2069,6 +2086,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                             in_counter          = InCount,
                             durable             = IsDurable,
                             unconfirmed         = UC,
+                            unconfirmed_simple  = UCS,
                             rates               = #rates{ out = OutRate }}) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(Version, IsPersistent1, IsDelivered, SeqId, Msg, MsgProps, IndexMaxSize),
@@ -2076,7 +2094,7 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
     %% limit is at 1 because the queue process will need to access this message to know
     %% expiration information.
     MemoryLimit = min(1 + floor(2 * OutRate), 2048),
-    State4 = case DeltaCount of
+    State3 = case DeltaCount of
                  %% Len is the same as Q3Len when DeltaCount =:= 0.
                  0 when Len < MemoryLimit ->
                      {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
@@ -2088,11 +2106,13 @@ publish1(Msg = #basic_message { is_persistent = IsPersistent, id = MsgId },
                      State2 = State1 #vqstate { delta = Delta1 },
                      stats_published_disk(MsgStatus1, State2)
              end,
-    UC1 = sets_maybe_insert(NeedsConfirming, MsgId, UC),
-    State4#vqstate{ next_seq_id         = SeqId + 1,
+    {UC1, UCS1} = maybe_needs_confirming(NeedsConfirming, persist_to(MsgStatus),
+                                         Version, MsgId, UC, UCS),
+    State3#vqstate{ next_seq_id         = SeqId + 1,
                     next_deliver_seq_id = maybe_next_deliver_seq_id(SeqId, NextDeliverSeqId, IsDelivered),
                     in_counter          = InCount + 1,
-                    unconfirmed         = UC1 }.
+                    unconfirmed         = UC1,
+                    unconfirmed_simple  = UCS1 }.
 
 %% Only attempt to increase the next_deliver_seq_id for delivered messages.
 maybe_next_deliver_seq_id(SeqId, NextDeliverSeqId, true) ->
@@ -2114,19 +2134,32 @@ publish_delivered1(Msg = #basic_message { is_persistent = IsPersistent, id = Msg
                                       in_counter          = InCount,
                                       out_counter         = OutCount,
                                       durable             = IsDurable,
-                                      unconfirmed         = UC }) ->
+                                      unconfirmed         = UC,
+                                      unconfirmed_simple  = UCS }) ->
     IsPersistent1 = IsDurable andalso IsPersistent,
     MsgStatus = msg_status(Version, IsPersistent1, true, SeqId, Msg, MsgProps, IndexMaxSize),
     {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
     State2 = record_pending_ack(m(MsgStatus1), State1),
-    UC1 = sets_maybe_insert(NeedsConfirming, MsgId, UC),
+    {UC1, UCS1} = maybe_needs_confirming(NeedsConfirming, persist_to(MsgStatus),
+                                         Version, MsgId, UC, UCS),
     {SeqId,
      stats_published_pending_acks(MsgStatus1,
            State2#vqstate{ next_seq_id         = SeqId + 1,
                            next_deliver_seq_id = next_deliver_seq_id(SeqId, NextDeliverSeqId),
                            out_counter         = OutCount + 1,
                            in_counter          = InCount + 1,
-                           unconfirmed         = UC1 })}.
+                           unconfirmed         = UC1,
+                           unconfirmed_simple  = UCS1 })}.
+
+maybe_needs_confirming(false, _, _, _, UC, UCS) ->
+    {UC, UCS};
+%% When storing to the v2 queue store we take the simple confirms
+%% path because we don't need to track index and store separately.
+maybe_needs_confirming(true, queue_store, 2, MsgId, UC, UCS) ->
+    {UC, sets:add_element(MsgId, UCS)};
+%% Otherwise we keep tracking as it used to be.
+maybe_needs_confirming(true, _, _, MsgId, UC, UCS) ->
+    {sets:add_element(MsgId, UC), UCS}.
 
 batch_publish_delivered1({Msg, MsgProps}, {ChPid, Flow, SeqIds, State}) ->
     {SeqId, State1} =
@@ -2230,7 +2263,8 @@ maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
             queue_index -> {prepare_to_store(Msg), DiskWriteCount + 1}
         end,
     IndexState2 = IndexMod:publish(
-                    MsgOrId, SeqId, MsgLocation, MsgProps, IsPersistent, TargetRamCount,
+                    MsgOrId, SeqId, MsgLocation, MsgProps, IsPersistent,
+                    persist_to(MsgStatus) =:= msg_store, TargetRamCount,
                     IndexState),
     %% We always deliver messages when the old index is used.
     %% We are actually tracking message deliveries per-queue
@@ -2482,6 +2516,7 @@ msg_indices_written_to_disk(Callback, MsgIdSet) ->
                                            sets:union(MIOD, Confirmed) })
              end).
 
+%% @todo Having to call run_backing_queue is probably reducing performance...
 msgs_and_indices_written_to_disk(Callback, MsgIdSet) ->
     Callback(?MODULE,
              fun (?MODULE, State) -> record_confirms(MsgIdSet, State) end).

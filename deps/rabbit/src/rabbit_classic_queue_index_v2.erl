@@ -9,7 +9,7 @@
 
 -export([erase/1, init/3, reset_state/1, recover/7,
          terminate/3, delete_and_terminate/1,
-         publish/7, ack/2, read/3]).
+         publish/7, publish/8, ack/2, read/3]).
 
 %% Recovery. Unlike other functions in this module, these
 %% apply to all queues all at once.
@@ -290,7 +290,7 @@ recover_segments(State0 = #qi { queue_name = Name, dir = Dir }, Terms, IsMsgStor
                 list_to_integer(filename:basename(F, ?SEGMENT_EXTENSION))
             || F <- SegmentFiles]),
             %% We use a temporary store state to check that messages do exist.
-            StoreState0 = rabbit_classic_queue_store_v2:init(Name, OnSyncMsgFun),
+            StoreState0 = rabbit_classic_queue_store_v2:init(Name),
             {State1, StoreState} = recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, Segments),
             _ = rabbit_classic_queue_store_v2:terminate(StoreState),
             State1
@@ -482,7 +482,7 @@ recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
 recover_index_v1_common(State0 = #qi{ queue_name = Name, dir = Dir },
                         V1State, CountersRef) ->
     %% Use a temporary per-queue store state to store embedded messages.
-    StoreState0 = rabbit_classic_queue_store_v2:init(Name, fun(_, _) -> ok end),
+    StoreState0 = rabbit_classic_queue_store_v2:init(Name),
     %% Go through the v1 index and publish messages to the v2 index.
     {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1State),
     %% When resuming after a crash we need to double check the messages that are both
@@ -564,9 +564,12 @@ delete_and_terminate(State = #qi { dir = Dir,
               rabbit_types:message_properties(), boolean(),
               non_neg_integer() | infinity, State) -> State when State::state().
 
+publish(MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount, State) ->
+    publish(MsgId, SeqId, Location, Props, IsPersistent, true, TargetRamCount, State).
+
 %% Because we always persist to the msg_store, the Msg(Or)Id argument
 %% here is always a binary, never a record.
-publish(MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount,
+publish(MsgId, SeqId, Location, Props, IsPersistent, ShouldConfirm, TargetRamCount,
         State0 = #qi { write_buffer = WriteBuffer0,
                        segments = Segments }) ->
     ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount, State0]),
@@ -583,7 +586,7 @@ publish(MsgId, SeqId, Location, Props, IsPersistent, TargetRamCount,
     end,
     %% When publisher confirms have been requested for this
     %% message we mark the message as unconfirmed.
-    State = maybe_mark_unconfirmed(MsgId, Props, State2),
+    State = maybe_mark_unconfirmed(MsgId, Props, ShouldConfirm, State2),
     maybe_flush_buffer(State, SegmentEntryCount).
 
 new_segment_file(Segment, SegmentEntryCount, State = #qi{ segments = Segments }) ->
@@ -657,9 +660,9 @@ reduce_fd_usage(SegmentToOpen, State = #qi{ fds = OpenFds0 }) ->
     end.
 
 maybe_mark_unconfirmed(MsgId, #message_properties{ needs_confirming = true },
-        State = #qi { confirms = Confirms }) ->
+        true, State = #qi { confirms = Confirms }) ->
     State#qi{ confirms = sets:add_element(MsgId, Confirms) };
-maybe_mark_unconfirmed(_, _, State) ->
+maybe_mark_unconfirmed(_, _, _, State) ->
     State.
 
 maybe_flush_buffer(State = #qi { write_buffer = WriteBuffer,
@@ -1183,7 +1186,7 @@ stop(VHost) ->
 
 pre_publish(MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State) ->
     ?DEBUG("~0p ~0p ~0p ~0p ~0p ~0p ~0p", [MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State]),
-    publish(MsgOrId, SeqId, Location, Props, IsPersistent, TargetRamCount, State).
+    publish(MsgOrId, SeqId, Location, Props, IsPersistent, false, TargetRamCount, State).
 
 flush_pre_publish_cache(TargetRamCount, State) ->
     ?DEBUG("~0p ~0p", [TargetRamCount, State]),

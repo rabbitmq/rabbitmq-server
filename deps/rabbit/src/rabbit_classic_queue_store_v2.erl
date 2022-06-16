@@ -32,8 +32,7 @@
 %% they should be. What this effectively means is that the
 %% ?STORE:sync function is called right before the ?INDEX:sync
 %% function, and only if there are outstanding confirms in the
-%% index. As a result the store does not need to keep track of
-%% confirms.
+%% index.
 %%
 %% The old rabbit_msg_store has separate transient/persistent stores
 %% to make recovery of data on disk quicker. We do not need to
@@ -50,7 +49,7 @@
 
 -module(rabbit_classic_queue_store_v2).
 
--export([init/2, terminate/1,
+-export([init/1, terminate/1,
          write/4, sync/1, read/3, check_msg_on_disk/3,
          remove/2, delete_segments/2]).
 
@@ -116,14 +115,7 @@
     %% we are using file:pread/3 which leaves the file
     %% position undetermined.
     read_segment = undefined :: undefined | non_neg_integer(),
-    read_fd = undefined :: undefined | file:fd(),
-
-    %% Messages waiting for publisher confirms. The
-    %% publisher confirms will be sent at regular
-    %% intervals after the index has been flushed
-    %% to disk.
-    confirms = sets:new([{version,2}]) :: sets:set(),
-    on_sync :: on_sync_fun()
+    read_fd = undefined :: undefined | file:fd()
 }).
 
 -type state() :: #qs{}.
@@ -131,18 +123,13 @@
 -type msg_location() :: {?MODULE, non_neg_integer(), non_neg_integer()}.
 -export_type([msg_location/0]).
 
--type on_sync_fun() :: fun ((sets:set(), 'written' | 'ignored') -> any()).
+-spec init(rabbit_amqqueue:name()) -> state().
 
--spec init(rabbit_amqqueue:name(), on_sync_fun()) -> state().
-
-init(#resource{ virtual_host = VHost } = Name, OnSyncFun) ->
-    ?DEBUG("~0p ~0p", [Name, OnSyncFun]),
+init(#resource{ virtual_host = VHost } = Name) ->
+    ?DEBUG("~0p", [Name]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = rabbit_classic_queue_index_v2:queue_dir(VHostDir, Name),
-    #qs{
-        dir = Dir,
-        on_sync = OnSyncFun
-    }.
+    #qs{dir = Dir}.
 
 -spec terminate(State) -> State when State::state().
 
@@ -173,7 +160,7 @@ maybe_close_fd(Fd) ->
             rabbit_types:message_properties(), State)
         -> {msg_location(), State} when State::state().
 
-write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
+write(SeqId, Msg, Props, State0) ->
     ?DEBUG("~0p ~0p ~0p ~0p", [SeqId, Msg, Props, State0]),
     SegmentEntryCount = segment_entry_count(),
     Segment = SeqId div SegmentEntryCount,
@@ -202,10 +189,7 @@ write(SeqId, Msg=#basic_message{ id = MsgId }, Props, State0) ->
     %% Size:32, Flags:8, CRC32:16, Unused:8.
     ok = file:write(Fd, [<<Size:32/unsigned, 0:7, UseCRC32:1, CRC32:16, 0:8>>, MsgIovec]),
     %% Maybe cache the message.
-    State2 = maybe_cache(SeqId, Size, Msg, State1),
-    %% When publisher confirms have been requested for this
-    %% message we mark the message as unconfirmed.
-    State = maybe_mark_unconfirmed(MsgId, Props, State2),
+    State = maybe_cache(SeqId, Size, Msg, State1),
     %% Keep track of the offset we are at.
     {{?MODULE, Offset, Size}, State#qs{ write_offset = Offset + Size + ?ENTRY_HEADER_SIZE }}.
 
@@ -246,25 +230,12 @@ maybe_cache(SeqId, MsgSize, Msg, State = #qs{ cache = Cache,
                       cache_size = CacheSize + MsgSize }
     end.
 
-maybe_mark_unconfirmed(MsgId, #message_properties{ needs_confirming = true },
-        State = #qs { confirms = Confirms }) ->
-    State#qs{ confirms = sets:add_element(MsgId, Confirms) };
-maybe_mark_unconfirmed(_, _, State) ->
-    State.
-
 -spec sync(State) -> State when State::state().
 
-sync(State = #qs{ confirms = Confirms,
-                  on_sync = OnSyncFun }) ->
+sync(State) ->
     ?DEBUG("~0p", [State]),
     flush_write_fd(State),
-    case sets:is_empty(Confirms) of
-        true ->
-            State;
-        false ->
-            OnSyncFun(Confirms, written),
-            State#qs{ confirms = sets:new([{version,2}]) }
-    end.
+    State.
 
 -spec read(rabbit_variable_queue:seq_id(), msg_location(), State)
         -> {rabbit_types:basic_message(), State} when State::state().

@@ -12,7 +12,7 @@
 -export([erase/1, init/3, reset_state/1, recover/7,
          terminate/3, delete_and_terminate/1,
          pre_publish/7, flush_pre_publish_cache/2,
-         publish/7, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
+         publish/7, publish/8, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/2, stop/1]).
 
 -export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
@@ -429,6 +429,9 @@ publish(MsgOrId, SeqId, _Location, MsgProps, IsPersistent, JournalSizeHint, Stat
     maybe_flush_journal(
       JournalSizeHint,
       add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1)).
+
+publish(MsgOrId, SeqId, Location, MsgProps, IsPersistent, _, JournalSizeHint, State) ->
+    publish(MsgOrId, SeqId, Location, MsgProps, IsPersistent, JournalSizeHint, State).
 
 maybe_needs_confirming(MsgProps, MsgOrId,
         State = #qistate{unconfirmed     = UC,
