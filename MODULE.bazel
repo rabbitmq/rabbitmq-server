@@ -140,16 +140,6 @@ erlang_package.hex_package(
     sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
 )
 
-<<<<<<< HEAD
-=======
-erlang_package.git_package(
-    repository = "rabbitmq/osiris",
-    tag = "v1.2.6",
-    patch_cmds = ["""sed -i"_orig" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
-"""],
-)
-
->>>>>>> ae77914195 (Fixup the bazel build when used without bzlmod)
 erlang_package.hex_package(
     name = "prometheus",
     version = "4.8.1",
