@@ -1,9 +1,9 @@
 load("@rules_erlang//:erlang_app.bzl", "erlang_app")
 
 erlang_app(
-    app_name = "trust_store_http",
     app_description = "Trust store HTTP server",
     app_module = "trust_store_http_app",
+    app_name = "trust_store_http",
     app_version = "1.0.0",
     extra_apps = [
         "ssl",
