@@ -121,7 +121,7 @@ add_member(JoiningNode, [_ | _] = Cluster) ->
             ?LOG_DEBUG(
                "Khepri clustering: Node ~p is already a member of cluster ~p",
                [JoiningNode, Cluster]),
-            ok
+            {ok, already_member}
     end.
 
 pick_node_in_cluster(Cluster) when is_list(Cluster) ->
@@ -146,36 +146,49 @@ do_join(RemoteNode) when RemoteNode =/= node() ->
     ok = setup(),
     khepri:info(?RA_CLUSTER_NAME),
 
-    %% We don't verify the cluster membership before adding this node to the
-    %% remote cluster because such a check would not be atomic: the membership
-    %% could well change between the check and the actual join.
-
-    ?LOG_DEBUG(
-       "Adding this node (~p) to Khepri cluster \"~s\" through "
-       "node ~p",
-       [ThisNode, ?RA_CLUSTER_NAME, RemoteNode],
-       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-
     %% Ensure the remote node is reachable before we add it.
     pong = net_adm:ping(RemoteNode),
 
-    %% If the remote node to add is running RabbitMQ, we need to put
-    %% it in maintenance mode at least. We remember that state to
-    %% revive the node only if it was fully running before this code.
-    IsRunning = rabbit:is_running(ThisNode),
-    AlreadyBeingDrained =
-    rabbit_maintenance:is_being_drained_consistent_read(ThisNode),
-    NeedToRevive = IsRunning andalso not AlreadyBeingDrained,
-    maybe_drain_node(IsRunning),
+    %% We verify the cluster membership before adding `ThisNode' to
+    %% `RemoteNode''s cluster. We do it mostly to keep the same behavior as
+    %% what we do with Mnesia. Otherwise, the interest is limited given the
+    %% check and the actual join are not atomic.
 
-    %% Joining a cluster includes a reset of the local Khepri store.
-    Ret = khepri_cluster:join(?RA_CLUSTER_NAME, RemoteNode),
+    ClusteredNodes = rabbit_misc:rpc_call(
+                       RemoteNode, rabbit_khepri, locally_known_nodes, []),
+    case lists:member(ThisNode, ClusteredNodes) of
+        false ->
+            ?LOG_DEBUG(
+               "Adding this node (~p) to Khepri cluster \"~s\" through "
+               "node ~p",
+               [ThisNode, ?RA_CLUSTER_NAME, RemoteNode],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
 
-    %% Revive the remote node if it was running and not under
-    %% maintenance before we changed the cluster membership.
-    maybe_revive_node(NeedToRevive),
+            %% If the remote node to add is running RabbitMQ, we need to put it
+            %% in maintenance mode at least. We remember that state to revive
+            %% the node only if it was fully running before this code.
+            IsRunning = rabbit:is_running(ThisNode),
+            AlreadyBeingDrained =
+            rabbit_maintenance:is_being_drained_consistent_read(ThisNode),
+            NeedToRevive = IsRunning andalso not AlreadyBeingDrained,
+            maybe_drain_node(IsRunning),
 
-    Ret.
+            %% Joining a cluster includes a reset of the local Khepri store.
+            Ret = khepri_cluster:join(?RA_CLUSTER_NAME, RemoteNode),
+
+            %% Revive the remote node if it was running and not under
+            %% maintenance before we changed the cluster membership.
+            maybe_revive_node(NeedToRevive),
+
+            Ret;
+        true ->
+            ?LOG_DEBUG(
+               "This node (~p) is already part of the Khepri cluster \"~s\" "
+               "like node ~p",
+               [ThisNode, ?RA_CLUSTER_NAME, RemoteNode],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            {ok, already_member}
+    end.
 
 maybe_drain_node(true) ->
     ok = rabbit_maintenance:drain();
@@ -238,7 +251,12 @@ remove_member(NodeToRemove) when NodeToRemove =/= node() ->
                "Removing remote node ~s from Khepri cluster \"~s\"",
                [NodeToRemove, ?RA_CLUSTER_NAME],
                #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            ok = ensure_ra_system_started(),
+
+            %% We need the Khepri store to run on the node to remove, to be
+            %% able to reset it.
+            ok = rabbit_misc:rpc_call(
+                    NodeToRemove, ?MODULE, setup, []),
+
             Ret = rabbit_misc:rpc_call(
                     NodeToRemove, khepri_cluster, reset, [?RA_CLUSTER_NAME]),
             case Ret of

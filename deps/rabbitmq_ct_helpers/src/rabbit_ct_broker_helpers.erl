@@ -1001,7 +1001,8 @@ stop_rabbitmq_nodes(Config) ->
           fun(NodeConfig) ->
                   stop_rabbitmq_node(Config, NodeConfig)
           end),
-    find_crashes_in_logs(NodeConfigs),
+    IgnoredCrashes = ["** force_vhost_failure"],
+    find_crashes_in_logs(NodeConfigs, IgnoredCrashes),
     proplists:delete(rmq_nodes, Config).
 
 stop_rabbitmq_node(Config, NodeConfig) ->
@@ -1022,41 +1023,42 @@ stop_rabbitmq_node(Config, NodeConfig) ->
     end,
     NodeConfig.
 
-find_crashes_in_logs(NodeConfigs) ->
+find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
     ct:pal(
       "Looking up any crash reports in the nodes' log files. If we find "
       "some, they will appear below:"),
     CrashesCount = lists:foldl(
                      fun(NodeConfig, Total) ->
-                             Count = count_crashes_in_logs(NodeConfig),
+                             Count = count_crashes_in_logs(
+                                       NodeConfig, IgnoredCrashes),
                              Total + Count
                      end, 0, NodeConfigs),
     ct:pal("Found ~b crash report(s)", [CrashesCount]),
     ?assertEqual(0, CrashesCount).
 
-count_crashes_in_logs(NodeConfig) ->
+count_crashes_in_logs(NodeConfig, IgnoredCrashes) ->
     LogLocations = ?config(log_locations, NodeConfig),
     lists:foldl(
       fun(LogLocation, Total) ->
-              Count = count_crashes_in_log(LogLocation),
+              Count = count_crashes_in_log(LogLocation, IgnoredCrashes),
               Total + Count
       end, 0, LogLocations).
 
-count_crashes_in_log(LogLocation) ->
+count_crashes_in_log(LogLocation, IgnoredCrashes) ->
     case file:read_file(LogLocation) of
-        {ok, Content} -> count_crashes_in_content(Content);
+        {ok, Content} -> count_crashes_in_content(Content, IgnoredCrashes);
         _             -> 0
     end.
 
-count_crashes_in_content(Content) ->
+count_crashes_in_content(Content, IgnoredCrashes) ->
     ReOpts = [multiline],
     Lines = re:split(Content, "^", ReOpts),
-    count_gen_server_terminations(Lines).
+    count_gen_server_terminations(Lines, IgnoredCrashes).
 
-count_gen_server_terminations(Lines) ->
-    count_gen_server_terminations(Lines, 0).
+count_gen_server_terminations(Lines, IgnoredCrashes) ->
+    count_gen_server_terminations(Lines, 0, IgnoredCrashes).
 
-count_gen_server_terminations([Line | Rest], Count) ->
+count_gen_server_terminations([Line | Rest], Count, IgnoredCrashes) ->
     ReOpts = [{capture, all_but_first, list}],
     Ret = re:run(
             Line,
@@ -1064,26 +1066,40 @@ count_gen_server_terminations([Line | Rest], Count) ->
             ReOpts),
     case Ret of
         {match, [Prefix]} ->
-            capture_gen_server_termination(Rest, Prefix, [Line], Count + 1);
+            capture_gen_server_termination(
+              Rest, Prefix, [Line], Count, IgnoredCrashes);
         nomatch ->
-            count_gen_server_terminations(Rest, Count)
+            count_gen_server_terminations(Rest, Count, IgnoredCrashes)
     end;
-count_gen_server_terminations([], Count) ->
+count_gen_server_terminations([], Count, _IgnoredCrashes) ->
     Count.
 
-capture_gen_server_termination([Line | Rest] = Lines, Prefix, Acc, Count) ->
-    ReOpts = [{capture, none}],
-    Ret = re:run(Line, Prefix ++ "( |\\*|$)", ReOpts),
+capture_gen_server_termination(
+  [Line | Rest] = Lines, Prefix, Acc, Count, IgnoredCrashes) ->
+    ReOpts = [{capture, all_but_first, list}],
+    Ret = re:run(Line, Prefix ++ "( .*|\\*.*|)$", ReOpts),
     case Ret of
-        match ->
-            capture_gen_server_termination(Rest, Prefix, [Line | Acc], Count);
+        {match, [Suffix]} ->
+            case lists:member(Suffix, IgnoredCrashes) of
+                false ->
+                    capture_gen_server_termination(
+                      Rest, Prefix, [Line | Acc], Count, IgnoredCrashes);
+                true ->
+                    count_gen_server_terminations(
+                      Lines, Count, IgnoredCrashes)
+            end;
         nomatch ->
-            ct:pal("gen_server termination:~n~n~s", [lists:reverse(Acc)]),
-            count_gen_server_terminations(Lines, Count)
+            found_gen_server_termiation(
+              lists:reverse(Acc), Lines, Count, IgnoredCrashes)
     end;
-capture_gen_server_termination([] = Rest, _Prefix, Acc, Count) ->
-    ct:pal("gen_server termination:~n~n~s", [lists:reverse(Acc)]),
-    count_gen_server_terminations(Rest, Count).
+capture_gen_server_termination(
+  [] = Rest, _Prefix, Acc, Count, IgnoredCrashes) ->
+    found_gen_server_termiation(
+      lists:reverse(Acc), Rest, Count, IgnoredCrashes).
+
+found_gen_server_termiation(Message, Lines, Count, IgnoredCrashes) ->
+    ct:pal("gen_server termination:~n~n~s", [Message]),
+    count_gen_server_terminations(Lines, Count + 1, IgnoredCrashes).
 
 %% -------------------------------------------------------------------
 %% Helpers for partition simulation
@@ -1332,6 +1348,8 @@ delete_vhost(Config, Node, VHost) ->
 delete_vhost(Config, Node, VHost, Username) ->
     catch rpc(Config, Node, rabbit_vhost, delete, [VHost, Username]).
 
+-define(FORCE_VHOST_FAILURE_REASON, force_vhost_failure).
+
 force_vhost_failure(Config, VHost) -> force_vhost_failure(Config, 0, VHost).
 
 force_vhost_failure(Config, Node, VHost) ->
@@ -1345,7 +1363,8 @@ force_vhost_failure(Config, Node, VHost, Attempts) ->
             try
                 MessageStorePid = get_message_store_pid(Config, Node, VHost),
                 rpc(Config, Node,
-                    erlang, exit, [MessageStorePid, force_vhost_failure]),
+                    erlang, exit,
+                    [MessageStorePid, ?FORCE_VHOST_FAILURE_REASON]),
                 %% Give it a time to fail
                 timer:sleep(300),
                 force_vhost_failure(Config, Node, VHost, Attempts - 1)
