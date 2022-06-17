@@ -13,6 +13,11 @@ bazel_dep(
     version = "1.2.0",
 )
 
+bazel_dep(
+    name = "rules_cc",
+    version = "0.0.1",
+)
+
 bazel_dep(name = "rules_erlang", version = "3.0.1")
 
 archive_override(
@@ -309,4 +314,19 @@ use_repo(
     "sysmon_handler",
     "systemd",
     "trust_store_http",
+)
+
+rbe = use_extension(
+    "//bazel/bzlmod:extensions.bzl",
+    "rbe",
+)
+
+rbe.git_repository(
+    remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
+    branch = "linux-rbe",
+)
+
+use_repo(
+    rbe,
+    "rbe",
 )
