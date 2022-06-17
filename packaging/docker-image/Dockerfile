@@ -212,10 +212,6 @@ ENV RABBITMQ_HOME=/opt/rabbitmq
 ENV PATH=$RABBITMQ_HOME/sbin:$PATH \
 	RABBITMQ_LOGS=-
 
-ARG RABBITMQ_BUILD
-COPY ${RABBITMQ_BUILD} $RABBITMQ_HOME
-
-# Install RabbitMQ
 RUN set -eux; \
 	\
 	savedAptMark="$(apt-mark showmanual)"; \
@@ -231,6 +227,11 @@ RUN set -eux; \
 	apt-mark auto '.*' > /dev/null; \
 	apt-mark manual $savedAptMark; \
 	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
+
+# Install RabbitMQ
+ARG RABBITMQ_BUILD
+COPY ${RABBITMQ_BUILD} $RABBITMQ_HOME
+
 RUN set -eux; \
 # Do not default SYS_PREFIX to RABBITMQ_HOME, leave it empty
 	grep -qE '^SYS_PREFIX=\$\{RABBITMQ_HOME\}$' "$RABBITMQ_HOME/sbin/rabbitmq-defaults"; \
