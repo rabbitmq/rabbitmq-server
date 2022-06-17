@@ -94,8 +94,8 @@ recover() ->
 -spec recover([rabbit_exchange:name()], [rabbit_amqqueue:name()]) ->
                         'ok'.
 recover(XNames, QNames) ->
-    XNameSet = sets:from_list(XNames),
-    QNameSet = sets:from_list(QNames),
+    XNameSet = sets:from_list(XNames, [{version, 2}]),
+    QNameSet = sets:from_list(QNames, [{version, 2}]),
     SelectSet = fun (#resource{kind = exchange}) -> XNameSet;
                     (#resource{kind = queue})    -> QNameSet
                 end,
