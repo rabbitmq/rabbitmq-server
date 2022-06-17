@@ -3,6 +3,16 @@ module(
     version = "3.10.0",
 )
 
+bazel_dep(
+    name = "rules_pkg",
+    version = "0.5.1",
+)
+
+bazel_dep(
+    name = "bazel_skylib",
+    version = "1.2.0",
+)
+
 bazel_dep(name = "rules_erlang", version = "3.0.1")
 
 archive_override(
