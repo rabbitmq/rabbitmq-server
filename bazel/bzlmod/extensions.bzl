@@ -1,26 +1,27 @@
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 def _rbe(ctx):
+    rbe_repo_props = []
     for mod in ctx.modules:
         for repo in mod.tags.git_repository:
+            props = {"remote": repo.remote}
             if repo.commit != "":
-                git_repository(
-                    name = "rbe",
-                    commit = repo.commit,
-                    remote = repo.remote,
-                )
+                props["commit"] = repo.commit
             if repo.tag != "":
-                git_repository(
-                    name = "rbe",
-                    tag = repo.tag,
-                    remote = repo.remote,
-                )
+                props["tag"] = repo.tag
             if repo.branch != "":
-                git_repository(
-                    name = "rbe",
-                    branch = repo.branch,
-                    remote = repo.remote,
-                )
+                props["branch"] = repo.branch
+            if not props in rbe_repo_props:
+                rbe_repo_props.append(props)
+
+    if len(rbe_repo_props) > 1:
+        fail("Multiple definitions for @rbe exist: {}".format(rbe_repo_props))
+
+    if len(rbe_repo_props) > 0:
+        git_repository(
+            name = "rbe",
+            **rbe_repo_props[0]
+        )
 
 git_repository_tag = tag_class(attrs = {
     "remote": attr.string(),
