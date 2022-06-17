@@ -758,7 +758,9 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
     FileHandlesEts  = ets:new(rabbit_msg_store_shared_file_handles,
                               [ordered_set, public]),
     CurFileCacheEts = ets:new(rabbit_msg_store_cur_file, [set, public]),
-    FlyingEts       = ets:new(rabbit_msg_store_flying, [set, public]),
+    FlyingEts       = ets:new(rabbit_msg_store_flying, [set, public,
+                              {read_concurrency, true},
+                              {write_concurrency, true}]),
 
     {ok, FileSizeLimit} = application:get_env(rabbit, msg_store_file_size_limit),
 
