@@ -48,7 +48,7 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 git_repository(
     name = "rbe",
-    commit = "f68402af3e31018e8bbff1d24a5ccc43ca4ad4c6",  # linux-rbe branch
+    commit = "3dea2dea9721349ba06938a34e52d683e04e975b",  # linux-rbe branch
     remote = "https://github.com/rabbitmq/rbe-erlang-platform.git",
 )
 
