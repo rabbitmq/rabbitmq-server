@@ -67,6 +67,52 @@ def _copy_script(ctx, script):
     )
     return dest
 
+def _scripts_and_escripts_private_impl(ctx):
+    plugins = flat_deps(ctx.attr.plugins)
+
+    scripts = [_copy_script(ctx, script) for script in ctx.files._scripts]
+
+    rabbitmq_ctl_copies = [
+        "rabbitmq-diagnostics",
+        "rabbitmq-plugins",
+        "rabbitmq-queues",
+        "rabbitmq-streams",
+        "rabbitmq-tanzu",
+        "rabbitmq-upgrade",
+        "rabbitmqctl",
+    ]
+    escripts = [link_escript(ctx, escript) for escript in rabbitmq_ctl_copies]
+
+    rabbitmqctl = None
+    for script in scripts:
+        if script.basename == "rabbitmqctl":
+            rabbitmqctl = script
+    if rabbitmqctl == None:
+        fail("could not find rabbitmqct among", scripts)
+
+    return [
+        RabbitmqHomeInfo(
+            rabbitmqctl = rabbitmqctl,
+        ),
+        DefaultInfo(
+            files = depset(scripts + escripts),
+        ),
+    ]
+
+scripts_and_escripts_private = rule(
+    implementation = _scripts_and_escripts_private_impl,
+    attrs = RABBITMQ_HOME_ATTRS,
+)
+
+def scripts_and_escripts(**kwargs):
+    scripts_and_escripts_private(
+        is_windows = select({
+            "@bazel_tools//src/conditions:host_windows": True,
+            "//conditions:default": False,
+        }),
+        **kwargs
+    )
+
 def _extract_version(p):
     return "erl -eval '{ok, [{application, _, AppInfo}]} = file:consult(\"" + p + "\"), Version = proplists:get_value(vsn, AppInfo), io:fwrite(Version), halt().' -noshell"
 
@@ -76,7 +122,9 @@ def _app_file(plugin_lib_info):
             return f
     fail(".app file not found in {}".format(plugin_lib_info))
 
-def _plugins_dir(ctx, plugins):
+def _versioned_plugins_dir_impl(ctx):
+    plugins = flat_deps(ctx.attr.plugins)
+
     plugins_dir = ctx.actions.declare_directory(path_join(ctx.label.name, "plugins"))
 
     (erlang_home, _, runfiles) = erlang_dirs(ctx)
@@ -94,12 +142,6 @@ def _plugins_dir(ctx, plugins):
         app_file = _app_file(lib_info)
         extract_version = _extract_version(app_file.path)
         commands.append("PLUGIN_VERSION=$({erlang_home}/bin/{extract_version})".format(erlang_home = erlang_home, extract_version = extract_version))
-
-        commands.append(
-            "echo \"Assembling {lib_name}-$PLUGIN_VERSION...\"".format(
-                lib_name = lib_info.app_name,
-            ),
-        )
 
         commands.append(
             "mkdir -p {plugins_dir}/{lib_name}-$PLUGIN_VERSION/include".format(
@@ -166,6 +208,7 @@ def _plugins_dir(ctx, plugins):
         command = "\n".join(commands),
     )
 
+<<<<<<< HEAD
     return plugins_dir
 
 def _versioned_rabbitmq_home_impl(ctx):
@@ -192,23 +235,22 @@ def _versioned_rabbitmq_home_impl(ctx):
     if rabbitmqctl == None:
         fail("could not find rabbitmqct among", scripts)
 
+=======
+>>>>>>> 20d653a676 (Adjustments to :package-generic-unix for rules_pkg 0.5.1)
     return [
-        RabbitmqHomeInfo(
-            rabbitmqctl = rabbitmqctl,
-        ),
         DefaultInfo(
-            files = depset(scripts + escripts + [plugins_dir]),
+            files = depset([plugins_dir]),
         ),
     ]
 
-versioned_rabbitmq_home_private = rule(
-    implementation = _versioned_rabbitmq_home_impl,
+versioned_plugins_dir_private = rule(
+    implementation = _versioned_plugins_dir_impl,
     attrs = RABBITMQ_HOME_ATTRS,
     toolchains = ["@rules_erlang//tools:toolchain_type"],
 )
 
-def versioned_rabbitmq_home(**kwargs):
-    versioned_rabbitmq_home_private(
+def versioned_plugins_dir(**kwargs):
+    versioned_plugins_dir_private(
         is_windows = select({
             "@bazel_tools//src/conditions:host_windows": True,
             "//conditions:default": False,
@@ -261,21 +303,34 @@ def package_generic_unix(plugins):
         visibility = ["//visibility:public"],
     )
 
-    versioned_rabbitmq_home(
-        name = "dist-home",
+    scripts_and_escripts(
+        name = "scripts-and-escripts",
+    )
+
+    versioned_plugins_dir(
+        name = "plugins-dir",
         plugins = plugins,
     )
 
     pkg_tar(
-        name = "package-generic-unix",
+        name = "plugins-tar",
         srcs = [
-            ":dist-home",
+            ":plugins-dir",
         ],
+        package_dir = "plugins",
+    )
+
+    pkg_tar(
+        name = "package-generic-unix",
         extension = "tar.xz",
+        srcs = [
+            ":scripts-and-escripts",
+        ],
         package_dir = "rabbitmq_server-{}".format(APP_VERSION),
-        strip_prefix = "dist-home",
+        strip_prefix = "scripts-and-escripts",
         visibility = ["//visibility:public"],
         deps = [
+            ":plugins-tar",
             ":license-files",
             ":release-notes",
             ":scripts",
@@ -315,6 +370,7 @@ def source_archive(plugins):
 
     pkg_tar(
         name = "source_archive",
+        extension = "tar.gz",
         srcs = [
             ":root-licenses",
         ],
