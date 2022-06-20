@@ -144,21 +144,20 @@ trace(X, Msg0, RKPrefix, RKSuffix, Extra) ->
     case X of
         #exchange{name = #resource{name = XName}} ->
             ok;
-        #exchange{name = SourceXName} ->
+        _ ->
             RoutingKeys = mc:get_annotation(routing_keys, Msg0),
             %% for now convert into amqp legacy
-            Msg = mc:prepare(read, mc:convert(mc_amqpl, Msg0)),
+            Msg = mc:convert(rabbit_mc_amqp_legacy, Msg0),
             %% check exchange name in case it is same as target
-            #content{properties = Props} = Content0 =
-                mc:protocol_state(Msg),
+            #content{properties = Props} = Content0 = mc:protocol_state(Msg),
 
             Key = <<RKPrefix/binary, ".", RKSuffix/binary>>,
             Content = Content0#content{properties =
-                                       #'P_basic'{headers = msg_to_table(XName, RoutingKeys, Props)
-                                                  ++ Extra},
-                                       properties_bin = none},
-            TargetXName = SourceXName#resource{name = ?XNAME},
-            TraceMsg = mc_amqpl:message(TargetXName, Key, Content),
+                                       #'P_basic'{headers = msg_to_table(XName, RoutingKeys, Props )
+                                                  ++ Extra}},
+
+            TraceMsg = mc:init(rabbit_mc_amqp_legacy, Content, #{exchange => ?XNAME,
+                                                                 routing_keys => [Key]}),
             ok = rabbit_queue_type:publish_at_most_once(X, TraceMsg),
             ok
     end.

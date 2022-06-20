@@ -1974,6 +1974,14 @@ pseudo_queue(#resource{kind = queue} = QueueName, Pid, Durable)
                  rabbit_classic_queue % Type
                 ).
 
+% -spec immutable(amqqueue:amqqueue()) -> amqqueue:amqqueue().
+% immutable(Q) -> amqqueue:set_immutable(Q).
+
+% -spec deliver([amqqueue:amqqueue()], rabbit_types:delivery()) -> 'ok'.
+% deliver(Qs, Delivery) ->
+%     _ = rabbit_queue_type:deliver(Qs, Delivery, #{}, stateless),
+%     ok.
+
 get_quorum_nodes(Q) ->
     case amqqueue:get_type_state(Q) of
         #{nodes := Nodes} ->

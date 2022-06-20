@@ -1285,18 +1285,9 @@ msg_status(Version, IsPersistent, IsDelivered, SeqId,
                 persist_to    = determine_persist_to(Version, Msg, MsgProps, IndexMaxSize),
                 msg_props     = MsgProps}.
 
-beta_msg_status({MsgId, SeqId, MsgLocation, MsgProps, IsPersistent})
-  when is_binary(MsgId) orelse
-       MsgId =:= undefined ->
-    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
-    MS0#msg_status{msg_id       = MsgId,
-                   msg          = undefined,
-                   persist_to   = case is_tuple(MsgLocation) of
-                                      true  -> queue_store; %% @todo I'm not sure this clause is triggered anymore.
-                                      false -> msg_store
-                                  end,
-                   msg_location = MsgLocation};
-beta_msg_status({Msg, SeqId, MsgLocation, MsgProps, IsPersistent}) ->
+beta_msg_status({Msg,
+                 SeqId, MsgLocation, MsgProps, IsPersistent})
+  when element(1, Msg) == mc ->
     MsgId = mc:get_annotation(id, Msg),
     MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
     MS0#msg_status{msg_id       = MsgId,
@@ -1309,7 +1300,18 @@ beta_msg_status({Msg, SeqId, MsgLocation, MsgProps, IsPersistent}) ->
                    msg_location = case MsgLocation of
                                       rabbit_queue_index -> memory;
                                       _ -> MsgLocation
-                                  end}.
+                                  end};
+
+beta_msg_status({MsgId, SeqId, MsgLocation, MsgProps, IsPersistent})
+  when is_binary(MsgId) ->
+    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
+    MS0#msg_status{msg_id       = MsgId,
+                   msg          = undefined,
+                   persist_to   = case is_tuple(MsgLocation) of
+                                      true  -> queue_store; %% @todo I'm not sure this clause is triggered anymore.
+                                      false -> msg_store
+                                  end,
+                   msg_location = MsgLocation}.
 
 beta_msg_status0(SeqId, MsgProps, IsPersistent) ->
   #msg_status{seq_id        = SeqId,
@@ -2197,6 +2199,14 @@ determine_persist_to(Version,
          true  -> msg_store;
          false ->
              Est = MetaSize + BodySize,
+             % Est = case is_binary(PropsBin) of
+             %                true  -> BodySize + size(PropsBin);
+             %                false -> #'P_basic'{headers = Hs} = Props,
+             %                         case Hs of
+             %                             undefined -> 0;
+             %                             _         -> length(Hs)
+             %                         end * ?HEADER_GUESS_SIZE + BodySize
+             %            end,
              case Est >= IndexMaxSize of
                  true                     -> msg_store;
                  false when Version =:= 1 -> queue_index;
@@ -2207,7 +2217,7 @@ determine_persist_to(Version,
 persist_to(#msg_status{persist_to = To}) -> To.
 
 prepare_to_store(Msg) ->
-    mc:prepare(store, Msg).
+    mc:prepare(Msg).
 
 %%----------------------------------------------------------------------------
 %% Internal gubbins for acks

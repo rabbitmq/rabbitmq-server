@@ -20,24 +20,23 @@
          %%
          convert/2,
          protocol_state/1,
-         prepare/2,
+         serialize/1,
+         prepare/1,
          record_death/3,
          is_death_cycle/2,
+         % deaths/1,
          last_death/1,
          death_queue_names/1
-        ]).
+         ]).
 
 -include("mc.hrl").
 
 -type str() :: atom() | string() | binary().
--type internal_ann_key() :: atom().
--type x_ann_key() :: binary(). %% should begin with x- or ideally x-opt-
--type x_ann_value() :: str() | integer() | float() | [x_ann_value()].
+
+-type ann_key() :: str().
+-type ann_value() :: str() | integer() | float() | [ann_value()].
 -type protocol() :: module().
--type annotations() :: #{internal_ann_key() => term(),
-                         x_ann_key() => x_ann_value()}.
--type ann_key() :: internal_ann_key() | x_ann_key().
--type ann_value() :: term().
+-type annotations() :: #{ann_key() => ann_value()}.
 
 %% the protocol module must implement the mc behaviour
 -record(?MODULE, {protocol :: protocol(),
@@ -45,7 +44,8 @@
                   data :: proto_state(),
                   %% any annotations done by the broker itself
                   %% such as recording the exchange / routing keys used
-                  annotations = #{} :: annotations()
+                  annotations = #{} :: annotations(),
+                  deaths :: undefined | #deaths{}
                  }).
 
 -opaque state() :: #?MODULE{} | mc_compat:state().
@@ -54,7 +54,7 @@
               state/0,
               ann_key/0,
               ann_value/0
-             ]).
+              ]).
 
 -type proto_state() :: term().
 
@@ -64,63 +64,37 @@
                           integer() |
                           float() |
                           boolean().
--type tagged_prop() :: {uuid, binary()} |
-                       {utf8, binary()} |
-                       {binary, binary()} |
-                       {boolean, boolean()} |
-                       {long, integer()} |
-                       {ulong, non_neg_integer() } |
-                       {list, [tagged_prop()]} |
-                       {map, [{tagged_prop(), tagged_prop()}]} |
-                       undefined.
 
 %% behaviour callbacks for protocol specific implementation
-
-%% protocol specific init function
 %% returns a map of additional annotations to merge into the
-%% protocol generic annotations map, e.g. ttl, priority and durable
+%% protocol generic annotations map
 -callback init(term()) ->
     {proto_state(), annotations()}.
 
-%% the size of the payload and other meta data respectively
+-callback init_amqp([rabbit_mc_amqp:message_section()]) -> proto_state().
+
 -callback size(proto_state()) ->
     {MetadataSize :: non_neg_integer(),
      PayloadSize :: non_neg_integer()}.
 
-%% retrieve and x- header from the protocol data
-%% the return value should be tagged with an AMQP 1.0 type
 -callback x_header(binary(), proto_state()) ->
-    tagged_prop().
+    {property_value(), proto_state()}.
 
-%% retrieve a property field from the protocol data
-%% e.g. message_id, correlation_id
--callback property(atom(), proto_state()) ->
-    tagged_prop().
-
-%% return a map of header values used for message routing,
-%% optionally include x- headers and / or complex types (i.e. tables, arrays etc)
 -callback routing_headers(proto_state(), [x_headers | complex_types]) ->
     #{binary() => term()}.
 
-%% Convert state to another protocol
-%% all protocols must be able to convert to mc_amqp (AMQP 1.0)
--callback convert_to(Target :: protocol(), proto_state()) ->
-    proto_state() | not_implemented.
-
-%% Convert from another protocol
-%% all protocols must be able to convert from mc_amqp (AMQP 1.0)
--callback convert_from(Source :: protocol(), proto_state()) ->
+%% all protocols must be able to convert to amqp (1.0)
+-callback convert(protocol(), proto_state()) ->
     proto_state() | not_implemented.
 
 %% emit a protocol specific state package
-%% typically used by connection / channel type process at consumer delivery
-%% time
--callback protocol_state(proto_state(), annotations()) ->
+-callback protocol_state(proto_state(), annotations(),
+                         undefined | #deaths{}) ->
     term().
 
-%% prepare the data for either reading or storage
--callback prepare(read | store, proto_state()) ->
-    proto_state().
+%% serialize the data into the protocol's binary format
+-callback serialize(proto_state(), annotations()) ->
+    iodata().
 
 %%% API
 
@@ -128,10 +102,13 @@
 init(Proto, Data, Anns)
   when is_atom(Proto)
        andalso is_map(Anns) ->
-    {ProtoData, ProtoAnns} = Proto:init(Data),
+    {ProtoData, AddAnns} = Proto:init(Data),
     #?MODULE{protocol = Proto,
              data = ProtoData,
-             annotations = maps:merge(ProtoAnns, Anns)}.
+             %% not sure what the precedence rule should be for annotations
+             %% that are explicitly passed vs annotations that are recovered
+             %% from the protocol parsing
+             annotations = maps:merge(AddAnns, Anns)}.
 
 -spec size(state()) ->
     {MetadataSize :: non_neg_integer(),
@@ -173,7 +150,7 @@ set_annotation(Key, Value, BasicMessage) ->
     mc_compat:set_annotation(Key, Value, BasicMessage).
 
 -spec x_header(Key :: binary(), state()) ->
-    tagged_prop().
+    property_value() | undefined.
 x_header(Key, #?MODULE{protocol = Proto,
                        annotations = Anns,
                        data = Data}) ->
@@ -181,23 +158,26 @@ x_header(Key, #?MODULE{protocol = Proto,
     %% we need to check that first
     case Anns of
         #{Key := Value} ->
-            mc_util:infer_type(Value);
+            Value;
         _ ->
             %% if not we have to call into the protocol specific handler
-            Proto:x_header(Key, Data)
+            {Result, _} = Proto:x_header(Key, Data),
+            Result
     end;
 x_header(Key, BasicMsg) ->
     mc_compat:x_header(Key, BasicMsg).
 
--spec routing_headers(state(), [x_headers | complex_types]) ->
+-spec routing_headers(state(), [x_header | complex_types]) ->
     #{binary() => property_value()}.
 routing_headers(#?MODULE{protocol = Proto,
                          annotations = Anns,
                          data = Data}, Options) ->
+    %% TODO: fake death headers also as this is what most users
+    %% use for x- filtering
     New = case lists:member(x_headers, Options) of
               true ->
-                  maps:filter(fun (Key, _) ->
-                                      mc_util:is_x_header(Key)
+                  maps:filter(fun (<<"x-", _/binary>>, _) -> true;
+                                  (_, _) -> false
                               end, Anns);
               false ->
                   #{}
@@ -208,7 +188,7 @@ routing_headers(BasicMsg, Opts) ->
 
 -spec is_persistent(state()) -> boolean().
 is_persistent(#?MODULE{annotations = Anns}) ->
-    maps:get(durable, Anns, true);
+    maps:get(durable, Anns, false);
 is_persistent(BasicMsg) ->
     mc_compat:is_persistent(BasicMsg).
 
@@ -231,27 +211,15 @@ priority(#?MODULE{annotations = Anns}) ->
 priority(BasicMsg) ->
     mc_compat:priority(BasicMsg).
 
--spec correlation_id(state()) ->
-    {uuid, binary()} |
-    {utf8, binary()} |
-    {binary, binary()} |
-    {ulong, non_neg_integer()} |
-    undefined.
-correlation_id(#?MODULE{protocol = Proto,
-                        data = Data}) ->
-    Proto:property(?FUNCTION_NAME, Data);
+-spec correlation_id(state()) -> undefined | binary().
+correlation_id(#?MODULE{annotations = Anns}) ->
+    maps:get(correlation_id, Anns, undefined);
 correlation_id(BasicMsg) ->
     mc_compat:correlation_id(BasicMsg).
 
--spec message_id(state()) ->
-    {uuid, binary()} |
-    {utf8, binary()} |
-    {binary, binary()} |
-    {ulong, non_neg_integer()} |
-    undefined.
-message_id(#?MODULE{protocol = Proto,
-                    data = Data}) ->
-    Proto:property(?FUNCTION_NAME, Data);
+-spec message_id(state()) -> undefined | binary().
+message_id(#?MODULE{annotations = Anns}) ->
+    maps:get(message_id, Anns, undefined);
 message_id(BasicMsg) ->
     mc_compat:message_id(BasicMsg).
 
@@ -264,34 +232,34 @@ set_ttl(Value, BasicMsg) ->
 -spec convert(protocol(), state()) -> state().
 convert(Proto, #?MODULE{protocol = Proto} = State) ->
     State;
-convert(TargetProto, #?MODULE{protocol = SourceProto,
-                              data = Data0} = State) ->
-    Data = SourceProto:prepare(read, Data0),
-    TargetState =
-        case SourceProto:convert_to(TargetProto, Data) of
-            not_implemented ->
-                case TargetProto:convert_from(SourceProto, Data) of
-                    not_implemented ->
-                        AmqpData = SourceProto:convert_to(mc_amqp, Data),
-                        mc_amqp:convert_to(TargetProto, AmqpData);
-                    TargetState0 ->
-                        TargetState0
-                end;
-            TargetState0 ->
-                TargetState0
-        end,
-    State#?MODULE{protocol = TargetProto,
-                  data = TargetState};
+convert(TargetProto, #?MODULE{protocol = Proto,
+                              data = Data} = State) ->
+    case Proto:convert(TargetProto, Data) of
+        not_implemented ->
+            %% convert to 1.0 then try again
+            AmqpData = Proto:convert(rabbit_mc_amqp, Data),
+            %% init the target from a list of amqp sections
+            State#?MODULE{protocol = TargetProto,
+                          data = TargetProto:init_amqp(AmqpData)};
+        TargetState ->
+            State#?MODULE{protocol = TargetProto,
+                          data = TargetState}
+    end;
 convert(Proto, BasicMsg) ->
-    mc_compat:convert_to(Proto, BasicMsg).
+    mc_compat:convert(Proto, BasicMsg).
 
 -spec protocol_state(state()) -> term().
 protocol_state(#?MODULE{protocol = Proto,
                         annotations = Anns,
-                        data = Data}) ->
-    Proto:protocol_state(Data, Anns);
+                        data = Data,
+                        deaths = Deaths}) ->
+    Proto:protocol_state(Data, Anns, Deaths);
 protocol_state(BasicMsg) ->
     mc_compat:protocol_state(BasicMsg).
+
+-spec prepare(state()) -> state().
+prepare(State) ->
+    State.
 
 -spec record_death(rabbit_dead_letter:reason(),
                    SourceQueue :: rabbit_misc:resource_name(),
@@ -299,89 +267,77 @@ protocol_state(BasicMsg) ->
 record_death(Reason, SourceQueue,
              #?MODULE{protocol = _Mod,
                       data = _Data,
-                      annotations = Anns0} = State)
+                      annotations = Anns0,
+                      deaths = Ds0} = State)
   when is_atom(Reason) andalso is_binary(SourceQueue) ->
     Key = {SourceQueue, Reason},
     Exchange = maps:get(exchange, Anns0),
     RoutingKeys = maps:get(routing_keys, Anns0),
     Timestamp = os:system_time(millisecond),
     Ttl = maps:get(ttl, Anns0, undefined),
-
-    DeathAnns = rabbit_misc:maps_put_truthy(ttl, Ttl, #{first_time => Timestamp,
-                                                        last_time => Timestamp}),
-    case maps:get(deaths, Anns0, undefined) of
+    case Ds0 of
         undefined ->
             Ds = #deaths{last = Key,
                          first = Key,
                          records = #{Key => #death{count = 1,
+                                                   ttl = Ttl,
                                                    exchange = Exchange,
                                                    routing_keys = RoutingKeys,
-                                                   anns = DeathAnns}}},
+                                                   timestamp = Timestamp}}},
             Anns = Anns0#{<<"x-first-death-reason">> => atom_to_binary(Reason),
                           <<"x-first-death-queue">> => SourceQueue,
-                          <<"x-first-death-exchange">> => Exchange,
-                          <<"x-last-death-reason">> => atom_to_binary(Reason),
-                          <<"x-last-death-queue">> => SourceQueue,
-                          <<"x-last-death-exchange">> => Exchange
-                         },
+                          <<"x-first-death-exchange">> => Exchange},
 
-            State#?MODULE{annotations = Anns#{deaths => Ds}};
-        #deaths{records = Rs} = Ds0 ->
-            Death = #death{count = C,
-                           anns = DA} = maps:get(Key, Rs,
-                                                 #death{exchange = Exchange,
+            State#?MODULE{deaths = Ds,
+                          annotations = Anns};
+        #deaths{records = Rs} ->
+            Death = #death{count = C} = maps:get(Key, Rs,
+                                                 #death{ttl = Ttl,
+                                                        exchange = Exchange,
                                                         routing_keys = RoutingKeys,
-                                                        anns = DeathAnns}),
+                                                        timestamp = Timestamp}),
             Ds = Ds0#deaths{last = Key,
-                            records = Rs#{Key =>
-                                          Death#death{count = C + 1,
-                                                      anns = DA#{last_time => Timestamp}}}},
-            Anns = Anns0#{deaths => Ds,
-                          <<"x-last-death-reason">> => atom_to_binary(Reason),
-                          <<"x-last-death-queue">> => SourceQueue,
-                          <<"x-last-death-exchange">> => Exchange},
-            State#?MODULE{annotations = Anns}
+                            records = Rs#{Key => Death#death{count = C + 1}}},
+            State#?MODULE{deaths = Ds}
     end;
 record_death(Reason, SourceQueue, BasicMsg) ->
     mc_compat:record_death(Reason, SourceQueue, BasicMsg).
 
 
 -spec is_death_cycle(rabbit_misc:resource_name(), state()) -> boolean().
-is_death_cycle(TargetQueue, #?MODULE{annotations = #{deaths := Deaths}}) ->
+is_death_cycle(TargetQueue, #?MODULE{deaths = Deaths}) ->
     is_cycle(TargetQueue, maps:keys(Deaths#deaths.records));
-is_death_cycle(_TargetQueue, #?MODULE{}) ->
-    false;
 is_death_cycle(TargetQueue, BasicMsg) ->
     mc_compat:is_death_cycle(TargetQueue, BasicMsg).
 
 -spec death_queue_names(state()) -> [rabbit_misc:resource_name()].
-death_queue_names(#?MODULE{annotations = Anns}) ->
-    case maps:get(deaths, Anns, undefined) of
+death_queue_names(#?MODULE{deaths = Deaths}) ->
+    case Deaths of
         undefined ->
             [];
         #deaths{records = Records} ->
-            proplists:get_keys(maps:keys(Records))
+            [Q || {Q, _} <- maps:keys(Records)]
+            %% Should we avoid returning duplicate queue names?
+            % proplists:get_keys(maps:keys(Records))
     end;
 death_queue_names(BasicMsg) ->
     mc_compat:death_queue_names(BasicMsg).
 
 -spec last_death(state()) ->
     undefined | {death_key(), #death{}}.
-last_death(#?MODULE{annotations = Anns})
-  when not is_map_key(deaths, Anns) ->
+last_death(#?MODULE{deaths = undefined}) ->
     undefined;
-last_death(#?MODULE{annotations = #{deaths := #deaths{last = Last,
-                                                      records = Rs}}}) ->
+last_death(#?MODULE{deaths = #deaths{last = Last,
+                                     records = Rs}}) ->
     {Last, maps:get(Last, Rs)};
 last_death(BasicMsg) ->
     mc_compat:last_death(BasicMsg).
 
--spec prepare(read | store, state()) -> state().
-prepare(For, #?MODULE{protocol = Proto,
-                      data = Data} = State) ->
-    State#?MODULE{data = Proto:prepare(For, Data)};
-prepare(For, State) ->
-    mc_compat:prepare(For, State).
+-spec serialize(state()) -> iodata().
+serialize(#?MODULE{protocol = Proto,
+                   annotations = Anns,
+                   data = Data}) ->
+    Proto:serialize(Data, Anns).
 
 %% INTERNAL
 

@@ -332,7 +332,7 @@ settlement_action(Type, QRef, MsgSeqs, Acc) ->
 deliver(Qs0, Msg0, Options) ->
     %% add guid to content here instead of in rabbit_basic:message/3,
     %% as classic queues are the only ones that need it
-    Msg = mc:prepare(store, mc:set_annotation(id, rabbit_guid:gen(), Msg0)),
+    Msg = mc:set_annotation(id, rabbit_guid:gen(), Msg0),
     Mandatory = maps:get(mandatory, Options, false),
     MsgSeqNo = maps:get(correlation, Options, undefined),
     Flow = maps:get(flow, Options, noflow),

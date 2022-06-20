@@ -8,6 +8,7 @@
 -module(rabbit_priority_queue).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+% -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("amqqueue.hrl").
 
 -behaviour(rabbit_backing_queue).
@@ -629,6 +630,9 @@ priority(Priority, MaxP) when is_integer(Priority), Priority > MaxP ->
     MaxP;
 priority(Msg, MaxP) ->
     priority(mc:priority(Msg), MaxP).
+% priority(#content{properties = Props}, MaxP) ->
+%     #'P_basic'{priority = Priority0} = Props,
+%     priority(Priority0, MaxP).
 
 add_maybe_infinity(infinity, _) -> infinity;
 add_maybe_infinity(_, infinity) -> infinity;

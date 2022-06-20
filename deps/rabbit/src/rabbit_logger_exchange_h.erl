@@ -56,7 +56,7 @@ do_log(LogEvent, #{config := #{exchange := Exchange}} = Config) ->
     Content = rabbit_basic:build_content(PBasic, Body),
     Anns = #{exchange => Exchange#resource.name,
              routing_keys => [RoutingKey]},
-    Msg = mc:init(mc_amqpl, Content, Anns),
+    Msg = mc:init(rabbit_mc_amqp_legacy, Content, Anns),
     case rabbit_queue_type:publish_at_most_once(Exchange, Msg) of
         ok -> ok;
         {error, not_found} -> ok

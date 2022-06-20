@@ -910,9 +910,8 @@ deliver0(QName, Correlation, Msg, QState0) ->
     rabbit_fifo_client:enqueue(QName, Correlation,
                                Msg, QState0).
 
-deliver(QSs, Msg0, Options) ->
+deliver(QSs, Msg, Options) ->
     Correlation = maps:get(correlation, Options, undefined),
-    Msg = mc:prepare(store, Msg0),
     lists:foldl(
       fun({Q, stateless}, {Qs, Actions}) ->
               QRef = amqqueue:get_pid(Q),
@@ -1579,7 +1578,7 @@ peek(Pos, Q) when ?is_amqqueue(Q) andalso ?amqqueue_is_quorum(Q) ->
             Msg = mc:set_annotation(<<"x-delivery-count">>, Count, Msg0),
             XName = mc:get_annotation(exchange, Msg),
             RoutingKeys = mc:get_annotation(routing_keys, Msg),
-            AmqpLegacyMsg = mc:prepare(read, mc:convert(mc_amqpl, Msg)),
+            AmqpLegacyMsg = mc:convert(rabbit_mc_amqp_legacy, Msg),
             Content = mc:protocol_state(AmqpLegacyMsg),
             {ok, rabbit_basic:peek_fmt_message(XName, RoutingKeys, Content)};
         {error, Err} ->
@@ -1714,6 +1713,20 @@ notify_decorators(QName, F, A) ->
         {error, not_found} ->
             ok
     end.
+
+%% remove any data that a quorum queue doesn't need
+% prepare_content(#content{properties = none} = Content) ->
+%     Content;
+% prepare_content(#content{protocol = none} = Content) ->
+%     Content;
+% prepare_content(#content{properties = #'P_basic'{expiration = undefined} = Props,
+%                          protocol = Proto} = Content) ->
+%     Content#content{properties = none,
+%                     properties_bin = Proto:encode_properties(Props)};
+% prepare_content(Content) ->
+%     %% expiration is set. Therefore, leave properties decoded so that
+%     %% rabbit_fifo can directly parse it without having to decode again.
+%     Content.
 
 ets_lookup_element(Tbl, Key, Pos, Default) ->
     try ets:lookup_element(Tbl, Key, Pos) of

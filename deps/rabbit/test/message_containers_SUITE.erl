@@ -6,8 +6,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
--define(FEATURE_FLAG, message_containers).
-
 %%%===================================================================
 %%% Common Test callbacks
 %%%===================================================================
@@ -20,16 +18,16 @@ all() ->
     ].
 
 
+all_tests() ->
+    [
+     enable_ff
+    ].
+
 groups() ->
     [
      {classic, [], all_tests()},
      {quorum, [], all_tests()},
      {stream, [], all_tests()}
-    ].
-
-all_tests() ->
-    [
-     enable_ff
     ].
 
 init_per_suite(Config0) ->
@@ -53,6 +51,7 @@ init_per_group(Group, Config) ->
                                             [{queue_type, atom_to_binary(Group, utf8)},
                                              {net_ticktime, 10}]),
 
+
     Config1c = rabbit_ct_helpers:merge_app_env(
                  Config1b, {rabbit, [{forced_feature_flags_on_init, []}]}),
     Config2 = rabbit_ct_helpers:run_steps(Config1c,
@@ -62,8 +61,9 @@ init_per_group(Group, Config) ->
            Config2, 0, application, set_env,
            [rabbit, channel_tick_interval, 100]),
 
-    AllFFs = rabbit_ct_broker_helpers:rpc(Config2, rabbit_feature_flags, list, [all, stable]),
-    FFs = maps:keys(maps:remove(?FEATURE_FLAG, AllFFs)),
+    AllFFs = rabbit_ct_broker_helpers:rpc(Config2, 0,
+                                          rabbit_feature_flags,list, [all, stable]),
+    FFs = maps:keys(maps:remove(message_containers, AllFFs)),
     ct:pal("FFs ~p", [FFs]),
     rabbit_ct_broker_helpers:set_policy(Config2, 0,
                                         <<"ha-policy">>, <<".*">>, <<"queues">>,
@@ -83,23 +83,18 @@ end_per_group(_Group, Config) ->
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, ?FEATURE_FLAG) of
-        false ->
-            {skip, "feature flag message_containers is unsupported"};
-        true ->
-            Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-            ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, ?FEATURE_FLAG)),
-            Q = rabbit_data_coercion:to_binary(Testcase),
-            Config2 = rabbit_ct_helpers:set_config(Config1,
-                                                   [{queue_name, Q},
-                                                    {alt_queue_name, <<Q/binary, "_alt">>}
-                                                   ]),
-            rabbit_ct_helpers:run_steps(Config2,
-                                        rabbit_ct_client_helpers:setup_steps())
-    end.
+    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
+    Q = rabbit_data_coercion:to_binary(Testcase),
+    Config2 = rabbit_ct_helpers:set_config(Config1,
+                                           [{queue_name, Q},
+                                            {alt_queue_name, <<Q/binary, "_alt">>}
+                                           ]),
+    rabbit_ct_helpers:run_steps(Config2,
+                                rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
+    catch delete_queues(),
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
                 rabbit_ct_client_helpers:teardown_steps()),
@@ -131,12 +126,17 @@ enable_ff(Config) ->
     %% consume
     publish(Ch, QName, <<"msg2">>),
 
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG),
+    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers),
 
     confirm(),
+
     publish_and_confirm(Ch, QName, <<"msg3">>),
+
+
     receive_and_ack(Ch2),
-    receive_and_ack(Ch2).
+    receive_and_ack(Ch2),
+
+    ok.
 
 receive_and_ack(Ch) ->
     receive
@@ -152,7 +152,7 @@ receive_and_ack(Ch) ->
 %% Utility
 
 delete_queues() ->
-    [{ok, 0} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
+    [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
      || Q <- rabbit_amqqueue:list()].
 
 declare(Ch, Q, Args) ->

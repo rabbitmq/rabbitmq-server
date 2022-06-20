@@ -433,6 +433,8 @@ ack(#state{settled_ids = Ids,
     state().
 redeliver_messages(#state{pendings = Pendings,
                           settle_timeout = SettleTimeout} = State0) ->
+
+    rabbit_log:debug("ReDeliver messages ~p ", [Pendings]),
     case lookup_dlx(State0) of
         {not_found, State} ->
             %% Configured dead-letter-exchange does (still) not exist.

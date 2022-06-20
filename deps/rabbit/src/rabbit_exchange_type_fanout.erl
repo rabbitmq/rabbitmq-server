@@ -32,9 +32,6 @@ description() ->
 serialise_events() -> false.
 
 route(#exchange{name = Name}, _Message) ->
-    route(#exchange{name = Name}, _Message, #{}).
-
-route(#exchange{name = Name}, _Message, _Opts) ->
     rabbit_router:match_routing_key(Name, ['_']).
 
 validate(_X) -> ok.

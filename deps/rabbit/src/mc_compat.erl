@@ -21,18 +21,16 @@
          x_header/2,
          routing_headers/2,
          %%%
-         convert_to/2,
+         convert/2,
          protocol_state/1,
          %serialize/1,
-         prepare/2,
+         %prepare/1,
          record_death/3,
          is_death_cycle/2,
          %deaths/1,
          last_death/1,
          death_queue_names/1
          ]).
-
--export([get_property/2]).
 
 -type state() :: rabbit_types:message().
 
@@ -41,7 +39,7 @@
              ]).
 
 size(#basic_message{content = Content}) ->
-    mc_amqpl:size(Content).
+    rabbit_mc_amqp_legacy:size(Content).
 
 is(#basic_message{}) ->
     true;
@@ -55,6 +53,17 @@ get_annotation(exchange, #basic_message{exchange_name = Ex}) ->
     Ex#resource.name;
 get_annotation(id, #basic_message{id = Id}) ->
     Id.
+% get_annotation(binding_keys = Key,
+%                #basic_message{content =
+%                               #content{properties =
+%                                        #'P_basic'{headers = H}}}) ->
+%     case H of
+%         undefined -> H;
+%         _ -> case rabbit_misc:table_lookup(H, Key) of
+%                  {array, BKeys} -> [BKey || {longstr, BKey} <- BKeys];
+%                  Undefined -> Undefined
+%              end
+%     end.
 
 set_annotation(id, Value, #basic_message{} = Msg) ->
     Msg#basic_message{id = Value};
@@ -72,26 +81,23 @@ set_annotation(<<"x-", _/binary>> = Key, Value,
             _ when is_binary(Value) ->
                 longstr
         end,
-    H1 = case H0 of
+    H00 = case H0 of
               undefined ->
                   [];
               _ ->
                   H0
           end,
-    H2 = [{Key, T, Value} | H1],
-    H =  lists:usort(fun({Key1, _, _}, {Key2, _, _}) ->
-                             Key1 =< Key2
-                     end, H2),
+
+    H = [{Key, T, Value} | H00],
+
     C = C0#content{properties = B#'P_basic'{headers = H},
                    properties_bin = none},
-    Msg#basic_message{content = C};
-set_annotation(<<"timestamp_in_ms">> = Name, Value, #basic_message{} = Msg) ->
-    rabbit_basic:add_header(Name, long, Value, Msg);
-set_annotation(timestamp, Millis,
-               #basic_message{content = #content{properties = B} = C0} = Msg) ->
-    C = C0#content{properties = B#'P_basic'{timestamp = Millis div 1000},
-                   properties_bin = none},
     Msg#basic_message{content = C}.
+% set_annotation(binding_keys, BindingKeys, #basic_message{} = Msg) ->
+%     L = maps:fold(fun(B, true, Acc) ->
+%                           [{longstr, B} | Acc]
+%                   end, [], BindingKeys),
+%     rabbit_basic:add_header(<<"x-binding-keys">>, array, L, Msg).
 
 is_persistent(#basic_message{content = Content}) ->
     get_property(durable, Content).
@@ -106,47 +112,31 @@ priority(#basic_message{content = Content}) ->
     get_property(?FUNCTION_NAME, Content).
 
 correlation_id(#basic_message{content = Content}) ->
-    case get_property(?FUNCTION_NAME, Content) of
-        undefined ->
-            undefined;
-        Corr ->
-            {utf8, Corr}
-    end.
+    get_property(?FUNCTION_NAME, Content).
 
 message_id(#basic_message{content = Content}) ->
-    case get_property(?FUNCTION_NAME, Content) of
-        undefined ->
-            undefined;
-        MsgId ->
-            {utf8, MsgId}
-    end.
+    get_property(message_id, Content).
 
 set_ttl(Value, #basic_message{content = Content0} = Msg) ->
-    Content = mc_amqpl:set_property(ttl, Value, Content0),
+    Content = rabbit_mc_amqp_legacy:set_property(ttl, Value, Content0),
     Msg#basic_message{content = Content}.
 
 x_header(Key,#basic_message{content = Content}) ->
-    mc_amqpl:x_header(Key, Content).
+    element(1, rabbit_mc_amqp_legacy:x_header(Key, Content)).
 
 routing_headers(#basic_message{content = Content}, Opts) ->
-    mc_amqpl:routing_headers(Content, Opts).
+    rabbit_mc_amqp_legacy:routing_headers(Content, Opts).
 
-convert_to(mc_amqpl, #basic_message{} = BasicMsg) ->
+convert(rabbit_mc_amqp_legacy, #basic_message{} = BasicMsg) ->
     BasicMsg;
-convert_to(Proto, #basic_message{} = BasicMsg) ->
+convert(Proto, #basic_message{} = BasicMsg) ->
     %% at this point we have to assume this message will no longer travel between nodes
     %% and potentially end up on a node that doesn't yet understand message containers
     %% create legacy mc, then convert and return this
-    mc:convert(Proto, mc_amqpl:from_basic_message(BasicMsg)).
+    mc:convert(Proto, rabbit_mc_amqp_legacy:from_basic_message(BasicMsg)).
 
 protocol_state(#basic_message{content = Content}) ->
-    rabbit_binary_parser:ensure_content_decoded(Content).
-
-prepare(read, #basic_message{content = Content} = Msg) ->
-    Msg#basic_message{content =
-        rabbit_binary_parser:ensure_content_decoded(Content)};
-prepare(store, Msg) ->
-    Msg.
+    Content.
 
 record_death(Reason, SourceQueue,
              #basic_message{content = Content,
@@ -177,11 +167,8 @@ record_death(Reason, SourceQueue,
                       content = Content2}.
 
 x_death_event_key(Info, Key) ->
-    x_death_event_key(Info, Key, undefined).
-
-x_death_event_key(Info, Key, Def) ->
     case lists:keysearch(Key, 1, Info) of
-        false -> Def;
+        false -> undefined;
         {value, {Key, _KeyType, Val}} -> Val
     end.
 
@@ -364,22 +351,17 @@ last_death(#basic_message{content = Content}) ->
         {array, [{table, Info} | _]} ->
             X = x_death_event_key(Info, <<"exchange">>),
             Q = x_death_event_key(Info, <<"queue">>),
-            T = x_death_event_key(Info, <<"time">>, 0),
+            % R = x_death_event_key(Info, <<"reason">>),
             Keys = x_death_event_key(Info, <<"routing_keys">>),
             Count = x_death_event_key(Info, <<"count">>),
             {Q, #death{exchange = X,
-                       anns = #{first_time => T * 1000,
-                                last_time => T * 1000},
+                       timestamp = 0,
                        routing_keys = Keys,
                        count = Count}};
         _ ->
             undefined
     end.
 
-get_property(P, #content{properties = none} = Content) ->
-    %% this is inefficient but will only apply to old messages that are
-    %% not containerized
-    get_property(P, rabbit_binary_parser:ensure_content_decoded(Content));
 get_property(durable,
              #content{properties = #'P_basic'{delivery_mode = Mode}}) ->
     Mode == 2;
@@ -397,11 +379,34 @@ get_property(timestamp, #content{properties = Props}) ->
             %% timestamp should be in ms
             Timestamp * 1000
     end;
-get_property(correlation_id,
-             #content{properties = #'P_basic'{correlation_id = Corr}}) ->
-    Corr;
-get_property(message_id,
-             #content{properties = #'P_basic'{message_id = MsgId}}) ->
-     MsgId;
 get_property(_P, _C) ->
     undefined.
+
+
+% detect_cycles(rejected, _Msg, Queues) ->
+%     {Queues, []};
+
+% detect_cycles(_Reason, #basic_message{content = Content}, Queues) ->
+%     #content{properties = #'P_basic'{headers = Headers}} =
+%         rabbit_binary_parser:ensure_content_decoded(Content),
+%     NoCycles = {Queues, []},
+%     case Headers of
+%         undefined ->
+%             NoCycles;
+%         _ ->
+%             case rabbit_misc:table_lookup(Headers, <<"x-death">>) of
+%                 {array, Deaths} ->
+%                     {Cycling, NotCycling} =
+%                         lists:partition(fun (#resource{name = Queue}) ->
+%                                                 is_cycle(Queue, Deaths)
+%                                         end, Queues),
+%                     OldQueues = [rabbit_misc:table_lookup(D, <<"queue">>) ||
+%                                     {table, D} <- Deaths],
+%                     OldQueues1 = [QName || {longstr, QName} <- OldQueues],
+%                     {NotCycling, [[QName | OldQueues1] ||
+%                                      #resource{name = QName} <- Cycling]};
+%                 _ ->
+%                     NoCycles
+%             end
+%     end.
+

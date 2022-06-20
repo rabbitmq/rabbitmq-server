@@ -40,8 +40,8 @@ route(Exchange, Msg) ->
     route(Exchange, Msg, #{}).
 
 route(#exchange{name = XName}, Msg, Opts) ->
-    RKeys = mc:get_annotation(routing_keys, Msg),
-    lists:append([rabbit_db_topic_exchange:match(XName, RKey, Opts) || RKey <- RKeys]).
+    RKyes = mc:get_annotation(routing_keys, Msg),
+    lists:append([rabbit_db_topic_exchange:match(XName, RKey, Opts) || RKey <- RKyes]).
 
 validate(_X) -> ok.
 validate_binding(_X, _B) -> ok.

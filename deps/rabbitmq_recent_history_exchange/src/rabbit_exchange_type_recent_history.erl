@@ -45,7 +45,7 @@ description() ->
 serialise_events() -> false.
 
 route(#exchange{name      = XName,
-                arguments = Args}, Message, _Options) ->
+                arguments = Args}, Message) ->
     Length = table_lookup(Args, <<"x-recent-history-length">>),
     maybe_cache_msg(XName, Message, Length),
     rabbit_router:match_routing_key(XName, ['_']).
@@ -124,7 +124,7 @@ disable_plugin() ->
 %%private
 maybe_cache_msg(XName, Message, Length) ->
     case mc:x_header(<<"x-recent-history-no-store">>, Message) of
-        {boolean, true} ->
+        true ->
             ok;
         _ ->
             cache_msg(XName, Message, Length)

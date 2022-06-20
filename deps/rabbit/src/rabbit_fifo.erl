@@ -1550,8 +1550,8 @@ maybe_set_msg_ttl(Msg, RaCmdTs, Header,
         true ->
             TTL = min(MsgTTL, mc:ttl(Msg)),
             update_expiry_header(RaCmdTs, TTL, Header);
-        false ->
-            Header
+        false
+        -> Header
     end.
 
 update_expiry_header(_, undefined, Header) ->

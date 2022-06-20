@@ -60,7 +60,7 @@ serialise_events() -> false.
 
 route(#exchange{name = Name,
                 arguments = Args},
-      Msg, _Options) ->
+      Msg) ->
     case rabbit_db_ch_exchange:get(Name) of
         undefined ->
             [];
@@ -262,13 +262,19 @@ jump_consistent_hash_value(_B0, J0, NumberOfBuckets, SeedState0) ->
 value_to_hash(undefined, Msg) ->
     mc:get_annotation(routing_keys, Msg);
 value_to_hash({header, Header}, Msg0) ->
-    maps:get(Header, mc:routing_headers(Msg0, [x_headers]));
+    Msg = mc:convert(rabbit_mc_amqp_legacy, Msg0),
+    #content{} = Content = mc:protocol_state(Msg),
+    Headers = rabbit_basic:extract_headers(Content),
+    case Headers of
+        undefined -> undefined;
+        _         -> rabbit_misc:table_lookup(Headers, Header)
+    end;
 value_to_hash({property, Property}, Msg) ->
     case Property of
         <<"correlation_id">> ->
-            unwrap(mc:correlation_id(Msg));
+            mc:correlation_id(Msg);
         <<"message_id">> ->
-            unwrap(mc:message_id(Msg));
+            mc:message_id(Msg);
         <<"timestamp">> ->
             case mc:timestamp(Msg) of
                 undefined ->
