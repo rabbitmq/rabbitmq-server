@@ -571,6 +571,8 @@ rabbit:
 - gm
 - internal_user
 - lqueue
+- mc
+- mc_compat
 - mirrored_supervisor
 - mirrored_supervisor_sups
 - pg_local
@@ -680,6 +682,8 @@ rabbit:
 - rabbit_logger_exchange_h
 - rabbit_looking_glass
 - rabbit_maintenance
+- rabbit_mc_amqp
+- rabbit_mc_amqp_legacy
 - rabbit_memory_monitor
 - rabbit_message_interceptor
 - rabbit_metrics

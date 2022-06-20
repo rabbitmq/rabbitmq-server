@@ -11,6 +11,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("amqqueue.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
@@ -1479,24 +1480,12 @@ pub_res(VQS) ->
     VQS.
 
 make_publish(IsPersistent, PayloadFun, PropFun, N) ->
-    {rabbit_basic:message(
-       rabbit_misc:r(<<>>, exchange, <<>>),
-       <<>>, #'P_basic'{delivery_mode = case IsPersistent of
-                                            true  -> 2;
-                                            false -> 1
-                                        end},
-       PayloadFun(N)),
+    {message(IsPersistent, PayloadFun, N),
      PropFun(N, #message_properties{size = 10}),
      false}.
 
 make_publish_delivered(IsPersistent, PayloadFun, PropFun, N) ->
-    {rabbit_basic:message(
-       rabbit_misc:r(<<>>, exchange, <<>>),
-       <<>>, #'P_basic'{delivery_mode = case IsPersistent of
-                                            true  -> 2;
-                                            false -> 1
-                                        end},
-       PayloadFun(N)),
+    {message(IsPersistent, PayloadFun, N),
      PropFun(N, #message_properties{size = 10})}.
 
 queue_name(Config, Name) ->
@@ -1615,13 +1604,15 @@ publish_and_confirm(Q, Payload, Count) ->
     QTState =
     lists:foldl(
       fun (Seq, Acc0) ->
-              Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
+              BMsg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
                                          <<>>, #'P_basic'{delivery_mode = 2},
                                          Payload),
-              Delivery = #delivery{mandatory = false, sender = self(),
-                                   confirm = true, message = Msg, msg_seq_no = Seq,
-                                   flow = noflow},
-              {ok, Acc, _Actions} = rabbit_queue_type:deliver([Q], Delivery, Acc0),
+              Content = BMsg#basic_message.content,
+              Ex = BMsg#basic_message.exchange_name,
+              Msg = rabbit_mc_amqp_legacy:message(Ex, <<>>, Content),
+              Options = #{correlation => Seq},
+              {ok, Acc, _Actions} = rabbit_queue_type:deliver([Q], Msg,
+                                                              Options, Acc0),
               Acc
       end, QTState0, Seqs),
     wait_for_confirms(sets:from_list(Seqs, [{version, 2}])),
@@ -1687,15 +1678,16 @@ variable_queue_publish(IsPersistent, Start, Count, PropFun, PayloadFun, VQ) ->
     variable_queue_wait_for_shuffling_end(
       lists:foldl(
         fun (N, VQN) ->
-
+                Msg = message(IsPersistent, PayloadFun, N),
                 rabbit_variable_queue:publish(
-                  rabbit_basic:message(
-                    rabbit_misc:r(<<>>, exchange, <<>>),
-                    <<>>, #'P_basic'{delivery_mode = case IsPersistent of
-                                                         true  -> 2;
-                                                         false -> 1
-                                                     end},
-                    PayloadFun(N)),
+                  Msg,
+                  % rabbit_basic:message(
+                  %   rabbit_misc:r(<<>>, exchange, <<>>),
+                  %   <<>>, #'P_basic'{delivery_mode = case IsPersistent of
+                  %                                        true  -> 2;
+                  %                                        false -> 1
+                  %                                    end},
+                  %   PayloadFun(N)),
                   PropFun(N, #message_properties{size = 10}),
                   false, self(), noflow, VQN)
         end, VQ, lists:seq(Start, Start + Count - 1))).
@@ -1738,9 +1730,9 @@ variable_queue_batch_publish0(IsPersistent, Start, Count, PropFun, PayloadFun,
 variable_queue_fetch(Count, IsPersistent, IsDelivered, Len, VQ) ->
     lists:foldl(fun (N, {VQN, AckTagsAcc}) ->
                         Rem = Len - N,
-                        {{#basic_message { is_persistent = IsPersistent },
-                          IsDelivered, AckTagN}, VQM} =
+                        {{Msg, IsDelivered, AckTagN}, VQM} =
                             rabbit_variable_queue:fetch(true, VQN),
+                        IsPersistent = mc:is_persistent(Msg),
                         Rem = rabbit_variable_queue:len(VQM),
                         {VQM, [AckTagN | AckTagsAcc]}
                 end, {VQ, []}, lists:seq(1, Count)).
@@ -1792,6 +1784,9 @@ variable_queue_wait_for_shuffling_end(VQ) ->
     end.
 
 msg2int(#basic_message{content = #content{ payload_fragments_rev = P}}) ->
+    binary_to_term(list_to_binary(lists:reverse(P)));
+msg2int(Msg) ->
+    #content{payload_fragments_rev = P} = mc:protocol_state(Msg),
     binary_to_term(list_to_binary(lists:reverse(P))).
 
 ack_subset(AckSeqs, Interval, Rem) ->
@@ -1864,3 +1859,15 @@ flush() ->
     after 0 ->
               ok
     end.
+
+message(IsPersistent, PayloadFun, N) ->
+    #basic_message{content = Content,
+                   exchange_name = Ex,
+                   id = Id} =
+        rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
+                             <<>>, #'P_basic'{delivery_mode = case IsPersistent of
+                                                                  true  -> 2;
+                                                                  false -> 1
+                                                              end},
+                             PayloadFun(N)),
+    rabbit_mc_amqp_legacy:message(Ex, <<>>, Content, #{id => Id}).

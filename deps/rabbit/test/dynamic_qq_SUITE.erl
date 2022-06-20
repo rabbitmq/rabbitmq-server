@@ -74,10 +74,12 @@ init_per_testcase(Testcase, Config) ->
                                                             {queue_name, Q},
                                                             {queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]}
                                                            ]),
-            rabbit_ct_helpers:run_steps(
-              Config1,
-              rabbit_ct_broker_helpers:setup_steps() ++
-              rabbit_ct_client_helpers:setup_steps())
+            Config2 = rabbit_ct_helpers:run_steps(
+                        Config1,
+                        rabbit_ct_broker_helpers:setup_steps() ++
+                        rabbit_ct_client_helpers:setup_steps()),
+            _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2, message_containers),
+            Config2
     end.
 
 end_per_testcase(Testcase, Config) ->

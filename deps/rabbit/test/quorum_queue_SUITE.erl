@@ -190,10 +190,11 @@ init_per_group(clustered_with_partitions, Config0) ->
         true ->
             {skip, "clustered_with_partitions is too unreliable in mixed mode"};
         false ->
-            Config = rabbit_ct_helpers:run_setup_steps(
+            Config1 = rabbit_ct_helpers:run_setup_steps(
                        Config0,
                        [fun rabbit_ct_broker_helpers:configure_dist_proxy/1]),
-            rabbit_ct_helpers:set_config(Config, [{net_ticktime, 10}])
+            Config2 = rabbit_ct_helpers:set_config(Config1, [{net_ticktime, 10}]),
+            Config2
     end;
 init_per_group(Group, Config) ->
     ClusterSize = case Group of
@@ -220,6 +221,7 @@ init_per_group(Group, Config) ->
                 {skip, _} ->
                     Ret;
                 Config2 ->
+                    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2, message_containers),
                     ok = rabbit_ct_broker_helpers:rpc(
                            Config2, 0, application, set_env,
                            [rabbit, channel_tick_interval, 100]),
@@ -2186,6 +2188,7 @@ subscribe_redelivery_count(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag1,
                           redelivered  = true},
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
+            ct:pal("H1 ~p", [H1]),
             ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
                                                 multiple     = false,

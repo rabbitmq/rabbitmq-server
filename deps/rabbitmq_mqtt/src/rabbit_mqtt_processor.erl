@@ -1556,7 +1556,6 @@ publish_to_queues(
          auth_state = #auth_state{user = #user{username = Username}}
         } = State) ->
     RoutingKey = mqtt_to_amqp(Topic),
-    Confirm = Qos > ?QOS_0,
     {Expiration, Timestamp} = case Props of
                                   #{'Message-Expiry-Interval' := ExpirySecs} ->
                                       {integer_to_binary(timer:seconds(ExpirySecs)),
@@ -1569,36 +1568,19 @@ publish_to_queues(
                        delivery_mode = delivery_mode(Qos),
                        expiration = Expiration,
                        timestamp = Timestamp},
-    {ClassId, _MethodId} = rabbit_framing_amqp_0_9_1:method_id('basic.publish'),
-    Content0 = #content{
-                  class_id = ClassId,
-                  properties = PBasic,
-                  properties_bin = none,
-                  protocol = none,
-                  payload_fragments_rev = [Payload]
-                 },
+    Content0 = content(PBasic, Payload),
     Content = rabbit_message_interceptor:intercept(Content0),
-    BasicMessage = #basic_message{
-                      exchange_name = ExchangeName,
-                      routing_keys = [RoutingKey],
-                      content = Content,
-                      id = <<>>, %% GUID set in rabbit_classic_queue
-                      is_persistent = Confirm
-                     },
-    Delivery = #delivery{
-                  mandatory = false,
-                  confirm = Confirm,
-                  sender = self(),
-                  message = BasicMessage,
-                  msg_seq_no = PacketId,
-                  flow = Flow
-                 },
+    Message = rabbit_mc_amqp_legacy:message(ExchangeName,
+                                            RoutingKey,
+                                            Content),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
-            QNames0 = rabbit_exchange:route(Exchange, Delivery, #{return_binding_keys => true}),
+            QNames0 = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
             QNames = drop_local(QNames0, State),
-            rabbit_trace:tap_in(BasicMessage, QNames, ConnName, Username, TraceState),
-            deliver_to_queues(Delivery, QNames, State);
+            rabbit_trace:tap_in(Message, QNames, ConnName, Username, TraceState),
+            Options = maps_put_truthy(
+                        flow, Flow, maps_put_truthy(correlation, PacketId, #{})),
+            deliver_to_queues(Message, Options, QNames, State);
         {error, not_found} ->
             ?LOG_ERROR("~s not found", [rabbit_misc:rs(ExchangeName)]),
             {error, exchange_not_found, State}
@@ -1637,54 +1619,54 @@ drop_local(QNames, #state{subscriptions = Subs,
 drop_local(QNames, _) ->
     QNames.
 
-deliver_to_queues(Delivery,
+deliver_to_queues(Message,
+                  Options,
                   RoutedToQNames,
                   State0 = #state{queue_states = QStates0,
                                   cfg = #cfg{proto_ver = ProtoVer}}) ->
     Qs0 = rabbit_amqqueue:lookup_many(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
-    case rabbit_queue_type:deliver(Qs, Delivery, QStates0) of
+    case rabbit_queue_type:deliver(Qs, Message, Options, QStates0) of
         {ok, QStates, Actions} ->
             rabbit_global_counters:messages_routed(ProtoVer, length(Qs)),
-            State = process_routing_confirm(Delivery, Qs,
+            State = process_routing_confirm(Options, Qs,
                                             State0#state{queue_states = QStates}),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes.
             {ok, handle_queue_actions(Actions, State)};
         {error, Reason} ->
+            Corr = maps:get(correlation, Options, undefined),
             ?LOG_ERROR("Failed to deliver message with packet_id=~p to queues: ~p",
-                       [Delivery#delivery.msg_seq_no, Reason]),
+                       [Corr, Reason]),
             {error, Reason, State0}
     end.
 
-process_routing_confirm(#delivery{confirm = false},
-                        [], State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
+process_routing_confirm(Options,
+                        [], State = #state{cfg = #cfg{proto_ver = ProtoVer}})
+  when not is_map_key(correlation, Options) ->
     rabbit_global_counters:messages_unroutable_dropped(ProtoVer, 1),
     State;
-process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = ?WILL_MSG_QOS_1_CORRELATION},
+process_routing_confirm(#{correlation := ?WILL_MSG_QOS_1_CORRELATION},
                         [], State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     %% unroutable will message with QoS 1
     rabbit_global_counters:messages_unroutable_dropped(ProtoVer, 1),
     State;
-process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = PktId},
+process_routing_confirm(#{correlation := PktId},
                         [], State = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
     rabbit_global_counters:messages_unroutable_returned(ProtoVer, 1),
     send_puback(PktId, ?RC_NO_MATCHING_SUBSCRIBERS, State),
     State;
-process_routing_confirm(#delivery{confirm = false}, _, State) ->
-    State;
-process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = ?WILL_MSG_QOS_1_CORRELATION}, [_|_], State) ->
+process_routing_confirm(#{correlation := ?WILL_MSG_QOS_1_CORRELATION},
+                        [_|_], State) ->
     %% routable will message with QoS 1
     State;
-process_routing_confirm(#delivery{confirm = true,
-                                  msg_seq_no = PktId},
+process_routing_confirm(#{correlation := PktId},
                         Qs, State = #state{unacked_client_pubs = U0}) ->
     QNames = rabbit_amqqueue:queue_names(Qs),
     U = rabbit_mqtt_confirms:insert(PktId, QNames, U0),
-    State#state{unacked_client_pubs = U}.
+    State#state{unacked_client_pubs = U};
+process_routing_confirm(#{}, _, State) ->
+    State.
 
 -spec send_puback(packet_id() | list(packet_id()), reason_code(), state()) -> ok.
 send_puback(PktIds0, ReasonCode, State)
@@ -1771,10 +1753,6 @@ maybe_send_will(
     T = erlang:monotonic_time(millisecond),
     case create_queue(will, none, QArgs, rabbit_queue_type:default(), State) of
         {ok, Q} ->
-            #resource{name = QNameBin} = amqqueue:get_name(Q),
-            DefaultX = #resource{virtual_host = Vhost,
-                                 kind = exchange,
-                                 name = <<"">>},
             %% "The Server delays publishing the Client’s Will Message until the Will Delay
             %% Interval has passed or the Session ends, whichever happens first." [v5 3.1.3.2.2]
             MsgTTLSecs = min(Delay, SessionExpiry),
@@ -1801,27 +1779,31 @@ maybe_send_will(
                             Interval = max(0, Interval0),
                             min(MsgTTL0, Interval)
                      end,
-            {Headers, Timestamp} = case Props of
-                                       #{'Message-Expiry-Interval' := ExpirySecs} ->
-                                           E = integer_to_binary(timer:seconds(ExpirySecs)),
-                                           {[{<<"x-dead-letter-expiration">>, longstr, E},
-                                             {<<"x-mqtt-will-delay-interval">>, long, Delay}],
-                                            os:system_time(second)};
-                                       _ ->
-                                           {[], undefined}
-                                   end,
+            {Anns, Timestamp} = case Props of
+                                    #{'Message-Expiry-Interval' := ExpirySecs} ->
+                                        Anns0 = #{dead_letter_ttl => timer:seconds(ExpirySecs),
+                                                  mqtt_will_delay_interval_secs => Delay},
+                                        {Anns0, os:system_time(second)};
+                                    _ ->
+                                        {#{}, undefined}
+                                end,
             PBasic0 = mqtt_props_to_amqp_props(Props, Qos, Retain),
             PBasic = PBasic0#'P_basic'{
                                %% Persist message regardless of Will QoS since there is no noticable
                                %% performance benefit if that single message is transient. This ensures that
                                %% delayed Will Messages are not lost after a broker restart.
-                               headers = Headers ++ PBasic0#'P_basic'.headers,
                                delivery_mode = 2,
                                expiration = integer_to_binary(MsgTTL),
                                timestamp = Timestamp},
+            Content = content(PBasic, Payload),
+            DefaultX = #resource{virtual_host = Vhost,
+                                 kind = exchange,
+                                 name = <<>>},
+            #resource{name = QNameBin} = amqqueue:get_name(Q),
+            Message = rabbit_mc_amqp_legacy:message(DefaultX, QNameBin, Content, Anns),
             case check_publish_permitted(DefaultX, Topic, State) of
                 ok ->
-                    ok = rabbit_basic:publish(DefaultX, QNameBin, PBasic, Payload),
+                    ok = rabbit_queue_type:publish_at_most_once(DefaultX, Message),
                     ?LOG_DEBUG("scheduled delayed Will Message to topic ~s for MQTT "
                                "client ID ~s to be sent in ~b ms",
                                [Topic, ClientId, MsgTTL]);
@@ -2064,18 +2046,15 @@ deliver_to_client(Msgs, Ack, State) ->
                         deliver_one_to_client(Msg, Ack, S)
                 end, State, Msgs).
 
-deliver_one_to_client(Msg0 = {QNameOrType, QPid, QMsgId, _Redelivered,
-                              BasicMsg = #basic_message{content = Content0}},
+deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Msg} = Delivery,
                       AckRequired, State0) ->
-    Content = #content{properties = #'P_basic'{headers = Headers}} =
-        rabbit_binary_parser:ensure_content_decoded(Content0),
-    Msg = setelement(5, Msg0, BasicMsg#basic_message{content = Content}),
-    PublisherQoS = case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
-                       {byte, QoS0} ->
-                           QoS0;
+    %% TODO internal annotation should be atom annotation key
+    PublisherQoS = case mc:x_header(<<"x-mqtt-publish-qos">>, Msg) of
                        undefined ->
                            %% non-MQTT publishes are assumed to be QoS 1 regardless of delivery_mode
-                           ?QOS_1
+                           ?QOS_1;
+                       Qos when is_integer(Qos) ->
+                           Qos
                    end,
     SubscriberQoS = case AckRequired of
                         true ->
@@ -2084,7 +2063,7 @@ deliver_one_to_client(Msg0 = {QNameOrType, QPid, QMsgId, _Redelivered,
                             ?QOS_0
                     end,
     QoS = effective_qos(PublisherQoS, SubscriberQoS),
-    {SettleOp, State1} = maybe_publish_to_client(Msg, QoS, State0),
+    {SettleOp, State1} = maybe_publish_to_client(Delivery, QoS, State0),
     State = maybe_auto_settle(AckRequired, SettleOp, QoS, QNameOrType, QMsgId, State1),
     ok = maybe_notify_sent(QNameOrType, QPid, State),
     State.
@@ -2100,33 +2079,35 @@ maybe_publish_to_client({_, _, _, _Redelivered = true, _}, ?QOS_0, State) ->
     %% Do not redeliver to MQTT subscriber who gets message at most once.
     {complete, State};
 maybe_publish_to_client(
-  Msg = {QNameOrType, _QPid, QMsgId, Redelivered,
-         #basic_message{
-            routing_keys = [RoutingKey | _CcRoutes],
-            content = #content{payload_fragments_rev = FragmentsRev,
-                               properties = PBasic = #'P_basic'{headers = Headers}}}},
+  {QNameOrType, _QPid, QMsgId, Redelivered, Msg} = Delivery,
   QoS, State0 = #state{cfg = #cfg{proto_ver = ProtoVer}}) ->
-    Props0 = amqp_props_to_mqtt_props(PBasic, ProtoVer),
-    MatchedTopicFilters = matched_topic_filters_v5(Headers, State0),
+    AmqpLegMsg = mc:convert(rabbit_mc_amqp_legacy, Msg),
+    Content = mc:protocol_state(AmqpLegMsg),
+    #content{properties = PBasic = #'P_basic'{headers = Headers},
+             payload_fragments_rev = FragmentsRev
+            } = rabbit_binary_parser:ensure_content_decoded(Content),
+
+    Props0 = amqp_props_to_mqtt_props(PBasic, Msg, ProtoVer),
+    MatchedTopicFilters = matched_topic_filters_v5(Msg, State0),
     Props1 = maybe_add_subscription_ids(MatchedTopicFilters, Props0, State0),
+    [RoutingKey | _] = mc:get_annotation(routing_keys, Msg),
     Topic0 = amqp_to_mqtt(RoutingKey),
     {Topic, Props, State1} = process_topic_alias_outbound(Topic0, Props1, State0),
     {PacketId, State} = msg_id_to_packet_id(QMsgId, QoS, State1),
-    Packet =
-    #mqtt_packet{
-       fixed = #mqtt_packet_fixed{
-                  type = ?PUBLISH,
-                  qos = QoS,
-                  dup = Redelivered,
-                  retain = retain(Headers, MatchedTopicFilters, State)},
-       variable = #mqtt_packet_publish{
-                     packet_id = PacketId,
-                     topic_name = Topic,
-                     props = Props},
-       payload = lists:reverse(FragmentsRev)},
+    Packet = #mqtt_packet{
+                fixed = #mqtt_packet_fixed{
+                           type = ?PUBLISH,
+                           qos = QoS,
+                           dup = Redelivered,
+                           retain = retain(Headers, MatchedTopicFilters, State)},
+                variable = #mqtt_packet_publish{
+                              packet_id = PacketId,
+                              topic_name = Topic,
+                              props = Props},
+                payload = lists:reverse(FragmentsRev)},
     SettleOp = case send(Packet, State) of
                    ok ->
-                       trace_tap_out(Msg, State),
+                       trace_tap_out(Delivery, State),
                        message_delivered(QNameOrType, Redelivered, QoS, State),
                        complete;
                    {error, packet_too_large} ->
@@ -2208,42 +2189,41 @@ mqtt_props_to_amqp_props(Props, Qos, Retain) ->
     P.
 
 %% Convert AMQP 0.9.1 properties to MQTT v5 PUBLISH properties.
--spec amqp_props_to_mqtt_props(rabbit_framing:amqp_property_record(), protocol_version_atom()) ->
+-spec amqp_props_to_mqtt_props(rabbit_framing:amqp_property_record(),
+                               mc:state(),
+                               protocol_version_atom()) ->
     properties().
 %% Do not unnecessarily convert properties.
-amqp_props_to_mqtt_props(_, ?MQTT_PROTO_V3) ->
+amqp_props_to_mqtt_props(_, _, ?MQTT_PROTO_V3) ->
     #{};
-amqp_props_to_mqtt_props(_, ?MQTT_PROTO_V4) ->
+amqp_props_to_mqtt_props(_, _, ?MQTT_PROTO_V4) ->
     #{};
 amqp_props_to_mqtt_props(
   #'P_basic'{headers = Headers,
-             expiration = Expiration,
              timestamp = TimestampSeconds,
              content_type = ContentType,
-             correlation_id = CorrelationId
-            }, ?MQTT_PROTO_V5) ->
+             correlation_id = CorrelationId},
+  Msg, ?MQTT_PROTO_V5) ->
     SourceProtocolIsMqtt = case rabbit_mqtt_util:table_lookup(Headers, <<"x-mqtt-publish-qos">>) of
                                {byte, _Qos} -> true;
                                undefined -> false
                            end,
-    P0 = if is_binary(Expiration) andalso
+    Ttl = mc:ttl(Msg),
+    P0 = if is_integer(Ttl) andalso
             is_integer(TimestampSeconds) andalso
             %% Only if source protocol is MQTT we know that timestamp was set by the server
             SourceProtocolIsMqtt ->
-                ExpirationMs = binary_to_integer(Expiration),
-                ExpirationSeconds = ExpirationMs div 1000,
+                TtlSeconds = Ttl div 1000,
                 %% "The PUBLISH packet sent to a Client by the Server MUST contain a Message
                 %% Expiry Interval set to the received value minus the time that the
                 %% Application Message has been waiting in the Server" [MQTT-3.3.2-6]
                 WaitingSeconds0 = os:system_time(second) - TimestampSeconds,
                 %% For a delayed Will Message, the waiting time starts when the Will Message was published.
-                WaitingSeconds = case rabbit_basic:header(<<"x-mqtt-will-delay-interval">>, Headers) of
-                                     {<<"x-mqtt-will-delay-interval">>, long, Delay} ->
-                                         WaitingSeconds0 - Delay;
-                                     _ ->
-                                         WaitingSeconds0
+                WaitingSeconds = case mc:get_annotation(mqtt_will_delay_interval_secs, Msg) of
+                                     undefined -> WaitingSeconds0;
+                                     WillDelayInterval -> WaitingSeconds0 - WillDelayInterval
                                  end,
-                Expiry = max(0, ExpirationSeconds - WaitingSeconds),
+                Expiry = max(0, TtlSeconds - WaitingSeconds),
                 #{'Message-Expiry-Interval' => Expiry};
             true ->
                 #{}
@@ -2295,12 +2275,10 @@ amqp_props_to_mqtt_props(
         end,
     P.
 
-matched_topic_filters_v5(Headers, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
-    case rabbit_mqtt_util:table_lookup(Headers, <<"x-binding-keys">>) of
-        {array, BindingKeys} ->
-            [amqp_to_mqtt(BKey) || {longstr, BKey} <- BindingKeys];
-        undefined ->
-            []
+matched_topic_filters_v5(Msg, #state{cfg = #cfg{proto_ver = ?MQTT_PROTO_V5}}) ->
+    case mc:get_annotation(binding_keys, Msg) of
+        undefined -> [];
+        BKeys -> lists:map(fun rabbit_mqtt_util:amqp_to_mqtt/1, BKeys)
     end;
 matched_topic_filters_v5(_, _) ->
     [].
@@ -2753,3 +2731,19 @@ format_status(
       ra_register_state => RaRegisterState,
       queues_soft_limit_exceeded => QSLE,
       qos0_messages_dropped => Qos0MsgsDropped}.
+
+
+maps_put_truthy(_K, undefined, M) ->
+    M;
+% maps_put_truthy(_K, false, M) ->
+%     M;
+maps_put_truthy(K, V, M) ->
+    maps:put(K, V, M).
+
+content(#'P_basic'{} = PBasic, Payload)
+  when is_binary(Payload) ->
+    #content{class_id = 60,
+             properties = PBasic,
+             properties_bin = none,
+             protocol = none,
+             payload_fragments_rev = [Payload]}.

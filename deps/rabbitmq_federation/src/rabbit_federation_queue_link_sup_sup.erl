@@ -87,5 +87,5 @@ init([]) ->
 %% we don't clear it out here and can trust it.
 id(Q) when ?is_amqqueue(Q) ->
     Policy = amqqueue:get_policy(Q),
-    Q1 = rabbit_amqqueue:immutable(Q),
+    Q1 = amqqueue:set_immutable(Q),
     amqqueue:set_policy(Q1, Policy).

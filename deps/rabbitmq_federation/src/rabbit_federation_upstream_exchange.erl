@@ -38,8 +38,7 @@ description() ->
 
 serialise_events() -> false.
 
-route(X = #exchange{arguments = Args},
-      D = #delivery{message = #basic_message{content = Content}}) ->
+route(X = #exchange{arguments = Args}, Msg) ->
     %% This arg was introduced in the same release as this exchange type;
     %% it must be set
     {long, MaxHops} = rabbit_misc:table_lookup(Args, ?MAX_HOPS_ARG),
@@ -53,9 +52,13 @@ route(X = #exchange{arguments = Args},
                 {longstr, Val1} -> Val1;
                 _               -> unknown
             end,
+    %% Federation uses AMQP 0.9.1 internally at the moment so this
+    %% conversion may need to happen anyway
+    LegacyMsg = mc:convert(rabbit_mc_amqp_legacy, Msg),
+    Content = mc:protocol_state(LegacyMsg),
     Headers = rabbit_basic:extract_headers(Content),
     case rabbit_federation_util:should_forward(Headers, MaxHops, DName, DVhost) of
-        true  -> rabbit_exchange_type_fanout:route(X, D);
+        true  -> rabbit_exchange_type_fanout:route(X, Msg);
         false -> []
     end.
 

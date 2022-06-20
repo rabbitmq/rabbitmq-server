@@ -59,9 +59,9 @@ description() ->
 
 serialise_events() -> false.
 
-route(#exchange {name      = Name,
-                 arguments = Args},
-      #delivery {message = Msg}) ->
+route(#exchange{name = Name,
+                arguments = Args},
+      Msg) ->
     case rabbit_db_ch_exchange:get(Name) of
         undefined ->
             [];
@@ -69,13 +69,14 @@ route(#exchange {name      = Name,
             case maps:size(BM) of
                 0 -> [];
                 N ->
-                    K              = value_to_hash(hash_on(Args), Msg),
+                    K = value_to_hash(hash_on(Args), Msg),
                     SelectedBucket = jump_consistent_hash(K, N),
                     case maps:get(SelectedBucket, BM, undefined) of
                         undefined ->
                             rabbit_log:warning("Bucket ~tp not found", [SelectedBucket]),
                             [];
-                        Queue     -> [Queue]
+                        Queue ->
+                            [Queue]
                     end
             end
     end.
@@ -259,26 +260,28 @@ jump_consistent_hash_value(_B0, J0, NumberOfBuckets, SeedState0) ->
     J = trunc((B + 1) / R),
     jump_consistent_hash_value(B, J, NumberOfBuckets, SeedState).
 
-value_to_hash(undefined, #basic_message { routing_keys = Routes }) ->
-    Routes;
-value_to_hash({header, Header}, #basic_message { content = Content }) ->
+value_to_hash(undefined, Msg) ->
+    mc:get_annotation(routing_keys, Msg);
+value_to_hash({header, Header}, Msg0) ->
+    Msg = mc:convert(rabbit_mc_amqp_legacy, Msg0),
+    #content{} = Content = mc:protocol_state(Msg),
     Headers = rabbit_basic:extract_headers(Content),
     case Headers of
         undefined -> undefined;
         _         -> rabbit_misc:table_lookup(Headers, Header)
     end;
-value_to_hash({property, Property}, #basic_message { content = Content }) ->
-    #content{properties = #'P_basic'{ correlation_id = CorrId,
-                                      message_id     = MsgId,
-                                      timestamp      = Timestamp }} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
+value_to_hash({property, Property}, Msg) ->
     case Property of
-        <<"correlation_id">> -> CorrId;
-        <<"message_id">>     -> MsgId;
-        <<"timestamp">>      ->
-            case Timestamp of
-                undefined -> undefined;
-                _         -> integer_to_binary(Timestamp)
+        <<"correlation_id">> ->
+            mc:correlation_id(Msg);
+        <<"message_id">> ->
+            mc:message_id(Msg);
+        <<"timestamp">> ->
+            case mc:timestamp(Msg) of
+                undefined ->
+                    undefined;
+                Timestamp ->
+                    integer_to_binary(Timestamp div 1000)
             end
     end.
 
@@ -298,8 +301,8 @@ hash_args(Args) ->
 hash_on(Args) ->
     case hash_args(Args) of
         {undefined, undefined} -> undefined;
-        {Header, undefined}    -> Header;
-        {undefined, Property}  -> Property
+        {Header, undefined} -> Header;
+        {undefined, Property} -> Property
     end.
 
 -spec map_has_value(#{bucket() => rabbit_types:binding_destination()},

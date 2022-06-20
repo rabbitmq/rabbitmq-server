@@ -30,10 +30,9 @@
          pending_size/1,
          stat/1,
          stat/2,
-         query_single_active_consumer/1
+         query_single_active_consumer/1,
+         cluster_name/1
          ]).
-
--include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(SOFT_LIMIT, 32).
 -define(TIMER_TIME, 10000).
@@ -238,12 +237,14 @@ dequeue(QueueName, ConsumerTag, Settlement,
             Err
     end.
 
-add_delivery_count_header(#basic_message{} = Msg0, Count)
-  when is_integer(Count) andalso
-       Count > 0 ->
-    rabbit_basic:add_header(<<"x-delivery-count">>, long, Count, Msg0);
-add_delivery_count_header(Msg, _Count) ->
-    Msg.
+add_delivery_count_header(Msg, Count) ->
+    case mc:is(Msg) of
+        true when is_integer(Count) andalso
+                  Count > 0 ->
+            mc:set_annotation(<<"x-delivery-count">>, Count, Msg);
+        _ ->
+            Msg
+    end.
 
 
 %% @doc Settle a message. Permanently removes message from the queue.
@@ -777,6 +778,7 @@ transform_msgs(QName, QRef, Msgs) ->
                                        _ ->
                                            {Msg0, false}
                                    end,
+
               {QName, QRef, MsgId, Redelivered, Msg}
       end, Msgs).
 
