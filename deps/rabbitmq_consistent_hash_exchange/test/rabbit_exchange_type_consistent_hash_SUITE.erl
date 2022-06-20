@@ -36,6 +36,7 @@ groups() ->
                                ]},
       {hash_ring_management_tests, [], [
                                 test_durable_exchange_hash_ring_recovery_between_node_restarts,
+                                test_idempotent_binding_addition_first_write_wins,
                                 test_hash_ring_updates_when_queue_is_deleted,
                                 test_hash_ring_updates_when_multiple_queues_are_deleted,
                                 test_hash_ring_updates_when_exclusive_queues_are_deleted_due_to_connection_closure,
@@ -328,6 +329,41 @@ test_durable_exchange_hash_ring_recovery_between_node_restarts(Config) ->
      || Q <- Queues],
 
     ?assertEqual(9, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    rabbit_ct_broker_helpers:restart_node(Config, 0),
+    rabbit_ct_helpers:await_condition(
+        fun () -> count_buckets_of_exchange(Config, X) > 0 end, 15000),
+
+    ?assertEqual(9, count_buckets_of_exchange(Config, X)),
+    assert_ring_consistency(Config, X),
+
+    clean_up_test_topology(Config, X, Queues),
+    rabbit_ct_client_helpers:close_channel(Chan),
+    ok.
+
+test_idempotent_binding_addition_first_write_wins(Config) ->
+    Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
+
+    X = <<"test_idempotent_binding_addition_first_write_wins">>,
+    amqp_channel:call(Chan, #'exchange.delete' {exchange = X}),
+
+    Declare = #'exchange.declare'{exchange = X,
+        durable = true,
+        type = <<"x-consistent-hash">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Chan, Declare),
+
+    Queues = [<<"d-q1">>, <<"d-q2">>, <<"d-q3">>],
+    [#'queue.declare_ok'{} =
+        amqp_channel:call(Chan, #'queue.declare'{
+            queue = Q, durable = true, exclusive = false}) || Q <- Queues],
+    [#'queue.bind_ok'{} =
+        amqp_channel:call(Chan, #'queue.bind'{queue = Q,
+            exchange = X,
+            routing_key = <<"1">>})
+        || Q <- Queues],
+
+    ?assertEqual(4, count_buckets_of_exchange(Config, X)),
     assert_ring_consistency(Config, X),
 
     rabbit_ct_broker_helpers:restart_node(Config, 0),
