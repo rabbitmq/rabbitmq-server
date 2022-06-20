@@ -208,35 +208,6 @@ def _versioned_plugins_dir_impl(ctx):
         command = "\n".join(commands),
     )
 
-<<<<<<< HEAD
-    return plugins_dir
-
-def _versioned_rabbitmq_home_impl(ctx):
-    plugins = flat_deps(ctx.attr.plugins)
-
-    scripts = [_copy_script(ctx, script) for script in ctx.files._scripts]
-
-    rabbitmq_ctl_copies = [
-        "rabbitmq-diagnostics",
-        "rabbitmq-plugins",
-        "rabbitmq-queues",
-        "rabbitmq-streams",
-        "rabbitmq-upgrade",
-        "rabbitmqctl",
-    ]
-    escripts = [link_escript(ctx, escript) for escript in rabbitmq_ctl_copies]
-
-    plugins_dir = _plugins_dir(ctx, plugins)
-
-    rabbitmqctl = None
-    for script in scripts:
-        if script.basename == "rabbitmqctl":
-            rabbitmqctl = script
-    if rabbitmqctl == None:
-        fail("could not find rabbitmqct among", scripts)
-
-=======
->>>>>>> 20d653a676 (Adjustments to :package-generic-unix for rules_pkg 0.5.1)
     return [
         DefaultInfo(
             files = depset([plugins_dir]),
