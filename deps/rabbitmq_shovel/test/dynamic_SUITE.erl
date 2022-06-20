@@ -8,6 +8,7 @@
 -module(dynamic_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
@@ -189,8 +190,9 @@ headers(Config) ->
                 <<"test">>,
                 [{<<"src-queue">>,            <<"src">>},
                  {<<"dest-queue">>,           <<"dest">>}]),
-            #amqp_msg{props = #'P_basic'{headers = undefined}} =
-                  publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi1">>),
+            ?assertMatch(#amqp_msg{props = #'P_basic'{headers = H0}}
+                           when H0 == undefined orelse H0 == [],
+                                publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hi1">>)),
 
             shovel_test_utils:set_param(Config,
                 <<"test">>,

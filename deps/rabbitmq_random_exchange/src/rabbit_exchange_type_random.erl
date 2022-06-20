@@ -36,7 +36,7 @@
 description() ->
     [{name, <<"x-random">>}, {description, <<"Randomly picks a binding (queue) to route via (to).">>}].
 
-route(_X=#exchange{name = Name}, _Delivery) ->
+route(_X=#exchange{name = Name}, _Message) ->
     Matches = rabbit_router:match_routing_key(Name, ['_']),
     case length(Matches) of
       Len when Len < 2 -> Matches;

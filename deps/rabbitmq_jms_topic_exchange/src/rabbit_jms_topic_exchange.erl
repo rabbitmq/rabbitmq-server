@@ -89,14 +89,14 @@ description() -> [ {name, <<"jms-selector">>}
 serialise_events() -> false.
 
 % Route messages
-route( #exchange{name = XName}
-     , #delivery{message = #basic_message{content = MessageContent, routing_keys = RKs}}
-     ) ->
+route(#exchange{name = XName}, Msg) ->
+    RKs = mc:get_annotation(routing_keys, Msg),
+    Content = mc:protocol_state(mc:convert(rabbit_mc_amqp_legacy, Msg)),
     case get_binding_funs_x(XName) of
         not_found ->
             [];
         BindingFuns ->
-            match_bindings(XName, RKs, MessageContent, BindingFuns)
+            match_bindings(XName, RKs, Content, BindingFuns)
     end.
 
 

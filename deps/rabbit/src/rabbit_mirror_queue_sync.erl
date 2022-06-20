@@ -133,7 +133,8 @@ bq_fold(FoldFun, FoldAcc, Args, BQ, BQS) ->
 append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {_, _, 0}, {Curr, Len}, T}) ->
     {[{Msg, MsgProps, Unacked} | Batch], I, {0, 0, 0}, {Curr + 1, Len}, T};
 append_to_acc(Msg, MsgProps, Unacked, {Batch, I, {TotalBytes, LastCheck, SyncThroughput}, {Curr, Len}, T}) ->
-    {[{Msg, MsgProps, Unacked} | Batch], I, {TotalBytes + rabbit_basic:msg_size(Msg), LastCheck, SyncThroughput}, {Curr + 1, Len}, T}.
+    {_, MsgSize} = mc:size(Msg),
+    {[{Msg, MsgProps, Unacked} | Batch], I, {TotalBytes + MsgSize, LastCheck, SyncThroughput}, {Curr + 1, Len}, T}.
 
 master_send_receive(SyncMsg, NewAcc, Syncer, Ref, Parent) ->
     receive

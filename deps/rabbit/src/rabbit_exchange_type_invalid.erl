@@ -26,7 +26,7 @@ description() ->
 
 serialise_events() -> false.
 
--spec route(rabbit_types:exchange(), rabbit_types:delivery()) -> no_return().
+-spec route(rabbit_types:exchange(), mc:state()) -> no_return().
 
 route(#exchange{name = Name, type = Type}, _) ->
     rabbit_misc:protocol_error(

@@ -65,12 +65,15 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps() ++ [
-        fun rabbit_ct_broker_helpers:set_ha_policy_two_pos/1,
-        fun rabbit_ct_broker_helpers:set_ha_policy_two_pos_batch_sync/1
-      ]).
+    Config2 = rabbit_ct_helpers:run_steps(
+                Config1,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps() ++ [
+                                                           fun rabbit_ct_broker_helpers:set_ha_policy_two_pos/1,
+                                                           fun rabbit_ct_broker_helpers:set_ha_policy_two_pos_batch_sync/1
+                                                          ]),
+    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2, message_containers),
+    Config2.
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,

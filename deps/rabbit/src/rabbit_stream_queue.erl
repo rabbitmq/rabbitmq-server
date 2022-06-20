@@ -20,7 +20,7 @@
          consume/3,
          cancel/5,
          handle_event/3,
-         deliver/2,
+         deliver/3,
          settle/5,
          credit/5,
          dequeue/5,
@@ -417,30 +417,33 @@ credit(QName, CTag, Credit, Drain, #stream_client{readers = Readers0,
             false ->
                 {Readers1, []}
         end,
-    {State#stream_client{readers = Readers}, [{send_credit_reply, length(Msgs)},
-                                              {deliver, CTag, true, Msgs}] ++ Actions}.
+    {State#stream_client{readers = Readers},
+     [{send_credit_reply, length(Msgs)},
+      {deliver, CTag, true, Msgs}] ++ Actions}.
 
-deliver(QSs, #delivery{message = Msg, confirm = Confirm} = Delivery) ->
+deliver(QSs, Msg, Options) ->
     lists:foldl(
       fun({Q, stateless}, {Qs, Actions}) ->
               LeaderPid = amqqueue:get_pid(Q),
               ok = osiris:write(LeaderPid,
                                 stream_message(Msg, filtering_supported())),
               {Qs, Actions};
-         ({Q, S0}, {Qs, Actions}) ->
-              {S, As} = deliver(Confirm, Delivery, S0),
-              {[{Q, S} | Qs], As ++ Actions}
+         ({Q, S0}, {Qs, Actions0}) ->
+              {S, Actions} = deliver0(maps:get(correlation, Options, undefined),
+                                      Msg, S0, Actions0),
+              {[{Q, S} | Qs], Actions}
       end, {[], []}, QSs).
 
-deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
-        #stream_client{name = Name,
-                       leader = LeaderPid,
-                       writer_id = WriterId,
-                       next_seq = Seq,
-                       correlation = Correlation0,
-                       soft_limit = SftLmt,
-                       slow = Slow0,
-                       filtering_supported = FilteringSupported} = State) ->
+deliver0(MsgId, Msg,
+         #stream_client{name = Name,
+                        leader = LeaderPid,
+                        writer_id = WriterId,
+                        next_seq = Seq,
+                        correlation = Correlation0,
+                        soft_limit = SftLmt,
+                        slow = Slow0,
+                        filtering_supported = FilteringSupported} = State,
+        Actions0) ->
     ok = osiris:write(LeaderPid, WriterId, Seq,
                       stream_message(Msg, FilteringSupported)),
     Correlation = case MsgId of
@@ -451,9 +454,9 @@ deliver(_Confirm, #delivery{message = Msg, msg_seq_no = MsgId},
                   end,
     {Slow, Actions} = case maps:size(Correlation) >= SftLmt of
                           true when not Slow0 ->
-                              {true, [{block, Name}]};
+                              {true, [{block, Name} | Actions0]};
                           Bool ->
-                              {Bool, []}
+                              {Bool, Actions0}
                       end,
     {State#stream_client{next_seq = Seq + 1,
                          correlation = Correlation,
@@ -559,8 +562,8 @@ recover(_VHost, Queues) ->
       end, {[], []}, Queues).
 
 settle(QName, complete, CTag, MsgIds, #stream_client{readers = Readers0,
-                                              local_pid = LocalPid,
-                                              name = Name} = State) ->
+                                                     local_pid = LocalPid,
+                                                     name = Name} = State) ->
     Credit = length(MsgIds),
     {Readers, Msgs} = case Readers0 of
                           #{CTag := #stream{credit = Credit0} = Str0} ->
@@ -1039,8 +1042,7 @@ stream_entries(QName, Name, LocalPid,
         {Records, Seg} ->
             Msgs = [begin
                         Msg0 = binary_to_msg(QName, B),
-                        Msg = rabbit_basic:add_header(<<"x-stream-offset">>,
-                                                      long, O, Msg0),
+                        Msg = mc:set_annotation(<<"x-stream-offset">>, O, Msg0),
                         {Name, LocalPid, O, false, Msg}
                     end || {O, B} <- Records,
                            O >= StartOffs],
@@ -1062,41 +1064,14 @@ stream_entries(QName, Name, LocalPid,
 stream_entries(_QName, _Name, _LocalPid, Str, Msgs) ->
     {Str, Msgs}.
 
-binary_to_msg(#resource{virtual_host = VHost,
+binary_to_msg(#resource{virtual_host = _VHost,
                         kind = queue,
-                        name = QName}, Data) ->
-    R0 = rabbit_msg_record:init(Data),
-    %% if the message annotation isn't present the data most likely came from
-    %% the rabbitmq-stream plugin so we'll choose defaults that simulate use
-    %% of the direct exchange
-    {utf8, Exchange} = rabbit_msg_record:message_annotation(<<"x-exchange">>,
-                                                            R0, {utf8, <<>>}),
-    {utf8, RoutingKey} = rabbit_msg_record:message_annotation(<<"x-routing-key">>,
-                                                              R0, {utf8, QName}),
-    {Props, Payload} = rabbit_msg_record:to_amqp091(R0),
-    XName = #resource{kind = exchange,
-                      virtual_host = VHost,
-                      name = Exchange},
-    Content = #content{class_id = 60,
-                       properties = Props,
-                       properties_bin = none,
-                       payload_fragments_rev = [Payload]},
-    {ok, Msg} = rabbit_basic:message(XName, RoutingKey, Content),
-    Msg.
+                        name = _QName}, Data) ->
+    mc:init(rabbit_mc_amqp, amqp10_framing:decode_bin(Data), #{}).
 
-
-msg_to_iodata(#basic_message{exchange_name = #resource{name = Exchange},
-                             routing_keys = [RKey | _],
-                             content = Content}) ->
-    #content{properties = Props,
-             payload_fragments_rev = Payload} =
-        rabbit_binary_parser:ensure_content_decoded(Content),
-    R0 = rabbit_msg_record:from_amqp091(Props, lists:reverse(Payload)),
-    %% TODO durable?
-    R = rabbit_msg_record:add_message_annotations(
-          #{<<"x-exchange">> => {utf8, Exchange},
-            <<"x-routing-key">> => {utf8, RKey}}, R0),
-    rabbit_msg_record:to_iodata(R).
+msg_to_iodata(Msg0) ->
+    Msg = mc:convert(rabbit_mc_amqp, Msg0),
+    mc:serialize(Msg).
 
 capabilities() ->
     #{unsupported_policies => [%% Classic policies

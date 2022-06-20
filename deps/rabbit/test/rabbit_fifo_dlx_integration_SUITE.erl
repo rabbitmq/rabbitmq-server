@@ -96,6 +96,7 @@ init_per_group(Group, Config, NodesCount) ->
     Config2 =  rabbit_ct_helpers:run_steps(Config1,
                                            [fun merge_app_env/1 ] ++
                                            rabbit_ct_broker_helpers:setup_steps()),
+    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config2, message_containers),
     ok = rpc(Config2, 0, application, set_env,
              [rabbit, channel_tick_interval, 100]),
     Config2.

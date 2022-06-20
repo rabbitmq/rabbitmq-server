@@ -154,6 +154,7 @@ discard(Msgs, Reason, undefined, State) ->
     {State, [{mod_call, rabbit_global_counters, messages_dead_lettered,
               [Reason, rabbit_quorum_queue, disabled, length(Msgs)]}]};
 discard(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
+    rabbit_log:debug("DISCARD ~p", [Msgs0]),
     Idxs = [I || ?MSG(I, _) <- Msgs0],
     Effect = {log, Idxs,
               fun (Log) ->

@@ -795,14 +795,17 @@ do_check_queue_version(AMQ, Version, N) ->
 cmd_publish_msg(St=#cq{amq=AMQ}, PayloadSize, DeliveryMode, Mandatory, Expiration) ->
     ?DEBUG("~0p ~0p ~0p ~0p ~0p", [St, PayloadSize, DeliveryMode, Mandatory, Expiration]),
     Payload = do_rand_payload(PayloadSize),
-    Msg = rabbit_basic:message(rabbit_misc:r(<<>>, exchange, <<>>),
-                               <<>>, #'P_basic'{delivery_mode = DeliveryMode,
-                                                expiration = do_encode_expiration(Expiration)},
-                               Payload),
-    Delivery = #delivery{mandatory = Mandatory, sender = self(),
-                         confirm = false, message = Msg, flow = noflow},
-    ok = rabbit_amqqueue:deliver([AMQ], Delivery),
-    {MsgProps, MsgPayload} = rabbit_basic_common:from_content(Msg#basic_message.content),
+    Ex = rabbit_misc:r(<<>>, exchange, <<>>),
+    BasicMsg = rabbit_basic:message(Ex, <<>>,
+                                    #'P_basic'{delivery_mode = DeliveryMode,
+                                               expiration = do_encode_expiration(Expiration)},
+                                    Payload),
+
+    Msg0 = rabbit_mc_amqp_legacy:message(Ex, <<>>, BasicMsg#basic_message.content),
+    Msg = mc:set_annotation(id, BasicMsg#basic_message.id, Msg0),
+    {ok, _, _} = rabbit_queue_type:deliver([AMQ], Msg, #{}, stateless),
+    Content = mc:protocol_state(Msg),
+    {MsgProps, MsgPayload} = rabbit_basic_common:from_content(Content),
     #amqp_msg{props=MsgProps, payload=MsgPayload}.
 
 cmd_basic_get_msg(St=#cq{amq=AMQ, limiter=LimiterPid}) ->
@@ -815,7 +818,8 @@ cmd_basic_get_msg(St=#cq{amq=AMQ, limiter=LimiterPid}) ->
         {empty, _} ->
             empty;
         {ok, _CountMinusOne, {_QName, _QPid, _AckTag, _IsDelivered, Msg}, _} ->
-            {MsgProps, MsgPayload} = rabbit_basic_common:from_content(Msg#basic_message.content),
+            Content = mc:protocol_state(Msg),
+            {MsgProps, MsgPayload} = rabbit_basic_common:from_content(Content),
             #amqp_msg{props=MsgProps, payload=MsgPayload}
     end.
 
