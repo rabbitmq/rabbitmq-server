@@ -147,13 +147,14 @@ defmodule RabbitMQCtl.MixfileBase do
           end
         end
 
+        make_cmd = System.get_env("MAKE", "make")
         is_bazel = System.get_env("IS_BAZEL") != nil
 
         [
           {
             :rabbit_common,
             path: Path.join(deps_dir, "rabbit_common"),
-            compile: (if is_bazel, do: false, else: "make"),
+            compile: (if is_bazel, do: false, else: make_cmd),
             override: true
           },
           {
@@ -171,7 +172,7 @@ defmodule RabbitMQCtl.MixfileBase do
           {
             :amqp_client,
             path: Path.join(deps_dir, "amqp_client"),
-            compile: (if is_bazel, do: false, else: "make"),
+            compile: (if is_bazel, do: false, else: make_cmd),
             override: true,
             only: :test
           },
