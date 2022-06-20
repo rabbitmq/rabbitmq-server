@@ -122,8 +122,8 @@ do_decrypt_start_app(Config, Passphrase) ->
     %% We expect a failure *after* the decrypting has been done.
     try
         rabbit:start_apps([rabbit_shovel_test], #{rabbit => temporary})
-    catch _:Err ->
-              ct:pal("~s: start_apps failed with ~p", [Err]),
+    catch _:Err:Stacktrace ->
+              ct:pal("start_apps failed with ~p~n~p", [Err, Stacktrace]),
               ok
     end,
     %% Check if the values have been decrypted.
