@@ -29,7 +29,11 @@ all_tests() ->
 groups() ->
     [
      {classic, [], all_tests()},
-     {quorum, [], all_tests()}
+     {quorum, [], all_tests()},
+     {direct_replyto, [],
+      [
+       direct_replyto
+      ]}
     ].
 
 init_per_suite(Config0) ->
@@ -221,6 +225,50 @@ ack_after_queue_delete(Config) ->
     flush(),
     ok.
 
+direct_replyto(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QName = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr,
+                                      <<"quorum">>}])),
+
+    %% spawn "rpc server"
+    spawn_link(
+      fun () ->
+              Server2 = rabbit_ct_broker_helpers:get_node_config(Config, 2, nodename),
+              Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+              ok = subscribe(Ch2, QName, <<"rpc-server">>),
+              receive
+                  {#'basic.deliver'{delivery_tag = _},
+                   #amqp_msg{props = #'P_basic'{reply_to = ReplyTo}}} ->
+                      ct:pal("Reply to ~p", [ReplyTo]),
+                      publish(Ch2, ReplyTo, <<"my-reply">>),
+                      timer:sleep(5000),
+                      amqp_channel:close(Ch2),
+                      ok
+              after 5000 ->
+                        flush(),
+                        exit(basic_deliver_timeout)
+              end
+      end),
+
+    ok = subscribe(Ch, <<"amq.rabbitmq.reply-to">>, <<"reply-to-queue">>, true),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{routing_key = QName},
+                           #amqp_msg{props =
+                                     #'P_basic'{reply_to = <<"amq.rabbitmq.reply-to">>},
+                                     payload = <<"my-request">>}),
+    receive
+        {#'basic.deliver'{delivery_tag = _},
+         #amqp_msg{props = #'P_basic'{}, payload = <<"my-reply">>}} ->
+            ok
+    after 5000 ->
+              flush(),
+              exit(basic_deliver_timeout)
+    end,
+    ok.
+
 %% Utility
 %%
 delete_queues() ->
@@ -265,8 +313,11 @@ basic_get_empty(Ch, Queue) ->
                                                     no_ack = false})).
 
 subscribe(Ch, Queue, CTag) ->
+    subscribe(Ch, Queue, CTag, false).
+
+subscribe(Ch, Queue, CTag, NoAck) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Queue,
-                                                no_ack = false,
+                                                no_ack = NoAck,
                                                 consumer_tag = CTag},
                            self()),
     receive
@@ -290,11 +341,14 @@ basic_nack(Ch, DTag) ->
                                         multiple = false}).
 
 flush() ->
+    flush(0).
+
+flush(T) ->
     receive
         Any ->
             ct:pal("flush ~p", [Any]),
             flush()
-    after 0 ->
+    after T ->
               ok
     end.
 

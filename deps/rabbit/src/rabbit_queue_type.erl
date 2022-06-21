@@ -52,7 +52,9 @@
 -type queue_state() :: term().
 -type msg_tag() :: term().
 -type arguments() :: queue_arguments | consumer_arguments.
--type queue_type() :: rabbit_classic_queue | rabbit_quorum_queue | rabbit_stream_queue.
+-type queue_type() :: rabbit_classic_queue |
+                      rabbit_quorum_queue |
+                      rabbit_stream_queue.
 
 -define(STATE, ?MODULE).
 
