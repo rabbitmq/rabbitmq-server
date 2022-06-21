@@ -306,14 +306,20 @@ begin_stream(#stream_client{name = QName, readers = Readers0} = State0,
 
 cancel(_Q, ConsumerTag, OkMsg, ActingUser, #stream_client{readers = Readers0,
                                                           name = QName} = State) ->
-    Readers = maps:remove(ConsumerTag, Readers0),
-    rabbit_core_metrics:consumer_deleted(self(), ConsumerTag, QName),
-    rabbit_event:notify(consumer_deleted, [{consumer_tag, ConsumerTag},
-                                           {channel, self()},
-                                           {queue, QName},
-                                           {user_who_performed_action, ActingUser}]),
-    maybe_send_reply(self(), OkMsg),
-    {ok, State#stream_client{readers = Readers}}.
+    case maps:take(ConsumerTag, Readers0) of
+        {#stream{log = Log}, Readers} ->
+            ok = close_log(Log),
+            rabbit_core_metrics:consumer_deleted(self(), ConsumerTag, QName),
+            rabbit_event:notify(consumer_deleted,
+                                [{consumer_tag, ConsumerTag},
+                                 {channel, self()},
+                                 {queue, QName},
+                                 {user_who_performed_action, ActingUser}]),
+            maybe_send_reply(self(), OkMsg),
+            {ok, State#stream_client{readers = Readers}};
+        error ->
+            {ok, State}
+    end.
 
 credit(CTag, Credit, Drain, #stream_client{readers = Readers0,
                                            name = Name,
@@ -1051,6 +1057,7 @@ set_leader_pid(Pid, QName) ->
             ok
     end.
 
+<<<<<<< HEAD
 apply_leader_locator_strategy(#{leader_locator_strategy := <<"client-local">>} = Conf) ->
     Conf;
 apply_leader_locator_strategy(#{leader_node := Leader,
@@ -1096,3 +1103,8 @@ select_first_matching_node([{N, _} | Rest], Replicas) ->
         true -> N;
         false -> select_first_matching_node(Rest, Replicas)
     end.
+=======
+close_log(undefined) -> ok;
+close_log(Log) ->
+    osiris_log:close(Log).
+>>>>>>> dc7292595d (Close osiris log when cancelling AMQP stream consumer)
