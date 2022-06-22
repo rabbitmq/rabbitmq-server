@@ -1057,7 +1057,6 @@ set_leader_pid(Pid, QName) ->
             ok
     end.
 
-<<<<<<< HEAD
 apply_leader_locator_strategy(#{leader_locator_strategy := <<"client-local">>} = Conf) ->
     Conf;
 apply_leader_locator_strategy(#{leader_node := Leader,
@@ -1103,8 +1102,7 @@ select_first_matching_node([{N, _} | Rest], Replicas) ->
         true -> N;
         false -> select_first_matching_node(Rest, Replicas)
     end.
-=======
+
 close_log(undefined) -> ok;
 close_log(Log) ->
     osiris_log:close(Log).
->>>>>>> dc7292595d (Close osiris log when cancelling AMQP stream consumer)
