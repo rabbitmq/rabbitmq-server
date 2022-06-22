@@ -110,7 +110,11 @@ cat << 'EOF' > $@
     if [ $$# -gt 1 ]; then
         OUTPUT_DIR=shard_$$2_of_*/test.outputs
     fi
-    open bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR/index.html
+    cd bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR
+    if [ -f outputs.zip ]; then
+        unzip -u outputs.zip
+    fi
+    open index.html
 EOF
 """,
     executable = True,
@@ -135,8 +139,8 @@ cat << 'EOF' > $@
         OUTPUT_DIR=shard_$$2_of_*/test.outputs
     fi
     TESTLOGS=$$(echo $$(bazel info output_path)/k8-*/testlogs)
-    cd $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR && unzip outputs.zip
-    open $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR/index.html
+    cd $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR && unzip -u outputs.zip
+    open index.html
 EOF
 """,
     executable = True,
@@ -160,7 +164,12 @@ cat << 'EOF' > $@
     if [ $$# -gt 1 ]; then
         OUTPUT_DIR=shard_$$2_of_*/test.outputs
     fi
-    open bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR/ct_run.*/deps.*/run.*/log_private
+    cd bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR
+    if [ -f outputs.zip ]; then
+        unzip -u outputs.zip
+    fi
+    open index.html
+    open ct_run.*/deps.*/run.*/log_private
 EOF
 """,
     executable = True,
@@ -187,9 +196,9 @@ cat << 'EOF' > $@
         OUTPUT_DIR=shard_$$2_of_*/test.outputs
     fi
     TESTLOGS=$$(echo $$(bazel info output_path)/k8-*/testlogs)
-    cd $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR && unzip outputs.zip
-    open $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR/index.html
-    open $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR/ct_run.*/deps.*/run.*/log_private
+    cd $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR && unzip -u outputs.zip
+    open index.html
+    open ct_run.*/deps.*/run.*/log_private
 EOF
 """,
     executable = True,
