@@ -155,7 +155,7 @@ function oauth_is_logged_in() {
 
 
 function oauth_initiateLogin() {
-    mgr.signinRedirect({ state: { foo: "bar" } /*, useReplaceToNavigate: true*/ }).then(function() {
+    mgr.signinRedirect({ state: { } /*, useReplaceToNavigate: true*/ }).then(function() {
         log("signinRedirect done");
     }).catch(function(err) {
         console.error(err);
