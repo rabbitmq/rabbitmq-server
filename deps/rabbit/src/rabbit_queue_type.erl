@@ -14,6 +14,7 @@
          close/1,
          discover/1,
          default/0,
+         is_supported/0,
          is_enabled/1,
          is_compatible/4,
          declare/2,
@@ -125,7 +126,6 @@
               actions/0,
               settle_op/0]).
 
-%% is the queue type feature enabled
 -callback is_enabled() -> boolean().
 
 -callback is_compatible(Durable :: boolean(),
@@ -234,6 +234,13 @@ discover(<<"stream">>) ->
 default() ->
     rabbit_classic_queue.
 
+%% is the queue type API supported in the cluster
+is_supported() ->
+    %% the stream_queue feature enables
+    %% the queue_type internal message API
+    rabbit_feature_flags:is_enabled(stream_queue).
+
+%% is a specific queue type implementation enabled
 -spec is_enabled(module()) -> boolean().
 is_enabled(Type) ->
     Type:is_enabled().
