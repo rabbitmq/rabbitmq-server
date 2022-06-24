@@ -579,10 +579,10 @@ assert_invariant(State = #q{consumers = Consumers, single_active_consumer_on = f
 
 is_empty(#q{backing_queue = BQ, backing_queue_state = BQS}) -> BQ:is_empty(BQS).
 
-maybe_send_drained(WasEmpty, State) ->
+maybe_send_drained(WasEmpty, #q{q = Q} = State) ->
     case (not WasEmpty) andalso is_empty(State) of
         true  -> notify_decorators(State),
-                 rabbit_queue_consumers:send_drained();
+                 rabbit_queue_consumers:send_drained(amqqueue:get_name(Q));
         false -> ok
     end,
     State.
@@ -1355,7 +1355,8 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
              PrefetchCount, ConsumerTag, ExclusiveConsume, Args, OkMsg, ActingUser},
-            _From, State = #q{consumers             = Consumers,
+            _From, State = #q{q = Q,
+                              consumers             = Consumers,
                               active_consumer = Holder,
                               single_active_consumer_on = SingleActiveConsumerOn}) ->
     ConsumerRegistration = case SingleActiveConsumerOn of
@@ -1364,11 +1365,12 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                 true  ->
                     {error, reply({error, exclusive_consume_unavailable}, State)};
                 false ->
-                  Consumers1 = rabbit_queue_consumers:add(
-                    ChPid, ConsumerTag, NoAck,
-                    LimiterPid, LimiterActive,
-                    PrefetchCount, Args, is_empty(State),
-                    ActingUser, Consumers),
+                    Consumers1 = rabbit_queue_consumers:add(
+                                   amqqueue:get_name(Q),
+                                   ChPid, ConsumerTag, NoAck,
+                                   LimiterPid, LimiterActive,
+                                   PrefetchCount, Args, is_empty(State),
+                                   ActingUser, Consumers),
 
                   case Holder of
                       none ->
@@ -1386,6 +1388,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
               in_use -> {error, reply({error, exclusive_consume_unavailable}, State)};
               ok     ->
                     Consumers1 = rabbit_queue_consumers:add(
+                                   amqqueue:get_name(Q),
                                    ChPid, ConsumerTag, NoAck,
                                    LimiterPid, LimiterActive,
                                    PrefetchCount, Args, is_empty(State),
@@ -1652,9 +1655,10 @@ handle_cast({credit, ChPid, CTag, Credit, Drain},
                        backing_queue_state = BQS,
                        q = Q}) ->
     Len = BQ:len(BQS),
-    rabbit_classic_queue:send_queue_event(ChPid, amqqueue:get_name(Q), {send_credit_reply, Len}),
+    rabbit_classic_queue:send_credit_reply(ChPid, amqqueue:get_name(Q), Len),
     noreply(
-      case rabbit_queue_consumers:credit(Len == 0, Credit, Drain, ChPid, CTag,
+      case rabbit_queue_consumers:credit(amqqueue:get_name(Q),
+                                         Len == 0, Credit, Drain, ChPid, CTag,
                                          Consumers) of
           unchanged               -> State;
           {unblocked, Consumers1} -> State1 = State#q{consumers = Consumers1},
