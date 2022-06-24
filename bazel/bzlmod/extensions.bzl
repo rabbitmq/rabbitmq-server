@@ -1,4 +1,8 @@
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+load(
+    ":secondary_umbrella.bzl",
+    fetch_secondary_umbrella = "secondary_umbrella",
+)
 
 def _rbe(ctx):
     rbe_repo_props = []
@@ -35,4 +39,11 @@ rbe = module_extension(
     tag_classes = {
         "git_repository": git_repository_tag,
     },
+)
+
+def _secondary_umbrella(ctx):
+    fetch_secondary_umbrella()
+
+secondary_umbrella = module_extension(
+    implementation = _secondary_umbrella,
 )

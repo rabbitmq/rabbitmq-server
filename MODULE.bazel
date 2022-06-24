@@ -310,3 +310,13 @@ use_repo(
     rbe,
     "rbe",
 )
+
+secondary_umbrella = use_extension(
+    "//bazel/bzlmod:extensions.bzl",
+    "secondary_umbrella",
+)
+
+use_repo(
+    secondary_umbrella,
+    "rabbitmq-server-generic-unix-3.9",
+)
