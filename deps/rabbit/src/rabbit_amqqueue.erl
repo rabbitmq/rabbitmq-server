@@ -87,7 +87,7 @@
 
 -export_type([name/0, qmsg/0, absent_reason/0]).
 
--type name() :: rabbit_types:r('queue').
+-type name() :: rabbit_types:r('queue') | rabbit_types:r('virtual_queue').
 
 -type qpids() :: [pid()].
 -type qlen() :: rabbit_types:ok(non_neg_integer()).

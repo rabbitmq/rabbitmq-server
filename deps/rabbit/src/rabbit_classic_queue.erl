@@ -179,7 +179,7 @@ consume(Q, Spec, State) when ?amqqueue_is_classic(Q) ->
       exclusive_consume := ExclusiveConsume,
       args := Args,
       ok_msg := OkMsg,
-      acting_user :=  ActingUser} = Spec,
+      acting_user := ActingUser} = Spec,
     case delegate:invoke(QPid,
                          {gen_server2, call,
                           [{basic_consume, NoAck, ChPid, LimiterPid,

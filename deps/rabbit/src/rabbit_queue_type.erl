@@ -47,6 +47,10 @@
          notify_decorators/1
          ]).
 
+-export([
+         lookup/1
+        ]).
+
 -type queue_name() :: rabbit_types:r(queue).
 -type queue_ref() :: queue_name() | atom().
 -type queue_state() :: term().
@@ -351,6 +355,28 @@ arguments(ArgumentType, QueueType) ->
 notify_decorators(Q) ->
     Mod = amqqueue:get_type(Q),
     Mod:notify_decorators(Q).
+
+-spec lookup([rabbit_amqqueue:name()]) ->
+    [amqqueue:amqqueue()].
+lookup(QNames) when is_list(QNames) ->
+    lookup0(QNames, []).
+
+lookup0([], Acc) ->
+    Acc;
+lookup0([#resource{kind = queue} = Name | Rem], Acc) ->
+    case rabbit_virtual_queue:is_virtual(Name) of
+        false ->
+            case ets:lookup(rabbit_queue, Name) of
+                [] ->
+                    lookup0(Rem, Acc);
+                [Q] ->
+                    lookup0(Rem, [Q | Acc])
+            end;
+        true ->
+            %% virtual queues are not persisted,
+            %% create a temporary amqqueue record here
+            lookup0(Rem, [rabbit_virtual_queue:create_amqqueue(Name) | Acc])
+    end.
 
 -spec init() -> state().
 init() ->

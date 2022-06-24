@@ -1399,7 +1399,10 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                consumer_tag = CTag0,
                                no_ack       = NoAck,
                                nowait       = NoWait},
-              _, State = #ch{reply_consumer   = ReplyConsumer,
+              _, State = #ch{cfg = #conf{user = User,
+                                         virtual_host = VHostPath},
+                             reply_consumer   = ReplyConsumer,
+                             queue_states =  QStates0,
                              consumer_mapping = ConsumerMapping}) ->
     case maps:find(CTag0, ConsumerMapping) of
         error ->
@@ -1410,10 +1413,23 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                           rabbit_guid:gen_secure(), "amq.ctag");
                                Other -> Other
                            end,
-                    %% Precalculate both suffix and key
-                    {Key, Suffix} = rabbit_direct_reply_to:compute_key_and_suffix_v2(self()),
+                    TmpQName = #resource{name = <<"amq.rabbitmq.reply-to">>,
+                                         kind = queue,
+                                         virtual_host = VHostPath},
+                    Q = rabbit_virtual_queue:create_amqqueue(TmpQName),
+                    %% suffix is pre-calculated by create_amqqueue
+                    #{key := Key,
+                      suffix := Suffix} = amqqueue:get_type_state(Q),
                     Consumer = {CTag, Suffix, Key},
-                    State1 = State#ch{reply_consumer = Consumer},
+                    Spec = #{no_ack => true,
+                             channel_pid => self(),
+                             consumer_tag => CTag,
+                             ok_msg => undefined,
+                             acting_user => User},
+                    {ok, QStates1, Actions} = rabbit_queue_type:consume(Q, Spec, QStates0),
+                    State1 = handle_queue_actions(Actions,
+                                                  State#ch{reply_consumer = Consumer,
+                                                           queue_states = QStates1}),
                     case NoWait of
                         true  -> {noreply, State1};
                         false -> Rep = #'basic.consume_ok'{consumer_tag = CTag},
@@ -2174,15 +2190,15 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
                                         confirm    = Confirm,
                                         msg_seq_no = MsgSeqNo},
                    RoutedToQueueNames = [QName]}, State0 = #ch{queue_states = QueueStates0}) -> %% optimisation when there is one queue
-    Qs0 = rabbit_amqqueue:lookup(RoutedToQueueNames),
+    Qs0 = rabbit_queue_type:lookup(RoutedToQueueNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
-    QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
     case rabbit_queue_type:deliver(Qs, Delivery, QueueStates0) of
-        {ok, QueueStates, Actions}  ->
+        {ok, QueueStates, Actions} ->
             rabbit_global_counters:messages_routed(amqp091, erlang:min(1, length(Qs))),
             %% NB: the order here is important since basic.returns must be
             %% sent before confirms.
-            ok = process_routing_mandatory(Mandatory, Qs, Message, State0),
+            QueueNames = lists:map(fun amqqueue:get_name/1, Qs),
+            ok = process_routing_mandatory(Mandatory, QueueNames, Message, State0),
             State1 = process_routing_confirm(Confirm, QueueNames, MsgSeqNo, XName, State0),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes
@@ -2242,13 +2258,13 @@ deliver_to_queues({Delivery = #delivery{message    = Message = #basic_message{ex
     end.
 
 process_routing_mandatory(_Mandatory = true,
-                          _RoutedToQs = [],
+                          _RoutedToQNames = [],
                           Msg, State) ->
     rabbit_global_counters:messages_unroutable_returned(amqp091, 1),
     ok = basic_return(Msg, State, no_route),
     ok;
 process_routing_mandatory(_Mandatory = false,
-                          _RoutedToQs = [],
+                          _RoutedToQNames = [],
                           #basic_message{exchange_name = ExchangeName}, State) ->
     rabbit_global_counters:messages_unroutable_dropped(amqp091, 1),
     ?INCR_STATS(exchange_stats, ExchangeName, 1, drop_unroutable, State),

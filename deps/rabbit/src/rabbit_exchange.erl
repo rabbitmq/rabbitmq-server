@@ -7,7 +7,6 @@
 
 -module(rabbit_exchange).
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -export([recover/1, policy_changed/2, callback/4, declare/7,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1, exists/1,
@@ -405,26 +404,19 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
     rabbit_control_misc:emitting_map(
       AggregatorPid, Ref, fun(X) -> info(X, Items) end, list(VHostPath)).
 
--spec route(rabbit_types:exchange(), rabbit_types:delivery())
-                 -> [rabbit_amqqueue:name()].
-
+-spec route(rabbit_types:exchange(), rabbit_types:delivery()) ->
+    [rabbit_amqqueue:name()].
 route(#exchange{name = #resource{virtual_host = VHost, name = RName} = XName,
                 decorators = Decorators} = X,
       #delivery{message = #basic_message{routing_keys = RKs}} = Delivery) ->
     case RName of
         <<>> ->
             RKsSorted = lists:usort(RKs),
-            [rabbit_channel:deliver_reply(RK, Delivery) ||
-             RK <- RKsSorted, virtual_reply_queue(RK)],
-            [rabbit_misc:r(VHost, queue, RK) || RK <- RKsSorted,
-                                                not virtual_reply_queue(RK)];
+            [rabbit_misc:r(VHost, queue, RK) || RK <- RKsSorted];
         _ ->
             Decs = rabbit_exchange_decorator:select(route, Decorators),
             lists:usort(route1(Delivery, Decs, {[X], XName, []}))
     end.
-
-virtual_reply_queue(<<"amq.rabbitmq.reply-to.", _/binary>>) -> true;
-virtual_reply_queue(_)                                      -> false.
 
 route1(_, _, {[], _, QNames}) ->
     QNames;
