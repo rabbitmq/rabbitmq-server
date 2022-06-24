@@ -8,11 +8,11 @@
 -module(rabbit_queue_consumers).
 
 -export([new/0, max_active_priority/1, inactive/1, all/1, all/3, count/0,
-         unacknowledged_message_count/0, add/10, remove/3, erase_ch/2,
-         send_drained/0, deliver/5, record_ack/3, subtract_acks/3,
+         unacknowledged_message_count/0, add/11, remove/3, erase_ch/2,
+         send_drained/1, deliver/5, record_ack/3, subtract_acks/3,
          possibly_unblock/3,
          resume_fun/0, notify_sent_fun/1, activate_limit_fun/0,
-         credit/6, utilisation/1, capacity/1, is_same/3, get_consumer/1, get/3,
+         credit/7, utilisation/1, capacity/1, is_same/3, get_consumer/1, get/3,
          consumer_tag/1, get_infos/1]).
 
 -export([deactivate_limit_fun/0]).
@@ -120,12 +120,12 @@ count() -> lists:sum([Count || #cr{consumer_count = Count} <- all_ch_record()]).
 unacknowledged_message_count() ->
     lists:sum([?QUEUE:len(C#cr.acktags) || C <- all_ch_record()]).
 
--spec add(ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
+-spec add(amqqueue:name(), ch(), rabbit_types:ctag(), boolean(), pid(), boolean(),
           non_neg_integer(), rabbit_framing:amqp_table(), boolean(),
           rabbit_types:username(), state())
          -> state().
 
-add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
+add(QName, ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
     Username, State = #state{consumers = Consumers,
                              use       = CUInfo}) ->
     C = #cr{consumer_count = Count,
@@ -139,7 +139,7 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Prefetch, Args, IsEmpty,
       case parse_credit_args(Prefetch, Args) of
           {0,       auto}            -> C1;
           {_Credit, auto} when NoAck -> C1;
-          {Credit,  Mode}            -> credit_and_drain(
+          {Credit,  Mode}            -> credit_and_drain(QName,
                                           C1, CTag, Credit, Mode, IsEmpty)
       end),
     Consumer = #consumer{tag          = CTag,
@@ -192,9 +192,9 @@ erase_ch(ChPid, State = #state{consumers = Consumers}) ->
              State#state{consumers = remove_consumers(ChPid, Consumers)}}
     end.
 
--spec send_drained() -> 'ok'.
+-spec send_drained(amqqueue:name()) -> 'ok'.
 
-send_drained() -> [update_ch_record(send_drained(C)) || C <- all_ch_record()],
+send_drained(QName) -> [update_ch_record(send_drained(QName, C)) || C <- all_ch_record()],
                   ok.
 
 -spec deliver(fun ((boolean()) -> {fetch_result(), T}),
@@ -273,8 +273,9 @@ deliver_to_consumer(FetchFun,
                             unsent_message_count = Count},
                     QName) ->
     {{Message, IsDelivered, AckTag}, R} = FetchFun(AckRequired),
-    rabbit_channel:deliver(ChPid, CTag, AckRequired,
-                           {QName, self(), AckTag, IsDelivered, Message}),
+    Msg= {QName, self(), AckTag, IsDelivered, Message},
+    rabbit_classic_queue:deliver_to_consumer(ChPid, QName, CTag, AckRequired,
+                                              Msg),
     ChAckTags1 = case AckRequired of
                      true  -> ?QUEUE:in({AckTag, CTag}, ChAckTags);
                      false -> ChAckTags
@@ -394,16 +395,17 @@ deactivate_limit_fun() ->
             C#cr{limiter = rabbit_limiter:deactivate(Limiter)}
     end.
 
--spec credit(boolean(), integer(), boolean(), ch(), rabbit_types:ctag(),
+-spec credit(amqqueue:name(), boolean(), integer(), boolean(), ch(),
+             rabbit_types:ctag(),
              state()) -> 'unchanged' | {'unblocked', state()}.
 
-credit(IsEmpty, Credit, Drain, ChPid, CTag, State) ->
+credit(QName, IsEmpty, Credit, Drain, ChPid, CTag, State) ->
     case lookup_ch(ChPid) of
         not_found ->
             unchanged;
         #cr{limiter = Limiter} = C ->
             C1 = #cr{limiter = Limiter1} =
-                credit_and_drain(C, CTag, Credit, drain_mode(Drain), IsEmpty),
+                credit_and_drain(QName, C, CTag, Credit, drain_mode(Drain), IsEmpty),
             case is_ch_blocked(C1) orelse
                 (not rabbit_limiter:is_consumer_blocked(Limiter, CTag)) orelse
                 rabbit_limiter:is_consumer_blocked(Limiter1, CTag) of
@@ -522,20 +524,20 @@ block_consumer(C = #cr{blocked_consumers = Blocked}, QEntry) ->
 is_ch_blocked(#cr{unsent_message_count = Count, limiter = Limiter}) ->
     Count >= ?UNSENT_MESSAGE_LIMIT orelse rabbit_limiter:is_suspended(Limiter).
 
-send_drained(C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
+send_drained(QName, C = #cr{ch_pid = ChPid, limiter = Limiter}) ->
     case rabbit_limiter:drained(Limiter) of
         {[],         Limiter}  -> C;
-        {CTagCredit, Limiter2} -> rabbit_channel:send_drained(
-                                    ChPid, CTagCredit),
-                                  C#cr{limiter = Limiter2}
+        {CTagCredits, Limiter2} ->
+            rabbit_classic_queue:send_drained(ChPid, QName, CTagCredits),
+            C#cr{limiter = Limiter2}
     end.
 
-credit_and_drain(C = #cr{ch_pid = ChPid, limiter = Limiter},
+credit_and_drain(QName, C = #cr{ch_pid = ChPid, limiter = Limiter},
                  CTag, Credit, Mode, IsEmpty) ->
     case rabbit_limiter:credit(Limiter, CTag, Credit, Mode, IsEmpty) of
-        {true,  Limiter1} -> rabbit_channel:send_drained(ChPid,
-                                                         [{CTag, Credit}]),
-                             C#cr{limiter = Limiter1};
+        {true,  Limiter1} ->
+            rabbit_classic_queue:send_drained(ChPid, QName, [{CTag, Credit}]),
+            C#cr{limiter = Limiter1};
         {false, Limiter1} -> C#cr{limiter = Limiter1}
     end.
 
