@@ -521,7 +521,8 @@ credit(Q, CTag, Credit, Drain, Ctxs) ->
 -spec dequeue(amqqueue:amqqueue(), boolean(),
               pid(), rabbit_types:ctag(), state()) ->
     {ok, non_neg_integer(), term(), state()}  |
-    {empty, state()}.
+    {empty, state()} | rabbit_types:error(term()) |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),
     Mod = amqqueue:get_type(Q),
@@ -532,6 +533,8 @@ dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
             {empty, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {error, _} = Err ->
             Err;
+        {timeout, _} = Err ->
+            {error, Err};
         {protocol_error, _, _, _} = Err ->
             Err
     end.
