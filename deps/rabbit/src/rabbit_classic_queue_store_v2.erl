@@ -244,7 +244,6 @@ build_data({_, Size, Msg}, CheckCRC32) ->
     Padding = (Size - iolist_size(MsgIovec)) * 8,
     %% Calculate the CRC for the data if configured to do so.
     %% We will truncate the CRC to 16 bits to save on space. (Idea taken from postgres.)
-    %% @todo Move check_crc32 to flush_buffer.
     {UseCRC32, CRC32} = case CheckCRC32 of
         true -> {1, erlang:crc32(MsgIovec)};
         false -> {0, 0}
@@ -287,22 +286,16 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
         0 ->
             ok;
         1 ->
-            %% We only want to check the CRC32 if configured to do so.
-            %% @todo Always check if the message has a CRC32 to be consistent with QQs.
-            case check_crc32() of
-                false ->
-                    ok;
-                true ->
-                    CRC32 = erlang:crc32(MsgBin),
-                    %% We currently crash if the CRC32 is incorrect as we cannot recover automatically.
-                    try
-                        CRC32Expected = <<CRC32:16>>,
-                        ok
-                    catch C:E:S ->
-                        rabbit_log:error("Per-queue store CRC32 check failed in ~s seq id ~b offset ~b size ~b",
-                                         [segment_file(Segment, State), SeqId, Offset, Size]),
-                        erlang:raise(C, E, S)
-                    end
+            %% Always check the CRC32 if it was computed on write.
+            CRC32 = erlang:crc32(MsgBin),
+            %% We currently crash if the CRC32 is incorrect as we cannot recover automatically.
+            try
+                CRC32Expected = <<CRC32:16>>,
+                ok
+            catch C:E:S ->
+                rabbit_log:error("Per-queue store CRC32 check failed in ~s seq id ~b offset ~b size ~b",
+                                 [segment_file(Segment, State), SeqId, Offset, Size]),
+                erlang:raise(C, E, S)
             end
     end,
     Msg = binary_to_term(MsgBin),
