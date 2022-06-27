@@ -11,7 +11,8 @@
 
 -export([recover/0, recover/2, exists/1, add/2, add/3, remove/1, remove/2, remove/3, remove/4]).
 -export([list/1, list_for_source/1, list_for_destination/1,
-         list_for_source_and_destination/2, list_explicit/0]).
+         list_for_source_and_destination/2, list_explicit/0,
+         list_between/2, has_any_between/2]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
          process_deletions/2, binding_action/3]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
@@ -303,6 +304,30 @@ list_for_destination(DstName = #resource{virtual_host = VHostPath}) ->
                                        S =/= ?DEFAULT_EXCHANGE(VHostPath)
                                end, AllBindings),
     implicit_for_destination(DstName) ++ Filtered.
+
+-spec list_between(
+    rabbit_types:binding_source(),
+    rabbit_types:binding_destination()) -> bindings().
+
+list_between(SrcName = #resource{virtual_host = SVH}, DstName = #resource{}) ->
+    AllBindings = mnesia:async_dirty(
+      fun() ->
+              Route = #route{binding = #binding{
+                  source = SrcName,
+                  destination = DstName,
+                  _ = '_'}
+              },
+              [B || #route{binding = B}
+                        <- mnesia:match_object(rabbit_route, Route, read)]
+      end),
+    lists:filter(fun(#binding{source = S}) ->
+                       S =/= ?DEFAULT_EXCHANGE(SVH)
+                 end, AllBindings).
+
+-spec has_any_between(rabbit_types:binding_source(),
+    rabbit_types:binding_destination()) -> boolean().
+has_any_between(Source, Destination) ->
+    list_between(Source, Destination) =/= [].
 
 implicit_bindings(VHostPath) ->
     DstQueues = rabbit_amqqueue:list_names(VHostPath),
