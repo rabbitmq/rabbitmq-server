@@ -49,12 +49,17 @@ groups() ->
                 basic_recover,
                 delete_immediately_by_resource
                ],
+    ExtraBccTests = [extra_bcc_option,
+                     extra_bcc_option_multiple_1,
+                     extra_bcc_option_multiple_2
+                    ],
     [
      {parallel_tests, [], [
        {classic_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds,
                                                 trigger_message_store_compaction]},
        {mirrored_queue, [parallel], AllTests ++ [delete_immediately_by_pid_succeeds,
                                                  trigger_message_store_compaction]},
+<<<<<<< HEAD
        {quorum_queue, [parallel], AllTests ++ [
            delete_immediately_by_pid_fails,
            extra_bcc_option
@@ -65,6 +70,12 @@ groups() ->
                                    subscribe,
                                    extra_bcc_option]}
 
+=======
+       {quorum_queue, [parallel], AllTests ++ ExtraBccTests ++ [delete_immediately_by_pid_fails]},
+       {quorum_queue_in_memory_limit, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
+       {quorum_queue_in_memory_bytes, [parallel], AllTests ++ [delete_immediately_by_pid_fails]},
+       {stream_queue, [parallel], ExtraBccTests ++ [publish, subscribe]}
+>>>>>>> 729a665573 (Do not route to duplicate extra BCC destinations)
       ]}
     ].
 
@@ -673,11 +684,13 @@ delete_immediately_by_resource(Config) ->
 
 extra_bcc_option(Config) ->
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
-    QName = <<"a_queue_with_extra_bcc">>,
+    Name0 = ?FUNCTION_NAME,
+    Name = atom_to_binary(Name0),
+    QName = <<"queue_with_extra_bcc_", Name/binary>>,
     delete_queue(Ch, QName),
     declare_queue(Ch, Config, QName),
 
-    ExtraBCC = <<"extra.bcc">>,
+    ExtraBCC = <<"extra_bcc_", Name/binary>>,
     delete_queue(Ch, ExtraBCC),
     declare_bcc_queue(Ch, ExtraBCC),
     set_queue_options(Config, QName, #{
@@ -691,9 +704,86 @@ extra_bcc_option(Config) ->
     delete_queue(Ch, QName),
     delete_queue(Ch, ExtraBCC).
 
+<<<<<<< HEAD
+=======
+%% Test single message being routed to 2 target queues where 1 target queue
+%% has an extra BCC.
+extra_bcc_option_multiple_1(Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Name0 = ?FUNCTION_NAME,
+    Name = atom_to_binary(Name0),
+    Exchange = <<"fanout_", Name/binary>>,
+    declare_exchange(Ch, Exchange, <<"fanout">>),
+
+    QName1 = <<"queue_with_extra_bcc_", Name/binary>>,
+    declare_queue(Ch, Config, QName1),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = QName1,
+                                             exchange = Exchange}),
+    ExtraBCC = <<"extra_bcc_", Name/binary>>,
+    declare_bcc_queue(Ch, ExtraBCC),
+    set_queue_options(Config, QName1, #{extra_bcc => ExtraBCC}),
+    QName2 = <<"queue_without_extra_bcc_", Name/binary>>,
+    declare_queue(Ch, Config, QName2),
+    #'queue.bind_ok'{} = amqp_channel:call(
+                           Ch, #'queue.bind'{queue = QName2,
+                                             exchange = Exchange}),
+
+    publish(Ch, <<"ignore">>, [<<"msg">>], Exchange),
+    wait_for_messages(Config, [[QName1, <<"1">>, <<"1">>, <<"0">>]]),
+    wait_for_messages(Config, [[QName2, <<"1">>, <<"1">>, <<"0">>]]),
+    wait_for_messages(Config, [[ExtraBCC, <<"1">>, <<"1">>, <<"0">>]]),
+
+    delete_exchange(Ch, Exchange),
+    delete_queue(Ch, QName1),
+    delete_queue(Ch, QName2),
+    delete_queue(Ch, ExtraBCC).
+
+%% Test single message being routed to 2 target queues where both target queues
+%% have the same extra BCC.
+extra_bcc_option_multiple_2(Config) ->
+    {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Name0 = ?FUNCTION_NAME,
+    Name = atom_to_binary(Name0),
+    Exchange = <<"fanout_", Name/binary>>,
+    declare_exchange(Ch, Exchange, <<"fanout">>),
+
+    ExtraBCC = <<"extra_bcc_", Name/binary>>,
+    declare_bcc_queue(Ch, ExtraBCC),
+
+    QName1 = <<"q1_with_extra_bcc_", Name/binary>>,
+    QName2 = <<"q2_with_extra_bcc_", Name/binary>>,
+    lists:foreach(
+      fun(QName) ->
+              declare_queue(Ch, Config, QName),
+              #'queue.bind_ok'{} = amqp_channel:call(
+                                     Ch, #'queue.bind'{queue = QName,
+                                                       exchange = Exchange}),
+              set_queue_options(Config, QName, #{extra_bcc => ExtraBCC})
+      end, [QName1, QName2]),
+
+    publish(Ch, <<"ignore">>, [<<"msg">>], Exchange),
+    wait_for_messages(Config, [[QName1, <<"1">>, <<"1">>, <<"0">>]]),
+    wait_for_messages(Config, [[QName2, <<"1">>, <<"1">>, <<"0">>]]),
+    wait_for_messages(Config, [[ExtraBCC, <<"1">>, <<"1">>, <<"0">>]]),
+
+    delete_exchange(Ch, Exchange),
+    delete_queue(Ch, QName1),
+    delete_queue(Ch, QName2),
+    delete_queue(Ch, ExtraBCC).
+
+>>>>>>> 729a665573 (Do not route to duplicate extra BCC destinations)
 %%%%%%%%%%%%%%%%%%%%%%%%
 %% Test helpers
 %%%%%%%%%%%%%%%%%%%%%%%%
+
+declare_exchange(Ch, Name, Type) ->
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Ch, #'exchange.declare'{exchange = Name,
+                                                         type     = Type
+                                                        }).
+delete_exchange(Ch, Name) ->
+    #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = Name}).
 
 declare_queue(Ch, Config, QName) ->
     Args = ?config(queue_args, Config),

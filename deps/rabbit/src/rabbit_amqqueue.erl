@@ -2031,3 +2031,47 @@ get_quorum_nodes(Q) ->
         _ ->
             []
     end.
+<<<<<<< HEAD
+=======
+
+-spec prepend_extra_bcc([amqqueue:amqqueue()]) ->
+    [amqqueue:amqqueue()].
+prepend_extra_bcc([]) ->
+    [];
+prepend_extra_bcc([Q] = Qs) ->
+    case amqqueue:get_options(Q) of
+        #{extra_bcc := BCCName} ->
+            case get_bcc_queue(Q, BCCName) of
+                {ok, BCCQueue} ->
+                    [BCCQueue | Qs];
+                {error, not_found} ->
+                    Qs
+            end;
+        _ ->
+            Qs
+    end;
+prepend_extra_bcc(Qs) ->
+    BCCQueues =
+        lists:filtermap(
+          fun(Q) ->
+                  case amqqueue:get_options(Q) of
+                      #{extra_bcc := BCCName} ->
+                          case get_bcc_queue(Q, BCCName) of
+                              {ok, BCCQ} ->
+                                  {true, BCCQ};
+                              {error, not_found} ->
+                                  false
+                          end;
+                      _ ->
+                          false
+                  end
+          end, Qs),
+    lists:usort(BCCQueues) ++ Qs.
+
+-spec get_bcc_queue(amqqueue:amqqueue(), binary()) ->
+    {ok, amqqueue:amqqueue()} | {error, not_found}.
+get_bcc_queue(Q, BCCName) ->
+    #resource{virtual_host = VHost} = amqqueue:get_name(Q),
+    BCCQueueName = rabbit_misc:r(VHost, queue, BCCName),
+    rabbit_amqqueue:lookup(BCCQueueName).
+>>>>>>> 729a665573 (Do not route to duplicate extra BCC destinations)
