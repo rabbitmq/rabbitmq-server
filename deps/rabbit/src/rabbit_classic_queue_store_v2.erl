@@ -168,7 +168,8 @@ get_write_offset(Segment, Size, State = #qs{ write_segment = WriteSegment })
            ?VERSION:8,
            FromSeqId:64/unsigned,
            ToSeqId:64/unsigned,
-           0:344 >>),
+           0:344 >>,
+        [raw]),
     {?HEADER_SIZE, State#qs{ write_segment = Segment,
                              write_offset = ?HEADER_SIZE + ?ENTRY_HEADER_SIZE + Size }}.
 
