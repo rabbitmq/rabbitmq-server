@@ -21,6 +21,8 @@
 !/deps/rabbitmq_cli/
 !/deps/rabbitmq_codegen/
 !/deps/rabbitmq_consistent_hash_exchange/
+!/deps/rabbitmq_ct_helpers/
+!/deps/rabbitmq_ct_client_helpers/
 !/deps/rabbitmq_event_exchange/
 !/deps/rabbitmq_federation/
 !/deps/rabbitmq_federation_management/
