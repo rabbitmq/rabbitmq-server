@@ -2090,23 +2090,43 @@ get_quorum_nodes(Q) ->
             []
     end.
 
--spec prepend_extra_bcc([amqqueue:amqqueue()]) -> [amqqueue:amqqueue()].
+-spec prepend_extra_bcc([amqqueue:amqqueue()]) ->
+    [amqqueue:amqqueue()].
 prepend_extra_bcc([]) ->
     [];
 prepend_extra_bcc([Q] = Qs) ->
-    prepend_extra_bcc(Q, Qs);
-prepend_extra_bcc(Qs) ->
-    lists:foldl(fun(Q, Acc) ->
-                        prepend_extra_bcc(Q, Acc)
-                end, Qs, Qs).
-
-prepend_extra_bcc(Q, Qs) ->
     case amqqueue:get_options(Q) of
-        #{extra_bcc := BCC} ->
-            #resource{virtual_host = VHost} = amqqueue:get_name(Q),
-            BCCQueueName = rabbit_misc:r(VHost, queue, BCC),
-            BCCQueue = rabbit_amqqueue:lookup([BCCQueueName]),
-            BCCQueue ++ Qs;
+        #{extra_bcc := BCCName} ->
+            case get_bcc_queue(Q, BCCName) of
+                {ok, BCCQueue} ->
+                    [BCCQueue | Qs];
+                {error, not_found} ->
+                    Qs
+            end;
         _ ->
             Qs
-    end.
+    end;
+prepend_extra_bcc(Qs) ->
+    BCCQueues =
+        lists:filtermap(
+          fun(Q) ->
+                  case amqqueue:get_options(Q) of
+                      #{extra_bcc := BCCName} ->
+                          case get_bcc_queue(Q, BCCName) of
+                              {ok, BCCQ} ->
+                                  {true, BCCQ};
+                              {error, not_found} ->
+                                  false
+                          end;
+                      _ ->
+                          false
+                  end
+          end, Qs),
+    lists:usort(BCCQueues) ++ Qs.
+
+-spec get_bcc_queue(amqqueue:amqqueue(), binary()) ->
+    {ok, amqqueue:amqqueue()} | {error, not_found}.
+get_bcc_queue(Q, BCCName) ->
+    #resource{virtual_host = VHost} = amqqueue:get_name(Q),
+    BCCQueueName = rabbit_misc:r(VHost, queue, BCCName),
+    rabbit_amqqueue:lookup(BCCQueueName).
