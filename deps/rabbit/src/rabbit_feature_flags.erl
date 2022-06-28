@@ -37,9 +37,9 @@
 %%   function is called when the feature flag is enabled. It is responsible
 %%   for doing all the data conversion, if any, and confirming the feature
 %%   flag can be enabled.</li>
-%% <li>a level of stability (stable or experimental). For now, this is only
-%%   informational. But it might be used for specific purposes in the
-%%   future.</li>
+%% <li>a level of stability (stable or experimental). Experimental feature
+%%   flags are not enabled by default on a brand new RabbitMQ nodes. They are
+%%   also skipped by {@link enable_all/0}.</li>
 %% </ul>
 %%
 %% == How to declare a feature flag ==
