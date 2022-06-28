@@ -52,6 +52,7 @@
 -export([dict_cons/3, orddict_cons/3, maps_cons/3, gb_trees_cons/3]).
 -export([gb_trees_fold/3, gb_trees_foreach/2]).
 -export([all_module_attributes/1,
+         rabbitmq_related_apps/0,
          rabbitmq_related_module_attributes/1,
          module_attributes_from_apps/2,
          build_acyclic_graph/3]).

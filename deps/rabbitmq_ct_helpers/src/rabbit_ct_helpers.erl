@@ -7,6 +7,7 @@
 
 -module(rabbit_ct_helpers).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("common_test/include/ct.hrl").
 
 -deprecated({is_mixed_versions,1,"Use is_mixed_versions/0 instead"}).
@@ -26,6 +27,7 @@
     load_rabbitmqctl_app/1,
     ensure_rabbitmq_plugins_cmd/1,
     ensure_rabbitmq_queues_cmd/1,
+    redirect_logger_to_ct_logs/1,
     init_skip_as_error_flag/1,
     start_long_running_testsuite_monitor/1,
     stop_long_running_testsuite_monitor/1,
@@ -153,6 +155,34 @@ run_steps(Config, [Step | Rest]) ->
             exit("A setup step returned a non-proplist")
     end;
 run_steps(Config, []) ->
+    Config.
+
+redirect_logger_to_ct_logs(Config) ->
+    ct:pal(
+      ?LOW_IMPORTANCE,
+      "Configuring logger to send logs to common_test logs"),
+    logger:set_handler_config(cth_log_redirect, level, debug),
+
+    %% Let's use the same format as RabbitMQ itself.
+    logger:set_handler_config(
+      cth_log_redirect, formatter,
+      rabbit_prelaunch_early_logging:default_file_formatter(#{})),
+
+    %% We use an addition logger handler for messages tagged with a non-OTP
+    %% domain because by default, `cth_log_redirect' drop them.
+    {ok, LogCfg0} = logger:get_handler_config(cth_log_redirect),
+    LogCfg = maps:remove(id, maps:remove(module, LogCfg0)),
+    ok = logger:add_handler(
+           cth_log_redirect_any_domains, cth_log_redirect_any_domains,
+           LogCfg),
+
+    logger:remove_handler(default),
+
+    ct:pal(
+      ?LOW_IMPORTANCE,
+      "Logger configured to send logs to common_test logs; you should see "
+      "a message below saying so"),
+    ?LOG_INFO("Logger message logged to common_test logs"),
     Config.
 
 init_skip_as_error_flag(Config) ->
