@@ -193,8 +193,9 @@ policy_changed(_X1, _X2) -> ok.
 add_binding(transaction, X,
             B = #binding{source = S, destination = D, key = K}) ->
     Weight = rabbit_data_coercion:to_integer(K),
-    rabbit_log:debug("Consistent hashing exchange: adding binding from "
-                     "exchange ~s to destination ~s with routing key '~s'", [rabbit_misc:rs(S), rabbit_misc:rs(D), K]),
+            rabbit_log:debug("Consistent hashing exchange: adding binding from "
+                             "exchange ~s to destination ~s with routing key '~s'",
+                             [rabbit_misc:rs(S), rabbit_misc:rs(D), K]),
 
     case mnesia:read(?HASH_RING_STATE_TABLE, S) of
         [State0 = #chx_hash_ring{bucket_map = BM0,

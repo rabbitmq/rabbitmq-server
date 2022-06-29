@@ -317,8 +317,11 @@ list_between(SrcName = #resource{virtual_host = SVH}, DstName = #resource{}) ->
                   destination = DstName,
                   _ = '_'}
               },
-              [B || #route{binding = B}
-                        <- mnesia:match_object(rabbit_route, Route, read)]
+
+              Durable     = [B || #route{binding = B} <- mnesia:match_object(rabbit_durable_route, Route, read)],
+              Transient   = [B || #route{binding = B} <- mnesia:match_object(rabbit_route, Route, read)],
+              SemiDurable = [B || #route{binding = B} <- mnesia:match_object(rabbit_semi_durable_route, Route, read)],
+              Durable ++ Transient ++ SemiDurable
       end),
     lists:filter(fun(#binding{source = S}) ->
                        S =/= ?DEFAULT_EXCHANGE(SVH)
