@@ -10,10 +10,15 @@ describe("Management UI with UAA running", function() {
   var driver;
   var page;
   this.timeout(3000);
+  var rabbitmqURL = process.env.RABBITMQ_URL;
+  if (!process.env.RABBITMQ_URL) {
+    rabbitmqURL = "http://localhost:15672";
+  }
 
   before(function(done) {
     driver = buildDriver();
-    page = driver.get("http://localhost:15672");
+    console.log("Opening page " + rabbitmqURL);
+    page = driver.get(rabbitmqURL);
     done();
   });
 
