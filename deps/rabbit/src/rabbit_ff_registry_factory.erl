@@ -220,7 +220,7 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                                          WrittenToDisk),
             T1 = erlang:timestamp(),
             rabbit_log_feature_flags:debug(
-              "Feature flags: time to regen registry: ~p µs",
+              "Feature flags: time to regen registry: ~p us",
               [timer:now_diff(T1, T0)]),
             Ret;
         false ->

@@ -867,7 +867,7 @@ handle_nodes_in_parallel(NodeConfigs, Fun) ->
                          T2 = erlang:timestamp(),
                          ct:pal(
                            ?LOW_IMPORTANCE,
-                           "Time to run ~p for node ~s: ~b µs",
+                           "Time to run ~p for node ~s: ~b us",
                           [Fun,
                            ?config(nodename, NodeConfig),
                            timer:now_diff(T2, T1)]),
@@ -884,7 +884,7 @@ wait_for_node_handling([], Fun, T0, Results) ->
     T3 = erlang:timestamp(),
     ct:pal(
       ?LOW_IMPORTANCE,
-      "Time to run ~p for all nodes: ~b µs",
+      "Time to run ~p for all nodes: ~b us",
       [Fun, timer:now_diff(T3, T0)]),
     Results;
 wait_for_node_handling(Procs, Fun, T0, Results) ->
