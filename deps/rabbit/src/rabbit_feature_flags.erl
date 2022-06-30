@@ -1036,7 +1036,7 @@ query_supported_feature_flags() ->
     AttributesFromTestsuite = module_attributes_from_testsuite(),
     T1 = erlang:timestamp(),
     rabbit_log_feature_flags:debug(
-      "Feature flags: time to find supported feature flags: ~p µs",
+      "Feature flags: time to find supported feature flags: ~p us",
       [timer:now_diff(T1, T0)]),
     AllAttributes = AttributesPerApp ++ AttributesFromTestsuite,
     prepare_queried_feature_flags(AllAttributes, #{}).

@@ -387,7 +387,7 @@ start_it(StartType) ->
 
                 T1 = erlang:timestamp(),
                 ?LOG_DEBUG(
-                  "Time to start RabbitMQ: ~p µs",
+                  "Time to start RabbitMQ: ~p us",
                   [timer:now_diff(T1, T0)]),
                 stop_boot_marker(Marker),
                 ok
