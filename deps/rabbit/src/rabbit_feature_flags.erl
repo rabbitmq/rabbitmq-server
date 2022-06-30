@@ -932,7 +932,7 @@ query_supported_feature_flags() ->
     TestsuiteProviders = [App || {App, _, _} <- AttributesFromTestsuite],
     T1 = erlang:timestamp(),
     rabbit_log_feature_flags:debug(
-      "Feature flags: time to find supported feature flags: ~p µs",
+      "Feature flags: time to find supported feature flags: ~p us",
       [timer:now_diff(T1, T0)]),
     AllAttributes = AttributesPerApp ++ AttributesFromTestsuite,
     AllApps = lists:usort(ScannedApps ++ TestsuiteProviders),
