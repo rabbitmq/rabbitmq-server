@@ -193,23 +193,33 @@ policy_changed(_X1, _X2) -> ok.
 add_binding(transaction, X,
             B = #binding{source = S, destination = D, key = K}) ->
     Weight = rabbit_data_coercion:to_integer(K),
-    rabbit_log:debug("Consistent hashing exchange: adding binding from "
-                     "exchange ~s to destination ~s with routing key '~s'", [rabbit_misc:rs(S), rabbit_misc:rs(D), K]),
 
     case mnesia:read(?HASH_RING_STATE_TABLE, S) of
         [State0 = #chx_hash_ring{bucket_map = BM0,
                                  next_bucket_number = NexN0}] ->
-            NextN    = NexN0 + Weight,
-            %% hi/lo bucket counters are 0-based but weight is 1-based
-            Range   = lists:seq(NexN0, (NextN - 1)),
-            BM      = lists:foldl(fun(Key, Acc) ->
-                                          maps:put(Key, D, Acc)
-                                  end, BM0, Range),
-            State   = State0#chx_hash_ring{bucket_map = BM,
-                                           next_bucket_number = NextN},
+            case map_has_value(BM0, D) of
+                true ->
+                    rabbit_log:debug("Consistent hashing exchange: NOT adding binding from "
+                                     "exchange ~s to destination ~s with routing key '~s' "
+                                     "because this binding (possibly with a different "
+                                     "routing key) already exists",
+                                     [rabbit_misc:rs(S), rabbit_misc:rs(D), K]);
+                false ->
+                    rabbit_log:debug("Consistent hashing exchange: adding binding from "
+                                     "exchange ~s to destination ~s with routing key '~s'",
+                                     [rabbit_misc:rs(S), rabbit_misc:rs(D), K]),
+                    NextN    = NexN0 + Weight,
+                    %% hi/lo bucket counters are 0-based but weight is 1-based
+                    Range   = lists:seq(NexN0, (NextN - 1)),
+                    BM      = lists:foldl(fun(Key, Acc) ->
+                                                  maps:put(Key, D, Acc)
+                                          end, BM0, Range),
+                    State   = State0#chx_hash_ring{bucket_map = BM,
+                                                   next_bucket_number = NextN},
 
-            ok = mnesia:write(?HASH_RING_STATE_TABLE, State, write),
-            ok;
+                    ok = mnesia:write(?HASH_RING_STATE_TABLE, State, write),
+                    ok
+            end;
         [] ->
             maybe_initialise_hash_ring_state(transaction, S),
             add_binding(transaction, X, B)
@@ -226,6 +236,7 @@ remove_bindings(none, X, Bindings) ->
      fun() -> remove_bindings(transaction, X, Bindings) end),
     ok.
 
+-spec remove_binding(#binding{}) -> ok.
 remove_binding(#binding{source = S, destination = D, key = RK}) ->
     rabbit_log:debug("Consistent hashing exchange: removing binding "
                      "from exchange ~s to destination ~s with routing key '~s'",
@@ -265,6 +276,8 @@ remove_binding(#binding{source = S, destination = D, key = RK}) ->
             ok
     end.
 
+-spec ring_state(vhost:name(), rabbit_misc:resource_name()) ->
+    {ok, #chx_hash_ring{}} | {error, not_found}.
 ring_state(VirtualHost, Exchange) ->
     Resource = rabbit_misc:r(VirtualHost, exchange, Exchange),
     case mnesia:dirty_read(?HASH_RING_STATE_TABLE, Resource) of
@@ -340,3 +353,22 @@ hash_on(Args) ->
         {Header, undefined}    -> Header;
         {undefined, Property}  -> Property
     end.
+
+-spec map_has_value(#{bucket() => rabbit_types:binding_destination()},
+                    rabbit_types:binding_destination()) ->
+    boolean().
+map_has_value(Map, Val) ->
+    I = maps:iterator(Map),
+    map_has_value0(maps:next(I), Val).
+
+-spec map_has_value0(none | {bucket(),
+                             rabbit_types:binding_destination(),
+                             maps:iterator()},
+                     rabbit_types:binding_destination()) ->
+    boolean().
+map_has_value0(none, _Val) ->
+    false;
+map_has_value0({_Bucket, SameVal, _I}, SameVal) ->
+    true;
+map_has_value0({_Bucket, _OtherVal, I}, Val) ->
+    map_has_value0(maps:next(I), Val).
