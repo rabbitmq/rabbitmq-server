@@ -942,8 +942,20 @@ query_supported_feature_flags() ->
       "Feature flags: time to find supported feature flags: ~p us",
       [timer:now_diff(T1, T0)]),
     AllAttributes = AttributesPerApp ++ AttributesFromTestsuite,
-    AllApps = lists:usort(ScannedApps ++ TestsuiteProviders),
-    {AllApps, prepare_queried_feature_flags(AllAttributes, #{})}.
+    prepare_queried_feature_flags(AllAttributes, #{}).
+-else.
+query_supported_feature_flags() ->
+    rabbit_log_feature_flags:debug(
+      "Feature flags: query feature flags in loaded applications"),
+    T0 = erlang:timestamp(),
+    AttributesPerApp = rabbit_misc:rabbitmq_related_module_attributes(
+                         rabbit_feature_flag),
+    T1 = erlang:timestamp(),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: time to find supported feature flags: ~p us",
+      [timer:now_diff(T1, T0)]),
+    prepare_queried_feature_flags(AttributesPerApp, #{}).
+-endif.
 
 prepare_queried_feature_flags([{App, _Module, Attributes} | Rest],
                               AllFeatureFlags) ->
