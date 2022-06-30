@@ -8,7 +8,6 @@
 -module(rabbit_ff_registry_factory).
 
 -include_lib("kernel/include/logger.hrl").
--include_lib("stdlib/include/assert.hrl").
 
 -export([initialize_registry/0,
          initialize_registry/1,
@@ -25,22 +24,11 @@
 
 -type registry_vsn() :: term().
 
--spec acquire_state_change_lock() -> boolean().
-acquire_state_change_lock() ->
-    rabbit_log_feature_flags:debug(
-      "Feature flags: acquiring lock ~p",
-      [?FF_STATE_CHANGE_LOCK]),
-    Ret = global:set_lock(?FF_STATE_CHANGE_LOCK),
-    rabbit_log_feature_flags:debug(
-      "Feature flags: acquired lock ~p",
-      [?FF_STATE_CHANGE_LOCK]),
-    Ret.
 
--spec release_state_change_lock() -> true.
+acquire_state_change_lock() ->
+    global:set_lock(?FF_STATE_CHANGE_LOCK).
+
 release_state_change_lock() ->
-    rabbit_log_feature_flags:debug(
-      "Feature flags: releasing lock ~p",
-      [?FF_STATE_CHANGE_LOCK]),
     global:del_lock(?FF_STATE_CHANGE_LOCK).
 
 -spec initialize_registry() -> ok | {error, any()} | no_return().
@@ -56,7 +44,7 @@ release_state_change_lock() ->
 %% replaced by a proper registry.
 %%
 %% Once replaced, the registry contains the map of all supported feature
-%% flags and their state. This makes it very efficient to query a
+%% flags and their state. This is makes it very efficient to query a
 %% feature flag state or property.
 %%
 %% The registry is local to all RabbitMQ nodes.
@@ -131,20 +119,17 @@ initialize_registry(NewSupportedFeatureFlags) ->
 initialize_registry(NewSupportedFeatureFlags,
                     NewFeatureStates,
                     WrittenToDisk) ->
-    try
-        Ret = maybe_initialize_registry(NewSupportedFeatureFlags,
-                                        NewFeatureStates,
-                                        WrittenToDisk),
-        case Ret of
-            ok      -> ok;
-            restart -> initialize_registry(NewSupportedFeatureFlags,
-                                           NewFeatureStates,
-                                           WrittenToDisk);
-            Error1  -> Error1
-        end
-    catch
-        throw:{error, _} = Error2 ->
-            Error2
+
+    Ret = maybe_initialize_registry(NewSupportedFeatureFlags,
+                                    NewFeatureStates,
+                                    WrittenToDisk),
+    case Ret of
+        ok      -> ok;
+        restart -> initialize_registry(NewSupportedFeatureFlags,
+                                       NewFeatureStates,
+                                       WrittenToDisk);
+        Error   -> Error
+
     end.
 
 -spec maybe_initialize_registry(rabbit_feature_flags:feature_flags(),
@@ -195,21 +180,7 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
 
     %% Next we want to update the feature states, based on the new
     %% states passed as arguments.
-    %%
-    %% At the same time, we pay attention to required feature flags. Those
-    %% are feature flags which must be enabled. The compatibility and
-    %% migration code behind them is gone at that point. We distinguish two
-    %% situations:
-    %%   1. The node starts for the very first time (the
-    %%      `enabled_feature_flags' file does not exist). In this case, the
-    %%      required feature flags are marked as enabled right away.
-    %%   2. This is a node restart (the file exists), and thus possibly an
-    %%      upgrade. This time, if required feature flags are not enabled, we
-    %%      return an error (and RabbitMQ start will abort). RabbitMQ won't be
-    %%      able to work, especially if the feature flag needed some
-    %%      migration, because the corresponding code was removed.
-    NewNode =
-    not rabbit_feature_flags:does_enabled_feature_flags_list_file_exist(),
+
     FeatureStates0 = case RegistryInitialized of
                          true ->
                              maps:merge(rabbit_ff_registry:states(),
@@ -218,44 +189,13 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
                              NewFeatureStates
                      end,
     FeatureStates = maps:map(
-                      fun(FeatureName, FeatureProps) ->
-                              Stability = maps:get(
-                                            stability, FeatureProps, stable),
-                              State = case FeatureStates0 of
-                                          #{FeatureName := FeatureState} ->
-                                              FeatureState;
-                                          _ ->
-                                              false
-                                      end,
-                              case Stability of
-                                  required when State =:= true ->
-                                      %% The required feature flag is already
-                                      %% enabled, we keep it this way.
-                                      State;
-                                  required when NewNode ->
-                                      %% This is the very first time the node
-                                      %% starts, we already mark the required
-                                      %% feature flag as enabled.
-                                      ?assertNotEqual(state_changing, State),
-                                      true;
-                                  required ->
-                                      %% This is not a new node and the
-                                      %% required feature flag is disabled.
-                                      %% This is an error and RabbitMQ must be
-                                      %% downgraded to enable the feature
-                                      %% flag.
-                                      ?assertNotEqual(state_changing, State),
-                                      rabbit_log_feature_flags:error(
-                                        "Feature flags: `~s`: required "
-                                        "feature flag not enabled! It must "
-                                        "be enabled before upgrading "
-                                        "RabbitMQ.",
-                                        [FeatureName]),
-                                      throw({error,
-                                             {disabled_required_feature_flag,
-                                              FeatureName}});
+
+                      fun(FeatureName, _FeatureProps) ->
+                              case FeatureStates0 of
+                                  #{FeatureName := FeatureState} ->
+                                      FeatureState;
                                   _ ->
-                                      State
+                                      false
                               end
                       end, AllFeatureFlags),
 
