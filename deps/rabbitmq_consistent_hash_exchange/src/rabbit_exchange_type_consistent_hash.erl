@@ -239,7 +239,7 @@ remove_bindings(none, X, Bindings) ->
 -spec remove_binding(#binding{}) -> ok.
 remove_binding(#binding{source = S, destination = D, key = RK}) ->
     rabbit_log:debug("Consistent hashing exchange: removing binding "
-                     "from exchange '~p' to destination '~p' with routing key '~s'",
+                     "from exchange ~s to destination ~s with routing key '~s'",
                      [rabbit_misc:rs(S), rabbit_misc:rs(D), RK]),
 
     case mnesia:read(?HASH_RING_STATE_TABLE, S) of
