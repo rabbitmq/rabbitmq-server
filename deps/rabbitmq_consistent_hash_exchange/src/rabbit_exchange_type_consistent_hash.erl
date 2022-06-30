@@ -236,6 +236,7 @@ remove_bindings(none, X, Bindings) ->
      fun() -> remove_bindings(transaction, X, Bindings) end),
     ok.
 
+-spec remove_binding(#binding{}) -> ok.
 remove_binding(#binding{source = S, destination = D, key = RK}) ->
     rabbit_log:debug("Consistent hashing exchange: removing binding "
                      "from exchange '~p' to destination '~p' with routing key '~s'",
@@ -275,6 +276,8 @@ remove_binding(#binding{source = S, destination = D, key = RK}) ->
             ok
     end.
 
+-spec ring_state(vhost:name(), rabbit_misc:resource_name()) ->
+    {ok, #chx_hash_ring{}} | {error, not_found}.
 ring_state(VirtualHost, Exchange) ->
     Resource = rabbit_misc:r(VirtualHost, exchange, Exchange),
     case mnesia:dirty_read(?HASH_RING_STATE_TABLE, Resource) of
@@ -351,14 +354,14 @@ hash_on(Args) ->
         {undefined, Property}  -> Property
     end.
 
--spec map_has_value(#{non_neg_integer() => rabbit_types:binding_destination()},
+-spec map_has_value(#{bucket() => rabbit_types:binding_destination()},
                     rabbit_types:binding_destination()) ->
     boolean().
 map_has_value(Map, Val) ->
     I = maps:iterator(Map),
     map_has_value0(maps:next(I), Val).
 
--spec map_has_value0(none | {non_neg_integer(),
+-spec map_has_value0(none | {bucket(),
                              rabbit_types:binding_destination(),
                              maps:iterator()},
                      rabbit_types:binding_destination()) ->
