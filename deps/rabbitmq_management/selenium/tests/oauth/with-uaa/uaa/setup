@@ -25,5 +25,5 @@ uaac client add rabbit_client_code --name rabbit_client_code \
   --authorized_grant_types authorization_code  \
   --autoapprove "true" \
   --authorities 'uaa.resource,rabbitmq' \
-  --redirect_uri 'http://localhost:15672' \
+  --redirect_uri 'http://rabbitmq:15672' \
   --secret rabbit_client_code

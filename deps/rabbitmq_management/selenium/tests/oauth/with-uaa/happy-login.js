@@ -3,17 +3,18 @@ require("chromedriver");
 var assert = require('assert');
 
 var buildDriver = function(caps) {
-  return new Builder().forBrowser('chrome').build();
+  return new Builder().forBrowser('chrome').usingServer("http://selenium:4444").build();
 };
 
 describe("An UAA user with administrator tag", function() {
   var driver;
   var page;
   this.timeout(10000);
+  var rabbitmqURL = process.env.RABBITMQ_URL;
 
   before(function(done) {
     driver = buildDriver();
-    page = driver.get("http://localhost:15672");
+    page = driver.get(rabbitmqURL);
     done();
   });
 

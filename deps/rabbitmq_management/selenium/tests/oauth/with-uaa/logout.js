@@ -10,10 +10,11 @@ describe("When a logged in user", function() {
   var driver;
   var page;
   this.timeout(10000);
+  var rabbitmqURL = process.env.RABBITMQ_URL;
 
   before(function(done) {
     driver = buildDriver();
-    page = driver.get("http://localhost:15672");
+    page = driver.get(rabbitmqURL);
 
       driver.wait(until.elementLocated(By.id("loginWindow")))
         .then( button => {
