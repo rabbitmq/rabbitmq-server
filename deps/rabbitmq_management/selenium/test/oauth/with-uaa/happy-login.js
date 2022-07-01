@@ -16,11 +16,7 @@ describe("An UAA user with administrator tag", function() {
   });
 
   it("can log in into the management ui", async function() {
-      await homePage.isLoaded()
-      homePage.getLoginButton().then(function(value) {
-        homePage.login("rabbit_admin", "rabbit_admin");
-        
-      })
+    await homePage.login("rabbit_admin", "rabbit_admin");
 
   });
 
