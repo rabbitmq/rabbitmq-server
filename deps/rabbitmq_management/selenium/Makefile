@@ -4,7 +4,7 @@ SHELL = bash# we depend on bash expansion for e.g. queue patterns
 .DEFAULT_GOAL = help
 
 
-SELENIUM_VERSION := 102.0
+SELENIUM_VERSION := 103.0
 
 ### TARGETS ###
 
@@ -16,6 +16,7 @@ run-chrome: ## Install Selenium Chrome
 	@(docker network inspect rabbitmq_selenimum_net >/dev/null 2>&1 || docker network create rabbitmq_selenimum_net)
 	@(docker rm -f selenium 2>/dev/null || echo "selenium was not running")
 	@(docker run -d --name selenium --net rabbitmq_selenimum_net -p 4444:4444 --shm-size=2g selenium/standalone-chrome:$(SELENIUM_VERSION))
+	#@(docker run -d --name selenium --net rabbitmq_selenimum_net -p 4444:4444 --shm-size=2g selenium/standalone-chrome)
 	@(echo "Selenium Standalone is running on http://localhost:4444/")
 
 init-tests: ## Prepare docker image to run tests

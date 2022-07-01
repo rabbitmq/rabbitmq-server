@@ -10,9 +10,9 @@ rabbitmq() {
   echo "Running RabbitMQ ${IMAGE}:${IMAGE_TAG} with $RABBITMQ_CONFIG & ${LOCAL_SCRIPT}/enabled_plugins"
 
 
-  docker network inspect rabbitmq_net >/dev/null 2>&1 || docker network create rabbitmq_net
+  docker network inspect rabbitmq_selenimum_net >/dev/null 2>&1 || docker network create rabbitmq_selenimum_net
   docker rm -f rabbitmq 2>/dev/null || echo "rabbitmq was not running"
-  docker run -d --name rabbitmq --net rabbitmq_net \
+  docker run -d --name rabbitmq --net rabbitmq_selenimum_net \
       -p 15672:15672 -p 5672:5672 \
       -v ${RABBITMQ_CONFIG}:/etc/rabbitmq/rabbitmq.config:ro \
       -v ${LOCAL_SCRIPT}/enabled_plugins:/etc/rabbitmq/enabled_plugins \
