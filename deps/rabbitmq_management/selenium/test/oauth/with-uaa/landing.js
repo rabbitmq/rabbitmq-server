@@ -1,45 +1,26 @@
 const {By,Key,until,Builder} = require("selenium-webdriver");
 require("chromedriver");
 var assert = require('assert');
+const {buildDriver, goToHome} = require("../../utils");
 
-var buildDriver = function(caps) {
-  return new Builder()
-    .forBrowser('chrome')
-    .usingServer("http://localhost:4444")
-    .build();
-};
-
-var baseUrl = process.env.RABBITMQ_URL;
-if (!process.env.RABBITMQ_URL) {
-  baseUrl = "http://rabbitmq:15672";
-}
-
-function goToHome (driver) {
-  return driver.get(baseUrl)
-}
+var SSOHomePage = require('../../pageobjects/SSOHomePage')
 
 describe("Management UI with UAA running", function() {
   var driver;
-  var page;
+  var homePage;
 
   before(async function() {
     driver = buildDriver();
     await goToHome(driver);
+    homePage = new SSOHomePage(driver)
   });
 
-  it("should have a title", function() {
-      driver.getTitle().then(function(title) {
-        assert(title.match("RabbitMQ Management") != null);
-      });
-  });
+  it("should have a login button to SSO", async function() {
+    await homePage.isLoaded()
+    homePage.getLoginButton().then(function(value) {
+      assert.equal(value, "Single Sign On");
+    })
 
- it("should have a login button", function(done) {
-      driver.wait(until.elementLocated(By.id("loginWindow"))).then(function(loginButton) {
-        loginButton.getText().then(function(text) {
-          assert.equal(text, "Single Sign On");
-          done();
-        })
-    });
   });
 
   after(function(done) {
