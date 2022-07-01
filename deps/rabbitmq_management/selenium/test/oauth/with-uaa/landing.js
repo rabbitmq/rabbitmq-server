@@ -3,42 +3,43 @@ require("chromedriver");
 var assert = require('assert');
 
 var buildDriver = function(caps) {
-  return new Builder().forBrowser('chrome').build();
+  return new Builder()
+    .forBrowser('chrome')
+    .usingServer("http://localhost:4444")
+    .build();
 };
+
+var baseUrl = process.env.RABBITMQ_URL;
+if (!process.env.RABBITMQ_URL) {
+  baseUrl = "http://rabbitmq:15672";
+}
+
+function goToHome (driver) {
+  return driver.get(baseUrl)
+}
 
 describe("Management UI with UAA running", function() {
   var driver;
   var page;
-  this.timeout(3000);
-  var rabbitmqURL = process.env.RABBITMQ_URL;
-  if (!process.env.RABBITMQ_URL) {
-    rabbitmqURL = "http://localhost:15672";
-  }
 
-  before(function(done) {
+  before(async function() {
     driver = buildDriver();
-    console.log("Opening page " + rabbitmqURL);
-    page = driver.get(rabbitmqURL);
-    done();
+    await goToHome(driver);
   });
 
-  it("should have a title", function(done) {
-      page.then(function() {
-        driver.getTitle().then(function(title) {
-          assert(title.match("RabbitMQ Management") != null);
-          done();
+  it("should have a title", function() {
+      driver.getTitle().then(function(title) {
+        assert(title.match("RabbitMQ Management") != null);
       });
-    });
   });
 
-  it("should have a login button", function(done) {
+ it("should have a login button", function(done) {
       driver.wait(until.elementLocated(By.id("loginWindow"))).then(function(loginButton) {
         loginButton.getText().then(function(text) {
-          assert.equal(text, "Click here to log in");
+          assert.equal(text, "Single Sign On");
           done();
         })
     });
-
   });
 
   after(function(done) {
@@ -51,5 +52,4 @@ describe("Management UI with UAA running", function() {
       done();
     });
   });
-
 })

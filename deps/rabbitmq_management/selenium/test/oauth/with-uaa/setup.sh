@@ -10,7 +10,7 @@ uaa() {
 
   UAA_IMAGE_TAG=${UAA_IMAGE_TAG:-latest}
 
-  docker network inspect rabbitmq_net >/dev/null 2>&1 || docker network create rabbitmq_net
+  docker network inspect rabbitmq_selenimum_net >/dev/null 2>&1 || docker network create rabbitmq_selenimum_net
   docker rm -f uaa 2>/dev/null || echo "uaa was not running"
 
   echo "Running uaa:${UAA_IMAGE_TAG} docker image ..."
