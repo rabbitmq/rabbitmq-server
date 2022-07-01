@@ -38,10 +38,11 @@ module.exports = class BasePage {
     return this.driver.findElement(locator)
   }
 
+
   async getText (locator, retries = 1) {
     try {
-      const element = await this.driver.findElement(locator)
-      return element.getText()
+      const text = await this.driver.findElement(locator).getText()
+      return text
     } catch (err) {
       if (retries === 0) {
         throw new Error(`Unable to get ${locator.toString()} text after maximum retries, error : ${err.message}`)
@@ -50,11 +51,11 @@ module.exports = class BasePage {
       return this.getText(locator, retries - 1)
     }
   }
+
   async click (locator, retries = 1) {
     try {
       const element = await this.driver.findElement(locator)
-      await element.click()
-      return
+      return element.click()
     } catch (err) {
       if (retries === 0) {
         throw new Error(`Still not able to click ${locator.toString()} after maximum retries, Error message: ${err.message.toString()}`)
@@ -68,7 +69,8 @@ module.exports = class BasePage {
       const element = await this.driver.findElement(locator)
       await element.click()
       await element.clear()
-      return element.sendKeys(keys)      
+      console.log("sendKeys to " + element);
+      return element.sendKeys(keys)
     } catch (err) {
       if (retries === 0) {
         throw new Error(`Unable to send keys to ${locator.toString()} after maximum retries, error : ${err.message}`)

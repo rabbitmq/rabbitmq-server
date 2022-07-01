@@ -16,11 +16,10 @@ describe("Management UI with UAA running", function() {
   });
 
   it("should have a login button to SSO", async function() {
-    await homePage.isLoaded()
-    homePage.getLoginButton().then(function(value) {
-      assert.equal(value, "Single Sign On");
-    })
-
+    await homePage.isLoaded();
+    await homePage.getLoginButton().then(function(value) {
+       assert.equal(value, "Single Sign On");
+     })
   });
 
   after(function(done) {
