@@ -30,7 +30,7 @@ their bindings.
 
 2. When the number of queues changes, it is not easy to ensure that the
 new topology still distributes messages between the different queues
-evenly.
+roughly evenly.
 
 [Consistent Hashing](https://en.wikipedia.org/wiki/Consistent_hashing)
 is a hashing technique whereby each bucket appears at multiple points
@@ -40,13 +40,14 @@ to the computed hash (and the hash space wraps around). The effect of
 this is that when a new bucket is added or an existing bucket removed,
 only a very few hashes change which bucket they are routed to.
 
-## Supported RabbitMQ Versions
+## Purpose
+
+The purpose of this exchange type is to help developers achieve
+a reasonably even message flow distribution between a number of queues.
+
+## Installation
 
 This plugin ships with RabbitMQ.
-
-## Supported Erlang Versions
-
-This plugin supports the same [Erlang versions](https://rabbitmq.com/which-erlang.html) as RabbitMQ core.
 
 ## Enabling the Plugin
 
@@ -78,12 +79,27 @@ Assuming a reasonably even routing key distribution of inbound messages,
 routed messages should be reasonably evenly distributed across all
 ring partitions, and thus queues according to their binding weights.
 
-### Binding Weights
+### Bindings and Hash Ring Buckets
+
+#### One Binding Per Queue
+
+This exchange type **assumes a single binding between a queue and an exchange**.
+Starting with RabbitMQ `3.10.6` and `3.9.21` this will be enforced in the code:
+when multiple bindings are created, only the first one will actually update the ring.
+
+This limitation makes most semantic sense: the purpose is to achieve
+a reasonably even message flow distribution between queues.
+
+#### Weights
 
 When a queue is bound to a Consistent Hash exchange, the binding key
 is a number-as-a-string which indicates the binding weight: the number
 of buckets (sections of the range) that will be associated with the
 target queue.
+
+In most environments, using **one bucket per binding** (and thus queue)
+is highly recommended as it is the simplest way to achieve reasonably
+even balancing.
 
 ### Consistent Hashing-based Routing
 
@@ -103,7 +119,9 @@ keys approaches the ratios of the binding keys.
 
 Each message gets delivered to at most one queue. On average, a
 message gets delivered to exactly one queue. Concurrent binding changes
-and queue primary replica failures can affect this but on average.
+and queue primary replica failures can temporarily affect this but
+over the long term, assuming equal weights of every binding,
+the distribution should be roughly even.
 
 ### Node Restart Effects
 
@@ -115,8 +133,8 @@ the same number of messages routed to them (assuming routing key distribution
 does not change) but a given routing key now **may route to a different queue**.
 
 In other words, this exchange type provides consistent message distribution
-between queues but cannot guarantee stable routing [queue] locality for a message
-with a fixed routing key.
+between queues but cannot guarantee stable queue routing locality for messages
+with a given routing key.
 
 
 ## Usage Example
@@ -136,10 +154,12 @@ is because AMQP 0-9-1 specifies the `routing_key` field must be a string.
 ### Choosing Appropriate Weight Values
 
 The example uses low weight values intentionally.
+
 Higher values will reduce throughput of the exchange, primarily for
 workloads that experience a high binding churn (queues are bound to
 and unbound from a consistent hash exchange frequently).
-Single digit weight values are recommended (and usually sufficient).
+
+Equal weights of 1 for all bindings are recommended (and sufficient for most use cases).
 
 ### Inspecting Message Counts
 
