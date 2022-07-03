@@ -64,9 +64,10 @@ init([]) ->
                                   credits_required_for_unblocking,
                                   ?DEFAULT_CREDITS_REQUIRED_FOR_UNBLOCKING),
           frame_max =>
-              application:get_env(rabbit_stream, frame_max, ?DEFAULT_FRAME_MAX),
+              application:get_env(rabbitmq_stream, frame_max, 
+                                  ?DEFAULT_FRAME_MAX),
           heartbeat =>
-              application:get_env(rabbit_stream, heartbeat,
+              application:get_env(rabbitmq_stream, heartbeat,
                                   ?DEFAULT_HEARTBEAT)},
 
     StreamManager =
