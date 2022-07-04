@@ -58,6 +58,22 @@ rabbitmq_run_command(
     subcommand = "run-broker",
 )
 
+# Allow us to `bazel run start-cluster`
+# for the equivalent of `make start-cluster`
+rabbitmq_run_command(
+    name = "start-cluster",
+    rabbitmq_run = ":rabbitmq-run",
+    subcommand = "start-cluster",
+)
+
+# Allow us to `bazel run stop-cluster`
+# for the equivalent of `make stop-cluster`
+rabbitmq_run_command(
+    name = "stop-cluster",
+    rabbitmq_run = ":rabbitmq-run",
+    subcommand = "stop-cluster",
+)
+
 # `bazel run rabbitmqctl`
 rabbitmqctl(
     name = "rabbitmqctl",

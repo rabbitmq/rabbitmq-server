@@ -125,6 +125,8 @@ rabbitmq_run_command_private = rule(
             "run-broker",
             "start-background-broker",
             "stop-node",
+            "start-cluster",
+            "stop-cluster",
         ]),
     },
     executable = True,
