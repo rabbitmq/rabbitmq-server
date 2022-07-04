@@ -174,6 +174,12 @@ erlang_app(
     version = "0.3.6",
 )
 
+erlang_package.hex_package(
+    name = "opentelemetry_exporter",
+    version = "1.0.4",
+    sha256 = "61da65290fbb6cac3459b84b8cd630795bf608df93a2b2cc49251cae78200e5e",
+)
+
 erlang_package.git_package(
     name = "emqtt",
     build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")

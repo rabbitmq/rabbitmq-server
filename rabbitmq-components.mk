@@ -124,6 +124,11 @@ dep_thoas = hex 0.4.0
 dep_observer_cli = hex 1.7.3
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
+dep_opentelemetry_commit = git-subfolder https://github.com/open-telemetry/opentelemetry-erlang main apps/opentelemetry
+dep_opentelemetry_api_commit = git-subfolder https://github.com/open-telemetry/opentelemetry-erlang main apps/opentelemetry_api
+dep_opentelemetry_exporter = git-subfolder https://github.com/open-telemetry/opentelemetry-erlang main apps/opentelemetry_exporter
+dep_grpcbox = hex 0.15.0
+dep_opentelemetry_cowboy = git-subfolder https://github.com/open-telemetry/opentelemetry-erlang-contrib main instrumentation/opentelemetry_cowboy
 
 RABBITMQ_COMPONENTS = amqp_client \
 		      amqp10_common \
