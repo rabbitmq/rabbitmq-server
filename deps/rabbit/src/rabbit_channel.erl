@@ -2886,7 +2886,9 @@ find_queue_name_from_quorum_name(Name, QStates) ->
                           amqqueue:get_name(Q);
                       _ ->
                           undefined
-                  end
+                  end;
+             (_, _, Acc) ->
+                  Acc
           end,
     rabbit_queue_type:fold_state(Fun, undefined, QStates).
 
