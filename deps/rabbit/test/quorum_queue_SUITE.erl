@@ -56,6 +56,7 @@ groups() ->
                                             cleanup_data_dir]
                        ++ memory_tests()},
                       {cluster_size_3, [], [
+                                            channel_handles_ra_event,
                                             declare_during_node_down,
                                             simple_confirm_availability_on_leader_change,
                                             publishing_to_unavailable_queue,
@@ -1399,6 +1400,32 @@ cancel_sync_queue(Config) ->
     {error, _, _} =
         rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, [<<"cancel_sync_queue">>, QQ]),
     ok.
+
+%% Test case for https://github.com/rabbitmq/rabbitmq-server/issues/5141
+%% Tests backwards compatibility in 3.9 / 3.8 mixed version cluster.
+%% Server 1 runs a version AFTER queue type interface got introduced.
+%% Server 2 runs a version BEFORE queue type interface got introduced.
+channel_handles_ra_event(Config) ->
+    Server1 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Server2 = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    Q1 = ?config(queue_name, Config),
+    Q2 = ?config(alt_queue_name, Config),
+    ?assertMatch({'queue.declare_ok', Q1, 0, 0},
+                 declare(Ch2, Q1,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                          {<<"x-quorum-initial-group-size">>, long, 1}])),
+    ?assertMatch({'queue.declare_ok', Q2, 0, 0},
+                 declare(Ch2, Q2,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                          {<<"x-quorum-initial-group-size">>, long, 1}])),
+    publish(Ch1, Q1),
+    publish(Ch1, Q2),
+    wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]),
+    wait_for_messages(Config, [[Q2, <<"1">>, <<"1">>, <<"0">>]]),
+    ?assertEqual(1, consume(Ch1, Q1, false)),
+    ?assertEqual(2, consume(Ch1, Q2, false)).
 
 declare_during_node_down(Config) ->
     [Server, DownServer, _] = Servers = rabbit_ct_broker_helpers:get_node_configs(
