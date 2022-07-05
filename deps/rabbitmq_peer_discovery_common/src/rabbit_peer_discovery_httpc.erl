@@ -20,12 +20,14 @@
          build_uri/5,
          build_path/1,
          delete/6,
+         delete/7,
          get/5,
          get/7,
          post/6,
          post/8,
          put/6,
          put/7,
+         put/8,
          maybe_configure_proxy/0,
          maybe_configure_inet6/0]).
 
@@ -234,13 +236,37 @@ put(Scheme, Host, Port, Path, Args, Body) ->
   Headers :: list(),
   Body :: string() | binary() | tuple().
 put(Scheme, Host, Port, Path, Args, Headers, Body) ->
+  put(Scheme, Host, Port, Path, Args, Headers, [], Body).
+
+%% @spec put(Scheme, Host, Port, Path, Args, Headers, HttpOptions, Body) -> Result
+%% @where Scheme  = string(),
+%%        Host    = string(),
+%%        Port    = integer(),
+%%        Path    = string(),
+%%        Args    = proplist(),
+%%        Headers = proplist(),
+%%        HttpOpts = proplist(),
+%%        Body    = string(),
+%%        Result  = {ok, mixed}|{error, Reason::string()}
+%% @doc Perform a HTTP PUT request
+%% @end
+%%
+-spec put(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) -> {ok, string()} | {error, any()} when
+  Scheme :: atom() | string(),
+  Host :: string() | binary(),
+  Port :: integer(),
+  Path :: string() | binary(),
+  Args :: list(),
+  Headers :: list(),
+  HttpOpts :: list(),
+  Body :: string() | binary() | tuple().
+put(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
   ?LOG_DEBUG("PUT ~s [~p] [~p]", [URL, Headers, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
-  HttpOpts = ensure_timeout(),
-  Response = httpc:request(put, {URL, Headers, ?CONTENT_URLENCODED, Body}, HttpOpts, []),
+  HttpOpts1 = ensure_timeout(HttpOpts),
+  Response = httpc:request(put, {URL, Headers, ?CONTENT_URLENCODED, Body}, HttpOpts1, []),
   ?LOG_DEBUG("Response: [~p]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   parse_response(Response).
-
 
 %% @public
 %% @spec delete(Scheme, Host, Port, Path, Args, Body) -> Result
@@ -258,10 +284,29 @@ delete(Scheme, Host, Port, PathSegments, Args, Body) when is_list(PathSegments) 
   Path = uri_string:recompose(#{path => lists:join("/", [rabbit_data_coercion:to_list(PS) || PS <- PathSegments])}),
   delete(Scheme, Host, Port, Path, Args, Body);
 delete(Scheme, Host, Port, Path, Args, Body) ->
+  delete(Scheme, Host, Port, Path, Args, [], Body).
+
+%% @public
+%% @spec delete(Scheme, Host, Port, Path, Args, Body) -> Result
+%% @where Scheme = string(),
+%%        Host   = string(),
+%%        Port   = integer(),
+%%        Path   = string(),
+%%        Args   = proplist(),
+%%        HttpOpts = proplist(),
+%%        Body   = string(),
+%%        Result = {ok, mixed}|{error, Reason::string()}
+%% @doc Perform a HTTP DELETE request
+%% @end
+%%
+delete(Scheme, Host, Port, PathSegments, Args, HttpOpts, Body) when is_list(PathSegments) ->
+  Path = uri_string:recompose(#{path => lists:join("/", [rabbit_data_coercion:to_list(PS) || PS <- PathSegments])}),
+  delete(Scheme, Host, Port, Path, Args, HttpOpts, Body);
+delete(Scheme, Host, Port, Path, Args, HttpOpts, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
   ?LOG_DEBUG("DELETE ~s [~p]", [URL, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
-  HttpOpts = ensure_timeout(),
-  Response = httpc:request(delete, {URL, [], ?CONTENT_URLENCODED, Body}, HttpOpts, []),
+  HttpOpts1 = ensure_timeout(HttpOpts),
+  Response = httpc:request(delete, {URL, [], ?CONTENT_URLENCODED, Body}, HttpOpts1, []),
   ?LOG_DEBUG("Response: [~p]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
   parse_response(Response).
 
