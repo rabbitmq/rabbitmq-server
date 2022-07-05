@@ -439,7 +439,7 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
 registration_with_all_default_values_test(_Config) ->
           meck:expect(rabbit_log, debug, fun(_Message) -> ok end),
           meck:expect(rabbit_peer_discovery_httpc, put,
-            fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+            fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
               ?assertEqual("http", Scheme),
               ?assertEqual("localhost", Host),
               ?assertEqual(8500, Port),
@@ -456,7 +456,7 @@ registration_with_all_default_values_test(_Config) ->
 
 registration_with_cluster_name_test(_Config) ->
           meck:expect(rabbit_peer_discovery_httpc, put,
-            fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+            fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
               ?assertEqual("http", Scheme),
               ?assertEqual("localhost", Host),
               ?assertEqual(8500, Port),
@@ -473,7 +473,7 @@ registration_with_cluster_name_test(_Config) ->
 
 registration_without_acl_token_test(_Config) ->
           meck:expect(rabbit_peer_discovery_httpc, put,
-            fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+            fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
               ?assertEqual("https", Scheme),
               ?assertEqual("consul.service.consul", Host),
               ?assertEqual(8501, Port),
@@ -495,7 +495,7 @@ registration_without_acl_token_test(_Config) ->
 
 registration_with_acl_token_test(_Config) ->
           meck:expect(rabbit_peer_discovery_httpc, put,
-            fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+            fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
               ?assertEqual("https", Scheme),
               ?assertEqual("consul.service.consul", Host),
               ?assertEqual(8501, Port),
@@ -520,7 +520,7 @@ registration_with_auto_addr_test(_Config) ->
            meck:expect(rabbit_peer_discovery_util, node_hostname, fun(true)  -> "bob.consul.node";
                                                                      (false) -> "bob" end),
            meck:expect(rabbit_peer_discovery_httpc, put,
-             fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+             fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                ?assertEqual("http", Scheme),
                ?assertEqual("consul.service.consul", Host),
                ?assertEqual(8500, Port),
@@ -544,7 +544,7 @@ registration_with_auto_addr_from_nodename_test(_Config) ->
           meck:expect(rabbit_peer_discovery_util, node_hostname, fun(true)  -> "bob.consul.node";
                                                                     (false) -> "bob" end),
           meck:expect(rabbit_peer_discovery_httpc, put,
-            fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+            fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
               ?assertEqual("http", Scheme),
               ?assertEqual("consul.service.consul", Host),
               ?assertEqual(8500, Port),
@@ -572,7 +572,7 @@ registration_with_auto_addr_nic_test(_Config) ->
               {ok, "172.16.4.50"}
             end),
           meck:expect(rabbit_peer_discovery_httpc, put,
-            fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+            fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
               ?assertEqual("http", Scheme),
               ?assertEqual("consul.service.consul", Host),
               ?assertEqual(8500, Port),
@@ -600,7 +600,7 @@ registration_with_auto_addr_nic_issue_12_test(_Config) ->
               {ok, "172.16.4.50"}
             end),
           meck:expect(rabbit_peer_discovery_httpc, put,
-            fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+            fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
               ?assertEqual("http", Scheme),
               ?assertEqual("consul.service.consul", Host),
               ?assertEqual(8500, Port),
@@ -622,7 +622,7 @@ registration_with_auto_addr_nic_issue_12_test(_Config) ->
 
 registration_generic_error_test(_Config) ->
          meck:expect(rabbit_peer_discovery_httpc, put,
-           fun(_Scheme, _Host, _Port, _Path, _Args, _Headers, _Body) ->
+           fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, _Body) ->
              {error, "testing"}
            end),
          ?assertEqual({error, "testing"}, rabbit_peer_discovery_consul:register()),
@@ -630,7 +630,7 @@ registration_generic_error_test(_Config) ->
 
 health_check_with_all_defaults_test(_Config) ->
          meck:expect(rabbit_peer_discovery_httpc, put,
-           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
+           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts, _Body) ->
              ?assertEqual("http", Scheme),
              ?assertEqual("localhost", Host),
              ?assertEqual(8500, Port),
@@ -645,7 +645,7 @@ health_check_with_all_defaults_test(_Config) ->
 
 health_check_without_acl_token_test(_Config) ->
          meck:expect(rabbit_peer_discovery_httpc, put,
-           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
+           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts, _Body) ->
              ?assertEqual("https", Scheme),
              ?assertEqual("consul.service.consul", Host),
              ?assertEqual(8501, Port),
@@ -664,7 +664,7 @@ health_check_without_acl_token_test(_Config) ->
 
 health_check_with_acl_token_test(_Config) ->
          meck:expect(rabbit_peer_discovery_httpc, put,
-           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
+           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts, _Body) ->
              ?assertEqual("http", Scheme),
              ?assertEqual("consul.service.consul", Host),
              ?assertEqual(8500, Port),
@@ -685,7 +685,7 @@ health_check_error_handling_test(_Config) ->
            ok
          end),
          meck:expect(rabbit_peer_discovery_httpc, put,
-           fun(_Scheme, _Host, _Port, _Path, _Args, _Headers, _HttpOpts) ->
+           fun(_Scheme, _Host, _Port, _Path, _Args, _Headers, _HttpOpts, _Body) ->
              {error, "testing"}
            end),
          ?assertEqual(ok, rabbit_peer_discovery_consul:send_health_check_pass()),
@@ -695,7 +695,7 @@ health_check_error_handling_test(_Config) ->
 
 unregistration_with_all_defaults_test(_Config) ->
          meck:expect(rabbit_peer_discovery_httpc, put,
-           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
+           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
              ?assertEqual("http", Scheme),
              ?assertEqual("localhost", Host),
              ?assertEqual(8500, Port),
@@ -703,6 +703,7 @@ unregistration_with_all_defaults_test(_Config) ->
              ?assertEqual([], Args),
              ?assertEqual([], Headers),
              ?assertEqual([], HttpOpts),
+             ?assertEqual([], Body),
              {ok, []}
            end),
          ?assertEqual(ok, rabbit_peer_discovery_consul:unregister()),
@@ -711,7 +712,7 @@ unregistration_with_all_defaults_test(_Config) ->
 
 unregistration_without_acl_token_test(_Config) ->
          meck:expect(rabbit_peer_discovery_httpc, put,
-           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
+           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
              ?assertEqual("https", Scheme),
              ?assertEqual("consul.service.consul", Host),
              ?assertEqual(8501, Port),
@@ -719,6 +720,7 @@ unregistration_without_acl_token_test(_Config) ->
              ?assertEqual([], Args),
              ?assertEqual([], Headers),
              ?assertEqual([], HttpOpts),
+             ?assertEqual([], Body),
              {ok, []}
            end),
          os:putenv("CONSUL_SCHEME", "https"),
@@ -732,7 +734,7 @@ unregistration_without_acl_token_test(_Config) ->
 
 unregistration_with_acl_token_test(_Config) ->
          meck:expect(rabbit_peer_discovery_httpc, put,
-           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
+           fun(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
              ?assertEqual("http", Scheme),
              ?assertEqual("consul.service.consul", Host),
              ?assertEqual(8500, Port),
@@ -740,6 +742,7 @@ unregistration_with_acl_token_test(_Config) ->
              ?assertEqual([], Args),
              ?assertEqual([{"X-Consul-Token", "token-value"}], Headers),
              ?assertEqual([], HttpOpts),
+             ?assertEqual([], Body),
              {ok, []}
            end),
          os:putenv("CONSUL_HOST", "consul.service.consul"),
@@ -750,7 +753,7 @@ unregistration_with_acl_token_test(_Config) ->
 
 unregistration_with_generic_error_test(_Config) ->
          meck:expect(rabbit_peer_discovery_httpc, put,
-           fun(_Scheme, _Host, _Port, _Path, _Args, _Headers, _HttpOpts) ->
+           fun(_Scheme, _Host, _Port, _Path, _Args, _Headers, _HttpOpts, _Body) ->
              {error, "testing"}
            end),
          ?assertEqual({error, "testing"}, rabbit_peer_discovery_consul:unregister()),
@@ -772,7 +775,7 @@ startup_lock_path_with_cluster_name_test(_Config) ->
 
 create_session_without_token_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -788,7 +791,7 @@ create_session_without_token_test(_Config) ->
 
 create_session_with_token_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -901,7 +904,7 @@ wait_for_lock_release_without_session_test(_Config) ->
 
 acquire_lock_successfully_acquired_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -916,7 +919,7 @@ acquire_lock_successfully_acquired_test(_Config) ->
 
 acquire_lock_not_acquired_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -931,7 +934,7 @@ acquire_lock_not_acquired_test(_Config) ->
 
 acquire_lock_with_token_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -947,7 +950,7 @@ acquire_lock_with_token_test(_Config) ->
 
 release_lock_successfully_released_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -962,7 +965,7 @@ release_lock_successfully_released_test(_Config) ->
 
 release_lock_not_released_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -977,7 +980,7 @@ release_lock_not_released_test(_Config) ->
 
 release_lock_with_token_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -1024,7 +1027,7 @@ consul_kv_read_custom_values_test(_Config) ->
 
 consul_kv_write_default_values_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -1039,7 +1042,7 @@ consul_kv_write_default_values_test(_Config) ->
 
 consul_kv_write_custom_values_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("consul.node.consul", Host),
                         ?assertEqual(8501, Port),
@@ -1056,7 +1059,7 @@ consul_kv_write_custom_values_test(_Config) ->
 
 consul_session_create_default_values_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -1071,7 +1074,7 @@ consul_session_create_default_values_test(_Config) ->
 
 consul_session_create_custom_values_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("consul.node.consul", Host),
                         ?assertEqual(8501, Port),
@@ -1088,7 +1091,7 @@ consul_session_create_custom_values_test(_Config) ->
 
 consul_session_renew_default_values_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("localhost", Host),
                         ?assertEqual(8500, Port),
@@ -1103,7 +1106,7 @@ consul_session_renew_default_values_test(_Config) ->
 
 consul_session_renew_custom_values_test(_Config) ->
     meck:expect(rabbit_peer_discovery_httpc, put,
-                fun(Scheme, Host, Port, Path, Args, Headers, Body) ->
+                fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
                         ?assertEqual("http", Scheme),
                         ?assertEqual("consul.node.consul", Host),
                         ?assertEqual(8501, Port),
