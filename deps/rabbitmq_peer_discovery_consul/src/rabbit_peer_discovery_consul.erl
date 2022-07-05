@@ -101,13 +101,17 @@ register() ->
       ?LOG_DEBUG(
          "Consul registration body: ~s", [Body],
          #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+      Path = rabbit_peer_discovery_httpc:build_path([v1, agent, service, register]),
+      Headers = maybe_add_acl([]),
+      HttpOpts = http_options(M),
       case rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
-                                            get_config_key(consul_host, M),
-                                            get_integer_config_key(consul_port, M),
-                                            rabbit_peer_discovery_httpc:build_path([v1, agent, service, register]),
-                                            [],
-                                            maybe_add_acl([]),
-                                            Body) of
+                                           get_config_key(consul_host, M),
+                                           get_integer_config_key(consul_port, M),
+                                           Path,
+                                           [],
+                                           Headers,
+                                           HttpOpts,
+                                           Body) of
         {ok, _} -> ok;
         Error   -> Error
       end;
