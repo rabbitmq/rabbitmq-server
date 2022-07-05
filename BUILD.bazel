@@ -97,24 +97,33 @@ genrule(
     outs = ["open-test-logs.sh"],
     cmd = """set -euo pipefail
 cat << 'EOF' > $@
-    set -euo pipefail
-    if [ $$# -eq 0 ]; then
-        echo "Usage: bazel run test-logs TEST_LABEL [shard_index]"
-        exit 1
-    fi
+#!/bin/bash
+set -euo pipefail
+if [ $$# -eq 0 ]; then
+    echo "Usage: bazel run test-logs TEST_LABEL [shard_index]"
+    exit 1
+fi
 
-    RELATIVE=$${1#//}
-    PACKAGE=$${RELATIVE%%:*}
-    SUITE=$${RELATIVE##*:}
-    OUTPUT_DIR=test.outputs
-    if [ $$# -gt 1 ]; then
-        OUTPUT_DIR=shard_$$2_of_*/test.outputs
-    fi
-    cd bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR
-    if [ -f outputs.zip ]; then
-        unzip -u outputs.zip
-    fi
-    open index.html
+RELATIVE=$${1#//}
+PACKAGE=$${RELATIVE%%:*}
+SUITE=$${RELATIVE##*:}
+OUTPUT_DIR=test.outputs
+if [ $$# -gt 1 ]; then
+    OUTPUT_DIR=shard_$$2_of_*/test.outputs
+fi
+cd "bazel-testlogs/$$PACKAGE/$$SUITE/$$OUTPUT_DIR"
+if [ -f outputs.zip ]; then
+    unzip -u outputs.zip
+fi
+set +e
+open index.html
+rc=$$?
+set -e
+if [[ $$rc -eq 3 ]]; then
+  # For xdg-open exit code 3 means "A required tool could not be found." That is, there is no browser.
+  echo "Open your browser at http://$$(hostname -s):8000/index.html"
+  python -m http.server 8000
+fi
 EOF
 """,
     executable = True,
@@ -125,22 +134,23 @@ genrule(
     outs = ["open-remote-test-logs.sh"],
     cmd = """set -euo pipefail
 cat << 'EOF' > $@
-    set -euo pipefail
-    if [ $$# -eq 0 ]; then
-        echo "Usage: bazel run remote-test-logs TEST_LABEL [shard_index]"
-        exit 1
-    fi
+#!/bin/bash
+set -euo pipefail
+if [ $$# -eq 0 ]; then
+    echo "Usage: bazel run remote-test-logs TEST_LABEL [shard_index]"
+    exit 1
+fi
 
-    RELATIVE=$${1#//}
-    PACKAGE=$${RELATIVE%%:*}
-    SUITE=$${RELATIVE##*:}
-    OUTPUT_DIR=test.outputs
-    if [ $$# -gt 1 ]; then
-        OUTPUT_DIR=shard_$$2_of_*/test.outputs
-    fi
-    TESTLOGS=$$(echo $$(bazel info output_path)/k8-*/testlogs)
-    cd $$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR && unzip -u outputs.zip
-    open index.html
+RELATIVE=$${1#//}
+PACKAGE=$${RELATIVE%%:*}
+SUITE=$${RELATIVE##*:}
+OUTPUT_DIR=test.outputs
+if [ $$# -gt 1 ]; then
+    OUTPUT_DIR=shard_$$2_of_*/test.outputs
+fi
+TESTLOGS=$$(echo $$(bazel info output_path)/k8-*/testlogs)
+cd "$$TESTLOGS/$$PACKAGE/$$SUITE/$$OUTPUT_DIR" && unzip -u outputs.zip
+open index.html
 EOF
 """,
     executable = True,
