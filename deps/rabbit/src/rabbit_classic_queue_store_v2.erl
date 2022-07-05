@@ -50,7 +50,7 @@
 -module(rabbit_classic_queue_store_v2).
 
 -export([init/1, terminate/1,
-         write/4, sync/1, read/3, check_msg_on_disk/3,
+         write/4, sync/1, read/3, read_many/2, check_msg_on_disk/3,
          remove/2, delete_segments/2]).
 
 -define(SEGMENT_EXTENSION, ".qs").
@@ -301,6 +301,106 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
     end,
     Msg = binary_to_term(MsgBin),
     {Msg, State}.
+
+read_many([], State) ->
+    {[], State};
+read_many(Reads0, State0 = #qs{ write_buffer = WriteBuffer,
+                                cache        = Cache }) ->
+    %% First we read what we can from memory.
+    %% Because the Reads0 list is ordered we start from the end
+    %% and stop when we get to a message that isn't in memory.
+    case read_many_from_memory(lists:reverse(Reads0), WriteBuffer, Cache, []) of
+        %% We've read everything, return.
+        {Msgs, []} ->
+            {Msgs, State0};
+        %% Everything else will be on disk.
+        {Msgs, Reads1} ->
+            %% We prepare the pread locations sorted by segment.
+            Reads2 = lists:reverse(Reads1),
+            SegmentEntryCount = segment_entry_count(),
+            [{FirstSeqId, _}|_] = Reads2,
+            FirstSegment = FirstSeqId div SegmentEntryCount,
+            SegmentThreshold = (1 + FirstSegment) * SegmentEntryCount,
+            Segs = consolidate_reads(Reads2, SegmentThreshold,
+                FirstSegment, SegmentEntryCount, [], #{}),
+            %% We read from disk and convert multiple messages at a time.
+            read_many_from_disk(Segs, Msgs, State0)
+    end.
+
+%% We only read from Map. If we don't find the entry in Map,
+%% we replace Map with NextMap and continue. If we then don't
+%% find an entry in NextMap, we are done.
+read_many_from_memory(Reads = [{SeqId, _}|Tail], Map, NextMap, Acc) ->
+    case Map of
+        #{ SeqId := {_, _, Msg} } ->
+            read_many_from_memory(Tail, Map, NextMap, [Msg|Acc]);
+        _ when NextMap =:= #{} ->
+            %% The Acc is in the order we want, no need to reverse.
+            {Acc, Reads};
+        _ ->
+            read_many_from_memory(Reads, NextMap, #{}, Acc)
+    end;
+read_many_from_memory([], _, _, Acc) ->
+    {Acc, []}.
+
+consolidate_reads(Reads = [{SeqId, _}|_], SegmentThreshold,
+        Segment, SegmentEntryCount, Acc, Segs)
+        when SeqId >= SegmentThreshold ->
+    %% We Segment + 1 because we expect reads to be contiguous.
+    consolidate_reads(Reads, SegmentThreshold + SegmentEntryCount,
+        Segment + 1, SegmentEntryCount, [], Segs#{Segment => lists:reverse(Acc)});
+%% NextSize does not include the entry header size.
+consolidate_reads([{_, {?MODULE, NextOffset, NextSize}}|Tail], SegmentThreshold,
+        Segment, SegmentEntryCount, [{Offset, Size}|Acc], Segs)
+        when Offset + Size =:= NextOffset ->
+    consolidate_reads(Tail, SegmentThreshold, Segment, SegmentEntryCount,
+        [{Offset, Size + NextSize + ?ENTRY_HEADER_SIZE}|Acc], Segs);
+consolidate_reads([{_, {?MODULE, Offset, Size}}|Tail], SegmentThreshold,
+        Segment, SegmentEntryCount, Acc, Segs) ->
+    consolidate_reads(Tail, SegmentThreshold, Segment, SegmentEntryCount,
+        [{Offset, Size + ?ENTRY_HEADER_SIZE}|Acc], Segs);
+consolidate_reads([], _, _, _, [], Segs) ->
+    Segs;
+consolidate_reads([], _, Segment, _, Acc, Segs) ->
+    %% We lists:reverse/1 because we need to preserve order.
+    Segs#{Segment => lists:reverse(Acc)}.
+
+read_many_from_disk(Segs, Msgs, State) ->
+    %% We read from segments in reverse order because
+    %% we need to control the order of returned messages.
+    %% @todo As a result it doesn't help much to keep the read FD.
+    Keys = lists:reverse(lists:sort(maps:keys(Segs))),
+    lists:foldl(fun(Segment, {Acc0, FoldState0}) ->
+        {ok, Fd, FoldState} = get_read_fd(Segment, FoldState0),
+        {ok, Bin} = file:pread(Fd, maps:get(Segment, Segs)),
+        Acc = parse_many_from_disk(Bin, Segment, FoldState, Acc0),
+        {Acc, FoldState}
+    end, {Msgs, State}, Keys).
+
+parse_many_from_disk([<<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits,
+                       _:8, MsgBin:Size/binary, R/bits>>|Tail], Segment, State, Acc) ->
+    case UseCRC32 of
+        0 ->
+            ok;
+        1 ->
+            %% Always check the CRC32 if it was computed on write.
+            CRC32 = erlang:crc32(MsgBin),
+            %% We currently crash if the CRC32 is incorrect as we cannot recover automatically.
+            try
+                CRC32Expected = <<CRC32:16>>,
+                ok
+            catch C:E:S ->
+                rabbit_log:error("Per-queue store CRC32 check failed in ~s",
+                                 [segment_file(Segment, State)]),
+                erlang:raise(C, E, S)
+            end
+    end,
+    Msg = binary_to_term(MsgBin),
+    [Msg|parse_many_from_disk([R|Tail], Segment, State, Acc)];
+parse_many_from_disk([<<>>], _, _, Acc) ->
+    Acc;
+parse_many_from_disk([<<>>|Tail], Segment, State, Acc) ->
+    parse_many_from_disk(Tail, Segment, State, Acc).
 
 get_read_fd(Segment, State = #qs{ read_segment = Segment,
                                   read_fd = Fd }) ->

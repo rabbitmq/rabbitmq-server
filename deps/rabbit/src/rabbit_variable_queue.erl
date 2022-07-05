@@ -1427,6 +1427,14 @@ beta_msg_status({Msg = #basic_message{id = MsgId},
                    persist_to   = queue_index,
                    msg_location = memory};
 
+beta_msg_status({Msg = #basic_message{id = MsgId},
+                 SeqId, {rabbit_classic_queue_store_v2, _, _}, MsgProps, IsPersistent}) ->
+    MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
+    MS0#msg_status{msg_id       = MsgId,
+                   msg          = Msg,
+                   persist_to   = queue_store,
+                   msg_location = memory};
+
 beta_msg_status({MsgId, SeqId, MsgLocation, MsgProps, IsPersistent}) ->
     MS0 = beta_msg_status0(SeqId, MsgProps, IsPersistent),
     MS0#msg_status{msg_id       = MsgId,
@@ -2711,12 +2719,14 @@ maybe_deltas_to_betas(DelsAndAcksFun,
                         q3                   = Q3,
                         index_mod            = IndexMod,
                         index_state          = IndexState,
+                        store_state          = StoreState,
                         ram_msg_count        = RamMsgCount,
                         ram_bytes            = RamBytes,
                         disk_read_count      = DiskReadCount,
                         delta_transient_bytes = DeltaTransientBytes,
                         transient_threshold  = TransientThreshold,
-                        rates                = #rates{ out = OutRate }}) ->
+                        rates                = #rates{ out = OutRate },
+                        version              = Version }) ->
     #delta { start_seq_id = DeltaSeqId,
              count        = DeltaCount,
              transient    = Transient,
@@ -2731,11 +2741,22 @@ maybe_deltas_to_betas(DelsAndAcksFun,
                    %% using the consuming rate.
                    DeltaSeqId + MemoryLimit,
                    DeltaSeqIdEnd]),
-    {List, IndexState1} = IndexMod:read(DeltaSeqId, DeltaSeqId1, IndexState),
+    {List0, IndexState1} = IndexMod:read(DeltaSeqId, DeltaSeqId1, IndexState),
+    {List, StoreState2} = case Version of
+        1 -> {List0, StoreState};
+        %% When using v2 we try to read all messages from disk at once
+        %% instead of 1 by 1 at fetch time.
+        2 ->
+            Reads = [{SeqId, MsgLocation}
+                || {_, SeqId, MsgLocation, _, _} <- List0, is_tuple(MsgLocation)],
+            {Msgs, StoreState1} = rabbit_classic_queue_store_v2:read_many(Reads, StoreState),
+            {merge_read_msgs(List0, Reads, Msgs), StoreState1}
+    end,
     {Q3a, RamCountsInc, RamBytesInc, State1, TransientCount, TransientBytes} =
         betas_from_index_entries(List, TransientThreshold,
                                  DelsAndAcksFun,
-                                 State #vqstate { index_state = IndexState1 }),
+                                 State #vqstate { index_state = IndexState1,
+                                                  store_state = StoreState2 }),
     State2 = State1 #vqstate { ram_msg_count     = RamMsgCount   + RamCountsInc,
                                ram_bytes         = RamBytes      + RamBytesInc,
                                disk_read_count   = DiskReadCount + RamCountsInc },
@@ -2766,6 +2787,13 @@ maybe_deltas_to_betas(DelsAndAcksFun,
             end
     end.
 
+merge_read_msgs([M = {_, SeqId, _, _, _}|MTail], [{SeqId, _}|RTail], [Msg|MsgTail]) ->
+    [setelement(1, M, Msg)|merge_read_msgs(MTail, RTail, MsgTail)];
+merge_read_msgs([M|MTail], RTail, MsgTail) ->
+    [M|merge_read_msgs(MTail, RTail, MsgTail)];
+merge_read_msgs([], [], []) ->
+    [].
+
 %% Flushes queue index batch caches and updates queue index state.
 ui(#vqstate{index_mod        = IndexMod,
             index_state      = IndexState,
@@ -2776,6 +2804,7 @@ ui(#vqstate{index_mod        = IndexMod,
 
 %%----------------------------------------------------------------------------
 %% Upgrading
+%% @todo Remove this, also see rabbit_upgrade.
 %%----------------------------------------------------------------------------
 
 -spec multiple_routing_keys() -> 'ok'.
