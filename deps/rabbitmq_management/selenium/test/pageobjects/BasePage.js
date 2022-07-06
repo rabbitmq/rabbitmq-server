@@ -69,12 +69,23 @@ module.exports = class BasePage {
       return this.click(locator, retries - 1)
     }
   }
+    async submit (locator, retries = 1) {
+      try {
+        const element = await this.driver.findElement(locator)
+        return element.submit()
+      } catch (err) {
+        if (retries === 0) {
+          throw new Error(`Still not able to submit ${locator.toString()} after maximum retries, Error message: ${err.message.toString()}`)
+        }
+        await this.driver.sleep(250)
+        return this.submit(locator, retries - 1)
+      }
+    }
   async sendKeys (locator, keys, retries = 1) {
     try {
       const element = await this.driver.findElement(locator)
       await element.click()
       await element.clear()
-      console.log("sendKeys to " + element);
       return element.sendKeys(keys)
     } catch (err) {
       if (retries === 0) {

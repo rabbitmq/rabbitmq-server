@@ -17,7 +17,7 @@ uaa() {
 
   docker run \
   		--detach \
-      --name uaa --net rabbitmq_net \
+      --name local-uaa --net rabbitmq_net \
   		--publish 8080:8080 \
   		--mount type=bind,source=${SCRIPT}/uaa,target=/etc/uaa \
   		--env JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom" \
@@ -30,7 +30,7 @@ install_uaac() {
 
   gem list --local | grep cf-uaac || sudo gem install cf-uaac && echo "Already installed"
 
-  target=${UAA_HOST:="http://localhost:8080/uaa"}
+  target=${UAA_HOST:="http://local-uaa:8080/uaa"}
   # export to use a different ctl, e.g. if the node was built from source
 
   # Target the server
@@ -46,5 +46,6 @@ install_uaac() {
 
 rabbitmq
 uaa
+sleep 5
 install_uaac
 ${SCRIPT}/uaa/setup

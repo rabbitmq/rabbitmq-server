@@ -24,4 +24,4 @@ init-tests: ## Prepare docker image to run tests
 
 run-tests: ## Run tests
 	#@(test/oauth/with-uaa/setup.sh)
-	@(docker run  --name mocha --net rabbitmq_net --env RABBITMQ_URL=http://rabbitmq:15672 -v ${PWD}/test:/code/test mocha-test)
+	@(docker run  --name mocha --net rabbitmq_net --env RABBITMQ_URL=http://local-rabbitmq:15672 -v ${PWD}/test:/code/test mocha-test)

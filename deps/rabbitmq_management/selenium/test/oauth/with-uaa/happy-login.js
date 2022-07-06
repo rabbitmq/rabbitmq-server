@@ -5,6 +5,7 @@ const {buildDriver, goToHome} = require("../../utils");
 
 var SSOHomePage = require('../../pageobjects/SSOHomePage')
 var UAALoginPage = require('../../pageobjects/UAALoginPage')
+var OverviewPage = require('../../pageobjects/OverviewPage')
 
 describe("An UAA user with administrator tag", function() {
   var driver;
@@ -15,11 +16,17 @@ describe("An UAA user with administrator tag", function() {
     await goToHome(driver);
     homePage = new SSOHomePage(driver)
     uaaLogin = new UAALoginPage(driver)
+    overview = new OverviewPage(driver)
   });
 
   it("can log in into the management ui", async function() {
     await homePage.clickToLogin();
     await uaaLogin.login("rabbit_admin", "rabbit_admin");
+    if (! await overview.isLoaded()) {
+      this.capture();
+      throw new Error("Failed to login")
+    }
+    assert.equal(await overview.getUser(), "User rabbit_admin");
 
   });
 
