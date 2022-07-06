@@ -20,6 +20,9 @@ module.exports = class SSOLoginPage extends BasePage {
       throw new Error(`Warning message  "`+ message + `" is visible. Idp is probably down or not reachable`)
     }
   }
+  async getLoginButton() {
+    return this.getText(LOGIN_BUTTON)
+  }
   async isWarningVisible() {
       try {
         await this.getText(WARNING)

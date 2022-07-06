@@ -8,8 +8,9 @@ var UAALoginPage = require('../../pageobjects/UAALoginPage')
 var OverviewPage = require('../../pageobjects/OverviewPage')
 
 describe("An UAA user with administrator tag", function() {
-  var driver;
   var homePage;
+  var uaaLogin;
+  var overview;
 
   before(async function() {
     driver = buildDriver();
@@ -23,8 +24,7 @@ describe("An UAA user with administrator tag", function() {
     await homePage.clickToLogin();
     await uaaLogin.login("rabbit_admin", "rabbit_admin");
     if (! await overview.isLoaded()) {
-      this.capture();
-      throw new Error("Failed to login")
+      throw new Error("Failed to login");
     }
     assert.equal(await overview.getUser(), "User rabbit_admin");
 

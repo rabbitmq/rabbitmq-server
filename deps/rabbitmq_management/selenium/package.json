@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha --no-timeouts test/oauth/with-uaa/happy-login.js"
+    "test": "mocha --no-timeouts test/oauth/with-uaa/logout.js"
   },
   "keywords": [],
   "author": "",

@@ -7,4 +7,4 @@ COPY package.json package.json
 
 FROM base as test
 RUN npm install
-CMD [ "npm",  "test" ]
+ENTRYPOINT [ "./node_modules/.bin/mocha", "--recursive", "--trace-warnings", "--timeout 35000"]
