@@ -9,8 +9,7 @@ const PASSWORD = By.css('input[name="password"]')
 module.exports = class UAAHomePage extends BasePage {
 
   async isLoaded () {
-  //  return this.waitForDisplayed(LOGIN_BUTTON)
-    return true
+    return this.waitForDisplayed(FORM)    
   }
   async login(username, password) {
     await this.isLoaded();

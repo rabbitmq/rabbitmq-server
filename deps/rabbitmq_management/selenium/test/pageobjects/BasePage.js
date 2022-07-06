@@ -46,7 +46,8 @@ module.exports = class BasePage {
 
   async getText (locator, retries = 1) {
     try {
-      const text = await this.driver.findElement(locator).getText()
+      let element = await this.driver.findElement(locator);
+      let text = element.getText()
       return text
     } catch (err) {
       if (retries === 0) {

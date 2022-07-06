@@ -9,11 +9,10 @@ const LOGOUT_FORM = By.css('li#logout form')
 module.exports = class OverviewPage extends BasePage {
 
   async isLoaded () {
-    return this.waitForDisplayed(MENU_TABS)
+    return await this.waitForDisplayed(MENU_TABS)
   }
   async logout() {
-    await this.isLoaded();
-    await submit(LOGOUT_FORM);
+    await this.submit(LOGOUT_FORM);
   }
   async getUser() {
     return this.getText(USER)

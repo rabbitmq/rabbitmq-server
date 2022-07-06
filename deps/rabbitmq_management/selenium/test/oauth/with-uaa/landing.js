@@ -6,7 +6,6 @@ const {buildDriver, goToHome} = require("../../utils");
 var SSOHomePage = require('../../pageobjects/SSOHomePage')
 
 describe("Management UI with UAA running", function() {
-  var driver;
   var homePage;
 
   before(async function() {
@@ -17,9 +16,9 @@ describe("Management UI with UAA running", function() {
 
   it("should have a login button to SSO", async function() {
     await homePage.isLoaded();
-    await homePage.getLoginButton().then(function(value) {
-       assert.equal(value, "Click here to log in");       
-     })
+    let value = await homePage.getLoginButton()
+    assert.equal(value, "Click here to log in");
+
   });
 
   after(function(done) {
