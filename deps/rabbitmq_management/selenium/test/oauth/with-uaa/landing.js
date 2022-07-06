@@ -6,6 +6,7 @@ const {buildDriver, goToHome} = require("../../utils");
 var SSOHomePage = require('../../pageobjects/SSOHomePage')
 
 describe("Management UI with UAA running", function() {
+  var driver;
   var homePage;
 
   before(async function() {

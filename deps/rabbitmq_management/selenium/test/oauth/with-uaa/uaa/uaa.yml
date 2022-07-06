@@ -56,7 +56,7 @@ jwt:
   token:
     policy:
       # Will override global validity policies for the default zone only.
-      accessTokenValiditySeconds: 600
+      accessTokenValiditySeconds: 15
       keys:
         legacy-token-key:
           signingKey: |

@@ -13,11 +13,17 @@ module.exports = {
     if (!runLocal) {
       builder = builder.usingServer("http://selenium:4444/wd/hub")
     }
-    return builder.build();
+    driver = builder.build();
+    return driver;
   },
 
   goToHome: (driver) => {
     return driver.get(baseUrl)
-  }
+  },
 
-}
+  delay: async (msec, ref) => {
+    return new Promise(resolve => {
+      setTimeout(resolve, msec, ref);
+    })
+  }
+};
