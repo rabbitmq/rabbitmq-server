@@ -7,4 +7,4 @@ COPY package.json package.json
 
 FROM base as test
 RUN npm install
-CMD [ "./node_modules/.bin/mocha", "--recursive", "--trace-warnings", "tests/" ]
+CMD [ "npm",  "test" ]

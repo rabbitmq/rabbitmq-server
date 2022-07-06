@@ -15,7 +15,7 @@ module.exports = class BasePage {
         throw new Error(`Still not able to locate element ${locator.toString()} after maximum retries, Error message: ${err.message.toString()}`)
       }
       await driver.sleep(250)
-      return waitForLocated(driver, locator, retries - 1)
+      return this.waitForLocated(driver, locator, retries - 1)
     }
   }
 
@@ -28,7 +28,7 @@ module.exports = class BasePage {
         throw new Error(`Element ${locator.toString()} still not visible after maximum retries, Error message: ${err.message.toString()}`)
       }
       await driver.sleep(250)
-      return waitForVisible(driver, locator, retries - 1)
+      return this.waitForVisible(driver, locator, retries - 1)
     }
   }
 
@@ -38,6 +38,11 @@ module.exports = class BasePage {
     return this.driver.findElement(locator)
   }
 
+  async hasElement (locator) {
+    let count = await this.driver.findElements(locator).size();
+    throw new Error("there are " + count + " warnings");
+    return count > 0;
+  }
 
   async getText (locator, retries = 1) {
     try {
@@ -79,5 +84,11 @@ module.exports = class BasePage {
       return this.sendKeys(locator, keys, retries - 1)
     }
   }
-
+  capture() {
+    this.driver.takeScreenshot().then(
+        function(image) {
+            require('fs').writeFileSync("/tmp/capture.png", image, "base64");
+        }
+    );
+  }
 }
