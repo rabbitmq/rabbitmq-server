@@ -13,8 +13,9 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 
--include("vhost.hrl").
+-include("feature_flags.hrl").
 -include("internal_user.hrl").
+-include("vhost.hrl").
 
 -export([quorum_queue_migration/3,
          implicit_default_bindings_migration/3,
@@ -303,7 +304,7 @@ direct_exchange_routing_v2_migration(_FeatureName, _FeatureProps, is_enabled) ->
                             rabbit_topic_permission,
                             rabbit_runtime_parameters]).
 
-mds_phase1_migration(#{name := FeatureName, command := enable}) ->
+mds_phase1_migration(#ffcommand{name = FeatureName, command = enable}) ->
     case ensure_khepri_cluster_matches_mnesia(FeatureName) of
         ok ->
             Tables = ?MDS_PHASE1_TABLES,
@@ -314,7 +315,7 @@ mds_phase1_migration(#{name := FeatureName, command := enable}) ->
         Error ->
             Error
     end;
-mds_phase1_migration(#{name := FeatureName, command := post_enable}) ->
+mds_phase1_migration(#ffcommand{name = FeatureName, command = post_enable}) ->
     ?assert(rabbit_khepri:is_enabled(non_blocking)),
     Tables = ?MDS_PHASE1_TABLES,
     empty_unused_mnesia_tables(FeatureName, Tables).
