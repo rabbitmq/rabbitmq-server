@@ -217,10 +217,18 @@ handle_call({create, VirtualHost, Reference, Arguments, Username},
                 end
             catch
                 exit:ExitError ->
-                    % likely to be a problem of inequivalent args on an existing stream
-                    rabbit_log:error("Error while creating ~p stream: ~p",
-                                     [Reference, ExitError]),
-                    {reply, {error, validation_failed}, State}
+                    case ExitError of
+                        % likely a problem of inequivalent args on an existing stream
+                        {amqp_error, precondition_failed, M, _} ->
+                            rabbit_log:info("Error while creating ~p stream, "
+                                            ++ M,
+                                            [Reference]),
+                            {error, validation_failed};
+                        E ->
+                            rabbit_log:warning("Error while creating ~p stream, ~p",
+                                               [Reference, E]),
+                            {error, validation_failed}
+                    end
             end;
         error ->
             {reply, {error, validation_failed}, State}
