@@ -72,7 +72,12 @@ ensure_ra_system_started(RaSystem) ->
 
 get_config(quorum_queues = RaSystem) ->
     DefaultConfig = get_default_config(),
-    DefaultConfig#{name => RaSystem}; % names => ra_system:derive_names(quorum)
+    Checksums = application:get_env(rabbit, quorum_compute_checksums, true),
+    WalChecksums = application:get_env(rabbit, quorum_wal_compute_checksums, Checksums),
+    SegmentChecksums = application:get_env(rabbit, quorum_segment_compute_checksums, Checksums),
+    DefaultConfig#{name => RaSystem, % names => ra_system:derive_names(quorum)
+                   wal_compute_checksums => WalChecksums,
+                   segment_compute_checksums => SegmentChecksums};
 get_config(coordination = RaSystem) ->
     DefaultConfig = get_default_config(),
     CoordDataDir = filename:join(
