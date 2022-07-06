@@ -3,7 +3,7 @@ require("chromedriver");
 
 var baseUrl = process.env.RABBITMQ_URL;
 if (!process.env.RABBITMQ_URL) {
-  baseUrl = "http://localhost:15672";
+  baseUrl = "http://local-rabbitmq:15672";
 }
 
 module.exports = {

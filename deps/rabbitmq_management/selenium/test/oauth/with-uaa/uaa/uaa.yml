@@ -2,7 +2,7 @@ logging:
   config: /etc/uaa/log4j2.properties
 
 issuer:
-  uri: http://localhost:8080/uaa
+  uri: http://local-uaa:8080/uaa
 
 encryption:
   active_key_label: CHANGE-THIS-KEY
