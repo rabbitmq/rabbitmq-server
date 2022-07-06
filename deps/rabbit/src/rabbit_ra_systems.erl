@@ -72,7 +72,7 @@ ensure_ra_system_started(RaSystem) ->
 
 get_config(quorum_queues = RaSystem) ->
     DefaultConfig = get_default_config(),
-    Checksums = application:get_env(rabbit, quorum_compute_checksums, false),
+    Checksums = application:get_env(rabbit, quorum_compute_checksums, true),
     WalChecksums = application:get_env(rabbit, quorum_wal_compute_checksums, Checksums),
     SegmentChecksums = application:get_env(rabbit, quorum_segment_compute_checksums, Checksums),
     DefaultConfig#{name => RaSystem, % names => ra_system:derive_names(quorum)
