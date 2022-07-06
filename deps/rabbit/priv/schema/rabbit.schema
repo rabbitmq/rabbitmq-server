@@ -2256,6 +2256,9 @@ end}.
     end
 }.
 
+{mapping, "quorum_queue.compute_checksums", "rabbit.quorum_compute_checksums", [
+    {datatype, {enum, [true, false]}}]}.
+
 % ===============================
 % Validators
 % ===============================

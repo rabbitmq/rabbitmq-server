@@ -812,5 +812,16 @@ credential_validator.regexp = ^abc\\d+",
   {classic_queue_default_version_invalid,
    "classic_queue.default_version = 3",
    [],
+   []},
+
+  %%
+  %% Quorum queue
+  %%
+
+  {quorum_queue_compute_checksums,
+   "quorum_queue.compute_checksums = true",
+   [{rabbit, [
+      {quorum_compute_checksums, true}
+     ]}],
    []}
 ].
