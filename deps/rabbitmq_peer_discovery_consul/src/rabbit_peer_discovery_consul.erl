@@ -19,8 +19,11 @@
          post_registration/0, lock/1, unlock/1]).
 -export([send_health_check_pass/0]).
 -export([session_ttl_update_callback/1]).
-%% useful for debugging from the REPL with RABBITMQ_ALLOW_INPUT
+%% for debugging from the REPL
 -export([service_id/0, service_address/0]).
+%% for debugging from the REPL
+-export([http_options/1, http_options/2]).
+
 %% for tests
 -ifdef(TEST).
 -compile(export_all).
@@ -63,13 +66,15 @@ list_nodes() ->
            end,
     Fun2 = fun(Proplist) ->
                    M = maps:from_list(Proplist),
+                   Path = rabbit_peer_discovery_httpc:build_path([v1, health, service, get_config_key(consul_svc, M)]),
+                   HttpOpts = http_options(M),
                    case rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
                                                         get_config_key(consul_host, M),
                                                         get_integer_config_key(consul_port, M),
-                                                        rabbit_peer_discovery_httpc:build_path([v1, health, service, get_config_key(consul_svc, M)]),
+                                                        Path,
                                                         list_nodes_query_args(),
                                                         maybe_add_acl([]),
-                                                        []) of
+                                                        HttpOpts) of
                        {ok, Nodes} ->
                            IncludeWithWarnings = get_config_key(consul_include_nodes_with_warnings, M),
                            Result = extract_nodes(
@@ -96,13 +101,17 @@ register() ->
       ?LOG_DEBUG(
          "Consul registration body: ~s", [Body],
          #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+      Path = rabbit_peer_discovery_httpc:build_path([v1, agent, service, register]),
+      Headers = maybe_add_acl([]),
+      HttpOpts = http_options(M),
       case rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
-                                            get_config_key(consul_host, M),
-                                            get_integer_config_key(consul_port, M),
-                                            rabbit_peer_discovery_httpc:build_path([v1, agent, service, register]),
-                                            [],
-                                            maybe_add_acl([]),
-                                            Body) of
+                                           get_config_key(consul_host, M),
+                                           get_integer_config_key(consul_port, M),
+                                           Path,
+                                           [],
+                                           Headers,
+                                           HttpOpts,
+                                           Body) of
         {ok, _} -> ok;
         Error   -> Error
       end;
@@ -117,12 +126,16 @@ unregister() ->
   ?LOG_DEBUG(
      "Unregistering with Consul using service ID '~s'", [ID],
      #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  Path = rabbit_peer_discovery_httpc:build_path([v1, agent, service, deregister, ID]),
+  Headers = maybe_add_acl([]),
+  HttpOpts = http_options(M),
   case rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                        get_config_key(consul_host, M),
                                        get_integer_config_key(consul_port, M),
-                                       rabbit_peer_discovery_httpc:build_path([v1, agent, service, deregister, ID]),
+                                       Path,
                                        [],
-                                       maybe_add_acl([]),
+                                       Headers,
+                                       HttpOpts,
                                        []) of
     {ok, Response} ->
           ?LOG_INFO(
@@ -198,6 +211,30 @@ get_integer_config_key(Key, Map) ->
     ?CONFIG_MODULE:get_integer(Key, ?CONFIG_MAPPING, Map).
 
 
+-spec http_options(Map :: #{atom() => peer_discovery_config_value()}) -> list().
+http_options(M) ->
+  case maps:get(ssl_options, M, none) of
+    none -> [];
+    []   -> [];
+    Opts -> [{ssl, Opts}]
+  end.
+
+
+-spec http_options(HttpOpts0 :: list(), Map :: #{atom() => peer_discovery_config_value()}) -> list().
+http_options(HttpOpts0, M) ->
+  TLSOpts = case get_config_key(consul_scheme, M) of
+    "http"  -> [];
+    "https" ->
+      case maps:get(ssl_options, M, none) of
+        none -> [];
+        []   -> [];
+        Opts -> [{ssl, Opts}]
+      end
+  end,
+
+  HttpOpts1 = [TLSOpts | HttpOpts0],
+  HttpOpts1.
+
 -spec filter_nodes(ConsulResult :: list(), AllowWarning :: atom()) -> list().
 filter_nodes(Nodes, Warn) ->
   case Warn of
@@ -234,11 +271,11 @@ extract_nodes([H | T], Nodes) ->
   extract_nodes(T, lists:merge(Nodes, [NodeName])).
 
 -spec maybe_add_acl(QArgs :: list()) -> list().
-maybe_add_acl(QArgs) ->
+maybe_add_acl(List) ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   case get_config_key(consul_acl_token, M) of
-    "undefined" -> QArgs;
-    ACL         -> lists:append(QArgs, [{"X-Consul-Token", ACL}])
+    "undefined" -> List;
+    ACL         -> [{"X-Consul-Token", ACL} | List]
   end.
 
 -spec list_nodes_query_args() -> list().
@@ -469,7 +506,6 @@ maybe_add_domain(Value) ->
       false -> Value
   end.
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Let Consul know that this node is still around
@@ -484,12 +520,16 @@ send_health_check_pass() ->
   ?LOG_DEBUG(
      "Running Consul health check",
      #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  Path = rabbit_peer_discovery_httpc:build_path([v1, agent, check, pass, Service]),
+  Headers = maybe_add_acl([]),
+  HttpOpts = http_options(M),
   case rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                        get_config_key(consul_host, M),
                                        get_integer_config_key(consul_port, M),
-                                       rabbit_peer_discovery_httpc:build_path([v1, agent, check, pass, Service]),
+                                       Path,
                                        [],
-                                       maybe_add_acl([]),
+                                       Headers,
+                                       HttpOpts,
                                        []) of
     {ok, []} -> ok;
     {error, "429"} ->
@@ -591,12 +631,14 @@ consul_session_create(Query, Headers, Body) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     case serialize_json_body(Body) of
         {ok, Serialized} ->
+            HttpOpts = http_options(M),
             rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                             get_config_key(consul_host, M),
                                             get_integer_config_key(consul_port, M),
                                             "v1/session/create",
                                             Query,
                                             Headers,
+                                            HttpOpts,
                                             Serialized);
         {error, _} = Err ->
             Err
@@ -712,12 +754,14 @@ consul_kv_write(Path, Query, Headers, Body) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     case serialize_json_body(Body) of
         {ok, Serialized} ->
+            HttpOpts = http_options(M),
             rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                             get_config_key(consul_host, M),
                                             get_integer_config_key(consul_port, M),
                                             "v1/kv/" ++ Path,
                                             Query,
                                             Headers,
+                                            HttpOpts,
                                             Serialized);
         {error, _} = Err ->
             Err
@@ -735,13 +779,14 @@ consul_kv_write(Path, Query, Headers, Body) ->
       Headers :: [{string(), string()}].
 consul_kv_read(Path, Query, Headers) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    HttpOpts = http_options(M),
     rabbit_peer_discovery_httpc:get(get_config_key(consul_scheme, M),
                                     get_config_key(consul_host, M),
                                     get_integer_config_key(consul_port, M),
                                     "v1/kv/" ++ Path,
                                     Query,
                                     Headers,
-                                    []).
+                                    HttpOpts).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -819,10 +864,13 @@ session_ttl_update_callback(SessionId) ->
 -spec consul_session_renew(string(), [{string(), string()}], [{string(), string()}]) -> {ok, term()} | {error, string()}.
 consul_session_renew(SessionId, Query, Headers) ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    Path = rabbit_peer_discovery_httpc:build_path([v1, session, renew, rabbit_data_coercion:to_atom(SessionId)]),
+    HttpOpts = http_options(M),
     rabbit_peer_discovery_httpc:put(get_config_key(consul_scheme, M),
                                     get_config_key(consul_host, M),
                                     get_integer_config_key(consul_port, M),
-                                    rabbit_peer_discovery_httpc:build_path([v1, session, renew, rabbit_data_coercion:to_atom(SessionId)]),
+                                    Path,
                                     Query,
                                     Headers,
+                                    HttpOpts,
                                     []).
