@@ -3,31 +3,30 @@ const {By,Key,until,Builder} = require("selenium-webdriver");
 var BasePage = require('./BasePage')
 
 const LOGIN_BUTTON = By.css('div#outer div#login div#login-status button#loginWindow');
-const USERNAME = By.css('input[name="username"]')
-const PASSWORD = By.css('input[name="password"]')
 const WARNING = By.css('.warning')
 
-module.exports = class SSOHomePage extends BasePage {
+module.exports = class SSOLoginPage extends BasePage {
 
   async isLoaded () {
     return this.waitForDisplayed(LOGIN_BUTTON)
   }
-  async getLoginButton() {
-    return this.getText(LOGIN_BUTTON)
-  }
-  async login(username, password) {
+  async clickToLogin(username, password) {
     await this.isLoaded();
-    if (!this.isWarningVisible()) {
-      await this.sendKeys(USERNAME, username)
-      await this.sendKeys(PASSWORD, password)
+    if (! await this.isWarningVisible() ) {
       return this.click(LOGIN_BUTTON)
-    }else {
-      throw new Error(`Warning message is visible. Idp is down`)
+    } else {
+      this.capture();
+      var message = await this.getWarning()
+      throw new Error(`Warning message  "`+ message + `" is visible. Idp is probably down or not reachable`)
     }
   }
   async isWarningVisible() {
-    const message = await this.getText(WARNING)
-    return (message != undefined)
+      try {
+        await this.getText(WARNING)
+        return true;
+      }catch(e) {
+        return false;
+      }
   }
   async getWarning() {
     return this.getText(WARNING)
