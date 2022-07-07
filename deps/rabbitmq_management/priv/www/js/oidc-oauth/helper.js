@@ -34,7 +34,6 @@ function auth_settings_apply_defaults(authSettings) {
     if (!authSettings.oauth_scopes) {
       authSettings.oauth_scopes = "openid profile " + authSettings.oauth_resource_id + ".*";
     }
-
   }
   if (!authSettings.oauth_response_type) {
     authSettings.oauth_response_type = "code"; // although the default value in oidc client
@@ -43,8 +42,6 @@ function auth_settings_apply_defaults(authSettings) {
   if (!authSettings.oauth_scopes) {
     authSettings.oauth_scopes = "openid profile";
   }
-
-
 
   return authSettings;
 
@@ -98,12 +95,17 @@ function oauth_initialize(authSettings) {
     mgr.events.addAccessTokenExpiring(function() {
         console.log("token expiring...");
     });
-      mgr.events.addAccessTokenExpired(function() {
-          console.log("token expired !!");
-      });
+    mgr.events.addAccessTokenExpired(function() {
+        console.log("token expired !!");
+    });
     mgr.events.addSilentRenewError(function(err) {
         console.log("token expiring failed due to " + err);
     });
+    mgr.events.addUserLoaded(function(user) {
+        let expiryDate = new Date(user.expires_at * 1000)  // it is epoch in seconds
+        console.log("user loaded with token which expires at " + expiryDate);
+        oauth.access_token = user.access_token;
+     });
 
     return oauth;
 }
