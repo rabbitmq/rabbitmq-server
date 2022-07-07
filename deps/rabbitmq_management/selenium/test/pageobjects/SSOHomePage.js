@@ -3,7 +3,7 @@ const {By,Key,until,Builder} = require("selenium-webdriver");
 var BasePage = require('./BasePage')
 
 const LOGIN_BUTTON = By.css('div#outer div#login div#login-status button#loginWindow');
-const WARNING = By.css('.warning')
+const WARNING = By.css('p.warning')
 
 module.exports = class SSOLoginPage extends BasePage {
 
@@ -26,9 +26,9 @@ module.exports = class SSOLoginPage extends BasePage {
   async isWarningVisible() {
       try {
         await this.getText(WARNING)
-        return true;
+        return Promise.resolve(true);
       }catch(e) {
-        return false;
+        return Promise.resolve(false);
       }
   }
   async getWarning() {

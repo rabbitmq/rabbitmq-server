@@ -39,6 +39,8 @@ And now we can run the test:
 RUN_LOCAL=TRUE ./node_modules/.bin/mocha  --timeout 20000 test/oauth/with-uaa/happy-login.js
 ```
 
+## Run RabbitMQ from source
+
 If we prefer, we can run RabbitMQ from source. We just kill+rm the `local-rabbitmq` container and launch
 RabbitMQ as follows:
 ```bash

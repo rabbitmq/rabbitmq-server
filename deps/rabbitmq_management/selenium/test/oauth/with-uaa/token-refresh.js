@@ -11,6 +11,7 @@ describe("Once user is logged in", function() {
   var homePage;
   var uaaLogin;
   var overview;
+  this.timeout(25000); 
 
   before(async function() {
     driver = buildDriver();
