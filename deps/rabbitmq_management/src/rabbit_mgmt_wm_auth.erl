@@ -38,7 +38,7 @@ to_json(ReqData, Context) ->
                    case is_invalid([OAuthClientId, OAuthClientSecret, OAuthResourceId, OAuthProviderUrl]) of
                        true ->
                            rabbit_log:warning("Disabling OAuth 2 authorization, relevant configuration settings are missing", []),
-                           [{oauth_enable, false}, {oauth_client_id, <<>>}, {oauth_url, <<>>}];
+                           [{oauth_enable, false}, {oauth_client_id, <<>>}, {oauth_provider_url, <<>>}];
                        false ->
                            [{oauth_enable, true},
                             {enable_uaa, rabbit_data_coercion:to_binary(EnableUAA)},
