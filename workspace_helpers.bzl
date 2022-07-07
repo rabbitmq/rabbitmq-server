@@ -182,7 +182,7 @@ erlang_app(
     hex_pm_erlang_app(
         name = "ra",
         version = "2.2.0",
-        sha256 = "c7c2ff1325095cbf3b95be20a8bea1e81d68da7c3f3cc329331bc71af9d3c8db",
+        sha256 = "e130a9c0bde791d5a1779d1e0145ec50475bc1f03c4c35b59de7541d8757fef9",
         deps = [
             "@gen_batch_server//:erlang_app",
         ],
