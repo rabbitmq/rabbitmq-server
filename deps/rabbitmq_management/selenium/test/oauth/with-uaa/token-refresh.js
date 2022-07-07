@@ -29,7 +29,7 @@ describe("Once user is logged in", function() {
     await overview.clickOnConnectionsTab()
     await delay(5000) // 10 sec
     await overview.clickOnConnectionsTab()
-    await delay(5000) // 15 sec
+    await delay(5000) // 15 sec => accessTokenValiditySeconds = 15 sec
     await overview.clickOnChannelsTab()
     await delay(5000) // 20 sec
     await overview.clickOnQueuesTab()
