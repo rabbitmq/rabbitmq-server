@@ -209,6 +209,9 @@ is_authorized_global_parameters(ReqData, Context) ->
 is_basic_auth_disabled() ->
     get_bool_env(rabbitmq_management, disable_basic_auth, false).
 
+is_oauth2_enabled() ->
+    get_bool_env(rabbitmq_management, oauth_enable, false).
+
 is_authorized(ReqData, Context, ErrorMsg, Fun) ->
     case cowboy_req:method(ReqData) of
         <<"OPTIONS">> -> {true, ReqData, Context};
@@ -737,8 +740,13 @@ bad_request(Reason, ReqData, Context) ->
     halt_response(400, bad_request, Reason, ReqData, Context).
 
 not_authenticated(Reason, ReqData, Context) ->
-%    ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
-    halt_response(401, not_authorized, Reason, ReqData, Context).
+    case is_oauth2_enabled() of
+      false ->
+          ReqData1 = cowboy_req:set_resp_header(<<"www-authenticate">>, ?AUTH_REALM, ReqData),
+          halt_response(401, not_authorized, Reason, ReqData1, Context);
+      true ->
+          halt_response(401, not_authorized, Reason, ReqData, Context)
+    end.
 
 not_authorised(Reason, ReqData, Context) ->
     %% TODO: consider changing to 403 in 4.0

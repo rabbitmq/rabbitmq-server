@@ -377,6 +377,8 @@ assert_percentage(Breakdown0, ExtraMargin) ->
             ok
     end.
 
+println(What) -> io:format("~p~n", [What]).
+
 auth_test(Config) ->
     http_put(Config, "/users/user", [{password, <<"user">>},
                                      {tags, <<"">>}], {group, '2xx'}),
@@ -3279,13 +3281,13 @@ oauth_test(Config) ->
     Map1 = http_get(Config, "/auth", ?OK),
     %% Defaults
     ?assertEqual(false, maps:get(oauth_enable, Map1)),
-    ?assertEqual(<<>>, maps:get(oauth_client_id, Map1)),
-    ?assertEqual(<<>>, maps:get(oauth_provider_url, Map1)),
+
     %% Misconfiguration
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbitmq_management, oauth_enable, true]),
     Map2 = http_get(Config, "/auth", ?OK),
-    ?assertEqual(false, maps:get(oauth_enable, Map2)),
+    println(Map2),
+    ?assertEqual(true, maps:get(oauth_enable, Map2)),
     ?assertEqual(<<>>, maps:get(oauth_client_id, Map2)),
     ?assertEqual(<<>>, maps:get(oauth_provider_url, Map2)),
     %% Valid config
