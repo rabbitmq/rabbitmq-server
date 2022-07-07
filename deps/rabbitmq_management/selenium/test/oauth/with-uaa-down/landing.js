@@ -1,43 +1,30 @@
 const {By,Key,until,Builder} = require("selenium-webdriver");
 require("chromedriver");
 var assert = require('assert');
+const {buildDriver, goToHome} = require("../../utils");
 
-var buildDriver = function(caps) {
-  return new Builder().forBrowser('chrome').build();
-};
+var SSOHomePage = require('../../pageobjects/SSOHomePage')
 
-describe("Management UI with UAA down", function() {
+describe("Management UI with UAA running", function() {
   var driver;
-  var page;
-  this.timeout(3000);
+  var homePage;
 
-  before(function(done) {
+  before(async function() {
     driver = buildDriver();
-    page = driver.get("http://localhost:15672");
-    done();
+    await goToHome(driver);
+    homePage = new SSOHomePage(driver)
   });
 
-  it("should have a warning message", function(done) {
-
-      driver.wait(until.elementLocated(By.id("outer")))
-        .then(function(outer) { return outer.findElement(By.className("warning")); })
-        .then(function(warning) {
-          warning.getText().then(function(text) {
-            assert.equal(text, "http://localhost:8080/uaa does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate");
-            done();
-          });
-        });
-
+  it("should have a warning message", async function() {
+      await homePage.isLoaded();
+      let message = await homePage.getWarning();
+      assert.equal(message, "http://local-uaa:8080/uaa does not appear to be a running OAuth2.0 instance or may not have a trusted SSL certificate");
   });
 
-
-  it("should have a login button", function(done) {
-      driver.wait(until.elementLocated(By.id("loginWindow"))).then(function(loginButton) {
-        loginButton.getText().then(function(text) {
-          assert.equal(text, "Single Sign On");
-          done();
-        })
-    });
+  it("should have a login button to SSO", async function() {
+    await homePage.isLoaded();
+    let value = await homePage.getLoginButton()
+    assert.equal(value, "Single Sign On");
 
   });
 
@@ -51,5 +38,4 @@ describe("Management UI with UAA down", function() {
       done();
     });
   });
-
 })

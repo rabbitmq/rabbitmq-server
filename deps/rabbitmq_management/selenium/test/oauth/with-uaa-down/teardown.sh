@@ -6,4 +6,4 @@ export RABBITMQ_CONFIG=${SCRIPT}/rabbitmq.config
 
 . $SCRIPT/../../../bin/rabbitmq.sh
 
-start_rabbitmq
+stop_rabbitmq

@@ -6,4 +6,11 @@ export RABBITMQ_CONFIG=${SCRIPT}/rabbitmq.config
 
 . $SCRIPT/../../../bin/rabbitmq.sh
 
-start_rabbitmq
+stop_uaa() {
+  docker kill local-uaa
+  docker rm local-uaa
+}
+
+
+stop_rabbitmq
+stop_uaa

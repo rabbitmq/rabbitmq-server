@@ -19,7 +19,12 @@ describe("Management UI with UAA running", function() {
     await homePage.isLoaded();
     let value = await homePage.getLoginButton()
     assert.equal(value, "Click here to log in");
+  });
 
+  it("should not have a warning message", async function() {
+    await homePage.isLoaded();
+    let visible = await homePage.isWarningVisible();
+    assert.ok(!visible);
   });
 
   after(function(done) {

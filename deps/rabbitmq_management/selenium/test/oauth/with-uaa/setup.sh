@@ -6,7 +6,7 @@ export RABBITMQ_CONFIG=${SCRIPT}/rabbitmq.config
 
 . $SCRIPT/../../../bin/rabbitmq.sh
 
-uaa() {
+start_uaa() {
 
   UAA_IMAGE_TAG=${UAA_IMAGE_TAG:-latest}
 
@@ -44,8 +44,8 @@ install_uaac() {
 
 }
 
-rabbitmq
-uaa
+start_rabbitmq
+start_uaa
 sleep 5
 install_uaac
 ${SCRIPT}/uaa/setup
