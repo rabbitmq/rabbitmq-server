@@ -3297,7 +3297,7 @@ oauth_test(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
                                  [rabbitmq_management, oauth_provider_url, "http://localhost:8080/uaa"]),
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbitmq_management, resource_server_id, "rabbitmq"]),
+                                 [rabbitmq_auth_backend_oauth2, resource_server_id, "rabbitmq"]),
     Map3 = http_get(Config, "/auth", ?OK),
     println(Map3),
     ?assertEqual(true, maps:get(oauth_enable, Map3)),

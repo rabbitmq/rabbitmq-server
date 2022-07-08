@@ -35,20 +35,26 @@ to_json(ReqData, Context) ->
                    OAuthMetadataUrl = application:get_env(rabbitmq_management, oauth_metadata_url, ""),
                    OAuthScopes = application:get_env(rabbitmq_management, oauth_scopes, ""),
                    OAuthResourceId = application:get_env(rabbitmq_auth_backend_oauth2, resource_server_id, ""),
-                   case is_invalid([OAuthClientId, OAuthClientSecret, OAuthResourceId, OAuthProviderUrl]) of
+                   case is_invalid([OAuthResourceId]) of
                        true ->
-                           rabbit_log:warning("Disabling OAuth 2 authorization, relevant configuration settings are missing", []),
-                           [{oauth_enable, false}, {oauth_client_id, <<>>}, {oauth_provider_url, <<>>}];
+                           rabbit_log:warning("Disabling OAuth 2 authorization, missing resource_server_id in oauth2 plugin", []),
+                            [{oauth_enable, false}];
                        false ->
-                           [{oauth_enable, true},
-                            {enable_uaa, rabbit_data_coercion:to_binary(EnableUAA)},
-                            {oauth_client_id, rabbit_data_coercion:to_binary(OAuthClientId)},
-                            {oauth_client_secret, rabbit_data_coercion:to_binary(OAuthClientSecret)},
-                            {oauth_provider_url, rabbit_data_coercion:to_binary(OAuthProviderUrl)},
-                            {oauth_scopes, rabbit_data_coercion:to_binary(OAuthScopes)},
-                            {oauth_metadata_url, rabbit_data_coercion:to_binary(OAuthMetadataUrl)},
-                            {oauth_resource_id, rabbit_data_coercion:to_binary(OAuthResourceId)}
-                            ]
+                           case is_invalid([OAuthClientId, OAuthClientSecret, OAuthProviderUrl]) of
+                               true ->
+                                   rabbit_log:warning("Disabling OAuth 2 authorization, missing relevant configuration in management plugin", []),
+                                   [{oauth_enable, false}, {oauth_client_id, <<>>}, {oauth_provider_url, <<>>}];
+                               false ->
+                                   [{oauth_enable, true},
+                                    {enable_uaa, rabbit_data_coercion:to_binary(EnableUAA)},
+                                    {oauth_client_id, rabbit_data_coercion:to_binary(OAuthClientId)},
+                                    {oauth_client_secret, rabbit_data_coercion:to_binary(OAuthClientSecret)},
+                                    {oauth_provider_url, rabbit_data_coercion:to_binary(OAuthProviderUrl)},
+                                    {oauth_scopes, rabbit_data_coercion:to_binary(OAuthScopes)},
+                                    {oauth_metadata_url, rabbit_data_coercion:to_binary(OAuthMetadataUrl)},
+                                    {oauth_resource_id, rabbit_data_coercion:to_binary(OAuthResourceId)}
+                                    ]
+                           end
                    end;
                false ->
                    [{oauth_enable, false}]
