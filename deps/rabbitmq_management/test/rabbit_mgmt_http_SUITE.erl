@@ -3278,6 +3278,8 @@ stats_redirect_test(Config) ->
     passed.
 
 oauth_test(Config) ->
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, "rabbitmq_auth_backend_oauth2"),
+
     Map1 = http_get(Config, "/auth", ?OK),
     %% Defaults
     ?assertEqual(false, maps:get(oauth_enable, Map1)),
