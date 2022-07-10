@@ -622,7 +622,7 @@ registration_with_auto_addr_nic_issue_12_test(_Config) ->
 
 registration_generic_error_test(_Config) ->
          meck:expect(rabbit_peer_discovery_httpc, put,
-           fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, _Body) ->
+           fun(_Scheme, _Host, _Port, _Path, _Args, _Headers, _HttpOpts, _Body) ->
              {error, "testing"}
            end),
          ?assertEqual({error, "testing"}, rabbit_peer_discovery_consul:register()),
