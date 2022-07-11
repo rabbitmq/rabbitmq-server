@@ -230,7 +230,7 @@ def versioned_plugins_dir(**kwargs):
     )
 
 def package_generic_unix(
-        plugins,
+        plugins = None,
         rabbitmq_workspace = "@",
         package_dir = "rabbitmq_server-{}".format(APP_VERSION)):
     collect_licenses(
@@ -286,7 +286,7 @@ def package_generic_unix(
     )
 
 def source_archive(
-        plugins,
+        plugins = None,
         rabbitmq_workspace = "@"):
     source_tree(
         name = "source-tree",
