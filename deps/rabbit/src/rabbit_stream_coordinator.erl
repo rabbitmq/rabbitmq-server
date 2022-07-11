@@ -426,11 +426,12 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                 fun(StreamId, _, Acc) ->
                     case Acc of
                         #{StreamId := Stream = #stream{listeners = Listeners0}} ->
-                            Listeners = maps:fold(fun({P, _} = K, _, A) when P == Pid ->
-                                                          maps:remove(K, A);
-                                                     (K, V, A) ->
-                                                          A#{K => V}
-                                                  end, #{}, Listeners0),
+                            %% it will be either a leader or member, not very
+                            %% generic but it is a lot faster than iterating the
+                            %% whole listeners map each time
+                            Listeners = maps:remove({Pid, leader},
+                                                    maps:remove({Pid, member},
+                                                                Listeners0)),
                             Acc#{StreamId => Stream#stream{listeners = Listeners}};
                         _ ->
                             Acc
