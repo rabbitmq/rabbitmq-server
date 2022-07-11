@@ -123,9 +123,9 @@ pkg_tar(
     visibility = ["//visibility:public"],
 )
 
-package_generic_unix(PLUGINS)
+package_generic_unix(plugins = PLUGINS)
 
-source_archive(PLUGINS + [
+source_archive(plugins = PLUGINS + [
     "//deps/rabbitmq_cli:rabbitmqctl",
 ])
 
