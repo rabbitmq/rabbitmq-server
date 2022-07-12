@@ -50,20 +50,22 @@
                  members = #{} :: #{node() := #member{}},
                  listeners = #{} :: #{pid() | %% v0 & v1
                                       {pid(), leader | member} %% v2
-                                      := LeaderPid :: pid()} | {node(), LocalPid :: pid()},
+                                      := LeaderPid :: pid()} |
+                 {node(), LocalPid :: pid()},
                  reply_to :: undefined | from(),
                  mnesia = {updated, 0} :: {updated | updating, osiris:epoch()},
                  target = running :: running | deleted
                 }).
 
--record(rabbit_stream_coordinator, {streams = #{} :: #{stream_id() => #stream{}},
-                                    monitors = #{} :: #{pid() => {stream_id() | %% v0 & v1
-                                                                  #{stream_id() => ok}, %% v2
-                                                                  monitor_role()} |
-                                                        sac},
-                                    %% not used as of v2
-                                    listeners = #{} :: undefined | #{stream_id() =>
-                                                                     #{pid() := queue_ref()}},
-                                    single_active_consumer = undefined :: undefined | rabbit_stream_sac_coordinator:state(),
-                                    %% future extensibility
-                                    reserved_2}).
+-record(rabbit_stream_coordinator,
+        {streams = #{} :: #{stream_id() => #stream{}},
+         monitors = #{} :: #{pid() => {stream_id() | %% v0 & v1
+                                       #{stream_id() => ok}, %% v2
+                                       monitor_role()} |
+                             sac},
+         %% not used as of v2
+         listeners = #{} :: undefined | #{stream_id() =>
+                                          #{pid() := queue_ref()}},
+         single_active_consumer = undefined :: undefined | rabbit_stream_sac_coordinator:state(),
+         %% future extensibility
+         reserved_2}).

@@ -378,7 +378,7 @@ apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
                            Reply, inform_listeners_eol(MachineVersion, Stream0));
                 _ ->
                     {Stream2, Effects0} = evaluate_stream(Meta, Stream1, []),
-                    {Stream3, Effects1} = eval_listeners(MachineVersion, Stream2, Effects0),
+                    {Stream3, Effects1} = eval_listeners(MachineVersion, Stream2, Stream0, Effects0),
                     {Stream, Effects2} = eval_retention(Meta, Stream3, Effects1),
                     {Monitors, Effects} = ensure_monitors(Stream, Monitors0, Effects2),
                     return(Meta,
@@ -426,11 +426,12 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                 fun(StreamId, _, Acc) ->
                     case Acc of
                         #{StreamId := Stream = #stream{listeners = Listeners0}} ->
-                            Listeners = maps:fold(fun({P, _} = K, _, A) when P == Pid ->
-                                                          maps:remove(K, A);
-                                                     (K, V, A) ->
-                                                          A#{K => V}
-                                                  end, #{}, Listeners0),
+                            %% it will be either a leader or member, not very
+                            %% generic but it is a lot faster than iterating the
+                            %% whole listeners map each time
+                            Listeners = maps:remove({Pid, leader},
+                                                    maps:remove({Pid, member},
+                                                                Listeners0)),
                             Acc#{StreamId => Stream#stream{listeners = Listeners}};
                         _ ->
                             Acc
@@ -499,8 +500,8 @@ apply(#{machine_version := MachineVersion} = Meta,
                     local_member ->
                         {{Pid, member}, {Node, undefined}}
                 end,
-            Stream1 = Stream0#stream{listeners = maps:put(LKey, LValue, Listeners0)},
-            {Stream, Effects} = eval_listeners(MachineVersion, Stream1, []),
+            {Listeners, Effects} = eval_listener(LKey, LValue, {Listeners0, []}, Stream0),
+            Stream = Stream0#stream{listeners = Listeners},
             {PidStreams, listener} = maps:get(Pid, Monitors0, {#{}, listener}),
             Monitors = maps:put(Pid, {PidStreams#{StreamId => ok}, listener}, Monitors0),
             return(Meta,
@@ -1369,82 +1370,104 @@ inform_listeners_eol(MachineVersion,
 inform_listeners_eol(_, _) ->
     [].
 
+
+eval_listeners(MachineVersion, #stream{} = Stream, Effects) ->
+    eval_listeners(MachineVersion, Stream, undefined, Effects).
+
+eval_listeners(_MachineVersion,
+               #stream{members = Members} = Stream,
+               #stream{members = Members},
+               Effects0) ->
+    %% if the Members have not changed don't evaluate as this is an
+    %% expensive operation when there are many listeners
+    {Stream, Effects0};
 eval_listeners(MachineVersion, #stream{listeners = Listeners0,
                                        queue_ref = QRef,
-                                       members = Members} = Stream, Effects0) 
+                                       members = Members} = Stream,
+               _OldStream, Effects0)
   when MachineVersion =< 1 ->
     case find_leader(Members) of
         {#member{state = {running, _, LeaderPid}}, _} ->
             %% a leader is running, check all listeners to see if any of them
             %% has not been notified of the current leader pid
             {Listeners, Effects} =
-                maps:fold(
-                  fun(_, P, Acc) when P == LeaderPid ->
-                          Acc;
-                     (LPid, _, {L, Acc}) ->
-                          {L#{LPid => LeaderPid},
-                           [{send_msg, LPid,
-                             {queue_event, QRef,
-                              {stream_leader_change, LeaderPid}},
-                             cast} | Acc]}
-                  end, {Listeners0, Effects0}, Listeners0),
+                maps:fold(fun(_, P, Acc) when P == LeaderPid ->
+                                  Acc;
+                             (LPid, _, {L, Acc}) ->
+                                  {L#{LPid => LeaderPid},
+                                   [{send_msg, LPid,
+                                     {queue_event, QRef,
+                                      {stream_leader_change, LeaderPid}},
+                                     cast} | Acc]}
+                          end, {Listeners0, Effects0}, Listeners0),
             {Stream#stream{listeners = Listeners}, Effects};
         _ ->
             {Stream, Effects0}
     end;
-eval_listeners(MachineVersion, #stream{listeners = Listeners0,
-                                       queue_ref = QRef,
-                                       members = Members} = Stream0, Effects0) when MachineVersion >= 2 ->
+eval_listeners(MachineVersion, #stream{listeners = Listeners0} = Stream0,
+               _OldStream, Effects0)
+  when MachineVersion >= 2 ->
     %% Iterating over stream listeners.
     %% Returning the new map of listeners and the effects (notification of changes)
     {Listeners1, Effects1} =
-        maps:fold(fun({P, leader}, ListLPid0, {Lsts0, Effs0}) ->
-                          %% iterating over member to find the leader
-                          {ListLPid1, Effs1} =
-                          maps:fold(fun(_N, #member{state  = {running, _, LeaderPid},
-                                                    role   = {writer, _},
-                                                    target = T}, A)
-                                                    when ListLPid0 == LeaderPid, T /= deleted ->
-                                            %% it's the leader, same PID, nothing to do
-                                            A;
-                                       (_N, #member{state  = {running, _, LeaderPid},
-                                                    role   = {writer, _},
-                                                    target = T}, {_, Efs})
-                                                    when T /= deleted ->
-                                            %% it's the leader, not same PID, assign the new leader, add effect
-                                            {LeaderPid, [{send_msg, P,
-                                                          {queue_event, QRef,
-                                                           {stream_leader_change, LeaderPid}},
-                                                          cast} | Efs]};
-                                       (_N, _M, Acc) ->
-                                            %% it's not the leader, nothing to do
-                                            Acc
-                                    end, {ListLPid0, Effs0}, Members),
-                          {Lsts0#{{P, leader} => ListLPid1}, Effs1};
-                     ({P, member}, {ListNode, ListMPid0}, {Lsts0, Effs0}) ->
-                          %% listening to a member on a given node
-                          %% iterating over the members to find the member on this node
-                          {ListMPid1, Effs1} =
-                          maps:fold(fun(MNode, #member{state = {running, _, MemberPid}, target = T}, Acc)
-                                          when ListMPid0 == MemberPid, ListNode == MNode, T /= deleted ->
-                                            %% it's the local member of this listener
-                                            %% it has not changed, nothing to do
-                                            Acc;
-                                       (MNode, #member{state = {running, _, MemberPid}, target = T}, {_, Efs})
-                                          when ListNode == MNode, T /= deleted ->
-                                            %% it's the local member of this listener
-                                            %% the PID is not the same, updating it in the listener, add effect
-                                            {MemberPid, [{send_msg, P,
-                                                          {queue_event, QRef,
-                                                           {stream_local_member_change, MemberPid}},
-                                                          cast} | Efs]};
-                                       (_N, _M, Acc) ->
-                                            %% not a replica, nothing to do
-                                            Acc
-                                    end, {ListMPid0, Effs0}, Members),
-                          {Lsts0#{{P, member} => {ListNode, ListMPid1}}, Effs1}
-              end, {Listeners0, Effects0}, Listeners0),
+        maps:fold(fun(ListenerSpec, ListLPid0, {Lsts0, Effs0}) ->
+                          eval_listener(ListenerSpec, ListLPid0, {Lsts0, Effs0}, Stream0)
+                  end, {Listeners0, Effects0}, Listeners0),
     {Stream0#stream{listeners = Listeners1}, Effects1}.
+
+eval_listener({P, leader}, ListLPid0, {Lsts0, Effs0},
+              #stream{queue_ref = QRef,
+                      members = Members}) ->
+    %% iterating over member to find the leader
+    {ListLPid1, Effs1} =
+        maps:fold(fun(_N, #member{state  = {running, _, LeaderPid},
+                                  role   = {writer, _},
+                                  target = T}, A)
+                        when ListLPid0 == LeaderPid, T /= deleted ->
+                          %% it's the leader, same PID, nothing to do
+                          A;
+                     (_N, #member{state  = {running, _, LeaderPid},
+                                  role   = {writer, _},
+                                  target = T}, {_, Efs})
+                       when T /= deleted ->
+                          %% it's the leader, not same PID, assign the new leader, add effect
+                          {LeaderPid, [{send_msg, P,
+                                        {queue_event, QRef,
+                                         {stream_leader_change, LeaderPid}},
+                                        cast} | Efs]};
+                     (_N, _M, Acc) ->
+                          %% it's not the leader, nothing to do
+                          Acc
+                  end, {ListLPid0, Effs0}, Members),
+    {Lsts0#{{P, leader} => ListLPid1}, Effs1};
+eval_listener({P, member}, {ListNode, ListMPid0}, {Lsts0, Effs0},
+              #stream{queue_ref = QRef, members = Members}) ->
+    %% listening to a member on a given node
+    %% iterating over the members to find the member on this node
+    {ListMPid1, Effs1} =
+        maps:fold(fun(MNode, #member{state = {running, _, MemberPid},
+                                     target = T}, Acc)
+                        when ListMPid0 == MemberPid,
+                             ListNode == MNode,
+                             T /= deleted ->
+                          %% it's the local member of this listener
+                          %% it has not changed, nothing to do
+                          Acc;
+                     (MNode, #member{state = {running, _, MemberPid},
+                                     target = T}, {_, Efs})
+                       when ListNode == MNode,
+                            T /= deleted ->
+                          %% it's the local member of this listener
+                          %% the PID is not the same, updating it in the listener, add effect
+                          {MemberPid, [{send_msg, P,
+                                        {queue_event, QRef,
+                                         {stream_local_member_change, MemberPid}},
+                                        cast} | Efs]};
+                     (_N, _M, Acc) ->
+                          %% not a replica, nothing to do
+                          Acc
+                  end, {ListMPid0, Effs0}, Members),
+    {Lsts0#{{P, member} => {ListNode, ListMPid1}}, Effs1}.
 
 eval_retention(#{index := Idx} = Meta,
                #stream{conf = #{retention := Ret} = Conf,
