@@ -57,18 +57,6 @@
                  target = running :: running | deleted
                 }).
 
-<<<<<<< HEAD
--record(rabbit_stream_coordinator, {streams = #{} :: #{stream_id() => #stream{}},
-                                    monitors = #{} :: #{pid() => {stream_id() | %% v0 & v1
-                                                                  #{stream_id() => ok}, %% v2
-                                                                  monitor_role()}},
-                                    %% not used as of v2
-                                    listeners = #{} :: undefined | #{stream_id() =>
-                                                                     #{pid() := queue_ref()}},
-                                    %% future extensibility
-                                    reserved_1,
-                                    reserved_2}).
-=======
 -record(rabbit_stream_coordinator,
         {streams = #{} :: #{stream_id() => #stream{}},
          monitors = #{} :: #{pid() => {stream_id() | %% v0 & v1
@@ -81,4 +69,3 @@
          single_active_consumer = undefined :: undefined | rabbit_stream_sac_coordinator:state(),
          %% future extensibility
          reserved_2}).
->>>>>>> a6e8ff44e3 (optimise listener down)
