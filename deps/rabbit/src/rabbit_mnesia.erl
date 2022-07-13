@@ -597,6 +597,7 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry) ->
     end,
     %% ...and all nodes will need to wait for tables
     rabbit_table:wait_for_replicated(Retry),
+    rabbit_table:maybe_ensure_index_route_table(),
     ok.
 
 init_db_with_mnesia(ClusterNodes, NodeType,
