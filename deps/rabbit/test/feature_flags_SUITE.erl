@@ -583,20 +583,24 @@ enable_unsupported_feature_flag_in_a_healthy_situation(Config) ->
        is_feature_flag_enabled(Config, FeatureName)).
 
 enable_feature_flag_when_ff_file_is_unwritable(Config) ->
-    QQSupported = rabbit_ct_broker_helpers:is_feature_flag_supported(
-                    Config, quorum_queue),
-    case QQSupported of
+    Supported = rabbit_ct_broker_helpers:is_feature_flag_supported(
+                  Config, stream_queue),
+    case Supported of
         true  -> do_enable_feature_flag_when_ff_file_is_unwritable(Config);
-        false -> {skip, "Quorum queues are unsupported"}
+        false -> {skip, "Stream queues are unsupported"}
     end.
 
 do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
-    FeatureName = quorum_queue,
+    FeatureName = stream_queue,
     ClusterSize = ?config(rmq_nodes_count, Config),
     Node = ClusterSize - 1,
     True = lists:duplicate(ClusterSize, true),
     False = lists:duplicate(ClusterSize, false),
     Files = feature_flags_files(Config),
+
+    %% Remember the `enabled_feature_flags' files content.
+    FFFilesContent = [file:consult(File)
+                      || File <- feature_flags_files(Config)],
 
     %% The feature flag is supported but disabled initially.
     ?assertEqual(
@@ -619,7 +623,7 @@ do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
 
     %% The `feature_flags` file were not updated.
     ?assertEqual(
-       lists:duplicate(ClusterSize, {ok, [[]]}),
+       FFFilesContent,
        [file:consult(File) || File <- feature_flags_files(Config)]),
 
     %% Stop all nodes and restore permissions on the `feature_flags` files.
@@ -630,15 +634,20 @@ do_enable_feature_flag_when_ff_file_is_unwritable(Config) ->
 
     %% Restart all nodes and assert the feature flag is still enabled and
     %% the `feature_flags` files were correctly repaired.
+    %%
+    %% TODO: The `is_enabled' mechanism was dropped with the introduction of
+    %% the `rabbit_ff_controller' process because it was pretty fragile.
+    %% That's why the rest of the testcase is commentted out now. We should
+    %% revisit this at some point.
     [?assertEqual(ok, rabbit_ct_broker_helpers:start_node(Config, N))
-     || N <- lists:reverse(Nodes)],
+     || N <- lists:reverse(Nodes)].
 
-    ?assertEqual(
-       True,
-       is_feature_flag_enabled(Config, FeatureName)),
-    ?assertEqual(
-       lists:duplicate(ClusterSize, {ok, [[FeatureName]]}),
-       [file:consult(File) || File <- feature_flags_files(Config)]).
+    % XXX ?assertEqual(
+    % XXX    True,
+    % XXX    is_feature_flag_enabled(Config, FeatureName)),
+    % XXX ?assertEqual(
+    % XXX    lists:duplicate(ClusterSize, {ok, [[FeatureName]]}),
+    % XXX    [file:consult(File) || File <- feature_flags_files(Config)]).
 
 enable_feature_flag_with_a_network_partition(Config) ->
     FeatureName = ff_from_testsuite,
