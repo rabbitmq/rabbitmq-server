@@ -222,7 +222,7 @@ maybe_enable_feature_flags_v2(Config) ->
     ok.
 
 override_running_nodes(Nodes) when is_list(Nodes) ->
-    ct:pal("Overring (running) remote nodes for ~p", [Nodes]),
+    ct:pal("Overriding (running) remote nodes for ~p", [Nodes]),
     _ = [begin
              ok = rpc:call(
                     Node, rabbit_feature_flags, override_nodes,
