@@ -889,7 +889,7 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv1(Config) ->
     OtherMigratedNodes = [receive
                               {Node, MigFunPid2, waiting} ->
                                   MigFunPid2 ! proceed,
-                                  Node 
+                                  Node
                           end || Node <- ExpectedNodes -- [FirstMigratedNode]],
     MigratedNodes = [FirstMigratedNode | OtherMigratedNodes],
     ?assertEqual(lists:sort(ExpectedNodes), lists:sort(MigratedNodes)),
