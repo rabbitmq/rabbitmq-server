@@ -125,9 +125,7 @@ pkg_tar(
 
 package_generic_unix(plugins = PLUGINS)
 
-source_archive(plugins = PLUGINS + [
-    "//deps/rabbitmq_cli:rabbitmqctl",
-])
+source_archive(plugins = PLUGINS)
 
 genrule(
     name = "test-logs",
