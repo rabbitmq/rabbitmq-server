@@ -229,48 +229,24 @@ def versioned_plugins_dir(**kwargs):
         **kwargs
     )
 
-# This macro must be invoked from the top level BUILD.bazel of rabbitmq-server
-def package_generic_unix(plugins):
+def package_generic_unix(
+        plugins = None,
+        rabbitmq_workspace = "@",
+        package_dir = "rabbitmq_server-{}".format(APP_VERSION)):
     collect_licenses(
         name = "licenses",
-        srcs = native.glob(
-            ["LICENSE*"],
-            exclude = [
-                "LICENSE.md",
-                "LICENSE.txt",
-            ],
-        ),
+        srcs = [
+            rabbitmq_workspace + "//:root-licenses",
+        ],
         deps = plugins,
     )
 
     pkg_tar(
-        name = "license-files",
+        name = "license-files-tar",
         srcs = [
             ":licenses",
-            "//deps/rabbit:INSTALL",
+            rabbitmq_workspace + "//deps/rabbit:INSTALL",
         ],
-        visibility = ["//visibility:public"],
-    )
-
-    pkg_tar(
-        name = "scripts",
-        srcs = [
-            "scripts/bash_autocomplete.sh",
-            "scripts/rabbitmq-script-wrapper",
-            "scripts/rabbitmqctl-autocomplete.sh",
-            "scripts/zsh_autocomplete.sh",
-        ],
-        package_dir = "scripts",
-        visibility = ["//visibility:public"],
-    )
-
-    pkg_tar(
-        name = "release-notes",
-        srcs = native.glob([
-            "release-notes/*.md",
-            "release-notes/*.txt",
-        ]),
-        package_dir = "release-notes",
         visibility = ["//visibility:public"],
     )
 
@@ -297,29 +273,24 @@ def package_generic_unix(plugins):
         srcs = [
             ":scripts-and-escripts",
         ],
-        package_dir = "rabbitmq_server-{}".format(APP_VERSION),
+        package_dir = package_dir,
         strip_prefix = "scripts-and-escripts",
         visibility = ["//visibility:public"],
         deps = [
             ":plugins-tar",
-            ":license-files",
-            ":release-notes",
-            ":scripts",
-            "//deps/rabbit:manpages-dir",
+            ":license-files-tar",
+            rabbitmq_workspace + "//:release-notes-tar",
+            rabbitmq_workspace + "//:scripts-tar",
+            rabbitmq_workspace + "//deps/rabbit:manpages-dir",
         ],
     )
 
-# This macro must be invoked from the top level BUILD.bazel of rabbitmq-server
-def source_archive(plugins):
+def source_archive(
+        plugins = None,
+        rabbitmq_workspace = "@"):
     source_tree(
         name = "source-tree",
         deps = plugins,
-    )
-
-    native.filegroup(
-        name = "root-licenses",
-        srcs = native.glob(["LICENSE*"]),
-        visibility = ["//visibility:public"],
     )
 
     pkg_tar(
@@ -343,7 +314,7 @@ def source_archive(plugins):
         name = "source_archive",
         extension = "tar.gz",
         srcs = [
-            ":root-licenses",
+            rabbitmq_workspace + "//:root-licenses",
         ],
         deps = [
             ":deps-archive",
