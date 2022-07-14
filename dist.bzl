@@ -290,7 +290,9 @@ def source_archive(
         rabbitmq_workspace = "@"):
     source_tree(
         name = "source-tree",
-        deps = plugins,
+        deps = plugins + [
+            rabbitmq_workspace + "//deps/rabbitmq_cli:rabbitmqctl",
+        ],
     )
 
     pkg_tar(
@@ -305,7 +307,7 @@ def source_archive(
     pkg_tar(
         name = "cli-deps-archive",
         deps = [
-            "//deps/rabbitmq_cli:fetched_srcs",
+            rabbitmq_workspace + "//deps/rabbitmq_cli:fetched_srcs",
         ],
         package_dir = "deps/rabbitmq_cli",
     )
