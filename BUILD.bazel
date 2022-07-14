@@ -2,6 +2,7 @@ load(
     "@bazel_skylib//rules:common_settings.bzl",
     "string_flag",
 )
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_erlang//:dialyze.bzl", "plt")
 load("@rules_erlang//:shell.bzl", "shell")
 load("@rules_erlang//:erl_eval.bzl", "erl_eval")
@@ -108,9 +109,45 @@ iex_eval(
     expression = """File.write!(System.get_env("OUTS"), System.version()); System.halt()""",
 )
 
-package_generic_unix(PLUGINS)
+filegroup(
+    name = "root-licenses",
+    srcs = glob(
+        ["LICENSE*"],
+        exclude = [
+            "LICENSE.md",
+            "LICENSE.txt",
+        ],
+    ),
+    visibility = ["//visibility:public"],
+)
 
-source_archive(PLUGINS + ["//deps/rabbitmq_cli:rabbitmqctl"])
+pkg_tar(
+    name = "scripts-tar",
+    srcs = [
+        "scripts/bash_autocomplete.sh",
+        "scripts/rabbitmq-script-wrapper",
+        "scripts/rabbitmqctl-autocomplete.sh",
+        "scripts/zsh_autocomplete.sh",
+    ],
+    package_dir = "scripts",
+    visibility = ["//visibility:public"],
+)
+
+pkg_tar(
+    name = "release-notes-tar",
+    srcs = glob([
+        "release-notes/*.md",
+        "release-notes/*.txt",
+    ]),
+    package_dir = "release-notes",
+    visibility = ["//visibility:public"],
+)
+
+package_generic_unix(plugins = PLUGINS)
+
+source_archive(plugins = PLUGINS + [
+    "//deps/rabbitmq_cli:rabbitmqctl",
+])
 
 genrule(
     name = "test-logs",
