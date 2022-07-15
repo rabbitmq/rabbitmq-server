@@ -51,6 +51,7 @@
          tracked_connection_from_connection_created/1,
          tracked_connection_from_connection_state/1,
          lookup/1,
+         lookup_by_user/1,
          count/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -344,6 +345,27 @@ lookup(Name, [Node | Nodes]) ->
         [] -> lookup(Name, Nodes);
         [Row] -> Row
     end.
+
+-spec lookup_by_user(rabbit_types:connection_name()) -> rabbit_types:tracked_connection() | 'not_found'.
+
+lookup_by_user(Name) ->
+  Nodes = rabbit_nodes:all_running(),
+  lookup_by_user(Name, Nodes).
+
+lookup_by_user(_, []) ->
+  not_found;
+lookup_by_user(Name, [Node | Nodes]) ->
+  TableName = tracked_connection_table_name_for(Node),
+
+  MatchHead = #tracked_connection{_ = '_', username = Name},
+
+  case mnesia:dirty_select(TableName, [{MatchHead,[],['$_']}]) of
+    [] -> lookup(Name, Nodes);
+    [Row] -> Row
+  end.
+
+
+
 
 -spec list() -> [rabbit_types:tracked_connection()].
 
