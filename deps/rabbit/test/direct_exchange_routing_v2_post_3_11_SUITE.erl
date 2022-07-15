@@ -33,8 +33,13 @@ suite() ->
     ].
 
 init_per_suite(Config) ->
-    rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config, []).
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "This test suite won't work in mixed mode with pre 3.11 releases"};
+        false ->
+            rabbit_ct_helpers:log_environment(),
+            rabbit_ct_helpers:run_setup_steps(Config, [])
+    end.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
