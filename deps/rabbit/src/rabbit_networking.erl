@@ -81,6 +81,7 @@ init() ->
 -spec boot() -> 'ok' | no_return().
 
 boot() ->
+    ensure_listener_table_for_this_node(),
     ok = record_distribution_listener(),
     _ = application:start(ranch),
     rabbit_log:debug("Started Ranch"),
@@ -705,8 +706,17 @@ ensure_listener_table_for_this_node() ->
                                          {attributes, record_info(fields, listener)},
                                          {type, bag},
                                          {ram_copies, [node()]}]) of
-        {atomic, ok}                   -> ok;
-        {aborted, {already_exists, _}} -> ok;
+        {atomic, ok}                   ->
+            ok;
+        {aborted, {already_exists, _}} ->
+            case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
+                ok ->
+                    rabbit_binding:populate_index_route_table();
+                {error, Err} = Error ->
+                    rabbit_log_feature_flags:error("Failed to add copy of table ~s to node ~p: ~p",
+                                                   [TableName, node(), Err]),
+                    Error
+            end;
         {aborted, Error}               ->
             rabbit_log:error("Failed to create a listeners table for node ~p: ~p", [node(), Error]),
             ok
