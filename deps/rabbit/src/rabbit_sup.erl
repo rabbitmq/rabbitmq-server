@@ -105,5 +105,6 @@ init([]) -> {ok, {{one_for_all, 0, 1}, []}}.
 
 %%----------------------------------------------------------------------------
 
-child_reply({ok, _}) -> ok;
-child_reply(X)       -> X.
+child_reply({ok, _, _}) -> ok;
+child_reply({ok, _})    -> ok;
+child_reply(X)          -> X.
