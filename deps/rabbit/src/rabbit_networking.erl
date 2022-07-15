@@ -19,9 +19,9 @@
 %%
 %% See also tcp_listener_sup and tcp_listener.
 
--export([boot/0, start_tcp_listener/2, start_tcp_listener/3,
+-export([init/0, boot/0, start_tcp_listener/2, start_tcp_listener/3,
          start_ssl_listener/3, start_ssl_listener/4,
-         stop_tcp_listener/1, on_node_down/1, active_listeners/0,
+         stop_tcp_listener/1, active_listeners/0,
          node_listeners/1, node_client_listeners/1,
          register_connection/1, unregister_connection/1,
          register_non_amqp_connection/1, unregister_non_amqp_connection/1,
@@ -74,9 +74,14 @@
 -type protocol() :: atom().
 -type label() :: string().
 
+init() ->
+    ensure_listener_table_for_this_node(),
+    ok.
+
 -spec boot() -> 'ok' | no_return().
 
 boot() ->
+    ensure_listener_table_for_this_node(),
     ok = record_distribution_listener(),
     _ = application:start(ranch),
     rabbit_log:debug("Started Ranch"),
@@ -230,11 +235,10 @@ listener_of_protocol(Protocol) ->
     rabbit_misc:execute_mnesia_transaction(
         fun() ->
             MatchSpec = #listener{
-                node = node(),
                 protocol = Protocol,
                 _ = '_'
             },
-            case mnesia:match_object(rabbit_listener, MatchSpec, read) of
+            case mnesia:match_object(listener_table_name_for(node()), MatchSpec, read) of
                 []    -> undefined;
                 [Row] -> Row
             end
@@ -333,7 +337,7 @@ tcp_listener_started(Protocol, Opts, IPAddress, Port) ->
     %% We need the host so we can distinguish multiple instances of the above
     %% in a cluster.
     ok = mnesia:dirty_write(
-           rabbit_listener,
+           listener_table_name_for(node()),
            #listener{node = node(),
                      protocol = Protocol,
                      host = tcp_host(IPAddress),
@@ -351,7 +355,7 @@ tcp_listener_started(Protocol, Opts, IPAddress, Port) ->
 
 tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
     ok = mnesia:dirty_delete_object(
-           rabbit_listener,
+           listener_table_name_for(node()),
            #listener{node = node(),
                      protocol = Protocol,
                      host = tcp_host(IPAddress),
@@ -378,12 +382,18 @@ record_distribution_listener() ->
 -spec active_listeners() -> [rabbit_types:listener()].
 
 active_listeners() ->
-    rabbit_misc:dirty_read_all(rabbit_listener).
+    Nodes = rabbit_mnesia:cluster_nodes(running),
+    lists:append([node_listeners(Node) || Node <- Nodes]).
 
 -spec node_listeners(node()) -> [rabbit_types:listener()].
 
 node_listeners(Node) ->
-    mnesia:dirty_read(rabbit_listener, Node).
+    try
+        rabbit_misc:dirty_read_all(listener_table_name_for(Node))
+    catch
+        exit:{aborted, _} ->
+            []
+    end.
 
 -spec node_client_listeners(node()) -> [rabbit_types:listener()].
 
@@ -394,19 +404,6 @@ node_client_listeners(Node) ->
             lists:filter(fun (#listener{protocol = clustering}) -> false;
                              (_) -> true
                          end, Xs)
-    end.
-
--spec on_node_down(node()) -> 'ok'.
-
-on_node_down(Node) ->
-    case lists:member(Node, nodes()) of
-        false ->
-            rabbit_log:info(
-                   "Node ~s is down, deleting its listeners", [Node]),
-            ok = mnesia:dirty_delete(rabbit_listener, Node);
-        true  ->
-            rabbit_log:info(
-                   "Keeping ~s listeners: the node is already back", [Node])
     end.
 
 -spec register_connection(pid()) -> ok.
@@ -698,4 +695,29 @@ ipv6_status(TestPort) ->
         %% Port in use
         {error, _} ->
             ipv6_status(TestPort + 1)
+    end.
+
+listener_table_name_for(Node) ->
+    list_to_atom(rabbit_misc:format("rabbit_listener_on_node_~s", [Node])).
+
+ensure_listener_table_for_this_node() ->
+    TableName = listener_table_name_for(node()),
+    case mnesia:create_table(TableName, [{record_name, listener},
+                                         {attributes, record_info(fields, listener)},
+                                         {type, bag},
+                                         {ram_copies, [node()]}]) of
+        {atomic, ok}                   ->
+            ok;
+        {aborted, {already_exists, _}} ->
+            case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
+                ok ->
+                    rabbit_binding:populate_index_route_table();
+                {error, Err} = Error ->
+                    rabbit_log_feature_flags:error("Failed to add copy of table ~s to node ~p: ~p",
+                                                   [TableName, node(), Err]),
+                    Error
+            end;
+        {aborted, Error}               ->
+            rabbit_log:error("Failed to create a listeners table for node ~p: ~p", [node(), Error]),
+            ok
     end.
