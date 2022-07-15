@@ -72,7 +72,7 @@ conn(ReqData) ->
             [{name, Name}, {pid, Pid}, {user, Username}, {type, Type}];
         not_found ->
             not_found
-    end
+    end.
 
 conn_stats(ReqData) ->
     rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData),
