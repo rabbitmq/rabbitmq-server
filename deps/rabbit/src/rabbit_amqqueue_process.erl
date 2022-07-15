@@ -316,12 +316,7 @@ terminate(_Reason,           State = #q{q = Q}) ->
                                Q2 = amqqueue:set_state(Q, crashed),
                                rabbit_misc:execute_mnesia_transaction(
                                  fun() ->
-                                     ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
-                                        rabbit_amqqueue:store_queue(Q2),
-                                        begin
-                                            Q3 = amqqueue:upgrade(Q2),
-                                            rabbit_amqqueue:store_queue(Q3)
-                                        end)
+                                         rabbit_amqqueue:store_queue(Q2)
                                  end),
                                BQS
                        end, State).

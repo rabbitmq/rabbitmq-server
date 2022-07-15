@@ -115,7 +115,7 @@
 
 -spec is_enabled() -> boolean().
 is_enabled() ->
-    rabbit_feature_flags:is_enabled(quorum_queue).
+    true.
 
 -spec is_compatible(boolean(), boolean(), boolean()) -> boolean().
 is_compatible(_Durable = true,
