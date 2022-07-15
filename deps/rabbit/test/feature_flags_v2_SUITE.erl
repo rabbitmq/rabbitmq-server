@@ -222,7 +222,7 @@ maybe_enable_feature_flags_v2(Config) ->
     ok.
 
 override_running_nodes(Nodes) when is_list(Nodes) ->
-    ct:pal("Overring (running) remote nodes for ~p", [Nodes]),
+    ct:pal("Overriding (running) remote nodes for ~p", [Nodes]),
     _ = [begin
              ok = rpc:call(
                     Node, rabbit_feature_flags, override_nodes,
@@ -889,7 +889,7 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv1(Config) ->
     OtherMigratedNodes = [receive
                               {Node, MigFunPid2, waiting} ->
                                   MigFunPid2 ! proceed,
-                                  Node 
+                                  Node
                           end || Node <- ExpectedNodes -- [FirstMigratedNode]],
     MigratedNodes = [FirstMigratedNode | OtherMigratedNodes],
     ?assertEqual(lists:sort(ExpectedNodes), lists:sort(MigratedNodes)),

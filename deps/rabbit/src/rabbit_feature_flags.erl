@@ -78,6 +78,7 @@
 -module(rabbit_feature_flags).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
 
@@ -126,6 +127,7 @@
          enabled_feature_flags_to_feature_states/1,
          inject_test_feature_flags/1,
          query_supported_feature_flags/0,
+         does_enabled_feature_flags_list_file_exist/0,
          read_enabled_feature_flags_list/0,
          run_migration_fun/3,
          uses_migration_fun_v2/1,
@@ -207,7 +209,7 @@
 
 -type feature_states() :: #{feature_name() => feature_state()}.
 
--type stability() :: stable | experimental.
+-type stability() :: required | stable | experimental.
 %% The level of stability of a feature flag.
 %%
 %% Experimental feature flags are not enabled by default on a fresh RabbitMQ
@@ -342,10 +344,14 @@ list(disabled) -> maps:filter(
 %% flags.
 %% @returns A map of selected feature flags.
 
-list(Which, Stability)
-  when Stability =:= stable orelse Stability =:= experimental ->
+list(Which, stable) ->
     maps:filter(fun(_, FeatureProps) ->
-                        Stability =:= get_stability(FeatureProps)
+                        Stability = get_stability(FeatureProps),
+                        stable =:= Stability orelse required =:= Stability
+                end, list(Which));
+list(Which, experimental) ->
+    maps:filter(fun(_, FeatureProps) ->
+                        experimental =:= get_stability(FeatureProps)
                 end, list(Which)).
 
 -spec enable(feature_name() | [feature_name()]) -> ok |
@@ -835,6 +841,9 @@ get_state(FeatureName) when is_atom(FeatureName) ->
 %%
 %% The possible stability levels are:
 %% <ul>
+%% <li>`required': the feature flag is required and always enabled. It
+%%   means the behavior prior to the introduction of the feature flags is no
+%%   longer supported.</li>
 %% <li>`stable': the feature flag is stable and will not change in future
 %%   releases: it can be enabled in production.</li>
 %% <li>`experimental': the feature flag is experimental and may change in
@@ -863,16 +872,14 @@ get_stability(FeatureProps) when is_map(FeatureProps) ->
 %% @private
 
 init() ->
-    %% We want to make sure the `feature_flags` file exists once
-    %% RabbitMQ was started at least once. This is not required by
-    %% this module (it works fine if the file is missing) but it helps
-    %% external tools.
-    _ = ensure_enabled_feature_flags_list_file_exists(),
-
-    %% We also "list" supported feature flags. We are not interested in
-    %% that list, however, it triggers the first initialization of the
-    %% registry.
-    _ = list(all),
+    %% We list enabled feature flags. This has two purposes:
+    %%   1. We initialize the registry (the generated module storing the list
+    %%      and states of feature flags).
+    %%   2. We use the returned list to initialize the `enabled_feature_flags'
+    %%      file on disk if it doesn't exist. Some external tools rely on that
+    %%      file too.
+    EnabledFeatureFlags = list(enabled),
+    ok = ensure_enabled_feature_flags_list_file_exists(EnabledFeatureFlags),
     ok.
 
 -define(PT_TESTSUITE_ATTRS, {?MODULE, testsuite_feature_flags_attrs}).
@@ -945,6 +952,8 @@ prepare_queried_feature_flags([{App, _Module, Attributes} | Rest],
       [App, length(Attributes)]),
     AllFeatureFlags1 = lists:foldl(
                          fun({FeatureName, FeatureProps}, AllFF) ->
+                                 assert_feature_flag_is_valid(
+                                   FeatureName, FeatureProps),
                                  merge_new_feature_flags(AllFF,
                                                          App,
                                                          FeatureName,
@@ -953,6 +962,32 @@ prepare_queried_feature_flags([{App, _Module, Attributes} | Rest],
     prepare_queried_feature_flags(Rest, AllFeatureFlags1);
 prepare_queried_feature_flags([], AllFeatureFlags) ->
     AllFeatureFlags.
+
+assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
+    ?assert(is_atom(FeatureName)),
+    ?assert(is_map(FeatureProps)),
+    Stability = get_stability(FeatureProps),
+    ?assert(Stability =:= stable orelse
+            Stability =:= experimental orelse
+            Stability =:= required),
+    case FeatureProps of
+        #{migration_fun := _} when Stability =:= required ->
+            rabbit_log_feature_flags:error(
+              "Feature flags: `~s`: a required feature flag can't have a "
+              "migration function",
+              [FeatureName]),
+            throw({required_feature_flag_with_migration_fun, FeatureName});
+        #{migration_fun := MigrationFunMF} ->
+            ?assertMatch({_, _}, MigrationFunMF),
+            {MigrationMod, MigrationFun} = MigrationFunMF,
+            ?assert(is_atom(MigrationMod)),
+            ?assert(is_atom(MigrationFun)),
+            ?assert(
+               erlang:function_exported(MigrationMod, MigrationFun, 1) orelse
+               erlang:function_exported(MigrationMod, MigrationFun, 3));
+        _ ->
+            ok
+    end.
 
 -spec merge_new_feature_flags(feature_flags(),
                               atom(),
@@ -974,14 +1009,31 @@ merge_new_feature_flags(AllFeatureFlags, App, FeatureName, FeatureProps)
 %% Feature flags state storage.
 %% -------------------------------------------------------------------
 
--spec ensure_enabled_feature_flags_list_file_exists() -> ok | {error, any()}.
+-spec does_enabled_feature_flags_list_file_exist() -> boolean().
 %% @private
 
-ensure_enabled_feature_flags_list_file_exists() ->
-    File = enabled_feature_flags_list_file(),
-    case filelib:is_regular(File) of
-        true  -> ok;
-        false -> write_enabled_feature_flags_list([])
+does_enabled_feature_flags_list_file_exist() ->
+    try
+        File = enabled_feature_flags_list_file(),
+        filelib:is_regular(File)
+    catch
+        throw:feature_flags_file_not_set ->
+            false
+    end.
+
+-spec ensure_enabled_feature_flags_list_file_exists(EnabledFeatureFlags) ->
+    Ret when
+      EnabledFeatureFlags :: feature_flags(),
+      Ret :: ok | {error, any()}.
+%% @private
+
+ensure_enabled_feature_flags_list_file_exists(EnabledFeatureFlags) ->
+    case does_enabled_feature_flags_list_file_exist() of
+        true ->
+            ok;
+        false ->
+            EnabledFeatureNames = maps:keys(EnabledFeatureFlags),
+            write_enabled_feature_flags_list(EnabledFeatureNames)
     end.
 
 -spec read_enabled_feature_flags_list() ->
@@ -1697,7 +1749,6 @@ sync_feature_flags_with_cluster(Nodes, NodeIsVirgin, Timeout) ->
     end.
 
 sync_cluster_v1([], NodeIsVirgin, _) ->
-    verify_which_feature_flags_are_actually_enabled(),
     case NodeIsVirgin of
         true ->
             FeatureNames = get_forced_feature_flag_names(),
