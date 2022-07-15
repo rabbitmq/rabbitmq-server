@@ -164,11 +164,6 @@ start(Qs) ->
     ok.
 
 mark_local_durable_queues_stopped(VHost) ->
-    ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
-       do_mark_local_durable_queues_stopped(VHost),
-       do_mark_local_durable_queues_stopped(VHost)).
-
-do_mark_local_durable_queues_stopped(VHost) ->
     Qs = find_local_durable_queues(VHost),
     rabbit_misc:execute_mnesia_transaction(
         fun() ->
@@ -258,12 +253,7 @@ get_queue_type(Args) ->
     {created | existing, amqqueue:amqqueue()} | queue_absent().
 
 internal_declare(Q, Recover) ->
-    ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
-        do_internal_declare(Q, Recover),
-        begin
-            Q1 = amqqueue:upgrade(Q),
-            do_internal_declare(Q1, Recover)
-        end).
+    do_internal_declare(Q, Recover).
 
 do_internal_declare(Q, true) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
@@ -311,14 +301,6 @@ update(Name, Fun) ->
 %% only really used for quorum queues to ensure the rabbit_queue record
 %% is initialised
 ensure_rabbit_queue_record_is_initialized(Q) ->
-    ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
-       do_ensure_rabbit_queue_record_is_initialized(Q),
-       begin
-           Q1 = amqqueue:upgrade(Q),
-           do_ensure_rabbit_queue_record_is_initialized(Q1)
-       end).
-
-do_ensure_rabbit_queue_record_is_initialized(Q) ->
     rabbit_misc:execute_mnesia_tx_with_tail(
       fun () ->
               ok = store_queue(Q),
