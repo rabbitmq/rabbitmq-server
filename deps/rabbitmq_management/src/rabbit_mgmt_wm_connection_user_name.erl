@@ -30,8 +30,8 @@ allowed_methods(ReqData, Context) ->
 
 resource_exists(ReqData, Context) ->
     case conn(ReqData) of
-        not_found -> {false, ReqData, Context};
-        _Conn     -> {true, ReqData, Context}
+        [] -> {false, ReqData, Context};
+        List     -> {true, ReqData, Context}
     end.
 
 delete_resource(ReqData, Context) ->
