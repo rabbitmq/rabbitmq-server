@@ -7,7 +7,7 @@
 
 -module(rabbit_mgmt_wm_connection_user_name).
 
--export([init/2, resource_exists/2, to_json/2, content_types_provided/2,
+-export([init/2, resource_exists/2, content_types_provided/2,
          is_authorized/2, allowed_methods/2, delete_resource/2, conn/1]).
 -export([variances/2]).
 
@@ -36,15 +36,18 @@ resource_exists(ReqData, Context) ->
 
 delete_resource(ReqData, Context) ->
     case conn(ReqData) of
-        not_found -> ok;
-        Conn      ->
-            case proplists:get_value(pid, Conn) of
-                undefined -> ok;
-                Pid when is_pid(Pid) ->
-                    force_close_connection(ReqData, Conn, Pid)
-            end
+        []        -> ok;
+        List      -> [close_single_connection(Conn, ReqData)|| Conn <- List]
     end,
     {true, ReqData, Context}.
+
+
+close_single_connection(Conn, ReqData) ->
+    case proplists:get_value(pid, Conn) of
+        undefined -> ok;
+        Pid when is_pid(Pid) ->
+            force_close_connection(ReqData, Conn, Pid)
+    end.
 
 is_authorized(ReqData, Context) ->
     try
@@ -57,12 +60,18 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 conn(ReqData) ->
-    case rabbit_connection_tracking:lookup_by_user(rabbit_mgmt_util:id(connection, ReqData)) of
+    List = rabbit_connection_tracking:lookup_by_user(rabbit_mgmt_util:id(connection, ReqData)),
+    Result = [],
+    [convert(Result, H) || H <- List].
+
+convert(Result, Data) ->
+    case Data of
         #tracked_connection{name = Name, pid = Pid, username = Username, type = Type} ->
-            [{name, Name}, {pid, Pid}, {user, Username}, {type, Type}];
+            Result ++ [{name, Name}, {pid, Pid}, {user, Username}, {type, Type}];
         not_found ->
             not_found
     end.
+
 
 conn_stats(ReqData) ->
     rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData),

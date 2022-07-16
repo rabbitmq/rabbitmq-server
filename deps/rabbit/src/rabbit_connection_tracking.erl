@@ -346,7 +346,7 @@ lookup(Name, [Node | Nodes]) ->
         [Row] -> Row
     end.
 
--spec lookup_by_user(rabbit_types:connection_name()) -> rabbit_types:tracked_connection() | 'not_found'.
+%%-spec lookup_by_user(rabbit_types:connection_name()) -> rabbit_types:tracked_connection() | 'not_found'.
 
 lookup_by_user(Name) ->
   Nodes = rabbit_nodes:all_running(),
@@ -356,15 +356,8 @@ lookup_by_user(_, []) ->
   not_found;
 lookup_by_user(Name, [Node | Nodes]) ->
   TableName = tracked_connection_table_name_for(Node),
-
   MatchHead = #tracked_connection{_ = '_', username = Name},
-
-  case mnesia:dirty_select(TableName, [{MatchHead,[],['$_']}]) of
-    [] -> lookup(Name, Nodes);
-    [Row] -> Row
-  end.
-
-
+  mnesia:dirty_select(TableName, [{MatchHead,[],['$_']}]).
 
 
 -spec list() -> [rabbit_types:tracked_connection()].
