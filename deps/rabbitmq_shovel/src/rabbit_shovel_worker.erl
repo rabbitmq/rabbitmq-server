@@ -113,7 +113,11 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
                 {stop, {outbound_conn_died, Reason}} ->
                     rabbit_log_shovel:error("Shovel ~s detected destination connection failure: ~p", [human_readable_name(Name), Reason]),
                     {stop, Reason, State};
+<<<<<<< HEAD
 	            {stop, {outbound_link_or_channel_closure, Reason}} ->
+=======
+	            {stop, {outbound_consumer_no_ack, Reason}} ->
+>>>>>>> 41958e2702 (fix shovel error according to consumer_timeout)
     		        rabbit_log_shovel:error("Shovel ~s detected destination shovel failure: ~p", [human_readable_name(Name), Reason]),
     		        {stop, Reason, State};
                 {stop, Reason} ->
@@ -128,8 +132,13 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
         {stop, {inbound_conn_died, Reason}} ->
             rabbit_log_shovel:error("Shovel ~s detected source connection failure: ~p", [human_readable_name(Name), Reason]),
             {stop, Reason, State};
+<<<<<<< HEAD
         {stop, {inbound_link_or_channel_closure, Reason}} ->
 	        rabbit_log_shovel:error("Shovel ~s detected source Shovel (or link,  or channel) failure: ~p", [human_readable_name(Name), Reason]),
+=======
+        {stop, {inbound_consumer_no_ack, Reason}} ->
+	        rabbit_log_shovel:error("Shovel ~s detected source shovel failure: ~p", [human_readable_name(Name), Reason]),
+>>>>>>> 41958e2702 (fix shovel error according to consumer_timeout)
 	        {stop, Reason, State};
         {stop, Reason} ->
             rabbit_log_shovel:error("Shovel ~s decided to stop due a message from source: ~p", [human_readable_name(Name), Reason]),
