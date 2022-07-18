@@ -1192,7 +1192,7 @@ convert_from_v2_to_v1(State0 = #vqstate{ index_mod   = rabbit_classic_queue_inde
     %% We have already closed the v2 index/store FDs when deleting the files.
     State#vqstate{ index_mod   = rabbit_queue_index,
                    index_state = V1Index,
-                   store_state = V2Store }.
+                   store_state = rabbit_classic_queue_store_v2:terminate(V2Store) }.
 
 convert_from_v2_to_v1_in_memory(State0 = #vqstate{ q1 = Q1b,
                                                    q2 = Q2b,
@@ -2403,13 +2403,12 @@ purge_pending_ack(KeepPersistent,
                                      store_state       = StoreState0,
                                      msg_store_clients = MSCState }) ->
     {IndexOnDiskSeqIds, MsgIdsByStore, SeqIdsInStore, State1} = purge_pending_ack1(State),
-    StoreState1 = lists:foldl(fun rabbit_classic_queue_store_v2:remove/2, StoreState0, SeqIdsInStore),
-    %% @todo Sounds like we might want to remove only transients from the cache?
     case KeepPersistent of
         true  -> remove_transient_msgs_by_id(MsgIdsByStore, MSCState),
-                 State1 #vqstate { store_state = StoreState1 };
+                 State1;
         false -> {DeletedSegments, IndexState1} =
                      IndexMod:ack(IndexOnDiskSeqIds, IndexState),
+                 StoreState1 = lists:foldl(fun rabbit_classic_queue_store_v2:remove/2, StoreState0, SeqIdsInStore),
                  StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState1),
                  remove_vhost_msgs_by_id(MsgIdsByStore, MSCState),
                  State1 #vqstate { index_state = IndexState1,
