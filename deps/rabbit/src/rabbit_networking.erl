@@ -699,3 +699,36 @@ ipv6_status(TestPort) ->
         {error, _} ->
             ipv6_status(TestPort + 1)
     end.
+<<<<<<< HEAD
+=======
+
+listener_table_name_for(Node) ->
+    list_to_atom(rabbit_misc:format("rabbit_listener_on_node_~s", [Node])).
+
+ensure_listener_table_for_this_node() ->
+    TableName = listener_table_name_for(node()),
+    case mnesia:create_table(TableName, [{record_name, listener},
+                                         {attributes, record_info(fields, listener)},
+                                         {type, bag},
+                                         {ram_copies, [node()]}]) of
+        {atomic, ok}                   ->
+            ok;
+        {aborted, {already_exists, _}} ->
+            case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
+                ok ->
+                    case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2) of
+                        true ->
+                            rabbit_binding:populate_index_route_table();
+                        false ->
+                            ok
+                    end;
+                {error, Err} = Error ->
+                    rabbit_log_feature_flags:error("Failed to add copy of table ~s to node ~p: ~p",
+                                                   [TableName, node(), Err]),
+                    Error
+            end;
+        {aborted, Error}               ->
+            rabbit_log:error("Failed to create a listeners table for node ~p: ~p", [node(), Error]),
+            ok
+    end.
+>>>>>>> aca475bc4e (Only populate index route table if its FF is enabled)
