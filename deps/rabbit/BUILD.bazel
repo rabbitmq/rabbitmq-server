@@ -1054,11 +1054,6 @@ suites = [
         name = "direct_exchange_routing_v2_SUITE",
         size = "medium",
     ),
-    rabbitmq_integration_suite(
-        PACKAGE,
-        name = "direct_exchange_routing_v2_post_3_11_SUITE",
-        size = "small",
-    ),
 ]
 
 assert_suites(

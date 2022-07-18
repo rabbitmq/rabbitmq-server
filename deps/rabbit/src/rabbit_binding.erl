@@ -777,26 +777,27 @@ index_route_table_definition() ->
         storage_properties => [{ets, [{read_concurrency, true}]}]
        }).
 
+-spec populate_index_route_table() -> ok.
 populate_index_route_table() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               mnesia:lock({table, rabbit_route}, read),
               mnesia:lock({table, rabbit_index_route}, write),
               Routes = rabbit_misc:dirty_read_all(rabbit_route),
-              lists:foreach(fun(#route{binding = #binding{source = Exchange}} = Route) ->
-                                    case rabbit_exchange:lookup(Exchange) of
-                                        {ok, X} ->
-                                            case should_index_table(X) of
-                                                true ->
-                                                    mnesia:dirty_write(rabbit_index_route,
-                                                                       index_route(Route));
-                                                false ->
-                                                    ok
-                                            end;
-                                        _ ->
-                                            ok
-                                    end
-                            end, Routes)
+              lists:foreach(
+                fun(#route{binding = #binding{source = Exchange}} = Route) ->
+                        case rabbit_exchange:lookup(Exchange) of
+                            {ok, X} ->
+                                case should_index_table(X) of
+                                    true ->
+                                        ok = mnesia:dirty_write(rabbit_index_route, index_route(Route));
+                                    false ->
+                                        ok
+                                end;
+                            _ ->
+                                ok
+                        end
+                end, Routes)
       end).
 
 %% Only the direct exchange type uses the rabbit_index_route table to store its
