@@ -31,7 +31,7 @@ allowed_methods(ReqData, Context) ->
 resource_exists(ReqData, Context) ->
     case conn(ReqData) of
         [] -> {false, ReqData, Context};
-        List     -> {true, ReqData, Context}
+        _List -> {true, ReqData, Context}
     end.
 
 delete_resource(ReqData, Context) ->
@@ -71,11 +71,6 @@ convert(Result, Data) ->
         not_found ->
             not_found
     end.
-
-
-conn_stats(ReqData) ->
-    rabbit_mgmt_db:get_connection(rabbit_mgmt_util:id(connection, ReqData),
-                                  rabbit_mgmt_util:range_ceil(ReqData)).
 
 force_close_connection(ReqData, Conn, Pid) ->
     Reason = case cowboy_req:header(<<"x-reason">>, ReqData) of
