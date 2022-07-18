@@ -231,7 +231,7 @@ handle_source({'EXIT', Conn, Reason},
     {stop, {inbound_conn_died, Reason}};
 
 handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
-    {stop, {inbound_consumer_no_ack, Reason}};
+    {stop, {inbound_link_or_channel_closure, Reason}};
 
 handle_source(_Msg, _State) ->
     not_handled.
@@ -254,9 +254,9 @@ handle_dest(#'basic.cancel'{}, #{name := Name}) ->
 
 handle_dest({'EXIT', Conn, Reason}, #{dest := #{current := {Conn, _, _}}}) ->
     {stop, {outbound_conn_died, Reason}};
-    
+
 handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
-    {stop, {outbound_consumer_no_ack, Reason}};
+    {stop, {outbound_link_or_channel_closure, Reason}};
 
 handle_dest(_Msg, _State) ->
     not_handled.
