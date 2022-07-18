@@ -113,6 +113,9 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
                 {stop, {outbound_conn_died, Reason}} ->
                     rabbit_log_shovel:error("Shovel ~s detected destination connection failure: ~p", [human_readable_name(Name), Reason]),
                     {stop, Reason, State};
+	            {stop, {outbound_link_or_channel_closure, Reason}} ->
+    		        rabbit_log_shovel:error("Shovel ~s detected destination shovel failure: ~p", [human_readable_name(Name), Reason]),
+    		        {stop, Reason, State};
                 {stop, Reason} ->
                     rabbit_log_shovel:debug("Shovel ~s decided to stop due a message from destination: ~p", [human_readable_name(Name), Reason]),
                     {stop, Reason, State};
@@ -125,6 +128,9 @@ handle_info(Msg, State = #state{config = Config, name = Name}) ->
         {stop, {inbound_conn_died, Reason}} ->
             rabbit_log_shovel:error("Shovel ~s detected source connection failure: ~p", [human_readable_name(Name), Reason]),
             {stop, Reason, State};
+        {stop, {inbound_link_or_channel_closure, Reason}} ->
+	        rabbit_log_shovel:error("Shovel ~s detected source Shovel (or link,  or channel) failure: ~p", [human_readable_name(Name), Reason]),
+	        {stop, Reason, State};
         {stop, Reason} ->
             rabbit_log_shovel:error("Shovel ~s decided to stop due a message from source: ~p", [human_readable_name(Name), Reason]),
             {stop, Reason, State};
