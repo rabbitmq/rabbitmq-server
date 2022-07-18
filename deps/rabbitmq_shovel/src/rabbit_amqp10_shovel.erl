@@ -201,6 +201,7 @@ handle_source({'EXIT', Conn, Reason},
               #{source := #{current := #{conn := Conn}}}) ->
     {stop, {outbound_conn_died, Reason}};
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
     {stop, {inbound_link_or_channel_closure, Reason}};
@@ -211,6 +212,12 @@ handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_F
     {stop, {inbound_consumer_no_ack, Reason}};
     
 >>>>>>> 41958e2702 (fix shovel error according to consumer_timeout)
+=======
+
+handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
+    {stop, {inbound_link_or_channel_closure, Reason}};
+
+>>>>>>> 8c37c2a33f (Naming)
 handle_source(_Msg, _State) ->
     not_handled.
 
@@ -266,6 +273,7 @@ handle_dest({'EXIT', Conn, Reason},
             #{dest := #{current := #{conn := Conn}}}) ->
     {stop, {outbound_conn_died, Reason}};
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
     {stop, {outbound_link_or_channel_closure, Reason}};
@@ -276,6 +284,12 @@ handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAI
     {stop, {outbound_consumer_no_ack, Reason}};
     
 >>>>>>> 41958e2702 (fix shovel error according to consumer_timeout)
+=======
+
+handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
+    {stop, {outbound_link_or_channel_closure, Reason}};
+
+>>>>>>> 8c37c2a33f (Naming)
 handle_dest(_Msg, _State) ->
     not_handled.
 

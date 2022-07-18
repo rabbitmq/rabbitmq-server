@@ -232,10 +232,14 @@ handle_source({'EXIT', Conn, Reason},
 
 handle_source({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
 <<<<<<< HEAD
+<<<<<<< HEAD
     {stop, {inbound_link_or_channel_closure, Reason}};
 =======
     {stop, {inbound_consumer_no_ack, Reason}};
 >>>>>>> 41958e2702 (fix shovel error according to consumer_timeout)
+=======
+    {stop, {inbound_link_or_channel_closure, Reason}};
+>>>>>>> 8c37c2a33f (Naming)
 
 handle_source(_Msg, _State) ->
     not_handled.
@@ -258,9 +262,9 @@ handle_dest(#'basic.cancel'{}, #{name := Name}) ->
 
 handle_dest({'EXIT', Conn, Reason}, #{dest := #{current := {Conn, _, _}}}) ->
     {stop, {outbound_conn_died, Reason}};
-    
+
 handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
-    {stop, {outbound_consumer_no_ack, Reason}};
+    {stop, {outbound_link_or_channel_closure, Reason}};
 
 handle_dest({'EXIT', _Pid, {shutdown, {server_initiated_close, ?PRECONDITION_FAILED, Reason}}}, _State) ->
     {stop, {outbound_link_or_channel_closure, Reason}};
