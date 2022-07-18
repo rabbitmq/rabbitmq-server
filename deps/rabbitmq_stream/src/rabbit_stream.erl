@@ -39,8 +39,7 @@
 -include("rabbit_stream_metrics.hrl").
 
 start(_Type, _Args) ->
-    FeatureFlagsEnabled = rabbit_ff_registry:list(enabled),
-    case maps:is_key(stream_queue, FeatureFlagsEnabled) of
+    case rabbit_feature_flags:is_enabled(stream_queue) of
         true ->
             rabbit_stream_metrics:init(),
             rabbit_global_counters:init([{protocol, stream}],
