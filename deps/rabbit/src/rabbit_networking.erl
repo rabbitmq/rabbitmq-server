@@ -711,11 +711,9 @@ ensure_listener_table_for_this_node() ->
         {aborted, {already_exists, _}} ->
             case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
                 ok ->
-                    case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2) of
-                        true ->
-                            rabbit_binding:populate_index_route_table();
-                        false ->
-                            ok
+                    case catch mnesia:table_info(rabbit_index_route, type) of
+                        {'EXIT', {aborted, {no_exists, _, _}}} -> ok;
+                        _ -> rabbit_binding:populate_index_route_table()
                     end;
                 {error, Err} = Error ->
                     rabbit_log_feature_flags:error("Failed to add copy of table ~s to node ~p: ~p",
