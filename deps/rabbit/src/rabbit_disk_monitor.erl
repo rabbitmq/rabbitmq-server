@@ -62,16 +62,7 @@
           %% on start-up
           retries,
           %% Interval between retries
-          interval,
-          %% Win32 specific state
-          win32 = undefined
-}).
-
--record(win32state, {
-          %% port of running powershell.exe
-          port,
-          %% monitor of the port
-          mon_ref
+          interval
 }).
 
 %%----------------------------------------------------------------------------
@@ -174,17 +165,6 @@ handle_info(try_enable, #state{retries = Retries} = State) ->
 handle_info(update, State) ->
     {noreply, start_timer(internal_update(State))};
 
-% win32 process monitor message
-handle_info({'DOWN', MonRef, port, Port, _Info0},
-            #state{win32 = #win32state{port = Port, mon_ref = MonRef}} = State0) ->
-    {ok, State1} = enable_os(State0),
-    {noreply, State1};
-
-% Note: we get this message if powershell dies or is killed. Since we're monitoring the port,
-% the DOWN message will take care of restarting it.
-handle_info({Port, {data, {noeol, _Line}}},
-            #state{win32 = #win32state{port = Port}} = State) ->
-    {noreply, State};
 handle_info(Info, State) ->
     rabbit_log:debug("~p unhandled msg: ~p", [?MODULE, Info]),
     {noreply, State}.
@@ -234,7 +214,7 @@ set_disk_limits(State, Limit0) ->
 internal_update(State = #state { limit   = Limit,
                                  dir     = Dir,
                                  alarmed = Alarmed}) ->
-    CurrentFree = get_disk_free(Dir, State),
+    CurrentFree = get_disk_free(Dir),
     NewAlarmed = CurrentFree < Limit,
     case {Alarmed, NewAlarmed} of
         {false, true} ->
@@ -249,21 +229,17 @@ internal_update(State = #state { limit   = Limit,
     ets:insert(?ETS_NAME, {disk_free, CurrentFree}),
     State#state{alarmed = NewAlarmed, actual = CurrentFree}.
 
-get_disk_free(Dir, State) ->
-    get_disk_free(Dir, os:type(), State).
+get_disk_free(Dir) ->
+    get_disk_free(Dir, os:type()).
 
-get_disk_free(Dir, {unix, Sun}, _State)
+get_disk_free(Dir, {unix, Sun})
   when Sun =:= sunos; Sun =:= sunos4; Sun =:= solaris ->
     Df = os:find_executable("df"),
     parse_free_unix(run_cmd(Df ++ " -k " ++ Dir));
-get_disk_free(Dir, {unix, _}, _State) ->
+get_disk_free(Dir, {unix, _}) ->
     Df = os:find_executable("df"),
     parse_free_unix(run_cmd(Df ++ " -kP " ++ Dir));
-get_disk_free(Dir, {win32, _}, #state{win32 = undefined}) ->
-    rabbit_log:debug("~p powershell not running, getting free space from Dir: ~p", [?MODULE, Dir]),
-    {ok, Free} = win32_get_disk_free_dir(Dir),
-    Free;
-get_disk_free(Dir, {win32, _}, #state{win32 = W32State}) ->
+get_disk_free(Dir, {win32, _}) ->
     % Dir:
     % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
     case win32_get_drive_letter(Dir) of
@@ -274,12 +250,26 @@ get_disk_free(Dir, {win32, _}, #state{win32 = W32State}) ->
             {ok, Free} = win32_get_disk_free_dir(Dir),
             Free;
         DriveLetter ->
-            case catch win32_get_disk_free_pwsh(DriveLetter, W32State) of
-                {ok, Free1} -> Free1;
-                PwshNotOk ->
-                    rabbit_log:error("could not determine disk free: ~p", [PwshNotOk]),
-                    exit(could_not_determine_disk_free)
-            end
+            % Note: yes, "$\s" is the $char sequence for an ASCII space
+            F = fun([D, $:, $\\, $\s | _]) when D =:= DriveLetter ->
+                        true;
+                   (_) -> false
+                end,
+            % Note: we can use os_mon_sysinfo:get_disk_info/1 after the following is fixed:
+            % https://github.com/erlang/otp/issues/6156
+            [DriveInfoStr] = lists:filter(F, os_mon_sysinfo:get_disk_info()),
+
+            % Note: DriveInfoStr is in this format
+            % "C:\\ DRIVE_FIXED 720441434112 1013310287872 720441434112\n"
+            [DriveLetter, $:, $\\, $\s | DriveInfo] = DriveInfoStr,
+
+            % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexa
+            % lib/os_mon/c_src/win32sysinfo.c:
+            % if (fpGetDiskFreeSpaceEx(drive,&availbytes,&totbytes,&totbytesfree)){
+            %     sprintf(answer,"%s DRIVE_FIXED %I64u %I64u %I64u\n",drive,availbytes,totbytes,totbytesfree);
+            ["DRIVE_FIXED", FreeBytesAvailableToCallerStr,
+             _TotalNumberOfBytesStr, _TotalNumberOfFreeBytesStr] = string:tokens(DriveInfo, " "),
+            list_to_integer(FreeBytesAvailableToCallerStr)
     end.
 
 parse_free_unix(Str) ->
@@ -291,28 +281,13 @@ parse_free_unix(Str) ->
         _          -> exit({unparseable, Str})
     end.
 
-win32_get_drive_letter([DriveLetter, $:, $/ | _]) when
-      (DriveLetter >= $a andalso DriveLetter =< $z) orelse
-      (DriveLetter >= $A andalso DriveLetter =< $Z) ->
+win32_get_drive_letter([DriveLetter, $:, $/ | _]) when (DriveLetter >= $a andalso DriveLetter =< $z) ->
+    % Note: os_mon_sysinfo returns drives with uppercase letters, so uppercase it here
+    DriveLetter - 32;
+win32_get_drive_letter([DriveLetter, $:, $/ | _]) when (DriveLetter >= $A andalso DriveLetter =< $Z) ->
     DriveLetter;
 win32_get_drive_letter(_) ->
     error.
-
-win32_get_disk_free_pwsh(DriveLetter, #win32state{port = Port, mon_ref = MonRef}) when
-      (DriveLetter >= $a andalso DriveLetter =< $z) orelse
-      (DriveLetter >= $A andalso DriveLetter =< $Z) ->
-    % DriveLetter $c
-    Cmd = "(Get-PSDrive -Name " ++ [DriveLetter] ++ ").Free\n",
-    true = erlang:port_command(Port, Cmd),
-    case pwsh_receive(Port, Cmd) of
-        {ok, PoshResult} ->
-            {ok, list_to_integer(string:trim(PoshResult))};
-        {error, _} = Error ->
-            % Note: returning an error will cause the current process
-            % to exit, so clean up here
-            pwsh_cleanup(Port, MonRef),
-            Error
-    end.
 
 win32_get_disk_free_dir(Dir) ->
     %% On Windows, the Win32 API enforces a limit of 260 characters
@@ -376,49 +351,18 @@ interval(#state{limit        = Limit,
 
 enable(#state{retries = 0} = State) ->
     State;
-enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries}
-       = State0) ->
-    {ok, State1} = enable_os(State0),
-    case {catch get_disk_free(Dir, State1),
+enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries} = State) ->
+    case {catch get_disk_free(Dir),
           vm_memory_monitor:get_total_memory()} of
         {N1, N2} when is_integer(N1), is_integer(N2) ->
             rabbit_log:info("Enabling free disk space monitoring", []),
-            start_timer(set_disk_limits(State1, Limit));
+            start_timer(set_disk_limits(State, Limit));
         Err ->
             rabbit_log:info("Free disk space monitor encountered an error "
                             "(e.g. failed to parse output from OS tools): ~p, retries left: ~b",
                             [Err, Retries]),
             erlang:send_after(Interval, self(), try_enable),
-            State1#state{enabled = false}
-    end.
-
-enable_os(State) ->
-    enable_os(os:type(), State).
-
-enable_os({win32, _}, State) ->
-    SystemRootDir = os:getenv("SystemRoot", "C:\\WINDOWS"), 
-    Pwsh = find_powershell(SystemRootDir),
-    PwshArgs = ["-NonInteractive", "-NoProfile", "-NoLogo", "-InputFormat", "Text", "-WindowStyle", "Hidden"],
-    % Note: 'hide' must be used or this will not work!
-    PortOptions = [use_stdio, stderr_to_stdout, {cd, SystemRootDir}, {line, 512}, hide, {args, PwshArgs}],
-    Port = erlang:open_port({spawn_executable, Pwsh}, PortOptions),
-    MonRef = erlang:monitor(port, Port),
-    W32State = #win32state{port = Port, mon_ref = MonRef},
-    {ok, State#state{win32 = W32State}};
-enable_os(_, State) ->
-    {ok, State}.
-
-find_powershell(SystemRootDir) ->
-    case os:find_executable("pwsh.exe") of
-        false ->
-            case os:find_executable("powershell.exe") of
-                false ->
-                    SystemRootDir ++ "\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
-                Powershell ->
-                    Powershell
-            end;
-        Pwsh ->
-            Pwsh
+            State#state{enabled = false}
     end.
 
 run_cmd(Cmd) ->
@@ -436,39 +380,4 @@ run_cmd(Cmd) ->
         exit(CmdPid, kill),
         rabbit_log:error("Command timed out: '~s'", [Cmd]),
         {error, timeout}
-    end.
-
-pwsh_receive(Port, Cmd0) ->
-    Cmd1 = string:trim(Cmd0),
-    FoundCmd =  receive
-                    {Port, {data, {eol, Line0}}} ->
-                        Line1 = string:trim(Line0),
-                        case string:find(Line1, Cmd1, trailing) of
-                            nomatch ->
-                                {error, {unexpected, Line1}};
-                            _ ->
-                                ok
-                        end
-                after 5000 ->
-                          {error, timeout}
-                end,
-    case FoundCmd of
-        ok ->
-            receive
-                {Port, {data, {eol, Line2}}} ->
-                    {ok, Line2}
-            after 5000 ->
-                      {error, timeout}
-            end;
-        Error ->
-            Error
-    end.
-
-pwsh_cleanup(Port, MonRef) ->
-    try
-        erlang:port_command(Port, "exit 0\n"),
-        erlang:demonitor(MonRef),
-        erlang:port_close(Port)
-    catch Class:Error:Stacktrace ->
-        rabbit_log:debug("~p ~p:~p:~p", [?MODULE, Class, Error, Stacktrace])
     end.
