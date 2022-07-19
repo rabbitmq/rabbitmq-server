@@ -14,9 +14,11 @@
     check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
     wait_for_replicated/0, exists/1]).
 
+-export([ensure_feature_flag_tables/0]).
+
 %% for testing purposes
 -export([definitions/0]).
--export([maybe_ensure_index_route_table/0]).
+
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -389,17 +391,22 @@ definitions() ->
         ++ gm:table_definitions()
         ++ mirrored_supervisor:table_definitions().
 
-maybe_ensure_index_route_table() ->
+%% To allow for rolling upgrades, new Mnesia tables must be created behind feature flags.
+%% However, feature flags are not designed to initialize RabbitMQ.
+%% Therefore, this function is called upon node boot and ensures that:
+%%
+%% 1. For a single node cluster that already ran the feature flag migration function creating
+%% the table, but got subsequently reset, the table must be created again upon node boot.
+%%
+%% 2. For a stand-alone node that already ran the feature flag migration function adding a
+%% table copy and subsequently joins a new cluster, it must add a table copy again upon node boot.
+-spec ensure_feature_flag_tables() -> ok.
+ensure_feature_flag_tables() ->
+    %% Currently, direct_exchange_routing_v2 is the only feature flag that creates a Mnesia table.
     case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2) of
         true ->
-            case rabbit_table:ensure_table_copy(rabbit_index_route, node(), ram_copies) of
-                ok ->
-                    ok;
-                {error, Reason} ->
-                    rabbit_log_feature_flags:warning(
-                      "Failed to add copy of table ~s to node ~p: ~p",
-                      [rabbit_index_route, node(), Reason])
-            end;
+            ok = create(rabbit_index_route, rabbit_binding:index_route_table_definition()),
+            ok = ensure_table_copy(rabbit_index_route, node(), ram_copies);
         false ->
             ok
     end.
