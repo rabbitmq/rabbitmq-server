@@ -88,6 +88,7 @@
          enable/1,
          enable_all/0,
          enable_all/1,
+         enable_auto/0,
          disable/1,
          disable_all/0,
          is_supported/1,
@@ -156,6 +157,7 @@
 -type feature_props() :: #{desc => string(),
                            doc_url => string(),
                            stability => stability(),
+                           auto_enable => boolean(),
                            depends_on => [feature_name()],
                            migration_fun => migration_fun_name(),
                            callbacks =>
@@ -170,6 +172,10 @@
 %% <li>`doc_url': a URL pointing to more documentation about the feature
 %%   flag</li>
 %% <li>`stability': the level of stability</li>
+%% <li>`auto_enable': a boolean to indicate if the feature flag should be
+%%   auto-enabled when RabbitMQ starts, a plugin is enabled/disabled or a node
+%%   joins/leaves the cluster. This property is ignored for experimental
+%%   feature flags.</li>
 %% <li>`depends_on': a list of feature flags name which must be enabled
 %%   before this one</li>
 %% <li>`migration_fun': a migration function specified by its module and
@@ -195,6 +201,7 @@
 -type feature_props_extended() :: #{desc => string(),
                                     doc_url => string(),
                                     stability => stability(),
+                                    auto_enable => boolean(),
                                     migration_fun => migration_fun_name(),
                                     callbacks =>
                                     #{callback_name() => migration_fun_name()},
@@ -459,8 +466,11 @@ sort_feature_flags_v2_first(FeatureNames) ->
           (A, B)                -> A =< B
       end, FeatureNames).
 
+requires_feature_flags_v2(feature_flags_v2) ->
+    false;
 requires_feature_flags_v2(FeatureName) ->
-    uses_callbacks(FeatureName).
+    uses_callbacks(FeatureName) orelse
+    is_marked_auto_enable(FeatureName).
 
 uses_callbacks(FeatureName) when is_atom(FeatureName) ->
     case rabbit_ff_registry:get(FeatureName) of
@@ -469,6 +479,14 @@ uses_callbacks(FeatureName) when is_atom(FeatureName) ->
     end;
 uses_callbacks(FeatureProps) when is_map(FeatureProps) ->
     maps:is_key(callbacks, FeatureProps).
+
+is_marked_auto_enable(FeatureName) when is_atom(FeatureName) ->
+    case rabbit_ff_registry:get(FeatureName) of
+        undefined    -> false;
+        FeatureProps -> is_marked_auto_enable(FeatureProps)
+    end;
+is_marked_auto_enable(FeatureProps) when is_map(FeatureProps) ->
+    maps:is_key(auto_enable, FeatureProps).
 
 enable_v1(FeatureName) ->
     rabbit_log_feature_flags:debug(
@@ -530,6 +548,42 @@ enable_all() ->
 enable_all(Stability)
   when Stability =:= stable orelse Stability =:= experimental ->
     enable(maps:keys(list(all, Stability))).
+
+-spec enable_auto() -> ok.
+%% @doc
+%% Tries to enables all feature flags marked with `auto_enable`.
+%%
+%% All auto-enable feature flags are tried even if one of them fails. Errors
+%% are ignored by this function.
+%%
+%% @returns `ok'.
+
+enable_auto() ->
+    DisabledFeatureFlags = list(disabled, stable),
+    AutoEnableFeatureNames0 = maps:fold(
+                                fun(FeatureName, FeatureProps, Acc) ->
+                                        case is_auto_enable(FeatureProps) of
+                                            true  -> [FeatureName | Acc];
+                                            false -> Acc
+                                        end
+                                end, [], DisabledFeatureFlags),
+    case AutoEnableFeatureNames0 of
+        [] ->
+            ok;
+        _ ->
+            AutoEnableFeatureNames = lists:sort(AutoEnableFeatureNames0),
+            rabbit_log_feature_flags:info(
+              lists:flatten(
+                ["Feature flags: trying to auto-enable the following feature "
+                 "flags:" |
+                 ["~nFeature flags:   - ~s" || _ <- AutoEnableFeatureNames]]),
+              AutoEnableFeatureNames),
+            _ = lists:foreach(fun enable/1, AutoEnableFeatureNames)
+    end,
+    ok.
+
+is_auto_enable(#{auto_enable := AutoEnable}) -> AutoEnable;
+is_auto_enable(_)                            -> false.
 
 -spec disable(feature_name() | [feature_name()]) -> ok | {error, any()}.
 %% @doc
@@ -1022,9 +1076,10 @@ assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
         ?assert(is_atom(FeatureName)),
         ?assert(is_map(FeatureProps)),
         Stability = get_stability(FeatureProps),
-        ?assert(Stability =:= stable orelse
-                Stability =:= experimental orelse
-                Stability =:= required),
+        ?assert(Stability =:= required orelse
+                Stability =:= stable orelse
+                Stability =:= experimental),
+        ?assert(is_boolean(is_auto_enable(FeatureProps))),
         case FeatureProps of
             #{migration_fun := _} when Stability =:= required ->
                 rabbit_log_feature_flags:error(
@@ -1825,10 +1880,12 @@ sync_feature_flags_with_cluster(Nodes, NodeIsVirgin) ->
 %% @private
 
 sync_feature_flags_with_cluster(Nodes, NodeIsVirgin, Timeout) ->
-    case is_enabled(feature_flags_v2) of
-        true  -> rabbit_ff_controller:sync_cluster();
-        false -> sync_cluster_v1(Nodes, NodeIsVirgin, Timeout)
-    end.
+    Ret = case is_enabled(feature_flags_v2) of
+              true  -> rabbit_ff_controller:sync_cluster();
+              false -> sync_cluster_v1(Nodes, NodeIsVirgin, Timeout)
+          end,
+    enable_auto(),
+    Ret.
 
 sync_cluster_v1([], NodeIsVirgin, _) ->
     case NodeIsVirgin of
@@ -2177,10 +2234,12 @@ enabled_feature_flags_to_feature_states(FeatureNames) ->
     ok | {error, any()} | no_return().
 
 refresh_feature_flags_after_app_load(Apps) ->
-    case is_enabled(feature_flags_v2) of
-        true  -> rabbit_ff_controller:refresh_after_app_load();
-        false -> refresh_feature_flags_after_app_load_v1(Apps)
-    end.
+    Ret = case is_enabled(feature_flags_v2) of
+              true  -> rabbit_ff_controller:refresh_after_app_load();
+              false -> refresh_feature_flags_after_app_load_v1(Apps)
+          end,
+    enable_auto(),
+    Ret.
 
 refresh_feature_flags_after_app_load_v1([]) ->
     ok;

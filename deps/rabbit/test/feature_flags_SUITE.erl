@@ -38,7 +38,9 @@
          clustering_ok_with_new_ff_enabled_from_plugin_on_some_nodes/1,
          clustering_ok_with_supported_required_ff/1,
          activating_plugin_with_new_ff_disabled/1,
-         activating_plugin_with_new_ff_enabled/1
+         activating_plugin_with_new_ff_enabled/1,
+
+         auto_enable_works_on_startup/1
         ]).
 
 suite() ->
@@ -58,7 +60,8 @@ groups() ->
       [
        enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
-       required_feature_flag_enabled_by_default
+       required_feature_flag_enabled_by_default,
+       auto_enable_works_on_startup
       ]},
      {enabling_in_cluster, [],
       [
@@ -66,7 +69,8 @@ groups() ->
        enable_unsupported_feature_flag_in_a_healthy_situation,
        enable_feature_flag_with_a_network_partition,
        mark_feature_flag_as_enabled_with_a_network_partition,
-       required_feature_flag_enabled_by_default
+       required_feature_flag_enabled_by_default,
+       auto_enable_works_on_startup
       ]},
      {clustering, [],
       [
@@ -1143,6 +1147,67 @@ activating_plugin_with_new_ff_enabled(Config) ->
                          is_feature_flag_supported(Config, plugin_ff)),
             ?assertEqual([true, false],
                          is_feature_flag_enabled(Config, plugin_ff));
+        false ->
+            ok
+    end,
+    ok.
+
+auto_enable_works_on_startup(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    NewFeatureFlags = #{brewery =>
+                        #{desc => "Brewery in RabbitMQ",
+                          provided_by => rabbit,
+                          stability => stable,
+                          auto_enable => true}},
+
+    FFSubsysOk = is_feature_flag_subsystem_available(Config),
+
+    log_feature_flags_of_all_nodes(Config),
+    case FFSubsysOk of
+        true ->
+            ?assertEqual([false || _ <- Nodes],
+                         is_feature_flag_supported(Config, brewery));
+        false ->
+            ok
+    end,
+
+    inject_ff_on_nodes(Config, Nodes, NewFeatureFlags),
+
+    log_feature_flags_of_all_nodes(Config),
+    case FFSubsysOk of
+        true ->
+            ?assertEqual([true || _ <- Nodes],
+                         is_feature_flag_supported(Config, brewery)),
+            ?assertEqual([false || _ <- Nodes],
+                         is_feature_flag_enabled(Config, brewery));
+        false ->
+            ok
+    end,
+
+    ?assertEqual(
+       ok,
+       rabbit_ct_broker_helpers:rpc(Config, hd(Nodes), rabbit, stop, [])),
+    ?assertEqual(
+       ok,
+       rabbit_ct_broker_helpers:rpc(Config, hd(Nodes), rabbit, start, [])),
+
+    log_feature_flags_of_all_nodes(Config),
+    %% When testing in a mixed-version cluster, auto-enable will be inactive
+    %% if this is a cluster and not all of them support `feature_flags_v2'.
+    SingleNode = erlang:length(Nodes) =:= 1,
+    SupportFFv2 = lists:all(
+                    fun(SupportFFv2) -> SupportFFv2 end,
+                    rabbit_ct_broker_helpers:rpc(
+                      Config, Nodes,
+                      rabbit_feature_flags, is_supported_locally,
+                      [feature_flags_v2])),
+    ExpectEnabled = SingleNode orelse SupportFFv2,
+    case FFSubsysOk of
+        true ->
+            ?assertEqual([true || _ <- Nodes],
+                         is_feature_flag_supported(Config, brewery)),
+            ?assertEqual([ExpectEnabled || _ <- Nodes],
+                         is_feature_flag_enabled(Config, brewery));
         false ->
             ok
     end,
