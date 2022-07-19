@@ -250,8 +250,8 @@ get_disk_free(Dir, {win32, _}) ->
             {ok, Free} = win32_get_disk_free_dir(Dir),
             Free;
         DriveLetter ->
-            % Note: yes, "$ " is the $char sequence for an ASCII space
-            F = fun([D, $:, $\\, $  | _]) when D =:= DriveLetter ->
+            % Note: yes, "$\s" is the $char sequence for an ASCII space
+            F = fun([D, $:, $\\, $\s | _]) when D =:= DriveLetter ->
                         true;
                    (_) -> false
                 end,
@@ -261,7 +261,7 @@ get_disk_free(Dir, {win32, _}) ->
 
             % Note: DriveInfoStr is in this format
             % "C:\\ DRIVE_FIXED 720441434112 1013310287872 720441434112\n"
-            [DriveLetter, $:, $\\, $  | DriveInfo] = DriveInfoStr,
+            [DriveLetter, $:, $\\, $\s | DriveInfo] = DriveInfoStr,
 
             % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexa
             % lib/os_mon/c_src/win32sysinfo.c:
