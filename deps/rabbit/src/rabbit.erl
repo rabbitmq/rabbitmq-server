@@ -868,6 +868,7 @@ start(normal, []) ->
         %% will be used. We start it now because we can't wait for boot steps
         %% to do this (feature flags are refreshed before boot steps run).
         ok = rabbit_sup:start_child(rabbit_ff_controller),
+        rabbit_feature_flags:enable_auto(),
 
         %% Compatibility with older RabbitMQ versions + required by
         %% rabbit_node_monitor:notify_node_up/0:
