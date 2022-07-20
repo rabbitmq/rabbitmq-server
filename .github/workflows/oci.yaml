@@ -29,9 +29,9 @@ jobs:
           # Source of truth for OTP versions (min & max): https://www.rabbitmq.com/which-erlang.html
           include:
           - image_tag_suffix: otp-min
-            otp_major: 24
+            otp_major: 23
           - image_tag_suffix: otp-max
-            otp_major: 25
+            otp_major: 24
     steps:
       - name: Checkout
         uses: actions/checkout@v3
