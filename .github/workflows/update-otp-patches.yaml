@@ -11,9 +11,9 @@ jobs:
       max-parallel: 1
       matrix:
         include:
-        - erlang_version: "23.0"
+        - erlang_version: "23.3"
           name_suffix: '_23'
-        - erlang_version: "24.0"
+        - erlang_version: "24.3"
           name_suffix: '_24'
         - erlang_version: "25.0"
           name_suffix: '_25'
