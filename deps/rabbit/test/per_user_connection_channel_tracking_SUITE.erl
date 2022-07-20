@@ -652,19 +652,6 @@ cluster_node_removed(Config) ->
 
     rabbit_ct_broker_helpers:forget_cluster_node(Config, 0, 1),
     timer:sleep(200),
-    NodeName = rabbit_ct_broker_helpers:get_node_config(Config, 1, nodename),
-
-    DroppedConnTrackingTables =
-        rabbit_connection_tracking:get_all_tracked_connection_table_names_for_node(NodeName),
-    [?assertEqual(
-        {'EXIT', {aborted, {no_exists, Tab, all}}},
-        catch mnesia:table_info(Tab, all)) || Tab <- DroppedConnTrackingTables],
-
-    DroppedChTrackingTables =
-        rabbit_channel_tracking:get_all_tracked_channel_table_names_for_node(NodeName),
-    [?assertEqual(
-        {'EXIT', {aborted, {no_exists, Tab, all}}},
-        catch mnesia:table_info(Tab, all)) || Tab <- DroppedChTrackingTables],
 
     ?assertEqual(false, is_process_alive(Conn2)),
     [?assertEqual(false, is_process_alive(Ch)) || Ch <- Chans2],
@@ -769,31 +756,26 @@ exists_in_tracked_connection_per_vhost_table(Config, VHost) ->
     exists_in_tracked_connection_per_vhost_table(Config, 0, VHost).
 exists_in_tracked_connection_per_vhost_table(Config, NodeIndex, VHost) ->
     exists_in_tracking_table(Config, NodeIndex,
-        fun rabbit_connection_tracking:tracked_connection_per_vhost_table_name_for/1,
-        VHost).
+                             tracked_connection_per_vhost,
+                             VHost).
 
 exists_in_tracked_connection_per_user_table(Config, Username) ->
     exists_in_tracked_connection_per_user_table(Config, 0, Username).
 exists_in_tracked_connection_per_user_table(Config, NodeIndex, Username) ->
     exists_in_tracking_table(Config, NodeIndex,
-        fun rabbit_connection_tracking:tracked_connection_per_user_table_name_for/1,
-        Username).
+                             tracked_connection_per_user,
+                             Username).
 
 exists_in_tracked_channel_per_user_table(Config, Username) ->
     exists_in_tracked_channel_per_user_table(Config, 0, Username).
 exists_in_tracked_channel_per_user_table(Config, NodeIndex, Username) ->
     exists_in_tracking_table(Config, NodeIndex,
-        fun rabbit_channel_tracking:tracked_channel_per_user_table_name_for/1,
-        Username).
+                             tracked_connection_per_user,
+                             Username).
 
-exists_in_tracking_table(Config, NodeIndex, TableNameFun, Key) ->
-    Node = rabbit_ct_broker_helpers:get_node_config(
-                Config, NodeIndex, nodename),
-    Tab = TableNameFun(Node),
-    AllKeys = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                           mnesia,
-                                           dirty_all_keys, [Tab]),
-    lists:member(Key, AllKeys).
+exists_in_tracking_table(Config, NodeIndex, Tab, Key) ->
+    All = rabbit_ct_broker_helpers:rpc(Config, NodeIndex, ets, tab2list, [Tab]),
+    lists:keymember(Key, 1, All).
 
 mimic_vhost_down(Config, NodeIndex, VHost) ->
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,

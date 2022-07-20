@@ -27,14 +27,14 @@
          shutdown_tracked_items/2]).
 
 -export([list/0, list_of_user/1, list_on_node/1,
-         tracked_channel_table_name_for/1,
-         tracked_channel_per_user_table_name_for/1,
-         get_all_tracked_channel_table_names_for_node/1,
          delete_tracked_channel_user_entry/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -import(rabbit_misc, [pget/2]).
+
+-define(TRACKED_CHANNEL_TABLE, tracked_channel).
+-define(TRACKED_CHANNEL_TABLE_PER_USER, tracked_channel_per_user).
 
 %%
 %% API
@@ -44,13 +44,11 @@
 -spec boot() -> ok.
 
 boot() ->
-    ensure_tracked_channels_table_for_this_node(),
+    ensure_tracked_tables_for_this_node(),
     rabbit_log:info("Setting up a table for channel tracking on this node: ~p",
-                    [tracked_channel_table_name_for(node())]),
-    ensure_per_user_tracked_channels_table_for_node(),
+                    [?TRACKED_CHANNEL_TABLE]),
     rabbit_log:info("Setting up a table for channel tracking on this node: ~p",
-                    [tracked_channel_per_user_table_name_for(node())]),
-    clear_tracking_tables(),
+                    [?TRACKED_CHANNEL_TABLE_PER_USER]),
     ok.
 
 -spec update_tracked(term()) -> ok.
@@ -115,51 +113,41 @@ handle_cast({user_deleted, Details}) ->
     _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_channel_user_entry, [Username]),
     ok;
-handle_cast({node_deleted, Details}) ->
-    Node = pget(node, Details),
-    rabbit_log_channel:info(
-        "Node '~s' was removed from the cluster, deleting"
-        " its channel tracking tables...", [Node]),
-    delete_tracked_channels_table_for_node(Node),
-    delete_per_user_tracked_channels_table_for_node(Node).
+handle_cast({node_deleted, _Details}) ->
+    ok.
 
 -spec register_tracked(rabbit_types:tracked_channel()) -> ok.
 -dialyzer([{nowarn_function, [register_tracked/1]}]).
 
 register_tracked(TrackedCh =
-  #tracked_channel{node = Node, name = Name, username = Username}) ->
+  #tracked_channel{node = Node, name = Name, username = Username}) when Node == node() ->
     ChId = rabbit_tracking:id(Node, Name),
-    TableName = tracked_channel_table_name_for(Node),
-    PerUserChTableName = tracked_channel_per_user_table_name_for(Node),
     %% upsert
-    case mnesia:dirty_read(TableName, ChId) of
-      []    ->
-          mnesia:dirty_write(TableName, TrackedCh),
-          mnesia:dirty_update_counter(PerUserChTableName, Username, 1);
-      [#tracked_channel{}] ->
-          ok
+    case ets:lookup(?TRACKED_CHANNEL_TABLE, ChId) of
+        []    ->
+            ets:insert(?TRACKED_CHANNEL_TABLE, TrackedCh),
+            ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, 1, {Username, 0});
+        [#tracked_channel{}] ->
+            ok
     end,
     ok.
 
 -spec unregister_tracked(rabbit_types:tracked_channel_id()) -> ok.
 
 unregister_tracked(ChId = {Node, _Name}) when Node =:= node() ->
-    TableName = tracked_channel_table_name_for(Node),
-    PerUserChannelTableName = tracked_channel_per_user_table_name_for(Node),
-    case mnesia:dirty_read(TableName, ChId) of
+    case ets:lookup(?TRACKED_CHANNEL_TABLE, ChId) of
         []     -> ok;
         [#tracked_channel{username = Username}] ->
-            mnesia:dirty_update_counter(PerUserChannelTableName, Username, -1),
-            mnesia:dirty_delete(TableName, ChId)
+            ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, -1),
+            ets:delete(?TRACKED_CHANNEL_TABLE, ChId)
     end.
 
 -spec count_tracked_items_in({atom(), rabbit_types:username()}) -> non_neg_integer().
 
 count_tracked_items_in({user, Username}) ->
     rabbit_tracking:count_tracked_items(
-        fun tracked_channel_per_user_table_name_for/1,
-        #tracked_channel_per_user.channel_count, Username,
-        "channels in vhost").
+      ?TRACKED_CHANNEL_TABLE_PER_USER, Username,
+      "channels in vhost").
 
 -spec clear_tracking_tables() -> ok.
 
@@ -178,109 +166,52 @@ shutdown_tracked_items(TrackedItems, _Args) ->
 list() ->
     lists:foldl(
       fun (Node, Acc) ->
-              Tab = tracked_channel_table_name_for(Node),
-              try
-                  Acc ++
-                  mnesia:dirty_match_object(Tab, #tracked_channel{_ = '_'})
-              catch
-                  exit:{aborted, {no_exists, [Tab, _]}} ->
-                      %% The table might not exist yet (or is already gone)
-                      %% between the time rabbit_nodes:all_running() runs and
-                      %% returns a specific node, and
-                      %% mnesia:dirty_match_object() is called for that node's
-                      %% table.
-                      Acc
-              end
+              list_on_node(Node) ++ Acc
       end, [], rabbit_nodes:all_running()).
 
 -spec list_of_user(rabbit_types:username()) -> [rabbit_types:tracked_channel()].
 
 list_of_user(Username) ->
     rabbit_tracking:match_tracked_items(
-        fun tracked_channel_table_name_for/1,
-        #tracked_channel{username = Username, _ = '_'}).
+      ?TRACKED_CHANNEL_TABLE,
+      #tracked_channel{username = Username, _ = '_'}).
 
 -spec list_on_node(node()) -> [rabbit_types:tracked_channel()].
 
+list_on_node(Node) when Node == node() ->
+    ets:tab2list(?TRACKED_CHANNEL_TABLE);
 list_on_node(Node) ->
-    try mnesia:dirty_match_object(
-          tracked_channel_table_name_for(Node),
-          #tracked_channel{_ = '_'})
-    catch exit:{aborted, {no_exists, _}} -> []
+    case rabbit_misc:rpc_call(Node, ets, tab2list, [?TRACKED_CHANNEL_TABLE]) of
+        List when is_list(List) ->
+            List;
+        _ ->
+            []
     end.
-
--spec tracked_channel_table_name_for(node()) -> atom().
-
-tracked_channel_table_name_for(Node) ->
-    list_to_atom(rabbit_misc:format("tracked_channel_on_node_~s", [Node])).
-
--spec tracked_channel_per_user_table_name_for(node()) -> atom().
-
-tracked_channel_per_user_table_name_for(Node) ->
-    list_to_atom(rabbit_misc:format(
-        "tracked_channel_table_per_user_on_node_~s", [Node])).
 
 %% internal
-ensure_tracked_channels_table_for_this_node() ->
-    ensure_tracked_channels_table_for_node(node()).
-
-ensure_per_user_tracked_channels_table_for_node() ->
-    ensure_per_user_tracked_channels_table_for_node(node()).
-
-%% Create tables
-ensure_tracked_channels_table_for_node(Node) ->
-    TableName = tracked_channel_table_name_for(Node),
-    case mnesia:create_table(TableName, [{record_name, tracked_channel},
-                                         {attributes, record_info(fields, tracked_channel)}]) of
-        {atomic, ok}                   -> ok;
-        {aborted, {already_exists, _}} -> ok;
-        {aborted, Error}               ->
-            rabbit_log:error("Failed to create a tracked channel table for node ~p: ~p", [Node, Error]),
-            ok
-    end.
-
-ensure_per_user_tracked_channels_table_for_node(Node) ->
-    TableName = tracked_channel_per_user_table_name_for(Node),
-    case mnesia:create_table(TableName, [{record_name, tracked_channel_per_user},
-                                         {attributes, record_info(fields, tracked_channel_per_user)}]) of
-        {atomic, ok}                   -> ok;
-        {aborted, {already_exists, _}} -> ok;
-        {aborted, Error}               ->
-            rabbit_log:error("Failed to create a per-user tracked channel table for node ~p: ~p", [Node, Error]),
-            ok
-    end.
+ensure_tracked_tables_for_this_node() ->
+    ets:new(?TRACKED_CHANNEL_TABLE, [named_table, public, {write_concurrency, true},
+                                        {keypos, #tracked_connection.id}]),
+    ets:new(?TRACKED_CHANNEL_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]).
 
 clear_tracked_channel_tables_for_this_node() ->
     [rabbit_tracking:clear_tracking_table(T)
-        || T <- get_all_tracked_channel_table_names_for_node(node())].
-
-delete_tracked_channels_table_for_node(Node) ->
-    TableName = tracked_channel_table_name_for(Node),
-    rabbit_tracking:delete_tracking_table(TableName, Node, "tracked channel").
-
-delete_per_user_tracked_channels_table_for_node(Node) ->
-    TableName = tracked_channel_per_user_table_name_for(Node),
-    rabbit_tracking:delete_tracking_table(TableName, Node,
-        "per-user tracked channels").
-
-get_all_tracked_channel_table_names_for_node(Node) ->
-    [tracked_channel_table_name_for(Node),
-        tracked_channel_per_user_table_name_for(Node)].
+        || T <- [?TRACKED_CHANNEL_TABLE, ?TRACKED_CHANNEL_TABLE_PER_USER]].
 
 get_tracked_channels_by_connection_pid(ConnPid) ->
     rabbit_tracking:match_tracked_items(
-        fun tracked_channel_table_name_for/1,
+        ?TRACKED_CHANNEL_TABLE,
         #tracked_channel{connection = ConnPid, _ = '_'}).
 
 get_tracked_channel_by_pid(ChPid) ->
     rabbit_tracking:match_tracked_items(
-        fun tracked_channel_table_name_for/1,
+        ?TRACKED_CHANNEL_TABLE,
         #tracked_channel{pid = ChPid, _ = '_'}).
 
 delete_tracked_channel_user_entry(Username) ->
     rabbit_tracking:delete_tracked_entry(
         {rabbit_auth_backend_internal, exists, [Username]},
-        fun tracked_channel_per_user_table_name_for/1,
+        ?TRACKED_CHANNEL_TABLE_PER_USER,
         Username).
 
 tracked_channel_from_channel_created_event(ChannelDetails) ->
