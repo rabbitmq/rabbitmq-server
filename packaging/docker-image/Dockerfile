@@ -116,7 +116,11 @@ RUN set -eux; \
 # Download, verify & extract OTP_SOURCE
 	mkdir -p "$OTP_PATH"; \
 	wget --progress dot:giga --output-document "$OTP_PATH.tar.gz" "$OTP_SOURCE_URL"; \
+<<<<<<< HEAD
 	echo "$OTP_SOURCE_SHA256 *$OTP_PATH.tar.gz" | sha256sum --check --strict -; \
+=======
+	test "$SKIP_OTP_VERIFY" = "true" || echo "$OTP_SOURCE_SHA256 *$OTP_PATH.tar.gz" | sha256sum --check --strict -; \
+>>>>>>> ffb8cae08a (Use single = instead of == with `test` in Dockerfile)
 	tar --extract --file "$OTP_PATH.tar.gz" --directory "$OTP_PATH" --strip-components 1; \
 	\
 # Configure Erlang/OTP for compilation, disable unused features & applications
