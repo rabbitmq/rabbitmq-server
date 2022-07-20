@@ -75,7 +75,7 @@
 
 -rabbit_boot_step({networking_metadata_store,
                    [{description, "networking infrastructure"},
-                    {mfa,         {rabbit_networking, init, []}},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_networking_store]}},
                     {requires,    database},
                     {enables,     external_infrastructure}]}).
 

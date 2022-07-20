@@ -19,7 +19,7 @@
 %%
 %% See also tcp_listener_sup and tcp_listener.
 
--export([init/0, boot/0, start_tcp_listener/2, start_tcp_listener/3,
+-export([boot/0, start_tcp_listener/2, start_tcp_listener/3,
          start_ssl_listener/3, start_ssl_listener/4,
          stop_tcp_listener/1, active_listeners/0,
          node_listeners/1, node_client_listeners/1,
@@ -42,6 +42,8 @@
          ensure_ssl/0, fix_ssl_options/1, poodle_check/1]).
 
 -export([tcp_listener_started/4, tcp_listener_stopped/4]).
+
+-export([ensure_listener_table_for_this_node/0]).
 
 -deprecated([{force_connection_event_refresh, 1, eventually}]).
 
@@ -74,14 +76,9 @@
 -type protocol() :: atom().
 -type label() :: string().
 
-init() ->
-    ensure_listener_table_for_this_node(),
-    ok.
-
 -spec boot() -> 'ok' | no_return().
 
 boot() ->
-    ensure_listener_table_for_this_node(),
     ok = record_distribution_listener(),
     _ = application:start(ranch),
     rabbit_log:debug("Started Ranch"),
@@ -232,17 +229,14 @@ ranch_ref_of_protocol(Protocol) ->
 
 -spec listener_of_protocol(atom()) -> #listener{}.
 listener_of_protocol(Protocol) ->
-    rabbit_misc:execute_mnesia_transaction(
-        fun() ->
-            MatchSpec = #listener{
-                protocol = Protocol,
-                _ = '_'
-            },
-            case mnesia:match_object(listener_table_name_for(node()), MatchSpec, read) of
-                []    -> undefined;
-                [Row] -> Row
-            end
-        end).
+    MatchSpec = #listener{
+                   protocol = Protocol,
+                   _ = '_'
+                  },
+    case ets:match_object(rabbit_listener, MatchSpec) of
+        []    -> undefined;
+        [Row] -> Row
+    end.
 
 -spec stop_ranch_listener_of_protocol(atom()) -> ok | {error, not_found}.
 stop_ranch_listener_of_protocol(Protocol) ->
@@ -336,14 +330,15 @@ tcp_listener_started(Protocol, Opts, IPAddress, Port) ->
     %% We need the ip to distinguish e.g. 0.0.0.0 and 127.0.0.1
     %% We need the host so we can distinguish multiple instances of the above
     %% in a cluster.
-    ok = mnesia:dirty_write(
-           listener_table_name_for(node()),
-           #listener{node = node(),
-                     protocol = Protocol,
-                     host = tcp_host(IPAddress),
-                     ip_address = IPAddress,
-                     port = Port,
-                     opts = Opts}).
+    true = ets:insert(
+             rabbit_listener,
+             #listener{node = node(),
+                       protocol = Protocol,
+                       host = tcp_host(IPAddress),
+                       ip_address = IPAddress,
+                       port = Port,
+                       opts = Opts}),
+    ok.
 
 -spec tcp_listener_stopped
         (_, _,
@@ -354,8 +349,8 @@ tcp_listener_started(Protocol, Opts, IPAddress, Port) ->
             'ok'.
 
 tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
-    ok = mnesia:dirty_delete_object(
-           listener_table_name_for(node()),
+    ok = ets:delete_object(
+           rabbit_listener,
            #listener{node = node(),
                      protocol = Protocol,
                      host = tcp_host(IPAddress),
@@ -388,11 +383,9 @@ active_listeners() ->
 -spec node_listeners(node()) -> [rabbit_types:listener()].
 
 node_listeners(Node) ->
-    try
-        rabbit_misc:dirty_read_all(listener_table_name_for(Node))
-    catch
-        exit:{aborted, _} ->
-            []
+    case rabbit_misc:rpc_call(Node, ets, tab2list, [rabbit_listener]) of
+        {badrpc, nodedown} -> [];
+        Listeners -> Listeners
     end.
 
 -spec node_client_listeners(node()) -> [rabbit_types:listener()].
@@ -697,27 +690,6 @@ ipv6_status(TestPort) ->
             ipv6_status(TestPort + 1)
     end.
 
-listener_table_name_for(Node) ->
-    list_to_atom(rabbit_misc:format("rabbit_listener_on_node_~s", [Node])).
-
 ensure_listener_table_for_this_node() ->
-    TableName = listener_table_name_for(node()),
-    case mnesia:create_table(TableName, [{record_name, listener},
-                                         {attributes, record_info(fields, listener)},
-                                         {type, bag},
-                                         {ram_copies, [node()]}]) of
-        {atomic, ok}                   ->
-            ok;
-        {aborted, {already_exists, _}} ->
-            case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
-                ok ->
-                    ok;
-                {error, Err} = Error ->
-                    rabbit_log_feature_flags:error("Failed to add copy of table ~s to node ~p: ~p",
-                                                   [TableName, node(), Err]),
-                    Error
-            end;
-        {aborted, Error}               ->
-            rabbit_log:error("Failed to create a listeners table for node ~p: ~p", [node(), Error]),
-            ok
-    end.
+    _ = ets:new(rabbit_listener, [named_table, public, bag, {keypos, #listener.node}]),
+    ok.
