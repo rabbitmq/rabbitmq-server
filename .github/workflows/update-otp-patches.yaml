@@ -44,7 +44,7 @@ jobs:
       run: |
         sudo npm install --global --silent @bazel/buildozer
 
-        LINE=$(grep -n 'name_suffix = "${{ matrix.name_suffix }}",' /bazel/toolchains/BUILD.bazel | awk -F  ":" '{print $1}')
+        LINE=$(grep -n 'name_suffix = "${{ matrix.name_suffix }}",' bazel/toolchains/BUILD.bazel | awk -F  ":" '{print $1}')
 
         buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' \
           //bazel/toolchains:%${LINE}
