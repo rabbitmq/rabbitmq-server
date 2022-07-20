@@ -37,7 +37,7 @@ jobs:
         wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "https://github.com/erlang/otp/archive/${TAG_NAME}.tar.gz" && \
         SHA=$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')
 
-        if [ -n "${SHA}" ]; then
+        if [ -z "${SHA}" ]; then
           echo "Failed to determine SHA for ${TAG_NAME}"
           exit
         fi
