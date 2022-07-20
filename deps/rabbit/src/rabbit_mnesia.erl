@@ -597,7 +597,7 @@ init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry) ->
     end,
     %% ...and all nodes will need to wait for tables
     rabbit_table:wait_for_replicated(Retry),
-    ok = rabbit_table:ensure_feature_flag_tables().
+    ok.
 
 init_db_with_mnesia(ClusterNodes, NodeType,
                     CheckOtherNodes, CheckConsistency, Retry) ->
