@@ -20,8 +20,8 @@ erlang_toolchain_from_github_release(
 
 erlang_toolchain_from_github_release(
     name_suffix = "_24",
-    sha256 = "76fcca5ba6f11eb9caac32bf053badc46b5d66f867150eef077f4f0d7944ecd7",
-    version = "24.3.4",
+    sha256 = "",
+    version = "",
 )
 
 erlang_toolchain_from_github_release(
