@@ -90,8 +90,7 @@ direct_exchange_routing_v2_migration(#ffcommand{name = FeatureName,
     TableName = rabbit_index_route,
     ok = rabbit_table:wait([rabbit_route], _Retry = true),
     try
-        ok = rabbit_table:create(TableName,
-                                 rabbit_binding:index_route_table_definition()),
+        ok = rabbit_table:create(TableName, rabbit_table:rabbit_index_route_definition()),
         case rabbit_table:ensure_table_copy(TableName, node(), ram_copies) of
             ok ->
                 ok = rabbit_binding:populate_index_route_table();

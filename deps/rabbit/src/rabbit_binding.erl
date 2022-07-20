@@ -21,8 +21,7 @@
          remove_for_destination/2, remove_transient_for_destination/1,
          remove_default_exchange_binding_rows_of/1]).
 
--export([implicit_for_destination/1, reverse_binding/1,
-         index_route_table_definition/0, populate_index_route_table/0]).
+-export([implicit_for_destination/1, reverse_binding/1, populate_index_route_table/0]).
 -export([new/4]).
 
 -define(DEFAULT_EXCHANGE(VHostPath), #resource{virtual_host = VHostPath,
@@ -765,17 +764,6 @@ del_notify(Bs, ActingUser) -> [rabbit_event:notify(
 
 x_callback(Serial, X, F, Bs) ->
     ok = rabbit_exchange:callback(X, F, Serial, [X, Bs]).
-
--spec index_route_table_definition() -> list(tuple()).
-index_route_table_definition() ->
-    maps:to_list(
-      #{
-        record_name => index_route,
-        attributes  => record_info(fields, index_route),
-        type => bag,
-        ram_copies => rabbit_nodes:all(),
-        storage_properties => [{ets, [{read_concurrency, true}]}]
-       }).
 
 -spec populate_index_route_table() -> ok.
 populate_index_route_table() ->
