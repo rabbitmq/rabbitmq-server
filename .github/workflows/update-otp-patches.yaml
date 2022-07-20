@@ -37,6 +37,11 @@ jobs:
         wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "https://github.com/erlang/otp/archive/${TAG_NAME}.tar.gz" && \
         SHA=$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')
 
+        if [ -n "${SHA}" ]; then
+          echo "Failed to determine SHA for ${TAG_NAME}"
+          exit
+        fi
+
         echo "::set-output name=VERSION::${TAG_NAME#OTP-}"
         echo "::set-output name=SHA::${SHA}"
     - name: MODIFY VERSION FILE
@@ -45,6 +50,7 @@ jobs:
         sudo npm install --global --silent @bazel/buildozer
 
         LINE=$(grep -n 'name_suffix = "${{ matrix.name_suffix }}",' bazel/toolchains/BUILD.bazel | awk -F  ":" '{print $1}')
+        LINE=$(($LINE-1))
 
         buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' \
           //bazel/toolchains:%${LINE}
