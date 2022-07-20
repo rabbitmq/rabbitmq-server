@@ -130,7 +130,6 @@ jobs:
             pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_1 }}
             pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_2 }}
           build-args: |
-            BASE=pivotalrabbitmq/ubuntu
             SKIP_PGP_VERIFY=true
             PGP_KEYSERVER=pgpkeys.eu
             OTP_VERSION=${{ steps.load-info.outputs.otp }}
