@@ -1,4 +1,4 @@
-name: Update OTP Versions for OCI Workflow
+name: Update OTP Patch Versions for Bazel Based Workflows
 on:
   schedule:
   - cron: '0 3 * * *'
@@ -11,8 +11,15 @@ jobs:
       max-parallel: 1
       matrix:
         include:
+        - erlang_version: "23.0"
+          name_suffix: '_23'
+          line: 15
+        - erlang_version: "24.0"
+          name_suffix: '_24'
+          line: 21
         - erlang_version: "25.0"
-          image_tag_suffix: 'otp-max'
+          name_suffix: '_25'
+          line: 27
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
@@ -38,13 +45,12 @@ jobs:
     - name: MODIFY VERSION FILE
       if: steps.check-for-branch.outputs.c != 0
       run: |
-        echo "Updating packaging/docker-image/${{ matrix.image_tag_suffix }}.yaml with:"
-        echo "  otp -> ${{ steps.fetch-version.outputs.VERSION }}"
-        echo "  otp_sha256 -> ${{ steps.fetch-version.outputs.SHA }}"
+        sudo npm install --global --silent @bazel/buildozer
 
-        FILE=packaging/docker-image/otp-versions/${{ matrix.image_tag_suffix }}.yaml
-        sed -i "s/otp: .*/otp: '${{ steps.fetch-version.outputs.VERSION }}'/" $FILE
-        sed -i "s/otp_sha256: .*/otp_sha256: ${{ steps.fetch-version.outputs.SHA }}/" $FILE
+        buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' \
+          //bazel/toolchains:%${{ matrix.line }}
+        buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' \
+          //bazel/toolchains:%${{ matrix.line }}
 
         set -x
         git diff
@@ -55,9 +61,9 @@ jobs:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
         committer: GitHub <noreply@github.com>
         author: GitHub <noreply@github.com>
-        title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }} for OCI workflow
+        title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
         commit-message: |
-          Adopt otp ${{ steps.fetch-version.outputs.VERSION }} for OCI workflow
+          Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
         labels: |
           backport-v3.10.x
           backport-v3.9.x
