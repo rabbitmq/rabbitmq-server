@@ -1,22 +1,22 @@
-name: Update OTP Patch Versions for Bazel Based Workflows
+name: Update Elixir Patch Versions for Bazel Based Workflows
 on:
   schedule:
   - cron: '0 3 * * *'
   workflow_dispatch:
 jobs:
   update-toolchains:
-    name: Update OTP Versions
+    name: Update Elixir Versions
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 1
       matrix:
         include:
-        - erlang_version: "23.0"
-          name_suffix: '_23'
-        - erlang_version: "24.0"
-          name_suffix: '_24'
-        - erlang_version: "25.0"
-          name_suffix: '_25'
+        - elixir_version: "1.10"
+          name_suffix: '_1_10'
+        - elixir_version: "1.12"
+          name_suffix: '_1_12'
+        - elixir_version: "1.13"
+          name_suffix: '_1_13'
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
@@ -25,17 +25,17 @@ jobs:
       id: check-for-branch
       run: |
         set +e
-        git ls-remote --exit-code --heads origin bump-otp-${{ matrix.erlang_version }}
+        git ls-remote --exit-code --heads origin bump-elixir-${{ matrix.elixir_version }}
         echo "::set-output name=c::$?"
-    - name: DETERMINE LATEST PATCH & SHA
+    - name: DETERMINE LATEST PATCH
       if: steps.check-for-branch.outputs.c != 0
       id: fetch-version
       run: |
-        TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags \
-          | jq -r 'map(select(.name | contains("OTP-${{ matrix.erlang_version }}"))) | first | .name')
+        TAG_NAME=$(curl -s GET https://api.github.com/repos/elixir-lang/elixir/tags \
+          | jq -r 'map(select(.name | contains("OTP-${{ matrix.elixir_version }}"))) | first | .name')
 
-        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "https://github.com/erlang/otp/archive/${TAG_NAME}.tar.gz" && \
-        SHA=$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')
+        wget --continue --quiet --output-document="/tmp/elixir.tar.gz" "https://github.com/elixir-lang/elixir/archive/${TAG_NAME}.tar.gz" && \
+        SHA=$(shasum -a 256 "/tmp/elixir.tar.gz" | awk '{print $1}')
 
         echo "::set-output name=VERSION::${TAG_NAME#OTP-}"
         echo "::set-output name=SHA::${SHA}"
@@ -60,11 +60,11 @@ jobs:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
         committer: GitHub <noreply@github.com>
         author: GitHub <noreply@github.com>
-        title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
+        title: Adopt elixir ${{ steps.fetch-version.outputs.VERSION }}
         commit-message: |
-          Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
+          Adopt elixir ${{ steps.fetch-version.outputs.VERSION }}
         labels: |
           backport-v3.10.x
           backport-v3.9.x
-        branch: bump-otp-${{ matrix.erlang_version }}
+        branch: bump-elixir-${{ matrix.elixir_version }}
         delete-branch: true
