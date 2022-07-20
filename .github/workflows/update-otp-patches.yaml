@@ -33,8 +33,10 @@ jobs:
       run: |
         TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags?per_page=100 \
           | jq -r 'map(select(.name | contains("OTP-${{ matrix.erlang_version }}"))) | first | .name')
+        VERSION=${TAG_NAME#OTP-}
 
-        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "https://github.com/erlang/otp/archive/${TAG_NAME}.tar.gz" && \
+        ARCHIVE_URL="https://github.com/erlang/otp/releases/download/${TAG_NAME}/otp_src_${VERSION}.tar.gz"
+        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "${ARCHIVE_URL}"
         SHA=$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')
 
         if [ -z "${SHA}" ]; then
@@ -42,7 +44,7 @@ jobs:
           exit 1
         fi
 
-        echo "::set-output name=VERSION::${TAG_NAME#OTP-}"
+        echo "::set-output name=VERSION::${VERSION}"
         echo "::set-output name=SHA::${SHA}"
     - name: MODIFY VERSION FILE
       if: steps.check-for-branch.outputs.c != 0
@@ -72,5 +74,6 @@ jobs:
         labels: |
           backport-v3.10.x
           backport-v3.9.x
+          backport-v3.8.x
         branch: bump-otp-${{ matrix.erlang_version }}
         delete-branch: true

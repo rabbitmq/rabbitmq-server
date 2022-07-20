@@ -72,5 +72,6 @@ jobs:
         labels: |
           backport-v3.10.x
           backport-v3.9.x
+          backport-v3.8.x
         branch: bump-elixir-${{ matrix.elixir_version }}
         delete-branch: true
