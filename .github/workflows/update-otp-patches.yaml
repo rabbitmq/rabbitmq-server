@@ -39,7 +39,7 @@ jobs:
 
         if [ -z "${SHA}" ]; then
           echo "Failed to determine SHA for ${TAG_NAME}"
-          exit
+          exit 1
         fi
 
         echo "::set-output name=VERSION::${TAG_NAME#OTP-}"
