@@ -25,10 +25,22 @@
 
 -type registry_vsn() :: term().
 
+-spec acquire_state_change_lock() -> boolean().
 acquire_state_change_lock() ->
-    global:set_lock(?FF_STATE_CHANGE_LOCK).
+    rabbit_log_feature_flags:debug(
+      "Feature flags: acquiring lock ~p",
+      [?FF_STATE_CHANGE_LOCK]),
+    Ret = global:set_lock(?FF_STATE_CHANGE_LOCK),
+    rabbit_log_feature_flags:debug(
+      "Feature flags: acquired lock ~p",
+      [?FF_STATE_CHANGE_LOCK]),
+    Ret.
 
+-spec release_state_change_lock() -> true.
 release_state_change_lock() ->
+    rabbit_log_feature_flags:debug(
+      "Feature flags: releasing lock ~p",
+      [?FF_STATE_CHANGE_LOCK]),
     global:del_lock(?FF_STATE_CHANGE_LOCK).
 
 -spec initialize_registry() -> ok | {error, any()} | no_return().
