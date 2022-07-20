@@ -982,7 +982,7 @@ read_from_disk(SeqIdsToRead0, State0 = #qi{ write_buffer = WriteBuffer }, Acc0) 
                     %% We reached the end of a partial file.
                     %% Everything past that point is non-existent.
                     %% This probably does not happen outside of tests.
-                    read_from_disk(SeqIdsToRead, State0, Acc0)
+                    read_from_disk(SeqIdsToRead, State, Acc0)
             end;
         %% The segment file no longer exists. This is equivalent to a file
         %% where all entries are non-existent/acked. This can happen after
