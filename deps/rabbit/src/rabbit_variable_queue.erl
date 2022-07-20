@@ -2094,9 +2094,7 @@ remove_by_predicate(Pred, State = #vqstate {out_counter = OutCount}) ->
 %%
 %% @todo See todo in remove_by_predicate/2 function.
 fetch_by_predicate(Pred, Fun, FetchAcc,
-                   State = #vqstate {
-                              index_state = IndexState1,
-                              out_counter = OutCount}) ->
+                   State = #vqstate { out_counter = OutCount}) ->
     {MsgProps, QAcc, State1} =
         collect_by_predicate(Pred, ?QUEUE:new(), State),
 
@@ -2106,7 +2104,6 @@ fetch_by_predicate(Pred, Fun, FetchAcc,
     {MsgProps, FetchAcc1, maybe_update_rates(
                             State2 #vqstate {
                               next_deliver_seq_id = NextDeliverSeqId,
-                              index_state         = IndexState1,
                               out_counter         = OutCount + ?QUEUE:len(QAcc)})}.
 
 %% We try to do here the same as what remove(true, State) does but
