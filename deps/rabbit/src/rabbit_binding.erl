@@ -79,15 +79,17 @@ new(Src, RoutingKey, Dst, Arguments) ->
 
 recover() ->
     rabbit_misc:execute_mnesia_transaction(
-        fun () ->
-            mnesia:lock({table, rabbit_durable_route}, read),
-            mnesia:lock({table, rabbit_semi_durable_route}, write),
-            Routes = rabbit_misc:dirty_read_all(rabbit_durable_route),
-            Fun = fun(Route) ->
-                mnesia:dirty_write(rabbit_semi_durable_route, Route)
-            end,
-        lists:foreach(Fun, Routes)
-    end).
+      fun () ->
+              mnesia:read_lock_table(rabbit_durable_route),
+              mnesia:write_lock_table(rabbit_semi_durable_route),
+              Routes = rabbit_misc:read_all(rabbit_durable_route),
+              lists:foreach(
+                fun(Route) ->
+                        mnesia:write(rabbit_semi_durable_route,
+                                     Route,
+                                     write)
+                end, Routes)
+      end).
 
 %% Virtual host-specific recovery
 
@@ -769,16 +771,18 @@ x_callback(Serial, X, F, Bs) ->
 populate_index_route_table() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              mnesia:lock({table, rabbit_route}, read),
-              mnesia:lock({table, rabbit_index_route}, write),
-              Routes = rabbit_misc:dirty_read_all(rabbit_route),
+              mnesia:read_lock_table(rabbit_route),
+              mnesia:write_lock_table(rabbit_index_route),
+              Routes = rabbit_misc:read_all(rabbit_route),
               lists:foreach(
                 fun(#route{binding = #binding{source = Exchange}} = Route) ->
                         case rabbit_exchange:lookup(Exchange) of
                             {ok, X} ->
                                 case should_index_table(X) of
                                     true ->
-                                        ok = mnesia:dirty_write(rabbit_index_route, index_route(Route));
+                                        ok = mnesia:write(rabbit_index_route,
+                                                          index_route(Route),
+                                                          write);
                                     false ->
                                         ok
                                 end;
@@ -796,7 +800,7 @@ populate_index_route_table() ->
 %% types. This reduces write lock conflicts on the same tuple {SourceExchange, RoutingKey}
 %% reducing the number of restarted Mnesia transactions.
 should_index_table(#exchange{name = #resource{name = Name},
-                      type = direct})
+                             type = direct})
   when Name =/= <<>> ->
     true;
 should_index_table(_) ->

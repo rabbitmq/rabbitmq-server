@@ -39,7 +39,7 @@
 -export([tcp_name/3, format_inet_error/1]).
 -export([upmap/2, map_in_order/2, utf8_safe/1]).
 -export([table_filter/3]).
--export([dirty_read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
+-export([dirty_read_all/1, read_all/1, dirty_foreach_key/2, dirty_dump_log/1]).
 -export([format/2, format_many/1, format_stderr/2]).
 -export([unfold/2, ceil/1, queue_fold/3]).
 -export([sort_field_table/1]).
@@ -185,6 +185,7 @@
 -spec table_filter
         (fun ((A) -> boolean()), fun ((A, boolean()) -> 'ok'), atom()) -> [A].
 -spec dirty_read_all(atom()) -> [any()].
+-spec read_all(atom()) -> [any()].
 -spec dirty_foreach_key(fun ((any()) -> any()), atom()) ->
           'ok' | 'aborted'.
 -spec dirty_dump_log(file:filename()) -> ok_or_error().
@@ -680,6 +681,9 @@ table_filter(Pred, PrePostCommitFun, TableName) ->
 
 dirty_read_all(TableName) ->
     mnesia:dirty_select(TableName, [{'$1',[],['$1']}]).
+
+read_all(TableName) ->
+    mnesia:select(TableName, [{'$1',[],['$1']}]).
 
 dirty_foreach_key(F, TableName) ->
     dirty_foreach_key1(F, TableName, mnesia:dirty_first(TableName)).
