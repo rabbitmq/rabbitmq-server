@@ -11,7 +11,7 @@
 -include("vhost.hrl").
 
 -export([recover/0, recover/1, read_config/1]).
--export([add/2, add/4, delete/2, exists/1, with/2, with_user_and_vhost/3, assert/1, update/2,
+-export([add/2, add/3, add/4, delete/2, exists/1, with/2, with_user_and_vhost/3, assert/1, update/2,
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
 -export([parse_tags/1, update_metadata/2, tag_with/2, untag_from/2, update_tags/2, update_tags/3]).
@@ -138,34 +138,42 @@ parse_tags(Val) when is_list(Val) ->
         [trim_tag(Tag) || Tag <- re:split(Val, ",", [{return, list}])]
     end.
 
--spec add(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
-
+-spec add(vhost:name(), rabbit_types:username()) ->
+    rabbit_types:ok_or_error(any()).
 add(VHost, ActingUser) ->
-    case exists(VHost) of
-        true  -> ok;
-        false -> do_add(VHost, <<"">>, [], ActingUser)
-    end.
+    add(VHost, #{}, ActingUser).
 
--spec add(vhost:name(), binary(), [atom()], rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
-
+-spec add(vhost:name(), binary(), [atom()], rabbit_types:username()) ->
+    rabbit_types:ok_or_error(any()).
 add(Name, Description, Tags, ActingUser) ->
+    add(Name, #{description => Description,
+                tags => Tags}, ActingUser).
+
+-spec add(vhost:name(), vhost:metadata(), rabbit_types:username()) ->
+    rabbit_types:ok_or_error(any()).
+add(Name, Metadata, ActingUser) ->
     case exists(Name) of
         true  -> ok;
-        false -> do_add(Name, Description, Tags, ActingUser)
+        false -> do_add(Name, Metadata, ActingUser)
     end.
 
-do_add(Name, Description, Tags, ActingUser) ->
+do_add(Name, Metadata, ActingUser) ->
+    Description = maps:get(description, Metadata, undefined),
+    Tags = maps:get(tags, Metadata, []),
+
+    rabbit_log:info("Adding vhost '~s' metadata ~p", [Name, Metadata]),
     case Description of
         undefined ->
             rabbit_log:info("Adding vhost '~s' without a description", [Name]);
-        Value ->
-            rabbit_log:info("Adding vhost '~s' (description: '~s', tags: ~p)", [Name, Value, Tags])
+        Description ->
+            rabbit_log:info("Adding vhost '~s' (description: '~s', tags: ~p)",
+                            [Name, Description, Tags])
     end,
     VHost = rabbit_misc:execute_mnesia_transaction(
           fun () ->
                   case mnesia:wread({rabbit_vhost, Name}) of
                       [] ->
-                        Row = vhost:new(Name, [], #{description => Description, tags => Tags}),
+                        Row = vhost:new(Name, [], Metadata),
                         rabbit_log:debug("Inserting a virtual host record ~p", [Row]),
                         ok = mnesia:write(rabbit_vhost, Row, write),
                         Row;
