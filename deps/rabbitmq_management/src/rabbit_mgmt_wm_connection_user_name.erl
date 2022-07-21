@@ -30,7 +30,7 @@ allowed_methods(ReqData, Context) ->
 
 resource_exists(ReqData, Context) ->
     case conn(ReqData) of
-        [] -> {false, ReqData, Context};
+        []    -> {false, ReqData, Context};
         _List -> {true, ReqData, Context}
     end.
 
@@ -41,12 +41,21 @@ delete_resource(ReqData, Context) ->
     end,
     {true, ReqData, Context}.
 
+close_single_connection(Data, ReqData) ->
+    
+    case Data of
+        #tracked_connection{name = Name, pid = Pid, username = Username, type = Type} ->
+            Conn =  [{name, Name}, {pid, Pid}, {user, Username}, {type, Type}],
 
-close_single_connection(Conn, ReqData) ->
-    case proplists:get_value(pid, Conn) of
-        undefined -> ok;
-        Pid when is_pid(Pid) ->
-            force_close_connection(ReqData, Conn, Pid)
+            case proplists:get_value(pid, Conn) of
+                 undefined -> ok;
+ 
+                Pid when is_pid(Pid) ->
+                     force_close_connection(ReqData, Conn, Pid)
+                 end;
+
+        not_found ->
+            not_found
     end.
 
 is_authorized(ReqData, Context) ->
@@ -60,17 +69,7 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 conn(ReqData) ->
-    List = rabbit_connection_tracking:lookup_by_user(rabbit_mgmt_util:id(connection, ReqData)),
-    Result = [],
-    [convert(Result, H) || H <- List].
-
-convert(Result, Data) ->
-    case Data of
-        #tracked_connection{name = Name, pid = Pid, username = Username, type = Type} ->
-            Result ++ [{name, Name}, {pid, Pid}, {user, Username}, {type, Type}];
-        not_found ->
-            not_found
-    end.
+    rabbit_connection_tracking:list_by_username(rabbit_mgmt_util:id(username, ReqData)).
 
 force_close_connection(ReqData, Conn, Pid) ->
     Reason = case cowboy_req:header(<<"x-reason">>, ReqData) of

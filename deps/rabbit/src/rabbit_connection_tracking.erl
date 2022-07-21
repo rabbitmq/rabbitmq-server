@@ -47,11 +47,11 @@
 
          clear_tracked_connection_tables_for_this_node/0,
 
-         list/0, list/1, list_on_node/1, list_on_node/2, list_of_user/1,
+         list/0, list/1,list_on_node/1, list_on_node/2, list_of_user/1,
          tracked_connection_from_connection_created/1,
          tracked_connection_from_connection_state/1,
          lookup/1,
-         lookup_by_user/1,
+         list_by_username/1,
          count/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -346,19 +346,25 @@ lookup(Name, [Node | Nodes]) ->
         [Row] -> Row
     end.
 
-%%-spec lookup_by_user(rabbit_types:connection_name()) -> rabbit_types:tracked_connection() | 'not_found'.
+-spec list_by_username(rabbit_types:username()) -> [rabbit_types:tracked_connection()].
 
-lookup_by_user(Name) ->
-  Nodes = rabbit_nodes:all_running(),
-  lookup_by_user(Name, Nodes).
-
-lookup_by_user(_, []) ->
-  not_found;
-lookup_by_user(Name, [Node | Nodes]) ->
-  TableName = tracked_connection_table_name_for(Node),
-  MatchHead = #tracked_connection{_ = '_', username = Name},
-  mnesia:dirty_select(TableName, [{MatchHead,[],['$_']}]).
-
+list_by_username(Username) ->
+  lists:foldl(
+    fun (Node, Acc) ->
+      Tab = tracked_connection_table_name_for(Node),
+      try
+        Acc ++
+        mnesia:dirty_match_object(Tab, #tracked_connection{_ = '_', username = Username})
+      catch
+        exit:{aborted, {no_exists, [Tab, _]}} ->
+          %% The table might not exist yet (or is already gone)
+          %% between the time rabbit_nodes:all_running() runs and
+          %% returns a specific node, and
+          %% mnesia:dirty_match_object() is called for that node's
+          %% table.
+          Acc
+      end
+    end, [], rabbit_nodes:all_running()).
 
 -spec list() -> [rabbit_types:tracked_connection()].
 
@@ -379,6 +385,8 @@ list() ->
                       Acc
               end
       end, [], rabbit_nodes:all_running()).
+
+
 
 -spec count() -> non_neg_integer().
 
