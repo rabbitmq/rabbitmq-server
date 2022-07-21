@@ -114,6 +114,7 @@ dispatcher() ->
      {"/vhost-limits/:vhost",                                  rabbit_mgmt_wm_limits, []},
      {"/connections",                                          rabbit_mgmt_wm_connections, []},
      {"/connections/:connection",                              rabbit_mgmt_wm_connection, []},
+     {"/connections/username/:username",                       rabbit_mgmt_wm_connection_user_name, []},
      {"/connections/:connection/channels",                     rabbit_mgmt_wm_connection_channels, []},
      {"/channels",                                             rabbit_mgmt_wm_channels, []},
      {"/channels/:channel",                                    rabbit_mgmt_wm_channel, []},
