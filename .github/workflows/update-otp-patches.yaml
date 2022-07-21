@@ -1,0 +1,79 @@
+name: Update OTP Patch Versions for Bazel Based Workflows
+on:
+  schedule:
+  - cron: '0 3 * * *'
+  workflow_dispatch:
+jobs:
+  update-toolchains:
+    name: Update OTP Versions
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        include:
+        - erlang_version: "23.3"
+          name_suffix: '_23'
+        - erlang_version: "24.3"
+          name_suffix: '_24'
+        - erlang_version: "25.0"
+          name_suffix: '_25'
+    timeout-minutes: 10
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v3
+    - name: SKIP IF THE PR ALREADY EXISTS
+      id: check-for-branch
+      run: |
+        set +e
+        git ls-remote --exit-code --heads origin bump-otp-${{ matrix.erlang_version }}
+        echo "::set-output name=c::$?"
+    - name: DETERMINE LATEST PATCH & SHA
+      if: steps.check-for-branch.outputs.c != 0
+      id: fetch-version
+      run: |
+        TAG_NAME=$(curl -s GET https://api.github.com/repos/erlang/otp/tags?per_page=100 \
+          | jq -r 'map(select(.name | contains("OTP-${{ matrix.erlang_version }}"))) | first | .name')
+        VERSION=${TAG_NAME#OTP-}
+
+        ARCHIVE_URL="https://github.com/erlang/otp/releases/download/${TAG_NAME}/otp_src_${VERSION}.tar.gz"
+        wget --continue --quiet --output-document="/tmp/OTP.tar.gz" "${ARCHIVE_URL}"
+        SHA=$(shasum -a 256 "/tmp/OTP.tar.gz" | awk '{print $1}')
+
+        if [ -z "${SHA}" ]; then
+          echo "Failed to determine SHA for ${TAG_NAME}"
+          exit 1
+        fi
+
+        echo "::set-output name=VERSION::${VERSION}"
+        echo "::set-output name=SHA::${SHA}"
+    - name: MODIFY VERSION FILE
+      if: steps.check-for-branch.outputs.c != 0
+      run: |
+        sudo npm install --global --silent @bazel/buildozer
+
+        LINE=$(grep -n 'name_suffix = "${{ matrix.name_suffix }}",' bazel/toolchains/BUILD.bazel | awk -F  ":" '{print $1}')
+        LINE=$(($LINE-1))
+
+        buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' \
+          //bazel/toolchains:%${LINE}
+        buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' \
+          //bazel/toolchains:%${LINE}
+
+        set -x
+        git diff
+    - name: CREATE PULL REQUEST
+      if: steps.check-for-branch.outputs.c != 0
+      uses: peter-evans/create-pull-request@v4.0.4
+      with:
+        token: ${{ secrets.REPO_SCOPED_TOKEN }}
+        committer: GitHub <noreply@github.com>
+        author: GitHub <noreply@github.com>
+        title: Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
+        commit-message: |
+          Adopt otp ${{ steps.fetch-version.outputs.VERSION }}
+        labels: |
+          backport-v3.10.x
+          backport-v3.9.x
+          backport-v3.8.x
+        branch: bump-otp-${{ matrix.erlang_version }}
+        delete-branch: true

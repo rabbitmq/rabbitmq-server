@@ -165,7 +165,8 @@ handle_info(try_enable, #state{retries = Retries} = State) ->
 handle_info(update, State) ->
     {noreply, start_timer(internal_update(State))};
 
-handle_info(_Info, State) ->
+handle_info(Info, State) ->
+    rabbit_log:debug("~p unhandled msg: ~p", [?MODULE, Info]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -249,10 +250,26 @@ get_disk_free(Dir, {win32, _}) ->
             {ok, Free} = win32_get_disk_free_dir(Dir),
             Free;
         DriveLetter ->
-            case catch win32_get_disk_free_pwsh(DriveLetter) of
-                {ok, Free1} -> Free1;
-                _PwshNotOk -> exit(could_not_determine_disk_free)
-            end
+            % Note: yes, "$\s" is the $char sequence for an ASCII space
+            F = fun([D, $:, $\\, $\s | _]) when D =:= DriveLetter ->
+                        true;
+                   (_) -> false
+                end,
+            % Note: we can use os_mon_sysinfo:get_disk_info/1 after the following is fixed:
+            % https://github.com/erlang/otp/issues/6156
+            [DriveInfoStr] = lists:filter(F, os_mon_sysinfo:get_disk_info()),
+
+            % Note: DriveInfoStr is in this format
+            % "C:\\ DRIVE_FIXED 720441434112 1013310287872 720441434112\n"
+            [DriveLetter, $:, $\\, $\s | DriveInfo] = DriveInfoStr,
+
+            % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexa
+            % lib/os_mon/c_src/win32sysinfo.c:
+            % if (fpGetDiskFreeSpaceEx(drive,&availbytes,&totbytes,&totbytesfree)){
+            %     sprintf(answer,"%s DRIVE_FIXED %I64u %I64u %I64u\n",drive,availbytes,totbytes,totbytesfree);
+            ["DRIVE_FIXED", FreeBytesAvailableToCallerStr,
+             _TotalNumberOfBytesStr, _TotalNumberOfFreeBytesStr] = string:tokens(DriveInfo, " "),
+            list_to_integer(FreeBytesAvailableToCallerStr)
     end.
 
 parse_free_unix(Str) ->
@@ -264,25 +281,13 @@ parse_free_unix(Str) ->
         _          -> exit({unparseable, Str})
     end.
 
-win32_get_drive_letter([DriveLetter, $:, $/ | _]) when
-      (DriveLetter >= $a andalso DriveLetter =< $z) orelse
-      (DriveLetter >= $A andalso DriveLetter =< $Z) ->
+win32_get_drive_letter([DriveLetter, $:, $/ | _]) when (DriveLetter >= $a andalso DriveLetter =< $z) ->
+    % Note: os_mon_sysinfo returns drives with uppercase letters, so uppercase it here
+    DriveLetter - 32;
+win32_get_drive_letter([DriveLetter, $:, $/ | _]) when (DriveLetter >= $A andalso DriveLetter =< $Z) ->
     DriveLetter;
 win32_get_drive_letter(_) ->
     error.
-
-win32_get_disk_free_pwsh(DriveLetter) when
-      (DriveLetter >= $a andalso DriveLetter =< $z) orelse
-      (DriveLetter >= $A andalso DriveLetter =< $Z) ->
-    % DriveLetter $c
-    PoshCmd = "powershell.exe -NoLogo -NoProfile -NonInteractive -Command (Get-PSDrive " ++ [DriveLetter] ++ ").Free",
-    case run_cmd(PoshCmd) of
-        {error, timeout} ->
-            error;
-        PoshResult ->
-            % Note: remove \r\n
-            {ok, list_to_integer(string:trim(PoshResult))}
-    end.
 
 win32_get_disk_free_dir(Dir) ->
     %% On Windows, the Win32 API enforces a limit of 260 characters
@@ -346,8 +351,7 @@ interval(#state{limit        = Limit,
 
 enable(#state{retries = 0} = State) ->
     State;
-enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries}
-       = State) ->
+enable(#state{dir = Dir, interval = Interval, limit = Limit, retries = Retries} = State) ->
     case {catch get_disk_free(Dir),
           vm_memory_monitor:get_total_memory()} of
         {N1, N2} when is_integer(N1), is_integer(N2) ->

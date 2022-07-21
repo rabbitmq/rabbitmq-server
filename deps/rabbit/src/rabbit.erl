@@ -73,6 +73,12 @@
                     {requires,    database},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({networking_metadata_store,
+                   [{description, "networking infrastructure"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_networking_store]}},
+                    {requires,    database},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({code_server_cache,
                    [{description, "code_server cache server"},
                     {mfa,         {rabbit_sup, start_child, [code_server_cache]}},

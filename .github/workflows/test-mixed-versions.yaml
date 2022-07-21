@@ -6,7 +6,8 @@ on:
       - v3.10.x
       - v3.9.x
       - v3.8.x
-      - bump-otp-for-oci
+      - bump-otp-*
+      - bump-elixir-*
       - bump-rbe-*
       - bump-rules_erlang
     paths:

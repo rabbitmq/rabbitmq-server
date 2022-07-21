@@ -14,8 +14,11 @@
     check_schema_integrity/1, clear_ram_only_tables/0, retry_timeout/0,
     wait_for_replicated/0, exists/1]).
 
+-export([rabbit_index_route_definition/0]).
+
 %% for testing purposes
 -export([definitions/0]).
+
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -295,6 +298,7 @@ definitions(ram) ->
         {Tab, TabDef} <- definitions()].
 
 definitions() ->
+    Definitions =
     [{rabbit_user,
       [{record_name, internal_user},
        {attributes, internal_user:fields()},
@@ -320,11 +324,6 @@ definitions() ->
        {attributes, vhost:fields()},
        {disc_copies, [node()]},
        {match, vhost:pattern_match_all()}]},
-     {rabbit_listener,
-      [{record_name, listener},
-       {attributes, record_info(fields, listener)},
-       {type, bag},
-       {match, #listener{_='_'}}]},
      {rabbit_durable_route,
       [{record_name, route},
        {attributes, record_info(fields, route)},
@@ -391,7 +390,24 @@ definitions() ->
        {match, amqqueue:pattern_match_on_name(queue_name_match())}]}
     ]
         ++ gm:table_definitions()
-        ++ mirrored_supervisor:table_definitions().
+        ++ mirrored_supervisor:table_definitions(),
+
+    case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2) of
+        true ->
+            Definitions ++ [{rabbit_index_route, rabbit_index_route_definition()}];
+        false ->
+            Definitions
+    end.
+
+-spec rabbit_index_route_definition() -> list(tuple()).
+rabbit_index_route_definition() ->
+    [{record_name, index_route},
+     {attributes, record_info(fields, index_route)},
+     {type, bag},
+     {storage_properties, [{ets, [{read_concurrency, true}]}]},
+     {match, #index_route{source_key = {exchange_name_match(), '_'},
+                          destination = binding_destination_match(),
+                          _='_'}}].
 
 binding_match() ->
     #binding{source = exchange_name_match(),

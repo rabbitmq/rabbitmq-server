@@ -775,7 +775,6 @@ handle_dead_rabbit(Node, State = #state{partitions = Partitions,
     %% TODO: This may turn out to be a performance hog when there are
     %% lots of nodes.  We really only need to execute some of these
     %% statements on *one* node, rather than all of them.
-    ok = rabbit_networking:on_node_down(Node),
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
     ok = rabbit_mnesia:on_node_down(Node),

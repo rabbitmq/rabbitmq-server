@@ -19,7 +19,8 @@
 all() ->
     [
      {group, cluster_size_1},
-     {group, cluster_size_2}
+     {group, cluster_size_2},
+     {group, unclustered_cluster_size_2}
     ].
 
 groups() ->
@@ -28,7 +29,8 @@ groups() ->
       [{start_feature_flag_enabled, [], [remove_binding_unbind_queue,
                                          remove_binding_delete_queue,
                                          remove_binding_delete_queue_multiple,
-                                         remove_binding_delete_exchange]},
+                                         remove_binding_delete_exchange,
+                                         reset]},
        {start_feature_flag_disabled, [], [enable_feature_flag]}
       ]},
      {cluster_size_2, [],
@@ -36,6 +38,9 @@ groups() ->
                                          remove_binding_node_down_durable_queue
                                         ]},
        {start_feature_flag_disabled, [], [enable_feature_flag]}
+      ]},
+     {unclustered_cluster_size_2, [],
+      [{start_feature_flag_enabled, [], [join_cluster]}
       ]}
     ].
 
@@ -56,7 +61,14 @@ init_per_group(cluster_size_1, Config) ->
     rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 2});
-
+init_per_group(unclustered_cluster_size_2, Config0) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "This test group won't work in mixed mode with pre 3.11 releases"};
+        false ->
+            rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 2},
+                                                   {rmq_nodes_clustered, false}])
+    end;
 init_per_group(start_feature_flag_enabled = Group, Config0) ->
     Config = start_broker(Group, Config0),
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG) of
@@ -80,8 +92,10 @@ init_per_group(start_feature_flag_disabled = Group, Config0) ->
 
 start_broker(Group, Config0) ->
     Size = rabbit_ct_helpers:get_config(Config0, rmq_nodes_count),
+    Clustered = rabbit_ct_helpers:get_config(Config0, rmq_nodes_clustered, true),
     Config = rabbit_ct_helpers:set_config(Config0, {rmq_nodename_suffix,
-                                                    io_lib:format("cluster_size_~b-~s", [Size, Group])}),
+                                                    io_lib:format("cluster_size_~b-clustered_~p-~s",
+                                                                  [Size, Clustered, Group])}),
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:setup_steps() ++
                                 rabbit_ct_client_helpers:setup_steps()).
@@ -326,6 +340,73 @@ enable_feature_flag(Config) ->
 
     delete_queue(Ch, Q1),
     delete_queue(Ch, Q2),
+    ok.
+
+reset(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    ?assertEqual([Server], rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, table_info,
+                                                        [?INDEX_TABLE_NAME, ram_copies])),
+    ok = rabbit_control_helper:command(stop_app, Server),
+    ok = rabbit_control_helper:command(reset, Server),
+    ok = rabbit_control_helper:command(start_app, Server),
+    %% After reset, upon node boot, we expect that the table gets re-created.
+    ?assertEqual([Server], rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, table_info,
+                                                        [?INDEX_TABLE_NAME, ram_copies])).
+
+join_cluster(Config) ->
+    Servers0 = [Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Servers = lists:sort(Servers0),
+
+    {_Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server1),
+    DirectX = <<"amq.direct">>,
+    Q = <<"q">>,
+    RKey = <<"k">>,
+
+    declare_queue(Ch1, Q, true),
+    bind_queue(Ch1, Q, DirectX, RKey),
+
+    %% Server1 and Server2 are not clustered yet.
+    %% Hence, every node has their own table (copy) and only Server1's table contains the binding.
+    ?assertEqual([Server1], rabbit_ct_broker_helpers:rpc(Config, Server1, mnesia, table_info,
+                                                         [?INDEX_TABLE_NAME, ram_copies])),
+    ?assertEqual([Server2], rabbit_ct_broker_helpers:rpc(Config, Server2, mnesia, table_info,
+                                                         [?INDEX_TABLE_NAME, ram_copies])),
+    ?assertEqual(1, rabbit_ct_broker_helpers:rpc(Config, Server1, mnesia, table_info,
+                                                 [?INDEX_TABLE_NAME, size])),
+    ?assertEqual(0, rabbit_ct_broker_helpers:rpc(Config, Server2, mnesia, table_info,
+                                                 [?INDEX_TABLE_NAME, size])),
+
+    ok = rabbit_control_helper:command(stop_app, Server2),
+    %% For the purpose of this test it shouldn't matter whether Server2 is reset. Both should work.
+    case erlang:system_time() rem 2 of
+        0 ->
+            ok = rabbit_control_helper:command(reset, Server2);
+        1 ->
+            ok
+    end,
+    ok = rabbit_control_helper:command(join_cluster, Server2, [atom_to_list(Server1)], []),
+    ok = rabbit_control_helper:command(start_app, Server2),
+
+    %% After Server2 joined Server1, the table should be clustered.
+    ?assertEqual(Servers, lists:sort(rabbit_ct_broker_helpers:rpc(Config, Server2, mnesia, table_info,
+                                                                  [?INDEX_TABLE_NAME, ram_copies]))),
+    ?assertEqual(1, rabbit_ct_broker_helpers:rpc(Config, Server2, mnesia, table_info,
+                                                 [?INDEX_TABLE_NAME, size])),
+
+    %% Publishing via Server1 via "direct exchange routing v2" should work.
+    amqp_channel:call(Ch1, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch1, self()),
+    publish(Ch1, DirectX, RKey),
+    assert_confirm(),
+
+    %% Publishing via Server2 via "direct exchange routing v2" should work.
+    {_Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server2),
+    amqp_channel:call(Ch2, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch2, self()),
+    publish(Ch2, DirectX, RKey),
+    assert_confirm(),
+    delete_queue(Ch1, Q),
     ok.
 
 %%%===================================================================

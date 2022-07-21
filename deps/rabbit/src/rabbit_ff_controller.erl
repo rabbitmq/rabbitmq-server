@@ -546,18 +546,8 @@ lock_registry_and_enable(#{states_per_node := _} = Inventory, FeatureName) ->
     %% registered name to prevent concurrent runs). But this is used in
     %% `rabbit_feature_flags:is_enabled()' to block while the state is
     %% `state_changing'.
-    ?LOG_DEBUG(
-       "Feature flags: acquiring registry state change lock",
-       [],
-       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     rabbit_ff_registry_factory:acquire_state_change_lock(),
-
     Ret = enable_with_registry_locked(Inventory, FeatureName),
-
-    ?LOG_DEBUG(
-       "Feature flags: releasing registry state change lock",
-       [],
-       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     rabbit_ff_registry_factory:release_state_change_lock(),
     Ret.
 

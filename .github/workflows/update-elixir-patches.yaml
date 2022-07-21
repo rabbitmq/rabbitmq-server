@@ -1,0 +1,77 @@
+name: Update Elixir Patch Versions for Bazel Based Workflows
+on:
+  schedule:
+  - cron: '0 3 * * *'
+  workflow_dispatch:
+jobs:
+  update-toolchains:
+    name: Update Elixir Versions
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        include:
+        - elixir_version: "1.10"
+          name_suffix: '_1_10'
+        - elixir_version: "1.12"
+          name_suffix: '_1_12'
+        - elixir_version: "1.13"
+          name_suffix: '_1_13'
+    timeout-minutes: 10
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v3
+    - name: SKIP IF THE PR ALREADY EXISTS
+      id: check-for-branch
+      run: |
+        set +e
+        git ls-remote --exit-code --heads origin bump-elixir-${{ matrix.elixir_version }}
+        echo "::set-output name=c::$?"
+    - name: DETERMINE LATEST PATCH
+      if: steps.check-for-branch.outputs.c != 0
+      id: fetch-version
+      run: |
+        TAG_NAME=$(curl -s GET https://api.github.com/repos/elixir-lang/elixir/tags?per_page=100 \
+          | jq -r 'map(select(.name | contains("OTP-${{ matrix.elixir_version }}"))) | first | .name')
+
+        wget --continue --quiet --output-document="/tmp/elixir.tar.gz" "https://github.com/elixir-lang/elixir/archive/${TAG_NAME}.tar.gz" && \
+        SHA=$(shasum -a 256 "/tmp/elixir.tar.gz" | awk '{print $1}')
+
+        if [ -z "${SHA}" ]; then
+          echo "Failed to determine SHA for ${TAG_NAME}"
+          exit 1
+        fi
+
+        echo "::set-output name=VERSION::${TAG_NAME}"
+        echo "::set-output name=SHA::${SHA}"
+    - name: MODIFY VERSION FILE
+      if: steps.check-for-branch.outputs.c != 0
+      run: |
+        sudo npm install --global --silent @bazel/buildozer
+
+        LINE=$(grep -n 'name_suffix = "${{ matrix.name_suffix }}",' bazel/toolchains/BUILD.bazel | awk -F  ":" '{print $1}')
+        LINE=$(($LINE-1))
+
+        buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' \
+          //bazel/toolchains:%${LINE}
+        buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' \
+          //bazel/toolchains:%${LINE}
+
+        set -x
+        git diff
+    - name: CREATE PULL REQUEST
+      if: steps.check-for-branch.outputs.c != 0
+      uses: peter-evans/create-pull-request@v4.0.4
+      with:
+        token: ${{ secrets.REPO_SCOPED_TOKEN }}
+        committer: GitHub <noreply@github.com>
+        author: GitHub <noreply@github.com>
+        title: Adopt elixir ${{ steps.fetch-version.outputs.VERSION }}
+        commit-message: |
+          Adopt elixir ${{ steps.fetch-version.outputs.VERSION }}
+        labels: |
+          backport-v3.10.x
+          backport-v3.9.x
+          backport-v3.8.x
+        branch: bump-elixir-${{ matrix.elixir_version }}
+        delete-branch: true

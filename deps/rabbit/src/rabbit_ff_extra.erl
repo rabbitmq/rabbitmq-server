@@ -80,7 +80,8 @@ cli_info(FeatureFlags) ->
 %% @param Options Options to tune what is displayed and how.
 
 info(Options) ->
-    %% Two tables: one for stable feature flags, one for experimental ones.
+    %% Two tables: one for stable/required feature flags, one for
+    %% experimental ones.
     StableFF = rabbit_feature_flags:list(all, stable),
     case maps:size(StableFF) of
         0 ->

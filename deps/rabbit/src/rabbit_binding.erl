@@ -21,8 +21,7 @@
          remove_for_destination/2, remove_transient_for_destination/1,
          remove_default_exchange_binding_rows_of/1]).
 
--export([implicit_for_destination/1, reverse_binding/1,
-         index_route_table_definition/0, populate_index_route_table/0]).
+-export([implicit_for_destination/1, reverse_binding/1, populate_index_route_table/0]).
 -export([new/4]).
 
 -define(DEFAULT_EXCHANGE(VHostPath), #resource{virtual_host = VHostPath,
@@ -766,37 +765,27 @@ del_notify(Bs, ActingUser) -> [rabbit_event:notify(
 x_callback(Serial, X, F, Bs) ->
     ok = rabbit_exchange:callback(X, F, Serial, [X, Bs]).
 
--spec index_route_table_definition() -> list(tuple()).
-index_route_table_definition() ->
-    maps:to_list(
-      #{
-        record_name => index_route,
-        attributes  => record_info(fields, index_route),
-        type => bag,
-        ram_copies => rabbit_nodes:all(),
-        storage_properties => [{ets, [{read_concurrency, true}]}]
-       }).
-
+-spec populate_index_route_table() -> ok.
 populate_index_route_table() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
               mnesia:lock({table, rabbit_route}, read),
               mnesia:lock({table, rabbit_index_route}, write),
               Routes = rabbit_misc:dirty_read_all(rabbit_route),
-              lists:foreach(fun(#route{binding = #binding{source = Exchange}} = Route) ->
-                                    case rabbit_exchange:lookup(Exchange) of
-                                        {ok, X} ->
-                                            case should_index_table(X) of
-                                                true ->
-                                                    mnesia:dirty_write(rabbit_index_route,
-                                                                       index_route(Route));
-                                                false ->
-                                                    ok
-                                            end;
-                                        _ ->
-                                            ok
-                                    end
-                            end, Routes)
+              lists:foreach(
+                fun(#route{binding = #binding{source = Exchange}} = Route) ->
+                        case rabbit_exchange:lookup(Exchange) of
+                            {ok, X} ->
+                                case should_index_table(X) of
+                                    true ->
+                                        ok = mnesia:dirty_write(rabbit_index_route, index_route(Route));
+                                    false ->
+                                        ok
+                                end;
+                            _ ->
+                                ok
+                        end
+                end, Routes)
       end).
 
 %% Only the direct exchange type uses the rabbit_index_route table to store its

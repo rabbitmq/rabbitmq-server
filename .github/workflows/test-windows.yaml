@@ -48,6 +48,8 @@ jobs:
           # build:buildbuddy --repository_cache=/home/runner/repo-cache/
           build:buildbuddy --color=yes
           build:buildbuddy --disk_cache=
+          build:buildbuddy --noexperimental_remote_cache_compression
+          build:buildbuddy --noexperimental_remote_cache_async
 
           build --@rules_erlang//:erlang_version=${{ matrix.erlang_version }}
           build --@rules_erlang//:erlang_home="${ERL_PATH/\/bin\/erl/}"
