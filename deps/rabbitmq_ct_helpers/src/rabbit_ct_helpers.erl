@@ -377,12 +377,16 @@ ensure_rabbitmq_run_cmd(Config) ->
     end.
 
 ensure_rabbitmq_run_secondary_cmd(Config) ->
-    Path = os:getenv("RABBITMQ_RUN_SECONDARY"),
-    case filelib:is_file(Path) of
-        true  ->
-            set_config(Config, {rabbitmq_run_secondary_cmd, Path});
+    case os:getenv("RABBITMQ_RUN_SECONDARY") of
         false ->
-            Config
+            Config;
+        Path ->
+            case filelib:is_file(Path) of
+                true  ->
+                    set_config(Config, {rabbitmq_run_secondary_cmd, Path});
+                false ->
+                    error("RABBITMQ_RUN_SECONDARY was set, but is not a valid file")
+            end
     end.
 
 ensure_erl_call_cmd(Config) ->
