@@ -295,5 +295,5 @@ secondary_umbrella = use_extension(
 
 use_repo(
     secondary_umbrella,
-    "rabbitmq-server-generic-unix-3.9",
+    "rabbitmq-server-generic-unix-3.7",
 )
