@@ -14,8 +14,8 @@ erlang_toolchain_external()
 
 erlang_toolchain_from_github_release(
     name_suffix = "_23",
-    sha256 = "35123f366ded534775a05db8ad6c06c20519ae228af1b5952132b10845621f21",
-    version = "23.3.4.14",
+    sha256 = "e3ecb3ac2cc549ab90cd9f8921eaebc8613f4d5c89972a3987e5a762d5a2df08",
+    version = "23.3.4.16",
 )
 
 erlang_toolchain_from_github_release(
