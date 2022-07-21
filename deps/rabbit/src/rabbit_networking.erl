@@ -21,7 +21,7 @@
 
 -export([boot/0, start_tcp_listener/2, start_tcp_listener/3,
          start_ssl_listener/3, start_ssl_listener/4,
-         stop_tcp_listener/1, active_listeners/0,
+         stop_tcp_listener/1, on_node_down/1, active_listeners/0,
          node_listeners/1, node_client_listeners/1,
          register_connection/1, unregister_connection/1,
          register_non_amqp_connection/1, unregister_non_amqp_connection/1,
@@ -59,6 +59,8 @@
 
 %% IANA-suggested ephemeral port range is 49152 to 65535
 -define(FIRST_TEST_BIND_PORT, 49152).
+
+-define(ETS_TABLE, rabbit_listener_ets).
 
 %%----------------------------------------------------------------------------
 
@@ -229,11 +231,31 @@ ranch_ref_of_protocol(Protocol) ->
 
 -spec listener_of_protocol(atom()) -> #listener{}.
 listener_of_protocol(Protocol) ->
+    case rabbit_feature_flags:is_enabled(listener_records_in_ets) of
+        true -> listener_of_protocol_ets(Protocol);
+        false -> listener_of_protocol_mnesia(Protocol)
+    end.
+
+listener_of_protocol_mnesia(Protocol) ->
+    rabbit_misc:execute_mnesia_transaction(
+        fun() ->
+            MatchSpec = #listener{
+                node = node(),
+                protocol = Protocol,
+                _ = '_'
+            },
+            case mnesia:match_object(rabbit_listener, MatchSpec, read) of
+                []    -> undefined;
+                [Row] -> Row
+            end
+        end).
+
+listener_of_protocol_ets(Protocol) ->
     MatchSpec = #listener{
                    protocol = Protocol,
                    _ = '_'
                   },
-    case ets:match_object(rabbit_listener, MatchSpec) of
+    case ets:match_object(?ETS_TABLE, MatchSpec) of
         []    -> undefined;
         [Row] -> Row
     end.
@@ -336,7 +358,16 @@ tcp_listener_started(Protocol, Opts, IPAddress, Port) ->
                   ip_address = IPAddress,
                   port = Port,
                   opts = Opts},
-    true = ets:insert(rabbit_listener, L),
+    case rabbit_feature_flags:is_enabled(listener_records_in_ets) of
+        true -> tcp_listener_started_ets(L);
+        false -> tcp_listener_started_mnesia(L)
+    end.
+
+tcp_listener_started_mnesia(L) ->
+    ok = mnesia:dirty_write(rabbit_listener, L).
+
+tcp_listener_started_ets(L) ->
+    true = ets:insert(?ETS_TABLE, L),
     ok.
 
 -spec tcp_listener_stopped
@@ -354,7 +385,16 @@ tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
                   ip_address = IPAddress,
                   port = Port,
                   opts = Opts},
-    true = ets:delete_object(rabbit_listener, L),
+    case rabbit_feature_flags:is_enabled(listener_records_in_ets) of
+        true -> tcp_listener_stopped_ets(L);
+        false -> tcp_listener_stopped_mnesia(L)
+    end.
+
+tcp_listener_stopped_mnesia(L) ->
+    ok = mnesia:dirty_delete_object(rabbit_listener, L).
+
+tcp_listener_stopped_ets(L) ->
+    true = ets:delete_object(?ETS_TABLE, L),
     ok.
 
 -spec record_distribution_listener() -> ok | no_return().
@@ -382,7 +422,16 @@ active_listeners() ->
 -spec node_listeners(node()) -> [rabbit_types:listener()].
 
 node_listeners(Node) ->
-    case rabbit_misc:rpc_call(Node, ets, tab2list, [rabbit_listener]) of
+    case rabbit_feature_flags:is_enabled(listener_records_in_ets) of
+        true -> node_listeners_ets(Node);
+        false -> node_listeners_mnesia(Node)
+    end.
+
+node_listeners_mnesia(Node) ->
+    mnesia:dirty_read(rabbit_listener, Node).
+
+node_listeners_ets(Node) ->
+    case rabbit_misc:rpc_call(Node, ets, tab2list, [?ETS_TABLE]) of
         {badrpc, nodedown} -> [];
         Listeners -> Listeners
     end.
@@ -396,6 +445,25 @@ node_client_listeners(Node) ->
             lists:filter(fun (#listener{protocol = clustering}) -> false;
                              (_) -> true
                          end, Xs)
+    end.
+
+-spec on_node_down(node()) -> 'ok'.
+
+on_node_down(Node) ->
+    case rabbit_feature_flags:is_enabled(listener_records_in_ets) of
+        true -> ok;
+        false -> on_node_down_mnesia(Node)
+    end.
+
+on_node_down_mnesia(Node) ->
+    case lists:member(Node, nodes()) of
+        false ->
+            rabbit_log:info(
+              "Node ~s is down, deleting its listeners", [Node]),
+            ok = mnesia:dirty_delete(rabbit_listener, Node);
+        true  ->
+            rabbit_log:info(
+              "Keeping ~s listeners: the node is already back", [Node])
     end.
 
 -spec register_connection(pid()) -> ok.
@@ -690,5 +758,5 @@ ipv6_status(TestPort) ->
     end.
 
 ensure_listener_table_for_this_node() ->
-    _ = ets:new(rabbit_listener, [named_table, public, bag, {keypos, #listener.node}]),
+    _ = ets:new(?ETS_TABLE, [named_table, public, bag, {keypos, #listener.node}]),
     ok.

@@ -9,7 +9,8 @@
 
 -include("feature_flags.hrl").
 
--export([direct_exchange_routing_v2_migration/1]).
+-export([direct_exchange_routing_v2_migration/1,
+         listener_records_in_ets_migration/1]).
 
 -rabbit_feature_flag(
    {classic_mirrored_queue_version,
@@ -79,6 +80,14 @@
       migration_fun => {?MODULE, direct_exchange_routing_v2_migration}
      }}).
 
+-rabbit_feature_flag(
+   {listener_records_in_ets,
+    #{desc          => "Store listener records in ETS instead of Mnesia",
+      stability     => stable,
+      depends_on    => [feature_flags_v2],
+      migration_fun => {?MODULE, listener_records_in_ets_migration}
+     }}).
+
 %% -------------------------------------------------------------------
 %% Direct exchange routing v2.
 %% -------------------------------------------------------------------
@@ -106,3 +115,43 @@ direct_exchange_routing_v2_migration(#ffcommand{name = FeatureName,
     end;
 direct_exchange_routing_v2_migration(_) ->
     ok.
+
+listener_records_in_ets_migration(#ffcommand{name = FeatureName,
+                                             command = enable}) ->
+    try
+        rabbit_misc:execute_mnesia_transaction(
+          fun () ->
+                  mnesia:lock({table, rabbit_listener}, read),
+                  Listeners = mnesia:select(rabbit_listener, [{'$1',[],['$1']}]),
+                  lists:foreach(
+                    fun(Listener) ->
+                            ets:insert(rabbit_listener_ets, Listener)
+                    end, Listeners)
+          end)
+    catch
+        throw:{error, {no_exists, rabbit_listener}} ->
+            ok;
+        throw:{error, Reason} ->
+            rabbit_log_feature_flags:error("Enabling feature flag ~s failed: ~p",
+                                           [FeatureName, Reason]),
+            {error, Reason}
+    end;
+listener_records_in_ets_migration(#ffcommand{name = FeatureName,
+                                             command = post_enable}) ->
+    try
+        case mnesia:delete_table(rabbit_listener) of
+            {atomic, ok} ->
+                ok;
+            {aborted, {no_exists, _}} ->
+                ok;
+            {aborted, Err} ->
+                rabbit_log_feature_flags:error("Enabling feature flag ~s failed to delete mnesia table: ~p",
+                                               [FeatureName, Err]),
+                {error, {failed_to_delete_mnesia_table, Err}}
+        end
+    catch
+        throw:{error, Reason} ->
+            rabbit_log_feature_flags:error("Enabling feature flag ~s failed: ~p",
+                                           [FeatureName, Reason]),
+            {error, Reason}
+    end.
