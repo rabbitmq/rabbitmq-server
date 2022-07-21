@@ -2519,13 +2519,15 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                                exclusive   = ExclusiveDeclare,
                                auto_delete = AutoDelete,
                                nowait      = NoWait,
-                               arguments   = Args} = Declare,
+                               arguments   = Args0} = Declare,
               ConnPid, AuthzContext, CollectorPid, VHostPath,
               #user{username = Username} = User) ->
     Owner = case ExclusiveDeclare of
                 true  -> ConnPid;
                 false -> none
             end,
+    Args = rabbit_amqqueue:augment_declare_args(VHostPath, ExclusiveDeclare,
+                                                DurableDeclare, Args0),
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     Durable = DurableDeclare andalso not ExclusiveDeclare,
     ActualNameBin = case StrippedQueueNameBin of
