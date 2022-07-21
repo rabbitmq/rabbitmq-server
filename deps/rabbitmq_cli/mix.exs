@@ -160,13 +160,13 @@ defmodule RabbitMQCtl.MixfileBase do
           {
             :goldrush,
             path: Path.join(deps_dir, "goldrush"),
-            compile: (if is_bazel, do: false, else: "make"),
+            compile: (if is_bazel, do: false, else: make_cmd),
             override: true
           },
           {
             :lager,
             path: Path.join(deps_dir, "lager"),
-            compile: (if is_bazel, do: false, else: "make"),
+            compile: (if is_bazel, do: false, else: make_cmd),
             override: true
           },
           {
