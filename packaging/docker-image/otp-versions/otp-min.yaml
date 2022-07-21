@@ -1,7 +1,0 @@
-otp: '23.3.4.14'
-otp_major: '23'
-# make -C packaging/docker-image find-otp-sha256 OTP_VERSION_MATCH=23.3
-otp_sha256: 5f01b5183eba6cd3570b551476b6d790532bb0077138b2e29f18728c8a9b6666
-# Which is the min supported Elixir?
-# https://github.com/rabbitmq/rabbitmq-server/blob/master/deps/rabbitmq_cli/mix.exs#L14
-elixir: '1.10.4'

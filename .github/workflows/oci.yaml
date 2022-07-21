@@ -27,22 +27,14 @@ jobs:
       matrix:
           # Build image for every supported Erlang major version.
           # Source of truth for OTP versions (min & max): https://www.rabbitmq.com/which-erlang.html
-          image_tag_suffix:
-            - otp-min
-            - otp-max
+          include:
+          - image_tag_suffix: otp-min
+            otp_major: 23
+          - image_tag_suffix: otp-max
+            otp_major: 24
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-
-      - name: Load version info
-        id: load-info
-        run: |
-          # TODO: de-duplicate the info these files and MODULE.bazel
-          FILE=packaging/docker-image/otp-versions/${{ matrix.image_tag_suffix }}.yaml
-          echo "::set-output name=otp::$(yq eval '.otp' $FILE)"
-          echo "::set-output name=otp_major::$(yq eval '.otp_major' $FILE)"
-          echo "::set-output name=otp_sha256::$(yq eval '.otp_sha256' $FILE)"
-          echo "::set-output name=elixir::$(yq eval '.elixir' $FILE)"
 
       - name: Mount Bazel Cache
         uses: actions/cache@v3.0.5
@@ -67,26 +59,17 @@ jobs:
             build:buildbuddy --remote_download_toplevel
           EOF
 
-      - name: Check for otp & elixir version exact match
+      - name: Load version info
+        id: load-info
         run: |
-          bazelisk build :otp_version --config=rbe-${{ steps.load-info.outputs.otp_major }}
-          if [ ! "$(cat bazel-bin/otp_version.txt)" == "${{ steps.load-info.outputs.otp }}" ]; then
-            echo "The version of erlang specified via bazel is $(cat bazel-bin/otp_version.txt),
-            echo "but ${{ steps.load-info.outputs.otp }} is expected."
-            exit 1
-          fi
-          bazelisk build :elixir_version --config=rbe-${{ steps.load-info.outputs.otp_major }}
-          if [ ! "$(cat bazel-bin/elixir_version.txt)" == "${{ steps.load-info.outputs.elixir }}" ]; then
-            echo "The version of elixir specified via bazel is $(cat bazel-bin/elixir_version.txt),
-            echo "but ${{ steps.load-info.outputs.elixir }} is expected."
-            exit 1
-          fi
+          bazelisk build :otp_version --config=rbe-${{ matrix.otp_major }}
+          echo "::set-output name=otp::$(cat bazel-bin/otp_version.txt)"
 
       - name: Build generic unix package
         run: |
           sed -i"_orig" -E '/APP_VERSION/ s/3\.[0-9]+\.[0-9]+/${{ github.event.pull_request.head.sha || github.sha }}/' rabbitmq.bzl
           bazelisk build :package-generic-unix \
-            --config=rbe-${{ steps.load-info.outputs.otp_major }}
+            --config=rbe-${{ matrix.otp_major }}
 
       - name: Resolve generic unix package path
         run: |
@@ -120,7 +103,7 @@ jobs:
           fi
 
       - name: Login to DockerHub
-        if: steps.authorized.outputs.PUSH
+        if: steps.authorized.outputs.PUSH == 'true'
         uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -141,6 +124,7 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: packaging/docker-image
+          pull: true
           push: ${{ steps.authorized.outputs.PUSH }}
           tags: |
             pivotalrabbitmq/rabbitmq:${{ steps.compute-tags.outputs.TAG_1 }}
@@ -149,7 +133,7 @@ jobs:
             SKIP_PGP_VERIFY=true
             PGP_KEYSERVER=pgpkeys.eu
             OTP_VERSION=${{ steps.load-info.outputs.otp }}
-            OTP_SHA256=${{ steps.load-info.outputs.otp_sha256 }}
+            SKIP_OTP_VERIFY=true
             RABBITMQ_BUILD=rabbitmq_server-${{ github.event.pull_request.head.sha || github.sha }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
