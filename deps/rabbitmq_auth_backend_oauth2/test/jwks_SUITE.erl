@@ -58,6 +58,7 @@ groups() ->
 
 -define(UTIL_MOD, rabbit_auth_backend_oauth2_test_util).
 -define(RESOURCE_SERVER_ID, <<"rabbitmq">>).
+-define(RESOURCE_SERVER_TYPE, <<"rabbitmq">>).
 -define(EXTRA_SCOPES_SOURCE, <<"additional_rabbitmq_scopes">>).
 
 init_per_suite(Config) ->
@@ -353,6 +354,7 @@ test_successful_connection_with_keycloak_token(Config) ->
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     close_connection_and_channel(Conn, Ch).
+
 
 test_successful_token_refresh(Config) ->
     Duration = 5,
