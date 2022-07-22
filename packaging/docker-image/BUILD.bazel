@@ -1,0 +1,253 @@
+load(
+    "@io_bazel_rules_docker//container:container.bzl",
+    "container_image",
+    "container_layer",
+)
+load(
+    "@io_bazel_rules_docker//contrib:test.bzl",
+    "container_test",
+)
+load(
+    "@io_bazel_rules_docker//docker/util:run.bzl",
+    "container_run_and_commit_layer",
+)
+load(
+    "@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl",
+    "download_pkgs",
+)
+load(
+    "@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl",
+    "install_pkgs",
+)
+
+BUILD_DEPS_PACKAGES = [
+    "autoconf",
+    "ca-certificates",
+    "dpkg-dev",
+    "g++",
+    "gcc",
+    "libncurses5-dev",
+    "make",
+]
+
+REQUIRED_PACKAGES = [
+    "gosu",
+]
+
+CONVENIENCE_PACKAGES = [
+    "python3",
+    "dstat",
+    "sysstat",
+    "htop",
+    "nmon",
+    "tmux",
+    "neovim",
+]
+
+download_pkgs(
+    name = "otp_pkgs",
+    image_tar = "@ubuntu2004//image",
+    packages = BUILD_DEPS_PACKAGES,
+)
+
+download_pkgs(
+    name = "rabbitmq_pkgs",
+    image_tar = "@ubuntu2004//image",
+    packages = REQUIRED_PACKAGES + CONVENIENCE_PACKAGES,
+)
+
+install_pkgs(
+    name = "otp_pkgs_image",
+    image_tar = "@ubuntu2004//image",
+    installables_tar = ":otp_pkgs.tar",
+    installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
+    output_image_name = "otp_pkgs_image",
+)
+
+install_pkgs(
+    name = "rabbitmq_pkgs_image",
+    image_tar = "@ubuntu2004//image",
+    installables_tar = ":rabbitmq_pkgs.tar",
+    installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
+    output_image_name = "rabbitmq_pkgs_image",
+)
+
+container_layer(
+    name = "openssl_source_layer",
+    directory = "/usr/local/src",
+    env = {
+        "OPENSSL_VERSION": "1.1.1g",
+    },
+    files = [
+        "build_install_openssh.sh",
+    ],
+    tars = [
+        "@openssl-1.1.1g//file",
+    ],
+)
+
+container_image(
+    name = "openssl_source",
+    base = ":otp_pkgs_image",
+    layers = [":openssl_source_layer"],
+)
+
+container_run_and_commit_layer(
+    name = "openssl_layer",
+    commands = [
+        "/usr/local/src/build_install_openssh.sh",
+        "rm /usr/local/src/build_install_openssh.sh",
+    ],
+    image = ":openssl_source.tar",
+)
+
+container_image(
+    name = "otp_source",
+    base = ":otp_pkgs_image",
+    directory = "/usr/local/src",
+    files = [
+        "build_install_otp.sh",
+    ],
+    layers = [
+        ":openssl_layer",
+    ],
+    tars = select({
+        "@rules_erlang//platforms:erlang_23": ["@otp_src_23//file"],
+        "@rules_erlang//platforms:erlang_24": ["@otp_src_24//file"],
+        "@rules_erlang//platforms:erlang_25": ["@otp_src_25//file"],
+        "@rules_erlang//platforms:erlang_external": ["@otp_src_25//file"],
+    }),
+)
+
+container_run_and_commit_layer(
+    name = "otp_layer",
+    commands = [
+        "/usr/local/src/build_install_otp.sh",
+        "rm /usr/local/src/build_install_otp.sh",
+    ],
+    image = ":otp_source.tar",
+)
+
+container_layer(
+    name = "rabbitmq_tarball_layer",
+    directory = "/opt",
+    files = [
+        "10-default-guest-user.conf",
+        "docker-entrypoint.sh",
+        "install_rabbitmq.sh",
+    ],
+    tars = [
+        "//:package-generic-unix",
+    ],
+)
+
+RABBITMQ_DATA_DIR = "/var/lib/rabbitmq"
+
+RABBITMQ_HOME = "/opt/rabbitmq"
+
+container_image(
+    name = "rabbitmq_tarball",
+    base = ":rabbitmq_pkgs_image",
+    env = {
+        "RABBITMQ_DATA_DIR": RABBITMQ_DATA_DIR,
+        "RABBITMQ_HOME": RABBITMQ_HOME,
+        "RABBITMQ_LOGS": "-",
+    },
+    layers = [
+        ":otp_layer",
+        ":rabbitmq_tarball_layer",
+    ],
+)
+
+container_run_and_commit_layer(
+    name = "rabbitmq_layer",
+    commands = [
+        "/opt/install_rabbitmq.sh",
+        "rm /opt/install_rabbitmq.sh",
+    ],
+    image = ":rabbitmq_tarball.tar",
+)
+
+C_UTF8 = "C.UTF-8"
+
+container_image(
+    name = "rabbitmq",
+    base = ":rabbitmq_pkgs_image",
+    cmd = ["rabbitmq-server"],
+    entrypoint = ["docker-entrypoint.sh"],
+    env = {
+        "RABBITMQ_DATA_DIR": RABBITMQ_DATA_DIR,
+        "RABBITMQ_HOME": RABBITMQ_HOME,
+        "RABBITMQ_LOGS": "-",
+        "HOME": RABBITMQ_DATA_DIR,
+        "PATH": "%s/sbin:$$PATH" % RABBITMQ_HOME,
+        "LANG": C_UTF8,
+        "LANGUAGE": C_UTF8,
+        "LC_ALL": C_UTF8,
+    },
+    layers = [
+        ":otp_layer",
+        ":rabbitmq_layer",
+    ],
+    ports = [
+        "4369/tcp",  # epmd
+        "5671/tcp",  # amqp-tls
+        "5672/tcp",  # amqp
+        "25672/tcp",  # erlang
+        "15671/tcp",  # management-tls
+        "15672/tcp",  # management
+        "15691/tcp",  # prometheus-tls
+        "15692/tcp",  # prometheus
+        "5551/tcp",  # stream-tls
+        "5552/tcp",  # stream
+        "8883/tcp",  # mqtt-tls
+        "1883/tcp",  # mqtt
+        "15676/tcp",  # web-mqtt-tls
+        "15675/tcp",  # web-mqtt
+        "61614/tcp",  # stomp-tls
+        "61613/tcp",  # stomp
+        "15673/tcp",  # web-stomp-tls
+        "15674/tcp",  # web-stomp
+        "15670/tcp",  # examples
+    ],
+    tags = ["manual"],
+    volumes = [
+        RABBITMQ_DATA_DIR,
+    ],
+)
+
+# Wrapper targets for the tarred images are required in order to be able to run
+# commandTests in container_test targets.
+
+container_image(
+    name = "openssl_install_wrapper",
+    base = ":otp_source",
+)
+
+container_image(
+    name = "otp_install_wrapper",
+    base = ":rabbitmq_pkgs_image",
+    layers = [
+        ":otp_layer",
+    ],
+)
+
+# Tests
+
+container_test(
+    name = "openssl_test",
+    configs = ["//packaging/docker-image/test_configs:openssl_ubuntu.yaml"],
+    image = ":openssl_install_wrapper",
+)
+
+container_test(
+    name = "otp_test",
+    configs = ["//packaging/docker-image/test_configs:otp_ubuntu.yaml"],
+    image = ":otp_install_wrapper",
+)
+
+container_test(
+    name = "rabbitmq_test",
+    configs = ["//packaging/docker-image/test_configs:rabbitmq_ubuntu.yaml"],
+    image = ":rabbitmq",
+)
