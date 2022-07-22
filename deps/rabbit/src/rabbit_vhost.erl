@@ -500,20 +500,20 @@ update_tags(VHostName, Tags) ->
     ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
     update(VHostName, fun(Record) ->
         Meta0 = vhost:get_metadata(Record),
-        Meta  = maps:update(tags, ConvertedTags, Meta0),
+        Meta  = maps:put(tags, ConvertedTags, Meta0),
         vhost:set_metadata(Record, Meta)
     end).
 
 -spec tag_with(vhost:name(), [atom()]) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
 tag_with(VHostName, Tags) when is_list(Tags) ->
     update_metadata(VHostName, fun(#{tags := Tags0} = Meta) ->
-        maps:update(tags, lists:usort(Tags0 ++ Tags), Meta)
+        maps:put(tags, lists:usort(Tags0 ++ Tags), Meta)
     end).
 
 -spec untag_from(vhost:name(), [atom()]) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
 untag_from(VHostName, Tags) when is_list(Tags) ->
     update_metadata(VHostName, fun(#{tags := Tags0} = Meta) ->
-        maps:update(tags, lists:usort(Tags0 -- Tags), Meta)
+        maps:put(tags, lists:usort(Tags0 -- Tags), Meta)
     end).
 
 set_limits(VHost, undefined) ->
