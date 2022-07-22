@@ -25,10 +25,10 @@ EOF
 
 def secondary_umbrella():
     http_archive(
-        name = "rabbitmq-server-generic-unix-3.9",
+        name = "rabbitmq-server-generic-unix-3.10",
         build_file = "@//:BUILD.package_generic_unix",
         patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
-        sha256 = "4672fad92a815b879cc78a5a9fd28445152b61745d68acd50432c15f96792171",
-        strip_prefix = "rabbitmq_server-3.9.13",
-        urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.9.13/rabbitmq-server-generic-unix-3.9.13.tar.xz"],
+        sha256 = "11651575d9c1b6b1803a41b5a37ad437abfb883fb7415500f98695f99943a83d",
+        strip_prefix = "rabbitmq_server-3.10.6",
+        urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.10.6/rabbitmq-server-generic-unix-3.10.6.tar.xz"],
     )
