@@ -25,6 +25,7 @@
   get_metadata/1,
   get_description/1,
   get_tags/1,
+  get_default_queue_type/1,
   set_limits/2,
   set_metadata/2,
   merge_metadata/2,
@@ -130,8 +131,16 @@ info_keys() ->
     case record_version_to_use() of
         %% note: this reports description and tags separately even though
         %% they are stored in the metadata map. MK.
-        ?record_version -> [name, description, tags, metadata, tracing, cluster_state];
-        _               -> vhost_v1:info_keys()
+        ?record_version ->
+            [name,
+             description,
+             tags,
+             default_queue_type,
+             metadata,
+             tracing,
+             cluster_state];
+        _ ->
+            vhost_v1:info_keys()
     end.
 
 -spec pattern_match_all() -> vhost_pattern().
@@ -165,6 +174,12 @@ get_tags(#vhost{} = VHost) ->
     maps:get(tags, get_metadata(VHost), undefined);
 get_tags(VHost) ->
     vhost_v1:get_tags(VHost).
+
+-spec get_default_queue_type(vhost()) -> binary() | undefined.
+get_default_queue_type(#vhost{} = VHost) ->
+    maps:get(default_queue_type, get_metadata(VHost), undefined);
+get_default_queue_type(_VHost) ->
+    undefined.
 
 set_limits(VHost, Value) ->
     case record_version_to_use() of
