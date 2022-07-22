@@ -10,7 +10,7 @@
 -export([init/2, resource_exists/2, to_json/2,
          content_types_provided/2, content_types_accepted/2,
          is_authorized/2, allowed_methods/2, accept_content/2,
-         delete_resource/2, id/1, put_vhost/5]).
+         delete_resource/2, id/1, put_vhost/6]).
 -export([variances/2]).
 
 -import(rabbit_misc, [pget/2]).
@@ -63,12 +63,17 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
         Trace = rabbit_mgmt_util:parse_bool(maps:get(tracing, BodyMap, undefined)),
         Description = maps:get(description, BodyMap, <<"">>),
         Tags = maps:get(tags, BodyMap, <<"">>),
-        case put_vhost(Name, Description, Tags, Trace, Username) of
+        DefaultQT = maps:get(defaultqueuetype, BodyMap, undefined),
+        case put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) of
             ok ->
                 {true, ReqData, Context};
             {error, timeout} = E ->
                 rabbit_mgmt_util:internal_server_error(
                   "Timed out while waiting for the vhost to initialise", E,
+                  ReqData0, Context);
+            {error, E} ->
+                rabbit_mgmt_util:internal_server_error(
+                  "Error occured while adding vhost", E,
                   ReqData0, Context)
         end
       end).
@@ -93,5 +98,5 @@ id(ReqData) ->
       Value   -> Value
     end.
 
-put_vhost(Name, Description, Tags, Trace, Username) ->
-    rabbit_vhost:put_vhost(Name, Description, Tags, Trace, Username).
+put_vhost(Name, Description, Tags, DefaultQT, Trace, Username) ->
+    rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQT, Trace, Username).
