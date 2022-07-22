@@ -595,8 +595,13 @@ delete(Tab, #index_route{} = Record, LockKind) ->
 
 remove_transient_routes(Routes) ->
     lists:map(fun(#route{binding = #binding{source = Src} = Binding} = Route) ->
-                      {ok, X} = rabbit_exchange:lookup(Src),
-                      ok = sync_transient_route(Route, should_index_table(X), fun delete/3),
+                      ShouldIndexTable = case rabbit_exchange:lookup(Src) of
+                                             {ok, X} ->
+                                                 should_index_table(X);
+                                             {error, not_found} ->
+                                                 true
+                                         end,
+                      ok = sync_transient_route(Route, ShouldIndexTable, fun delete/3),
                       Binding
               end, Routes).
 
