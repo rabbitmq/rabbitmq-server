@@ -154,14 +154,27 @@ add(Name, Description, Tags, ActingUser) ->
 add(Name, Metadata, ActingUser) ->
     case exists(Name) of
         true  -> ok;
-        false -> do_add(Name, Metadata, ActingUser)
+        false ->
+            catch(do_add(Name, Metadata, ActingUser))
     end.
 
 do_add(Name, Metadata, ActingUser) ->
     Description = maps:get(description, Metadata, undefined),
     Tags = maps:get(tags, Metadata, []),
 
-    rabbit_log:info("Adding vhost '~s' metadata ~p", [Name, Metadata]),
+    %% validate default_queue_type
+    case Metadata of
+        #{default_queue_type := DQT} ->
+            try rabbit_queue_type:discover(DQT) of
+                _ ->
+                    ok
+            catch _:_ ->
+                      throw({error, invalid_queue_type})
+            end;
+        _ ->
+            ok
+    end,
+
     case Description of
         undefined ->
             rabbit_log:info("Adding vhost '~s' without a description", [Name]);
