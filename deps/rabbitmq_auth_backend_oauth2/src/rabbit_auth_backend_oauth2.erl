@@ -473,7 +473,7 @@ post_process_payload_in_rich_auth_request_format(#{<<"authorization_details">> :
 
 
 
-validate_payload(#{?SCOPE_JWT_FIELD := _Scope, ?AUD_JWT_FIELD := _Aud} = DecodedToken) ->
+validate_payload(#{?SCOPE_JWT_FIELD := _Scope } = DecodedToken) ->
     ResourceServerEnv = application:get_env(?APP, ?RESOURCE_SERVER_ID, <<>>),
     ResourceServerId = rabbit_data_coercion:to_binary(ResourceServerEnv),
     validate_payload(DecodedToken, ResourceServerId).
