@@ -20,7 +20,8 @@
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1, ensure_config_file/1]).
 -export([delete_storage/1]).
 -export([vhost_down/1]).
--export([put_vhost/6]).
+-export([put_vhost/5,
+         put_vhost/6]).
 
 %%
 %% API
@@ -278,6 +279,9 @@ delete(VHost, ActingUser) ->
     %% on all the nodes.
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHost),
     ok.
+
+put_vhost(Name, Description, Tags0, Trace, Username) ->
+    put_vhost(Name, Description, Tags0, undefined, Trace, Username).
 
 put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
     Tags = case Tags0 of
@@ -580,6 +584,7 @@ i(tracing, VHost) -> rabbit_trace:enabled(vhost:get_name(VHost));
 i(cluster_state, VHost) -> vhost_cluster_state(vhost:get_name(VHost));
 i(description, VHost) -> vhost:get_description(VHost);
 i(tags, VHost) -> vhost:get_tags(VHost);
+i(default_queue_type, VHost) -> vhost:get_default_queue_type(VHost);
 i(metadata, VHost) -> vhost:get_metadata(VHost);
 i(Item, VHost)     ->
   rabbit_log:error("Don't know how to compute a virtual host info item '~s' for virtual host '~p'", [Item, VHost]),

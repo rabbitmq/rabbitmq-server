@@ -34,6 +34,7 @@ defmodule AddVhostCommandTest do
     assert @command.validate(["new-vhost"], %{}) == :ok
     assert @command.validate(["new-vhost"], %{description: "Used by team A"}) == :ok
     assert @command.validate(["new-vhost"], %{description: "Used by team A for QA purposes", tags: "qa,team-a"}) == :ok
+    assert @command.validate(["new-vhost"], %{description: "Used by team A for QA purposes", tags: "qa,team-a", default_queue_type: "quorum"}) == :ok
   end
 
   @tag vhost: @vhost
