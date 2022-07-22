@@ -1,4 +1,4 @@
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
 
 http_archive(
     name = "bazel_skylib",
@@ -25,6 +25,63 @@ http_archive(
 load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
 
 rules_pkg_dependencies()
+
+http_archive(
+    name = "io_bazel_rules_docker",
+    sha256 = "b1e80761a8a8243d03ebca8845e9cc1ba6c82ce7c5179ce2b295cd36f7e394bf",
+    urls = ["https://github.com/bazelbuild/rules_docker/releases/download/v0.25.0/rules_docker-v0.25.0.tar.gz"],
+)
+
+load(
+    "@io_bazel_rules_docker//repositories:repositories.bzl",
+    container_repositories = "repositories",
+)
+
+container_repositories()
+
+load("@io_bazel_rules_docker//repositories:deps.bzl", container_deps = "deps")
+
+container_deps()
+
+load(
+    "@io_bazel_rules_docker//container:container.bzl",
+    "container_pull",
+)
+
+container_pull(
+    name = "ubuntu2004",
+    registry = "index.docker.io",
+    repository = "pivotalrabbitmq/ubuntu",
+    tag = "20.04",
+)
+
+http_file(
+    name = "openssl-1.1.1g",
+    downloaded_file_path = "openssl-1.1.1g.tar.gz",
+    sha256 = "ddb04774f1e32f0c49751e21b67216ac87852ceb056b75209af2443400636d46",
+    urls = ["https://www.openssl.org/source/openssl-1.1.1g.tar.gz"],
+)
+
+http_file(
+    name = "otp_src_23",
+    downloaded_file_path = "OTP-23.3.4.16.tar.gz",
+    # sha256 = "",
+    urls = ["https://github.com/erlang/otp/archive/OTP-23.3.4.16.tar.gz"],
+)
+
+http_file(
+    name = "otp_src_24",
+    downloaded_file_path = "OTP-24.3.4.2.tar.gz",
+    # sha256 = "",
+    urls = ["https://github.com/erlang/otp/archive/OTP-24.3.4.2.tar.gz"],
+)
+
+http_file(
+    name = "otp_src_25",
+    downloaded_file_path = "OTP-25.0.3.tar.gz",
+    # sha256 = "",
+    urls = ["https://github.com/erlang/otp/archive/OTP-25.0.3.tar.gz"],
+)
 
 http_archive(
     name = "io_buildbuddy_buildbuddy_toolchain",
