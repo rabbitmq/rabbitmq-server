@@ -13,8 +13,6 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
--include("feature_flags.hrl").
-
 -export([suite/0,
          all/0,
          groups/0,
@@ -27,8 +25,8 @@
 
          mf_count_runs/3,
          mf_wait_and_count_runs/3,
-         mf_wait_and_count_runs_v2/1,
-         mf_wait_and_count_runs_in_post_enable/1,
+         mf_wait_and_count_runs_v2_enable/1,
+         mf_wait_and_count_runs_v2_post_enable/1,
 
          enable_unknown_feature_flag_on_a_single_node/1,
          enable_supported_feature_flag_on_a_single_node/1,
@@ -257,7 +255,7 @@ inject_on_nodes(Nodes, FeatureFlags) ->
       "Injecting feature flags on nodes~n"
       "  Nodes:         ~p~n"
       "  Feature flags: ~p~n",
-     [FeatureFlags, Nodes]),
+     [Nodes, FeatureFlags]),
     _ = [ok =
          run_on_node(
            Node,
@@ -296,26 +294,22 @@ mf_wait_and_count_runs(_FeatureName, _FeatureProps, enable) ->
     bump_runs(),
     ok.
 
-mf_wait_and_count_runs_v2(#ffcommand{command = enable}) ->
+mf_wait_and_count_runs_v2_enable(_Args) ->
     Peer = get_peer_proc(),
     Peer ! {node(), self(), waiting},
     ?LOG_NOTICE("Migration function: waiting for signal from ~p...", [Peer]),
     receive proceed -> ok end,
     ?LOG_NOTICE("Migration function: unblocked!", []),
     bump_runs(),
-    ok;
-mf_wait_and_count_runs_v2(_) ->
     ok.
 
-mf_wait_and_count_runs_in_post_enable(#ffcommand{command = post_enable}) ->
+mf_wait_and_count_runs_v2_post_enable(_Args) ->
     Peer = get_peer_proc(),
     Peer ! {node(), self(), waiting},
     ?LOG_NOTICE("Migration function: waiting for signal from ~p...", [Peer]),
     receive proceed -> ok end,
     ?LOG_NOTICE("Migration function: unblocked!", []),
     bump_runs(),
-    ok;
-mf_wait_and_count_runs_in_post_enable(_) ->
     ok.
 
 -define(PT_PEER_PROC, {?MODULE, peer_proc}).
@@ -929,8 +923,9 @@ enable_feature_flag_in_cluster_and_add_member_concurrently_mfv2(Config) ->
     FeatureFlags = #{FeatureName =>
                      #{provided_by => ?MODULE,
                        stability => stable,
-                       migration_fun => {?MODULE,
-                                         mf_wait_and_count_runs_v2}}},
+                       callbacks =>
+                       #{enable =>
+                         {?MODULE, mf_wait_and_count_runs_v2_enable}}}},
     inject_on_nodes(AllNodes, FeatureFlags),
 
     ct:pal(
@@ -1226,8 +1221,9 @@ enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2(Config) ->
     FeatureFlags = #{FeatureName =>
                      #{provided_by => ?MODULE,
                        stability => stable,
-                       migration_fun => {?MODULE,
-                                         mf_wait_and_count_runs_v2}}},
+                       callbacks =>
+                       #{enable =>
+                         {?MODULE, mf_wait_and_count_runs_v2_enable}}}},
     inject_on_nodes(AllNodes, FeatureFlags),
 
     UsingFFv1 = not ?config(enable_feature_flags_v2, Config),
@@ -1359,9 +1355,9 @@ enable_feature_flag_with_post_enable(Config) ->
     FeatureFlags = #{FeatureName =>
                      #{provided_by => ?MODULE,
                        stability => stable,
-                       migration_fun =>
-                       {?MODULE,
-                        mf_wait_and_count_runs_in_post_enable}}},
+                       callbacks =>
+                       #{post_enable =>
+                         {?MODULE, mf_wait_and_count_runs_v2_post_enable}}}},
     inject_on_nodes(AllNodes, FeatureFlags),
 
     ct:pal(

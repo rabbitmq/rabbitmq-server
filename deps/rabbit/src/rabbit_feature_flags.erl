@@ -82,8 +82,6 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
--include("feature_flags.hrl").
-
 -export([list/0,
          list/1,
          list/2,
@@ -130,8 +128,7 @@
          does_enabled_feature_flags_list_file_exist/0,
          read_enabled_feature_flags_list/0,
          run_migration_fun/3,
-         uses_migration_fun_v2/1,
-         uses_migration_fun_v2/2]).
+         uses_callbacks/1]).
 
 -ifdef(TEST).
 -export([mark_as_enabled_remotely/4,
@@ -160,7 +157,9 @@
                            doc_url => string(),
                            stability => stability(),
                            depends_on => [feature_name()],
-                           migration_fun => migration_fun_name()}.
+                           migration_fun => migration_fun_name(),
+                           callbacks =>
+                           #{callback_name() => migration_fun_name()}}.
 %% The feature flag properties.
 %%
 %% All properties are optional.
@@ -174,7 +173,8 @@
 %% <li>`depends_on': a list of feature flags name which must be enabled
 %%   before this one</li>
 %% <li>`migration_fun': a migration function specified by its module and
-%%   function names</li>
+%%   function names (deprecated for new feature flags)</li>
+%% <li>`callbacks': a map of callback names</li>
 %% </ul>
 %%
 %% Note that the `migration_fun' is a {@type migration_fun_name()},
@@ -183,6 +183,9 @@
 %% is that we must be able to represent it as an Erlang term when
 %% we regenerate the registry module source code (using {@link
 %% erl_syntax:abstract/1}).
+%%
+%% Likewise for `callbacks': each one is a {@type migration_fun_name()} but
+%% functions must conform to the appropriate signature for this callback.
 
 -type feature_flags() :: #{feature_name() => feature_props_extended()}.
 %% The feature flags map as returned or accepted by several functions in
@@ -193,6 +196,8 @@
                                     doc_url => string(),
                                     stability => stability(),
                                     migration_fun => migration_fun_name(),
+                                    callbacks =>
+                                    #{callback_name() => migration_fun_name()},
                                     depends_on => [feature_name()],
                                     provided_by => atom()}.
 %% The feature flag properties, once expanded by this module when feature
@@ -219,16 +224,12 @@
 %% The name of the module and function to call when changing the state of
 %% the feature flag.
 
--type migration_fun() :: migration_fun_v1() | migration_fun_v2().
-%% The migration function signature.
-
 -type migration_fun_context() :: enable | is_enabled.
 
--type migration_fun_v1() :: fun((feature_name(),
-                                 feature_props_extended(),
-                                 migration_fun_context())
-                                -> ok | {error, any()} |
-                                   boolean() | undefined).
+-type migration_fun() :: fun((feature_name(),
+                              feature_props_extended(),
+                              migration_fun_context())
+                             -> ok | {error, any()} | boolean() | undefined).
 %% The migration function signature (v1).
 %%
 %% It is called with context `enable' when a feature flag is being enabled.
@@ -244,10 +245,29 @@
 %% is actually enabled. It is useful on RabbitMQ startup, just in case
 %% the previous instance failed to write the feature flags list file.
 
--type ffcommand() :: #ffcommand{}.
+-type callbacks() :: enable_callback() | post_enable_callback().
+%% All possible callbacks.
 
--type migration_fun_v2() :: fun((ffcommand()) ->  ok | no_return()).
-%% The migration function signature (v2).
+-type callbacks_args() :: enable_callback_args() | post_enable_callback_args().
+%% All possible callbacks arguments.
+
+-type callbacks_rets() :: enable_callback_ret() | post_enable_callback_ret().
+%% All possible callbacks return values.
+
+-type callback_name() :: enable | post_enable.
+%% Name of the callback.
+
+-type enable_callback() :: fun((feature_name(),
+                                feature_props_extended(),
+                                enable_callback_args())
+                               -> enable_callback_ret()).
+%% The callback called while enabling a feature flag.
+%%
+%% It is called when a feature flag is being enabled. The function is
+%% responsible for this feature-flag-specific verification and data
+%% conversion. It returns `ok' if RabbitMQ can mark the feature flag as
+%% enabled an continue with the next one, if any. `{error, Reason}' and
+%% exceptions are an error and the feature flag will remain disabled.
 %%
 %% The migration function is called on all nodes which fulfill the following
 %% conditions:
@@ -257,30 +277,66 @@
 %% function.</li>
 %% </ol>
 %%
-%% All executions of the migration function on these nodes will run in
-%% parallel (concurrently). The migration function is responsible for its own
-%% locking and synchronization.
-%%
-%% It is first called with the command `enable' when a feature flag is being
-%% enabled. The function is responsible for this feature-flag-specific
-%% verification and data conversion. It returns `ok' if RabbitMQ can mark the
-%% feature flag as enabled an continue with the next one, if any. Other return
-%% values or exceptions are an error and the feature flag should remain
-%% disabled.
+%% All executions of the callback on these nodes will run in parallel
+%% (concurrently). The callback is responsible for its own locking and
+%% synchronization.
 %%
 %% It is then called with the command `post_enable' after a feature flag has
 %% been marked as enabled. The return value or enay exceptions are ignored and
 %% the feature flag will remain enabled even if there is a failure.
 %%
 %% When a node is joining a cluster where one side has a feature flag enabled,
-%% that feature flag will be enabled on the other side. It means the migration
-%% function will run on the nodes where it is disabled. Therefore the
-%% migration function can run in clusters where some nodes previously executed
-%% it and the feature flag was already enabled.
+%% that feature flag will be enabled on the other side. It means the callback
+%% will run on the nodes where it is disabled. Therefore the callback can run
+%% in clusters where some nodes previously executed it and the feature flag
+%% was already enabled.
 %%
-%% The migration function should also be idempotent. For instance, if the
-%% feature flag couldn't be marked as enabled everywhere after the migration
-%% function was called with the `enable' command, it may be called again.
+%% The callback should also be idempotent. For instance, if the feature flag
+%% couldn't be marked as enabled everywhere after the callback was called, it
+%% may be called again.
+
+-type enable_callback_args() :: #{feature_name := feature_name(),
+                                  feature_props := feature_props_extended(),
+                                  command := enable,
+                                  nodes := [node()]}.
+%% A map passed to {@type enable_callback()}.
+
+-type enable_callback_ret() :: ok | {error, term()}.
+%% Return value of the `enable' callback.
+
+-type post_enable_callback() :: fun((feature_name(),
+                                     feature_props_extended(),
+                                     post_enable_callback_args())
+                                    -> post_enable_callback_ret()).
+%% The callback called after enabling a feature flag.
+%%
+%% It is called after a feature flag has been marked as enabled. The return
+%% value or any exceptions are ignored and the feature flag will remain
+%% enabled even if there is a failure.
+%%
+%% All executions of the callback on nodes will run in parallel
+%% (concurrently). The callback is responsible for its own locking and
+%% synchronization.
+%%
+%% When a node is joining a cluster where one side has a feature flag enabled,
+%% that feature flag will be enabled on the other side. It means the callback
+%% will run on the nodes where it is disabled. Therefore the callback can run
+%% in clusters where some nodes previously executed it and the feature flag
+%% was already enabled.
+%%
+%% The callback should also be idempotent. For instance, if the feature flag
+%% couldn't be marked as enabled everywhere after the callback was called, it
+%% may be called again.
+
+-type post_enable_callback_args() :: #{feature_name := feature_name(),
+                                       feature_props :=
+                                       feature_props_extended(),
+                                       command := post_enable,
+                                       nodes := [node()]}.
+%% A map passed to {@type post_enable_callback()}.
+
+-type post_enable_callback_ret() :: ok.
+%% Return value of the `post_enable' callback.
 
 -type inventory() :: #{applications := [atom()],
                        feature_flags := feature_flags(),
@@ -302,10 +358,17 @@
               stability/0,
               migration_fun_name/0,
               migration_fun/0,
-              migration_fun_v1/0,
-              migration_fun_v2/0,
               migration_fun_context/0,
-              ffcommand/0,
+              callbacks/0,
+              callback_name/0,
+              callbacks_args/0,
+              callbacks_rets/0,
+              enable_callback/0,
+              enable_callback_args/0,
+              enable_callback_ret/0,
+              post_enable_callback/0,
+              post_enable_callback_args/0,
+              post_enable_callback_ret/0,
               inventory/0,
               cluster_inventory/0]).
 
@@ -397,24 +460,15 @@ sort_feature_flags_v2_first(FeatureNames) ->
       end, FeatureNames).
 
 requires_feature_flags_v2(FeatureName) ->
-    uses_migration_fun_v2(FeatureName).
+    uses_callbacks(FeatureName).
 
-uses_migration_fun_v2(FeatureName) ->
+uses_callbacks(FeatureName) when is_atom(FeatureName) ->
     case rabbit_ff_registry:get(FeatureName) of
-        undefined ->
-            false;
-        FeatureProps ->
-            case maps:get(migration_fun, FeatureProps, none) of
-                {MigrationMod, MigrationFun}
-                  when is_atom(MigrationMod) andalso is_atom(MigrationFun) ->
-                    uses_migration_fun_v2(MigrationMod, MigrationFun);
-                _ ->
-                    false
-            end
-    end.
-
-uses_migration_fun_v2(MigrationMod, MigrationFun) ->
-    erlang:function_exported(MigrationMod, MigrationFun, 1).
+        undefined    -> false;
+        FeatureProps -> uses_callbacks(FeatureProps)
+    end;
+uses_callbacks(FeatureProps) when is_map(FeatureProps) ->
+    maps:is_key(callbacks, FeatureProps).
 
 enable_v1(FeatureName) ->
     rabbit_log_feature_flags:debug(
@@ -964,29 +1018,57 @@ prepare_queried_feature_flags([], AllFeatureFlags) ->
     AllFeatureFlags.
 
 assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
-    ?assert(is_atom(FeatureName)),
-    ?assert(is_map(FeatureProps)),
-    Stability = get_stability(FeatureProps),
-    ?assert(Stability =:= stable orelse
-            Stability =:= experimental orelse
-            Stability =:= required),
-    case FeatureProps of
-        #{migration_fun := _} when Stability =:= required ->
+    try
+        ?assert(is_atom(FeatureName)),
+        ?assert(is_map(FeatureProps)),
+        Stability = get_stability(FeatureProps),
+        ?assert(Stability =:= stable orelse
+                Stability =:= experimental orelse
+                Stability =:= required),
+        case FeatureProps of
+            #{migration_fun := _} when Stability =:= required ->
+                rabbit_log_feature_flags:error(
+                  "Feature flags: `~s`: a required feature flag can't have a "
+                  "migration function",
+                  [FeatureName]),
+                throw(
+                  {required_feature_flag_with_migration_fun, FeatureName});
+            #{migration_fun := MigrationFunMF} ->
+                ?assertMatch({_, _}, MigrationFunMF),
+                {MigrationMod, MigrationFun} = MigrationFunMF,
+                ?assert(is_atom(MigrationMod)),
+                ?assert(is_atom(MigrationFun)),
+                ?assert(
+                   erlang:function_exported(MigrationMod, MigrationFun, 3)),
+                ?assertNot(maps:is_key(callbacks, FeatureProps));
+            #{callbacks := Callbacks} ->
+                Known = [enable,
+                         post_enable],
+                ?assert(is_map(Callbacks)),
+                ?assertEqual([], maps:keys(Callbacks) -- Known),
+                lists:foreach(
+                  fun(CallbackMF) ->
+                          ?assertMatch({_, _}, CallbackMF),
+                          {CallbackMod, CallbackFun} = CallbackMF,
+                          ?assert(is_atom(CallbackMod)),
+                          ?assert(is_atom(CallbackFun)),
+                          ?assert(erlang:function_exported(
+                                    CallbackMod, CallbackFun, 1))
+                  end, maps:values(Callbacks)),
+                ?assertNot(maps:is_key(migration_fun, FeatureProps));
+            _ ->
+                ok
+        end
+    catch
+        Class:Reason:Stacktrace ->
             rabbit_log_feature_flags:error(
-              "Feature flags: `~s`: a required feature flag can't have a "
-              "migration function",
-              [FeatureName]),
-            throw({required_feature_flag_with_migration_fun, FeatureName});
-        #{migration_fun := MigrationFunMF} ->
-            ?assertMatch({_, _}, MigrationFunMF),
-            {MigrationMod, MigrationFun} = MigrationFunMF,
-            ?assert(is_atom(MigrationMod)),
-            ?assert(is_atom(MigrationFun)),
-            ?assert(
-               erlang:function_exported(MigrationMod, MigrationFun, 1) orelse
-               erlang:function_exported(MigrationMod, MigrationFun, 3));
-        _ ->
-            ok
+              "Feature flags: `~s`: invalid properties:~n"
+              "Feature flags: `~s`:   Properties: ~p~n"
+              "Feature flags: `~s`:   Error: ~p",
+              [FeatureName,
+               FeatureName, FeatureProps,
+               FeatureName, Reason]),
+            erlang:raise(Class, Reason, Stacktrace)
     end.
 
 -spec merge_new_feature_flags(feature_flags(),
@@ -2021,7 +2103,7 @@ verify_which_feature_flags_are_actually_enabled() ->
     %% function fails), we keep the current state of the feature flag.
     List1 = maps:fold(
               fun(Name, Props, Acc) ->
-                      case uses_migration_fun_v2(Name) of
+                      case uses_callbacks(Name) of
                           true ->
                               Acc;
                           false ->

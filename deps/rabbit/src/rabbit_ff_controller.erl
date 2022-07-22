@@ -31,8 +31,6 @@
 
 -include_lib("rabbit_common/include/logging.hrl").
 
--include("feature_flags.hrl").
-
 -export([is_supported/1, is_supported/2,
          enable/1,
          check_node_compatibility/1,
@@ -662,9 +660,7 @@ do_enable(#{states_per_node := _} = Inventory, FeatureName, Nodes) ->
     %% several other feature flags.
     case enable_dependencies(Inventory, FeatureName) of
         {ok, Inventory1} ->
-            Extra = #{nodes => Nodes},
-            Rets = run_migration_fun(
-                     Nodes, FeatureName, enable, Extra, infinity),
+            Rets = run_callback(Nodes, FeatureName, enable, #{}, infinity),
             maps:fold(
               fun
                   (_Node, ok, {ok, _} = Ret) -> Ret;
@@ -682,11 +678,9 @@ do_enable(#{states_per_node := _} = Inventory, FeatureName, Nodes) ->
       Ret :: ok.
 
 post_enable(#{states_per_node := _}, FeatureName, Nodes) ->
-    case rabbit_feature_flags:uses_migration_fun_v2(FeatureName) of
+    case rabbit_feature_flags:uses_callbacks(FeatureName) of
         true ->
-            Extra = #{nodes => Nodes},
-            _ = run_migration_fun(
-                  Nodes, FeatureName, post_enable, Extra, infinity),
+            _ = run_callback(Nodes, FeatureName, post_enable, #{}, infinity),
             ok;
         false ->
             ok
@@ -1062,81 +1056,81 @@ enable_dependencies1(
 %% Migration function.
 %% --------------------------------------------------------------------
 
--spec run_migration_fun(Nodes, FeatureName, Command, Extra, Timeout) ->
+-spec run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
     Rets when
       Nodes :: [node()],
       FeatureName :: rabbit_feature_flags:feature_name(),
-      Command :: atom(),
-      Extra :: map(),
+      Command :: rabbit_feature_flags:callback_name(),
+      Extra :: rabbit_feature_flags:callbacks_args(),
       Timeout :: timeout(),
       Rets :: #{node() => term()}.
 
-run_migration_fun(Nodes, FeatureName, Command, Extra, Timeout) ->
+run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
     FeatureProps = rabbit_ff_registry:get(FeatureName),
-    case maps:get(migration_fun, FeatureProps, none) of
-        {MigrationMod, MigrationFun}
-          when is_atom(MigrationMod) andalso is_atom(MigrationFun) ->
-            UsesMFv2 = rabbit_feature_flags:uses_migration_fun_v2(
-                         MigrationMod, MigrationFun),
-            case UsesMFv2 of
-                true ->
-                    %% The migration fun API v2 is of the form:
-                    %%   MigrationMod:MigrationFun(#ffcommand{...}).
-                    %%
-                    %% Also, the function is executed on all nodes in
-                    %% parallel.
-                    FFCommand = #ffcommand{
-                                   name = FeatureName,
-                                   props = FeatureProps,
-                                   command = Command,
-                                   extra = Extra},
-                    run_migration_fun_v2(
-                      Nodes, MigrationMod, MigrationFun, FFCommand, Timeout);
-                false ->
-                    %% The migration fun API v1 is of the form:
-                    %%   MigrationMod:MigrationFun(
-                    %%     FeatureName, FeatureProps, Command).
-                    %%
-                    %% Also, the function is executed once on the calling node
-                    %% only.
-                    Ret = rabbit_feature_flags:run_migration_fun(
-                            FeatureName, FeatureProps, Command),
-                    #{node() => Ret}
-            end;
-        none ->
-            #{};
-        Invalid ->
+    Callbacks = maps:get(callbacks, FeatureProps, #{}),
+    case Callbacks of
+        #{Command := {CallbackMod, CallbackFun}}
+          when is_atom(CallbackMod) andalso is_atom(CallbackFun) ->
+            %% The migration fun API v2 is of the form:
+            %%   CallbackMod:CallbackFun(...)
+            %%
+            %% Also, the function is executed on all nodes in parallel.
+            Args = Extra#{feature_name => FeatureName,
+                          feature_props => FeatureProps,
+                          command => Command,
+                          nodes => Nodes},
+            do_run_callback(Nodes, CallbackMod, CallbackFun, Args, Timeout);
+        #{Command := Invalid} ->
             ?LOG_ERROR(
-               "Feature flags: `~s`: invalid migration function: ~p",
-               [FeatureName, Invalid],
+               "Feature flags: `~s`: invalid callback for `~s`: ~p",
+               [FeatureName, Command, Invalid],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            #{node() => {error, {invalid_migration_fun, Invalid}}}
+            #{node() =>
+              {error, {invalid_callback, FeatureName, Command, Invalid}}};
+        _ ->
+            %% The migration fun API v1 is of the form:
+            %%   MigrationMod:MigrationFun(
+            %%     FeatureName, FeatureProps, Command).
+            %%
+            %% Also, the function is executed once on the calling node only.
+            %%
+            %% Only `enable' is supported by the v1 migration function.
+            Ret = case Command of
+                      enable ->
+                          Ret0 = rabbit_feature_flags:run_migration_fun(
+                                   FeatureName, FeatureProps, Command),
+                          case Ret0 of
+                              {error, no_migration_fun} -> ok;
+                              _                         -> Ret0
+                          end;
+                      _ ->
+                          ok
+                  end,
+            #{node() => Ret}
     end.
 
--spec run_migration_fun_v2(Nodes, MigrationMod, MigrationFun, FFCommand,
-                           Timeout) -> Rets when
+-spec do_run_callback(Nodes, CallbackMod, CallbackFun, Args, Timeout) ->
+    Rets when
       Nodes :: [node()],
-      MigrationMod :: module(),
-      MigrationFun :: atom(),
-      FFCommand :: rabbit_feature_flags:ffcommand(),
+      CallbackMod :: module(),
+      CallbackFun :: atom(),
+      Args :: rabbit_feature_flags:callbacks_args(),
       Timeout :: timeout(),
-      Rets :: #{node() => term}.
+      Rets :: #{node() => rabbit_feature_flags:callbacks_rets()}.
 
-run_migration_fun_v2(
-  Nodes, MigrationMod, MigrationFun,
-  #ffcommand{name = FeatureName} = FFCommand,
-  Timeout) ->
+do_run_callback(Nodes, CallbackMod, CallbackFun, Args, Timeout) ->
+    #{feature_name := FeatureName,
+      command := Command} = Args,
     ?LOG_DEBUG(
-       "Feature flags: `~s`: run migration function (v2) ~s:~s~n"
-       "Feature flags:   with command=~p~n"
+       "Feature flags: `~s`: run callback ~s:~s (~s callback)~n"
+       "Feature flags:   with args = ~p~n"
        "Feature flags:   on nodes ~p",
-       [FeatureName, MigrationMod, MigrationFun, FFCommand, Nodes],
+       [FeatureName, CallbackMod, CallbackFun, Command, Args, Nodes],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-    Rets = rpc_calls(
-             Nodes, MigrationMod, MigrationFun, [FFCommand], Timeout),
+    Rets = rpc_calls(Nodes, CallbackMod, CallbackFun, [Args], Timeout),
     ?LOG_DEBUG(
-       "Feature flags: `~s`: migration function (v2) ~s:~s returned:~n"
+       "Feature flags: `~s`: callback ~s:~s (~s callback) returned:~n"
        "Feature flags:   ~p",
-       [FeatureName, MigrationMod, MigrationFun, Rets],
+       [FeatureName, CallbackMod, CallbackFun, Command, Rets],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     Rets.
