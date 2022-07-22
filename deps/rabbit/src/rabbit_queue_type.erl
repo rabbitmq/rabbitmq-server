@@ -15,6 +15,7 @@
          discover/1,
          default/0,
          is_enabled/1,
+         is_compatible/4,
          declare/2,
          delete/4,
          is_recoverable/1,
@@ -127,6 +128,11 @@
 %% is the queue type feature enabled
 -callback is_enabled() -> boolean().
 
+-callback is_compatible(Durable :: boolean(),
+                        Exclusive :: boolean(),
+                        AutoDelete :: boolean()) ->
+    boolean().
+
 -callback declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
     {'absent', amqqueue:amqqueue(), absent_reason()} |
@@ -231,6 +237,11 @@ default() ->
 -spec is_enabled(module()) -> boolean().
 is_enabled(Type) ->
     Type:is_enabled().
+
+-spec is_compatible(module(), boolean(), boolean(), boolean()) ->
+    boolean().
+is_compatible(Type, Durable, Exclusive, AutoDelete) ->
+    Type:is_compatible(Durable, Exclusive, AutoDelete).
 
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |

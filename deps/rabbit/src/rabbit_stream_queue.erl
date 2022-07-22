@@ -10,6 +10,7 @@
 -behaviour(rabbit_queue_type).
 
 -export([is_enabled/0,
+         is_compatible/3,
          declare/2,
          delete/4,
          purge/1,
@@ -86,6 +87,15 @@
 -spec is_enabled() -> boolean().
 is_enabled() ->
     rabbit_feature_flags:is_enabled(stream_queue).
+
+-spec is_compatible(boolean(), boolean(), boolean()) -> boolean().
+is_compatible(_Durable = true,
+              _Exclusive = false,
+              _AutoDelete = false) ->
+    true;
+is_compatible(_, _, _) ->
+    false.
+
 
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing', amqqueue:amqqueue()} |

@@ -2526,8 +2526,11 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
                 true  -> ConnPid;
                 false -> none
             end,
-    Args = rabbit_amqqueue:augment_declare_args(VHostPath, ExclusiveDeclare,
-                                                DurableDeclare, Args0),
+    Args = rabbit_amqqueue:augment_declare_args(VHostPath,
+                                                DurableDeclare,
+                                                ExclusiveDeclare,
+                                                AutoDelete,
+                                                Args0),
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     Durable = DurableDeclare andalso not ExclusiveDeclare,
     ActualNameBin = case StrippedQueueNameBin of
