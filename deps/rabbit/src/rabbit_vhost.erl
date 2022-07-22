@@ -20,7 +20,7 @@
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, config_file_path/1, ensure_config_file/1]).
 -export([delete_storage/1]).
 -export([vhost_down/1]).
--export([put_vhost/5]).
+-export([put_vhost/6]).
 
 %%
 %% API
@@ -279,7 +279,7 @@ delete(VHost, ActingUser) ->
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHost),
     ok.
 
-put_vhost(Name, Description, Tags0, Trace, Username) ->
+put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
     Tags = case Tags0 of
       undefined   -> <<"">>;
       null        -> <<"">>;
@@ -290,19 +290,32 @@ put_vhost(Name, Description, Tags0, Trace, Username) ->
     ParsedTags = parse_tags(Tags),
     rabbit_log:debug("Parsed tags ~p to ~p", [Tags, ParsedTags]),
     Result = case exists(Name) of
-        true  ->
-            update(Name, Description, ParsedTags, Username);
-        false ->
-            add(Name, Description, ParsedTags, Username),
-             %% wait for up to 45 seconds for the vhost to initialise
-             %% on all nodes
-             case await_running_on_all_nodes(Name, 45000) of
-                 ok               ->
-                     maybe_grant_full_permissions(Name, Username);
-                 {error, timeout} ->
-                     {error, timeout}
-             end
-    end,
+                 true  ->
+                     update(Name, Description, ParsedTags, Username);
+                 false ->
+                     Metadata0 = #{description => Description,
+                                   tags => ParsedTags},
+                     Metadata = case DefaultQueueType of
+                                    undefined ->
+                                        Metadata0;
+                                    _ ->
+                                        Metadata0#{default_queue_type =>
+                                                       DefaultQueueType}
+                                end,
+                     case add(Name, Metadata, Username) of
+                         ok ->
+                             %% wait for up to 45 seconds for the vhost to initialise
+                             %% on all nodes
+                             case await_running_on_all_nodes(Name, 45000) of
+                                 ok               ->
+                                     maybe_grant_full_permissions(Name, Username);
+                                 {error, timeout} ->
+                                     {error, timeout}
+                             end;
+                         Err ->
+                             Err
+                     end
+             end,
     case Trace of
         true      -> rabbit_trace:start(Name);
         false     -> rabbit_trace:stop(Name);

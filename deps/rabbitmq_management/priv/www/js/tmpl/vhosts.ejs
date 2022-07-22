@@ -156,6 +156,17 @@
           <th><label>Tags:</label></th>
           <td><input type="text" name="tags"/></td>
         </tr>
+        <tr>
+          <th><label>Default Queue Type:</label></th>
+          <td>
+            <!-- <select name="queuetype" onchange="select_queue_type(queuetype)"> -->
+            <select name="defaultqueuetype">
+                <option value="classic">Classic</option>
+                <option value="quorum">Quorum</option>
+                <option value="stream">Stream</option>
+            </select>
+          </td>
+        </tr>
       </table>
       <input type="submit" value="Add virtual host"/>
     </form>
