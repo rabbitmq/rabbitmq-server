@@ -147,11 +147,13 @@ listener_records_in_ets_migration(#ffcommand{name = FeatureName,
             {aborted, Err} ->
                 rabbit_log_feature_flags:error("Enabling feature flag ~s failed to delete mnesia table: ~p",
                                                [FeatureName, Err]),
-                {error, {failed_to_delete_mnesia_table, Err}}
+                %% adheres to the callback interface
+                ok
         end
     catch
         throw:{error, Reason} ->
             rabbit_log_feature_flags:error("Enabling feature flag ~s failed: ~p",
                                            [FeatureName, Reason]),
-            {error, Reason}
+            %% adheres to the callback interface
+            ok
     end.
