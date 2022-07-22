@@ -56,7 +56,7 @@ release_state_change_lock() ->
 %% replaced by a proper registry.
 %%
 %% Once replaced, the registry contains the map of all supported feature
-%% flags and their state. This is makes it very efficient to query a
+%% flags and their state. This makes it very efficient to query a
 %% feature flag state or property.
 %%
 %% The registry is local to all RabbitMQ nodes.

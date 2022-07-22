@@ -25,8 +25,8 @@
 -export([new/4]).
 
 -define(DEFAULT_EXCHANGE(VHostPath), #resource{virtual_host = VHostPath,
-                                              kind = exchange,
-                                              name = <<>>}).
+                                               kind = exchange,
+                                               name = <<>>}).
 
 %%----------------------------------------------------------------------------
 
@@ -79,15 +79,15 @@ new(Src, RoutingKey, Dst, Arguments) ->
 
 recover() ->
     rabbit_misc:execute_mnesia_transaction(
-        fun () ->
-            mnesia:lock({table, rabbit_durable_route}, read),
-            mnesia:lock({table, rabbit_semi_durable_route}, write),
-            Routes = rabbit_misc:dirty_read_all(rabbit_durable_route),
-            Fun = fun(Route) ->
-                mnesia:dirty_write(rabbit_semi_durable_route, Route)
-            end,
-        lists:foreach(Fun, Routes)
-    end).
+      fun () ->
+              mnesia:lock({table, rabbit_durable_route}, read),
+              mnesia:lock({table, rabbit_semi_durable_route}, write),
+              Routes = rabbit_misc:dirty_read_all(rabbit_durable_route),
+              Fun = fun(Route) ->
+                            mnesia:dirty_write(rabbit_semi_durable_route, Route)
+                    end,
+              lists:foreach(Fun, Routes)
+      end).
 
 %% Virtual host-specific recovery
 
@@ -492,7 +492,7 @@ sync_transient_route(Route, ShouldIndexTable, Fun) ->
     sync_index_route(Route, ShouldIndexTable, Fun).
 
 sync_index_route(Route, true, Fun) ->
-    %% Do not block as blocking will cause a dead lock when
+    %% Do not block as blocking will cause a deadlock when
     %% function rabbit_binding:populate_index_route_table/0
     %% (i.e. feature flag migration) runs in parallel.
     case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2, non_blocking) of
@@ -796,7 +796,7 @@ populate_index_route_table() ->
 %% types. This reduces write lock conflicts on the same tuple {SourceExchange, RoutingKey}
 %% reducing the number of restarted Mnesia transactions.
 should_index_table(#exchange{name = #resource{name = Name},
-                      type = direct})
+                             type = direct})
   when Name =/= <<>> ->
     true;
 should_index_table(_) ->
