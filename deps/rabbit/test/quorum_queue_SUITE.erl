@@ -712,12 +712,11 @@ vhost_with_default_queue_type_declares_quorum_queue(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     VHost = atom_to_binary(?FUNCTION_NAME, utf8),
     QName = atom_to_binary(?FUNCTION_NAME, utf8),
-    % RaName = binary_to_atom(<<VHost/binary, "_", QName/binary>>, utf8),
     User = ?config(rmq_username, Config),
 
-    AddVhostArgs = [VHost, #{default_queue_type => rabbit_quorum_queue}, User],
+    AddVhostArgs = [VHost, #{default_queue_type => <<"quorum">>}, User],
     ok = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, add,
-                                            AddVhostArgs),
+                                      AddVhostArgs),
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node, VHost),
     {ok, Ch} = amqp_connection:open_channel(Conn),
@@ -739,7 +738,7 @@ vhost_with_default_queue_type_declares_quorum_queue(Config) ->
     ?assertEqual({'queue.declare_ok', QNameEx, 0, 0},
                  amqp_channel:call(Ch, #'queue.declare'{queue = QNameEx,
                                                         exclusive = true,
-                                                        durable = false,
+                                                        durable = true,
                                                         arguments = []})),
     assert_queue_type(Node, VHost, QNameEx, rabbit_classic_queue),
 
@@ -750,7 +749,17 @@ vhost_with_default_queue_type_declares_quorum_queue(Config) ->
                                                         exclusive = false,
                                                         durable = false,
                                                         arguments = []})),
-    assert_queue_type(Node, VHost, QNameEx, rabbit_classic_queue),
+    assert_queue_type(Node, VHost, QNameTr, rabbit_classic_queue),
+
+    %% auto-delete declares should also fall back to classic queues
+    QNameAd = iolist_to_binary([QName, <<"_delete">>]),
+    ?assertEqual({'queue.declare_ok', QNameAd, 0, 0},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = QNameAd,
+                                                        exclusive = false,
+                                                        auto_delete = true,
+                                                        durable = true,
+                                                        arguments = []})),
+    assert_queue_type(Node, VHost, QNameAd, rabbit_classic_queue),
     amqp_connection:close(Conn),
     ok.
 

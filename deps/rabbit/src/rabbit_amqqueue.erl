@@ -17,7 +17,7 @@
          not_found_or_absent/1, not_found_or_absent_dirty/1,
          with/2, with/3, with_or_die/2,
          assert_equivalence/5,
-         augment_declare_args/4,
+         augment_declare_args/5,
          check_exclusive_access/2, with_exclusive_access_or_die/3,
          stat/1, deliver/2,
          requeue/3, ack/3, reject/4]).
@@ -730,26 +730,36 @@ assert_equivalence(Q, DurableDeclare, AutoDeleteDeclare, Args1, Owner) ->
     ok = rabbit_misc:assert_field_equivalence(AutoDeleteQ, AutoDeleteDeclare, QName, auto_delete),
     ok = assert_args_equivalence(Q, Args1).
 
-augment_declare_args(VHost, Exclusive, Durable, Args0) ->
+-spec augment_declare_args(vhost:name(), boolean(),
+                           boolean(), boolean(),
+                           rabbit_framing:amqp_table()) ->
+    rabbit_framing:amqp_table().
+augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
     V = rabbit_vhost:lookup(VHost),
     HasQTypeArg = rabbit_misc:table_lookup(Args0, <<"x-queue-type">>) =/= undefined,
     case vhost:get_metadata(V) of
         #{default_queue_type := DefaultQueueType}
-          when not HasQTypeArg andalso
-               not Exclusive andalso
-               Durable ->
-            %% patch up declare arguments with x-queue-type if there
-            %% is a vhost default set the queue is druable and not exclusive
-            %% and there is no queue type argument
-            %% present
-            rabbit_misc:set_table_value(
-              Args0,
-              <<"x-queue-type">>,
-              longstr,
-              queue_type_declare_tag(DefaultQueueType));
+          when is_binary(DefaultQueueType) andalso
+               not HasQTypeArg ->
+            Type = rabbit_queue_type:discover(DefaultQueueType),
+            case rabbit_queue_type:is_compatible(Type, Durable,
+                                                 Exclusive, AutoDelete) of
+                true ->
+                    %% patch up declare arguments with x-queue-type if there
+                    %% is a vhost default set the queue is druable and not exclusive
+                    %% and there is no queue type argument
+                    %% present
+                    rabbit_misc:set_table_value(Args0,
+                                                <<"x-queue-type">>,
+                                                longstr,
+                                                DefaultQueueType);
+                false ->
+                    Args0
+            end;
         _ ->
             Args0
     end.
+
 -spec check_exclusive_access(amqqueue:amqqueue(), pid()) ->
           'ok' | rabbit_types:channel_exit().
 
@@ -2151,12 +2161,3 @@ get_bcc_queue(Q, BCCName) ->
     #resource{virtual_host = VHost} = amqqueue:get_name(Q),
     BCCQueueName = rabbit_misc:r(VHost, queue, BCCName),
     rabbit_amqqueue:lookup(BCCQueueName).
-
-
-queue_type_declare_tag(rabbit_quorum_queue) ->
-    <<"quorum">>;
-queue_type_declare_tag(rabbit_classic_queue) ->
-    <<"classic">>;
-queue_type_declare_tag(rabbit_stream_queue) ->
-    <<"stream">>.
-
