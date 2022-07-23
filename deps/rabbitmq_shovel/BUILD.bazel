@@ -40,11 +40,11 @@ BUILD_DEPS = [
 DEPS = [
     "//deps/amqp_client:erlang_app",
     "//deps/rabbit_common:erlang_app",
+    "//deps/rabbit:erlang_app",
 ]
 
 RUNTIME_DEPS = [
     "//deps/amqp10_client:erlang_app",
-    "//deps/rabbit:erlang_app",
 ]
 
 rabbitmq_app(

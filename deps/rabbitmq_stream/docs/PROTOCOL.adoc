@@ -206,19 +206,19 @@ used to make the difference between a request (0) and a response (1). Example fo
 |0x0017
 |No
 
-|<<route>> (experimental)
+|<<route>>
 |Client
 |0x0018
 |Yes
 
-|<<partitions>> (experimental)
+|<<partitions>>
 |Client
 |0x0019
 |Yes
 
-|<<consumerupdate>> (experimental)
+|<<consumerupdate>>
 |Server
-|0x0020
+|0x001a
 |Yes
 
 |===
@@ -593,8 +593,6 @@ Heartbeat => Key Version
 
 === Route
 
-_Experimental_
-
 ```
 RouteQuery => Key Version CorrelationId RoutingKey SuperStream
   Key => uint16 // 0x0018
@@ -613,8 +611,6 @@ RouteResponse => Key Version CorrelationId ResponseCode [Stream]
 
 === Partitions
 
-_Experimental_
-
 ```
 PartitionsQuery => Key Version CorrelationId SuperStream
   Key => uint16 // 0x0019
@@ -630,7 +626,7 @@ PartitionsResponse => Key Version CorrelationId ResponseCode [Stream]
   Stream => string
 ```
 
-=== Consumer Update (experimental)
+=== ConsumerUpdate
 
 ```
 ConsumerUpdateQuery => Key Version CorrelationId SubscriptionId Active
