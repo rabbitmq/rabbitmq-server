@@ -794,9 +794,13 @@ clustering_ok_with_new_ff_disabled(Config) ->
                         #{desc => "Time travel with RabbitMQ",
                           provided_by => rabbit,
                           stability => stable}},
+<<<<<<< HEAD
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
       rabbit_feature_flags, initialize_registry, [NewFeatureFlags]),
+=======
+    inject_ff_on_nodes(Config, [0], NewFeatureFlags),
+>>>>>>> c29dbc227a (feature_flags_SUITE: Adapt the argument to `rabbit_feature_flags:inject_test_feature_flags()`)
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
@@ -830,9 +834,13 @@ clustering_denied_with_new_ff_enabled(Config) ->
                         #{desc => "Time travel with RabbitMQ",
                           provided_by => rabbit,
                           stability => stable}},
+<<<<<<< HEAD
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
       rabbit_feature_flags, initialize_registry, [NewFeatureFlags]),
+=======
+    inject_ff_on_nodes(Config, [0], NewFeatureFlags),
+>>>>>>> c29dbc227a (feature_flags_SUITE: Adapt the argument to `rabbit_feature_flags:inject_test_feature_flags()`)
     enable_feature_flag_on(Config, 0, time_travel),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
@@ -1137,12 +1145,50 @@ declare_arbitrary_feature_flag(Config) ->
     FeatureFlags = #{ff_from_testsuite =>
                      #{desc => "My feature flag",
                        stability => stable}},
+<<<<<<< HEAD
     rabbit_ct_broker_helpers:rpc_all(
       Config,
       rabbit_feature_flags,
       inject_test_feature_flags,
       [feature_flags_to_app_attrs(FeatureFlags)]),
+=======
+    inject_ff_on_nodes(Config, FeatureFlags),
+>>>>>>> c29dbc227a (feature_flags_SUITE: Adapt the argument to `rabbit_feature_flags:inject_test_feature_flags()`)
     ok.
+
+inject_ff_on_nodes(Config, FeatureFlags) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    inject_ff_on_nodes(Config, Nodes, FeatureFlags).
+
+inject_ff_on_nodes(Config, Nodes, FeatureFlags)
+  when is_list(Nodes) andalso is_map(FeatureFlags) ->
+    UseFFv2_0 = rabbit_ct_broker_helpers:rpc(
+                Config, Nodes,
+                rabbit_feature_flags, is_supported_locally,
+                [feature_flags_v2]),
+    UseFFv2 = lists:zip(Nodes, UseFFv2_0),
+    lists:map(
+      fun
+          ({Node, true}) ->
+              rabbit_ct_broker_helpers:rpc(
+                Config, Node,
+                rabbit_feature_flags,
+                inject_test_feature_flags,
+                [FeatureFlags]);
+          ({Node, false}) ->
+              Attributes = feature_flags_to_app_attrs(FeatureFlags),
+              rabbit_ct_broker_helpers:rpc(
+                Config, Node,
+                rabbit_feature_flags,
+                inject_test_feature_flags,
+                [Attributes])
+      end, UseFFv2).
+
+%% Convert to the format expected on RabbitMQ up-to 3.10.x.
+feature_flags_to_app_attrs(FeatureFlags) when is_map(FeatureFlags) ->
+    [{?MODULE, % Application
+      ?MODULE, % Module
+      maps:to_list(FeatureFlags)}].
 
 block(Pairs)   -> [block(X, Y) || {X, Y} <- Pairs].
 unblock(Pairs) -> [allow(X, Y) || {X, Y} <- Pairs].
