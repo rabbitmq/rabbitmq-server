@@ -221,6 +221,11 @@ used to make the difference between a request (0) and a response (1). Example fo
 |0x001a
 |Yes
 
+|<<exchangecommandversions>>
+|Client
+|0x001b
+|Yes
+
 |===
 
 === DeclarePublisher
@@ -645,6 +650,30 @@ ConsumerUpdateResponse => Key Version CorrelationId ResponseCode OffsetSpecifica
     OffsetType => uint16 // 0 (none), 1 (first), 2 (last), 3 (next), 4 (offset), 5 (timestamp)
     Offset => uint64 (for offset) | int64 (for timestamp)
 ```
+
+=== Exchange Command Versions
+
+```
+CommandVersionsExchangeRequest => Key Version CorrelationId [Command]
+  Key => uint16 // 0x001b
+  Version => uint16
+  CorrelationId => uint32
+  Command => Key MinVersion MaxVersion
+  Key => uint16
+  MinVersion => uint16
+  MaxVersion => uint16
+
+CommandVersionsExchangeResponse => Key Version CorrelationId ResponseCode [Command]
+  Key => uint16 // 0x801b
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+  Command => Key MinVersion MaxVersion
+  Key => uint16
+  MinVersion => uint16
+  MaxVersion => uint16
+```
+
 
 == Authentication
 
