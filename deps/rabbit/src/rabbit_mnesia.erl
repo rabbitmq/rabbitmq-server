@@ -560,18 +560,33 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
             throw({error, cannot_create_standalone_ram_node});
         {[], false, disc} ->
             %% RAM -> disc, starting from scratch
-            ok = create_schema();
+            ok = create_schema(),
+            ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin),
+            ok;
         {[], true, disc} ->
             %% First disc node up
             maybe_force_load(),
+            ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin),
             ok;
         {[_ | _], _, _} ->
             %% Subsequent node in cluster, catch up
             maybe_force_load(),
+            %% We want to synchronize feature flags first before we wait for
+            %% tables (which is needed to ensure the local view of the tables
+            %% matches the rest of the cluster). The reason is that some
+            %% feature flags may add or remove tables. In this case the list
+            %% of tables returned by `rabbit_table:definitions()' usually
+            %% depends on the state of feature flags but this state is local.
+            %%
+            %% For instance, a feature flag may remove a table (so it's gone
+            %% from the cluster). If we were to wait for that table locally
+            %% before synchronizing feature flags, we would wait forever;
+            %% indeed the feature flag being disabled before sync,
+            %% `rabbit_table:definitions()' would return the old table.
+            ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin),
             ok = rabbit_table:wait_for_replicated(_Retry = true),
             ok = rabbit_table:ensure_local_copies(NodeType)
     end,
-    ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin),
     ensure_schema_integrity(),
     rabbit_node_monitor:update_cluster_status(),
     ok.
