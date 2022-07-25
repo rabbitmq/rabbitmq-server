@@ -2021,17 +2021,22 @@ verify_which_feature_flags_are_actually_enabled() ->
     %% function fails), we keep the current state of the feature flag.
     List1 = maps:fold(
               fun(Name, Props, Acc) ->
-                      Ret = run_migration_fun(Name, Props, is_enabled),
-                      case Ret of
+                      case uses_migration_fun_v2(Name) of
                           true ->
-                              [Name | Acc];
-                          false ->
                               Acc;
-                          _ ->
-                              MarkedAsEnabled = is_enabled(Name),
-                              case MarkedAsEnabled of
-                                  true  -> [Name | Acc];
-                                  false -> Acc
+                          false ->
+                              Ret = run_migration_fun(Name, Props, is_enabled),
+                              case Ret of
+                                  true ->
+                                      [Name | Acc];
+                                  false ->
+                                      Acc;
+                                  _ ->
+                                      MarkedAsEnabled = is_enabled(Name),
+                                      case MarkedAsEnabled of
+                                          true  -> [Name | Acc];
+                                          false -> Acc
+                                      end
                               end
                       end
               end,
