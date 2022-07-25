@@ -18,7 +18,7 @@ format(
                        rabbit_logger_fmt_helpers:format_level(Level, Config)),
     FormattedMeta = format_meta(Meta, Config),
     %% We need to call `unicode:characters_to_binary()' here and several other
-    %% places because `jsx:encode()' will format a string as a list of
+    %% places because the JSON encoding library will format a string as a list of
     %% integers (we don't blame it for that, it makes sense).
     FormattedMsg = unicode:characters_to_binary(
                      rabbit_logger_fmt_helpers:format_msg(Msg, Meta, Config)),
@@ -29,7 +29,7 @@ format(
                      Verbosity -> InitialDoc0#{verbosity => Verbosity}
                  end,
     DocAfterMapping = apply_mapping_and_ordering(InitialDoc, Config),
-    Json = jsx:encode(DocAfterMapping),
+    Json = rabbit_json:encode(DocAfterMapping),
     [Json, $\n].
 
 level_to_verbosity(Level, #{verbosity_map := Mapping}) ->
