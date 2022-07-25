@@ -408,7 +408,7 @@ end}.
 
 {translation, "rabbitmq_management.headers.frame_options",
 fun(Conf) ->
-    case cuttlefish:conf_get("management.headers.content_type_options", Conf, undefined) of
+    case cuttlefish:conf_get("management.headers.frame_options", Conf, undefined) of
         undefined -> cuttlefish:unset();
         Value     -> Value
     end
