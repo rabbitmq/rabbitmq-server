@@ -20,6 +20,7 @@ all() ->
     [
      {group, cluster_size_1},
      {group, cluster_size_2},
+     {group, cluster_size_3},
      {group, unclustered_cluster_size_2}
     ].
 
@@ -41,6 +42,9 @@ groups() ->
       ]},
      {unclustered_cluster_size_2, [],
       [{start_feature_flag_enabled, [], [join_cluster]}
+      ]},
+     {cluster_size_3, [],
+      [{start_feature_flag_disabled, [], [enable_feature_flag_during_binding_churn]}
       ]}
     ].
 
@@ -61,6 +65,8 @@ init_per_group(cluster_size_1, Config) ->
     rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 1});
 init_per_group(cluster_size_2, Config) ->
     rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 2});
+init_per_group(cluster_size_3, Config) ->
+    rabbit_ct_helpers:set_config(Config, {rmq_nodes_count, 3});
 init_per_group(unclustered_cluster_size_2, Config0) ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
@@ -319,20 +325,17 @@ enable_feature_flag(Config) ->
     publish(Ch, DirectX, RKey),
     assert_confirm(),
 
-    %% Before the feature flag is enabled, there should not be an index table.
-    Tids = rabbit_ct_broker_helpers:rpc_all(Config, ets, whereis, [?INDEX_TABLE_NAME]),
-    ?assert(lists:all(fun(Tid) -> Tid =:= undefined end, Tids)),
+    assert_no_index_table(Config),
 
     ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG),
 
     %% The feature flag migration should have created an index table with a ram copy on all nodes.
-    ?assertEqual(lists:sort(Nodes),
-                 lists:sort(rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, table_info, [?INDEX_TABLE_NAME, ram_copies]))),
+    ?assertEqual(lists:sort(Nodes), index_table_ram_copies(Config, 0)),
     %% The feature flag migration should have populated the index table with all bindings whose source exchange
     %% is a direct exchange.
     ?assertEqual([{rabbit_misc:r(<<"/">>, exchange, DirectX), RKey}],
                  rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, dirty_all_keys, [?INDEX_TABLE_NAME])),
-    ?assertEqual(2, rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, table_info, [?INDEX_TABLE_NAME, size])),
+    ?assertEqual(2, table_size(Config, ?INDEX_TABLE_NAME)),
 
     %% Publishing via "direct exchange routing v2" works.
     publish(Ch, DirectX, RKey),
@@ -342,17 +345,111 @@ enable_feature_flag(Config) ->
     delete_queue(Ch, Q2),
     ok.
 
+%% Test that enabling feature flag works when clients concurrently
+%% create and delete bindings and send messages.
+enable_feature_flag_during_binding_churn(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {_Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    {_Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
+
+    DirectX = <<"amq.direct">>,
+    FanoutX = <<"amq.fanout">>,
+    Q = <<"q">>,
+
+    NumMessages = 500,
+    BindingsDirectX = 1000,
+    BindingsFanoutX = 10,
+
+    %% setup
+    declare_queue(Ch1, Q, true),
+    lists:foreach(fun(N) ->
+                          bind_queue(Ch1, Q, DirectX, integer_to_binary(N))
+                  end, lists:seq(1, trunc(0.4 * BindingsDirectX))),
+    lists:foreach(fun(N) ->
+                          bind_queue(Ch1, Q, FanoutX, integer_to_binary(N))
+                  end, lists:seq(1, BindingsFanoutX)),
+    lists:foreach(fun(N) ->
+                          bind_queue(Ch1, Q, DirectX, integer_to_binary(N))
+                  end, lists:seq(trunc(0.4 * BindingsDirectX) + 1, trunc(0.8 * BindingsDirectX))),
+
+    assert_no_index_table(Config),
+
+    {_, Ref1} = spawn_monitor(
+                  fun() ->
+                          ct:pal("sending ~b messages...", [NumMessages]),
+                          lists:foreach(
+                            fun(_) ->
+                                    publish(Ch1, DirectX, integer_to_binary(trunc(0.8 * BindingsDirectX))),
+                                    timer:sleep(1)
+                            end, lists:seq(1, NumMessages)),
+                          ct:pal("sent ~b messages", [NumMessages])
+                  end),
+    {_, Ref2} = spawn_monitor(
+                  fun() ->
+                          ct:pal("creating bindings..."),
+                          lists:foreach(
+                            fun(N) ->
+                                    bind_queue(Ch1, Q, DirectX, integer_to_binary(N)),
+                                    timer:sleep(1)
+                            end, lists:seq(trunc(0.8 * BindingsDirectX) + 1, BindingsDirectX)),
+                          ct:pal("created bindings")
+                  end),
+    {_, Ref3} = spawn_monitor(
+                  fun() ->
+                          ct:pal("deleting bindings..."),
+                          lists:foreach(
+                            fun(N) ->
+                                    unbind_queue(Ch2, Q, DirectX, integer_to_binary(N)),
+                                    timer:sleep(1)
+                            end, lists:seq(1, trunc(0.2 * BindingsDirectX))),
+                          ct:pal("deleted bindings")
+                  end),
+
+    timer:sleep(50),
+    ct:pal("enabling feature flag..."),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG),
+    ct:pal("enabled feature flag"),
+
+    lists:foreach(
+      fun(Ref) ->
+              receive {'DOWN', Ref, process, _Pid, normal} ->
+                          ok
+              after 300_000 ->
+                        ct:fail(timeout)
+              end
+      end, [Ref1, Ref2, Ref3]),
+
+    NumMessagesBin = integer_to_binary(NumMessages),
+    quorum_queue_utils:wait_for_messages(Config, [[Q, NumMessagesBin, NumMessagesBin, <<"0">>]]),
+
+    ?assertEqual(lists:sort(Nodes), index_table_ram_copies(Config, 0)),
+
+    ExpectedKeys = lists:map(
+                     fun(N) ->
+                             {rabbit_misc:r(<<"/">>, exchange, DirectX), integer_to_binary(N)}
+                     end, lists:seq(trunc(0.2 * BindingsDirectX) + 1, BindingsDirectX)),
+    ActualKeys = rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, dirty_all_keys, [?INDEX_TABLE_NAME]),
+    ?assertEqual(lists:sort(ExpectedKeys), lists:sort(ActualKeys)),
+
+    %% cleanup
+    lists:foreach(fun(N) ->
+                          unbind_queue(Ch1, Q, DirectX, integer_to_binary(N))
+                  end, lists:seq(trunc(0.2 * BindingsDirectX) + 1, BindingsDirectX)),
+    lists:foreach(fun(N) ->
+                          unbind_queue(Ch1, Q, FanoutX, integer_to_binary(N))
+                  end, lists:seq(1, BindingsFanoutX)),
+    delete_queue(Ch1, Q),
+    ok.
+
 reset(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
-    ?assertEqual([Server], rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, table_info,
-                                                        [?INDEX_TABLE_NAME, ram_copies])),
+    ?assertEqual([Server], index_table_ram_copies(Config, 0)),
     ok = rabbit_control_helper:command(stop_app, Server),
     ok = rabbit_control_helper:command(reset, Server),
     ok = rabbit_control_helper:command(start_app, Server),
     %% After reset, upon node boot, we expect that the table gets re-created.
-    ?assertEqual([Server], rabbit_ct_broker_helpers:rpc(Config, 0, mnesia, table_info,
-                                                        [?INDEX_TABLE_NAME, ram_copies])).
+    ?assertEqual([Server], index_table_ram_copies(Config, 0)).
 
 join_cluster(Config) ->
     Servers0 = [Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -368,14 +465,10 @@ join_cluster(Config) ->
 
     %% Server1 and Server2 are not clustered yet.
     %% Hence, every node has their own table (copy) and only Server1's table contains the binding.
-    ?assertEqual([Server1], rabbit_ct_broker_helpers:rpc(Config, Server1, mnesia, table_info,
-                                                         [?INDEX_TABLE_NAME, ram_copies])),
-    ?assertEqual([Server2], rabbit_ct_broker_helpers:rpc(Config, Server2, mnesia, table_info,
-                                                         [?INDEX_TABLE_NAME, ram_copies])),
-    ?assertEqual(1, rabbit_ct_broker_helpers:rpc(Config, Server1, mnesia, table_info,
-                                                 [?INDEX_TABLE_NAME, size])),
-    ?assertEqual(0, rabbit_ct_broker_helpers:rpc(Config, Server2, mnesia, table_info,
-                                                 [?INDEX_TABLE_NAME, size])),
+    ?assertEqual([Server1], index_table_ram_copies(Config, Server1)),
+    ?assertEqual([Server2], index_table_ram_copies(Config, Server2)),
+    ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME, Server1)),
+    ?assertEqual(0, table_size(Config, ?INDEX_TABLE_NAME, Server2)),
 
     ok = rabbit_control_helper:command(stop_app, Server2),
     %% For the purpose of this test it shouldn't matter whether Server2 is reset. Both should work.
@@ -389,10 +482,8 @@ join_cluster(Config) ->
     ok = rabbit_control_helper:command(start_app, Server2),
 
     %% After Server2 joined Server1, the table should be clustered.
-    ?assertEqual(Servers, lists:sort(rabbit_ct_broker_helpers:rpc(Config, Server2, mnesia, table_info,
-                                                                  [?INDEX_TABLE_NAME, ram_copies]))),
-    ?assertEqual(1, rabbit_ct_broker_helpers:rpc(Config, Server2, mnesia, table_info,
-                                                 [?INDEX_TABLE_NAME, size])),
+    ?assertEqual(Servers, index_table_ram_copies(Config, Server2)),
+    ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME, Server2)),
 
     %% Publishing via Server1 via "direct exchange routing v2" should work.
     amqp_channel:call(Ch1, #'confirm.select'{}),
@@ -466,5 +557,17 @@ assert_index_table_empty(Config) ->
 assert_index_table_non_empty(Config) ->
     ?assertNotEqual(0, table_size(Config, ?INDEX_TABLE_NAME)).
 
+assert_no_index_table(Config) ->
+    Tids = rabbit_ct_broker_helpers:rpc_all(Config, ets, whereis, [?INDEX_TABLE_NAME]),
+    ?assert(lists:all(fun(Tid) -> Tid =:= undefined end, Tids)).
+
+index_table_ram_copies(Config, Node) ->
+    RamCopies = rabbit_ct_broker_helpers:rpc(Config, Node, mnesia, table_info,
+                                             [?INDEX_TABLE_NAME, ram_copies]),
+    lists:sort(RamCopies).
+
 table_size(Config, Table) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [Table, size], 5000).
+    table_size(Config, Table, 0).
+
+table_size(Config, Table, Server) ->
+    rabbit_ct_broker_helpers:rpc(Config, Server, mnesia, table_info, [Table, size], 5000).
