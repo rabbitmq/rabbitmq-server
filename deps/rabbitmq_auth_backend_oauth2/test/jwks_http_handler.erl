@@ -5,7 +5,7 @@
 
 init(Req, State) ->
     {ok, Keys} = application:get_env(jwks_http, keys),
-    Body = jsx:encode(#{keys => Keys}),
+    Body = rabbit_json:encode(#{keys => Keys}),
     Headers = #{<<"content-type">> => <<"application/json">>},
     Req2 = cowboy_req:reply(200, Headers, Body, Req),
     {ok, Req2, State}.
