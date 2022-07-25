@@ -392,12 +392,19 @@ definitions() ->
         ++ gm:table_definitions()
         ++ mirrored_supervisor:table_definitions(),
 
-    case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2) of
-        true ->
-            Definitions ++ [{rabbit_index_route, rabbit_index_route_definition()}];
-        false ->
-            Definitions
-    end.
+    MaybeRouting = case rabbit_feature_flags:is_enabled(direct_exchange_routing_v2) of
+                       true ->
+                           [{rabbit_index_route, rabbit_index_route_definition()}];
+                       false ->
+                           []
+                   end,
+    MaybeListener = case rabbit_feature_flags:is_enabled(listener_records_in_ets) of
+                        false ->
+                            [{rabbit_listener, rabbit_listener_definition()}];
+                        true ->
+                            []
+                    end,
+    Definitions ++ MaybeRouting ++ MaybeListener.
 
 -spec rabbit_index_route_definition() -> list(tuple()).
 rabbit_index_route_definition() ->
@@ -408,6 +415,12 @@ rabbit_index_route_definition() ->
      {match, #index_route{source_key = {exchange_name_match(), '_'},
                           destination = binding_destination_match(),
                           _='_'}}].
+
+rabbit_listener_definition() ->
+    [{record_name, listener},
+     {attributes, record_info(fields, listener)},
+     {type, bag},
+     {match, #listener{_='_'}}].
 
 binding_match() ->
     #binding{source = exchange_name_match(),
