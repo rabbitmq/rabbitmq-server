@@ -73,6 +73,10 @@
     {publish_confirm, publisher_id(), [publishing_id()]} |
     {publish_error, publisher_id(), error_code(), [publishing_id()]} |
     {deliver, subscription_id(), Chunk :: binary()} |
+    {deliver_v2,
+     subscription_id(),
+     LastCommittedOffset :: osiris:offset(),
+     Chunk :: binary()} |
     {credit, subscription_id(), Credit :: non_neg_integer()} |
     {metadata_update, stream_name(), response_code()} |
     {store_offset, offset_ref(), stream_name(), osiris:offset()} |
@@ -238,6 +242,13 @@ frame({deliver, SubscriptionId, Chunk}) ->
                      ?COMMAND_DELIVER:15,
                      ?VERSION_1:16,
                      SubscriptionId:8>>,
+                   Chunk]);
+frame({deliver_v2, SubscriptionId, LastCommittedOffset, Chunk}) ->
+    wrap_in_frame([<<?REQUEST:1,
+                     ?COMMAND_DELIVER:15,
+                     ?VERSION_2:16,
+                     SubscriptionId:8,
+                     LastCommittedOffset:64>>,
                    Chunk]);
 frame({metadata_update, Stream, ResponseCode}) ->
     StreamSize = byte_size(Stream),
@@ -607,6 +618,13 @@ parse_request(<<?REQUEST:1,
                 SubscriptionId:8,
                 Chunk/binary>>) ->
     {deliver, SubscriptionId, Chunk};
+parse_request(<<?REQUEST:1,
+                ?COMMAND_DELIVER:15,
+                ?VERSION_2:16,
+                SubscriptionId:8,
+                LastCommittedOffset:64,
+                Chunk/binary>>) ->
+    {deliver_v2, SubscriptionId, LastCommittedOffset, Chunk};
 parse_request(<<?REQUEST:1,
                 ?COMMAND_CREDIT:15,
                 ?VERSION_1:16,
@@ -1021,6 +1039,8 @@ command_id(delete_publisher) ->
 command_id(subscribe) ->
     ?COMMAND_SUBSCRIBE;
 command_id(deliver) ->
+    ?COMMAND_DELIVER;
+command_id(deliver_v2) ->
     ?COMMAND_DELIVER;
 command_id(credit) ->
     ?COMMAND_CREDIT;

@@ -30,6 +30,7 @@
 -define(RESPONSE, 1).
 
 -define(VERSION_1, 1).
+-define(VERSION_2, 2).
 
 -define(RESPONSE_CODE_OK, 1).
 -define(RESPONSE_CODE_STREAM_DOES_NOT_EXIST, 2).

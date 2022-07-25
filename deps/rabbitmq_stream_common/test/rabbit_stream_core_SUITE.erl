@@ -57,6 +57,7 @@ roundtrip(_Config) ->
                     ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST,
                     [2, 3, 4]}),
     test_roundtrip({deliver, 53, <<"chunk">>}),
+    test_roundtrip({deliver_v2, 53, 10, <<"chunk">>}),
     test_roundtrip({credit, 53, 12}),
     test_roundtrip({metadata_update, <<"stream1">>,
                     ?RESPONSE_VHOST_ACCESS_FAILURE}),

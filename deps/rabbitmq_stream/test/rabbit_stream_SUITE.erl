@@ -436,9 +436,17 @@ test_server(Transport, Config) ->
     ?awaitMatch(#{consumers := 1}, get_global_counters(Config), ?WAIT),
     C8 = test_deliver(Transport, S, SubscriptionId, 0, Body, C7),
     C9 = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
-    C10 = test_delete_stream(Transport, S, Stream, C9),
-    C11 = test_exchange_command_versions(Transport, S, C10),
-    _C12 = test_close(Transport, S, C11),
+
+    %% exchange capabilities, which says we support deliver v2
+    %% the connection should adapt its deliver frame accordingly
+    C10 = test_exchange_command_versions(Transport, S, C9),
+    SubscriptionId2 = 43,
+    C11 = test_subscribe(Transport, S, SubscriptionId2, Stream, C10),
+    C12 = test_deliver_v2(Transport, S, SubscriptionId2, 0, Body, C11),
+    C13 = test_deliver_v2(Transport, S, SubscriptionId2, 1, Body, C12),
+
+    C14 = test_delete_stream(Transport, S, Stream, C13),
+    _C15 = test_close(Transport, S, C14),
     closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
@@ -582,15 +590,38 @@ test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
         Chunk,
     C.
 
+test_deliver_v2(Transport, S, SubscriptionId, COffset, Body, C0) ->
+    ct:pal("test_deliver ", []),
+    {{deliver_v2, SubscriptionId, _LastCommittedOffset, Chunk}, C} =
+        receive_commands(Transport, S, C0),
+    <<5:4/unsigned,
+      0:4/unsigned,
+      0:8,
+      1:16,
+      1:32,
+      _Timestamp:64,
+      _Epoch:64,
+      COffset:64,
+      _Crc:32,
+      _DataLength:32,
+      _TrailerLength:32,
+      _ReservedBytes:32,
+      0:1,
+      BodySize:31/unsigned,
+      Body:BodySize/binary>> =
+        Chunk,
+    C.
+
 test_exchange_command_versions(Transport, S, C0) ->
     ExCmd =
         {request, 1,
-         {exchange_command_versions, [{deliver, ?VERSION_1, ?VERSION_1}]}},
+         {exchange_command_versions, [{deliver, ?VERSION_1, ?VERSION_2}]}},
     ExFrame = rabbit_stream_core:frame(ExCmd),
     ok = Transport:send(S, ExFrame),
     {Cmd, C} = receive_commands(Transport, S, C0),
     ?assertMatch({response, 1,
-                  {exchange_command_versions, ?RESPONSE_CODE_OK, [{declare_publisher, _, _} | _]}},
+                  {exchange_command_versions, ?RESPONSE_CODE_OK,
+                   [{declare_publisher, _, _} | _]}},
                  Cmd),
     C.
 
