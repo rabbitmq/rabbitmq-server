@@ -10,7 +10,7 @@ APP_MODULE = "rabbit_prelaunch_app"
 
 RUNTIME_DEPS = [
     "@cuttlefish//:erlang_app",
-    "@jsx//:erlang_app",
+    "@thoas//:erlang_app",
 ]
 
 DEPS = [
