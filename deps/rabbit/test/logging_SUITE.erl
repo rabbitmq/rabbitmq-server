@@ -389,7 +389,7 @@ setting_log_levels_in_config_works(Config) ->
 setting_log_rotation_in_config_works(Config) ->
     Context = default_context(Config),
     ok = application:set_env(
-           rabbit, log, 
+           rabbit, log,
            [{file, [{date, "$D0"},
                     {compress, true},
                     {size, 100},
@@ -438,7 +438,7 @@ setting_log_rotation_in_config_works(Config) ->
 setting_log_rotation_defaults_in_config_works(Config) ->
     Context = default_context(Config),
     ok = application:set_env(
-           rabbit, log, 
+           rabbit, log,
            [{file, []},
             {categories, [{queue, [{file, "queue.log"}]},
                           {default, [{rotate_on_date, "$D0"},
@@ -1383,7 +1383,7 @@ log_and_return_json_object(Context, Metadata, DecodeOpts) ->
                         Content,
                         "^.+\"" ++ RandomMsg ++ "\".+$",
                         ReOpts),
-    Term = jsx:decode(Line, [{labels, attempt_atom} | DecodeOpts]),
+    Term = rabbit_json:decode(Line, [{labels, attempt_atom} | DecodeOpts]),
 
     {RandomMsg, Term}.
 
