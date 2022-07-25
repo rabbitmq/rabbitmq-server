@@ -135,9 +135,9 @@ erlang_app(
     )
 
     hex_pm_erlang_app(
-        name = "jsx",
-        version = "3.1.0",
-        sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
+        name = "thoas",
+        version = "0.2.0",
+        sha256 = "630aaee57fb3fde201578e787259e15e788a27733d49de8dcce1354db1885b8d",
     )
 
     github_erlang_app(

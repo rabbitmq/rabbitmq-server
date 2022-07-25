@@ -1387,7 +1387,9 @@ log_and_return_json_object(Context, Metadata, DecodeOpts) ->
                         Content,
                         "^.+\"" ++ RandomMsg ++ "\".+$",
                         ReOpts),
-    Term = rabbit_json:decode(Line, [{labels, attempt_atom} | DecodeOpts]),
+
+    Term0 = rabbit_json:decode(Line, DecodeOpts),
+    Term = rabbit_data_coercion:atomize_keys(Term0),
 
     {RandomMsg, Term}.
 

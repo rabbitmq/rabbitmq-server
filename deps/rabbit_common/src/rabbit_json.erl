@@ -13,24 +13,24 @@
 -define(DEFAULT_DECODE_OPTIONS, [return_maps]).
 
 
--spec decode(jsx:json_text()) -> jsx:json_term().
+-spec decode(iodata()) -> thoas:json_term().
 decode(JSON) ->
     decode(JSON, ?DEFAULT_DECODE_OPTIONS).
 
 
--spec decode(jsx:json_text(), jsx_to_term:config()) -> jsx:json_term().
+-spec decode(iodata(), thoas:decode_options()) -> thoas:json_term().
 decode(JSON, Opts) ->
-    jsx:decode(JSON, Opts).
+    thoas:decode(JSON, Opts).
 
 
--spec try_decode(jsx:json_text()) -> {ok, jsx:json_term()} |
+-spec try_decode(iodata()) -> {ok, thoas:json_term()} |
 				     {error, Reason :: term()}.
 try_decode(JSON) ->
     try_decode(JSON, ?DEFAULT_DECODE_OPTIONS).
 
 
--spec try_decode(jsx:json_text(), jsx_to_term:config()) -> 
-			{ok, jsx:json_term()} | {error, Reason :: term()}.
+-spec try_decode(iodata(), thoas:decode_options()) ->
+			{ok, thoas:json_term()} | {error, Reason :: term()}.
 try_decode(JSON, Opts) ->
     try
         {ok, decode(JSON, Opts)}
@@ -38,21 +38,21 @@ try_decode(JSON, Opts) ->
         {error, Reason}
     end.
 
--spec encode(jsx:json_term()) -> jsx:json_text().
+-spec encode(thoas:json_term()) -> iodata().
 encode(Term) ->
     encode(Term, []).
 
--spec encode(jsx:json_term(), jsx_to_json:config()) -> jsx:json_text().
+-spec encode(thoas:json_term(), thoas:encode_options()) -> iodata().
 encode(Term, Opts) ->
-    jsx:encode(fixup_terms(Term), Opts).
+    thoas:encode(fixup_terms(Term), Opts).
 
--spec try_encode(jsx:json_term()) -> {ok, jsx:json_text()} | 
+-spec try_encode(thoas:json_term()) -> {ok, iodata()} |
 				     {error, Reason :: term()}.
 try_encode(Term) ->
     try_encode(Term, []).
 
--spec try_encode(jsx:json_term(), jsx_to_term:config()) ->
-			{ok, jsx:json_text()} | {error, Reason :: term()}.
+-spec try_encode(thoas:json_term(), thoas:decode_options()) ->
+			{ok, iodata()} | {error, Reason :: term()}.
 try_encode(Term, Opts) ->
     try
         {ok, encode(Term, Opts)}
