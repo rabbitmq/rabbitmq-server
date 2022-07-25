@@ -404,6 +404,99 @@
   ], [rabbitmq_management]
  },
 
+ %%
+ %% X-Content-Type-Options
+ %%
+
+ {headers_content_type_options_case1,
+  "management.headers.content_type_options = nosniff",
+  [
+   {rabbitmq_management, [
+                          {headers, [
+                            {content_type_options, "nosniff"}
+                          ]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {csp_and_hsts_and_content_type_options_combined,
+  "management.csp.policy = default-src 'self' *.mailsite.com; img-src *
+   management.hsts.policy = max-age=31536000; includeSubDomains
+   management.headers.content_type_options = nosniff",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src 'self' *.mailsite.com; img-src *"},
+                          {strict_transport_security, "max-age=31536000; includeSubDomains"},
+
+                          {headers, [
+                            {content_type_options, "nosniff"}
+                          ]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ %%
+ %% X-XSS-Protection
+ %%
+
+ {headers_xss_protection_case1,
+  "management.headers.xss_protection = 1; mode=block",
+  [
+   {rabbitmq_management, [
+                          {headers, [
+                            {xss_protection, "1; mode=block"}
+                          ]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {csp_and_hsts_and_xss_protection_combined,
+  "management.csp.policy = default-src 'self' *.mailsite.com; img-src *
+   management.hsts.policy = max-age=31536000; includeSubDomains
+   management.headers.xss_protection = 1; mode=block",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src 'self' *.mailsite.com; img-src *"},
+                          {strict_transport_security, "max-age=31536000; includeSubDomains"},
+
+                          {headers, [
+                            {xss_protection, "1; mode=block"}
+                          ]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ %%
+ %% X-Frame-Options
+ %%
+
+ {headers_frame_options_case1,
+  "management.headers.frame_options = DENY",
+  [
+   {rabbitmq_management, [
+                          {headers, [
+                            {frame_options, "DENY"}
+                          ]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
+ {csp_and_hsts_and_frame_options_combined,
+  "management.csp.policy = default-src 'self' *.mailsite.com; img-src *
+   management.hsts.policy = max-age=31536000; includeSubDomains
+   management.headers.frame_options = DENY",
+  [
+   {rabbitmq_management, [
+                          {content_security_policy, "default-src 'self' *.mailsite.com; img-src *"},
+                          {strict_transport_security, "max-age=31536000; includeSubDomains"},
+
+                          {headers, [
+                            {frame_options, "DENY"}
+                          ]}
+                         ]}
+  ], [rabbitmq_management]
+ },
+
 
  %%
  %% Legacy listener configuration
