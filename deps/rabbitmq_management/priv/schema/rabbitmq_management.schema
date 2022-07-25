@@ -307,7 +307,7 @@ end}.
 
 
 %%
-%% CORS
+%% CORS (https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
 %%
 
 {mapping, "management.cors.allow_origins", "rabbitmq_management.cors_allow_origins", [
@@ -370,6 +370,50 @@ fun(Conf) ->
         Value     -> Value
     end
 end}.
+
+%% X-Content-Type-Options (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options)
+
+{mapping, "management.headers.content_type_options", "rabbitmq_management.headers.content_type_options", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_management.headers.content_type_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.headers.content_type_options", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+%% X-XSS-Protection (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-XSS-Protection)
+
+{mapping, "management.headers.xss_protection", "rabbitmq_management.headers.xss_protection", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_management.headers.xss_protection",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.headers.xss_protection", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%% X-Frame-Options (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options)
+
+{mapping, "management.headers.frame_options", "rabbitmq_management.headers.frame_options", [
+    {datatype, string}
+]}.
+
+{translation, "rabbitmq_management.headers.frame_options",
+fun(Conf) ->
+    case cuttlefish:conf_get("management.headers.frame_options", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
 
 %% OAuth 2/SSO access only
 
