@@ -440,11 +440,11 @@
  %%
 
  {headers_xss_protection_case1,
-  "management.headers.xss_protection = DENY",
+  "management.headers.xss_protection = 1; mode=block",
   [
    {rabbitmq_management, [
                           {headers, [
-                            {xss_protection, "DENY"}
+                            {xss_protection, "1; mode=block"}
                           ]}
                          ]}
   ], [rabbitmq_management]
@@ -453,14 +453,14 @@
  {csp_and_hsts_and_content_type_options_combined,
   "management.csp.policy = default-src 'self' *.mailsite.com; img-src *
    management.hsts.policy = max-age=31536000; includeSubDomains
-   management.headers.xss_protection = DENY",
+   management.headers.xss_protection = 1; mode=block",
   [
    {rabbitmq_management, [
                           {content_security_policy, "default-src 'self' *.mailsite.com; img-src *"},
                           {strict_transport_security, "max-age=31536000; includeSubDomains"},
 
                           {headers, [
-                            {xss_protection, "DENY"}
+                            {xss_protection, "1; mode=block"}
                           ]}
                          ]}
   ], [rabbitmq_management]
