@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
       ["<vhost>", "Virtual host name"],
       ["--description <description>", "Virtual host description"],
       ["--tags <tags>", "Command separated list of tags"],
-      ["--default-queue-type <quorum|classic|stream>", "Queue type name"]
+      ["--default-queue-type <quorum|classic|stream>", "Queue type to use if no type is explicitly provided by the client"]
     ]
   end
 
