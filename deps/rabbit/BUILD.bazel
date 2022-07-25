@@ -1053,6 +1053,9 @@ suites = [
         PACKAGE,
         name = "direct_exchange_routing_v2_SUITE",
         size = "medium",
+        additional_beam = [
+            ":quorum_queue_utils",
+        ],
     ),
 ]
 
