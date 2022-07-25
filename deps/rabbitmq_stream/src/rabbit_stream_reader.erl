@@ -2035,7 +2035,7 @@ handle_frame_post_auth(Transport,
             of
                 {error, closed} ->
                     rabbit_log_connection:info("Stream protocol connection has been closed by "
-                                               "peer",
+                                               ++ "peer",
                                                []),
                     throw({stop, normal});
                 {ok, Consumer1} ->
@@ -2616,6 +2616,21 @@ handle_frame_post_auth(Transport,
             {Connection, State}
     end;
 handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S} = Connection0,
+                       State,
+                       {request, CorrelationId,
+                        {exchange_command_versions, CommandVersions}}) ->
+    Frame =
+        rabbit_stream_core:frame({response, CorrelationId,
+                                  {exchange_command_versions, ?RESPONSE_CODE_OK,
+                                   rabbit_stream_utils:command_versions()}}),
+    send(Transport, S, Frame),
+
+    %% adapt connection handlers to client capabilities
+    Connection1 =
+        process_client_command_versions(Connection0, CommandVersions),
+    {Connection1, State};
+handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
                        State,
                        {request, CorrelationId,
@@ -2647,6 +2662,9 @@ handle_frame_post_auth(Transport,
     rabbit_global_counters:increase_protocol_counter(stream,
                                                      ?UNKNOWN_FRAME, 1),
     {Connection#stream_connection{connection_step = close_sent}, State}.
+
+process_client_command_versions(C, _CommandVersions) ->
+    C.
 
 init_reader(ConnectionTransport,
             LocalMemberPid,

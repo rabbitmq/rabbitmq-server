@@ -437,7 +437,8 @@ test_server(Transport, Config) ->
     C8 = test_deliver(Transport, S, SubscriptionId, 0, Body, C7),
     C9 = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
     C10 = test_delete_stream(Transport, S, Stream, C9),
-    _C11 = test_close(Transport, S, C10),
+    C11 = test_exchange_command_versions(Transport, S, C10),
+    _C12 = test_close(Transport, S, C11),
     closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
@@ -579,6 +580,18 @@ test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
       BodySize:31/unsigned,
       Body:BodySize/binary>> =
         Chunk,
+    C.
+
+test_exchange_command_versions(Transport, S, C0) ->
+    ExCmd =
+        {request, 1,
+         {exchange_command_versions, [{deliver, ?VERSION_1, ?VERSION_1}]}},
+    ExFrame = rabbit_stream_core:frame(ExCmd),
+    ok = Transport:send(S, ExFrame),
+    {Cmd, C} = receive_commands(Transport, S, C0),
+    ?assertMatch({response, 1,
+                  {exchange_command_versions, ?RESPONSE_CODE_OK, [{declare_publisher, _, _} | _]}},
+                 Cmd),
     C.
 
 test_close(Transport, S, C0) ->
