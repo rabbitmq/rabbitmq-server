@@ -353,11 +353,13 @@ the `vrn` pattern part is ignored.
 
 The supported location's attributed are:
 
-- `cluster` This is the only mandatory key. It is a regular expression which must match RabbitMQ's `resource_server_id` otherwise the location is ignored.
-- `vhost` This is the virtual host we are granting access to. It also a regular expression. RabbitMQ defaults to `*`.
+- `cluster` This is the only mandatory key. It is a wildcard pattern which must match RabbitMQ's `resource_server_id` otherwise the location is ignored.
+- `vhost` This is the virtual host we are granting access to. It also a wildcard pattern. RabbitMQ defaults to `*`.
 - `queue`|`exchange` This is the queue or exchange we are granting access to. A location can only specify one or the
 other but not both. However, RabbitMQ under the covers translates these permissions to scopes which means RabbitMQ does not differentiate between queues and exchanges, they are just resources. RabbitMQ defaults to `*`.
 - `routing-key` this is the routing key we are granted access to. RabbitMQ defaults to `*`.
+
+For more information about wildcard patterns, check the section [Scope-to-Permission Translation](#scope-to-permission-translation).
 
 #### Actions field  
 
