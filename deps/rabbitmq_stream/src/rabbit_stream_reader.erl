@@ -3161,7 +3161,7 @@ send_file_callback(?VERSION_1,
                                                          counters = Counters}},
                    Counter) ->
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
-        Size, _LastCommittedOffset) ->
+        Size, _CommittedOffset) ->
        FrameSize = 2 + 2 + 1 + Size,
        FrameBeginning =
            <<FrameSize:32,
@@ -3183,15 +3183,20 @@ send_file_callback(?VERSION_2,
                                                          counters = Counters}},
                    Counter) ->
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
-        Size, LastCommittedOffset) ->
+        Size, CommittedOffset0) ->
        FrameSize = 2 + 2 + 1 + 8 + Size,
+       CommittedOffset1 =
+           case CommittedOffset0 of
+               undefined -> 0;
+               _ -> CommittedOffset0
+           end,
        FrameBeginning =
            <<FrameSize:32,
              ?REQUEST:1,
              ?COMMAND_DELIVER:15,
              ?VERSION_2:16,
              SubscriptionId:8/unsigned,
-             LastCommittedOffset:64>>,
+             CommittedOffset1:64>>,
        Transport:send(S, FrameBeginning),
        atomics:add(Counter, 1, Size),
        increase_messages_consumed(Counters, NumEntries),

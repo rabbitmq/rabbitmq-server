@@ -592,7 +592,7 @@ test_deliver(Transport, S, SubscriptionId, COffset, Body, C0) ->
 
 test_deliver_v2(Transport, S, SubscriptionId, COffset, Body, C0) ->
     ct:pal("test_deliver ", []),
-    {{deliver_v2, SubscriptionId, _LastCommittedOffset, Chunk}, C} =
+    {{deliver_v2, SubscriptionId, _CommittedOffset, Chunk}, C} =
         receive_commands(Transport, S, C0),
     <<5:4/unsigned,
       0:4/unsigned,
