@@ -36,7 +36,7 @@ To use this plugin
 1. UAA should be configured to produce encrypted JWT tokens containing a set of RabbitMQ permission scopes
 2. All RabbitMQ nodes must be [configured to use the `rabbit_auth_backend_oauth2` backend](https://www.rabbitmq.com/access-control.html)
 3. All RabbitMQ nodes must be configure with a resource service ID (`resource_server_id`) that matches the scope prefix (e.g. `rabbitmq` in `rabbitmq.read:*/*`).
-4. The token **must** has a value in`aud` that match `resource_server_id` value. 
+4. The token **must** has a value in`aud` that match `resource_server_id` value.
 
 ### Authorization Flow
 
@@ -142,6 +142,7 @@ NOTE: `jwks_url` takes precedence over `signing_keys` if both are provided.
 | Key                                      | Documentation     
 |------------------------------------------|-----------
 | `auth_oauth2.resource_server_id`         | [The Resource Server ID](#resource-server-id-and-scope-prefixes)
+| `auth_oauth2.resource_server_type`       | [The Resource Server Type](#rich-authorization-request)
 | `auth_oauth2.additional_scopes_key`      | Configure the plugin to also look in other fields (maps to `additional_rabbitmq_scopes` in the old format).
 | `auth_oauth2.default_key`                | ID of the default signing key.
 | `auth_oauth2.signing_keys`               | Paths to signing key files.
@@ -152,6 +153,7 @@ NOTE: `jwks_url` takes precedence over `signing_keys` if both are provided.
 | `auth_oauth2.https.fail_if_no_peer_cert` | Used together with `auth_oauth2.https.peer_verification = verify_peer`. When set to `true`, TLS connection will be rejected if client fails to provide a certificate. Default is `false`.
 | `auth_oauth2.https.hostname_verification`| Enable wildcard-aware hostname verification for key server. Available values: `wildcard`, `none`. Default is `none`.
 | `auth_oauth2.algorithms`                 | Restrict [the usable algorithms](https://github.com/potatosalad/erlang-jose#algorithm-support).
+| `auth_oauth2.verify_aud`                 | [Verify token's `aud`](#token-validation).
 
 For example:
 
@@ -184,6 +186,25 @@ client has been granted. The scopes are free form strings.
 
 `resource_server_id` is a prefix used for scopes in UAA to avoid scope collisions (or unintended overlap).
 It is an empty string by default.
+
+### Token validation
+
+When RabbitMQ receives a JWT token, it validates it before accepting it.
+
+#### Must be digitally signed
+
+The token must carry a digital signature and optionally a `kid` header attribute which identifies the key RabbitMQ should
+use to validate the signature.
+
+#### Must not be expired
+
+RabbitMQ uses this field `exp` ([exp](https://tools.ietf.org/html/rfc7519#page-9)) to validate the token if present.
+It contains the expiration time after which the JWT MUST NOT be accepted for processing.
+
+#### Audience must have/match the resource_server_id
+
+The `aud` ([Audience](https://tools.ietf.org/html/rfc7519#page-9)) identifies the recipients and/or resource_server of the JWT. By default, **RabbitMQ uses this field to validate the token** although we can disable it by setting `verify_aud` to `false`.  When it set to `true`, this attribute must either match the `resource_server_id` setting or in case of a list, it must contain the `resource_server_id`.
+
 
 ### Scope-to-Permission Translation
 
@@ -243,7 +264,7 @@ By default the plugin will look for the `scope` key in the token, you can config
   ]},
 ].
 ```
-Token sample: 
+Token sample:
 ```
 {
  "exp": 1618592626,
@@ -278,6 +299,75 @@ the `monitoring` tag will be `my_rabbit.tag:monitoring`.
 On an existing connection the token can be refreshed by the [update-secret](https://rabbitmq.com/amqp-0-9-1-reference.html#connection.update-secret) AMQP 0.9.1 method. Please check your client whether it supports this method. (Eg. see documentation of the [Java client](https://rabbitmq.com/api-guide.html#oauth2-refreshing-token).) Otherwise the client has to disconnect and reconnect to use a new token.
 
 If the latest token expires on an existing connection, after a limited time the broker will refuse all operations (but it won't disconnect).
+
+### Rich Authorization Request
+
+The [Rich Authorization Request](https://oauth.net/2/rich-authorization-requests/) extension provides a way for OAuth clients to request fine-grained permissions during an authorization request. It moves away from the concept of Scopes and instead
+define a rich permission model.
+
+RabbitMQ supports JWT tokens compliant with this specification. Here is a sample JWT token where we have stripped out
+all the other attributes and left only the relevant ones for this specification:
+
+```
+{
+  "authorization_details": [
+    { "type" : "rabbitmq",  
+      "locations": ["cluster:finance/vhost:primary-*"],
+      "actions": [ "read", "write", "configure"  ]
+    },
+    { "type" : "rabbitmq",
+      "locations": ["cluster:finance", "cluster:inventory", ],
+      "actions": ["tag:administrator" ]
+    }
+  ]
+}
+```
+
+The token above contains two permissions under the attribute `authorization_details`.
+Both permissions are meant for a RabbitMQ server whose `resource_server_type` is equal to `rabbitmq`.
+This field is essentially a permission discriminator.
+
+The first permission grants `read`, `write` and `configure` permissions to any vhost which matches
+the pattern `primary-*` that belongs to a cluster whose `resource_server_id` is equal to `finance`.
+
+The second permission grants the `tag:administrator` user-tag to both clusters, `finance` and `inventory`.
+
+
+#### Type field
+
+In order for RabbitMQ to accept a permission, its value must match with RabbitMQ's `resource_server_type`.
+A JWT token may have permissions for resources other than RabbitMQ.
+
+#### Locations field
+
+The `locations` field can be either a string containing a single location or a Json array containing
+zero or many locations.
+
+A location consists of a list of key-value pairs separated by forward slash `/` character. The supported keys are:
+
+- `cluster` This is the only mandatory key. It is a regular expression which must match RabbitMQ's `resource_server_id` otherwise the location is ignored. For instance, if we want to match exactly `rabbitmq` we should use `^rabbitmq$`.
+- `vhost` This is the virtual host we are granting access to. It can be a fixed value or regular expression. RabbitMQ defaults to `*`.
+- `queue`|`exchange` This is the queue or exchange we are granting access to. A location can only specify one or the
+other but not both. However, RabbitMQ under the covers translates these permissions to scopes which means RabbitMQ does not differentiate between queues and exchanges, they are just resources. RabbitMQ defaults to `*`.
+- `routing-key` this is the routing key we are granted access to. RabbitMQ defaults to `*`.
+
+#### Actions field  
+
+The `actions` field can be either a string containing a single action or a Json array containing zero or many actions.
+
+The supported actions are:
+
+- `configure`
+- `read`
+- `write`
+- `tag:administrator`
+- `tag:monitoring`
+- `tag:management`
+- `tag:policymaker`
+
+RabbitMQ grants all the listed actions to all the locations meant for the current RabbitMQ server, i.e. those
+locations whose `cluster` field matches the `resource_server_id`.
+
 
 ## Examples
 
