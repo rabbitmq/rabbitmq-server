@@ -58,6 +58,15 @@
 %% IANA-suggested ephemeral port range is 49152 to 65535
 -define(FIRST_TEST_BIND_PORT, 49152).
 
+%% Number of re-try in case of no_epmd_port
+%% it can happen when the DNS is not ready
+%% for example, in Kubernetes during the start-up phase  
+-define(PORT_PLEASE_ATTEMPTS, 10).
+
+%% Wait for retry when erl_epmd:port_please fails
+%% See erl_epmd_port_please
+-define(PORT_PLEASE_ATTEMPTS_WAIT, 5000).
+
 %%----------------------------------------------------------------------------
 
 -export_type([ip_port/0, hostname/0]).
@@ -362,7 +371,33 @@ tcp_listener_stopped(Protocol, Opts, IPAddress, Port) ->
 -spec record_distribution_listener() -> ok | no_return().
 
 record_distribution_listener() ->
-    {Name, Host} = rabbit_nodes:parts(node()),
+  {Name, Host} = rabbit_nodes:parts(node()),
+  epmd_port_please(Name, Host).
+
+
+-spec epmd_port_please(string(),string()) -> ok | no_return().
+
+epmd_port_please(Name, Host) ->
+    epmd_port_please(Name, Host, ?PORT_PLEASE_ATTEMPTS).
+%% erl_epmd:port_please could fail if the DNS is not ready yet
+%% for example in Kubernetes. We retry a few times.
+%% (PORT_PLEASE_ATTEMPTS * PORT_PLEASE_ATTEMPTS_WAIT)
+-spec epmd_port_please(string(),string(), integer()) -> ok | no_return().
+epmd_port_please(Name, Host, 0) ->
+    maybe_get_epmd_port(Name, Host);
+epmd_port_please(Name, Host, RetriesLeft) ->
+    rabbit_log:debug("Getting epmd port node '~s', ~b retries left",
+    [Name, RetriesLeft]),
+  case catch maybe_get_epmd_port(Name, Host) of
+    ok -> ok;
+    {error, _} ->
+      timer:sleep(?PORT_PLEASE_ATTEMPTS_WAIT),
+      epmd_port_please(Name, Host, RetriesLeft - 1)
+  end.
+
+-spec maybe_get_epmd_port(string(),string()) -> ok | no_return().
+
+maybe_get_epmd_port(Name, Host) ->
     case erl_epmd:port_please(list_to_atom(Name), Host, infinity) of
         {port, Port, _Version} ->
             IPAddress =
@@ -374,6 +409,7 @@ record_distribution_listener() ->
         noport ->
             throw({error, no_epmd_port})
     end.
+
 
 -spec active_listeners() -> [rabbit_types:listener()].
 
