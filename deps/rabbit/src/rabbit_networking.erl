@@ -390,7 +390,7 @@ epmd_port_please(Name, Host) ->
 epmd_port_please(Name, Host, 0) ->
     maybe_get_epmd_port(Name, Host);
 epmd_port_please(Name, Host, RetriesLeft) ->
-    rabbit_log:info("Getting epmd port node '~s', ~b retries left",
+    rabbit_log:debug("Getting epmd port node '~s', ~b retries left",
     [Name, RetriesLeft]),
   case catch maybe_get_epmd_port(Name, Host) of
     ok -> ok;
