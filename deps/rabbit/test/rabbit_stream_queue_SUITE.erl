@@ -2158,16 +2158,20 @@ max_segment_size_bytes_policy_validation(Config) ->
     ok.
 
 max_segment_size_bytes_policy(Config) ->
+    %% updating a policy for the segment size does not force a stream restart +
+    %% config update but will pick it up the next time a stream is restarted.
+    %% This is a limitation that we may want to address at some
+    %% point but for now we need to set the policy _before_ creating the stream.
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, <<"segment">>, <<"max_segment_size_bytes.*">>, <<"queues">>,
+           [{<<"stream-max-segment-size-bytes">>, 5000}]),
+
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"segment">>, <<"max_segment_size_bytes.*">>, <<"queues">>,
-           [{<<"stream-max-segment-size-bytes">>, 5000}]),
-
     Info = find_queue_info(Config, [policy, operator_policy, effective_policy_definition]),
 
     ?assertEqual(<<"segment">>, proplists:get_value(policy, Info)),
