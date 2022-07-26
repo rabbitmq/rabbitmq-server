@@ -2042,7 +2042,7 @@ handle_frame_post_auth(Transport,
             of
                 {error, closed} ->
                     rabbit_log_connection:info("Stream protocol connection has been closed by "
-                                               ++ "peer",
+                                               "peer",
                                                []),
                     throw({stop, normal});
                 {ok, Consumer1} ->
@@ -2732,7 +2732,7 @@ maybe_dispatch_on_subscription(Transport,
     of
         {error, closed} ->
             rabbit_log_connection:info("Stream protocol connection has been closed by "
-                                       ++ "peer",
+                                       "peer",
                                        []),
             throw({stop, normal});
         {ok, #consumer{log = Log1, credit = Credit1} = ConsumerState1} ->
