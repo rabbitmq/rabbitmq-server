@@ -396,7 +396,6 @@ map_locations_to_permission_resource_paths(ResourceServerId, L) ->
       false -> false
     end end, Locations),
 
-  io:format("Locations: ~p =>  ~p  => ~p ",[ L, Locations, FilteredLocations ]),
   FilteredLocations.
 
 cluster_matches_resource_server_id(#{?CLUSTER_LOCATION_ATTRIBUTE := Cluster},
