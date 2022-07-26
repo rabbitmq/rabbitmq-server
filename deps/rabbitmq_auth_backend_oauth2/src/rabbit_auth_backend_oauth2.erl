@@ -399,11 +399,8 @@ map_locations_to_permission_resource_paths(ResourceServerId, L) ->
   FilteredLocations.
 
 cluster_matches_resource_server_id(#{?CLUSTER_LOCATION_ATTRIBUTE := Cluster},
-  ResourceServerId)  ->
-  case re:run(ResourceServerId, Cluster) of
-    nomatch -> false;
-    _ -> true
-  end;
+    ResourceServerId)  ->
+  wildcard:match(ResourceServerId, Cluster);
 
 cluster_matches_resource_server_id(_,_) ->
   false.

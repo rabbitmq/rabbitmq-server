@@ -204,17 +204,17 @@ test_post_process_payload_rich_auth_request_using_regular_expression_with_cluste
 
   { "can use regular expression on any location's attribute ",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
-        <<"locations">> => [<<"cluster:rabbitmq-*/vhost:^finance-.*">> ],
+        <<"locations">> => [<<"cluster:rabbitmq-*/vhost:^finance-*">> ],
         <<"actions">> => [<<"read">>]
         }
     ],
-    [<<"rabbitmq-test.read:^finance-.*/*/*">> ]
+    [<<"rabbitmq-test.read:^finance-*/*/*">> ]
   },
 
   { "should filter out any location which does not match the cluster's pattern ",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
-        <<"locations">> => [<<"cluster:rabbitmq-t-.*/vhost:^finance-.*">>,
-          <<"cluster:^rabbitmq$/vhost:^finance-.*">>  ],
+        <<"locations">> => [<<"cluster:rabbitmq-t-*/vhost:^finance-*">>,
+          <<"cluster:^rabbitmq$/vhost:^finance-*">>  ],
         <<"actions">> => [<<"read">>]
         }
     ],
@@ -409,21 +409,13 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [<<"rabbitmq.read:finance-*/*-invoice/r-*">> ]
   },
-  { "can use regular expression on any location's attribute except on the cluster",
+  { "can use regular expression on any location's attribute",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
-        <<"locations">> => [<<"cluster:rabbitmq/vhost:^finance-.*">> ],
+        <<"locations">> => [<<"cluster:rabbitmq/vhost:^finance-*">> ],
         <<"actions">> => [<<"read">>]
         }
     ],
-    [<<"rabbitmq.read:^finance-.*/*/*">> ]
-  },
-  { "can use regular expression on any location's attribute except on the cluster",
-    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
-        <<"locations">> => [<<"cluster:rabbitmq-*/vhost:^finance-.*">> ],
-        <<"actions">> => [<<"read">>]
-        }
-    ],
-    [<<"rabbitmq.read:^finance-.*/*/*">> ]
+    [<<"rabbitmq.read:^finance-*/*/*">> ]
   },
 
   { "should ignore permissions which are empty",
