@@ -28,7 +28,6 @@ def secondary_umbrella():
         name = "rabbitmq-server-generic-unix-3.9",
         build_file = "@//:BUILD.package_generic_unix",
         patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
-        sha256 = "4672fad92a815b879cc78a5a9fd28445152b61745d68acd50432c15f96792171",
         strip_prefix = "rabbitmq_server-3.9.13",
-        urls = ["https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.9.13/rabbitmq-server-generic-unix-3.9.13.tar.xz"],
+        urls = ["https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/package-generic-unix-for-mixed-version-testing-v3.9.13.tar.xz"],
     )
