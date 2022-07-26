@@ -32,6 +32,7 @@ all() ->
         test_post_process_token_payload,
         test_post_process_token_payload_keycloak,
         test_post_process_payload_rich_auth_request,
+        test_post_process_payload_rich_auth_request_using_regular_expression_with_cluster,
         test_post_process_token_payload_complex_claims,
         test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field,
         test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_field,
@@ -71,6 +72,11 @@ init_per_testcase(test_validate_payload_when_verify_aud_false, Config) ->
 init_per_testcase(test_post_process_payload_rich_auth_request, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_type, <<"rabbitmq-type">>),
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+  Config;
+
+init_per_testcase(test_post_process_payload_rich_auth_request_using_regular_expression_with_cluster, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_type, <<"rabbitmq-type">>),
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq-test">>),
   Config;
 
 init_per_testcase(_, Config) ->
@@ -178,6 +184,49 @@ post_process_payload_with_keycloak_authorization(Authorization) ->
     {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
     {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
     rabbit_auth_backend_oauth2:post_process_payload(Payload).
+
+test_post_process_payload_rich_auth_request_using_regular_expression_with_cluster(_) ->
+
+  Pairs = [
+
+  { "should filter out those permisions whose locations do not refer to cluster : <resource_server_id>",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-test">>],
+        <<"actions">> => [<<"read">>]
+       },
+      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-other">>],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq-test.read:*/*/*">> ]
+  },
+
+  { "can use regular expression on any location's attribute ",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-*/vhost:^finance-.*">> ],
+        <<"actions">> => [<<"read">>]
+        }
+    ],
+    [<<"rabbitmq-test.read:^finance-.*/*/*">> ]
+  },
+
+  { "should filter out any location which does not match the cluster's pattern ",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-t-.*/vhost:^finance-.*">>,
+          <<"cluster:^rabbitmq$/vhost:^finance-.*">>  ],
+        <<"actions">> => [<<"read">>]
+        }
+    ],
+    [ ]
+  }
+  ],
+
+  lists:foreach(
+      fun({Case, Permissions, ExpectedScope}) ->
+          Payload = post_process_payload_with_rich_auth_request(Permissions),
+          ?assertEqual(lists:sort(ExpectedScope), lists:sort(maps:get(<<"scope">>, Payload)), Case)
+      end, Pairs).
 
 test_post_process_payload_rich_auth_request(_) ->
 
@@ -363,6 +412,14 @@ test_post_process_payload_rich_auth_request(_) ->
   { "can use regular expression on any location's attribute except on the cluster",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq/vhost:^finance-.*">> ],
+        <<"actions">> => [<<"read">>]
+        }
+    ],
+    [<<"rabbitmq.read:^finance-.*/*/*">> ]
+  },
+  { "can use regular expression on any location's attribute except on the cluster",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq-*/vhost:^finance-.*">> ],
         <<"actions">> => [<<"read">>]
         }
     ],
