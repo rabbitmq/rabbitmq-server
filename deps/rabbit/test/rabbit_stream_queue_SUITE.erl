@@ -2335,16 +2335,8 @@ receive_batch_min_offset(Ch, N, M) ->
               exit({missing_offset, N})
     end.
 
-receive_batch(Ch, N, M) when N >= M ->
-    receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag},
-         #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, N}]}}} ->
-            ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
-                                                    multiple     = false})
-    after 60000 ->
-              flush(),
-              exit({missing_offset, N})
-    end;
+receive_batch(_Ch, N, M) when N > M ->
+    ok;
 receive_batch(Ch, N, M) ->
     receive
         {_,
