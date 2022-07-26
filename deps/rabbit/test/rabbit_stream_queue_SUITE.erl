@@ -2335,7 +2335,7 @@ receive_batch_min_offset(Ch, N, M) ->
               exit({missing_offset, N})
     end.
 
-receive_batch(Ch, N, N) ->
+receive_batch(Ch, N, M) when N >= M ->
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag},
          #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, N}]}}} ->
