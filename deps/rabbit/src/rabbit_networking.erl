@@ -58,9 +58,6 @@
 %% IANA-suggested ephemeral port range is 49152 to 65535
 -define(FIRST_TEST_BIND_PORT, 49152).
 
-<<<<<<< HEAD
-=======
--define(ETS_TABLE, rabbit_listener_ets).
 %% Number of re-try in case of no_epmd_port
 %% it can happen when the DNS is not ready
 %% for example, in Kubernetes during the start-up phase  
@@ -70,7 +67,6 @@
 %% See erl_epmd_port_please
 -define(PORT_PLEASE_ATTEMPTS_WAIT, 5000).
 
->>>>>>> dfbd60d043 (Add retry for erl_epmd:port_please)
 %%----------------------------------------------------------------------------
 
 -export_type([ip_port/0, hostname/0]).
