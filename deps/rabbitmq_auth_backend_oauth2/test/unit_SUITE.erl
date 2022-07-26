@@ -200,19 +200,7 @@ test_post_process_payload_rich_auth_request(_) ->
         <<"actions">> => [<<"read">>]
        },
       #{<<"type">> => ?RESOURCE_SERVER_TYPE,
-        <<"locations">> => [<<"cluster:other">>],
-        <<"actions">> => [<<"read">>]
-      }
-    ],
-    [<<"rabbitmq.read:*/*/*">> ]
-  },
-  { "should filter out those permisions whose locations do not refer to cluster : <resource_server_id>",
-    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
-        <<"locations">> => [<<"cluster:rabbitmq">>],
-        <<"actions">> => [<<"read">>]
-      },
-      #{<<"type">> => ?RESOURCE_SERVER_TYPE,
-        <<"locations">> => [<<"cluster:other">>],
+        <<"locations">> => [<<"cluster:rabbitmq-other">>],
         <<"actions">> => [<<"read">>]
       }
     ],
@@ -380,6 +368,7 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [<<"rabbitmq.read:^finance-.*/*/*">> ]
   },
+
   { "should ignore permissions which are empty",
     [],
     []

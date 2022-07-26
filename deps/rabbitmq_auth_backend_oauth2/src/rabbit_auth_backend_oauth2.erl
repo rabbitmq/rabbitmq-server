@@ -389,16 +389,21 @@ map_locations_to_permission_resource_paths(ResourceServerId, L) ->
           binary:split(LocationsAsBinary,<<"/">>,[global,trim_all]))]
     end,
 
-  lists:filtermap(fun(L2) ->
+  FilteredLocations = lists:filtermap(fun(L2) ->
     case cluster_matches_resource_server_id(L2, ResourceServerId) and
       legal_queue_and_exchange_values(L2) of
       true -> { true, build_permission_resource_path(L2) };
       false -> false
-    end end, Locations).
+    end end, Locations),
+
+  io:format("Locations: ~p =>  ~p  => ~p ",[ L, Locations, FilteredLocations ]),
+  FilteredLocations.
 
 cluster_matches_resource_server_id(#{?CLUSTER_LOCATION_ATTRIBUTE := Cluster},
-  ResourceServerId) when Cluster == ResourceServerId -> true;
-cluster_matches_resource_server_id(_, _) -> false.
+  ResourceServerId) when Cluster =:= ResourceServerId ->
+  true;
+cluster_matches_resource_server_id(_,_) ->
+  false.
 
 legal_queue_and_exchange_values(#{?QUEUE_LOCATION_ATTRIBUTE := Queue,
   ?EXCHANGE_LOCATION_ATTRIBUTE := Exchange}) ->
@@ -420,14 +425,17 @@ map_rich_auth_permissions_to_scopes(_, [], Acc) -> Acc;
 map_rich_auth_permissions_to_scopes(ResourceServerId,
   [ #{?ACTIONS_FIELD := Actions, ?LOCATIONS_FIELD := Locations }  | T ], Acc) ->
   ResourcePaths = map_locations_to_permission_resource_paths(ResourceServerId, Locations),
-  Scopes = case Actions of
-    undefined -> [];
-    ActionsAsList when is_list(ActionsAsList) ->
-      build_scopes(ResourceServerId, skip_unknown_actions(ActionsAsList), ResourcePaths);
-    ActionsAsBinary when is_binary(ActionsAsBinary) ->
-      build_scopes(ResourceServerId, skip_unknown_actions([ActionsAsBinary]), ResourcePaths)
-  end,
-  map_rich_auth_permissions_to_scopes(ResourceServerId, T, Acc ++ Scopes).
+  case ResourcePaths of
+    [] -> Acc;
+    _ -> Scopes = case Actions of
+          undefined -> [];
+          ActionsAsList when is_list(ActionsAsList) ->
+            build_scopes(ResourceServerId, skip_unknown_actions(ActionsAsList), ResourcePaths);
+          ActionsAsBinary when is_binary(ActionsAsBinary) ->
+            build_scopes(ResourceServerId, skip_unknown_actions([ActionsAsBinary]), ResourcePaths)
+        end,
+        map_rich_auth_permissions_to_scopes(ResourceServerId, T, Acc ++ Scopes)
+  end.
 
 skip_unknown_actions(Actions) ->
   lists:filter(fun(A) -> lists:member(A, ?ALLOWED_ACTION_VALUES) end, Actions).
