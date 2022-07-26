@@ -41,7 +41,7 @@ RABBITMQ_DIALYZER_OPTS = [
     "-Wunmatched_returns",
 ]
 
-APP_VERSION = "3.10.0"
+APP_VERSION = "3.11.0"
 
 BROKER_VERSION_REQUIREMENTS_ANY = """
 	{broker_version_requirements, []}
@@ -177,8 +177,8 @@ def broker_for_integration_suites(extra_plugins = []):
     rabbitmq_home(
         name = "broker-for-tests-home",
         plugins = [
-            "//deps/rabbit:erlang_app",
-            ":erlang_app",
+            "//deps/rabbit:test_erlang_app",
+            ":test_erlang_app",
         ] + extra_plugins,
         testonly = True,
     )
