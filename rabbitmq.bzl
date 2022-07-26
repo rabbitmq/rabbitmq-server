@@ -177,8 +177,8 @@ def broker_for_integration_suites(extra_plugins = []):
     rabbitmq_home(
         name = "broker-for-tests-home",
         plugins = [
-            "//deps/rabbit:erlang_app",
-            ":erlang_app",
+            "//deps/rabbit:test_erlang_app",
+            ":test_erlang_app",
         ] + extra_plugins,
         testonly = True,
     )
