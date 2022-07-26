@@ -328,7 +328,9 @@ Both permissions are meant for a RabbitMQ server whose `resource_server_type` is
 This field is essentially a permission discriminator.
 
 The first permission grants `read`, `write` and `configure` permissions to any vhost which matches
-the pattern `primary-*` that belongs to a cluster whose `resource_server_id` is equal to `finance`.
+the pattern `primary-*` that belongs to a cluster whose `resource_server_id` contains the string `finance`.
+The `cluster` attribute is a regular expression like the `vhost`. If we wanted to match exactly the `finance` cluster
+we would use instead `^finance$`.
 
 The second permission grants the `tag:administrator` user-tag to both clusters, `finance` and `inventory`.
 
@@ -343,10 +345,16 @@ A JWT token may have permissions for resources other than RabbitMQ.
 The `locations` field can be either a string containing a single location or a Json array containing
 zero or many locations.
 
-A location consists of a list of key-value pairs separated by forward slash `/` character. The supported keys are:
+A location consists of a list of key-value pairs separated by forward slash `/` character.
 
-- `cluster` This is the only mandatory key. It is a regular expression which must match RabbitMQ's `resource_server_id` otherwise the location is ignored. For instance, if we want to match exactly `rabbitmq` we should use `^rabbitmq$`.
-- `vhost` This is the virtual host we are granting access to. It can be a fixed value or regular expression. RabbitMQ defaults to `*`.
+The location format is `cluster:<resource_server_id_pattern>[/vhost:<vhostpattern>][/queue:<queue_name_pattern>|/exchange:<exchange_name_pattern][/routing-key:<routing_key_pattern>]`. Any string separated by `/` which does not
+conform to `<key>:<value>` is ignored. For instance, if your locations start with a prefix, e.g. `vrn/cluster:rabbitmq`,
+the `vrn` pattern part is ignored.
+
+The supported location's attributed are:
+
+- `cluster` This is the only mandatory key. It is a regular expression which must match RabbitMQ's `resource_server_id` otherwise the location is ignored.
+- `vhost` This is the virtual host we are granting access to. It also a regular expression. RabbitMQ defaults to `*`.
 - `queue`|`exchange` This is the queue or exchange we are granting access to. A location can only specify one or the
 other but not both. However, RabbitMQ under the covers translates these permissions to scopes which means RabbitMQ does not differentiate between queues and exchanges, they are just resources. RabbitMQ defaults to `*`.
 - `routing-key` this is the routing key we are granted access to. RabbitMQ defaults to `*`.
