@@ -1256,7 +1256,8 @@ tracking_status(Config) ->
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     Vhost = ?config(rmq_vhost, Config),
-    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue, ?FUNCTION_NAME, [Vhost, Q])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue,
+                                                  ?FUNCTION_NAME, [Vhost, Q])),
     publish_confirm(Ch, Q, [<<"msg">>]),
     ?assertMatch([[
                    {type, sequence},
@@ -2146,8 +2147,9 @@ queue_info(Config) ->
 
 max_segment_size_bytes_policy_validation(Config) ->
     PolicyName = atom_to_binary(?FUNCTION_NAME),
+    Pattern = <<PolicyName/binary, ".*">>,
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, PolicyName, <<"max_segment_size_bytes.*">>, <<"queues">>,
+           Config, 0, PolicyName, Pattern, <<"queues">>,
            [{<<"stream-max-segment-size-bytes">>, ?MAX_STREAM_MAX_SEGMENT_SIZE - 1_000}]),
 
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
@@ -2157,8 +2159,9 @@ max_segment_size_bytes_policy_validation(Config) ->
                           rabbit_policy, set,
                           [<<"/">>,
                             PolicyName,
-                           <<"max_segment_size_bytes.*">>,
-                           [{<<"stream-max-segment-size-bytes">>, ?MAX_STREAM_MAX_SEGMENT_SIZE + 1_000}],
+                            Pattern,
+                           [{<<"stream-max-segment-size-bytes">>,
+                             ?MAX_STREAM_MAX_SEGMENT_SIZE + 1_000}],
                            0,
                            <<"queues">>,
                            <<"acting-user">>]),
