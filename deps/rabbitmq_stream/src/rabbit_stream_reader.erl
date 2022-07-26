@@ -3154,6 +3154,7 @@ subscription_exists(StreamSubscriptions, SubscriptionId) ->
 
 send_file_callback(?VERSION_1,
                    Transport,
+                   _Log,
                    #consumer{configuration =
                                  #consumer_configuration{socket = S,
                                                          subscription_id =
@@ -3161,7 +3162,7 @@ send_file_callback(?VERSION_1,
                                                          counters = Counters}},
                    Counter) ->
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
-        Size, _CommittedOffset) ->
+        Size) ->
        FrameSize = 2 + 2 + 1 + Size,
        FrameBeginning =
            <<FrameSize:32,
@@ -3176,6 +3177,7 @@ send_file_callback(?VERSION_1,
     end;
 send_file_callback(?VERSION_2,
                    Transport,
+                   Log,
                    #consumer{configuration =
                                  #consumer_configuration{socket = S,
                                                          subscription_id =
@@ -3183,12 +3185,12 @@ send_file_callback(?VERSION_2,
                                                          counters = Counters}},
                    Counter) ->
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
-        Size, CommittedOffset0) ->
+        Size) ->
        FrameSize = 2 + 2 + 1 + 8 + Size,
-       CommittedOffset1 =
-           case CommittedOffset0 of
+       CommittedOffset =
+           case osiris_log:committed_offset(Log) of
                undefined -> 0;
-               _ -> CommittedOffset0
+               R -> R
            end,
        FrameBeginning =
            <<FrameSize:32,
@@ -3196,7 +3198,7 @@ send_file_callback(?VERSION_2,
              ?COMMAND_DELIVER:15,
              ?VERSION_2:16,
              SubscriptionId:8/unsigned,
-             CommittedOffset1:64>>,
+             CommittedOffset:64>>,
        Transport:send(S, FrameBeginning),
        atomics:add(Counter, 1, Size),
        increase_messages_consumed(Counters, NumEntries),
@@ -3262,6 +3264,7 @@ send_chunks(DeliverVersion,
     case osiris_log:send_file(S, Log,
                               send_file_callback(DeliverVersion,
                                                  Transport,
+                                                 Log,
                                                  Consumer,
                                                  Counter))
     of
