@@ -68,7 +68,7 @@
 
 %% Wait for retry when erl_epmd:port_please fails
 %% See erl_epmd_port_please
--define(PORT_PLEASE_ATTEMPTS_WAIT, 20000).
+-define(PORT_PLEASE_ATTEMPTS_WAIT, 5000).
 
 >>>>>>> dfbd60d043 (Add retry for erl_epmd:port_please)
 %%----------------------------------------------------------------------------
