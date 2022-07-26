@@ -1256,7 +1256,8 @@ tracking_status(Config) ->
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     Vhost = ?config(rmq_vhost, Config),
-    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue, ?FUNCTION_NAME, [Vhost, Q])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue,
+                                                  ?FUNCTION_NAME, [Vhost, Q])),
     publish_confirm(Ch, Q, [<<"msg">>]),
     ?assertMatch([[
                    {type, sequence},
@@ -1828,9 +1829,11 @@ initial_cluster_size_two(Config) ->
 
 initial_cluster_size_one_policy(Config) ->
     [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    PolicyName = atom_to_binary(?FUNCTION_NAME),
 
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"cluster-size">>, <<"initial_cluster_size_one_policy">>, <<"queues">>,
+           Config, 0, PolicyName, <<"initial_cluster_size_one_policy">>,
+           <<"queues">>,
            [{<<"initial-cluster-size">>, 1}]),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
@@ -1844,7 +1847,7 @@ initial_cluster_size_one_policy(Config) ->
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
 
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"cluster-size">>),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 declare_delete_same_stream(Config) ->
@@ -1984,8 +1987,10 @@ leader_locator_policy(Config) ->
     Bin = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
     Q1 = <<Bin/binary, "_q1">>,
 
+    PolicyName = atom_to_binary(?FUNCTION_NAME),
+
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"my-leader-locator">>, Q, <<"queues">>,
+           Config, 0, PolicyName, Q, <<"queues">>,
            [{<<"queue-leader-locator">>, <<"balanced">>}]),
 
     ?assertEqual({'queue.declare_ok', Q1, 0, 0},
@@ -1995,14 +2000,14 @@ leader_locator_policy(Config) ->
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     Info = find_queue_info(Config, [policy, operator_policy, effective_policy_definition, leader]),
-    ?assertEqual(<<"my-leader-locator">>, proplists:get_value(policy, Info)),
+    ?assertEqual(PolicyName, proplists:get_value(policy, Info)),
     ?assertEqual('', proplists:get_value(operator_policy, Info)),
     ?assertEqual([{<<"queue-leader-locator">>, <<"balanced">>}],
                  proplists:get_value(effective_policy_definition, Info)),
     Leader = proplists:get_value(leader, Info),
     ?assert(lists:member(Leader, [Server2, Server3])),
 
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"my-leader-locator">>),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, [[Q1, Q]]).
 
 queue_size_on_declare(Config) ->
@@ -2071,24 +2076,26 @@ max_age_policy(Config) ->
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+    PolicyName = atom_to_binary(?FUNCTION_NAME),
 
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"age">>, <<"max_age_policy.*">>, <<"queues">>,
+           Config, 0, PolicyName, <<"max_age_policy.*">>, <<"queues">>,
            [{<<"max-age">>, <<"1Y">>}]),
 
     Info = find_queue_info(Config, [policy, operator_policy, effective_policy_definition]),
 
-    ?assertEqual(<<"age">>, proplists:get_value(policy, Info)),
+    ?assertEqual(PolicyName, proplists:get_value(policy, Info)),
     ?assertEqual('', proplists:get_value(operator_policy, Info)),
     ?assertEqual([{<<"max-age">>, <<"1Y">>}],
                  proplists:get_value(effective_policy_definition, Info)),
 
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"age">>),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 update_retention_policy(Config) ->
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
+    PolicyName = atom_to_binary(?FUNCTION_NAME),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
@@ -2104,7 +2111,7 @@ update_retention_policy(Config) ->
                                             [rabbit_misc:r(<<"/">>, queue, Q)]),
     %% Don't use time based retention, it's really hard to get those tests right
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"retention">>, <<"update_retention_policy.*">>, <<"queues">>,
+           Config, 0, PolicyName, <<"update_retention_policy.*">>, <<"queues">>,
            [{<<"max-length-bytes">>, 10000}]),
     ensure_retention_applied(Config, Server),
 
@@ -2118,7 +2125,7 @@ update_retention_policy(Config) ->
     %% If there are changes only in the retention policy, processes should not be restarted
     ?assertEqual(amqqueue:get_pid(Q0), amqqueue:get_pid(Q1)),
 
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"retention">>),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 queue_info(Config) ->
@@ -2139,42 +2146,49 @@ queue_info(Config) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 max_segment_size_bytes_policy_validation(Config) ->
+    PolicyName = atom_to_binary(?FUNCTION_NAME),
+    Pattern = <<PolicyName/binary, ".*">>,
     ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"segment">>, <<"max_segment_size_bytes.*">>, <<"queues">>,
+           Config, 0, PolicyName, Pattern, <<"queues">>,
            [{<<"stream-max-segment-size-bytes">>, ?MAX_STREAM_MAX_SEGMENT_SIZE - 1_000}]),
 
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"segment">>),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
 
     {error_string, _} = rabbit_ct_broker_helpers:rpc(
                           Config, 0,
                           rabbit_policy, set,
                           [<<"/">>,
-                           <<"segment">>,
-                           <<"max_segment_size_bytes.*">>,
-                           [{<<"stream-max-segment-size-bytes">>, ?MAX_STREAM_MAX_SEGMENT_SIZE + 1_000}],
+                            PolicyName,
+                            Pattern,
+                           [{<<"stream-max-segment-size-bytes">>,
+                             ?MAX_STREAM_MAX_SEGMENT_SIZE + 1_000}],
                            0,
                            <<"queues">>,
                            <<"acting-user">>]),
     ok.
 
 max_segment_size_bytes_policy(Config) ->
-    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    %% updating a policy for the segment size does not force a stream restart +
+    %% config update but will pick it up the next time a stream is restarted.
+    %% This is a limitation that we may want to address at some
+    %% point but for now we need to set the policy _before_ creating the stream.
+    PolicyName = atom_to_binary(?FUNCTION_NAME),
+    ok = rabbit_ct_broker_helpers:set_policy(
+           Config, 0, PolicyName, <<"max_segment_size_bytes.*">>, <<"queues">>,
+           [{<<"stream-max-segment-size-bytes">>, 5000}]),
 
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
-    ok = rabbit_ct_broker_helpers:set_policy(
-           Config, 0, <<"segment">>, <<"max_segment_size_bytes.*">>, <<"queues">>,
-           [{<<"stream-max-segment-size-bytes">>, 5000}]),
-
     Info = find_queue_info(Config, [policy, operator_policy, effective_policy_definition]),
 
-    ?assertEqual(<<"segment">>, proplists:get_value(policy, Info)),
+    ?assertEqual(PolicyName, proplists:get_value(policy, Info)),
     ?assertEqual('', proplists:get_value(operator_policy, Info)),
     ?assertEqual([{<<"stream-max-segment-size-bytes">>, 5000}],
                  proplists:get_value(effective_policy_definition, Info)),
-    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"segment">>),
+    ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
 purge(Config) ->
@@ -2321,7 +2335,7 @@ receive_batch_min_offset(Ch, N, M) ->
               exit({missing_offset, N})
     end.
 
-receive_batch(Ch, N, N) ->
+receive_batch(Ch, N, M) when N >= M ->
     receive
         {#'basic.deliver'{delivery_tag = DeliveryTag},
          #amqp_msg{props = #'P_basic'{headers = [{<<"x-stream-offset">>, long, N}]}}} ->

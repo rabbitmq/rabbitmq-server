@@ -1345,10 +1345,11 @@ update_stream0(#{system_time := _Ts},
 update_stream0(_Meta, _Cmd, undefined) ->
     undefined.
 
-inform_listeners_eol(MachineVersion, #stream{target = deleted,
+inform_listeners_eol(MachineVersion,
+                     #stream{target = deleted,
                              listeners = Listeners,
-                             queue_ref = QRef
-                            }) when MachineVersion =< 1 ->
+                             queue_ref = QRef})
+  when MachineVersion =< 1 ->
     lists:map(fun(Pid) ->
                       {send_msg, Pid,
                        {queue_event, QRef, eol},
