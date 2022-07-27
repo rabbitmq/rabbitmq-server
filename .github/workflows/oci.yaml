@@ -2,6 +2,8 @@
 name: OCI
 on:
   push:
+    paths-ignore:
+      - '.github/workflows/secondary-umbrella.yaml'
   workflow_dispatch:
 env:
   GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/bazel-bin/package-generic-unix.tar.xz
