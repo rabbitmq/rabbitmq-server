@@ -353,10 +353,10 @@ the `vrn` pattern part is ignored.
 
 The supported location's attributed are:
 
-- `cluster` This is the only mandatory key. It is a wildcard pattern which must match RabbitMQ's `resource_server_id` otherwise the location is ignored.
+- `cluster` This is the only mandatory attribute. It is a wildcard pattern which must match RabbitMQ's `resource_server_id` otherwise the location is ignored.
 - `vhost` This is the virtual host we are granting access to. It also a wildcard pattern. RabbitMQ defaults to `*`.
 - `queue`|`exchange` This is the queue or exchange we are granting access to. A location can only specify one or the
-other but not both. However, RabbitMQ under the covers translates these permissions to scopes which means RabbitMQ does not differentiate between queues and exchanges, they are just resources. RabbitMQ defaults to `*`.
+other but not both.
 - `routing-key` this is the routing key we are granted access to. RabbitMQ defaults to `*`.
 
 For more information about wildcard patterns, check the section [Scope-to-Permission Translation](#scope-to-permission-translation).
@@ -375,8 +375,24 @@ The supported actions are:
 - `tag:management`
 - `tag:policymaker`
 
-RabbitMQ grants all the listed actions to all the locations meant for the current RabbitMQ server, i.e. those
-locations whose `cluster` field matches the `resource_server_id`.
+#### Rich-Permission to Scope translation
+
+Rich Authorization Request's Permissions are translated into RabbitMQ scopes following this mechanism:
+
+For each location found in the `locations` whose `cluster` matches the current RabbitMQ server's `resource_server_id`:
+
+  - it extracts the `vhost`, `queue` or `exchange` and `routing-key` attributes from the location. If the location did not  have any of those attributes, the default value is `*`. RabbitMQ builds the following scope's suffix:
+    ```
+       scope_suffix = <vhost>/<queue>|<exchange>/<routing-key>
+    ```
+    > Remember that RabbitMQ will not accept a location which specifies both, `queue` and `exchange`.
+
+  - For each action found in the `actions`, it generates a scope as follows:
+    ```
+      scope = <resource_server_id>.<action>:<scope_suffix>
+    ```
+
+In a nutshell, RabbitMQ multiplies the `actions` by the `locations` that matches the current RabbitMQ server's `resource_server_id`.
 
 
 ## Examples
