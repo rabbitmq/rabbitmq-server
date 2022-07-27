@@ -18,18 +18,20 @@ jobs:
           tag: v3.8.27
           patch: |
             diff --git a/WORKSPACE.bazel b/WORKSPACE.bazel
-            index 62514c79af..8848f695c5 100644
+            index 62514c79af..5dc3169c75 100644
             --- a/WORKSPACE.bazel
             +++ b/WORKSPACE.bazel
-            @@ -59,7 +59,7 @@ rules_pkg_dependencies()
+            @@ -59,8 +59,8 @@ rules_pkg_dependencies()
 
              http_archive(
                  name = "bazel-erlang",
             -    sha256 = "f37c339711ce05b748688938ad9b1c00a78f0b2ef67d6baa734f5a34e33ad8a3",
+            -    strip_prefix = "bazel-erlang-1.4.0",
             +    sha256 = "2ba878df673020ac714c050c0aaf3c66cac2f9cca0aa4259e3c74603c59e0cd0",
-                 strip_prefix = "bazel-erlang-1.4.0",
+            +    strip_prefix = "rules_erlang-1.4.0",
                  urls = ["https://github.com/rabbitmq/bazel-erlang/archive/refs/tags/1.4.0.zip"],
              )
+
             diff --git a/rabbitmq.bzl b/rabbitmq.bzl
             index f0e7b7470d..f8e18aabb3 100644
             --- a/rabbitmq.bzl
