@@ -97,7 +97,7 @@ groups() ->
     ].
 
 %% -------------------------------------------------------------------
-%% Testsuite setup/teardown.
+%% Testsuite setup/teardown
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
@@ -112,7 +112,31 @@ end_per_suite(Config) ->
 init_per_group(feature_flags_v1, Config) ->
     rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, false});
 init_per_group(feature_flags_v2, Config) ->
-    rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, true});
+    %% Before we run `feature_flags_v2'-related tests, we must ensure that both
+    %% umbrellas support them. Otherwise there is no point in running them. The
+    %% `feature_flags_v1' group already covers testing in that case.
+    case rabbit_ct_helpers:get_config(Config, secondary_umbrella) of
+        undefined ->
+            rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, true});
+        _ ->
+            %% To determine that `feature_flags_v2' are supported, we can't
+            %% query RabbitMQ which is not started. Therefore, we check if the
+            %% source of `rabbit_ff_controller' is present.
+            Dir1 = ?config(rabbit_srcdir, Config),
+            Dir2 = ?config(secondary_rabbit_srcdir, Config),
+            File1 = filename:join([Dir1, "src", "rabbit_ff_controller.erl"]),
+            File2 = filename:join([Dir2, "src", "rabbit_ff_controller.erl"]),
+            TestFFv2 = filelib:is_file(File1) andalso filelib:is_file(File2),
+            case TestFFv2 of
+                true ->
+                    rabbit_ct_helpers:set_config(
+                      Config, {enable_feature_flags_v2, true});
+                false ->
+                    {skip,
+                     "One of the umbrellas does not support "
+                     "feature_flags_v2"}
+            end
+    end;
 init_per_group(enabling_on_single_node, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
