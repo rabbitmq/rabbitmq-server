@@ -145,7 +145,7 @@ erlang_package.hex_package(
 
 erlang_package.git_package(
     repository = "rabbitmq/osiris",
-    branch = "main",
+    tag = "v1.2.8",
     patch_cmds = ["""VERSION=$(git rev-parse HEAD)
 echo "Injecting ${VERSION} into Makefile..."
 sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile

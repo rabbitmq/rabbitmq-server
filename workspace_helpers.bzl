@@ -151,7 +151,7 @@ erlang_app(
 
     git_repository(
         name = "osiris",
-        branch = "main",
+        tag = "v1.2.8",
         remote = "https://github.com/rabbitmq/osiris.git",
         patch_cmds = [
             """VERSION=$(git rev-parse HEAD)
