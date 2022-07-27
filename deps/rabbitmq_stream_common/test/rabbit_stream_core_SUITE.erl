@@ -57,6 +57,7 @@ roundtrip(_Config) ->
                     ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST,
                     [2, 3, 4]}),
     test_roundtrip({deliver, 53, <<"chunk">>}),
+    test_roundtrip({deliver_v2, 53, 10, <<"chunk">>}),
     test_roundtrip({credit, 53, 12}),
     test_roundtrip({metadata_update, <<"stream1">>,
                     ?RESPONSE_VHOST_ACCESS_FAILURE}),
@@ -104,6 +105,9 @@ roundtrip(_Config) ->
     test_roundtrip({request, 99, {route, <<"rkey.*">>, <<"exchange">>}}),
     test_roundtrip({request, 99, {partitions, <<"super stream">>}}),
     test_roundtrip({request, 99, {consumer_update, 1, true}}),
+    test_roundtrip({request, 99,
+                    {exchange_command_versions,
+                     [{deliver, ?VERSION_1, ?VERSION_1}]}}),
     %% RESPONSES
     [test_roundtrip({response, 99, {Tag, 53}})
      || Tag
@@ -133,6 +137,9 @@ roundtrip(_Config) ->
     test_roundtrip({response, 99,
                     {partitions, 1, [<<"stream1">>, <<"stream2">>]}}),
     test_roundtrip({response, 99, {consumer_update, 1, none}}),
+    test_roundtrip({response, 99,
+                    {exchange_command_versions, 1,
+                     [{publish, ?VERSION_1, ?VERSION_1}]}}),
     ok.
 
 roundtrip_metadata(_Config) ->

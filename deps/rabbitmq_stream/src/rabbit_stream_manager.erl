@@ -572,7 +572,7 @@ create_stream(VirtualHost, Reference, Arguments, Username) ->
                             {error, validation_failed};
                         E ->
                             rabbit_log:warning("Error while creating ~p stream, ~p",
-                                             [Reference, E]),
+                                               [Reference, E]),
                             {error, validation_failed}
                     end
             end;

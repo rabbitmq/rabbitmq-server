@@ -32,6 +32,7 @@
 
 -export_type([state/0]).
 
+-type command_version() :: 0..65535.
 -type correlation_id() :: non_neg_integer().
 %% publishing sequence number
 -type publishing_id() :: non_neg_integer().
@@ -72,6 +73,10 @@
     {publish_confirm, publisher_id(), [publishing_id()]} |
     {publish_error, publisher_id(), error_code(), [publishing_id()]} |
     {deliver, subscription_id(), Chunk :: binary()} |
+    {deliver_v2,
+     subscription_id(),
+     CommittedOffset :: osiris:offset(),
+     Chunk :: binary()} |
     {credit, subscription_id(), Credit :: non_neg_integer()} |
     {metadata_update, stream_name(), response_code()} |
     {store_offset, offset_ref(), stream_name(), osiris:offset()} |
@@ -100,7 +105,10 @@
      {close, Code :: non_neg_integer(), Reason :: binary()} |
      {route, RoutingKey :: binary(), SuperStream :: binary()} |
      {partitions, SuperStream :: binary()} |
-     {consumer_update, subscription_id(), active()}} |
+     {consumer_update, subscription_id(), active()} |
+     {exchange_command_versions,
+      [{Command :: atom(), MinVersion :: command_version(),
+        MaxVersion :: command_version()}]}} |
     {response, correlation_id(),
      {declare_publisher |
       delete_publisher |
@@ -127,7 +135,10 @@
      {credit, response_code(), subscription_id()} |
      {route, response_code(), stream_name()} |
      {partitions, response_code(), [stream_name()]} |
-     {consumer_update, response_code(), none | offset_spec()}} |
+     {consumer_update, response_code(), none | offset_spec()} |
+     {exchange_command_versions, response_code(),
+      [{Command :: atom(), MinVersion :: command_version(),
+        MaxVersion :: command_version()}]}} |
     {unknown, binary()}.
 
 -spec init(term()) -> state().
@@ -232,6 +243,13 @@ frame({deliver, SubscriptionId, Chunk}) ->
                      ?VERSION_1:16,
                      SubscriptionId:8>>,
                    Chunk]);
+frame({deliver_v2, SubscriptionId, CommittedOffset, Chunk}) ->
+    wrap_in_frame([<<?REQUEST:1,
+                     ?COMMAND_DELIVER:15,
+                     ?VERSION_2:16,
+                     SubscriptionId:8,
+                     CommittedOffset:64>>,
+                   Chunk]);
 frame({metadata_update, Stream, ResponseCode}) ->
     StreamSize = byte_size(Stream),
     wrap_in_frame(<<?REQUEST:1,
@@ -287,7 +305,7 @@ frame({request, CorrelationId, Body}) ->
                      CorrelationId:32>>,
                    BodyBin]);
 frame({response, _CorrelationId, {credit, Code, SubscriptionId}}) ->
-    %% specical case as credit response does not write correlationid!
+    %% special case as credit response does not write correlationid!
     wrap_in_frame(<<?RESPONSE:1,
                     ?COMMAND_CREDIT:15,
                     ?VERSION_1:16,
@@ -443,7 +461,17 @@ response_body({consumer_update = Tag, Code, OffsetSpec}) ->
             {timestamp, Ts} ->
                 <<?OFFSET_TYPE_TIMESTAMP, Ts:64/signed>>
         end,
-    {command_id(Tag), [<<Code:16, OffsetSpecBin/binary>>]}.
+    {command_id(Tag), [<<Code:16, OffsetSpecBin/binary>>]};
+response_body({exchange_command_versions = Tag, Code,
+               CommandVersions}) ->
+    CommandVersionsBin =
+        lists:foldr(fun({Command, MinVersion, MaxVersion}, Acc) ->
+                       CommandId = command_id(Command),
+                       [<<CommandId:16, MinVersion:16, MaxVersion:16>> | Acc]
+                    end,
+                    [], CommandVersions),
+    {command_id(Tag),
+     [<<Code:16, (length(CommandVersions)):32>>, CommandVersionsBin]}.
 
 request_body({declare_publisher = Tag,
               PublisherId,
@@ -539,7 +567,16 @@ request_body({consumer_update = Tag, SubscriptionId, Active}) ->
             false ->
                 0
         end,
-    {Tag, <<SubscriptionId:8, ActiveBin:8>>}.
+    {Tag, <<SubscriptionId:8, ActiveBin:8>>};
+request_body({exchange_command_versions = Tag, CommandVersions}) ->
+    CommandVersionsBin =
+        lists:foldl(fun({Command, MinVersion, MaxVersion}, Acc) ->
+                       CommandId = command_id(Command),
+                       [<<CommandId:16, MinVersion:16, MaxVersion:16>> | Acc]
+                    end,
+                    [], CommandVersions),
+    CommandVersionsLength = length(CommandVersions),
+    {Tag, [<<CommandVersionsLength:32>>, CommandVersionsBin]}.
 
 append_data(Prev, Data) when is_binary(Prev) ->
     [Prev, Data];
@@ -581,6 +618,13 @@ parse_request(<<?REQUEST:1,
                 SubscriptionId:8,
                 Chunk/binary>>) ->
     {deliver, SubscriptionId, Chunk};
+parse_request(<<?REQUEST:1,
+                ?COMMAND_DELIVER:15,
+                ?VERSION_2:16,
+                SubscriptionId:8,
+                CommittedOffset:64,
+                Chunk/binary>>) ->
+    {deliver_v2, SubscriptionId, CommittedOffset, Chunk};
 parse_request(<<?REQUEST:1,
                 ?COMMAND_CREDIT:15,
                 ?VERSION_1:16,
@@ -791,6 +835,14 @@ parse_request(<<?REQUEST:1,
                 true
         end,
     request(CorrelationId, {consumer_update, SubscriptionId, Active});
+parse_request(<<?REQUEST:1,
+                ?COMMAND_EXCHANGE_COMMAND_VERSIONS:15,
+                ?VERSION_1:16,
+                CorrelationId:32,
+                _CommandVersionsCount:32,
+                CommandVersionsBin/binary>>) ->
+    CommandVersions = parse_command_versions(CommandVersionsBin),
+    request(CorrelationId, {exchange_command_versions, CommandVersions});
 parse_request(Bin) ->
     {unknown, Bin}.
 
@@ -871,7 +923,12 @@ parse_response_body(?COMMAND_CONSUMER_UPDATE,
                     <<ResponseCode:16, OffsetType:16/signed,
                       OffsetValue/binary>>) ->
     OffsetSpec = offset_spec(OffsetType, OffsetValue),
-    {consumer_update, ResponseCode, OffsetSpec}.
+    {consumer_update, ResponseCode, OffsetSpec};
+parse_response_body(?COMMAND_EXCHANGE_COMMAND_VERSIONS,
+                    <<ResponseCode:16, _CommandVersionsCount:32,
+                      CommandVersionsBin/binary>>) ->
+    CommandVersions = parse_command_versions(CommandVersionsBin),
+    {exchange_command_versions, ResponseCode, CommandVersions}.
 
 offset_spec(OffsetType, OffsetValueBin) ->
     case OffsetType of
@@ -927,6 +984,15 @@ parse_nodes(<<Index:16,
             C, Acc) ->
     parse_nodes(Rem, C - 1, Acc#{Index => {Host, Port}}).
 
+parse_command_versions(<<>>) ->
+    [];
+parse_command_versions(<<Key:16,
+                         MinVersion:16,
+                         MaxVersion:16,
+                         Rem/binary>>) ->
+    [{parse_command_id(Key), MinVersion, MaxVersion}
+     | parse_command_versions(Rem)].
+
 parse_map(<<>>, Acc) ->
     Acc;
 parse_map(<<?STRING(KeySize, Key), ?STRING(ValSize, Value),
@@ -974,6 +1040,8 @@ command_id(subscribe) ->
     ?COMMAND_SUBSCRIBE;
 command_id(deliver) ->
     ?COMMAND_DELIVER;
+command_id(deliver_v2) ->
+    ?COMMAND_DELIVER;
 command_id(credit) ->
     ?COMMAND_CREDIT;
 command_id(store_offset) ->
@@ -1009,7 +1077,9 @@ command_id(route) ->
 command_id(partitions) ->
     ?COMMAND_PARTITIONS;
 command_id(consumer_update) ->
-    ?COMMAND_CONSUMER_UPDATE.
+    ?COMMAND_CONSUMER_UPDATE;
+command_id(exchange_command_versions) ->
+    ?COMMAND_EXCHANGE_COMMAND_VERSIONS.
 
 parse_command_id(?COMMAND_DECLARE_PUBLISHER) ->
     declare_publisher;
@@ -1062,7 +1132,9 @@ parse_command_id(?COMMAND_ROUTE) ->
 parse_command_id(?COMMAND_PARTITIONS) ->
     partitions;
 parse_command_id(?COMMAND_CONSUMER_UPDATE) ->
-    consumer_update.
+    consumer_update;
+parse_command_id(?COMMAND_EXCHANGE_COMMAND_VERSIONS) ->
+    exchange_command_versions.
 
 element_index(Element, List) ->
     element_index(Element, List, 0).

@@ -221,6 +221,11 @@ used to make the difference between a request (0) and a response (1). Example fo
 |0x001a
 |Yes
 
+|<<exchangecommandversions>>
+|Client
+|0x001b
+|Yes
+
 |===
 
 === DeclarePublisher
@@ -334,6 +339,8 @@ milliseconds from epoch
 
 === Deliver
 
+Version 1
+
 ```
 Deliver => Key Version SubscriptionId OsirisChunk
   Key => uint16 // 0x0008
@@ -355,6 +362,32 @@ Deliver => Key Version SubscriptionId OsirisChunk
   Message => EntryTypeAndSize
   Data => bytes
 ```
+
+Version 2
+
+```
+Deliver => Key Version SubscriptionId CommittedOffset OsirisChunk
+  Key => uint16 // 0x0008
+  Version => uint16
+  SubscriptionId => uint8
+  CommittedOffset => uint64
+  OsirisChunk => MagicVersion NumEntries NumRecords Epoch ChunkFirstOffset ChunkCrc DataLength Messages
+  MagicVersion => int8
+  ChunkType => int8 // 0: user, 1: tracking delta, 2: tracking snapshot
+  NumEntries => uint16
+  NumRecords => uint32
+  Timestamp => int64 // erlang system time in milliseconds, since epoch
+  Epoch => uint64
+  ChunkFirstOffset => uint64
+  ChunkCrc => int32
+  DataLength => uint32
+  TrailerLength => uint32
+  Reserved => unit32 // unused 4 bytes
+  Messages => [Message] // no int32 for the size for this array; the size is defined by NumEntries field above
+  Message => EntryTypeAndSize
+  Data => bytes
+```
+
 
 NB: See the https://github.com/rabbitmq/osiris/blob/f32df7563a036b1687c0208a3cb5f9e8f5cee937/src/osiris_log.erl#L101[Osiris project]
 for details on the structure of messages.
@@ -645,6 +678,30 @@ ConsumerUpdateResponse => Key Version CorrelationId ResponseCode OffsetSpecifica
     OffsetType => uint16 // 0 (none), 1 (first), 2 (last), 3 (next), 4 (offset), 5 (timestamp)
     Offset => uint64 (for offset) | int64 (for timestamp)
 ```
+
+=== Exchange Command Versions
+
+```
+CommandVersionsExchangeRequest => Key Version CorrelationId [Command]
+  Key => uint16 // 0x001b
+  Version => uint16
+  CorrelationId => uint32
+  Command => Key MinVersion MaxVersion
+  Key => uint16
+  MinVersion => uint16
+  MaxVersion => uint16
+
+CommandVersionsExchangeResponse => Key Version CorrelationId ResponseCode [Command]
+  Key => uint16 // 0x801b
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+  Command => Key MinVersion MaxVersion
+  Key => uint16
+  MinVersion => uint16
+  MaxVersion => uint16
+```
+
 
 == Authentication
 
