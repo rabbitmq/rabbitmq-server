@@ -1,6 +1,11 @@
 name: Generate Mixed Version Testing Artifacts
 on:
   workflow_dispatch:
+  push:
+    branches:
+    - master
+    paths:
+    - .github/workflows/secondary-umbrella.yaml
 jobs:
   package-generic-unix:
     name: package-generic-unix
@@ -17,21 +22,22 @@ jobs:
           tag: v3.10.6
     timeout-minutes: 20
     steps:
-    - name: Checkout Repository (Latest to get updated patches)
-      uses: actions/checkout@v3
-      with:
-        path: latest
-
     - name: Checkout Repository (Secondary Umbrella tag)
       uses: actions/checkout@v3
       with:
-        path: secondary-umbrella
         ref: ${{ matrix.tag }}
 
-    - name: Apply Patch
-      working-directory: secondary-umbrella
+    - name: Adjust Project-Wide erlc_opts
       run: |
-        patch -p1 < ${{ github.workspace }}/latest/bazel/secondary-umbrella.patch
+        sed -i"_orig" '
+        /RABBITMQ_ERLC_OPTS = /a\
+            "+nowarn_export_all",
+        ' rabbitmq.bzl
+        sed -i"_orig2" '
+        /RABBITMQ_ERLC_OPTS = /a\
+            "-DTEST=1",
+        ' rabbitmq.bzl
+        rm rabbitmq.bzl_*
         git diff
 
     - name: Mount Bazel Cache
@@ -41,7 +47,6 @@ jobs:
         key: repo-cache-secondary-umbrella
 
     - name: Configure Bazel
-      working-directory: secondary-umbrella
       run: |
         if [ -n "${{ secrets.BUILDBUDDY_API_KEY }}" ]; then
         cat << EOF >> user.bazelrc
@@ -62,7 +67,6 @@ jobs:
         bazelisk info release
 
     - name: Build
-      working-directory: secondary-umbrella
       run: |
         TAG=${{ matrix.tag }}
         VERSION=${TAG#v}
@@ -72,7 +76,6 @@ jobs:
           --verbose_failures
 
     - name: Rename the Artifact
-      working-directory: secondary-umbrella
       run: |
         OUTPUT_DIR=${{ github.workspace }}/output
         mkdir ${OUTPUT_DIR}
