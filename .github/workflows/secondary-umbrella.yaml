@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - erlang_major: "24"
+        - erlang_major: "23"
           tag: v3.8.27
           patch: |
             diff --git a/WORKSPACE.bazel b/WORKSPACE.bazel
