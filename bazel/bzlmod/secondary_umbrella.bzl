@@ -28,6 +28,11 @@ def secondary_umbrella():
         name = "rabbitmq-server-generic-unix-3.9",
         build_file = "@//:BUILD.package_generic_unix",
         patch_cmds = [ADD_PLUGINS_DIR_BUILD_FILE],
+<<<<<<< HEAD
         strip_prefix = "rabbitmq_server-3.9.13",
         urls = ["https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/package-generic-unix-for-mixed-version-testing-v3.9.13.tar.xz"],
+=======
+        strip_prefix = "rabbitmq_server-3.10.6",
+        urls = ["https://rabbitmq-github-actions.s3.eu-west-1.amazonaws.com/secondary-umbrellas/package-generic-unix-for-mixed-version-testing-v3.10.6.tar.xz"],
+>>>>>>> 8b9970cb01 (Remove the checksum for the secondary umbrella archive)
     )
