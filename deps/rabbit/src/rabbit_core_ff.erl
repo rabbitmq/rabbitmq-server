@@ -7,10 +7,20 @@
 
 -module(rabbit_core_ff).
 
+<<<<<<< HEAD
 -include("feature_flags.hrl").
 
 -export([direct_exchange_routing_v2_migration/1,
          listener_records_in_ets_migration/1]).
+=======
+-export([direct_exchange_routing_v2_enable/1,
+         listener_records_in_ets_enable/1,
+         listener_records_in_ets_post_enable/1,
+         tracking_records_in_ets_enable/1,
+         tracking_records_in_ets_post_enable/1]).
+
+-include("feature_flags.hrl").
+>>>>>>> 5795ba94b1 (Move connection and channel tracking tables to ETS)
 
 -rabbit_feature_flag(
    {classic_mirrored_queue_version,
@@ -88,6 +98,14 @@
       migration_fun => {?MODULE, listener_records_in_ets_migration}
      }}).
 
+-rabbit_feature_flag(
+   {tracking_records_in_ets,
+    #{desc          => "Store tracking records in ETS instead of Mnesia",
+      stability     => stable,
+      depends_on    => [feature_flags_v2],
+      migration_fun => {?MODULE, tracking_records_in_ets_migration}
+     }}).
+
 %% -------------------------------------------------------------------
 %% Direct exchange routing v2.
 %% -------------------------------------------------------------------
@@ -154,6 +172,46 @@ listener_records_in_ets_migration(#ffcommand{name = FeatureName,
         throw:{error, Reason} ->
             rabbit_log_feature_flags:error("Enabling feature flag ~s failed: ~p",
                                            [FeatureName, Reason]),
+            %% adheres to the callback interface
+            ok
+    end.
+
+tracking_records_in_ets_enable(#{feature_name := FeatureName}) ->
+    try
+        rabbit_connection_tracking:migrate_tracking_records(),
+        rabbit_channel_tracking:migrate_tracking_records()
+    catch
+        throw:{error, {no_exists, _}} ->
+            ok;
+        throw:{error, Reason} ->
+            rabbit_log_feature_flags:error("Enabling feature flag ~s failed: ~p",
+                                           [FeatureName, Reason]),
+            {error, Reason}
+    end.
+
+tracking_records_in_ets_post_enable(#{feature_name = FeatureName}) ->
+    try
+        [delete_table(FeatureName, Tab) ||
+            Tab <- rabbit_connection_tracking:get_all_tracked_connection_table_names_for_node(node())],
+        [delete_table(FeatureName, Tab) ||
+            Tab <- rabbit_channel_tracking:get_all_tracked_channel_table_names_for_node(node())]
+    catch
+        throw:{error, Reason} ->
+            rabbit_log_feature_flags:error("Enabling feature flag ~s failed: ~p",
+                                           [FeatureName, Reason]),
+            %% adheres to the callback interface
+            ok
+    end.
+
+delete_table(FeatureName, Tab) ->
+    case mnesia:delete_table(Tab) of
+        {atomic, ok} ->
+            ok;
+        {aborted, {no_exists, _}} ->
+            ok;
+        {aborted, Err} ->
+            rabbit_log_feature_flags:error("Enabling feature flag ~s failed to delete mnesia table ~p: ~p",
+                                           [FeatureName, Tab, Err]),
             %% adheres to the callback interface
             ok
     end.
