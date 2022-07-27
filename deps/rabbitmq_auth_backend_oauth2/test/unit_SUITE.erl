@@ -417,7 +417,22 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [<<"rabbitmq.read:^finance-*/*/*">> ]
   },
-
+  { "can use single string value for location",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => <<"cluster:rabbitmq/vhost:^finance-*">>,
+        <<"actions">> => [<<"read">>]
+        }
+    ],
+    [<<"rabbitmq.read:^finance-*/*/*">> ]
+  },
+  { "can use single string value for action",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => <<"cluster:rabbitmq/vhost:^finance-*">>,
+        <<"actions">> => <<"read">>
+        }
+    ],
+    [<<"rabbitmq.read:^finance-*/*/*">> ]
+  },
   { "should ignore permissions which are empty",
     [],
     []
