@@ -33,9 +33,70 @@ pull_request_rules:
     actions:
       comment:
         message: This pull request modifies the erlang.mk build only. If it is a deps update or PROJECT_ENV change, remember to sync any changes to the bazel files.
-  - name: Automatically backport to v3.10.x based on label
+  - name: Automatically backport to v3.11.x based on label
     conditions:
       - base=master
+      - label=backport-v3.11.x
+      - label!=backport-v3.10.x
+      - label!=backport-v3.9.x
+      - label!=backport-v3.8.x
+    actions:
+      backport:
+        branches:
+          - v3.11.x
+        assignees:
+          - "{{ author }}"
+  - name: Automatically backport to v3.11.x & v3.10.x based on label
+    conditions:
+      - base=master
+      - label=backport-v3.11.x
+      - label=backport-v3.10.x
+      - label!=backport-v3.9.x
+      - label!=backport-v3.8.x
+    actions:
+      backport:
+        branches:
+          - v3.11.x
+        labels:
+          - backport-v3.10.x
+        assignees:
+          - "{{ author }}"
+  - name: Automatically backport to v3.11.x, v3.10.x & v3.9.x based on labels
+    conditions:
+      - base=master
+      - label=backport-v3.11.x
+      - label=backport-v3.10.x
+      - label=backport-v3.9.x
+      - label!=backport-v3.8.x
+    actions:
+      backport:
+        branches:
+          - v3.11.x
+        labels:
+          - backport-v3.10.x
+          - backport-v3.9.x
+        assignees:
+          - "{{ author }}"
+  - name: Automatically backport to v3.11.x, v3.10.x, v3.9.x & v3.8.x based on labels
+    conditions:
+      - base=master
+      - label=backport-v3.11.x
+      - label=backport-v3.10.x
+      - label=backport-v3.9.x
+      - label=backport-v3.8.x
+    actions:
+      backport:
+        branches:
+          - v3.11.x
+        labels:
+          - backport-v3.10.x
+          - backport-v3.9.x
+          - backport-v3.8.x
+        assignees:
+          - "{{ author }}"
+  - name: Automatically backport to v3.10.x based on label
+    conditions:
+      - base=v3.11.x
       - label=backport-v3.10.x
       - label!=backport-v3.9.x
       - label!=backport-v3.8.x
@@ -47,7 +108,7 @@ pull_request_rules:
           - "{{ author }}"
   - name: Automatically backport to v3.10.x & v3.9.x based on labels
     conditions:
-      - base=master
+      - base=v3.11.x
       - label=backport-v3.10.x
       - label=backport-v3.9.x
       - label!=backport-v3.8.x
@@ -61,7 +122,7 @@ pull_request_rules:
           - "{{ author }}"
   - name: Automatically backport to v3.10.x, v3.9.x & v3.8.x based on labels
     conditions:
-      - base=master
+      - base=v3.11.x
       - label=backport-v3.10.x
       - label=backport-v3.9.x
       - label=backport-v3.8.x
