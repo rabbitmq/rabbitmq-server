@@ -23,7 +23,7 @@ jobs:
             +++ b/rabbitmq.bzl
             @@ -25,6 +25,8 @@ _LAGER_EXTRA_SINKS = [
             ]
-
+            
             RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
             +    "-DTEST=1",
             +    "+nowarn_export_all",
@@ -40,13 +40,13 @@ jobs:
             @@ -9,7 +9,10 @@ load("@bazel-erlang//:ct_sharded.bzl", "ct_suite", "ct_suite_variant")
             load("//:rabbitmq_home.bzl", "rabbitmq_home")
             load("//:rabbitmq_run.bzl", "rabbitmq_run")
-
+            
             -RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS
             +RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
             +    "-DTEST=1",
             +    "+nowarn_export_all",
             +]
-
+            
             RABBITMQ_TEST_ERLC_OPTS = DEFAULT_TEST_ERLC_OPTS + [
                 "+nowarn_export_all",
         - erlang_major: "24"
@@ -58,7 +58,7 @@ jobs:
             +++ b/rabbitmq.bzl
             @@ -28,6 +28,8 @@ STARTS_BACKGROUND_BROKER_TAG = "starts-background-broker"
             MIXED_VERSION_CLUSTER_TAG = "mixed-version-cluster"
-
+            
             RABBITMQ_ERLC_OPTS = DEFAULT_ERLC_OPTS + [
             +    "-DTEST=1",
             +    "+nowarn_export_all",
