@@ -401,6 +401,22 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [<<"rabbitmq.read:finance/invoices/r-*">> ]
   },
+  { "should ignore locations like //",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq//routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*/r-*">> ]
+  },
+  { "should default to wildcard those attributes with empty value",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/queue:/vhost:/routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*/r-*">> ]
+  },
   { "should ignore any location path element which is not compliant with <key>:<value> format",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"some-prefix-value/cluster:rabbitmq/vhost:finance-*/queue:*-invoice/routing-key:r-*">> ],
