@@ -316,7 +316,7 @@ all the other attributes and left only the relevant ones for this specification:
       "actions": [ "read", "write", "configure"  ]
     },
     { "type" : "rabbitmq",
-      "locations": ["cluster:finance", "cluster:inventory", ],
+      "locations": ["cluster:finance", "cluster:inventory" ],
       "actions": ["tag:administrator" ]
     }
   ]
@@ -338,18 +338,19 @@ The second permission grants the `tag:administrator` user-tag to both clusters, 
 #### Type field
 
 In order for RabbitMQ to accept a permission, its value must match with RabbitMQ's `resource_server_type`.
-A JWT token may have permissions for resources other than RabbitMQ.
+A JWT token may have permissions for resources' types.
 
 #### Locations field
 
 The `locations` field can be either a string containing a single location or a Json array containing
 zero or many locations.
 
-A location consists of a list of key-value pairs separated by forward slash `/` character.
+A location consists of a list of key-value pairs separated by forward slash `/` character. Here is the format:
+```
+cluster:<resource_server_id_pattern>[/vhost:<vhostpattern>][/queue:<queue_name_pattern>|/exchange:<exchange_name_pattern][/routing-key:<routing_key_pattern>]
+```
 
-The location format is `cluster:<resource_server_id_pattern>[/vhost:<vhostpattern>][/queue:<queue_name_pattern>|/exchange:<exchange_name_pattern][/routing-key:<routing_key_pattern>]`. Any string separated by `/` which does not
-conform to `<key>:<value>` is ignored. For instance, if your locations start with a prefix, e.g. `vrn/cluster:rabbitmq`,
-the `vrn` pattern part is ignored.
+Any string separated by `/` which does not conform to `<key>:<value>` is ignored. For instance, if your locations start with a prefix, e.g. `vrn/cluster:rabbitmq`, the `vrn` pattern part is ignored.
 
 The supported location's attributed are:
 
@@ -379,7 +380,7 @@ The supported actions are:
 
 Rich Authorization Request's Permissions are translated into RabbitMQ scopes following this mechanism:
 
-For each location found in the `locations` whose `cluster` matches the current RabbitMQ server's `resource_server_id`:
+For each location found in the `locations` where the `cluster` attribute matches the current RabbitMQ server's `resource_server_id`:
 
   - it extracts the `vhost`, `queue` or `exchange` and `routing-key` attributes from the location. If the location did not  have any of those attributes, the default value is `*`. RabbitMQ builds the following scope's suffix:
     ```
@@ -387,13 +388,43 @@ For each location found in the `locations` whose `cluster` matches the current R
     ```
     > Remember that RabbitMQ will not accept a location which specifies both, `queue` and `exchange`.
 
-  - For each action found in the `actions`, it generates a scope as follows:
+  - For each action found in the `actions`:
+
+    it generates a scope as follows for actions which are not user-tags:
     ```
       scope = <resource_server_id>.<action>:<scope_suffix>
     ```
 
+    or it generates a scope as follows for actions which are user-tags:
+    ```
+      scope = <resource_server_id>.<action>
+    ```
+
+
 In a nutshell, RabbitMQ multiplies the `actions` by the `locations` that matches the current RabbitMQ server's `resource_server_id`.
 
+Given the example above:
+```
+{
+  "authorization_details": [
+    { "type" : "rabbitmq",  
+      "locations": ["cluster:finance/vhost:primary-*"],
+      "actions": [ "read", "write", "configure"  ]
+    },
+    { "type" : "rabbitmq",
+      "locations": ["cluster:finance", "cluster:inventory" ],
+      "actions": ["tag:administrator" ]
+    }
+  ]
+}
+```
+
+RabbitMQ translates the permissions into these scopes:
+- `finance.read:primary-*/*/*`
+- `finance.write:primary-*/*/*`
+- `finance.configure:primary-*/*/*`
+- `finance.tag:administrator`
+- `inventory.tag:administrator`
 
 ## Examples
 
