@@ -152,9 +152,9 @@ erlang_app(
     github_erlang_app(
         name = "osiris",
         org = "rabbitmq",
-        ref = "refs/tags/v1.2.6",
-        version = "1.2.6",
-        sha256 = "abfe9bc53b0eb1c14713152314f612562ecb76465b9f804313e3510b73e5720b",
+        ref = "refs/tags/v1.2.8",
+        version = "1.2.8",
+        sha256 = "fac7ef765a2848ffc6bc3482b5b1638e3ae0d4c3295d7cf533a1b120ec509f35",
         build_file = rabbitmq_workspace + "//:BUILD.osiris",
     )
 
