@@ -97,7 +97,7 @@ groups() ->
     ].
 
 %% -------------------------------------------------------------------
-%% Testsuite setup/teardown.
+%% Testsuite setup/teardown
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
@@ -112,59 +112,79 @@ end_per_suite(Config) ->
 init_per_group(feature_flags_v1, Config) ->
     rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, false});
 init_per_group(feature_flags_v2, Config) ->
-    rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, true});
+    %% The feature_flags_v2 group only exists on branches where it is
+    %% supported, so if this is not a mixed version test, it is assumed
+    %% to be supported.
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            rabbit_ct_helpers:set_config(
+              Config, {enable_feature_flags_v2, true});
+        true ->
+            %% Before we run `feature_flags_v2'-related tests, we must ensure that
+            %% both umbrellas support them. Otherwise there is no point in running
+            %% them. The `feature_flags_v1' group already covers testing in that
+            %% case.
+            %% To determine that `feature_flags_v2' are supported, we can't
+            %% query RabbitMQ which is not started. Therefore, we check if the
+            %% source or bytecode of `rabbit_ff_controller' is present.
+            Dir1 = ?config(rabbit_srcdir, Config),
+            File1 = filename:join([Dir1, "ebin", "rabbit_ff_controller.beam"]),
+            SupportedPrimary = filelib:is_file(File1),
+            SupportedSecondary =
+                case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+                    undefined ->
+                        %% make
+                        Dir2 = ?config(secondary_rabbit_srcdir, Config),
+                        File2 = filename:join(
+                                  [Dir2, "src", "rabbit_ff_controller.erl"]),
+                        filelib:is_file(File2);
+                    RmqRunSecondary ->
+                        %% bazel
+                        Dir2 = filename:dirname(RmqRunSecondary),
+                        Beam = filename:join(
+                                 [Dir2, "plugins", "rabbit-*",
+                                  "ebin", "rabbit_ff_controller.beam"]),
+                        case filelib:wildcard(Beam) of
+                            [_] -> true;
+                            [] -> false
+                        end
+                end,
+            case {SupportedPrimary, SupportedSecondary} of
+                {true, true} ->
+                    rabbit_ct_helpers:set_config(
+                      Config, {enable_feature_flags_v2, true});
+                {false, true} ->
+                    {skip,
+                     "Primary umbrella does not support "
+                     "feature_flags_v2"};
+                {true, false} ->
+                    {skip,
+                     "Secondary umbrella does not support "
+                     "feature_flags_v2"}
+            end
+    end;
 init_per_group(enabling_on_single_node, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
       [{rmq_nodes_count, 1}]);
 init_per_group(enabling_in_cluster, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% This test relies on functions only exported for test,
-            %% which is not true of mixed version nodes in bazel
-            {skip, "mixed mode not supported"};
-        _ ->
-            rabbit_ct_helpers:set_config(
-              Config,
-              [{rmq_nodes_count, 5}])
-    end;
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{rmq_nodes_count, 5}]);
 init_per_group(clustering, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% This test relies on functions only exported for test,
-            %% which is not true of mixed version nodes in bazel
-            {skip, "mixed mode not supported"};
-        _ ->
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config,
-                        [{rmq_nodes_count, 2},
-                         {rmq_nodes_clustered, false},
-                         {start_rmq_with_plugins_disabled, true}]),
-            rabbit_ct_helpers:run_setup_steps(Config1, [
-                                                        fun prepare_my_plugin/1,
-                                                        fun work_around_cli_and_rabbit_circular_dep/1
-                                                       ])
-    end;
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodes_count, 2},
+                 {rmq_nodes_clustered, false},
+                 {start_rmq_with_plugins_disabled, true}]),
+    rabbit_ct_helpers:run_setup_steps(Config1, [fun prepare_my_plugin/1]);
 init_per_group(activating_plugin, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% mixed mode testing in bazel uses a production build of
-            %% the broker, however this group invokes functions via
-            %% rpc that are only available in test builds
-            {skip, "mixed mode not supported"};
-        _ ->
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config,
-                        [{rmq_nodes_count, 2},
-                         {rmq_nodes_clustered, true},
-                         {start_rmq_with_plugins_disabled, true}]),
-            rabbit_ct_helpers:run_setup_steps(
-              Config1,
-              [
-               fun prepare_my_plugin/1,
-               fun work_around_cli_and_rabbit_circular_dep/1
-              ])
-    end;
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodes_count, 2},
+                 {rmq_nodes_clustered, true},
+                 {start_rmq_with_plugins_disabled, true}]),
+    rabbit_ct_helpers:run_setup_steps(Config1,[fun prepare_my_plugin/1]);
 init_per_group(_, Config) ->
     Config.
 
@@ -869,9 +889,7 @@ clustering_ok_with_new_ff_disabled(Config) ->
                         #{desc => "Time travel with RabbitMQ",
                           provided_by => rabbit,
                           stability => stable}},
-    rabbit_ct_broker_helpers:rpc(
-      Config, 0,
-      rabbit_feature_flags, inject_test_feature_flags, [NewFeatureFlags]),
+    inject_ff_on_nodes(Config, [0], NewFeatureFlags),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
@@ -905,9 +923,7 @@ clustering_denied_with_new_ff_enabled(Config) ->
                         #{desc => "Time travel with RabbitMQ",
                           provided_by => rabbit,
                           stability => stable}},
-    rabbit_ct_broker_helpers:rpc(
-      Config, 0,
-      rabbit_feature_flags, inject_test_feature_flags, [NewFeatureFlags]),
+    inject_ff_on_nodes(Config, [0], NewFeatureFlags),
     enable_feature_flag_on(Config, 0, time_travel),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
@@ -1214,40 +1230,6 @@ remove_other_plugins(PluginSrcDir, OtherPlugins) ->
            [filename:join(PluginSrcDir, OtherPlugin)
             || OtherPlugin <- OtherPlugins]).
 
-work_around_cli_and_rabbit_circular_dep(Config) ->
-    %% FIXME: We also need to copy `rabbit` in `my_plugins` plugins
-    %% directory, not because `my_plugin` depends on it, but because the
-    %% CLI erroneously depends on the broker.
-    %%
-    %% This can't be fixed easily because this is a circular dependency
-    %% (i.e. the broker depends on the CLI). So until a proper solution
-    %% is implemented, keep this second copy of the broker for the CLI
-    %% to find it.
-    InitialPluginsDir = filename:join(
-                          ?config(current_srcdir, Config),
-                          "plugins"),
-    PluginsDir = ?config(rmq_plugins_dir, Config),
-    lists:foreach(
-      fun(Path) ->
-              Filename = filename:basename(Path),
-              IsRabbit = re:run(
-                           Filename,
-                           "^rabbit-", [{capture, none}]) =:= match,
-              case IsRabbit of
-                  true ->
-                      Dest = filename:join(PluginsDir, Filename),
-                      ct:pal(
-                        ?LOW_IMPORTANCE,
-                        "Copy `~s` to `~s` to fix CLI erroneous "
-                        "dependency on `rabbit`", [Path, Dest]),
-                      ok = rabbit_file:recursive_copy(Path, Dest);
-                  false ->
-                      ok
-              end
-      end,
-      filelib:wildcard(filename:join(InitialPluginsDir, "*"))),
-    Config.
-
 enable_feature_flag_on(Config, Node, FeatureName) ->
     rabbit_ct_broker_helpers:rpc(
       Config, Node, rabbit_feature_flags, enable, [FeatureName]).
@@ -1284,12 +1266,42 @@ declare_arbitrary_feature_flag(Config) ->
                      #{desc => "My feature flag",
                        provided_by => ?MODULE,
                        stability => stable}},
-    rabbit_ct_broker_helpers:rpc_all(
-      Config,
-      rabbit_feature_flags,
-      inject_test_feature_flags,
-      [FeatureFlags]),
+    inject_ff_on_nodes(Config, FeatureFlags),
     ok.
+
+inject_ff_on_nodes(Config, FeatureFlags) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    inject_ff_on_nodes(Config, Nodes, FeatureFlags).
+
+inject_ff_on_nodes(Config, Nodes, FeatureFlags)
+  when is_list(Nodes) andalso is_map(FeatureFlags) ->
+    UseFFv2_0 = rabbit_ct_broker_helpers:rpc(
+                Config, Nodes,
+                rabbit_feature_flags, is_supported_locally,
+                [feature_flags_v2]),
+    UseFFv2 = lists:zip(Nodes, UseFFv2_0),
+    lists:map(
+      fun
+          ({Node, true}) ->
+              rabbit_ct_broker_helpers:rpc(
+                Config, Node,
+                rabbit_feature_flags,
+                inject_test_feature_flags,
+                [FeatureFlags]);
+          ({Node, false}) ->
+              Attributes = feature_flags_to_app_attrs(FeatureFlags),
+              rabbit_ct_broker_helpers:rpc(
+                Config, Node,
+                rabbit_feature_flags,
+                inject_test_feature_flags,
+                [Attributes])
+      end, UseFFv2).
+
+%% Convert to the format expected on RabbitMQ up-to 3.10.x.
+feature_flags_to_app_attrs(FeatureFlags) when is_map(FeatureFlags) ->
+    [{?MODULE, % Application
+      ?MODULE, % Module
+      maps:to_list(FeatureFlags)}].
 
 block(Pairs)   -> [block(X, Y) || {X, Y} <- Pairs].
 unblock(Pairs) -> [allow(X, Y) || {X, Y} <- Pairs].
