@@ -7,6 +7,7 @@ updates:
       interval: "daily"
     target-branch: "master"
     labels:
+      - backport-v3.11.x
       - backport-v3.10.x
       - backport-v3.9.x
       - backport-v3.8.x
