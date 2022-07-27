@@ -112,28 +112,54 @@ end_per_suite(Config) ->
 init_per_group(feature_flags_v1, Config) ->
     rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, false});
 init_per_group(feature_flags_v2, Config) ->
-    %% Before we run `feature_flags_v2'-related tests, we must ensure that both
-    %% umbrellas support them. Otherwise there is no point in running them. The
-    %% `feature_flags_v1' group already covers testing in that case.
-    case rabbit_ct_helpers:get_config(Config, secondary_umbrella) of
-        undefined ->
-            rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, true});
-        _ ->
+    %% The feature_flags_v2 group only exists on branches where it is
+    %% supported, so if this is not a mixed version test, it is assumed
+    %% to be supported.
+    case rabbit_ct_helpers:is_mixed_versions() of
+        false ->
+            rabbit_ct_helpers:set_config(
+              Config, {enable_feature_flags_v2, true});
+        true ->
+            %% Before we run `feature_flags_v2'-related tests, we must ensure that
+            %% both umbrellas support them. Otherwise there is no point in running
+            %% them. The `feature_flags_v1' group already covers testing in that
+            %% case.
             %% To determine that `feature_flags_v2' are supported, we can't
             %% query RabbitMQ which is not started. Therefore, we check if the
-            %% source of `rabbit_ff_controller' is present.
+            %% source or bytecode of `rabbit_ff_controller' is present.
             Dir1 = ?config(rabbit_srcdir, Config),
-            Dir2 = ?config(secondary_rabbit_srcdir, Config),
-            File1 = filename:join([Dir1, "src", "rabbit_ff_controller.erl"]),
-            File2 = filename:join([Dir2, "src", "rabbit_ff_controller.erl"]),
-            TestFFv2 = filelib:is_file(File1) andalso filelib:is_file(File2),
-            case TestFFv2 of
-                true ->
+            File1 = filename:join([Dir1, "ebin", "rabbit_ff_controller.beam"]),
+            SupportedPrimary = filelib:is_file(File1),
+            SupportedSecondary =
+                case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+                    undefined ->
+                        %% make
+                        Dir2 = ?config(secondary_rabbit_srcdir, Config),
+                        File2 = filename:join(
+                                  [Dir2, "src", "rabbit_ff_controller.erl"]),
+                        filelib:is_file(File2);
+                    RmqRunSecondary ->
+                        %% bazel
+                        Dir2 = filename:dirname(RmqRunSecondary),
+                        Beam = filename:join(
+                                 [Dir2, "plugins", "rabbit-*",
+                                  "ebin", "rabbit_ff_controller.beam"]),
+                        case filelib:wildcard(Beam) of
+                            [_] -> true;
+                            [] -> false
+                        end
+                end,
+            case {SupportedPrimary, SupportedSecondary} of
+                {true, true} ->
                     rabbit_ct_helpers:set_config(
                       Config, {enable_feature_flags_v2, true});
-                false ->
+                {false, true} ->
                     {skip,
-                     "One of the umbrellas does not support "
+                     "Primary umbrella does not support "
+                     "feature_flags_v2"};
+                {true, false} ->
+                    {skip,
+                     "Secondary umbrella does not support "
                      "feature_flags_v2"}
             end
     end;
