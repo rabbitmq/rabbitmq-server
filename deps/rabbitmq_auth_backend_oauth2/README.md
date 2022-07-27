@@ -419,12 +419,11 @@ Given the example above:
 }
 ```
 
-RabbitMQ translates the permissions into these scopes:
+A RabbitMQ server with a `resource_server_id` equal to `finance` would translates these permissions into these scopes:
 - `finance.read:primary-*/*/*`
 - `finance.write:primary-*/*/*`
 - `finance.configure:primary-*/*/*`
 - `finance.tag:administrator`
-- `inventory.tag:administrator`
 
 ## Examples
 
