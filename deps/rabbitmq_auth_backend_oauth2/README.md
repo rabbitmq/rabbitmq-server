@@ -390,12 +390,12 @@ For each location found in the `locations` where the `cluster` attribute matches
 
   - For each action found in the `actions`:
 
-    it generates a scope as follows for actions which are not user-tags:
+    if the action is not a user-tag, it produces a scope as follows:
     ```
       scope = <resource_server_id>.<action>:<scope_suffix>
     ```
 
-    or it generates a scope as follows for actions which are user-tags:
+    otherwise, for user-tag's actions, it produces this scope:
     ```
       scope = <resource_server_id>.<action>
     ```
