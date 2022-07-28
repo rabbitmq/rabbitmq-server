@@ -456,7 +456,7 @@ lookup_mnesia(Name, Node) ->
 list() ->
     lists:foldl(
       fun (Node, Acc) ->
-              list_on_node(Node) ++ Acc
+              Acc ++ list_on_node(Node)
       end, [], rabbit_nodes:all_running()).
 
 -spec count() -> non_neg_integer().

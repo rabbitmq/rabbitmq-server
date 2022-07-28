@@ -227,7 +227,7 @@ shutdown_tracked_items(TrackedItems, _Args) ->
 list() ->
     lists:foldl(
       fun (Node, Acc) ->
-              list_on_node(Node) ++ Acc
+              Acc ++ list_on_node(Node)
       end, [], rabbit_nodes:all_running()).
 
 -spec list_of_user(rabbit_types:username()) -> [rabbit_types:tracked_channel()].

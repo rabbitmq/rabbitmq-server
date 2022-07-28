@@ -794,16 +794,17 @@ exists_in_tracking_table(Config, NodeIndex, TableNameFun, Table, Key) ->
     Node = rabbit_ct_broker_helpers:get_node_config(
                 Config, NodeIndex, nodename),
     Tab = TableNameFun(Node),
-    try
-        AllKeys = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                               mnesia,
-                                               dirty_all_keys, [Tab]),
-        lists:member(Key, AllKeys)
-    catch
-        _:_ ->
+    case rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_feature_flags,
+                                      is_enabled, [tracking_records_in_ets]) of
+        true ->
             All = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
                                                ets, lookup, [Table, Key]),
-            lists:keymember(Key, 1, All)
+            lists:keymember(Key, 1, All);
+        false ->
+            AllKeys = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
+                                                   mnesia,
+                                                   dirty_all_keys, [Tab]),
+            lists:member(Key, AllKeys)
     end.
 
 mimic_vhost_down(Config, NodeIndex, VHost) ->
