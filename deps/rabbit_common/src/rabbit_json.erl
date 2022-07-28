@@ -10,7 +10,7 @@
 -export([decode/1, decode/2, try_decode/1, try_decode/2,
 	 encode/1, encode/2, try_encode/1, try_encode/2]).
 
--define(DEFAULT_DECODE_OPTIONS, [return_maps]).
+-define(DEFAULT_DECODE_OPTIONS, #{}).
 
 
 -spec decode(iodata()) -> thoas:json_term().
@@ -20,7 +20,10 @@ decode(JSON) ->
 
 -spec decode(iodata(), thoas:decode_options()) -> thoas:json_term().
 decode(JSON, Opts) ->
-    thoas:decode(JSON, Opts).
+    case thoas:decode(JSON, Opts) of
+        {ok, Value}     -> Value;
+        {error, _Error} -> throw({error, failed_to_decode_json, JSON})
+    end.
 
 
 -spec try_decode(iodata()) -> {ok, thoas:json_term()} |
@@ -43,6 +46,8 @@ encode(Term) ->
     encode(Term, []).
 
 -spec encode(thoas:json_term(), thoas:encode_options()) -> iodata().
+encode(Term, []) ->
+    thoas:encode(fixup_terms(Term));
 encode(Term, Opts) ->
     thoas:encode(fixup_terms(Term), Opts).
 
