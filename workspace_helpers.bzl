@@ -250,13 +250,6 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         ],
     )
 
-    new_git_repository(
-        name = "trust_store_http",
-        remote = "https://github.com/rabbitmq/trust-store-http.git",
-        branch = "master",
-        build_file = rabbitmq_workspace + "//:BUILD.trust_store_http",
-    )
-
 RA_INJECT_GIT_VERSION = """
 VERSION=$(git rev-parse HEAD)
 echo "Injecting ${VERSION} into ra.app.src..."
