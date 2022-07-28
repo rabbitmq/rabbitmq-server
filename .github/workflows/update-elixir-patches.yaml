@@ -42,7 +42,7 @@ jobs:
           exit 1
         fi
 
-        echo "::set-output name=VERSION::${TAG_NAME}"
+        echo "::set-output name=VERSION::${TAG_NAME#v}"
         echo "::set-output name=SHA::${SHA}"
     - name: MODIFY VERSION FILE
       if: steps.check-for-branch.outputs.c != 0
