@@ -88,7 +88,7 @@ groups() ->
     ].
 
 %% -------------------------------------------------------------------
-%% Testsuite setup/teardown.
+%% Testsuite setup/teardown
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
@@ -105,53 +105,23 @@ init_per_group(enabling_on_single_node, Config) ->
       Config,
       [{rmq_nodes_count, 1}]);
 init_per_group(enabling_in_cluster, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% This test relies on functions only exported for test,
-            %% which is not true of mixed version nodes in bazel
-            {skip, "mixed mode not supported"};
-        _ ->
-            rabbit_ct_helpers:set_config(
-              Config,
-              [{rmq_nodes_count, 5}])
-    end;
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{rmq_nodes_count, 5}]);
 init_per_group(clustering, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% This test relies on functions only exported for test,
-            %% which is not true of mixed version nodes in bazel
-            {skip, "mixed mode not supported"};
-        _ ->
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config,
-                        [{rmq_nodes_count, 2},
-                         {rmq_nodes_clustered, false},
-                         {start_rmq_with_plugins_disabled, true}]),
-            rabbit_ct_helpers:run_setup_steps(Config1, [
-                                                        fun prepare_my_plugin/1,
-                                                        fun work_around_cli_and_rabbit_circular_dep/1
-                                                       ])
-    end;
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodes_count, 2},
+                 {rmq_nodes_clustered, false},
+                 {start_rmq_with_plugins_disabled, true}]),
+    rabbit_ct_helpers:run_setup_steps(Config1, [fun prepare_my_plugin/1]);
 init_per_group(activating_plugin, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% mixed mode testing in bazel uses a production build of
-            %% the broker, however this group invokes functions via
-            %% rpc that are only available in test builds
-            {skip, "mixed mode not supported"};
-        _ ->
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config,
-                        [{rmq_nodes_count, 2},
-                         {rmq_nodes_clustered, true},
-                         {start_rmq_with_plugins_disabled, true}]),
-            rabbit_ct_helpers:run_setup_steps(
-              Config1,
-              [
-               fun prepare_my_plugin/1,
-               fun work_around_cli_and_rabbit_circular_dep/1
-              ])
-    end;
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodes_count, 2},
+                 {rmq_nodes_clustered, true},
+                 {start_rmq_with_plugins_disabled, true}]),
+    rabbit_ct_helpers:run_setup_steps(Config1,[fun prepare_my_plugin/1]);
 init_per_group(_, Config) ->
     Config.
 
@@ -1084,40 +1054,6 @@ remove_other_plugins(PluginSrcDir, OtherPlugins) ->
     ok = rabbit_file:recursive_delete(
            [filename:join(PluginSrcDir, OtherPlugin)
             || OtherPlugin <- OtherPlugins]).
-
-work_around_cli_and_rabbit_circular_dep(Config) ->
-    %% FIXME: We also need to copy `rabbit` in `my_plugins` plugins
-    %% directory, not because `my_plugin` depends on it, but because the
-    %% CLI erroneously depends on the broker.
-    %%
-    %% This can't be fixed easily because this is a circular dependency
-    %% (i.e. the broker depends on the CLI). So until a proper solution
-    %% is implemented, keep this second copy of the broker for the CLI
-    %% to find it.
-    InitialPluginsDir = filename:join(
-                          ?config(current_srcdir, Config),
-                          "plugins"),
-    PluginsDir = ?config(rmq_plugins_dir, Config),
-    lists:foreach(
-      fun(Path) ->
-              Filename = filename:basename(Path),
-              IsRabbit = re:run(
-                           Filename,
-                           "^rabbit-", [{capture, none}]) =:= match,
-              case IsRabbit of
-                  true ->
-                      Dest = filename:join(PluginsDir, Filename),
-                      ct:pal(
-                        ?LOW_IMPORTANCE,
-                        "Copy `~s` to `~s` to fix CLI erroneous "
-                        "dependency on `rabbit`", [Path, Dest]),
-                      ok = rabbit_file:recursive_copy(Path, Dest);
-                  false ->
-                      ok
-              end
-      end,
-      filelib:wildcard(filename:join(InitialPluginsDir, "*"))),
-    Config.
 
 enable_feature_flag_on(Config, Node, FeatureName) ->
     rabbit_ct_broker_helpers:rpc(

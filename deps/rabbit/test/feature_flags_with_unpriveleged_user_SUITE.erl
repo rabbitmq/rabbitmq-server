@@ -55,16 +55,9 @@ end_per_suite(Config) ->
 
 
 init_per_group(enabling_in_cluster, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% This test relies on functions only exported for test,
-            %% which is not true of mixed version nodes in bazel
-            {skip, "mixed mode not supported"};
-        _ ->
-            rabbit_ct_helpers:set_config(
-              Config,
-              [{rmq_nodes_count, 3}])
-    end;
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{rmq_nodes_count, 3}]);
 init_per_group(Group, Config) ->
     feature_flags_SUITE:init_per_group(Group, Config).
 
