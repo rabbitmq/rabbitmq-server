@@ -9,6 +9,9 @@ env:
   GENERIC_UNIX_ARCHIVE: ${{ github.workspace }}/bazel-bin/package-generic-unix.tar.xz
   RABBITMQ_VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
   VERSION: ${{ github.event.pull_request.head.sha || github.sha }}
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
 
   # This job will build one docker image per supported Erlang major version.

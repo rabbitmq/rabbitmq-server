@@ -12,6 +12,13 @@
 -define(FEATURE_FLAG, direct_exchange_routing_v2).
 -define(INDEX_TABLE_NAME, rabbit_index_route).
 
+%% in file direct_exchange_routing_v2_SUITE_data/definition.json:
+%% number of bindings where the source exchange is a direct exchange
+-define(NUM_BINDINGS_TO_DIRECT_ECHANGE, 620).
+%% number of bindings where the source exchange is a direct exchange
+%% and both source exchange and destination queue are durable
+-define(NUM_BINDINGS_TO_DIRECT_ECHANGE_DURABLE, 220).
+
 %%%===================================================================
 %%% Common Test callbacks
 %%%===================================================================
@@ -31,14 +38,14 @@ groups() ->
                                          remove_binding_delete_queue,
                                          remove_binding_delete_queue_multiple,
                                          remove_binding_delete_exchange,
+                                         recover_bindings,
                                          reset]},
        {start_feature_flag_disabled, [], [enable_feature_flag]}
       ]},
      {cluster_size_2, [],
       [{start_feature_flag_enabled, [], [remove_binding_node_down_transient_queue,
-                                         remove_binding_node_down_durable_queue
-                                        ]},
-       {start_feature_flag_disabled, [], [enable_feature_flag]}
+                                         remove_binding_node_down_durable_queue]},
+       {start_feature_flag_disabled, [], [enable_feature_flag_during_definition_import]}
       ]},
      {unclustered_cluster_size_2, [],
       [{start_feature_flag_enabled, [], [join_cluster]}
@@ -90,6 +97,7 @@ init_per_group(start_feature_flag_disabled = Group, Config0) ->
     Config = start_broker(Group, Config1),
     case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, ?FEATURE_FLAG) of
         true ->
+            assert_no_index_table(Config),
             Config;
         false ->
             end_per_group(Group, Config),
@@ -302,6 +310,22 @@ remove_binding_node_down_durable_queue(Config) ->
     delete_queue(Ch1, Q),
     ok.
 
+recover_bindings(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Path = filename:join([?config(data_dir, Config), "definition.json"]),
+
+    assert_index_table_empty(Config),
+    rabbit_ct_broker_helpers:rabbitmqctl(Config, Server, ["import_definitions", Path], 10_000),
+    ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE, table_size(Config, ?INDEX_TABLE_NAME)),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+    ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE_DURABLE, table_size(Config, ?INDEX_TABLE_NAME)),
+
+    %% cleanup
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    delete_queue(Ch, <<"durable-q">>),
+    ok.
+
 enable_feature_flag(Config) ->
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
@@ -325,8 +349,6 @@ enable_feature_flag(Config) ->
     publish(Ch, DirectX, RKey),
     assert_confirm(),
 
-    assert_no_index_table(Config),
-
     ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG),
 
     %% The feature flag migration should have created an index table with a ram copy on all nodes.
@@ -343,6 +365,41 @@ enable_feature_flag(Config) ->
 
     delete_queue(Ch, Q1),
     delete_queue(Ch, Q2),
+    ok.
+
+%% Test that enabling feature flag works when bindings are imported concurrently.
+enable_feature_flag_during_definition_import(Config) ->
+    Nodes = [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+    Path = filename:join([?config(data_dir, Config), "definition.json"]),
+
+    {Pid, Ref} = spawn_monitor(
+                   fun() ->
+                           ct:pal("importing definitions..."),
+                           rabbit_ct_broker_helpers:rabbitmqctl(
+                             Config, Server1, ["import_definitions", Path]
+                            ),
+                           ct:pal("imported definitions")
+                   end),
+
+    timer:sleep(rand:uniform(400)),
+    ct:pal("enabling feature flag..."),
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG),
+    ct:pal("enabled feature flag"),
+
+    receive {'DOWN', Ref, process, Pid, normal} ->
+                ok
+    after 10_000 ->
+              ct:fail(timeout)
+    end,
+
+    ?assertEqual(lists:sort(Nodes), index_table_ram_copies(Config, 0)),
+    ?assertEqual(?NUM_BINDINGS_TO_DIRECT_ECHANGE,
+                 table_size(Config, ?INDEX_TABLE_NAME)),
+
+    %% cleanup
+    delete_queue(Ch, <<"durable-q">>),
+    delete_queue(Ch, <<"transient-q">>),
     ok.
 
 %% Test that enabling feature flag works when clients concurrently
@@ -371,8 +428,6 @@ enable_feature_flag_during_binding_churn(Config) ->
     lists:foreach(fun(N) ->
                           bind_queue(Ch1, Q, DirectX, integer_to_binary(N))
                   end, lists:seq(trunc(0.4 * BindingsDirectX) + 1, trunc(0.8 * BindingsDirectX))),
-
-    assert_no_index_table(Config),
 
     {_, Ref1} = spawn_monitor(
                   fun() ->
@@ -405,7 +460,7 @@ enable_feature_flag_during_binding_churn(Config) ->
                           ct:pal("deleted bindings")
                   end),
 
-    timer:sleep(50),
+    timer:sleep(rand:uniform(300)),
     ct:pal("enabling feature flag..."),
     ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG),
     ct:pal("enabled feature flag"),
@@ -432,12 +487,6 @@ enable_feature_flag_during_binding_churn(Config) ->
     ?assertEqual(lists:sort(ExpectedKeys), lists:sort(ActualKeys)),
 
     %% cleanup
-    lists:foreach(fun(N) ->
-                          unbind_queue(Ch1, Q, DirectX, integer_to_binary(N))
-                  end, lists:seq(trunc(0.2 * BindingsDirectX) + 1, BindingsDirectX)),
-    lists:foreach(fun(N) ->
-                          unbind_queue(Ch1, Q, FanoutX, integer_to_binary(N))
-                  end, lists:seq(1, BindingsFanoutX)),
     delete_queue(Ch1, Q),
     ok.
 
@@ -570,4 +619,7 @@ table_size(Config, Table) ->
     table_size(Config, Table, 0).
 
 table_size(Config, Table, Server) ->
-    rabbit_ct_broker_helpers:rpc(Config, Server, mnesia, table_info, [Table, size], 5000).
+    %% Do not use
+    %% mnesia:table_info(Table, size)
+    %% as this returns 0 if the table doesn't exist.
+    rabbit_ct_broker_helpers:rpc(Config, Server, ets, info, [Table, size], 5000).
