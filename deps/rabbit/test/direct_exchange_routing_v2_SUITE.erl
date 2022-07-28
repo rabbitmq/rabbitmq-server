@@ -343,13 +343,6 @@ enable_feature_flag(Config) ->
     publish(Ch, DirectX, RKey),
     assert_confirm(),
 
-<<<<<<< HEAD
-    %% Before the feature flag is enabled, there should not be an index table.
-    Tids = rabbit_ct_broker_helpers:rpc_all(Config, ets, whereis, [?INDEX_TABLE_NAME]),
-    ?assert(lists:all(fun(Tid) -> Tid =:= undefined end, Tids)),
-
-=======
->>>>>>> 4b6d72ea41 (Add more direct_exchange_routing_v2 tests)
     ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FEATURE_FLAG),
 
     %% The feature flag migration should have created an index table with a ram copy on all nodes.
@@ -369,8 +362,6 @@ enable_feature_flag(Config) ->
     delete_queue(Ch, Q2),
     ok.
 
-<<<<<<< HEAD
-=======
 %% Test that enabling feature flag works when bindings are imported concurrently.
 enable_feature_flag_during_definition_import(Config) ->
     Nodes = [Server1 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -494,7 +485,6 @@ enable_feature_flag_during_binding_churn(Config) ->
     delete_queue(Ch1, Q),
     ok.
 
->>>>>>> 4b6d72ea41 (Add more direct_exchange_routing_v2 tests)
 reset(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
@@ -619,10 +609,16 @@ assert_index_table_empty(Config) ->
 assert_index_table_non_empty(Config) ->
     ?assertNotEqual(0, table_size(Config, ?INDEX_TABLE_NAME)).
 
+assert_no_index_table(Config) ->
+    Tids = rabbit_ct_broker_helpers:rpc_all(Config, ets, whereis, [?INDEX_TABLE_NAME]),
+    ?assert(lists:all(fun(Tid) -> Tid =:= undefined end, Tids)).
+
+index_table_ram_copies(Config, Node) ->
+    RamCopies = rabbit_ct_broker_helpers:rpc(Config, Node, mnesia, table_info,
+                                             [?INDEX_TABLE_NAME, ram_copies]),
+    lists:sort(RamCopies).
+
 table_size(Config, Table) ->
-<<<<<<< HEAD
-    rabbit_ct_broker_helpers:rpc(Config, 0, ets, info, [Table, size], 5000).
-=======
     table_size(Config, Table, 0).
 
 table_size(Config, Table, Server) ->
@@ -630,4 +626,3 @@ table_size(Config, Table, Server) ->
     %% mnesia:table_info(Table, size)
     %% as this returns 0 if the table doesn't exist.
     rabbit_ct_broker_helpers:rpc(Config, Server, ets, info, [Table, size], 5000).
->>>>>>> 4b6d72ea41 (Add more direct_exchange_routing_v2 tests)
