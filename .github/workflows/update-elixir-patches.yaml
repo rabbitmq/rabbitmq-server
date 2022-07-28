@@ -32,7 +32,7 @@ jobs:
       id: fetch-version
       run: |
         TAG_NAME=$(curl -s GET https://api.github.com/repos/elixir-lang/elixir/tags?per_page=100 \
-          | jq -r 'map(select(.name | contains("OTP-${{ matrix.elixir_version }}"))) | first | .name')
+          | jq -r 'map(select(.name | contains("v${{ matrix.elixir_version }}"))) | first | .name')
 
         wget --continue --quiet --output-document="/tmp/elixir.tar.gz" "https://github.com/elixir-lang/elixir/archive/${TAG_NAME}.tar.gz" && \
         SHA=$(shasum -a 256 "/tmp/elixir.tar.gz" | awk '{print $1}')
