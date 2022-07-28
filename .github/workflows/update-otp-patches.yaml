@@ -51,16 +51,15 @@ jobs:
       run: |
         sudo npm install --global --silent @bazel/buildozer
 
-        set -x
-
         LINE=$(grep -n 'name_suffix = "${{ matrix.name_suffix }}",' bazel/toolchains/BUILD.bazel | awk -F  ":" '{print $1}')
         LINE=$(($LINE-1))
 
         buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' \
-          //bazel/toolchains:%${LINE}
+          //bazel/toolchains:%${LINE} || test $? -eq 3
         buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' \
-          //bazel/toolchains:%${LINE}
+          //bazel/toolchains:%${LINE} || test $? -eq 3
 
+        set -x
         git diff
     - name: CREATE PULL REQUEST
       if: steps.check-for-branch.outputs.c != 0

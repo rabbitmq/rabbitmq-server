@@ -53,9 +53,9 @@ jobs:
         LINE=$(($LINE-1))
 
         buildozer 'set sha256 "${{ steps.fetch-version.outputs.SHA }}"' \
-          //bazel/toolchains:%${LINE}
+          //bazel/toolchains:%${LINE} || test $? -eq 3
         buildozer 'set version "${{ steps.fetch-version.outputs.VERSION }}"' \
-          //bazel/toolchains:%${LINE}
+          //bazel/toolchains:%${LINE} || test $? -eq 3
 
         set -x
         git diff
