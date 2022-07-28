@@ -232,9 +232,19 @@ erlang_app(
         sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
     )
 
+<<<<<<< HEAD
     new_git_repository(
         name = "trust_store_http",
         remote = "https://github.com/rabbitmq/trust-store-http.git",
         branch = "master",
         build_file = rabbitmq_workspace + "//:BUILD.trust_store_http",
+=======
+    hex_pm_erlang_app(
+        name = "systemd",
+        version = "0.6.1",
+        sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
+        deps = [
+            "@enough//:erlang_app",
+        ],
+>>>>>>> 51d66776ce (Remove old reference to external trust-store-http)
     )

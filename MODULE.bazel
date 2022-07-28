@@ -237,10 +237,30 @@ erlang_package.hex_package(
     sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
 )
 
+<<<<<<< HEAD
 erlang_package.git_package(
     name = "trust_store_http",
     repository = "rabbitmq/trust-store-http",
     branch = "master",
+=======
+erlang_package.hex_package(
+    name = "systemd",
+    version = "0.6.1",
+    sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
+    build_file_content = """load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "systemd",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+    ],
+    deps = [
+        "@enough//:erlang_app",
+    ],
+)
+""",
+>>>>>>> 51d66776ce (Remove old reference to external trust-store-http)
 )
 
 use_repo(
@@ -270,7 +290,11 @@ use_repo(
     "stdout_formatter",
     "syslog",
     "sysmon_handler",
+<<<<<<< HEAD
     "trust_store_http",
+=======
+    "systemd",
+>>>>>>> 51d66776ce (Remove old reference to external trust-store-http)
 )
 
 rbe = use_extension(
