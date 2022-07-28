@@ -22,7 +22,7 @@ decode(JSON) ->
 decode(JSON, Opts) ->
     case thoas:decode(JSON, Opts) of
         {ok, Value}     -> Value;
-        {error, _Error} -> throw({error, failed_to_decode_json, JSON})
+        {error, _Error} -> error({error, failed_to_decode_json, JSON})
     end.
 
 
