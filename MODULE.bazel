@@ -287,6 +287,7 @@ use_repo(
     "sysmon_handler",
     "systemd",
     "thoas",
+    "trust_store_http",
 )
 
 rbe = use_extension(
