@@ -136,8 +136,8 @@ erlang_app(
 
     hex_pm_erlang_app(
         name = "thoas",
-        version = "0.2.0",
-        sha256 = "630aaee57fb3fde201578e787259e15e788a27733d49de8dcce1354db1885b8d",
+        version = "0.3.0",
+        sha256 = "b8e1f8c8fad317c0b75239a9234cb093de1fb8be7ba3e41433ff80a0b3353973",
     )
 
     github_erlang_app(
