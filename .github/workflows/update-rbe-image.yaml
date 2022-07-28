@@ -37,6 +37,13 @@ jobs:
         committer: GitHub <noreply@github.com>
         author: GitHub <noreply@github.com>
         title: Adopt latest rabbitmq-server-buildenv:linux-rbe for RBE
+        body: >
+          Automated changes created by
+          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          using the [create-pull-request](https://github.com/peter-evans/create-pull-request)
+          GitHub action
+
+          Source workflow: `${{ github.action_path }}`
         path: rabbitmq-server
         commit-message: |
           Use latest rbe-erlang-platform/linux-rbe
