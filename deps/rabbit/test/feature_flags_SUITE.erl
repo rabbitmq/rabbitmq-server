@@ -100,63 +100,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-<<<<<<< HEAD
-=======
-init_per_group(feature_flags_v1, Config) ->
-    rabbit_ct_helpers:set_config(Config, {enable_feature_flags_v2, false});
-init_per_group(feature_flags_v2, Config) ->
-    %% The feature_flags_v2 group only exists on branches where it is
-    %% supported, so if this is not a mixed version test, it is assumed
-    %% to be supported.
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false ->
-            rabbit_ct_helpers:set_config(
-              Config, {enable_feature_flags_v2, true});
-        true ->
-            %% Before we run `feature_flags_v2'-related tests, we must ensure that
-            %% both umbrellas support them. Otherwise there is no point in running
-            %% them. The `feature_flags_v1' group already covers testing in that
-            %% case.
-            %% To determine that `feature_flags_v2' are supported, we can't
-            %% query RabbitMQ which is not started. Therefore, we check if the
-            %% source or bytecode of `rabbit_ff_controller' is present.
-            Dir1 = ?config(rabbit_srcdir, Config),
-            File1 = filename:join([Dir1, "ebin", "rabbit_ff_controller.beam"]),
-            SupportedPrimary = filelib:is_file(File1),
-            SupportedSecondary =
-                case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
-                    undefined ->
-                        %% make
-                        Dir2 = ?config(secondary_rabbit_srcdir, Config),
-                        File2 = filename:join(
-                                  [Dir2, "src", "rabbit_ff_controller.erl"]),
-                        filelib:is_file(File2);
-                    RmqRunSecondary ->
-                        %% bazel
-                        Dir2 = filename:dirname(RmqRunSecondary),
-                        Beam = filename:join(
-                                 [Dir2, "plugins", "rabbit-*",
-                                  "ebin", "rabbit_ff_controller.beam"]),
-                        case filelib:wildcard(Beam) of
-                            [_] -> true;
-                            [] -> false
-                        end
-                end,
-            case {SupportedPrimary, SupportedSecondary} of
-                {true, true} ->
-                    rabbit_ct_helpers:set_config(
-                      Config, {enable_feature_flags_v2, true});
-                {false, true} ->
-                    {skip,
-                     "Primary umbrella does not support "
-                     "feature_flags_v2"};
-                {true, false} ->
-                    {skip,
-                     "Secondary umbrella does not support "
-                     "feature_flags_v2"}
-            end
-    end;
->>>>>>> 46227fa955 (feature_flags_SUITE: Skip `feature_flags_v2` if unsupported by secondary umbrella)
 init_per_group(enabling_on_single_node, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
@@ -843,13 +786,9 @@ clustering_ok_with_new_ff_disabled(Config) ->
                         #{desc => "Time travel with RabbitMQ",
                           provided_by => rabbit,
                           stability => stable}},
-<<<<<<< HEAD
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
       rabbit_feature_flags, initialize_registry, [NewFeatureFlags]),
-=======
-    inject_ff_on_nodes(Config, [0], NewFeatureFlags),
->>>>>>> c29dbc227a (feature_flags_SUITE: Adapt the argument to `rabbit_feature_flags:inject_test_feature_flags()`)
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
@@ -883,13 +822,9 @@ clustering_denied_with_new_ff_enabled(Config) ->
                         #{desc => "Time travel with RabbitMQ",
                           provided_by => rabbit,
                           stability => stable}},
-<<<<<<< HEAD
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
       rabbit_feature_flags, initialize_registry, [NewFeatureFlags]),
-=======
-    inject_ff_on_nodes(Config, [0], NewFeatureFlags),
->>>>>>> c29dbc227a (feature_flags_SUITE: Adapt the argument to `rabbit_feature_flags:inject_test_feature_flags()`)
     enable_feature_flag_on(Config, 0, time_travel),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
@@ -1160,50 +1095,12 @@ declare_arbitrary_feature_flag(Config) ->
     FeatureFlags = #{ff_from_testsuite =>
                      #{desc => "My feature flag",
                        stability => stable}},
-<<<<<<< HEAD
     rabbit_ct_broker_helpers:rpc_all(
       Config,
       rabbit_feature_flags,
       inject_test_feature_flags,
       [feature_flags_to_app_attrs(FeatureFlags)]),
-=======
-    inject_ff_on_nodes(Config, FeatureFlags),
->>>>>>> c29dbc227a (feature_flags_SUITE: Adapt the argument to `rabbit_feature_flags:inject_test_feature_flags()`)
     ok.
-
-inject_ff_on_nodes(Config, FeatureFlags) ->
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    inject_ff_on_nodes(Config, Nodes, FeatureFlags).
-
-inject_ff_on_nodes(Config, Nodes, FeatureFlags)
-  when is_list(Nodes) andalso is_map(FeatureFlags) ->
-    UseFFv2_0 = rabbit_ct_broker_helpers:rpc(
-                Config, Nodes,
-                rabbit_feature_flags, is_supported_locally,
-                [feature_flags_v2]),
-    UseFFv2 = lists:zip(Nodes, UseFFv2_0),
-    lists:map(
-      fun
-          ({Node, true}) ->
-              rabbit_ct_broker_helpers:rpc(
-                Config, Node,
-                rabbit_feature_flags,
-                inject_test_feature_flags,
-                [FeatureFlags]);
-          ({Node, false}) ->
-              Attributes = feature_flags_to_app_attrs(FeatureFlags),
-              rabbit_ct_broker_helpers:rpc(
-                Config, Node,
-                rabbit_feature_flags,
-                inject_test_feature_flags,
-                [Attributes])
-      end, UseFFv2).
-
-%% Convert to the format expected on RabbitMQ up-to 3.10.x.
-feature_flags_to_app_attrs(FeatureFlags) when is_map(FeatureFlags) ->
-    [{?MODULE, % Application
-      ?MODULE, % Module
-      maps:to_list(FeatureFlags)}].
 
 block(Pairs)   -> [block(X, Y) || {X, Y} <- Pairs].
 unblock(Pairs) -> [allow(X, Y) || {X, Y} <- Pairs].
