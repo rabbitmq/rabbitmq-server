@@ -51,6 +51,7 @@
 !/deps/rabbitmq_web_mqtt_examples/
 !/deps/rabbitmq_web_stomp/
 !/deps/rabbitmq_web_stomp_examples/
+!/deps/trust_store_http/
 /escript/
 /escript.lock
 /plugins/
