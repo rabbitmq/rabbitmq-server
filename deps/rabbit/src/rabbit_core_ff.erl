@@ -19,9 +19,12 @@
          tracking_records_in_ets_enable/1,
          tracking_records_in_ets_post_enable/1]).
 
+<<<<<<< HEAD
 -include("feature_flags.hrl").
 >>>>>>> 5795ba94b1 (Move connection and channel tracking tables to ETS)
 
+=======
+>>>>>>> 69ce55f971 (Updates to new feature flag API)
 -rabbit_feature_flag(
    {classic_mirrored_queue_version,
     #{desc          => "Support setting version for classic mirrored queues",
@@ -103,7 +106,10 @@
     #{desc          => "Store tracking records in ETS instead of Mnesia",
       stability     => stable,
       depends_on    => [feature_flags_v2],
-      migration_fun => {?MODULE, tracking_records_in_ets_migration}
+      callbacks     => #{enable =>
+                             {?MODULE, tracking_records_in_ets_enable},
+                         post_enable =>
+                             {?MODULE, tracking_records_in_ets_post_enable}}
      }}).
 
 %% -------------------------------------------------------------------
@@ -189,7 +195,7 @@ tracking_records_in_ets_enable(#{feature_name := FeatureName}) ->
             {error, Reason}
     end.
 
-tracking_records_in_ets_post_enable(#{feature_name = FeatureName}) ->
+tracking_records_in_ets_post_enable(#{feature_name := FeatureName}) ->
     try
         [delete_table(FeatureName, Tab) ||
             Tab <- rabbit_connection_tracking:get_all_tracked_connection_table_names_for_node(node())],
