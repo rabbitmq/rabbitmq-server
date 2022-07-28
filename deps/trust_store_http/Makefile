@@ -7,7 +7,7 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 LOCAL_DEPS = ssl
-DEPS = cowboy jsx
+DEPS = cowboy thoas
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

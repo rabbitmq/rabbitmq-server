@@ -26,7 +26,7 @@ define HEX_TARBALL_EXTRA_METADATA
 endef
 
 LOCAL_DEPS = compiler crypto public_key sasl ssl syntax_tools tools xmerl
-DEPS = jsx recon credentials_obfuscation
+DEPS = thoas recon credentials_obfuscation
 
 dep_credentials_obfuscation = hex 3.1.0
 
