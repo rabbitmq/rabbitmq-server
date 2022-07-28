@@ -250,11 +250,15 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
         ],
     )
 
-    new_git_repository(
+    github_erlang_app(
         name = "trust_store_http",
-        remote = "https://github.com/rabbitmq/trust-store-http.git",
-        branch = "master",
-        build_file = rabbitmq_workspace + "//:BUILD.trust_store_http",
+        org = "rabbitmq",
+        repo = "trust-store-http",
+        deps = [
+            "@cowboy//:erlang_app",
+            "@jsx//:erlang_app",
+        ],
+        sha256 = "e398967f37620c38a359e3e8c044a77c39a8d7869439fbb4fb4e19f293e7eb56",
     )
 
 RA_INJECT_GIT_VERSION = """
