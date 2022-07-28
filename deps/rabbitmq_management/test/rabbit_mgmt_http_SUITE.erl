@@ -18,7 +18,6 @@
                                 assert_keys/2, assert_no_keys/2,
                                 http_get/2, http_get/3, http_get/5,
                                 http_get_no_auth/3,
-                                http_get_as_proplist/2,
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
                                 http_upload_raw/8,
@@ -88,7 +87,6 @@ all_tests() -> [
     queues_test,
     quorum_queues_test,
     stream_queues_have_consumers_field,
-    queues_well_formed_json_test,
     bindings_test,
     bindings_post_test,
     bindings_null_routing_key_test,
@@ -1125,23 +1123,6 @@ stream_queues_have_consumers_field(Config) ->
 
     http_delete(Config, "/queues/%2f/sq", {group, '2xx'}),
     ok.
-
-queues_well_formed_json_test(Config) ->
-    %% TODO This test should be extended to the whole API
-    Good = [{durable, true}],
-    http_put(Config, "/queues/%2F/foo", Good, {group, '2xx'}),
-    http_put(Config, "/queues/%2F/baz", Good, {group, '2xx'}),
-
-    Queues = http_get_as_proplist(Config, "/queues/%2F"),
-    %% Ensure keys are unique
-    [begin
-         Q = rabbit_data_coercion:to_proplist(Q0),
-         ?assertEqual(lists:sort(Q), lists:usort(Q))
-     end || Q0 <- Queues],
-
-    http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
-    http_delete(Config, "/queues/%2F/baz", {group, '2xx'}),
-    passed.
 
 bindings_test(Config) ->
     XArgs = [{type, <<"direct">>}],
