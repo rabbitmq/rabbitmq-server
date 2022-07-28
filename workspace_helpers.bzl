@@ -252,10 +252,3 @@ sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.baze
             "@enough//:erlang_app",
         ],
     )
-
-    new_git_repository(
-        name = "trust_store_http",
-        remote = "https://github.com/rabbitmq/trust-store-http.git",
-        branch = "master",
-        build_file = rabbitmq_workspace + "//:BUILD.trust_store_http",
-    )
