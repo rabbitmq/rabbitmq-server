@@ -536,6 +536,7 @@ cluster_vhost_deletion(Config) ->
     [?assertEqual(false, is_process_alive(Ch)) || Ch <- Chans1],
 
     %% ensure vhost entry is cleared after 'tracking_execution_timeout'
+
     ?assertEqual(false, exists_in_tracked_connection_per_vhost_table(Config, 0, Vhost)),
     ?assertEqual(false, exists_in_tracked_connection_per_vhost_table(Config, 1, Vhost)),
 
@@ -770,6 +771,7 @@ exists_in_tracked_connection_per_vhost_table(Config, VHost) ->
 exists_in_tracked_connection_per_vhost_table(Config, NodeIndex, VHost) ->
     exists_in_tracking_table(Config, NodeIndex,
         fun rabbit_connection_tracking:tracked_connection_per_vhost_table_name_for/1,
+        tracked_connection_per_vhost,
         VHost).
 
 exists_in_tracked_connection_per_user_table(Config, Username) ->
@@ -777,6 +779,7 @@ exists_in_tracked_connection_per_user_table(Config, Username) ->
 exists_in_tracked_connection_per_user_table(Config, NodeIndex, Username) ->
     exists_in_tracking_table(Config, NodeIndex,
         fun rabbit_connection_tracking:tracked_connection_per_user_table_name_for/1,
+        tracked_connection_per_user,
         Username).
 
 exists_in_tracked_channel_per_user_table(Config, Username) ->
@@ -784,16 +787,25 @@ exists_in_tracked_channel_per_user_table(Config, Username) ->
 exists_in_tracked_channel_per_user_table(Config, NodeIndex, Username) ->
     exists_in_tracking_table(Config, NodeIndex,
         fun rabbit_channel_tracking:tracked_channel_per_user_table_name_for/1,
+        tracked_channel_per_user,
         Username).
 
-exists_in_tracking_table(Config, NodeIndex, TableNameFun, Key) ->
+exists_in_tracking_table(Config, NodeIndex, TableNameFun, Table, Key) ->
     Node = rabbit_ct_broker_helpers:get_node_config(
                 Config, NodeIndex, nodename),
     Tab = TableNameFun(Node),
-    AllKeys = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
-                                           mnesia,
-                                           dirty_all_keys, [Tab]),
-    lists:member(Key, AllKeys).
+    case rabbit_ct_broker_helpers:rpc(Config, NodeIndex, rabbit_feature_flags,
+                                      is_enabled, [tracking_records_in_ets]) of
+        true ->
+            All = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
+                                               ets, lookup, [Table, Key]),
+            lists:keymember(Key, 1, All);
+        false ->
+            AllKeys = rabbit_ct_broker_helpers:rpc(Config, NodeIndex,
+                                                   mnesia,
+                                                   dirty_all_keys, [Tab]),
+            lists:member(Key, AllKeys)
+    end.
 
 mimic_vhost_down(Config, NodeIndex, VHost) ->
     rabbit_ct_broker_helpers:rpc(Config, NodeIndex,

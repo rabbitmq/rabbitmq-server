@@ -26,9 +26,11 @@
 -callback clear_tracking_tables() -> 'ok'.
 -callback shutdown_tracked_items(list(), term()) -> ok.
 
--export([id/2, count_tracked_items/4, match_tracked_items/2,
-         clear_tracking_table/1, delete_tracking_table/3,
-         delete_tracked_entry/3]).
+-export([id/2, delete_tracked_entry/4, delete_tracked_entry_internal/4,
+         clear_tracking_table/1, delete_tracking_table/3]).
+-export([count_tracked_items_ets/3, match_tracked_items_ets/2]).
+-export([count_tracked_items_local/2, match_tracked_items_local/2]).
+-export([count_tracked_items_mnesia/4, match_tracked_items_mnesia/2]).
 
 %%----------------------------------------------------------------------------
 
@@ -37,10 +39,32 @@
 
 id(Node, Name) -> {Node, Name}.
 
--spec count_tracked_items(function(), integer(), term(), string()) ->
+-spec count_tracked_items_ets(atom(), term(), string()) ->
     non_neg_integer().
+count_tracked_items_ets(Tab, Key, ContextMsg) ->
+    lists:foldl(fun (Node, Acc) when Node == node() ->
+                        N = count_tracked_items_local(Tab, Key),
+                        Acc + N;
+                    (Node, Acc) ->
+                        N = case rabbit_misc:rpc_call(Node, ?MODULE, count_tracked_items_local,
+                                                      [Tab, Key]) of
+                                Int when is_integer(Int) -> Int;
+                                {badrpc, Err} ->
+                                    rabbit_log:error(
+                                      "Failed to fetch number of ~p ~p on node ~p:~n~p",
+                                      [ContextMsg, Key, Node, Err]),
+                                    0
+                            end,
+                        Acc + N
+                end, 0, rabbit_nodes:all_running()).
 
-count_tracked_items(TableNameFun, CountRecPosition, Key, ContextMsg) ->
+count_tracked_items_local(Tab, Key) ->
+    case ets:lookup(Tab, Key) of
+        []         -> 0;
+        [{_, Val}] -> Val
+    end.
+
+count_tracked_items_mnesia(TableNameFun, CountRecPosition, Key, ContextMsg) ->
     lists:foldl(fun (Node, Acc) ->
                         Tab = TableNameFun(Node),
                         try
@@ -58,9 +82,25 @@ count_tracked_items(TableNameFun, CountRecPosition, Key, ContextMsg) ->
                         end
                 end, 0, rabbit_nodes:all_running()).
 
--spec match_tracked_items(function(), tuple()) -> term().
+-spec match_tracked_items_ets(atom(), tuple()) -> term().
+match_tracked_items_ets(Tab, MatchSpec) ->
+    lists:foldl(
+      fun (Node, Acc) when Node == node() ->
+              Acc ++ match_tracked_items_local(Tab, MatchSpec);
+          (Node, Acc) ->
+              case rabbit_misc:rpc_call(Node, ?MODULE, match_tracked_items_local,
+                                        [Tab, MatchSpec]) of
+                  List when is_list(List) ->
+                      Acc ++ List;
+                  _ ->
+                      Acc
+              end
+      end, [], rabbit_nodes:all_running()).
 
-match_tracked_items(TableNameFun, MatchSpec) ->
+match_tracked_items_local(Tab, MatchSpec) ->
+    ets:match_object(Tab, MatchSpec).
+
+match_tracked_items_mnesia(TableNameFun, MatchSpec) ->
     lists:foldl(
         fun (Node, Acc) ->
                 Tab = TableNameFun(Node),
@@ -70,7 +110,6 @@ match_tracked_items(TableNameFun, MatchSpec) ->
         end, [], rabbit_nodes:all_running()).
 
 -spec clear_tracking_table(atom()) -> ok.
-
 clear_tracking_table(TableName) ->
     case mnesia:clear_table(TableName) of
         {atomic, ok} -> ok;
@@ -89,15 +128,35 @@ delete_tracking_table(TableName, Node, ContextMsg) ->
             ok
     end.
 
--spec delete_tracked_entry({atom(), atom(), list()}, function(), term()) -> ok.
-
-delete_tracked_entry(_ExistsCheckSpec = {M, F, A}, TableNameFun, Key) ->
+-spec delete_tracked_entry({atom(), atom(), list()}, atom(), function(), term()) -> ok.
+delete_tracked_entry(_ExistsCheckSpec = {M, F, A}, TableName, TableNameFun, Key) ->
     ClusterNodes = rabbit_nodes:all_running(),
     ExistsInCluster =
         lists:any(fun(Node) -> rpc:call(Node, M, F, A) end, ClusterNodes),
     case ExistsInCluster of
         false ->
-            [mnesia:dirty_delete(TableNameFun(Node), Key) || Node <- ClusterNodes];
+            [delete_tracked_entry_internal(Node, TableName, TableNameFun, Key)
+             || Node <- ClusterNodes];
         true ->
             ok
     end.
+
+delete_tracked_entry_internal(Node, Tab, TableNameFun, Key) when Node == node() ->
+    case rabbit_feature_flags:is_enabled(tracking_records_in_ets) of
+        true ->
+            true = ets:delete(Tab, Key),
+            ok;
+        false ->
+            mnesia:dirty_delete(TableNameFun(Node), Key),
+            ok
+    end;
+delete_tracked_entry_internal(Node, Tab, TableNameFun, Key) ->
+    case rabbit_misc:rpc_call(Node, ?MODULE, delete_tracked_entry_internal, [Node, Tab, TableNameFun, Key]) of
+        ok ->
+            ok;
+        _ ->
+            %% Node could be down, but also in a mixed version cluster this function is not
+            %% implemented on pre 3.11.x releases. Ensure that we clean up any mnesia table
+            mnesia:dirty_delete(TableNameFun(Node), Key)
+    end,
+    ok.

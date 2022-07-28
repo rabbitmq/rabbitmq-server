@@ -79,6 +79,12 @@
                     {requires,    database},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({tracking_metadata_store,
+                   [{description, "tracking infrastructure"},
+                    {mfa,         {rabbit_sup, start_child, [rabbit_tracking_store]}},
+                    {requires,    database},
+                    {enables,     external_infrastructure}]}).
+
 -rabbit_boot_step({code_server_cache,
                    [{description, "code_server cache server"},
                     {mfa,         {rabbit_sup, start_child, [code_server_cache]}},
