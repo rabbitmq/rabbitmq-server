@@ -277,12 +277,6 @@ erlang_app(
 """,
 )
 
-erlang_package.git_package(
-    name = "trust_store_http",
-    repository = "rabbitmq/trust-store-http",
-    branch = "master",
-)
-
 use_repo(
     erlang_package,
     "accept",
@@ -314,7 +308,6 @@ use_repo(
     "syslog",
     "sysmon_handler",
     "systemd",
-    "trust_store_http",
 )
 
 rbe = use_extension(
