@@ -291,30 +291,19 @@ import_case16(Config) ->
 import_case17(Config) -> import_invalid_file_case(Config, "failing_case17").
 
 import_case18(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-      false ->
-        case rabbit_ct_broker_helpers:enable_feature_flag(Config, user_limits) of
-            ok ->
-                import_file_case(Config, "case18"),
-                User = <<"limited_guest">>,
-                UserIsImported =
-                    fun () ->
-                            case user_lookup(Config, User) of
-                                {error, not_found} -> false;
-                                _       -> true
-                            end
-                    end,
-                rabbit_ct_helpers:await_condition(UserIsImported, 20000),
-                {ok, UserRec} = user_lookup(Config, User),
-                ?assertEqual(#{<<"max-connections">> => 2}, internal_user:get_limits(UserRec)),
-                ok;
-            Skip ->
-                Skip
-        end;
-      _ ->
-        %% skip the test in mixed version mode
-        {skip, "Should not run in mixed version environments"}
-    end.
+    import_file_case(Config, "case18"),
+    User = <<"limited_guest">>,
+    UserIsImported =
+    fun () ->
+            case user_lookup(Config, User) of
+                {error, not_found} -> false;
+                _       -> true
+            end
+    end,
+    rabbit_ct_helpers:await_condition(UserIsImported, 20000),
+    {ok, UserRec} = user_lookup(Config, User),
+    ?assertEqual(#{<<"max-connections">> => 2}, internal_user:get_limits(UserRec)),
+    ok.
 
 import_case19(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
