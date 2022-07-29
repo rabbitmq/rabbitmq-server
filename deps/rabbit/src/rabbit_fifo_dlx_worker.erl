@@ -460,9 +460,8 @@ redeliver0(#pending{delivery = #delivery{message = BasicMsg} = Delivery0,
   when is_list(DLRKeys) ->
     Delivery = Delivery0#delivery{message = BasicMsg#basic_message{exchange_name = DLXRef,
                                                                    routing_keys  = DLRKeys}},
-    %% rabbit_exchange:route/2 can route to target queues that do not exist
-    %% (feature flag implicit_default_bindings).
-    %% Therefore, filter out non-existent target queues.
+    %% Because of implicit default bindings rabbit_exchange:route/2 can route to target
+    %% queues that do not exist. Therefore, filter out non-existent target queues.
     RouteToQs0 = queue_names(
                    rabbit_amqqueue:prepend_extra_bcc(
                      rabbit_amqqueue:lookup(
