@@ -758,7 +758,7 @@ formatting_as_json_works(_, Context) ->
     ?assertMatch(#{float := 1.42}, Term),
     ?assertMatch(#{string := <<"string">>}, Term),
     ?assertMatch(#{list := [<<"s">>, <<"a">>, 3]}, Term),
-    ?assertMatch(#{map := #{key := <<"value">>}}, Term),
+    ?assertMatch(#{map := #{<<"key">> := <<"value">>}}, Term),
     ?assertMatch(#{function := FunBin}, Term),
     ?assertMatch(#{pid := PidBin}, Term),
     ?assertMatch(#{port := PortBin}, Term),
