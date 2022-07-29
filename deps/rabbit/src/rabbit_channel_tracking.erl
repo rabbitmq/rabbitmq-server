@@ -89,11 +89,7 @@ handle_cast({channel_created, Details}) ->
     end;
 handle_cast({channel_closed, Details}) ->
     %% channel has terminated, unregister if local
-    case get_tracked_channel_by_pid(pget(pid, Details)) of
-        [#tracked_channel{name = Name}] ->
-            unregister_tracked(rabbit_tracking:id(node(), Name));
-        _Other -> ok
-    end;
+    unregister_tracked_by_pid(pget(pid, Details));
 handle_cast({connection_closed, ConnDetails}) ->
     ThisNode= node(),
     ConnPid = pget(pid, ConnDetails),
@@ -139,9 +135,8 @@ register_tracked(TrackedCh = #tracked_channel{node = Node}) when Node == node() 
         false -> register_tracked_mnesia(TrackedCh)
     end.
 
-register_tracked_ets(TrackedCh = #tracked_channel{node = Node, name = Name, username = Username}) ->
-    ChId = rabbit_tracking:id(Node, Name),
-    case ets:lookup(?TRACKED_CHANNEL_TABLE, ChId) of
+register_tracked_ets(TrackedCh = #tracked_channel{pid = ChPid, username = Username}) ->
+    case ets:lookup(?TRACKED_CHANNEL_TABLE, ChPid) of
         []    ->
             ets:insert(?TRACKED_CHANNEL_TABLE, TrackedCh),
             ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, 1, {Username, 0});
@@ -164,6 +159,36 @@ register_tracked_mnesia(TrackedCh =
     end,
     ok.
 
+-spec unregister_tracked_by_pid(pid()) -> any().
+unregister_tracked_by_pid(ChPid) when node(ChPid) == node() ->
+    case rabbit_feature_flags:is_enabled(tracking_records_in_ets) of
+        true -> unregister_tracked_by_pid_ets(ChPid);
+        false -> unregister_tracked_by_pid_mnesia(ChPid)
+    end.
+
+unregister_tracked_by_pid_ets(ChPid) ->
+    case ets:lookup(?TRACKED_CHANNEL_TABLE, ChPid) of
+        []     -> ok;
+        [#tracked_channel{username = Username}] ->
+            ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, -1),
+            ets:delete(?TRACKED_CHANNEL_TABLE, ChPid)
+    end.
+
+unregister_tracked_by_pid_mnesia(ChPid) ->
+    case get_tracked_channel_by_pid_mnesia(ChPid) of
+        []     -> ok;
+        [#tracked_channel{id = ChId, node = Node, username = Username}] ->
+            TableName = tracked_channel_table_name_for(Node),
+            PerUserChannelTableName = tracked_channel_per_user_table_name_for(Node),
+
+            mnesia:dirty_update_counter(PerUserChannelTableName, Username, -1),
+            mnesia:dirty_delete(TableName, ChId)
+    end.
+
+%% @doc This function is exported and implements a rabbit_tracking
+%% callback, however it is not used in rabbitmq-server any more. It is
+%% only kept for backwards compatibility if 3rd-party code would rely
+%% on it.
 -spec unregister_tracked(rabbit_types:tracked_channel_id()) -> ok.
 unregister_tracked(ChId = {Node, _Name}) when Node == node() ->
     case rabbit_feature_flags:is_enabled(tracking_records_in_ets) of
@@ -172,11 +197,11 @@ unregister_tracked(ChId = {Node, _Name}) when Node == node() ->
     end.
 
 unregister_tracked_ets(ChId) ->
-    case ets:lookup(?TRACKED_CHANNEL_TABLE, ChId) of
+    case get_tracked_channel_by_id_ets(ChId) of
         []     -> ok;
-        [#tracked_channel{username = Username}] ->
+        [#tracked_channel{pid = ChPid, username = Username}] ->
             ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, -1),
-            ets:delete(?TRACKED_CHANNEL_TABLE, ChId)
+            ets:delete(?TRACKED_CHANNEL_TABLE, ChPid)
     end.
 
 unregister_tracked_mnesia(ChId = {Node, _Name}) when Node =:= node() ->
@@ -317,7 +342,7 @@ ensure_tracked_channels_table_for_this_node_ets() ->
     rabbit_log:info("Setting up a table for channel tracking on this node: ~p",
                     [?TRACKED_CHANNEL_TABLE]),
     ets:new(?TRACKED_CHANNEL_TABLE, [named_table, public, {write_concurrency, true},
-                                     {keypos, #tracked_channel.id}]).
+                                     {keypos, #tracked_channel.pid}]).
 
 ensure_tracked_channels_table_for_this_node_mnesia() ->
     Node = node(),
@@ -393,16 +418,10 @@ get_tracked_channels_by_connection_pid_mnesia(ConnPid) ->
         fun tracked_channel_table_name_for/1,
         #tracked_channel{connection = ConnPid, _ = '_'}).
 
-get_tracked_channel_by_pid(ChPid) ->
-    case rabbit_feature_flags:is_enabled(tracking_records_in_ets) of
-        true -> get_tracked_channel_by_pid_ets(ChPid);
-        false -> get_tracked_channel_by_pid_mnesia(ChPid)
-    end.
-
-get_tracked_channel_by_pid_ets(ChPid) ->
+get_tracked_channel_by_id_ets(ChId) ->
     rabbit_tracking:match_tracked_items_ets(
         ?TRACKED_CHANNEL_TABLE,
-        #tracked_channel{pid = ChPid, _ = '_'}).
+        #tracked_channel{id = ChId, _ = '_'}).
 
 get_tracked_channel_by_pid_mnesia(ChPid) ->
     rabbit_tracking:match_tracked_items_mnesia(
