@@ -82,12 +82,6 @@ init_per_group(Group, Config)
                                                     {rabbit,
                                                      [{forced_feature_flags_on_init,
                                                        [classic_mirrored_queue_version,
-<<<<<<< HEAD
-                                                        implicit_default_bindings,
-                                                        maintenance_mode_status,
-                                                        user_limits,
-=======
->>>>>>> 32e118fada (Remove test code which depended on feature flag implicit_default_bindings)
                                                         virtual_host_metadata,
                                                         quorum_queue,
                                                         stream_queue]}]})
