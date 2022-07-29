@@ -679,7 +679,7 @@ ConsumerUpdateResponse => Key Version CorrelationId ResponseCode OffsetSpecifica
     Offset => uint64 (for offset) | int64 (for timestamp)
 ```
 
-=== Exchange Command Versions
+=== ExchangeCommandVersions
 
 ```
 CommandVersionsExchangeRequest => Key Version CorrelationId [Command]
