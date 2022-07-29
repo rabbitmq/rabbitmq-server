@@ -145,14 +145,8 @@ erlang_package.hex_package(
 
 erlang_package.git_package(
     repository = "rabbitmq/osiris",
-    tag = "v1.2.8",
-    patch_cmds = ["""VERSION=$(git rev-parse HEAD)
-echo "Injecting ${VERSION} into Makefile..."
-sed -i"_orig" -E '/PROJECT_VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' Makefile
-echo "Injecting ${VERSION} into BUILD.bazel..."
-sed -i"_orig" -E '/VERSION/ s/[0-9]+\\.[0-9]+\\.[0-9]+/'${VERSION}'/' BUILD.bazel
-""",
-"""sed -i"_orig2" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
+    tag = "v1.2.6",
+    patch_cmds = ["""sed -i"_orig" -E 's/ct_sharded\\.bzl/ct.bzl/' BUILD.bazel
 """],
 )
 
