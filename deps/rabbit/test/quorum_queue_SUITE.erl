@@ -223,8 +223,6 @@ init_per_group(Group, Config) ->
                             %% tests.
                             timer:sleep(ClusterSize * 1000),
                             ok = rabbit_ct_broker_helpers:enable_feature_flag(
-                                   Config2, maintenance_mode_status),
-                            ok = rabbit_ct_broker_helpers:enable_feature_flag(
                                    Config2, virtual_host_metadata),
                             Config2;
                         Skip ->
