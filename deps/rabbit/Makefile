@@ -140,15 +140,8 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client meck prop
 
 PLT_APPS += mnesia
 
-<<<<<<< HEAD
 dep_cuttlefish = hex 3.0.0
 dep_syslog = git https://github.com/schlagert/syslog 3.4.5
-=======
-dep_syslog = git https://github.com/schlagert/syslog 4.0.0
-dep_osiris = git https://github.com/rabbitmq/osiris v1.2.6
-dep_systemd = hex 0.6.1
-dep_seshat = git https://github.com/rabbitmq/seshat 0.1.0
->>>>>>> 68560234bc (Revert "Pin Osiris to v1.2.8")
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))

@@ -164,18 +164,6 @@ erlang_app(
         sha256 = "a41b6d3e11a3444e063e09cc225f7f3e631ce14019e5fbcaebfda89b1bd788ea",
     )
 
-<<<<<<< HEAD
-=======
-    github_erlang_app(
-        name = "osiris",
-        org = "rabbitmq",
-        ref = "refs/tags/v1.2.6",
-        version = "1.2.6",
-        sha256 = "abfe9bc53b0eb1c14713152314f612562ecb76465b9f804313e3510b73e5720b",
-        build_file = rabbitmq_workspace + "//:BUILD.osiris",
-    )
-
->>>>>>> 68560234bc (Revert "Pin Osiris to v1.2.8")
     hex_pm_erlang_app(
         name = "prometheus",
         version = "4.8.1",
@@ -242,21 +230,4 @@ erlang_app(
         name = "sysmon_handler",
         version = "1.3.0",
         sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
-    )
-
-<<<<<<< HEAD
-    new_git_repository(
-        name = "trust_store_http",
-        remote = "https://github.com/rabbitmq/trust-store-http.git",
-        branch = "master",
-        build_file = rabbitmq_workspace + "//:BUILD.trust_store_http",
-=======
-    hex_pm_erlang_app(
-        name = "systemd",
-        version = "0.6.1",
-        sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
-        deps = [
-            "@enough//:erlang_app",
-        ],
->>>>>>> 51d66776ce (Remove old reference to external trust-store-http)
     )
