@@ -95,11 +95,8 @@ init_per_group(Group, Config, NodesCount) ->
     ok = rabbit_ct_broker_helpers:rpc(
            Config2, 0, application, set_env,
            [rabbit, channel_tick_interval, 100]),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
-        ok -> case rabbit_ct_broker_helpers:enable_feature_flag(Config2, stream_queue) of
-                  ok   -> Config2;
-                  Skip -> Skip
-              end;
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, stream_queue) of
+        ok   -> Config2;
         Skip -> Skip
     end.
 

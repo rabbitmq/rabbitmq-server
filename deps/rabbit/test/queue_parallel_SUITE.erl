@@ -90,40 +90,25 @@ init_per_group(classic_queue, Config) ->
        {consumer_args, []},
        {queue_durable, true}]);
 init_per_group(quorum_queue, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
-        ok ->
-            rabbit_ct_helpers:set_config(
-              Config,
-              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
-               {consumer_args, []},
-               {queue_durable, true}]);
-        Skip ->
-            Skip
-    end;
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>}]},
+       {consumer_args, []},
+       {queue_durable, true}]);
 init_per_group(quorum_queue_in_memory_limit, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
-        ok ->
-            rabbit_ct_helpers:set_config(
-              Config,
-              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                             {<<"x-max-in-memory-length">>, long, 1}]},
-               {consumer_args, []},
-               {queue_durable, true}]);
-        Skip ->
-            Skip
-    end;
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                     {<<"x-max-in-memory-length">>, long, 1}]},
+       {consumer_args, []},
+       {queue_durable, true}]);
 init_per_group(quorum_queue_in_memory_bytes, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
-        ok ->
-            rabbit_ct_helpers:set_config(
-              Config,
-              [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
-                             {<<"x-max-in-memory-bytes">>, long, 1}]},
-               {consumer_args, []},
-               {queue_durable, true}]);
-        Skip ->
-            Skip
-    end;
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{queue_args, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                     {<<"x-max-in-memory-bytes">>, long, 1}]},
+       {consumer_args, []},
+       {queue_durable, true}]);
 init_per_group(mirrored_queue, Config) ->
     rabbit_ct_broker_helpers:set_ha_policy(Config, 0, <<"^max_length.*queue">>,
         <<"all">>, [{<<"ha-sync-mode">>, <<"automatic">>}]),
