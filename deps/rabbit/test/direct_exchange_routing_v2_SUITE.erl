@@ -39,6 +39,7 @@ groups() ->
                                          remove_binding_delete_queue_multiple,
                                          remove_binding_delete_exchange,
                                          recover_bindings,
+                                         route_exchange_to_exchange,
                                          reset]},
        {start_feature_flag_disabled, [], [enable_feature_flag]}
       ]},
@@ -324,6 +325,37 @@ recover_bindings(Config) ->
     %% cleanup
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     delete_queue(Ch, <<"durable-q">>),
+    ok.
+
+%% Test that routing from a direct exchange to a fanout exchange works.
+route_exchange_to_exchange(Config) ->
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
+
+    DirectX = <<"amq.direct">>,
+    FanoutX = <<"amq.fanout">>,
+    RKey = <<"k">>,
+    Q1 = <<"q1">>,
+    Q2 = <<"q2">>,
+
+    #'exchange.bind_ok'{} = amqp_channel:call(Ch, #'exchange.bind'{destination = FanoutX,
+                                                                   source = DirectX,
+                                                                   routing_key = RKey}),
+    declare_queue(Ch, Q1, true),
+    declare_queue(Ch, Q2, false),
+    bind_queue(Ch, Q1, FanoutX, <<"ignored">>),
+    bind_queue(Ch, Q2, FanoutX, <<"ignored">>),
+
+    publish(Ch, DirectX, RKey),
+    quorum_queue_utils:wait_for_messages(Config, [[Q1, <<"1">>, <<"1">>, <<"0">>]]),
+    quorum_queue_utils:wait_for_messages(Config, [[Q2, <<"1">>, <<"1">>, <<"0">>]]),
+    ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME)),
+
+    %% cleanup
+    delete_queue(Ch, Q1),
+    delete_queue(Ch, Q2),
+    #'exchange.unbind_ok'{} = amqp_channel:call(Ch, #'exchange.unbind'{destination = FanoutX,
+                                                                       source = DirectX,
+                                                                       routing_key = RKey}),
     ok.
 
 enable_feature_flag(Config) ->
