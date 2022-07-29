@@ -122,8 +122,8 @@ erlang_package.git_package(
 
 erlang_package.git_package(
     name = "jose",
-    repository = "potatosalad/erlang-jose",
-    commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
+    repository = "michaelklishin/erlang-jose",
+    commit = "5d0e927fdaac25c95890b1fc15c7d0f741898acf",
 )
 
 erlang_package.hex_package(
