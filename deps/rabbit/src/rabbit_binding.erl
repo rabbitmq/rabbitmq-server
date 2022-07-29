@@ -585,8 +585,8 @@ remove_routes(Routes, ShouldIndexTable) ->
                  case rabbit_exchange:lookup(Src) of
                      {ok, X} ->
                          ok = sync_index_route(R, should_index_table(X), fun delete/3);
-                     _ ->
-                         ok
+                     {error, not_found} ->
+                         ok = sync_index_route(R, true, fun delete/3)
                  end
              end || #route{binding = #binding{source = Src}} = R <- Routes]
     end,
