@@ -29,6 +29,16 @@ format_prefix([Var | Rest], LogEvent, Config, Prefix)
   when is_atom(Var) ->
     String = format_var(Var, LogEvent, Config),
     format_prefix(Rest, LogEvent, Config, [String | Prefix]);
+format_prefix([{Var, Then, Else} | Rest], #{meta := Meta} = LogEvent, Config, Prefix)
+    when is_atom(Var) ->
+    String =
+	case maps:get(Var, Meta, undefined) of
+	    undefined ->
+		format_prefix(Else, LogEvent, Config, []);
+	    _Value ->
+		format_prefix(Then, LogEvent, Config, [])
+	end,
+    format_prefix(Rest, LogEvent, Config, [String | Prefix]);
 format_prefix([], _, _, Prefix) ->
     lists:reverse(Prefix).
 
