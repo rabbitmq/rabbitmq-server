@@ -39,18 +39,13 @@
 all() ->
     [
      {group, all_tests_with_prefix},
-     {group, all_tests_without_prefix},
-     {group, user_limits_ff}
+     {group, all_tests_without_prefix}
     ].
 
 groups() ->
     [
      {all_tests_with_prefix, [], all_tests()},
-     {all_tests_without_prefix, [], all_tests()},
-     {user_limits_ff, [], [
-        user_limits_list_test,
-        user_limit_set_test
-     ]}
+     {all_tests_without_prefix, [], all_tests()}
     ].
 
 all_tests() -> [
@@ -150,7 +145,9 @@ all_tests() -> [
     disable_basic_auth_test,
     login_test,
     csp_headers_test,
-    auth_attempts_test
+    auth_attempts_test,
+    user_limits_list_test,
+    user_limit_set_test
 ].
 
 %% -------------------------------------------------------------------
@@ -223,8 +220,6 @@ init_per_group(all_tests_with_prefix=Group, Config0) ->
             end_per_group(Group, Config3),
             {skip, "Quorum queues are unsupported"}
     end;
-init_per_group(user_limits_ff = Group, Config0) ->
-    enable_feature_flag_or_skip(user_limits, Group, Config0);
 init_per_group(Group, Config0) ->
     enable_feature_flag_or_skip(quorum_queue, Group, Config0).
 
