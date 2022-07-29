@@ -444,7 +444,7 @@ find_pythons() ->
     Py3 = rabbit_ct_helpers:exec(["python3", "-V"]),
     case Py3 of
          {ok, _} -> ["python3"];
-         _ -> erlang:error("python not found")
+         _ -> erlang:error("python3 not found")
     end.
 
 find_newest_python() ->
@@ -457,7 +457,7 @@ publish_with_stdin_python_program(Config, In) ->
     "import subprocess;" ++
     "proc = subprocess.Popen(['" ++ Py ++ "', '" ++ RmqAdmin ++ "', '-P', '" ++ integer_to_list(MgmtPort) ++
     "', 'publish', 'routing_key=test'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE);" ++
-    "(stdout, stderr) = proc.communicate('" ++ In ++ "');" ++
+    "(stdout, stderr) = proc.communicate('" ++ In ++ "'.encode());" ++
     "exit(proc.returncode)".
 
 write_test_config(Config) ->
