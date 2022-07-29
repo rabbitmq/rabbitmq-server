@@ -585,8 +585,8 @@ remove_routes(Routes, ShouldIndexTable) ->
                  case rabbit_exchange:lookup(Src) of
                      {ok, X} ->
                          ok = sync_index_route(R, should_index_table(X), fun delete/3);
-                     _ ->
-                         ok
+                     {error, not_found} ->
+                         ok = sync_index_route(R, true, fun delete/3)
                  end
              end || #route{binding = #binding{source = Src}} = R <- Routes]
     end,
@@ -780,8 +780,9 @@ x_callback(Serial, X, F, Bs) ->
 populate_index_route_table() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              mnesia:lock({table, rabbit_route}, read),
-              mnesia:lock({table, rabbit_index_route}, write),
+              mnesia:read_lock_table(rabbit_route),
+              mnesia:read_lock_table(rabbit_exchange),
+              mnesia:write_lock_table(rabbit_index_route),
               Routes = rabbit_misc:dirty_read_all(rabbit_route),
               lists:foreach(
                 fun(#route{binding = #binding{source = Exchange}} = Route) ->
@@ -793,8 +794,8 @@ populate_index_route_table() ->
                                     false ->
                                         ok
                                 end;
-                            _ ->
-                                ok
+                            {error, not_found} ->
+                                mnesia:abort({source_exchange_not_found, Route})
                         end
                 end, Routes)
       end).

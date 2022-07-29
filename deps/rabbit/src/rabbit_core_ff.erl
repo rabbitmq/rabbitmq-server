@@ -126,7 +126,7 @@ direct_exchange_routing_v2_enable(#{feature_name := FeatureName}) ->
                   [FeatureName, TableName, node(), Err]),
                 Error
         end
-    catch throw:Reason ->
+    catch throw:{error, Reason} ->
               rabbit_log_feature_flags:error(
                 "Feature flags: `~s`: enable callback failure: ~p",
                 [FeatureName, Reason]),
