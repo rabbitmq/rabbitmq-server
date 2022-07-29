@@ -211,22 +211,14 @@ init_per_group(Group, Config) ->
                 {skip, _} ->
                     Ret;
                 Config2 ->
-                    EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
-                                 Config2, quorum_queue),
-                    case EnableFF of
-                        ok ->
-                            ok = rabbit_ct_broker_helpers:rpc(
-                                   Config2, 0, application, set_env,
-                                   [rabbit, channel_tick_interval, 100]),
-                            %% HACK: the larger cluster sizes benefit for a bit
-                            %% more time after clustering before running the
-                            %% tests.
-                            timer:sleep(ClusterSize * 1000),
-                            Config2;
-                        Skip ->
-                            end_per_group(Group, Config2),
-                            Skip
-                    end
+                    ok = rabbit_ct_broker_helpers:rpc(
+                           Config2, 0, application, set_env,
+                           [rabbit, channel_tick_interval, 100]),
+                    %% HACK: the larger cluster sizes benefit for a bit
+                    %% more time after clustering before running the
+                    %% tests.
+                    timer:sleep(ClusterSize * 1000),
+                    Config2
             end
     end.
 
@@ -252,24 +244,10 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
                                             {queue_name, Q},
                                             {alt_queue_name, <<Q/binary, "_alt">>}
                                            ]),
-    Ret = rabbit_ct_helpers:run_steps(
-            Config2,
-            rabbit_ct_broker_helpers:setup_steps() ++
-            rabbit_ct_client_helpers:setup_steps()),
-    case Ret of
-        {skip, _} ->
-            Ret;
-        Config3 ->
-            EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
-                         Config3, quorum_queue),
-            case EnableFF of
-                ok ->
-                    Config3;
-                Skip ->
-                    end_per_testcase(Testcase, Config3),
-                    Skip
-            end
-    end;
+    rabbit_ct_helpers:run_steps(
+      Config2,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps());
 init_per_testcase(Testcase, Config) ->
     ClusterSize = ?config(rmq_nodes_count, Config),
     IsMixed = rabbit_ct_helpers:is_mixed_versions(),
@@ -309,15 +287,6 @@ init_per_testcase(Testcase, Config) ->
                                                     {alt_queue_name, <<Q/binary, "_alt">>},
                                                     {alt_2_queue_name, <<Q/binary, "_alt_2">>}
                                                    ]),
-            EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
-                         Config2, quorum_queue),
-            case EnableFF of
-                ok ->
-                    Config2;
-                Skip ->
-                    end_per_testcase(Testcase, Config2),
-                    Skip
-            end,
             rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps())
     end.
 

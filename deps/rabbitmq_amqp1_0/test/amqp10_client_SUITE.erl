@@ -48,26 +48,10 @@ init_per_group(Group, Config) ->
                          {rmq_nodename_suffix, Suffix},
                          {amqp10_client_library, Group}
                         ]),
-    Config2 = rabbit_ct_helpers:run_setup_steps(
-                Config1,
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(
-              Config2, nodename),
-    Ret = rabbit_ct_broker_helpers:rpc(
-            Config2, 0,
-            rabbit_feature_flags,
-            is_supported_remotely,
-            [Nodes, [quorum_queue], 60000]),
-    case Ret of
-        true ->
-            ok = rabbit_ct_broker_helpers:rpc(
-                    Config2, 0, rabbit_feature_flags, enable, [quorum_queue]),
-            Config2;
-        false ->
-            end_per_group(Group, Config2),
-            {skip, "Quorum queues are unsupported"}
-    end.
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,

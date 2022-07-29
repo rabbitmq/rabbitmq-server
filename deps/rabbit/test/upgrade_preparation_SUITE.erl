@@ -62,10 +62,7 @@ end_per_group(_Group, Config) ->
 
 init_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, TestCase),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
-        ok   -> Config;
-        Skip -> Skip
-    end.
+    Config.
 
 end_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase).

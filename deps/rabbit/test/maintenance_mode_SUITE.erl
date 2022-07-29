@@ -16,8 +16,7 @@
 
 all() ->
     [
-      {group, cluster_size_3},
-      {group, quorum_queues}
+      {group, cluster_size_3}
     ].
 
 groups() ->
@@ -25,9 +24,7 @@ groups() ->
       {cluster_size_3, [], [
           maintenance_mode_status,
           listener_suspension_status,
-          client_connection_closure
-        ]},
-      {quorum_queues, [], [
+          client_connection_closure,
           quorum_queue_leadership_transfer
       ]}
     ].
@@ -43,17 +40,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(quorum_queues, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        true ->
-            %% In a mixed 3.8/3.9 cluster, unless the 3.8 node is the
-            %% one in maintenance mode, a quorum won't be available
-            %% due to mixed ra major versions
-            {skip, "test not supported in mixed version mode"};
-        _ ->
-            rabbit_ct_helpers:set_config(Config,
-                                         [{rmq_nodes_count, 3}])
-    end;
 init_per_group(_Group, Config) ->
     rabbit_ct_helpers:set_config(Config,
                                  [{rmq_nodes_count, 3}]).
@@ -70,19 +56,10 @@ init_per_testcase(quorum_queue_leadership_transfer = Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
-    Config2 = rabbit_ct_helpers:run_steps(
-                Config1,
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    QuorumQueueFFEnabled = rabbit_ct_broker_helpers:enable_feature_flag(
-                                Config2, quorum_queue),
-    case QuorumQueueFFEnabled of
-        ok ->
-            Config2;
-        Skip ->
-            end_per_testcase(Testcase, Config2),
-            Skip
-    end;
+    rabbit_ct_helpers:run_steps(
+      Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps());
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     ClusterSize = ?config(rmq_nodes_count, Config),

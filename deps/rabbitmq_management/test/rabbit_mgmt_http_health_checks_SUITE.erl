@@ -65,24 +65,10 @@ init_per_group(Group, Config0) ->
                 {rmq_nodes_count, ClusterSize},
                 {tcp_ports_base}],
     Config2 = rabbit_ct_helpers:set_config(Config1, NodeConf),
-    Ret = rabbit_ct_helpers:run_setup_steps(
-            Config2,
-            rabbit_ct_broker_helpers:setup_steps() ++
-            rabbit_ct_client_helpers:setup_steps()),
-    case Ret of
-        {skip, _} ->
-            Ret;
-        Config3 ->
-            EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
-                         Config3, quorum_queue),
-            case EnableFF of
-                ok ->
-                    Config3;
-                Skip ->
-                    end_per_group(Group, Config3),
-                    Skip
-            end
-    end.
+    rabbit_ct_helpers:run_setup_steps(
+      Config2,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
     inets:stop(),
