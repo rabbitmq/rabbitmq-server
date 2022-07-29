@@ -237,12 +237,6 @@ erlang_package.hex_package(
     sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
 )
 
-erlang_package.git_package(
-    name = "trust_store_http",
-    repository = "rabbitmq/trust-store-http",
-    branch = "master",
-)
-
 use_repo(
     erlang_package,
     "accept",
@@ -270,7 +264,6 @@ use_repo(
     "stdout_formatter",
     "syslog",
     "sysmon_handler",
-    "trust_store_http",
 )
 
 rbe = use_extension(

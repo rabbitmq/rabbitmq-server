@@ -231,10 +231,3 @@ erlang_app(
         version = "1.3.0",
         sha256 = "922cf0dd558b9fdb1326168373315b52ed6a790ba943f6dcbd9ee22a74cebdef",
     )
-
-    new_git_repository(
-        name = "trust_store_http",
-        remote = "https://github.com/rabbitmq/trust-store-http.git",
-        branch = "master",
-        build_file = rabbitmq_workspace + "//:BUILD.trust_store_http",
-    )

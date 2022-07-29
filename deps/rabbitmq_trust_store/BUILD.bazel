@@ -88,8 +88,8 @@ suites = [
         name = "system_SUITE",
         flaky = True,
         runtime_deps = [
-            "@ct_helper//:erlang_app",
             "//deps/trust_store_http:erlang_app",
+            "@ct_helper//:erlang_app",
         ],
     ),
 ]
