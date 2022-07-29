@@ -109,26 +109,10 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
-    Config2 = rabbit_ct_helpers:run_steps(
-                Config1,
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    Group = proplists:get_value(name, ?config(tc_group_properties, Config)),
-    FFEnabled = case Group of
-                    maintenance_mode ->
-                        rabbit_ct_broker_helpers:enable_feature_flag(
-                          Config2,
-                          maintenance_mode_status);
-                    _ ->
-                        ok
-                end,
-    case FFEnabled of
-        ok ->
-            Config2;
-        Skip ->
-            end_per_testcase(Testcase, Config2),
-            Skip
-    end.
+    rabbit_ct_helpers:run_steps(
+      Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,

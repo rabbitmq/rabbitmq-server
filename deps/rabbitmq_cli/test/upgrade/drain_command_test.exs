@@ -23,8 +23,6 @@ defmodule DrainCommandTest do
   end
 
   setup context do
-    enable_feature_flag(:maintenance_mode_status)
-
     {:ok, opts: %{
         node: get_rabbit_hostname(),
         timeout: context[:test_timeout] || 5000
