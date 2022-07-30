@@ -532,6 +532,8 @@ setting_message_format_works(Config) ->
     Context = default_context(Config),
     Format = ["level=", level, " ",
               "md_key=", md_key, " ",
+              {md_key, ["known_md_key=", md_key], []}, " ",
+              {unknown_field, ["unknown_field=", unknown_field], ["unknown_field_spotted"]}, " ",
               "unknown_field=", unknown_field, " ",
               "msg=", msg],
     {PrefixFormat, LineFormat} =
@@ -552,7 +554,9 @@ setting_message_format_works(Config) ->
     ?assertEqual(
        <<"level=warning ",
          "md_key=md_value ",
-         "unknown_field=<unknown unknown_field> "
+         "known_md_key=md_value ",
+         "unknown_field_spotted ",
+         "unknown_field=<unknown unknown_field> ",
          "msg=", RandomMsgBin/binary>>,
        Line).
 

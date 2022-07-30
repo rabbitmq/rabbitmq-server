@@ -188,8 +188,6 @@ init_per_group1(Group, Config) ->
                     ok = rabbit_ct_broker_helpers:rpc(
                            Config2, 0, application, set_env,
                            [rabbit, channel_tick_interval, 100]),
-                    ok = rabbit_ct_broker_helpers:enable_feature_flag(
-                           Config2, maintenance_mode_status),
                     Config2;
                 {skip, _} = Skip ->
                     end_per_group(Group, Config2),

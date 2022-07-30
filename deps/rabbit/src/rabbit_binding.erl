@@ -18,10 +18,9 @@
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
 %% these must all be run inside a mnesia tx
 -export([has_for_source/1, remove_for_source/1,
-         remove_for_destination/2, remove_transient_for_destination/1,
-         remove_default_exchange_binding_rows_of/1]).
+         remove_for_destination/2, remove_transient_for_destination/1]).
 
--export([implicit_for_destination/1, reverse_binding/1, populate_index_route_table/0]).
+-export([populate_index_route_table/0]).
 -export([new/4]).
 
 -define(DEFAULT_EXCHANGE(VHostPath), #resource{virtual_host = VHostPath,
@@ -226,35 +225,14 @@ remove(Src, Dst, B, ActingUser) ->
                   B#binding.source, [B], new_deletions(), false),
     process_deletions(Deletions, ActingUser).
 
-%% Implicit bindings are implicit as of rabbitmq/rabbitmq-server#1721.
-remove_default_exchange_binding_rows_of(Dst = #resource{}) ->
-    case implicit_for_destination(Dst) of
-        [Binding] ->
-            mnesia:dirty_delete(rabbit_durable_route, Binding),
-            mnesia:dirty_delete(rabbit_semi_durable_route, Binding),
-            mnesia:dirty_delete(rabbit_reverse_route,
-                                reverse_binding(Binding)),
-            mnesia:dirty_delete(rabbit_route, Binding);
-        _ ->
-            %% no binding to remove or
-            %% a competing tx has beaten us to it?
-            ok
-    end,
-    ok.
-
 -spec list_explicit() -> bindings().
 
 list_explicit() ->
     mnesia:async_dirty(
-        fun () ->
-            AllRoutes = mnesia:dirty_match_object(rabbit_route, #route{_ = '_'}),
-            %% if there are any default exchange bindings left after an upgrade
-            %% of a pre-3.8 database, filter them out
-            AllBindings = [B || #route{binding = B} <- AllRoutes],
-            lists:filter(fun(#binding{source = S}) ->
-                            not (S#resource.kind =:= exchange andalso S#resource.name =:= <<>>)
-                         end, AllBindings)
-            end).
+      fun () ->
+              AllRoutes = mnesia:dirty_match_object(rabbit_route, #route{_ = '_'}),
+              [B || #route{binding = B} <- AllRoutes]
+      end).
 
 -spec list(rabbit_types:vhost()) -> bindings().
 
@@ -264,14 +242,9 @@ list(VHostPath) ->
                                       destination = VHostResource,
                                       _           = '_'},
                    _       = '_'},
-    %% if there are any default exchange bindings left after an upgrade
-    %% of a pre-3.8 database, filter them out
-    AllBindings = [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
-                                                                         Route)],
-    Filtered    = lists:filter(fun(#binding{source = S}) ->
-                                       S =/= ?DEFAULT_EXCHANGE(VHostPath)
-                               end, AllBindings),
-    implicit_bindings(VHostPath) ++ Filtered.
+    ExplicitBindings = [B || #route{binding = B} <- mnesia:dirty_match_object(rabbit_route,
+                                                                              Route)],
+    implicit_bindings(VHostPath) ++ ExplicitBindings.
 
 -spec list_for_source
         (rabbit_types:binding_source()) -> bindings().
@@ -289,41 +262,35 @@ list_for_source(SrcName) ->
 -spec list_for_destination
         (rabbit_types:binding_destination()) -> bindings().
 
-list_for_destination(DstName = #resource{virtual_host = VHostPath}) ->
-    AllBindings = mnesia:async_dirty(
-          fun() ->
-                  Route = #route{binding = #binding{destination = DstName,
-                                                    _ = '_'}},
-                  [reverse_binding(B) ||
-                      #reverse_route{reverse_binding = B} <-
-                          mnesia:match_object(rabbit_reverse_route,
-                                              reverse_route(Route), read)]
-          end),
-    Filtered    = lists:filter(fun(#binding{source = S}) ->
-                                       S =/= ?DEFAULT_EXCHANGE(VHostPath)
-                               end, AllBindings),
-    implicit_for_destination(DstName) ++ Filtered.
+list_for_destination(DstName = #resource{}) ->
+    ExplicitBindings = mnesia:async_dirty(
+                         fun() ->
+                                 Route = #route{binding = #binding{destination = DstName,
+                                                                   _ = '_'}},
+                                 [reverse_binding(B) ||
+                                  #reverse_route{reverse_binding = B} <-
+                                  mnesia:match_object(rabbit_reverse_route,
+                                                      reverse_route(Route), read)]
+                         end),
+    implicit_for_destination(DstName) ++ ExplicitBindings.
 
 -spec list_between(
     rabbit_types:binding_source(),
     rabbit_types:binding_destination()) -> bindings().
 
-list_between(SrcName = #resource{virtual_host = SVH}, DstName = #resource{}) ->
-    AllBindings = mnesia:async_dirty(
+list_between(SrcName = #resource{}, DstName = #resource{}) ->
+    mnesia:async_dirty(
       fun() ->
               Route = #route{binding = #binding{
-                  source = SrcName,
-                  destination = DstName,
-                  _ = '_'}
-              },
+                                          source = SrcName,
+                                          destination = DstName,
+                                          _ = '_'}
+                            },
               Durable     = [B || #route{binding = B} <- mnesia:match_object(rabbit_durable_route, Route, read)],
               Transient   = [B || #route{binding = B} <- mnesia:match_object(rabbit_route, Route, read)],
               SemiDurable = [B || #route{binding = B} <- mnesia:match_object(rabbit_semi_durable_route, Route, read)],
               Durable ++ Transient ++ SemiDurable
-      end),
-    lists:filter(fun(#binding{source = S}) ->
-                       S =/= ?DEFAULT_EXCHANGE(SVH)
-                 end, AllBindings).
+      end).
 
 -spec has_any_between(rabbit_types:binding_source(),
     rabbit_types:binding_destination()) -> boolean().
@@ -585,8 +552,8 @@ remove_routes(Routes, ShouldIndexTable) ->
                  case rabbit_exchange:lookup(Src) of
                      {ok, X} ->
                          ok = sync_index_route(R, should_index_table(X), fun delete/3);
-                     _ ->
-                         ok
+                     {error, not_found} ->
+                         ok = sync_index_route(R, true, fun delete/3)
                  end
              end || #route{binding = #binding{source = Src}} = R <- Routes]
     end,
@@ -780,8 +747,9 @@ x_callback(Serial, X, F, Bs) ->
 populate_index_route_table() ->
     rabbit_misc:execute_mnesia_transaction(
       fun () ->
-              mnesia:lock({table, rabbit_route}, read),
-              mnesia:lock({table, rabbit_index_route}, write),
+              mnesia:read_lock_table(rabbit_route),
+              mnesia:read_lock_table(rabbit_exchange),
+              mnesia:write_lock_table(rabbit_index_route),
               Routes = rabbit_misc:dirty_read_all(rabbit_route),
               lists:foreach(
                 fun(#route{binding = #binding{source = Exchange}} = Route) ->
@@ -793,8 +761,8 @@ populate_index_route_table() ->
                                     false ->
                                         ok
                                 end;
-                            _ ->
-                                ok
+                            {error, not_found} ->
+                                mnesia:abort({source_exchange_not_found, Route})
                         end
                 end, Routes)
       end).
@@ -806,9 +774,9 @@ populate_index_route_table() ->
 %% Therefore, we avoid inserting and deleting into rabbit_index_route for other exchange
 %% types. This reduces write lock conflicts on the same tuple {SourceExchange, RoutingKey}
 %% reducing the number of restarted Mnesia transactions.
-should_index_table(#exchange{name = #resource{name = Name},
-                             type = direct})
-  when Name =/= <<>> ->
+should_index_table(#exchange{name = ?DEFAULT_EXCHANGE(_)}) ->
+    false;
+should_index_table(#exchange{type = direct}) ->
     true;
 should_index_table(_) ->
     false.

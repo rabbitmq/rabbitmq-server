@@ -752,20 +752,15 @@ put_user(User, Version, ActingUser) ->
                 rabbit_credential_validation:validate(Username, Password) =:= ok
         end,
 
-    Limits = case rabbit_feature_flags:is_enabled(user_limits) of
-                 false ->
-                     undefined;
-                 true ->
-                     case maps:get(limits, User, undefined) of
-                         undefined ->
-                             undefined;
-                         Term ->
-                             case validate_user_limits(Term) of
-                                 ok -> Term;
-                                 Error -> throw(Error)
-                             end
-                     end
-             end,
+        Limits = case maps:get(limits, User, undefined) of
+                     undefined ->
+                         undefined;
+                     Term ->
+                         case validate_user_limits(Term) of
+                             ok -> Term;
+                             Error -> throw(Error)
+                         end
+                 end,
     case exists(Username) of
         true  ->
             case {HasPassword, HasPasswordHash} of
@@ -847,21 +842,15 @@ preconfigure_permissions(Username, Map, ActingUser) when is_map(Map) ->
     ok.
 
 set_user_limits(Username, Definition, ActingUser) when is_list(Definition); is_binary(Definition) ->
-    case rabbit_feature_flags:is_enabled(user_limits) of
-        true  ->
-            case rabbit_json:try_decode(rabbit_data_coercion:to_binary(Definition)) of
-                {ok, Term} ->
-                    validate_parameters_and_update_limit(Username, Term, ActingUser);
-                {error, Reason} ->
-                    {error_string, rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
-            end;
-        false -> {error_string, "cannot set any user limits: the user_limits feature flag is not enabled"}
+    case rabbit_json:try_decode(rabbit_data_coercion:to_binary(Definition)) of
+        {ok, Term} ->
+            validate_parameters_and_update_limit(Username, Term, ActingUser);
+        {error, Reason} ->
+            {error_string, rabbit_misc:format(
+                             "JSON decoding error. Reason: ~ts", [Reason])}
     end;
 set_user_limits(Username, Definition, ActingUser) when is_map(Definition) ->
-    case rabbit_feature_flags:is_enabled(user_limits) of
-        true  -> validate_parameters_and_update_limit(Username, Definition, ActingUser);
-        false -> {error_string, "cannot set any user limits: the user_limits feature flag is not enabled"}
-    end.
+    validate_parameters_and_update_limit(Username, Definition, ActingUser).
 
 validate_parameters_and_update_limit(Username, Term, ActingUser) ->
     case validate_user_limits(Term) of
