@@ -93,8 +93,7 @@ parse_set_global(Name, String, ActingUser) ->
         {ok, Term} when is_map(Term) -> set_global(Name, maps:to_list(Term), ActingUser);
         {ok, Term} -> set_global(Name, Term, ActingUser);
         {error, Reason} ->
-            {error_string,
-                rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}
+            {error_string, rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
     end.
 
 -spec set_global(atom(), term(), rabbit_types:username()) -> 'ok'.
