@@ -75,8 +75,7 @@ parse_set(VHost, Component, Name, String, User) ->
         {ok, Term} when is_map(Term) -> set(VHost, Component, Name, maps:to_list(Term), User);
         {ok, Term} -> set(VHost, Component, Name, Term, User);
         {error, Reason} ->
-            {error_string,
-                rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}
+            {error_string, rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
     end.
 
 -spec set(rabbit_types:vhost(), binary(), binary(), term(),
