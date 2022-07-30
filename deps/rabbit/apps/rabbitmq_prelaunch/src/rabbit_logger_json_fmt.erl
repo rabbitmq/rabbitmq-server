@@ -18,7 +18,7 @@ format(
                        rabbit_logger_fmt_helpers:format_level(Level, Config)),
     FormattedMeta = format_meta(Meta, Config),
     %% We need to call `unicode:characters_to_binary()' here and several other
-    %% places because the JSON encoding library will format a string as a list of
+    %% places because JSON encoder will format a string as a list of
     %% integers (we don't blame it for that, it makes sense).
     FormattedMsg = unicode:characters_to_binary(
                      rabbit_logger_fmt_helpers:format_msg(Msg, Meta, Config)),
@@ -59,38 +59,38 @@ format_meta(Meta, Config) ->
                          ".")),
               Acc#{Key => Term};
           (Key, Value, Acc) ->
-              case convert_to_types_accepted_by_jsx(Value) of
+              case convert_to_types_accepted_by_json_encoder(Value) of
                   false -> Acc;
                   Term  -> Acc#{Key => Term}
               end
       end, #{}, Meta).
 
-convert_to_types_accepted_by_jsx(Term) when is_map(Term) ->
+convert_to_types_accepted_by_json_encoder(Term) when is_map(Term) ->
     maps:map(
-      fun(_, Value) -> convert_to_types_accepted_by_jsx(Value) end,
+      fun(_, Value) -> convert_to_types_accepted_by_json_encoder(Value) end,
       Term);
-convert_to_types_accepted_by_jsx(Term) when is_list(Term) ->
+convert_to_types_accepted_by_json_encoder(Term) when is_list(Term) ->
     case io_lib:deep_char_list(Term) of
         true ->
             unicode:characters_to_binary(Term);
         false ->
-            [convert_to_types_accepted_by_jsx(E) || E <- Term]
+            [convert_to_types_accepted_by_json_encoder(E) || E <- Term]
     end;
-convert_to_types_accepted_by_jsx(Term) when is_tuple(Term) ->
-    convert_to_types_accepted_by_jsx(erlang:tuple_to_list(Term));
-convert_to_types_accepted_by_jsx(Term) when is_function(Term) ->
+convert_to_types_accepted_by_json_encoder(Term) when is_tuple(Term) ->
+    convert_to_types_accepted_by_json_encoder(erlang:tuple_to_list(Term));
+convert_to_types_accepted_by_json_encoder(Term) when is_function(Term) ->
     String = erlang:fun_to_list(Term),
     unicode:characters_to_binary(String);
-convert_to_types_accepted_by_jsx(Term) when is_pid(Term) ->
+convert_to_types_accepted_by_json_encoder(Term) when is_pid(Term) ->
     String = erlang:pid_to_list(Term),
     unicode:characters_to_binary(String);
-convert_to_types_accepted_by_jsx(Term) when is_port(Term) ->
+convert_to_types_accepted_by_json_encoder(Term) when is_port(Term) ->
     String = erlang:port_to_list(Term),
     unicode:characters_to_binary(String);
-convert_to_types_accepted_by_jsx(Term) when is_reference(Term) ->
+convert_to_types_accepted_by_json_encoder(Term) when is_reference(Term) ->
     String = erlang:ref_to_list(Term),
     unicode:characters_to_binary(String);
-convert_to_types_accepted_by_jsx(Term) ->
+convert_to_types_accepted_by_json_encoder(Term) ->
     Term.
 
 apply_mapping_and_ordering(Doc, #{field_map := Mapping}) ->
