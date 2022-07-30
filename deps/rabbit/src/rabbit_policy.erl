@@ -335,7 +335,7 @@ parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo, ActingUser) ->
             R;
         {error, Reason} ->
             {error_string,
-                rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}
+                rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
     end.
 
 set_op(VHost, Name, Pattern, Definition, Priority, ApplyTo, ActingUser) ->
