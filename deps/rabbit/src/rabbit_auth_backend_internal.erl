@@ -853,8 +853,7 @@ set_user_limits(Username, Definition, ActingUser) when is_list(Definition); is_b
                 {ok, Term} ->
                     validate_parameters_and_update_limit(Username, Term, ActingUser);
                 {error, Reason} ->
-                    {error_string, rabbit_misc:format(
-                                     "JSON decoding error. Reason: ~ts", [Reason])}
+                    {error_string, rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
             end;
         false -> {error_string, "cannot set any user limits: the user_limits feature flag is not enabled"}
     end;
