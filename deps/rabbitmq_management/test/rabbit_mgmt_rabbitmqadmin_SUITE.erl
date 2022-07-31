@@ -42,7 +42,7 @@ groups() ->
              ignore_vhost,
              sort
             ],
-    [ {list_to_atom(Py), [], Tests} || Py <- find_pythons() ].
+    [{python3, [], Tests}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -70,8 +70,6 @@ end_per_suite(Config) ->
                                          rabbit_ct_client_helpers:teardown_steps() ++
                                              rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(python2, Config) ->
-    rabbit_ct_helpers:set_config(Config, {python, "python2"});
 init_per_group(python3, Config) ->
     rabbit_ct_helpers:set_config(Config, {python, "python3"});
 init_per_group(_, Config) ->
@@ -332,8 +330,7 @@ publish(Config) ->
     {ok, _} = run(Config, ["publish", "routing_key=test", "payload=test_1"]),
     {ok, _} = run(Config, ["publish", "routing_key=test", "payload=test_2"]),
     %% publish with stdin
-    %% TODO: this must support Python 3 as well
-    Py      = find_python2(),
+    Py      = find_newest_python(),
     {ok, _} = rabbit_ct_helpers:exec([Py, "-c",
                                       publish_with_stdin_python_program(Config, "test_3")],
                                      []),
@@ -368,6 +365,9 @@ ignore_vhost(Config) ->
     {ok, _} = run(Config, ["delete", "user", "name=foo"]).
 
 sort(Config) ->
+    run(Config, ["delete", "queue", "name=foo"]),
+    run(Config, ["delete", "queue", "name=test"]),
+
     {ok, _} = run(Config, ["declare", "queue", "name=foo"]),
     {ok, _} = run(Config, ["declare", "binding", "source=amq.direct",
                            "destination=foo", "destination_type=queue",
@@ -375,23 +375,24 @@ sort(Config) ->
     {ok, _} = run(Config, ["declare", "binding", "source=amq.topic",
                            "destination=foo", "destination_type=queue",
                            "routing_key=aaa"]),
-    {ok, [["foo"],
-          ["amq.direct", "bbb"],
-          ["amq.topic", "aaa"]]} = run_table(Config, ["--sort", "source",
-                                                      "list", "bindings",
-                                                      "source", "routing_key"]),
-    {ok, [["amq.topic", "aaa"],
-          ["amq.direct", "bbb"],
-          ["foo"]]} = run_table(Config, ["--sort", "routing_key",
-                                         "list", "bindings", "source",
-                                         "routing_key"]),
-    {ok, [["amq.topic", "aaa"],
-          ["amq.direct", "bbb"],
-          ["foo"]]} = run_table(Config, ["--sort", "source",
-                                         "--sort-reverse", "list",
-                                         "bindings", "source",
-                                         "routing_key"]),
-    {ok, _} = run(Config, ["delete", "queue", "name=foo"]).
+
+    ?assertEqual({ok, [["foo"],
+                      ["amq.direct", "bbb"],
+                      ["amq.topic", "aaa"]]},
+        run_table(Config, ["--sort", "source", "list", "bindings", "source", "routing_key"])),
+
+    ?assertEqual({ok, [["amq.topic", "aaa"],
+                       ["amq.direct", "bbb"],
+                       ["foo"]]},
+        run_table(Config, ["--sort", "routing_key", "list", "bindings", "source", "routing_key"])),
+
+    ?assertEqual({ok, [["amq.topic", "aaa"],
+                       ["amq.direct", "bbb"],
+                       ["foo"]]},
+        run_table(Config, ["--sort", "source", "--sort-reverse", "list", "bindings", "source", "routing_key"])),
+
+    run(Config, ["delete", "queue", "name=foo"]),
+    run(Config, ["delete", "queue", "name=test"]).
 
 %% -------------------------------------------------------------------
 %% Utilities
@@ -440,33 +441,23 @@ rabbitmqadmin(Config) ->
     filename:join([?config(current_srcdir, Config), "bin", "rabbitmqadmin"]).
 
 find_pythons() ->
-    Py2 = rabbit_ct_helpers:exec(["python2", "-V"]),
     Py3 = rabbit_ct_helpers:exec(["python3", "-V"]),
-    case {Py2, Py3} of
-         {{ok, _}, {ok, _}} -> ["python2", "python3"];
-         {{ok, _}, _} -> ["python2"];
-         {_, {ok, _}} -> ["python3"];
-         _ -> erlang:error("python not found")
+    case Py3 of
+         {ok, _} -> ["python3"];
+         _ -> erlang:error("python3 not found")
     end.
 
-find_python2() ->
-    Py2  = rabbit_ct_helpers:exec(["python2", "-V"]),
-    Py27 = rabbit_ct_helpers:exec(["python2.7", "-V"]),
-    case {Py2, Py27} of
-        {{ok, _}, {ok, _}} -> ["python2.7"];
-        {{ok, _}, _} -> ["python2"];
-        {_, {ok, _}} -> ["python2.7"];
-        _            -> "python2"
-    end.
+find_newest_python() ->
+    "python3".
 
 publish_with_stdin_python_program(Config, In) ->
     MgmtPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt),
     RmqAdmin = rabbit_ct_helpers:get_config(Config, rabbitmqadmin_path),
-    Py       = find_python2(),
+    Py       = find_newest_python(),
     "import subprocess;" ++
     "proc = subprocess.Popen(['" ++ Py ++ "', '" ++ RmqAdmin ++ "', '-P', '" ++ integer_to_list(MgmtPort) ++
     "', 'publish', 'routing_key=test'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE);" ++
-    "(stdout, stderr) = proc.communicate('" ++ In ++ "');" ++
+    "(stdout, stderr) = proc.communicate('" ++ In ++ "'.encode());" ++
     "exit(proc.returncode)".
 
 write_test_config(Config) ->

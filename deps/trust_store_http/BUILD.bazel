@@ -10,6 +10,6 @@ erlang_app(
     ],
     deps = [
         "@cowboy//:erlang_app",
-        "@jsx//:erlang_app",
+        "@thoas//:erlang_app",
     ],
 )

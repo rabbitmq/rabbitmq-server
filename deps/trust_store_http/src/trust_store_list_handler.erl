@@ -32,7 +32,7 @@ json_encode(Files) ->
     Map = #{certificates => [ #{id   => cert_id(FileName, FileDate, FileHash),
                                 path => cert_path(FileName)}
                               || {FileName, FileDate, FileHash} <- Files ]},
-    jsx:encode(Map).
+    thoas:encode(Map).
 
 cert_id(FileName, FileDate, FileHash) ->
     iolist_to_binary(io_lib:format("~s:~p:~p", [FileName, FileDate, FileHash])).

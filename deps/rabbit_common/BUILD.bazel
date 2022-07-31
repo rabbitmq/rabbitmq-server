@@ -52,7 +52,7 @@ genrule(
 )
 
 RUNTIME_DEPS = [
-    "@jsx//:erlang_app",
+    "@thoas//:erlang_app",
     "@recon//:erlang_app",
     "@credentials_obfuscation//:erlang_app",
 ]

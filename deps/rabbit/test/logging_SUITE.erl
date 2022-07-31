@@ -746,7 +746,7 @@ formatting_as_json_works(_, Context) ->
                  port => hd(erlang:ports()),
                  ref => erlang:make_ref()},
     {RandomMsg, Term} = log_and_return_json_object(
-                          Context, Metadata, [return_maps]),
+                          Context, Metadata),
 
     RandomMsgBin = list_to_binary(RandomMsg),
     ?assertMatch(#{time := _}, Term),
@@ -762,7 +762,7 @@ formatting_as_json_works(_, Context) ->
     ?assertMatch(#{float := 1.42}, Term),
     ?assertMatch(#{string := <<"string">>}, Term),
     ?assertMatch(#{list := [<<"s">>, <<"a">>, 3]}, Term),
-    ?assertMatch(#{map := #{key := <<"value">>}}, Term),
+    ?assertMatch(#{map := #{<<"key">> := <<"value">>}}, Term),
     ?assertMatch(#{function := FunBin}, Term),
     ?assertMatch(#{pid := PidBin}, Term),
     ?assertMatch(#{port := PortBin}, Term),
@@ -786,7 +786,7 @@ renaming_json_fields_works(Config) ->
                  integer => 1,
                  string => "string",
                  list => ["s", a, 3]},
-    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata, [return_maps]),
+    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata),
 
     RandomMsgBin = list_to_binary(RandomMsg),
     ?assertMatch(
@@ -812,7 +812,7 @@ removing_specific_json_fields_works(Config) ->
                  integer => 1,
                  string => "string",
                  list => ["s", a, 3]},
-    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata, [return_maps]),
+    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata),
 
     RandomMsgBin = list_to_binary(RandomMsg),
     ?assertMatch(
@@ -838,7 +838,7 @@ removing_non_mentionned_json_fields_works(Config) ->
                  integer => 1,
                  string => "string",
                  list => ["s", a, 3]},
-    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata, [return_maps]),
+    {RandomMsg, Term} = log_and_return_json_object(Context, Metadata),
 
     RandomMsgBin = list_to_binary(RandomMsg),
     ?assertMatch(
@@ -864,7 +864,7 @@ configuring_verbosity_works(Config) ->
     rabbit_prelaunch_logging:clear_config_run_number(),
     rabbit_prelaunch_logging:setup(Context),
 
-    {RandomMsg, Term} = log_and_return_json_object(Context, #{}, [return_maps]),
+    {RandomMsg, Term} = log_and_return_json_object(Context, #{}),
 
     RandomMsgBin = list_to_binary(RandomMsg),
     ?assertMatch(
@@ -1372,7 +1372,7 @@ log_and_return_line(Context, Metadata) ->
                         ReOpts),
     {RandomMsg, Line}.
 
-log_and_return_json_object(Context, Metadata, DecodeOpts) ->
+log_and_return_json_object(Context, Metadata) ->
     RandomMsg = get_random_string(
                   32,
                   "abcdefghijklmnopqrstuvwxyz"
@@ -1387,7 +1387,9 @@ log_and_return_json_object(Context, Metadata, DecodeOpts) ->
                         Content,
                         "^.+\"" ++ RandomMsg ++ "\".+$",
                         ReOpts),
-    Term = rabbit_json:decode(Line, [{labels, attempt_atom} | DecodeOpts]),
+
+    Term0 = rabbit_json:decode(Line),
+    Term = rabbit_data_coercion:atomize_keys(Term0),
 
     {RandomMsg, Term}.
 

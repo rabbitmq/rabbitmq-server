@@ -122,14 +122,14 @@ erlang_package.git_package(
 
 erlang_package.git_package(
     name = "jose",
-    repository = "potatosalad/erlang-jose",
-    commit = "2b1d66b5f4fbe33cb198149a8cb23895a2c877ea",
+    repository = "michaelklishin/erlang-jose",
+    commit = "5d0e927fdaac25c95890b1fc15c7d0f741898acf",
 )
 
 erlang_package.hex_package(
-    name = "jsx",
-    version = "3.1.0",
-    sha256 = "0c5cc8fdc11b53cc25cf65ac6705ad39e54ecc56d1c22e4adb8f5a53fb9427f3",
+    name = "thoas",
+    version = "0.3.0",
+    sha256 = "b8e1f8c8fad317c0b75239a9234cb093de1fb8be7ba3e41433ff80a0b3353973",
 )
 
 erlang_package.git_package(
@@ -272,7 +272,6 @@ use_repo(
     "gun",
     "inet_tcp_proxy_dist",
     "jose",
-    "jsx",
     "meck",
     "observer_cli",
     "osiris",
@@ -287,6 +286,8 @@ use_repo(
     "syslog",
     "sysmon_handler",
     "systemd",
+    "thoas",
+    "trust_store_http",
 )
 
 rbe = use_extension(

@@ -149,7 +149,7 @@ parse_set(VHost, Defn, ActingUser) ->
             set(VHost, maps:to_list(Term), ActingUser);
         {error, Reason} ->
             {error_string,
-                rabbit_misc:format("JSON decoding error. Reason: ~ts", [Reason])}
+                rabbit_misc:format("Could not parse JSON document: ~tp", [Reason])}
     end.
 
 set(VHost, Defn, ActingUser) ->
