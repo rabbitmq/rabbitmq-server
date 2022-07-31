@@ -2,7 +2,8 @@
 
 # RabbitMQ Server
 
-[RabbitMQ](https://rabbitmq.com) is a [feature rich](https://rabbitmq.com/documentation.html), multi-protocol messaging broker. It supports:
+[RabbitMQ](https://rabbitmq.com) is a [feature rich](https://rabbitmq.com/documentation.html),
+multi-protocol messaging and streaming broker. It supports:
 
  * AMQP 0-9-1
  * AMQP 1.0
@@ -14,14 +15,14 @@
 ## Installation
 
  * [Installation guides](https://rabbitmq.com/download.html) for various platforms
- * [Kubernetes Cluster Operator](https://www.rabbitmq.com/kubernetes/operator/operator-overview.html)
+ * [Kubernetes Cluster Operator](https://rabbitmq.com/kubernetes/operator/operator-overview.html)
  * [Changelog](https://www.rabbitmq.com/changelog.html)
  * [Releases](https://github.com/rabbitmq/rabbitmq-server/releases) on GitHub
- * [Supported and unsupported series](https://www.rabbitmq.com/versions.html)
+ * [Currently supported released series](https://www.rabbitmq.com/versions.html)
  * [Supported Erlang versions](https://www.rabbitmq.com/which-erlang.html)
 
 
-## Tutorials & Documentation
+## Tutorials and Documentation
 
  * [RabbitMQ tutorials](https://rabbitmq.com/getstarted.html)
  * [All documentation guides](https://rabbitmq.com/documentation.html)
@@ -33,15 +34,19 @@ Some key doc guides include
  * [Configuration guide](https://rabbitmq.com/configure.html) 
  * [Client libraries and tools](https://rabbitmq.com/devtools.html)
  * [Monitoring](https://rabbitmq.com/monitoring.html) and [Prometheus/Grafana](https://www.rabbitmq.com/prometheus.html) guides
+ * [Kubernetes Cluster Operator](https://rabbitmq.com/kubernetes/operator/operator-overview.html)
  * [Production checklist](https://rabbitmq.com/production-checklist.html)
  * [Quorum queues](https://rabbitmq.com/quorum-queues.html): a replicated, data safety- and consistency-oriented queue type
+ * [Streams](https://rabbitmq.com/streams.html): a persistent and replicated append-only log with non-destructive consumer semantics
  * [Runnable tutorials](https://github.com/rabbitmq/rabbitmq-tutorials/)
- * [Documentation source](https://github.com/rabbitmq/rabbitmq-website/)
 
+RabbitMQ documentation is also [developed on GitHub](https://github.com/rabbitmq/rabbitmq-website/).
 
-## Commercial Support
+## Commercial Features and Support
 
-* [Commercial support](https://rabbitmq.com/services.html) from [VMware](https://vmware.com) for open source RabbitMQ
+ * [Commercial edition of RabbitMQ](https://tanzu.vmware.com/rabbitmq)
+ * [Commercial edition for Kubernetes](https://rabbitmq.com/kubernetes/tanzu/installation.html)
+ * [Commercial support](https://rabbitmq.com/services.html) from [VMware](https://vmware.com) for open source RabbitMQ
 
 ## Getting Help from the Community
 
