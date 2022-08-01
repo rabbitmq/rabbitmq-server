@@ -1041,10 +1041,19 @@ zip_msgs_and_acks(Msgs, AckTags, Accumulator, _State) ->
 set_queue_version(Version, State = #vqstate { version = Version }) ->
     State;
 %% v2 -> v1.
-set_queue_version(1, State = #vqstate { version = 2 }) ->
+set_queue_version(1, State0 = #vqstate { version = 2 }) ->
+    %% We call timeout/1 so that we sync to disk and get the confirms
+    %% handled before we do the conversion. This is necessary because
+    %% v2 now has a simpler confirms code path.
+    %% @todo Perhaps rename the function.
+    State = timeout(State0),
     convert_from_v2_to_v1(State #vqstate { version = 1 });
 %% v1 -> v2.
-set_queue_version(2, State = #vqstate { version = 1 }) ->
+set_queue_version(2, State0 = #vqstate { version = 1 }) ->
+    %% We call timeout/1 so that we sync to disk and get the confirms
+    %% handled before we do the conversion. This is necessary because
+    %% v2 now has a simpler confirms code path.
+    State = timeout(State0),
     convert_from_v1_to_v2(State #vqstate { version = 2 }).
 
 -define(CONVERT_COUNT, 1).
@@ -2057,6 +2066,7 @@ remove_queue_entries1(
      stats_removed(MsgStatus, State)}.
 
 process_delivers_and_acks_fun(deliver_and_ack) ->
+    %% @todo Make a clause for empty Acks list?
     fun (NextDeliverSeqId, Acks, State = #vqstate { index_mod   = IndexMod,
                                                     index_state = IndexState,
                                                     store_state = StoreState0}) ->
