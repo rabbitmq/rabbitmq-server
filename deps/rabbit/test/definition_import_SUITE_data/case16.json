@@ -45,6 +45,7 @@
     {
       "limits": [],
       "metadata": {
+        "default_queue_type":"quorum",
         "description": "A case16 description",
         "tags": [
           "multi_dc_replication",

@@ -263,6 +263,7 @@ import_case16(Config) ->
     rabbit_ct_helpers:await_condition(VHostIsImported, 20000),
     VHostRec = vhost_lookup(Config, VHost),
     ?assertEqual(<<"A case16 description">>, vhost:get_description(VHostRec)),
+    ?assertEqual(<<"quorum">>, vhost:get_default_queue_type(VHostRec)),
     ?assertEqual([multi_dc_replication,ab,cde], vhost:get_tags(VHostRec)),
 
     ok.
