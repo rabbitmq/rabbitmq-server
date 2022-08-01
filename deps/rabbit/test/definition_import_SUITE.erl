@@ -207,54 +207,44 @@ import_case11(Config) -> import_file_case(Config, "case11").
 import_case12(Config) -> import_invalid_file_case(Config, "failing_case12").
 
 import_case13(Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
-        ok ->
-            import_file_case(Config, "case13"),
-            VHost = <<"/">>,
-            QueueName = <<"definitions.import.case13.qq.1">>,
-            QueueIsImported =
-            fun () ->
-                    case queue_lookup(Config, VHost, QueueName) of
-                        {ok, _} -> true;
-                        _       -> false
-                    end
-            end,
-            rabbit_ct_helpers:await_condition(QueueIsImported, 20000),
-            {ok, Q} = queue_lookup(Config, VHost, QueueName),
+    import_file_case(Config, "case13"),
+    VHost = <<"/">>,
+    QueueName = <<"definitions.import.case13.qq.1">>,
+    QueueIsImported =
+    fun () ->
+            case queue_lookup(Config, VHost, QueueName) of
+                {ok, _} -> true;
+                _       -> false
+            end
+    end,
+    rabbit_ct_helpers:await_condition(QueueIsImported, 20000),
+    {ok, Q} = queue_lookup(Config, VHost, QueueName),
 
-            %% see rabbitmq/rabbitmq-server#2400, rabbitmq/rabbitmq-server#2426
-            ?assert(amqqueue:is_quorum(Q)),
-            ?assertEqual([{<<"x-max-length">>, long, 991},
-                          {<<"x-queue-type">>, longstr, <<"quorum">>}],
-                         amqqueue:get_arguments(Q));
-        Skip ->
-            Skip
-    end.
+    %% see rabbitmq/rabbitmq-server#2400, rabbitmq/rabbitmq-server#2426
+    ?assert(amqqueue:is_quorum(Q)),
+    ?assertEqual([{<<"x-max-length">>, long, 991},
+                  {<<"x-queue-type">>, longstr, <<"quorum">>}],
+                 amqqueue:get_arguments(Q)).
 
 import_case13a(Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
-        ok ->
-            import_file_case(Config, "case13"),
-            VHost = <<"/">>,
-            QueueName = <<"definitions.import.case13.qq.1">>,
-            QueueIsImported =
-            fun () ->
-                    case queue_lookup(Config, VHost, QueueName) of
-                        {ok, _} -> true;
-                        _       -> false
-                    end
-            end,
-            rabbit_ct_helpers:await_condition(QueueIsImported, 20000),
-            {ok, Q} = queue_lookup(Config, VHost, QueueName),
+    import_file_case(Config, "case13"),
+    VHost = <<"/">>,
+    QueueName = <<"definitions.import.case13.qq.1">>,
+    QueueIsImported =
+    fun () ->
+            case queue_lookup(Config, VHost, QueueName) of
+                {ok, _} -> true;
+                _       -> false
+            end
+    end,
+    rabbit_ct_helpers:await_condition(QueueIsImported, 20000),
+    {ok, Q} = queue_lookup(Config, VHost, QueueName),
 
-            %% We expect that importing an existing queue (i.e. same vhost and name)
-            %% but with different arguments and different properties is a no-op.
-            import_file_case(Config, "case13a"),
-            timer:sleep(1000),
-            ?assertMatch({ok, Q}, queue_lookup(Config, VHost, QueueName));
-        Skip ->
-            Skip
-    end.
+    %% We expect that importing an existing queue (i.e. same vhost and name)
+    %% but with different arguments and different properties is a no-op.
+    import_file_case(Config, "case13a"),
+    timer:sleep(1000),
+    ?assertMatch({ok, Q}, queue_lookup(Config, VHost, QueueName)).
 
 import_case14(Config) -> import_file_case(Config, "case14").
 %% contains a user with tags as a list

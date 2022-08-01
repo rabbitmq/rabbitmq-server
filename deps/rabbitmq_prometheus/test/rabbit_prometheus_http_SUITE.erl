@@ -169,7 +169,6 @@ init_per_group(aggregated_metrics, Config0) ->
         [{rabbit, [{collect_statistics, coarse}, {collect_statistics_interval, 100}]}]
     ),
     Config2 = init_per_group(aggregated_metrics, Config1, []),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue),
 
     A = rabbit_ct_broker_helpers:get_node_config(Config2, 0, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config2, A),
