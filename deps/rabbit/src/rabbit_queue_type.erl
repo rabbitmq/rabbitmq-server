@@ -13,6 +13,7 @@
          init/0,
          close/1,
          discover/1,
+         feature_flag_name/1,
          default/0,
          is_enabled/1,
          is_compatible/4,
@@ -223,13 +224,22 @@
 -callback notify_decorators(amqqueue:amqqueue()) ->
     ok.
 
-%% TODO: this should be controlled by a registry that is populated on boot
+%% TODO: should this use a registry that's populated on boot?
 discover(<<"quorum">>) ->
     rabbit_quorum_queue;
 discover(<<"classic">>) ->
     rabbit_classic_queue;
 discover(<<"stream">>) ->
     rabbit_stream_queue.
+
+feature_flag_name(<<"quorum">>) ->
+    quorum_queue;
+feature_flag_name(<<"classic">>) ->
+    undefined;
+feature_flag_name(<<"stream">>) ->
+    stream_queue;
+feature_flag_name(_) ->
+    undefined.
 
 default() ->
     rabbit_classic_queue.
