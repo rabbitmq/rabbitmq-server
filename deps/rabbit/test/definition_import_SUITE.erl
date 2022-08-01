@@ -261,6 +261,7 @@ import_case14(Config) -> import_file_case(Config, "case14").
 import_case15(Config) -> import_file_case(Config, "case15").
 %% contains a virtual host with tags
 import_case16(Config) ->
+<<<<<<< HEAD
     case rabbit_ct_helpers:is_mixed_versions() of
       false ->
         case rabbit_ct_broker_helpers:enable_feature_flag(Config, virtual_host_metadata) of
@@ -287,6 +288,24 @@ import_case16(Config) ->
         %% skip the test in mixed version mode
         {skip, "Should not run in mixed version environments"}
     end.
+=======
+    import_file_case(Config, "case16"),
+    VHost = <<"tagged">>,
+    VHostIsImported =
+    fun () ->
+            case vhost_lookup(Config, VHost) of
+                {error, {no_such_vhosts, _}} -> false;
+                _       -> true
+            end
+    end,
+    rabbit_ct_helpers:await_condition(VHostIsImported, 20000),
+    VHostRec = vhost_lookup(Config, VHost),
+    ?assertEqual(<<"A case16 description">>, vhost:get_description(VHostRec)),
+    ?assertEqual(<<"quorum">>, vhost:get_default_queue_type(VHostRec)),
+    ?assertEqual([multi_dc_replication,ab,cde], vhost:get_tags(VHostRec)),
+
+    ok.
+>>>>>>> 0f541f443f (close #5399, set default vhost queue type from import's metadata)
 
 import_case17(Config) -> import_invalid_file_case(Config, "failing_case17").
 
