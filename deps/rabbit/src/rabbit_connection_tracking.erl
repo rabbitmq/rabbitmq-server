@@ -41,6 +41,12 @@
          tracked_connection_from_connection_state/1,
          lookup/1, count/0]).
 
+%% All nodes (that support the `tracking_records_in_ets' feature) must
+%% export these functions with the same spec, as they are called via
+%% RPC from other nodes. (Their implementation can differ.)
+-export([count_local_tracked_items_in_vhost/1,
+         count_local_tracked_items_of_user/1]).
+
 -export([migrate_tracking_records/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -226,18 +232,24 @@ count_tracked_items_in(Type) ->
     case rabbit_feature_flags:is_enabled(tracking_records_in_ets) of
         true -> count_tracked_items_in_ets(Type);
         false -> count_tracked_items_in_mnesia(Type)
-    end.    
+    end.
 
 count_tracked_items_in_ets({vhost, VirtualHost}) ->
-    rabbit_tracking:count_tracked_items_ets(
-        ?TRACKED_CONNECTION_TABLE_PER_VHOST,
-        VirtualHost,
-        "connections in vhost");
+    rabbit_tracking:count_on_all_nodes(
+      ?MODULE, count_local_tracked_items_in_vhost, [VirtualHost],
+      ["connections in vhost ", VirtualHost]);
 count_tracked_items_in_ets({user, Username}) ->
-    rabbit_tracking:count_tracked_items_ets(
-        ?TRACKED_CONNECTION_TABLE_PER_USER,
-        Username,
-        "connections for user").
+    rabbit_tracking:count_on_all_nodes(
+      ?MODULE, count_local_tracked_items_of_user, [Username],
+      ["connections for user ", Username]).
+
+-spec count_local_tracked_items_in_vhost(rabbit_types:vhost()) -> non_neg_integer().
+count_local_tracked_items_in_vhost(VirtualHost) ->
+    rabbit_tracking:read_ets_counter(?TRACKED_CONNECTION_TABLE_PER_VHOST, VirtualHost).
+
+-spec count_local_tracked_items_of_user(rabbit_types:username()) -> non_neg_integer().
+count_local_tracked_items_of_user(Username) ->
+    rabbit_tracking:read_ets_counter(?TRACKED_CONNECTION_TABLE_PER_USER, Username).
 
 count_tracked_items_in_mnesia({vhost, VirtualHost}) ->
     rabbit_tracking:count_tracked_items_mnesia(
