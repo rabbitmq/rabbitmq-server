@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2022 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, ErrorCodes, FeatureFlags, Helpers}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -24,7 +24,19 @@ defmodule RabbitMQ.CLI.Ctl.Commands.AddVhostCommand do
     meta = %{description: desc,
              tags: parse_tags(tags),
              default_queue_type: default_qt}
-    :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, meta, Helpers.cli_acting_user()])
+    # check if the respective feature flag is enabled
+    case default_qt do
+      "quorum" ->
+        FeatureFlags.assert_feature_flag_enabled(node_name, :quorum_queue, fn () ->
+          :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, meta, Helpers.cli_acting_user()])
+        end)
+      "stream" ->
+        FeatureFlags.assert_feature_flag_enabled(node_name, :stream_queue, fn () ->
+          :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, meta, Helpers.cli_acting_user()])
+        end)
+      _ ->
+        :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, meta, Helpers.cli_acting_user()])
+    end
   end
   def run([vhost], %{node: node_name, description: desc, tags: tags}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :add, [vhost, description, tags, Helpers.cli_acting_user()])
