@@ -313,34 +313,24 @@ queue_name(Name) ->
     rabbit_misc:r(<<"/">>, queue, Name).
 
 credentials_obfuscation(Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false ->
-          case rabbit_ct_broker_helpers:enable_feature_flag(Config, virtual_host_metadata) of
-              ok ->
-                    Value = <<"amqp://something">>,
-                    Obfuscated0 = obfuscate_secret(Config, 0, Value),
-                    Obfuscated1 = obfuscate_secret(Config, 1, Value),
+    Value = <<"amqp://something">>,
+    Obfuscated0 = obfuscate_secret(Config, 0, Value),
+    Obfuscated1 = obfuscate_secret(Config, 1, Value),
 
-                    ok = rabbit_ct_broker_helpers:restart_broker(Config, 1),
+    ok = rabbit_ct_broker_helpers:restart_broker(Config, 1),
 
-                    ?assertEqual(Value, deobfuscate_secret(Config, 0, Obfuscated0)),
-                    ?assertEqual(Value, deobfuscate_secret(Config, 1, Obfuscated1)),
-                    ?assertEqual(Value, deobfuscate_secret(Config, 0, Obfuscated1)),
-                    ?assertEqual(Value, deobfuscate_secret(Config, 1, Obfuscated1)),
+    ?assertEqual(Value, deobfuscate_secret(Config, 0, Obfuscated0)),
+    ?assertEqual(Value, deobfuscate_secret(Config, 1, Obfuscated1)),
+    ?assertEqual(Value, deobfuscate_secret(Config, 0, Obfuscated1)),
+    ?assertEqual(Value, deobfuscate_secret(Config, 1, Obfuscated1)),
 
-                    Obfuscated2 = obfuscate_secret(Config, 1, Value),
+    Obfuscated2 = obfuscate_secret(Config, 1, Value),
 
-                    ok = rabbit_ct_broker_helpers:restart_broker(Config, 0),
+    ok = rabbit_ct_broker_helpers:restart_broker(Config, 0),
 
-                    ?assertEqual(Value, deobfuscate_secret(Config, 0, Obfuscated2)),
-                    ok;
-              Skip ->
-                  Skip
-          end;
-        _ ->
-          %% skip the test in mixed version mode
-          {skip, "Should not run in mixed version environments"}
-      end.
+    ?assertEqual(Value, deobfuscate_secret(Config, 0, Obfuscated2)),
+    ok.
+
 obfuscate_secret(Config, Node, Value) -> 
     {encrypted, _} = Result = rabbit_ct_broker_helpers:rpc(Config, Node, 
         credentials_obfuscation, encrypt, [Value]),
