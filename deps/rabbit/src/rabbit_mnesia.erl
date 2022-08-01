@@ -28,7 +28,7 @@
          dir/0,
          cluster_status_from_mnesia/0,
 
-         %% Operations on the db and utils, mainly used in `rabbit_upgrade' and `rabbit'
+         %% Operations on the db and utils, mainly used in `rabbit_mnesia_rename' and `rabbit'
          init_db_unchecked/2,
          copy_db/1,
          check_cluster_consistency/0,
@@ -596,21 +596,17 @@ init_db_unchecked(ClusterNodes, NodeType) ->
 
 init_db_and_upgrade(ClusterNodes, NodeType, CheckOtherNodes, Retry) ->
     ok = init_db(ClusterNodes, NodeType, CheckOtherNodes),
-    ok = case rabbit_upgrade:maybe_upgrade_local() of
-             ok                    -> ok;
-             starting_from_scratch -> rabbit_version:record_desired();
-             version_not_available -> schema_ok_or_move()
-         end,
-    %% `maybe_upgrade_local' restarts mnesia, so ram nodes will forget
-    %% about the cluster
-    case NodeType of
-        ram  -> start_mnesia(),
-                change_extra_db_nodes(ClusterNodes, false);
-        disc -> ok
-    end,
-    %% ...and all nodes will need to wait for tables
+    ok = record_node_type(NodeType),
     rabbit_table:wait_for_replicated(Retry),
     ok.
+
+record_node_type(NodeType) ->
+    %% We record the node type in the Mnesia directory. Not that we care about
+    %% the content of this file, but we need to create a file in the Mnesia
+    %% directory fo `is_virgin_node()' to work even with ram nodes.
+    MnesiaDir = dir(),
+    Filename = filename:join(MnesiaDir, "node-type.txt"),
+    rabbit_file:write_term_file(Filename, [NodeType]).
 
 init_db_with_mnesia(ClusterNodes, NodeType,
                     CheckOtherNodes, CheckConsistency, Retry) ->
@@ -816,21 +812,6 @@ discover_cluster0(Node) when Node == node() ->
 discover_cluster0(Node) ->
     rpc:call(Node, rabbit_mnesia, cluster_status_from_mnesia, []).
 
-schema_ok_or_move() ->
-    case rabbit_table:check_schema_integrity(_Retry = false) of
-        ok ->
-            ok;
-        {error, Reason} ->
-            %% NB: we cannot use rabbit_log here since it may not have been
-            %% started yet
-            rabbit_log:warning("schema integrity check failed: ~p~n"
-                               "moving database to backup location "
-                               "and recreating schema from scratch",
-                               [Reason]),
-            ok = move_db(),
-            ok = create_schema()
-    end.
-
 %% We only care about disc nodes since ram nodes are supposed to catch
 %% up only
 create_schema() ->
@@ -846,27 +827,6 @@ create_schema() ->
     rabbit_log:debug("Will check schema database integrity..."),
     ensure_schema_integrity(),
     rabbit_log:debug("Schema database schema integrity check passed"),
-    ok = rabbit_version:record_desired().
-
-move_db() ->
-    stop_mnesia(),
-    MnesiaDir = filename:dirname(dir() ++ "/"),
-    {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
-    BackupDir = rabbit_misc:format(
-                  "~s_~w~2..0w~2..0w~2..0w~2..0w~2..0w",
-                  [MnesiaDir, Year, Month, Day, Hour, Minute, Second]),
-    case file:rename(MnesiaDir, BackupDir) of
-        ok ->
-            %% NB: we cannot use rabbit_log here since it may not have
-            %% been started yet
-            rabbit_log:warning("moved database from ~s to ~s",
-                               [MnesiaDir, BackupDir]),
-            ok;
-        {error, Reason} -> throw({error, {cannot_backup_mnesia,
-                                          MnesiaDir, BackupDir, Reason}})
-    end,
-    ensure_mnesia_dir(),
-    start_mnesia(),
     ok.
 
 remove_node_if_mnesia_running(Node) ->

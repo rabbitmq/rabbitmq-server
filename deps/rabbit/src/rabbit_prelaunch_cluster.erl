@@ -16,16 +16,17 @@ setup(Context) ->
     rabbit_node_monitor:prepare_cluster_status_files(),
     case Context of
         #{initial_pass := true} ->
+            %% Renaming a node was partially handled by `rabbit_upgrade', the
+            %% old upgrade mechanism used before we introduced feature flags.
+            %% The following call to `rabbit_mnesia_rename' was part of
+            %% `rabbit_upgrade:maybe_upgrade_mnesia()'.
             ?LOG_DEBUG(
-               "Upgrading Mnesia schema", [],
+               "Finish node renaming (if any)", [],
                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-            ok = rabbit_upgrade:maybe_upgrade_mnesia();
+            ok = rabbit_mnesia_rename:maybe_finish();
         _ ->
             ok
     end,
-    %% It's important that the consistency check happens after
-    %% the upgrade, since if we are a secondary node the
-    %% primary node will have forgotten us
     ?LOG_DEBUG(
        "Checking cluster consistency", [],
        #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),

@@ -40,17 +40,6 @@ recorded() -> case rabbit_file:read_term_file(schema_filename()) of
 
 record(V) -> ok = rabbit_file:write_term_file(schema_filename(), [V]).
 
-recorded_for_scope(Scope) ->
-    case recorded() of
-        {error, _} = Err ->
-            Err;
-        {ok, Version} ->
-            {ok, case lists:keysearch(Scope, 1, categorise_by_scope(Version)) of
-                     false                 -> [];
-                     {value, {Scope, SV1}} -> SV1
-                 end}
-    end.
-
 record_for_scope(Scope, ScopeVersion) ->
     case recorded() of
         {error, _} = Err ->
@@ -76,7 +65,7 @@ desired() -> [Name || Scope <- ?SCOPES, Name <- desired_for_scope(Scope)].
 
 -spec desired_for_scope(scope()) -> scope_version().
 
-desired_for_scope(Scope) -> with_upgrade_graph(fun heads/1, Scope).
+desired_for_scope(_Scope) -> [].
 
 -spec record_desired() -> 'ok'.
 
@@ -91,22 +80,8 @@ record_desired_for_scope(Scope) ->
 -spec upgrades_required
         (scope()) -> rabbit_types:ok_or_error2([step()], any()).
 
-upgrades_required(Scope) ->
-    case recorded_for_scope(Scope) of
-        {error, enoent} ->
-            case filelib:is_file(rabbit_guid:filename()) of
-                false -> {error, starting_from_scratch};
-                true  -> {error, version_not_available}
-            end;
-        {ok, CurrentHeads} ->
-            with_upgrade_graph(
-              fun (G) ->
-                      case unknown_heads(CurrentHeads, G) of
-                          []      -> {ok, upgrades_to_apply(CurrentHeads, G)};
-                          Unknown -> {error, {future_upgrades_found, Unknown}}
-                      end
-              end, Scope)
-    end.
+upgrades_required(_Scope) ->
+    {ok, []}.
 
 all_upgrades_required(Scopes) ->
     case recorded() of
@@ -134,63 +109,8 @@ all_upgrades_required(Scopes) ->
 
 %% -------------------------------------------------------------------
 
-with_upgrade_graph(Fun, Scope) ->
-    case rabbit_misc:build_acyclic_graph(
-           fun ({_App, Module, Steps}) -> vertices(Module, Steps, Scope) end,
-           fun ({_App, Module, Steps}) -> edges(Module, Steps, Scope) end,
-           rabbit_misc:all_module_attributes(rabbit_upgrade)) of
-        {ok, G} -> try
-                       Fun(G)
-                   after
-                       true = digraph:delete(G)
-                   end;
-        {error, {vertex, duplicate, StepName}} ->
-            throw({error, {duplicate_upgrade_step, StepName}});
-        {error, {edge, {bad_vertex, StepName}, _From, _To}} ->
-            throw({error, {dependency_on_unknown_upgrade_step, StepName}});
-        {error, {edge, {bad_edge, StepNames}, _From, _To}} ->
-            throw({error, {cycle_in_upgrade_steps, StepNames}})
-    end.
-
-vertices(Module, Steps, Scope0) ->
-    [{StepName, {Module, StepName}} || {StepName, Scope1, _Reqs} <- Steps,
-                                       Scope0 == Scope1].
-
-edges(_Module, Steps, Scope0) ->
-    [{Require, StepName} || {StepName, Scope1, Requires} <- Steps,
-                            Require <- Requires,
-                            Scope0 == Scope1].
-unknown_heads(Heads, G) ->
-    [H || H <- Heads, digraph:vertex(G, H) =:= false].
-
-upgrades_to_apply(Heads, G) ->
-    %% Take all the vertices which can reach the known heads. That's
-    %% everything we've already applied. Subtract that from all
-    %% vertices: that's what we have to apply.
-    Unsorted = sets:to_list(
-                 sets:subtract(
-                   sets:from_list(digraph:vertices(G)),
-                   sets:from_list(digraph_utils:reaching(Heads, G)))),
-    %% Form a subgraph from that list and find a topological ordering
-    %% so we can invoke them in order.
-    [element(2, digraph:vertex(G, StepName)) ||
-        StepName <- digraph_utils:topsort(digraph_utils:subgraph(G, Unsorted))].
-
-heads(G) ->
-    lists:sort([V || V <- digraph:vertices(G), digraph:out_degree(G, V) =:= 0]).
-
-%% -------------------------------------------------------------------
-
 categorise_by_scope(Version) when is_list(Version) ->
-    Categorised =
-        [{Scope, Name} || {_App, _Module, Attributes} <-
-                              rabbit_misc:all_module_attributes(rabbit_upgrade),
-                          {Name, Scope, _Requires} <- Attributes,
-                          lists:member(Name, Version)],
-    maps:to_list(
-      lists:foldl(fun ({Scope, Name}, CatVersion) ->
-                          rabbit_misc:maps_cons(Scope, Name, CatVersion)
-                  end, maps:new(), Categorised)).
+    [].
 
 dir() -> rabbit_mnesia:dir().
 
