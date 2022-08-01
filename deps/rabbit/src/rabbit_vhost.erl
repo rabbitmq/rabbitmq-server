@@ -166,9 +166,17 @@ do_add(Name, Metadata, ActingUser) ->
     %% validate default_queue_type
     case Metadata of
         #{default_queue_type := DQT} ->
+            %% check that the queue type is known
             try rabbit_queue_type:discover(DQT) of
                 _ ->
-                    ok
+                    case rabbit_queue_type:feature_flag_name(DQT) of
+                        undefined -> ok;
+                        Flag when is_atom(Flag) ->
+                            case rabbit_feature_flags:is_enabled(Flag) of
+                                true  -> ok;
+                                false -> throw({error, queue_type_feature_flag_is_not_enabled})
+                            end
+                    end
             catch _:_ ->
                       throw({error, invalid_queue_type})
             end;
