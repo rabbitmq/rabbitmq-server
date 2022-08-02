@@ -64,6 +64,7 @@
          spawn_notify_decorators/3]).
 
 -export([is_enabled/0,
+         is_compatible/3,
          declare/2]).
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3,
@@ -116,7 +117,13 @@
 is_enabled() ->
     rabbit_feature_flags:is_enabled(quorum_queue).
 
-%%----------------------------------------------------------------------------
+-spec is_compatible(boolean(), boolean(), boolean()) -> boolean().
+is_compatible(_Durable = true,
+              _Exclusive = false,
+              _AutoDelete = false) ->
+    true;
+is_compatible(_, _, _) ->
+    false.
 
 -spec init(amqqueue:amqqueue()) -> {ok, rabbit_fifo_client:state()}.
 init(Q) when ?is_amqqueue(Q) ->
