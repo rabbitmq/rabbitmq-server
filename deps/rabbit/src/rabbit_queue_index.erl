@@ -15,15 +15,6 @@
          publish/7, publish/8, deliver/2, ack/2, sync/1, needs_sync/1, flush/1,
          read/3, next_segment_boundary/1, bounds/1, start/2, stop/1]).
 
--export([add_queue_ttl/0, avoid_zeroes/0, store_msg_size/0, store_msg/0]).
--export([scan_queue_segments/3, scan_queue_segments/4]).
-
-%% Migrates from global to per-vhost message stores
--export([move_to_per_vhost_stores/1,
-         update_recovery_term/2,
-         read_global_recovery_terms/1,
-         cleanup_global_recovery_terms/0]).
-
 %% Used by rabbit_vhost to set the segment_entry_count.
 -export([all_queue_directory_names/1]).
 
@@ -234,11 +225,6 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
-
--rabbit_upgrade({add_queue_ttl,  local, []}).
--rabbit_upgrade({avoid_zeroes,   local, [add_queue_ttl]}).
--rabbit_upgrade({store_msg_size, local, [avoid_zeroes]}).
--rabbit_upgrade({store_msg,      local, [store_msg_size]}).
 
 -type hdl() :: ('undefined' | any()).
 -type segment() :: ('undefined' |
@@ -576,10 +562,6 @@ all_queue_directory_names(VHost) ->
     filelib:wildcard(filename:join([rabbit_vhost:msg_store_dir_path(VHost),
                                     "queues", "*"])).
 
-all_queue_directory_names() ->
-    filelib:wildcard(filename:join([rabbit_vhost:msg_store_dir_wildcard(),
-                                    "queues", "*"])).
-
 %%----------------------------------------------------------------------------
 %% startup and shutdown
 %%----------------------------------------------------------------------------
@@ -608,13 +590,6 @@ queue_name_to_dir_name(#resource { kind = queue,
                                    name = QName }) ->
     <<Num:128>> = erlang:md5(<<"queue", VHost/binary, QName/binary>>),
     rabbit_misc:format("~.36B", [Num]).
-
-queue_name_to_dir_name_legacy(Name = #resource { kind = queue }) ->
-    <<Num:128>> = erlang:md5(term_to_binary_compat:term_to_binary_1(Name)),
-    rabbit_misc:format("~.36B", [Num]).
-
-queues_base_dir() ->
-    rabbit_mnesia:dir().
 
 blank_state_name_dir_funs(Name, Dir, OnSyncFun, OnSyncMsgFun) ->
     {ok, MaxJournal} =
@@ -1445,231 +1420,13 @@ journal_minus_segment1({no_pub, del, ack},         undefined) ->
     {undefined, 0}.
 
 %%----------------------------------------------------------------------------
-%% upgrade
-%%----------------------------------------------------------------------------
-
--spec add_queue_ttl() -> 'ok'.
-
-add_queue_ttl() ->
-    foreach_queue_index({fun add_queue_ttl_journal/1,
-                         fun add_queue_ttl_segment/1}).
-
-add_queue_ttl_journal(<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                        Rest/binary>>) ->
-    {<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
-add_queue_ttl_journal(<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                        Rest/binary>>) ->
-    {<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
-add_queue_ttl_journal(<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                        MsgId:?MSG_ID_BYTES/binary, Rest/binary>>) ->
-    {[<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, MsgId,
-      expiry_to_binary(undefined)], Rest};
-add_queue_ttl_journal(_) ->
-    stop.
-
-add_queue_ttl_segment(<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1,
-                        RelSeq:?REL_SEQ_BITS, MsgId:?MSG_ID_BYTES/binary,
-                        Rest/binary>>) ->
-    {[<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1, RelSeq:?REL_SEQ_BITS>>,
-      MsgId, expiry_to_binary(undefined)], Rest};
-add_queue_ttl_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-                        RelSeq:?REL_SEQ_BITS, Rest/binary>>) ->
-    {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
-     Rest};
-add_queue_ttl_segment(_) ->
-    stop.
-
-avoid_zeroes() ->
-    foreach_queue_index({none, fun avoid_zeroes_segment/1}).
-
-avoid_zeroes_segment(<<?PUB_PREFIX:?PUB_PREFIX_BITS,  IsPersistentNum:1,
-                       RelSeq:?REL_SEQ_BITS, MsgId:?MSG_ID_BITS,
-                       Expiry:?EXPIRY_BITS, Rest/binary>>) ->
-    {<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1, RelSeq:?REL_SEQ_BITS,
-       MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS>>, Rest};
-avoid_zeroes_segment(<<0:?REL_SEQ_ONLY_PREFIX_BITS,
-                       RelSeq:?REL_SEQ_BITS, Rest/binary>>) ->
-    {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
-     Rest};
-avoid_zeroes_segment(_) ->
-    stop.
-
-%% At upgrade time we just define every message's size as 0 - that
-%% will save us a load of faff with the message store, and means we
-%% can actually use the clean recovery terms in VQ. It does mean we
-%% don't count message bodies from before the migration, but we can
-%% live with that.
-store_msg_size() ->
-    foreach_queue_index({fun store_msg_size_journal/1,
-                         fun store_msg_size_segment/1}).
-
-store_msg_size_journal(<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                        Rest/binary>>) ->
-    {<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
-store_msg_size_journal(<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                        Rest/binary>>) ->
-    {<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
-store_msg_size_journal(<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                         MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS,
-                         Rest/binary>>) ->
-    {<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS, MsgId:?MSG_ID_BITS,
-       Expiry:?EXPIRY_BITS, 0:?SIZE_BITS>>, Rest};
-store_msg_size_journal(_) ->
-    stop.
-
-store_msg_size_segment(<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1,
-                         RelSeq:?REL_SEQ_BITS, MsgId:?MSG_ID_BITS,
-                         Expiry:?EXPIRY_BITS, Rest/binary>>) ->
-    {<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1, RelSeq:?REL_SEQ_BITS,
-       MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS, 0:?SIZE_BITS>>, Rest};
-store_msg_size_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-                        RelSeq:?REL_SEQ_BITS, Rest/binary>>) ->
-    {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
-     Rest};
-store_msg_size_segment(_) ->
-    stop.
-
-store_msg() ->
-    foreach_queue_index({fun store_msg_journal/1,
-                         fun store_msg_segment/1}).
-
-store_msg_journal(<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                    Rest/binary>>) ->
-    {<<?DEL_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
-store_msg_journal(<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                    Rest/binary>>) ->
-    {<<?ACK_JPREFIX:?JPREFIX_BITS, SeqId:?SEQ_BITS>>, Rest};
-store_msg_journal(<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS,
-                    MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS, Size:?SIZE_BITS,
-                    Rest/binary>>) ->
-    {<<Prefix:?JPREFIX_BITS, SeqId:?SEQ_BITS, MsgId:?MSG_ID_BITS,
-       Expiry:?EXPIRY_BITS, Size:?SIZE_BITS,
-       0:?EMBEDDED_SIZE_BITS>>, Rest};
-store_msg_journal(_) ->
-    stop.
-
-store_msg_segment(<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1,
-                    RelSeq:?REL_SEQ_BITS, MsgId:?MSG_ID_BITS,
-                    Expiry:?EXPIRY_BITS, Size:?SIZE_BITS, Rest/binary>>) ->
-    {<<?PUB_PREFIX:?PUB_PREFIX_BITS, IsPersistentNum:1, RelSeq:?REL_SEQ_BITS,
-       MsgId:?MSG_ID_BITS, Expiry:?EXPIRY_BITS, Size:?SIZE_BITS,
-       0:?EMBEDDED_SIZE_BITS>>, Rest};
-store_msg_segment(<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS,
-                    RelSeq:?REL_SEQ_BITS, Rest/binary>>) ->
-    {<<?REL_SEQ_ONLY_PREFIX:?REL_SEQ_ONLY_PREFIX_BITS, RelSeq:?REL_SEQ_BITS>>,
-     Rest};
-store_msg_segment(_) ->
-    stop.
-
-
-
-%%----------------------------------------------------------------------------
 %% Migration functions
 %%----------------------------------------------------------------------------
-
-foreach_queue_index(Funs) ->
-    QueueDirNames = all_queue_directory_names(),
-    {ok, Gatherer} = gatherer:start_link(),
-    [begin
-         ok = gatherer:fork(Gatherer),
-         ok = worker_pool:submit_async(
-                fun () ->
-                        transform_queue(QueueDirName, Gatherer, Funs)
-                end)
-     end || QueueDirName <- QueueDirNames],
-    empty = gatherer:out(Gatherer),
-    ok = gatherer:stop(Gatherer).
-
-transform_queue(Dir, Gatherer, {JournalFun, SegmentFun}) ->
-    ok = transform_file(filename:join(Dir, ?JOURNAL_FILENAME), JournalFun),
-    [ok = transform_file(filename:join(Dir, Seg), SegmentFun)
-     || Seg <- rabbit_file:wildcard(".*\\" ++ ?SEGMENT_EXTENSION, Dir)],
-    ok = gatherer:finish(Gatherer).
-
-transform_file(_Path, none) ->
-    ok;
-transform_file(Path, Fun) when is_function(Fun)->
-    PathTmp = Path ++ ".upgrade",
-    case rabbit_file:file_size(Path) of
-        0    -> ok;
-        Size -> {ok, PathTmpHdl} =
-                    file_handle_cache:open_with_absolute_path(
-                      PathTmp, ?WRITE_MODE,
-                      [{write_buffer, infinity}]),
-
-                {ok, PathHdl} = file_handle_cache:open_with_absolute_path(
-                                  Path, ?READ_MODE, [{read_buffer, Size}]),
-                {ok, Content} = file_handle_cache:read(PathHdl, Size),
-                ok = file_handle_cache:close(PathHdl),
-
-                ok = drive_transform_fun(Fun, PathTmpHdl, Content),
-
-                ok = file_handle_cache:close(PathTmpHdl),
-                ok = rabbit_file:rename(PathTmp, Path)
-    end.
-
-drive_transform_fun(Fun, Hdl, Contents) ->
-    case Fun(Contents) of
-        stop                -> ok;
-        {Output, Contents1} -> ok = file_handle_cache:append(Hdl, Output),
-                               drive_transform_fun(Fun, Hdl, Contents1)
-    end.
-
-move_to_per_vhost_stores(#resource{virtual_host = VHost} = QueueName) ->
-    OldQueueDir = filename:join([queues_base_dir(), "queues",
-                                 queue_name_to_dir_name_legacy(QueueName)]),
-    VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
-    NewQueueDir = queue_dir(VHostDir, QueueName),
-    rabbit_log_upgrade:info("About to migrate queue directory '~s' to '~s'",
-                            [OldQueueDir, NewQueueDir]),
-    case rabbit_file:is_dir(OldQueueDir) of
-        true  ->
-            ok = rabbit_file:ensure_dir(NewQueueDir),
-            ok = rabbit_file:rename(OldQueueDir, NewQueueDir),
-            ok = ensure_queue_name_stub_file(NewQueueDir, QueueName);
-        false ->
-            Msg  = "Queue index directory '~s' not found for ~s",
-            Args = [OldQueueDir, rabbit_misc:rs(QueueName)],
-            rabbit_log_upgrade:error(Msg, Args),
-            rabbit_log:error(Msg, Args)
-    end,
-    ok.
 
 ensure_queue_name_stub_file(Dir, #resource{virtual_host = VHost, name = QName}) ->
     QueueNameFile = filename:join(Dir, ?QUEUE_NAME_STUB_FILE),
     file:write_file(QueueNameFile, <<"VHOST: ", VHost/binary, "\n",
                                      "QUEUE: ", QName/binary, "\n">>).
-
-read_global_recovery_terms(DurableQueueNames) ->
-    ok = rabbit_recovery_terms:open_global_table(),
-
-    DurableTerms =
-        lists:foldl(
-          fun(QName, RecoveryTerms) ->
-                  DirName = queue_name_to_dir_name_legacy(QName),
-                  RecoveryInfo = case rabbit_recovery_terms:read_global(DirName) of
-                                     {error, _}  -> non_clean_shutdown;
-                                     {ok, Terms} -> Terms
-                                 end,
-                  [RecoveryInfo | RecoveryTerms]
-          end, [], DurableQueueNames),
-
-    ok = rabbit_recovery_terms:close_global_table(),
-    %% The backing queue interface requires that the queue recovery terms
-    %% which come back from start/1 are in the same order as DurableQueueNames
-    OrderedTerms = lists:reverse(DurableTerms),
-    {OrderedTerms, {fun queue_index_walker/1, {start, DurableQueueNames}}}.
-
-cleanup_global_recovery_terms() ->
-    rabbit_file:recursive_delete([filename:join([queues_base_dir(), "queues"])]),
-    rabbit_recovery_terms:delete_global_table(),
-    ok.
-
-
-update_recovery_term(#resource{virtual_host = VHost} = QueueName, Term) ->
-    Key = queue_name_to_dir_name(QueueName),
-    rabbit_recovery_terms:store(VHost, Key, Term).
-
 
 %% This function is only used when upgrading to the v2 index.
 %% We delete the segment file without updating the state.

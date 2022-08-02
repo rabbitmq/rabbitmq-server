@@ -18,14 +18,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([upgrade_recovery_terms/0, persistent_bytes/0]).
--export([open_global_table/0, close_global_table/0,
-         read_global/1, delete_global_table/0]).
--export([open_table/1, close_table/1]).
-
--rabbit_upgrade({upgrade_recovery_terms, local, []}).
--rabbit_upgrade({persistent_bytes, local, [upgrade_recovery_terms]}).
-
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 %%----------------------------------------------------------------------------
@@ -94,74 +86,6 @@ clear(VHost) ->
 
 start_link(VHost) ->
     gen_server:start_link(?MODULE, [VHost], []).
-
-%%----------------------------------------------------------------------------
-
-upgrade_recovery_terms() ->
-    open_global_table(),
-    try
-        QueuesDir = filename:join(rabbit_mnesia:dir(), "queues"),
-        Dirs = case rabbit_file:list_dir(QueuesDir) of
-                   {ok, Entries} -> Entries;
-                   {error, _}    -> []
-               end,
-        [begin
-             File = filename:join([QueuesDir, Dir, "clean.dot"]),
-             case rabbit_file:read_term_file(File) of
-                 {ok, Terms} -> ok  = store_global_table(Dir, Terms);
-                 {error, _}  -> ok
-             end,
-             file:delete(File)
-         end || Dir <- Dirs],
-        ok
-    after
-        close_global_table()
-    end.
-
-persistent_bytes()      -> dets_upgrade(fun persistent_bytes/1).
-persistent_bytes(Props) -> Props ++ [{persistent_bytes, 0}].
-
-dets_upgrade(Fun)->
-    open_global_table(),
-    try
-        ok = dets:foldl(fun ({DirBaseName, Terms}, Acc) ->
-                                store_global_table(DirBaseName, Fun(Terms)),
-                                Acc
-                        end, ok, ?MODULE),
-        ok
-    after
-        close_global_table()
-    end.
-
-open_global_table() ->
-    File = filename:join(rabbit_mnesia:dir(), "recovery.dets"),
-    {ok, _} = dets:open_file(?MODULE, [{file,      File},
-                                       {ram_file,  true},
-                                       {auto_save, infinity}]),
-    ok.
-
-close_global_table() ->
-    try
-        dets:sync(?MODULE),
-        dets:close(?MODULE)
-    %% see clear/1
-    catch _:badarg ->
-            rabbit_log:error("Failed to clear global recovery terms: table no longer exists!",
-                             []),
-            ok
-    end.
-
-store_global_table(DirBaseName, Terms) ->
-    dets:insert(?MODULE, {DirBaseName, Terms}).
-
-read_global(DirBaseName) ->
-    case dets:lookup(?MODULE, DirBaseName) of
-        [{_, Terms}] -> {ok, Terms};
-        _            -> {error, not_found}
-    end.
-
-delete_global_table() ->
-    file:delete(filename:join(rabbit_mnesia:dir(), "recovery.dets")).
 
 %%----------------------------------------------------------------------------
 
