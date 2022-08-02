@@ -1703,19 +1703,25 @@ not be visible to
 .Nm .
 .Bl -tag -width Ds
 .\" ------------------------------------------------------------------
-.It Cm add_vhost Ar vhost
+.It Cm add_vhost Ar vhost Op Fl description Ar desc Fl tags Ar tags Fl default-queue-type Ar default-q-type
 .Bl -tag -width Ds
 .It Ar vhost
 The name of the virtual host entry to create.
+.It Ar desc
+Arbitrary virtual host description, e.g. its purpose, for operator's convenience.
+.It Ar tags
+A comma-separated list of virtual host tags for operator's convenient
+.It Ar default-q-type
+If clients do not specify queue type explicitly, this type will be used. One of: quorum, stream.
 .El
 .Pp
 Creates a virtual host.
 .Pp
 For example, this command instructs the RabbitMQ broker to create a new
 virtual host called
-.Qq test :
+.Qq project9_dev_18 :
 .Pp
-.Dl rabbitmqctl add_vhost test
+.Dl rabbitmqctl add_vhost project9_dev_18 --description 'Dev environment no. 18' --tags "dev,project9"
 .\" ------------------------------------------------------------------
 .It Cm clear_vhost_limits Op Fl p Ar vhost
 .Pp
