@@ -467,13 +467,21 @@ vhosts_test(Config) ->
     passed.
 
 vhosts_description_test(Config) ->
+    Ret = rabbit_ct_broker_helpers:enable_feature_flag(
+            Config, virtual_host_metadata),
+
     http_put(Config, "/vhosts/myvhost", [{description, <<"vhost description">>},
                                          {tags, <<"tag1,tag2">>}], {group, '2xx'}),
-    Expected = #{name => <<"myvhost">>,
-                 metadata => #{
-                               description => <<"vhost description">>,
-                               tags => [<<"tag1">>, <<"tag2">>]
-                              }},
+    Expected = case Ret of
+                   {skip, _} ->
+                       #{name => <<"myvhost">>};
+                   _ ->
+                       #{name => <<"myvhost">>,
+                         metadata => #{
+                           description => <<"vhost description">>,
+                           tags => [<<"tag1">>, <<"tag2">>]
+                          }}
+               end,
     assert_item(Expected, http_get(Config, "/vhosts/myvhost")),
 
     %% Delete it

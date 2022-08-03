@@ -82,6 +82,7 @@ init_per_group(Group, Config)
                                                     {rabbit,
                                                      [{forced_feature_flags_on_init,
                                                        [classic_mirrored_queue_version,
+                                                        virtual_host_metadata,
                                                         quorum_queue,
                                                         stream_queue]}]})
                  end];

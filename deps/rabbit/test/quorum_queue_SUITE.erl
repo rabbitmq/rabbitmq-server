@@ -222,6 +222,10 @@ init_per_group(Group, Config) ->
                             %% more time after clustering before running the
                             %% tests.
                             timer:sleep(ClusterSize * 1000),
+                            ok = rabbit_ct_broker_helpers:enable_feature_flag(
+                                   Config2, maintenance_mode_status),
+                            ok = rabbit_ct_broker_helpers:enable_feature_flag(
+                                   Config2, virtual_host_metadata),
                             Config2;
                         Skip ->
                             end_per_group(Group, Config2),
