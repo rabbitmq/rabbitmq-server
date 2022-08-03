@@ -1734,7 +1734,6 @@ handle_frame_post_auth(Transport,
                        State,
                        {request, CorrelationId,
                         {query_publisher_sequence, Reference, Stream}}) ->
-    % FrameSize = ?RESPONSE_FRAME_SIZE + 8,
     {ResponseCode, Sequence} =
         case rabbit_stream_utils:check_read_permitted(#resource{name = Stream,
                                                                 kind = queue,
@@ -2641,6 +2640,63 @@ handle_frame_post_auth(Transport,
     Connection1 =
         process_client_command_versions(Connection0, CommandVersions),
     {Connection1, State};
+handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S,
+                                          virtual_host = VirtualHost,
+                                          user = User} =
+                           Connection,
+                       State,
+                       {request, CorrelationId, {stream_info, Stream}}) ->
+    QueueResource =
+        #resource{name = Stream,
+                  kind = queue,
+                  virtual_host = VirtualHost},
+    Response =
+        case rabbit_stream_utils:check_read_permitted(QueueResource, User,
+                                                      #{})
+        of
+            ok ->
+                case rabbit_stream_manager:lookup_member(VirtualHost, Stream) of
+                    {error, not_available} ->
+                        rabbit_global_counters:increase_protocol_counter(stream,
+                                                                         ?STREAM_NOT_AVAILABLE,
+                                                                         1),
+                        {stream_info, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE, #{}};
+                    {error, not_found} ->
+                        rabbit_global_counters:increase_protocol_counter(stream,
+                                                                         ?STREAM_DOES_NOT_EXIST,
+                                                                         1),
+                        {stream_info, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST,
+                         #{}};
+                    {ok, MemberPid} ->
+                        OffsetInfo =
+                            case gen:call(MemberPid, '$gen_call',
+                                          get_reader_context)
+                            of
+                                {ok, #{offset_ref := undefined}} ->
+                                    #{};
+                                {ok, #{offset_ref := OffsetRef}} ->
+                                    #{<<"first_offset">> =>
+                                          rabbit_data_coercion:to_binary(
+                                              atomics:get(OffsetRef, 2)),
+                                      <<"committed_offset">> =>
+                                          rabbit_data_coercion:to_binary(
+                                              atomics:get(OffsetRef, 1))};
+                                _ ->
+                                    #{}
+                            end,
+
+                        {stream_info, ?RESPONSE_CODE_OK, OffsetInfo}
+                end;
+            error ->
+                rabbit_global_counters:increase_protocol_counter(stream,
+                                                                 ?ACCESS_REFUSED,
+                                                                 1),
+                {stream_info, ?RESPONSE_CODE_ACCESS_REFUSED, #{}}
+        end,
+    Frame = rabbit_stream_core:frame({response, CorrelationId, Response}),
+    send(Transport, S, Frame),
+    {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
                        State,

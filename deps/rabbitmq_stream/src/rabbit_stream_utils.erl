@@ -275,4 +275,5 @@ command_versions() ->
      {close, ?VERSION_1, ?VERSION_1},
      {heartbeat, ?VERSION_1, ?VERSION_1},
      {route, ?VERSION_1, ?VERSION_1},
-     {partitions, ?VERSION_1, ?VERSION_1}].
+     {partitions, ?VERSION_1, ?VERSION_1},
+     {stream_info, ?VERSION_1, ?VERSION_1}].
