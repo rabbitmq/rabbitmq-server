@@ -226,6 +226,11 @@ used to make the difference between a request (0) and a response (1). Example fo
 |0x001b
 |Yes
 
+|<<streaminfo>>
+|Client
+|0x001c
+|Yes
+
 |===
 
 === DeclarePublisher
@@ -700,6 +705,26 @@ CommandVersionsExchangeResponse => Key Version CorrelationId ResponseCode [Comma
   Key => uint16
   MinVersion => uint16
   MaxVersion => uint16
+```
+
+=== StreamInfo
+
+```
+StreamInfoRequest => Key Version CorrelationId Stream
+  Key => uint16 // 0x001c
+  Version => uint16
+  CorrelationId => uint32
+  Stream => string
+
+StreamInfoResponse => Key Version CorrelationId ResponseCode Info
+  Key => uint16 // 0x801c
+  Version => uint16
+  CorrelationId => uint32
+  ResponseCode => uint16
+  Info => [PieceOfInfo]
+  PieceOfInfo => Key Value
+  Key => string
+  Value => string
 ```
 
 
