@@ -111,7 +111,7 @@ lookup_member(VirtualHost, Stream) ->
                   {ok,
                    #{leader_node => undefined | pid(),
                      replica_nodes => [pid()]}} |
-                  {error, not_found} | {error, not_available}.
+                  {error, stream_not_found} | {error, stream_not_available}.
 topology(VirtualHost, Stream) ->
     gen_server:call(?MODULE, {topology, VirtualHost, Stream}).
 
@@ -396,6 +396,10 @@ handle_call({topology, VirtualHost, Stream}, _From, State) ->
                       _ ->
                           {error, not_available}
                   end;
+              {error, not_found} ->
+                  {error, stream_not_found};
+              {error, not_available} ->
+                  {error, stream_not_available};
               R ->
                   R
           end,
