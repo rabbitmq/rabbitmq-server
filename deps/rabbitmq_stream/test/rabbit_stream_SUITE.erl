@@ -83,6 +83,7 @@ init_per_group(Group, Config)
                                                      [{forced_feature_flags_on_init,
                                                        [classic_mirrored_queue_version,
                                                         maintenance_mode_status,
+                                                        user_limits,
                                                         virtual_host_metadata,
                                                         quorum_queue,
                                                         stream_queue]}]})
