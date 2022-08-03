@@ -350,7 +350,7 @@ handle_call({lookup_member, VirtualHost, Stream}, _From, State) ->
                                                             false;
                                                         ({P, _Role})
                                                             when is_pid(P) ->
-                                                            is_process_alive(P);
+                                                            process_alive(P);
                                                         (_) ->
                                                             false
                                                     end,
@@ -875,7 +875,12 @@ process_alive(Pid) ->
         CurrentNode ->
             is_process_alive(Pid);
         OtherNode ->
-            rpc:call(OtherNode, erlang, is_process_alive, [Pid], 10000)
+            case rpc:call(OtherNode, erlang, is_process_alive, [Pid], 10000) of
+                B when is_boolean(B) ->
+                    B;
+                _ ->
+                    false
+            end
     end.
 
 is_stream_queue(Q) ->
