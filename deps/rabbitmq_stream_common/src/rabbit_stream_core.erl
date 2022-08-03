@@ -406,9 +406,9 @@ response_body({metadata = Tag, Endpoints, Metadata}) ->
         maps:fold(fun (Stream, Info, Acc) when is_atom(Info) ->
                           Code =
                               case Info of
-                                  not_found ->
+                                  stream_not_found ->
                                       ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST;
-                                  not_available ->
+                                  stream_not_available ->
                                       ?RESPONSE_CODE_STREAM_NOT_AVAILABLE
                               end,
                           StreamLength = byte_size(Stream),
