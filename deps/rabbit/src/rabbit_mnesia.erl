@@ -84,8 +84,7 @@ init() ->
     %% We intuitively expect the global name server to be synced when
     %% Mnesia is up. In fact that's not guaranteed to be the case -
     %% let's make it so.
-    ok = rabbit_node_monitor:global_sync(),
-    ok.
+    ok = global:sync().
 
 init_with_lock() ->
     {Retries, Timeout} = rabbit_peer_discovery:locking_retry_timeout(),

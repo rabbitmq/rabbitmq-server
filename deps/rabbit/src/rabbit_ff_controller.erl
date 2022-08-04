@@ -268,7 +268,7 @@ register_globally() ->
        "Feature flags: [global sync] @ ~s",
        [node()],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-    ok = rabbit_node_monitor:global_sync(),
+    ok = global:sync(),
     ?LOG_DEBUG(
        "Feature flags: [global register] @ ~s",
        [node()],
