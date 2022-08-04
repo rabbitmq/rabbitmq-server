@@ -36,7 +36,7 @@
 
 -type(password_hash() :: binary()).
 
--type internal_user() :: internal_user_v1:internal_user_v1() | internal_user_v2().
+-type internal_user() :: internal_user_v2().
 
 -record(internal_user, {
     username :: username() | '_',
@@ -55,8 +55,7 @@
                        hashing_algorithm :: atom() | '_',
                        limits            :: map()}).
 
--type internal_user_pattern() :: internal_user_v1:internal_user_v1_pattern() |
-                                 internal_user_v2_pattern().
+-type internal_user_pattern() :: internal_user_v2_pattern().
 
 -type internal_user_v2_pattern() :: #internal_user{
                                                   username :: username() | '_',
@@ -75,129 +74,85 @@
 
 -spec new() -> internal_user().
 new() ->
-    case record_version_to_use() of
-        ?record_version ->
-            #internal_user{
-                username = <<"">>,
-                password_hash = <<"">>,
-                tags = []
-            };
-        _ ->
-            internal_user_v1:new()
-    end.
+    #internal_user{
+       username = <<"">>,
+       password_hash = <<"">>,
+       tags = []
+      }.
 
 -spec new(tuple()) -> internal_user().
 new({hashing_algorithm, HashingAlgorithm}) ->
-    case record_version_to_use() of
-        ?record_version ->
-            #internal_user{
-                username = <<"">>,
-                password_hash = <<"">>,
-                tags = [],
-                hashing_algorithm = HashingAlgorithm
-            };
-        _ ->
-            internal_user_v1:new({hashing_algorithm, HashingAlgorithm})
-    end;
+    #internal_user{
+       username = <<"">>,
+       password_hash = <<"">>,
+       tags = [],
+       hashing_algorithm = HashingAlgorithm
+      };
 new({tags, Tags}) ->
-    case record_version_to_use() of
-	?record_version ->
-	    #internal_user{
-            username = <<"">>,
-            password_hash = <<"">>,
-            tags = Tags
-        };
-	_ ->
-	    internal_user_v1:new({tags, Tags})
-    end.
+    #internal_user{
+       username = <<"">>,
+       password_hash = <<"">>,
+       tags = Tags
+      }.
 
--spec record_version_to_use() -> internal_user_v1 | internal_user_v2.
+-spec record_version_to_use() -> internal_user_v2.
 record_version_to_use() ->
-    case rabbit_feature_flags:is_enabled(user_limits) of
-        true  -> ?record_version;
-        false -> internal_user_v1:record_version_to_use()
-    end.
+    ?record_version.
 
 -spec fields() -> list().
 fields() ->
-    case record_version_to_use() of
-        ?record_version -> fields(?record_version);
-        _               -> internal_user_v1:fields()
-    end.
+    fields(?record_version).
 
 -spec fields(atom()) -> list().
-fields(?record_version) -> record_info(fields, internal_user);
-fields(Version)         -> internal_user_v1:fields(Version).
+fields(?record_version) -> record_info(fields, internal_user).
 
 -spec upgrade(internal_user()) -> internal_user().
-upgrade(#internal_user{} = User) -> User;
-upgrade(OldUser)         -> upgrade_to(record_version_to_use(), OldUser).
+upgrade(#internal_user{} = User) -> User.
 
--spec upgrade_to
-(internal_user_v2, internal_user()) -> internal_user_v2();
-(internal_user_v1, internal_user_v1:internal_user_v1()) -> internal_user_v1:internal_user_v1().
+-spec upgrade_to(internal_user_v2, internal_user()) -> internal_user_v2().
 
 upgrade_to(?record_version, #internal_user{} = User) ->
     User;
 upgrade_to(?record_version, OldUser) ->
     Fields = erlang:tuple_to_list(OldUser) ++ [#{}],
-    #internal_user{} = erlang:list_to_tuple(Fields);
-upgrade_to(Version, OldUser) ->
-    internal_user_v1:upgrade_to(Version, OldUser).
+    #internal_user{} = erlang:list_to_tuple(Fields).
 
 -spec pattern_match_all() -> internal_user_pattern().
 pattern_match_all() ->
-    case record_version_to_use() of
-        ?record_version -> #internal_user{_ = '_'};
-        _               -> internal_user_v1:pattern_match_all()
-    end.
+    #internal_user{_ = '_'}.
 
 -spec get_username(internal_user()) -> username().
-get_username(#internal_user{username = Value}) -> Value;
-get_username(User) -> internal_user_v1:get_username(User).
+get_username(#internal_user{username = Value}) -> Value.
 
 -spec get_password_hash(internal_user()) -> password_hash().
-get_password_hash(#internal_user{password_hash = Value}) -> Value;
-get_password_hash(User) -> internal_user_v1:get_password_hash(User).
+get_password_hash(#internal_user{password_hash = Value}) -> Value.
 
 -spec get_tags(internal_user()) -> [atom()].
-get_tags(#internal_user{tags = Value}) -> Value;
-get_tags(User) -> internal_user_v1:get_tags(User).
+get_tags(#internal_user{tags = Value}) -> Value.
 
 -spec get_hashing_algorithm(internal_user()) -> atom().
-get_hashing_algorithm(#internal_user{hashing_algorithm = Value}) -> Value;
-get_hashing_algorithm(User) -> internal_user_v1:get_hashing_algorithm(User).
+get_hashing_algorithm(#internal_user{hashing_algorithm = Value}) -> Value.
 
 -spec get_limits(internal_user()) -> map().
-get_limits(#internal_user{limits = Value}) -> Value;
-get_limits(User) -> internal_user_v1:get_limits(User).
+get_limits(#internal_user{limits = Value}) -> Value.
 
 -spec create_user(username(), password_hash(), atom()) -> internal_user().
 create_user(Username, PasswordHash, HashingMod) ->
-    case record_version_to_use() of
-        ?record_version ->
-            #internal_user{username = Username,
-                           password_hash = PasswordHash,
-                           tags = [],
-                           hashing_algorithm = HashingMod,
-                           limits = #{}
-                          };
-        _ ->
-            internal_user_v1:create_user(Username, PasswordHash, HashingMod)
-    end.
+    #internal_user{username = Username,
+                   password_hash = PasswordHash,
+                   tags = [],
+                   hashing_algorithm = HashingMod,
+                   limits = #{}
+                  }.
 
 -spec set_password_hash(internal_user(), password_hash(), atom()) -> internal_user().
 set_password_hash(#internal_user{} = User, PasswordHash, HashingAlgorithm) ->
     User#internal_user{password_hash = PasswordHash,
-                       hashing_algorithm = HashingAlgorithm};
-set_password_hash(User, PasswordHash, HashingAlgorithm) ->
-    internal_user_v1:set_password_hash(User, PasswordHash, HashingAlgorithm).
+                       hashing_algorithm = HashingAlgorithm}.
 
 -spec set_tags(internal_user(), [atom()]) -> internal_user().
 set_tags(#internal_user{} = User, Tags) ->
-    User#internal_user{tags = Tags};
-set_tags(User, Tags) ->
-    internal_user_v1:set_tags(User, Tags).
+    User#internal_user{tags = Tags}.
 
 -spec update_limits
 (add, internal_user(), map()) -> internal_user();
@@ -205,12 +160,8 @@ set_tags(User, Tags) ->
 update_limits(add, #internal_user{limits = Limits} = User, Term) ->
     User#internal_user{limits = maps:merge(Limits, Term)};
 update_limits(remove, #internal_user{limits = Limits} = User, LimitType) ->
-    User#internal_user{limits = maps:remove(LimitType, Limits)};
-update_limits(Action, User, Term) ->
-    internal_user_v1:update_limits(Action, User, Term).
+    User#internal_user{limits = maps:remove(LimitType, Limits)}.
 
 -spec clear_limits(internal_user()) -> internal_user().
 clear_limits(#internal_user{} = User) ->
-    User#internal_user{limits = #{}};
-clear_limits(User) ->
-    internal_user_v1:clear_limits(User).
+    User#internal_user{limits = #{}}.

@@ -63,16 +63,8 @@ init_per_group(cluster_size_1_network, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
     init_per_multinode_group(cluster_size_1_network, Config1, 1);
 init_per_group(cluster_size_2_network, Config) ->
-    case rabbit_ct_helpers:is_mixed_versions() of
-        false ->
-            Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
-            init_per_multinode_group(cluster_size_2_network, Config1, 2);
-        _ ->
-            %% In a mixed 3.8/3.9 cluster, changes to rabbit_core_ff.erl imply that some
-            %% feature flag related migrations cannot occur, and therefore user_limits
-            %% cannot be enabled in a 3.8/3.9 mixed cluster
-            {skip, "cluster_size_2_network is not mixed version compatible"}
-    end;
+    Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, network}]),
+    init_per_multinode_group(cluster_size_2_network, Config1, 2);
 init_per_group(cluster_size_1_direct, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [{connection_type, direct}]),
     init_per_multinode_group(cluster_size_1_direct, Config1, 1);
@@ -86,21 +78,9 @@ init_per_multinode_group(Group, Config, NodeCount) ->
                                                     {rmq_nodes_count, NodeCount},
                                                     {rmq_nodename_suffix, Suffix}
       ]),
-    Config2 = rabbit_ct_helpers:run_steps(
-                Config1, rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    EnableFF = rabbit_ct_broker_helpers:enable_feature_flag(
-                 Config2, user_limits),
-    case EnableFF of
-        ok ->
-            Config2;
-        {skip, _} = Skip ->
-            end_per_group(Group, Config2),
-            Skip;
-        Other ->
-            end_per_group(Group, Config2),
-            {skip, Other}
-    end.
+    rabbit_ct_helpers:run_steps(
+      Config1, rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,

@@ -149,7 +149,7 @@ suites = [
         additional_beam = [
             ":rabbit_mgmt_runtime_parameters_util",
         ],
-        shard_count = 3,
+        shard_count = 2,
     ),
     rabbitmq_integration_suite(
         PACKAGE,
