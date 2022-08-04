@@ -418,7 +418,7 @@ get_tracked_channels_by_connection_pid(ConnPid) ->
     end.
 
 get_tracked_channels_by_connection_pid_ets(ConnPid) ->
-    rabbit_tracking:match_tracked_items_ets(
+    rabbit_tracking:match_tracked_items_local(
         ?TRACKED_CHANNEL_TABLE,
         #tracked_channel{connection = ConnPid, _ = '_'}).
 
