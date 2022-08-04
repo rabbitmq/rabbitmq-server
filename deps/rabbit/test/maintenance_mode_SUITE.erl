@@ -74,19 +74,11 @@ init_per_testcase(quorum_queue_leadership_transfer = Testcase, Config) ->
                 Config1,
                 rabbit_ct_broker_helpers:setup_steps() ++
                 rabbit_ct_client_helpers:setup_steps()),
-    MaintenanceModeFFEnabled = rabbit_ct_broker_helpers:enable_feature_flag(
-                                Config2, maintenance_mode_status),
     QuorumQueueFFEnabled = rabbit_ct_broker_helpers:enable_feature_flag(
                                 Config2, quorum_queue),
-    case MaintenanceModeFFEnabled of
+    case QuorumQueueFFEnabled of
         ok ->
-            case QuorumQueueFFEnabled of
-                ok ->
-                    Config2;
-                Skip ->
-                    end_per_testcase(Testcase, Config2),
-                    Skip
-            end;
+            Config2;
         Skip ->
             end_per_testcase(Testcase, Config2),
             Skip
@@ -100,21 +92,11 @@ init_per_testcase(Testcase, Config) ->
         {rmq_nodename_suffix, Testcase},
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}}
       ]),
-    Config2 = rabbit_ct_helpers:run_steps(
-                Config1,
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps() ++
-                [fun rabbit_ct_broker_helpers:set_ha_policy_all/1]),
-    MaintenanceModeFFEnabled = rabbit_ct_broker_helpers:enable_feature_flag(
-                                Config2,
-                                maintenance_mode_status),
-    case MaintenanceModeFFEnabled of
-        ok ->
-            Config2;
-        Skip ->
-            end_per_testcase(Testcase, Config2),
-            Skip
-    end.
+    rabbit_ct_helpers:run_steps(
+      Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps() ++
+      [fun rabbit_ct_broker_helpers:set_ha_policy_all/1]).
 
 end_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
