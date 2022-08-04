@@ -276,13 +276,13 @@ pause_if_all_down_guard(PreferredNodes, LastNodes, LastState) ->
 %% state, causing global:sync/0 to never return.
 %%
 %%     1. A process is spawned.
-%%     2. If after 15", global:sync() didn't return, the "global"
+%%     2. If after 10", global:sync() didn't return, the "global"
 %%        state is parsed.
 %%     3. If it detects that a sync is blocked for more than 10",
 %%        the process sends fake nodedown/nodeup events to the two
 %%        nodes involved (one local, one remote).
 %%     4. Both "global" instances restart their synchronisation.
-%%     5. globao:sync() finally returns.
+%%     5. global:sync() finally returns.
 %%
 %% FIXME: Remove this workaround, once we got rid of the change to
 %% "dist_auto_connect" and fixed the bugs uncovered.
@@ -297,13 +297,13 @@ workaround_global_hang() ->
     receive
         global_sync_done ->
             ok
-    after 10000 ->
+    after 10_000 ->
             find_blocked_global_peers()
     end.
 
 find_blocked_global_peers() ->
     Snapshot1 = snapshot_global_dict(),
-    timer:sleep(10000),
+    timer:sleep(10_000),
     Snapshot2 = snapshot_global_dict(),
     find_blocked_global_peers1(Snapshot2, Snapshot1).
 
@@ -324,8 +324,8 @@ find_blocked_global_peers1([], _) ->
 unblock_global_peer(PeerNode) ->
     ThisNode = node(),
     PeerState = rpc:call(PeerNode, sys, get_status, [global_name_server]),
-    logger:info(
-      "Global hang workaround: global state on ~s seems broken~n"
+    logger:debug(
+      "Global hang workaround: global state on ~s seems inconsistent~n"
       " * Peer global state:  ~p~n"
       " * Local global state: ~p~n"
       "Faking nodedown/nodeup between ~s and ~s",
