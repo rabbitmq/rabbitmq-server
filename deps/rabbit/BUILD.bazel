@@ -319,7 +319,7 @@ suites = [
         PACKAGE,
         name = "classic_queue_prop_SUITE",
         size = "large",
-        shard_count = 4,
+        shard_count = 5,
         sharding_method = "case",
         deps = [
             "@proper//:erlang_app",
