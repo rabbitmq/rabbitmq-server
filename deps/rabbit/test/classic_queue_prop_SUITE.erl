@@ -74,7 +74,7 @@
 %% Common Test.
 
 all() ->
-    [{group, classic_queue_tests}].
+    [{group, classic_queue_tests}, {group, classic_queue_regressions}].
 
 groups() ->
     [{classic_queue_tests, [], [
@@ -83,7 +83,11 @@ groups() ->
         lazy_queue_v1,
         classic_queue_v2,
         lazy_queue_v2
-    ]}].
+     ]},
+     {classic_queue_regressions, [], [
+        reg_v1_full_recover_only_journal
+     ]}
+    ].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -92,7 +96,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
-init_per_group(Group = classic_queue_tests, Config) ->
+init_per_group(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Group},
         {rmq_nodes_count, 1},
@@ -117,7 +121,7 @@ init_per_group(Group = classic_queue_tests, Config) ->
         erlang, system_flag, [backtrace_depth, 16]),
     Config2.
 
-end_per_group(classic_queue_tests, Config) ->
+end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
@@ -1155,3 +1159,38 @@ queue_fold(Fun, Acc0, {R, F}) when is_function(Fun, 2), is_list(R), is_list(F) -
     lists:foldr(Fun, Acc1, R);
 queue_fold(Fun, Acc0, Q) ->
     erlang:error(badarg, [Fun, Acc0, Q]).
+
+%% Regression tests.
+%%
+%% These tests are hard to reproduce by running the test suite normally
+%% because they require a very specific sequence of events.
+
+reg_v1_full_recover_only_journal(Config) ->
+    true = rabbit_ct_broker_helpers:rpc(Config, 0,
+        ?MODULE, do_reg_v1_full_recover_only_journal, [Config]).
+
+do_reg_v1_full_recover_only_journal(Config) ->
+
+    St0 = #cq{name=prop_classic_queue_v1, mode=lazy, version=1,
+              config=minimal_config(Config)},
+
+    Res1 = cmd_setup_queue(St0),
+    St3 = St0#cq{amq=Res1},
+
+    Res4 = cmd_channel_open(St3),
+    true = postcondition(St3, {call, undefined, cmd_channel_open, [St3]}, Res4),
+    St7 = next_state(St3, Res4, {call, undefined, cmd_channel_open, [St3]}),
+
+    Res8 = cmd_restart_queue_dirty(St7),
+    true = postcondition(St7, {call, undefined, cmd_restart_queue_dirty, [St7]}, Res8),
+    St11 = next_state(St7, Res8, {call, undefined, cmd_restart_queue_dirty, [St7]}),
+
+    Res12 = cmd_channel_publish_many(St11, Res4, 117, 4541, 2, true, undefined),
+    true = postcondition(St11, {call, undefined, cmd_channel_publish_many, [St11, Res4, 117, 4541, 2, true, undefined]}, Res12),
+    St14 = next_state(St11, Res12, {call, undefined, cmd_channel_publish_many, [St11, Res4, 117, 4541, 2, true, undefined]}),
+
+    Res15 = cmd_restart_vhost_clean(St14),
+    true = postcondition(St14, {call, undefined, cmd_restart_vhost_clean, [St14]}, Res15),
+    _ = next_state(St14, Res15, {call, undefined, cmd_restart_vhost_clean, [St14]}),
+
+    true.
