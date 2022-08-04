@@ -54,30 +54,24 @@ init_per_group(Group, Config) ->
     Config2 = rabbit_ct_helpers:run_steps(Config1b,
                                           [fun merge_app_env/1 ] ++
                                           rabbit_ct_broker_helpers:setup_steps()),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
-        ok ->
-            ok = rabbit_ct_broker_helpers:rpc(
-                   Config2, 0, application, set_env,
-                   [rabbit, channel_tick_interval, 100]),
-            %% HACK: the larger cluster sizes benefit for a bit more time
-            %% after clustering before running the tests.
-            Config3 = case Group of
-                          cluster_size_5 ->
-                              timer:sleep(5000),
-                              Config2;
-                          _ ->
-                              Config2
-                      end,
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config2, 0, application, set_env,
+           [rabbit, channel_tick_interval, 100]),
+    %% HACK: the larger cluster sizes benefit for a bit more time
+    %% after clustering before running the tests.
+    Config3 = case Group of
+                  cluster_size_5 ->
+                      timer:sleep(5000),
+                      Config2;
+                  _ ->
+                      Config2
+              end,
 
-            rabbit_ct_broker_helpers:set_policy(
-              Config3, 0,
-              <<"ha-policy">>, <<".*">>, <<"queues">>,
-              [{<<"ha-mode">>, <<"all">>}]),
-            Config3;
-        Skip ->
-            end_per_group(Group, Config2),
-            Skip
-    end.
+    rabbit_ct_broker_helpers:set_policy(
+      Config3, 0,
+      <<"ha-policy">>, <<".*">>, <<"queues">>,
+      [{<<"ha-mode">>, <<"all">>}]),
+    Config3.
 
 merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(

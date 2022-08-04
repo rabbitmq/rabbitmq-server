@@ -138,23 +138,10 @@ init_per_group1(Group, Config) ->
         {rmq_nodename_suffix, Suffix},
         {rmq_nodes_clustered, false}
       ]),
-    Config2 = rabbit_ct_helpers:run_steps(Config1,
-                                          rabbit_ct_broker_helpers:setup_steps() ++
-                                              rabbit_ct_client_helpers:setup_steps() ++
-                                              SetupFederation ++ Disambiguate),
-    case ?config(target_queue_type, Config2) of
-        quorum ->
-            case rabbit_ct_broker_helpers:enable_feature_flag(Config2, quorum_queue) of
-                ok ->
-                    Config2;
-                {skip, Skip} ->
-                    Skip;
-                Other ->
-                    {skip, Other}
-            end;
-        _ ->
-            Config2
-    end.
+    rabbit_ct_helpers:run_steps(Config1,
+                                rabbit_ct_broker_helpers:setup_steps() ++
+                                rabbit_ct_client_helpers:setup_steps() ++
+                                SetupFederation ++ Disambiguate).
 
 end_per_group(without_disambiguate, Config) ->
     Config;

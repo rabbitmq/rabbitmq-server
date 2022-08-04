@@ -285,18 +285,10 @@ recover0() ->
          OpPolicy1 = match(QName, OpPolicies),
          Q2 = amqqueue:set_operator_policy(Q1, OpPolicy1),
          Q3 = rabbit_queue_decorator:set(Q2),
-         ?try_mnesia_tx_or_upgrade_amqqueue_and_retry(
-            rabbit_misc:execute_mnesia_transaction(
-              fun () ->
-                      mnesia:write(rabbit_durable_queue, Q3, write)
-              end),
-            begin
-                Q4 = amqqueue:upgrade(Q3),
-                rabbit_misc:execute_mnesia_transaction(
-                  fun () ->
-                          mnesia:write(rabbit_durable_queue, Q4, write)
-                  end)
-            end)
+         rabbit_misc:execute_mnesia_transaction(
+           fun () ->
+                   mnesia:write(rabbit_durable_queue, Q3, write)
+           end)
      end || Q0 <- Qs],
     ok.
 

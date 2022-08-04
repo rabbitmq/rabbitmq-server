@@ -12,8 +12,7 @@
 
 all() ->
     [
-      {group, non_parallel_tests},
-      {group, non_parallel_tests_quorum}
+      {group, non_parallel_tests}
     ].
 
 groups() ->
@@ -21,9 +20,7 @@ groups() ->
       {non_parallel_tests, [], [
                                 block,
                                 handle_invalid_frames,
-                                stats
-                               ]},
-      {non_parallel_tests_quorum, [], [
+                                stats,
                                 quorum_session_false,
                                 quorum_session_true,
                                 classic_session_true,
@@ -62,14 +59,6 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(non_parallel_tests_quorum, Config) ->
-%%  Added for quorum queue test else the mixing test would fail
-%% with "feature flag is disabled"
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue) of
-        ok -> Config;
-        Skip -> Skip
-    end,
-  Config;
 init_per_group(_, Config) ->
     Config.
 
