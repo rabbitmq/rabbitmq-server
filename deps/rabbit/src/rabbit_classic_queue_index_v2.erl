@@ -1127,7 +1127,7 @@ queue_index_walker_reader(#resource{ virtual_host = VHost } = Name, Gatherer) ->
     _ = [queue_index_walker_segment(filename:join(Dir, F), Gatherer) || F <- SegmentFiles],
     %% When there are files belonging to the v1 index, we go through
     %% the v1 index walker function as well.
-    case rabbit_file:wildcard(".*\\.idx", Dir) of
+    case rabbit_file:wildcard(".*\\.(idx|jif)", Dir) of
         [_|_] ->
             %% This function will call gatherer:finish/1, we do not
             %% need to call it here.
