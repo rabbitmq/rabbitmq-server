@@ -986,9 +986,7 @@ normalize_per_cat_log_config([], LogConfig, _) ->
     log_config().
 
 handle_default_and_overridden_outputs(LogConfig, Context) ->
-    LogConfig1 = handle_default_main_output(LogConfig, Context),
-    LogConfig2 = handle_default_upgrade_cat_output(LogConfig1, Context),
-    LogConfig2.
+    handle_default_main_output(LogConfig, Context).
 
 -spec handle_default_main_output(log_config(), rabbit_env:context()) ->
     log_config().
@@ -1024,37 +1022,6 @@ handle_default_main_output(
         _       -> LogConfig#{
                      global => GlobalConfig#{
                                  outputs => Outputs1}}
-    end.
-
--spec handle_default_upgrade_cat_output(log_config(), rabbit_env:context()) ->
-    log_config().
-
-handle_default_upgrade_cat_output(
-  #{per_category := PerCatConfig} = LogConfig,
-  #{upgrade_log_file := UpgLogFile} = Context) ->
-    UpgCatConfig = case PerCatConfig of
-                       #{upgrade := CatConfig} -> CatConfig;
-                       _                       -> #{outputs => []}
-                   end,
-    #{outputs := Outputs} = UpgCatConfig,
-    NoOutputsConfigured = Outputs =:= [],
-    Overridden = rabbit_env:has_var_been_overridden(
-                   Context, upgrade_log_file),
-    Outputs1 = if
-                   NoOutputsConfigured orelse Overridden ->
-                       Output0 = log_file_var_to_output(UpgLogFile),
-                       Output1 = keep_log_level_from_equivalent_output(
-                                   Output0, Outputs),
-                       [Output1];
-                   true ->
-                      Outputs
-               end,
-    case Outputs1 of
-        Outputs -> LogConfig;
-        _       -> LogConfig#{
-                     per_category => PerCatConfig#{
-                                       upgrade => UpgCatConfig#{
-                                                    outputs => Outputs1}}}
     end.
 
 -spec log_file_var_to_output(file:filename() | string()) ->
