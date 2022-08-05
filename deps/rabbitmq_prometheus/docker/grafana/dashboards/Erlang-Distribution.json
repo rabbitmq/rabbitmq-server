@@ -446,7 +446,7 @@
         "x": 0,
         "y": 4
       },
-      "hideBranding": false,
+      "hideBranding": true,
       "highlightCards": true,
       "id": 19,
       "legend": {
@@ -469,7 +469,7 @@
           "expr": "erlang_vm_dist_node_state * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
+          "legendFormat": " {{rabbitmq_node}} -> {{peer}}",
           "refId": "A",
           "units": "none",
           "valueHandler": "Number Threshold"
@@ -2691,7 +2691,7 @@
         "x": 0,
         "y": 32
       },
-      "hideBranding": false,
+      "hideBranding": true,
       "highlightCards": true,
       "id": 18,
       "legend": {
@@ -2714,7 +2714,7 @@
           "expr": "erlang_vm_dist_proc_status{type=\"$erlang_vm_dist_proc_type\"} * on(instance) group_left(rabbitmq_node, rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} ",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{rabbitmq_node}} -> {{peer}}",
+          "legendFormat": " {{rabbitmq_node}} -> {{peer}}",
           "refId": "A",
           "units": "none",
           "valueHandler": "Number Threshold"
