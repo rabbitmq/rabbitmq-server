@@ -4,7 +4,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "7.0.0"
+      "version": "8.0.0"
     },
     {
       "type": "datasource",
@@ -1753,5 +1753,5 @@
   "timezone": "",
   "title": "RabbitMQ-PerfTest",
   "uid": "pK9UatSiz",
-  "version": 20210322
+  "version": 20220805
 }

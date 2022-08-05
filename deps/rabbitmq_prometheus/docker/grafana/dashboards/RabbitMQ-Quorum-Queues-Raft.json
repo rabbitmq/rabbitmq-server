@@ -4,7 +4,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "7.0.0"
+      "version": "8.0.0"
     },
     {
       "type": "datasource",
@@ -791,5 +791,5 @@
   "timezone": "",
   "title": "RabbitMQ-Quorum-Queues-Raft",
   "uid": "f1Mee9nZz",
-  "version": 20210322
+  "version": 20220805
 }

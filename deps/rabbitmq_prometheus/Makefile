@@ -106,5 +106,6 @@ rabbitmq-exporter_vs_rabbitmq-prometheus.json: $(JQ)
 	@$(GENERATE_DASHBOARD)
 .PHONY: RabbitMQ-Stream.json
 RabbitMQ-Stream.json: $(JQ)
-	@$(GENERATE_DASHBOARD)
-
+	@cd $(DASHBOARDS_TO_PATH) \
+	&& $(JQ) --slurp add $(@F) ../__inputs.json \
+	| $(JQ) '.templating.list[].datasource = "$${DS_PROMETHEUS}"' \
