@@ -1767,7 +1767,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.0.3",
@@ -2004,7 +2004,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.0.3",
@@ -2244,7 +2244,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.0.3",
@@ -2484,7 +2484,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.0.3",
@@ -2724,7 +2724,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.0.3",
@@ -2804,7 +2804,7 @@
           "placement": "right"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.0.3",
