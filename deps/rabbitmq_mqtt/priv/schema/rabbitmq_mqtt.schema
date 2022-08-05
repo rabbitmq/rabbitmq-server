@@ -108,6 +108,9 @@ end}.
 {mapping, "mqtt.proxy_protocol", "rabbitmq_mqtt.proxy_protocol",
     [{datatype, {enum, [true, false]}}]}.
 
+{mapping, "mqtt.login_timeout", "rabbitmq_mqtt.login_timeout",
+    [{datatype, integer}, {validators, ["non_negative_integer"]}]}.
+
 %% TCP/SSL Configuration (as per the broker configuration).
 %%
 %% {tcp_listeners, [1883]},
