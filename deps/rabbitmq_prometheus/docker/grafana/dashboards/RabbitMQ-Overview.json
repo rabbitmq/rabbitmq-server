@@ -1462,7 +1462,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -1712,7 +1712,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -1962,7 +1962,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -2212,7 +2212,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -2476,7 +2476,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -2723,7 +2723,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -2987,7 +2987,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -3234,7 +3234,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -3481,7 +3481,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -3728,7 +3728,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -3839,7 +3839,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -3950,7 +3950,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -4214,7 +4214,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -4464,7 +4464,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -4711,7 +4711,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -4958,7 +4958,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -5205,7 +5205,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -5316,7 +5316,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -5427,7 +5427,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -5538,7 +5538,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -5802,7 +5802,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -6053,7 +6053,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -6303,7 +6303,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -6553,7 +6553,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -6817,7 +6817,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -7067,7 +7067,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -7317,7 +7317,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -7581,7 +7581,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -7831,7 +7831,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
@@ -8082,7 +8082,7 @@
           "placement": "bottom"
         },
         "tooltip": {
-          "mode": "single"
+          "mode": "multi"
         }
       },
       "pluginVersion": "8.3.4",
