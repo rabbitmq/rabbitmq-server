@@ -34,12 +34,13 @@ readonly erlang_cookie='${erlang_cookie}'
 readonly debian_codename="$${distribution#debian-*}"
 
 case "$erlang_version" in
-  24.*)
+
+  26.*)
     if test -z "$erlang_git_ref"; then
       erlang_git_ref='master'
     fi
     ;;
-  23.*|22.*|21.*|20.*|19.3)
+  25.*|24.*|23.*|22.*|21.*|20.*|19.3)
     readonly erlang_package_version="1:$erlang_version-1"
     ;;
   R16B03)
