@@ -13,7 +13,7 @@ volumes:
 services:
   grafana:
     # https://hub.docker.com/r/grafana/grafana/tags
-    image: grafana/grafana:8.0.6
+    image: grafana/grafana:8.3.4
     ports:
       - "3000:3000"
     networks:
