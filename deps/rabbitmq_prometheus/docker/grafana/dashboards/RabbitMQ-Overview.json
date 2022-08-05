@@ -1768,7 +1768,6 @@
               "mode": "line+area"
             }
           },
-          "decimals": -1,
           "links": [],
           "mappings": [],
           "thresholds": {
@@ -2018,7 +2017,6 @@
               "mode": "line+area"
             }
           },
-          "decimals": -1,
           "links": [],
           "mappings": [],
           "thresholds": {
@@ -5611,7 +5609,6 @@
               "mode": "off"
             }
           },
-          "decimals": -1,
           "links": [],
           "mappings": [],
           "min": 0,
@@ -6626,7 +6623,6 @@
               "mode": "off"
             }
           },
-          "decimals": -1,
           "links": [],
           "mappings": [],
           "min": 0,
@@ -7390,7 +7386,6 @@
               "mode": "off"
             }
           },
-          "decimals": -1,
           "links": [],
           "mappings": [],
           "min": 0,
