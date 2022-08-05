@@ -14,8 +14,23 @@ groups() ->
       {non_parallel_tests, [], [
                                 block,
                                 handle_invalid_frames,
+<<<<<<< HEAD
                                 stats
+<<<<<<< HEAD
                                ]}
+=======
+                               ]},
+      {non_parallel_tests_quorum, [], [
+=======
+                                login_timeout,
+                                stats,
+>>>>>>> f3c17ceee7 (Add login_timeout to mqtt and stomp reader)
+                                quorum_session_false,
+                                quorum_session_true,
+                                classic_session_true,
+                                classic_session_false
+      ]}
+>>>>>>> 316225ad06 (Add login_timeout to mqtt and stomp reader)
     ].
 
 suite() ->
@@ -120,6 +135,17 @@ handle_invalid_frames(Config) ->
     gen_tcp:close(C),
     %% No new stats entries should be inserted as connection never got to initialize
     N = rpc(Config, ets, info, [connection_metrics, size]).
+
+login_timeout(Config) ->
+    rpc(Config, application, set_env, [rabbitmq_mqtt, login_timeout, 400]),
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+    {ok, C} = gen_tcp:connect("localhost", P, [{active, false}]),
+
+    try
+        {error, closed} = gen_tcp:recv(C, 0, 500)
+    after
+        rpc(Config, application, unset_env, [rabbitmq_mqtt, login_timeout])
+    end.
 
 stats(Config) ->
     P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
