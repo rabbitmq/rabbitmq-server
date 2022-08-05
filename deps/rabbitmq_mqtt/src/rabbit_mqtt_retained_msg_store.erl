@@ -21,3 +21,5 @@ behaviour_info(_Other) ->
 
 table_name_for(VHost) ->
   rabbit_mqtt_util:vhost_name_to_table_name(VHost).
+
+%%TODO could add a rabbitmq_mqtt_retained_msg_store_khepri to have some replication

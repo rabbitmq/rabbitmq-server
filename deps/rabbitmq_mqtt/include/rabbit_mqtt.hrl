@@ -14,13 +14,17 @@
                       deferred_recv,
                       received_connect_frame,
                       connection_state,
-                      keepalive,
-                      keepalive_sup,
                       conserve,
                       parse_state,
                       proc_state,
                       connection,
-                      stats_timer }).
+                      stats_timer,
+                      keepalive }).
+
+-record(keepalive, {timer :: reference(),
+                    interval_ms :: pos_integer(),
+                    recv_oct :: non_neg_integer(),
+                    received :: boolean()}).
 
 %% processor state
 -record(proc_state, { socket,
@@ -36,7 +40,6 @@
                       channels,
                       connection,
                       exchange,
-                      adapter_info,
                       ssl_login_name,
                       %% Retained messages handler. See rabbit_mqtt_retainer_sup
                       %% and rabbit_mqtt_retainer.
@@ -46,11 +49,20 @@
                       peer_addr,
                       mqtt2amqp_fun,
                       amqp2mqtt_fun,
-                      register_state }).
+                      register_state,
+                      info}).
 
 -record(auth_state, {username,
                      user,
-                     vhost}).
+                     vhost,
+                     authz_ctx}).
+
+-record(info, {prefetch,
+               host,
+               port,
+               peer_host,
+               peer_port,
+               protocol}).
 
 %% does not include vhost: it is used in
 %% the table name

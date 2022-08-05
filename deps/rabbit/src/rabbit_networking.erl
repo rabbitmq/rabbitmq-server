@@ -38,7 +38,7 @@
 
 %% Used by TCP-based transports, e.g. STOMP adapter
 -export([tcp_listener_addresses/1,
-         tcp_listener_spec/9, tcp_listener_spec/10,
+         tcp_listener_spec/9, tcp_listener_spec/10, tcp_listener_spec/11,
          ensure_ssl/0, fix_ssl_options/1, poodle_check/1]).
 
 -export([tcp_listener_started/4, tcp_listener_stopped/4]).
@@ -206,13 +206,24 @@ tcp_listener_spec(NamePrefix, Address, SocketOpts, Transport, ProtoSup, ProtoOpt
          any(), protocol(), non_neg_integer(), non_neg_integer(), label()) ->
             supervisor:child_spec().
 
-tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
+tcp_listener_spec(NamePrefix, Address, SocketOpts,
                   Transport, ProtoSup, ProtoOpts, Protocol, NumAcceptors,
                   ConcurrentConnsSupsCount, Label) ->
-    Args = [IPAddress, Port, Transport, [Family | SocketOpts], ProtoSup, ProtoOpts,
+    tcp_listener_spec(NamePrefix, Address, SocketOpts, Transport, ProtoSup, ProtoOpts,
+                      Protocol, NumAcceptors, ConcurrentConnsSupsCount, supervisor, Label).
+
+-spec tcp_listener_spec
+        (name_prefix(), address(), [gen_tcp:listen_option()], module(), module(),
+         any(), protocol(), non_neg_integer(), non_neg_integer(), supervisor:worker(), label()) ->
+            supervisor:child_spec().
+
+tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
+                  Transport, ProtoHandler, ProtoOpts, Protocol, NumAcceptors,
+                  ConcurrentConnsSupsCount, ConnectionType, Label) ->
+    Args = [IPAddress, Port, Transport, [Family | SocketOpts], ProtoHandler, ProtoOpts,
             {?MODULE, tcp_listener_started, [Protocol, SocketOpts]},
             {?MODULE, tcp_listener_stopped, [Protocol, SocketOpts]},
-            NumAcceptors, ConcurrentConnsSupsCount, Label],
+            NumAcceptors, ConcurrentConnsSupsCount, ConnectionType, Label],
     {rabbit_misc:tcp_name(NamePrefix, IPAddress, Port),
      {tcp_listener_sup, start_link, Args},
      transient, infinity, supervisor, [tcp_listener_sup]}.

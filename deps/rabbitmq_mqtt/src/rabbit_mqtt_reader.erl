@@ -8,10 +8,14 @@
 -module(rabbit_mqtt_reader).
 
 -behaviour(gen_server2).
+-behaviour(ranch_protocol).
 
--export([start_link/2]).
+-export([start_link/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          code_change/3, terminate/2, handle_pre_hibernate/1]).
+
+%%TODO check where to best 'hibernate' when returning from callback
+%%TODO use rabbit_global_counters for MQTT protocol
 
 -export([conserve_resources/3, start_keepalive/2,
          close_connection/2]).
@@ -27,10 +31,8 @@
 
 %%----------------------------------------------------------------------------
 
-start_link(KeepaliveSup, Ref) ->
-    Pid = proc_lib:spawn_link(?MODULE, init,
-                              [[KeepaliveSup, Ref]]),
-
+start_link(Ref, _Transport, []) ->
+    Pid = proc_lib:spawn_link(?MODULE, init, [Ref]),
     {ok, Pid}.
 
 conserve_resources(Pid, _, {_, Conserve, _}) ->
@@ -48,7 +50,7 @@ close_connection(Pid, Reason) ->
 
 %%----------------------------------------------------------------------------
 
-init([KeepaliveSup, Ref]) ->
+init(Ref) ->
     process_flag(trap_exit, true),
     {ok, Sock} = rabbit_networking:handshake(Ref,
         application:get_env(rabbitmq_mqtt, proxy_protocol, false)),
@@ -69,8 +71,6 @@ init([KeepaliveSup, Ref]) ->
                       await_recv             = false,
                       connection_state       = running,
                       received_connect_frame = false,
-                      keepalive              = {none, none},
-                      keepalive_sup          = KeepaliveSup,
                       conserve               = false,
                       parse_state            = rabbit_mqtt_frame:initial_state(),
                       proc_state             = ProcessorState }), #state.stats_timer),
@@ -176,20 +176,64 @@ handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
     maybe_process_deferred_recv(control_throttle(State));
 
-handle_info({start_keepalives, Keepalive},
-            State = #state { keepalive_sup = KeepaliveSup, socket = Sock }) ->
-    %% Only the client has the responsibility for sending keepalives
-    SendFun = fun() -> ok end,
-    Parent = self(),
-    ReceiveFun = fun() -> Parent ! keepalive_timeout end,
-    Heartbeater = rabbit_heartbeat:start(
-                    KeepaliveSup, Sock, 0, SendFun, Keepalive, ReceiveFun),
-    {noreply, State #state { keepalive = Heartbeater }};
+handle_info({start_keepalive, KeepaliveSec},
+            State = #state{socket = Sock,
+                           keepalive = undefined})
+  when is_number(KeepaliveSec), KeepaliveSec > 0 ->
+    case rabbit_net:getstat(Sock, [recv_oct]) of
+        {ok, [{recv_oct, RecvOct}]} ->
+            %% "If the Keep Alive value is non-zero and the Server does not receive a Control
+            %% Packet from the Client within one and a half times the Keep Alive time period,
+            %% it MUST disconnect the Network Connection to the Client as if the network had
+            %% failed" [MQTT-3.1.2-24]
+            %% 0.75 * 2 = 1.5
+            IntervalMs = timer:seconds(round(0.75 * KeepaliveSec)),
+            Ref = start_keepalive_timer(#keepalive{interval_ms = IntervalMs}),
+            {noreply, State#state{keepalive = #keepalive{timer = Ref,
+                                                         interval_ms = IntervalMs,
+                                                         recv_oct = RecvOct,
+                                                         received = true}}};
+        {error, einval} ->
+            %% the socket is dead, most likely because the connection is being shut down
+            {stop, {shutdown, cannot_get_socket_stats}, State};
+        {error, Reason} ->
+            {stop, Reason, State}
+    end;
 
-handle_info(keepalive_timeout, State = #state {conn_name = ConnStr,
-                                               proc_state = PState}) ->
-    rabbit_log_connection:error("closing MQTT connection ~tp (keepalive timeout)", [ConnStr]),
-    send_will_and_terminate(PState, {shutdown, keepalive_timeout}, State);
+handle_info({timeout, Ref, keepalive},
+            State = #state {socket = Sock,
+                            conn_name = ConnStr,
+                            proc_state = PState,
+                            keepalive = #keepalive{timer = Ref,
+                                                   recv_oct = SameRecvOct,
+                                                   received = ReceivedPreviously} = KeepAlive}) ->
+    case rabbit_net:getstat(Sock, [recv_oct]) of
+        {ok, [{recv_oct, SameRecvOct}]}
+          when ReceivedPreviously ->
+            %% Did not receive from socket for the 1st time.
+            Ref1 = start_keepalive_timer(KeepAlive),
+            {noreply,
+             State#state{keepalive = KeepAlive#keepalive{timer = Ref1,
+                                                         received = false}},
+             hibernate};
+        {ok, [{recv_oct, SameRecvOct}]} ->
+            %% Did not receive from socket for 2nd time successively.
+            rabbit_log_connection:error("closing MQTT connection ~tp (keepalive timeout)", [ConnStr]),
+            send_will_and_terminate(PState, {shutdown, keepalive_timeout}, State);
+        {ok, [{recv_oct, RecvOct}]} ->
+            %% Received from socket.
+            Ref1 = start_keepalive_timer(KeepAlive),
+            {noreply,
+             State#state{keepalive = KeepAlive#keepalive{timer = Ref1,
+                                                         recv_oct = RecvOct,
+                                                         received = true}},
+             hibernate};
+        {error, einval} ->
+            %% the socket is dead, most likely because the connection is being shut down
+            {stop, {shutdown, cannot_get_socket_stats}, State};
+        {error, Reason} ->
+            {stop, Reason, State}
+    end;
 
 handle_info(login_timeout, State = #state{received_connect_frame = true}) ->
     {noreply, State};
@@ -214,6 +258,12 @@ handle_info({ra_event, _From, Evt},
 
 handle_info(Msg, State) ->
     {stop, {mqtt_unexpected_msg, Msg}, State}.
+
+start_keepalive_timer(#keepalive{interval_ms = Time}) ->
+    erlang:start_timer(Time, self(), keepalive).
+
+cancel_keepalive_timer(#keepalive{timer = Ref}) ->
+    erlang:cancel_timer(Ref, [{async, true}, {info, false}]).
 
 terminate(Reason, State) ->
     maybe_emit_stats(State),
@@ -369,7 +419,7 @@ callback_reply(State, {error, Reason, ProcState}) ->
     {stop, Reason, pstate(State, ProcState)}.
 
 start_keepalive(_,   0        ) -> ok;
-start_keepalive(Pid, Keepalive) -> Pid ! {start_keepalives, Keepalive}.
+start_keepalive(Pid, Keepalive) -> Pid ! {start_keepalive, Keepalive}.
 
 pstate(State = #state {}, PState = #proc_state{}) ->
     State #state{ proc_state = PState }.
@@ -421,17 +471,28 @@ run_socket(State = #state{ socket = Sock }) ->
     rabbit_net:setopts(Sock, [{active, once}]),
     State#state{ await_recv = true }.
 
-control_throttle(State = #state{ connection_state = Flow,
-                                 conserve         = Conserve }) ->
+control_throttle(State = #state{connection_state = Flow,
+                                conserve = Conserve,
+                                keepalive = KeepAlive}) ->
     case {Flow, Conserve orelse credit_flow:blocked()} of
-        {running,   true} -> ok = rabbit_heartbeat:pause_monitor(
-                                    State#state.keepalive),
-                             State #state{ connection_state = blocked };
-        {blocked,  false} -> ok = rabbit_heartbeat:resume_monitor(
-                                    State#state.keepalive),
-                             run_socket(State #state{
-                                                connection_state = running });
-        {_,            _} -> run_socket(State)
+        {running, true}
+          when KeepAlive =:= undefined ->
+            State#state{connection_state = blocked};
+        {running, true} ->
+            %%TODO Instead of cancelling / setting the timer every time the connection
+            %% gets blocked / unblocked, restart the timer when it expires and
+            %% the connection_state is blocked.
+            ok = cancel_keepalive_timer(KeepAlive),
+            State#state{connection_state = blocked};
+        {blocked, false}
+          when KeepAlive =:= undefined ->
+            run_socket(State #state{connection_state = running});
+        {blocked, false} ->
+            Ref = start_keepalive_timer(KeepAlive),
+            run_socket(State #state{connection_state = running,
+                                    keepalive = KeepAlive#keepalive{timer = Ref}});
+        {_, _} ->
+            run_socket(State)
     end.
 
 maybe_process_deferred_recv(State = #state{ deferred_recv = undefined }) ->

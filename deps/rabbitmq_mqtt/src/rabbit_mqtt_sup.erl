@@ -73,34 +73,35 @@ listener_specs(Fun, Args, Listeners) ->
 
 tcp_listener_spec([Address, SocketOpts, NumAcceptors, ConcurrentConnsSups]) ->
     rabbit_networking:tcp_listener_spec(
-        rabbit_mqtt_listener_sup,
-        Address,
-        SocketOpts,
-        transport(?TCP_PROTOCOL),
-        rabbit_mqtt_connection_sup,
-        [],
-        mqtt,
-        NumAcceptors,
-        ConcurrentConnsSups,
-        "MQTT TCP listener"
-    ).
+      rabbit_mqtt_listener_sup,
+      Address,
+      SocketOpts,
+      transport(?TCP_PROTOCOL),
+      rabbit_mqtt_reader,
+      [],
+      mqtt,
+      NumAcceptors,
+      ConcurrentConnsSups,
+      worker,
+      "MQTT TCP listener"
+     ).
 
 ssl_listener_spec([Address, SocketOpts, SslOpts, NumAcceptors, ConcurrentConnsSups]) ->
     rabbit_networking:tcp_listener_spec(
-        rabbit_mqtt_listener_sup,
-        Address,
-        SocketOpts ++ SslOpts,
-        transport(?TLS_PROTOCOL),
-        rabbit_mqtt_connection_sup,
-        [],
-        'mqtt/ssl',
-        NumAcceptors,
-        ConcurrentConnsSups,
-        "MQTT TLS listener"
-    ).
+      rabbit_mqtt_listener_sup,
+      Address,
+      SocketOpts ++ SslOpts,
+      transport(?TLS_PROTOCOL),
+      rabbit_mqtt_reader,
+      [],
+      'mqtt/ssl',
+      NumAcceptors,
+      ConcurrentConnsSups,
+      worker,
+      "MQTT TLS listener"
+     ).
 
-transport(Protocol) ->
-    case Protocol of
-        ?TCP_PROTOCOL -> ranch_tcp;
-        ?TLS_PROTOCOL -> ranch_ssl
-    end.
+transport(?TCP_PROTOCOL) ->
+    ranch_tcp;
+transport(?TLS_PROTOCOL) ->
+    ranch_ssl.
