@@ -4,13 +4,13 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "7.0.0"
+      "version": "8.0.0"
     },
     {
       "type": "datasource",
       "id": "prometheus",
       "name": "prometheus",
-      "version": "1.0.0"
+      "version": "2.0.0"
     },
     {
       "type": "table",
@@ -5826,5 +5826,5 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 20210322
+  "version": 20220805
 }

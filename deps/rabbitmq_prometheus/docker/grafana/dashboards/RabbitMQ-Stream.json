@@ -16,7 +16,7 @@
       "type": "datasource",
       "id": "prometheus",
       "name": "prometheus",
-      "version": "1.0.0"
+      "version": "2.0.0"
     },
     {
       "type": "panel",
@@ -3001,5 +3001,5 @@
   "timezone": "",
   "title": "RabbitMQ-Stream",
   "uid": "j7MCpqZ7k",
-  "version": 20210811
+  "version": 20220805
 }
