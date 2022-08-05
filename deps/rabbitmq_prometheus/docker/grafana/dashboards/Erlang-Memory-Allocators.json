@@ -4,7 +4,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "7.0.0"
+      "version": "8.0.0"
     },
     {
       "type": "datasource",
@@ -2391,5 +2391,5 @@
   "timezone": "",
   "title": "Erlang-Memory-Allocators",
   "uid": "o_rtdpWik",
-  "version": 20210322
+  "version": 20220805
 }
