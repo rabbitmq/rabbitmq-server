@@ -334,6 +334,18 @@ vary: accept, accept-encoding, origin</pre>
       <tr>
         <td>X</td>
         <td></td>
+        <td>X</td>
+        <td></td>
+        <td class="path">/api/connections/username/<i>username</i></td>
+        <td>
+          A list of all open connections for a specific username. Use pagination parameters to filter connections.
+          DELETEing a resource will close all the connections for a username. Optionally set the
+          "X-Reason" header when DELETEing to provide a reason.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
         <td></td>
         <td></td>
         <td class="path">/api/connections/<i>name</i>/channels</td>
