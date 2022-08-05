@@ -1102,7 +1102,13 @@ list() ->
     list_with_possible_retry(fun do_list/0).
 
 do_list() ->
-    mnesia:dirty_match_object(rabbit_queue, amqqueue:pattern_match_all()).
+    All = mnesia:dirty_match_object(rabbit_queue, amqqueue:pattern_match_all()),
+    NodesRunning = rabbit_nodes:all_running(),
+    lists:filter(fun (Q) ->
+                         Pid = amqqueue:get_pid(Q),
+                         St = amqqueue:get_state(Q),
+                         St =/= stopped orelse lists:member(node(Pid), NodesRunning)
+                 end, All).
 
 -spec count() -> non_neg_integer().
 
@@ -1282,7 +1288,13 @@ is_in_virtual_host(Q, VHostName) ->
 
 -spec list(vhost:name()) -> [amqqueue:amqqueue()].
 list(VHostPath) ->
-    list(VHostPath, rabbit_queue).
+    All = list(VHostPath, rabbit_queue),
+    NodesRunning = rabbit_nodes:all_running(),
+    lists:filter(fun (Q) ->
+                         Pid = amqqueue:get_pid(Q),
+                         St = amqqueue:get_state(Q),
+                         St =/= stopped orelse lists:member(node(Pid), NodesRunning)
+                 end, All).
 
 list(VHostPath, TableName) ->
     list_with_possible_retry(fun() -> do_list(VHostPath, TableName) end).
@@ -1336,13 +1348,17 @@ list_down(VHostPath) ->
     case rabbit_vhost:exists(VHostPath) of
         false -> [];
         true  ->
-            Present = list(VHostPath),
+            Alive = sets:from_list([amqqueue:get_name(Q) || Q <- list(VHostPath)]),
             Durable = list(VHostPath, rabbit_durable_queue),
-            PresentS = sets:from_list([amqqueue:get_name(Q) || Q <- Present]),
-            sets:to_list(sets:filter(fun (Q) ->
-                                             N = amqqueue:get_name(Q),
-                                             not sets:is_element(N, PresentS)
-                                     end, sets:from_list(Durable)))
+            NodesRunning = rabbit_nodes:all_running(),
+            lists:filter(fun (Q) ->
+                                 N = amqqueue:get_name(Q),
+                                 Pid = amqqueue:get_pid(Q),
+                                 St = amqqueue:get_state(Q),
+                                 (St =:= stopped andalso not lists:member(node(Pid), NodesRunning))
+                                 orelse
+                                 (not sets:is_element(N, Alive))
+                         end, Durable)
     end.
 
 count(VHost) ->
@@ -2036,6 +2052,7 @@ queues_to_delete_when_node_down(NodeDown) ->
             Q <- mnesia:table(rabbit_queue),
                 amqqueue:qnode(Q) == NodeDown andalso
                 not rabbit_mnesia:is_process_alive(amqqueue:get_pid(Q)) andalso
+                (not amqqueue:is_classic(Q) orelse not amqqueue:is_durable(Q)) andalso
                 (not rabbit_amqqueue:is_replicated(Q) orelse
                 rabbit_amqqueue:is_dead_exclusive(Q))]
         ))
