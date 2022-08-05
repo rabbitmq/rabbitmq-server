@@ -21,7 +21,8 @@ all() ->
         direct_client_connections_are_not_leaked,
         stats_are_not_leaked,
         stats,
-        heartbeat
+        heartbeat,
+        login_timeout
     ].
 
 merge_app_env(Config) ->
@@ -158,3 +159,18 @@ heartbeat(Config) ->
     5 = proplists:get_value(timeout, Props),
     rabbit_stomp_client:disconnect(Client),
     ok.
+
+login_timeout(Config) ->
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0,
+      application, set_env, [rabbitmq_stomp, login_timeout, 400]),
+    StompPort = get_stomp_port(Config),
+    {ok, C} = gen_tcp:connect("localhost", StompPort, [{active, false}]),
+
+    try
+        {error, closed} = gen_tcp:recv(C, 0, 500)
+    after
+        rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          application, unset_env, [rabbitmq_stomp, login_timeout])
+    end.
