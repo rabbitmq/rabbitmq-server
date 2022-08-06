@@ -44,8 +44,10 @@ groups() ->
        {start_feature_flag_disabled, [], [enable_feature_flag]}
       ]},
      {cluster_size_2, [],
-      [{start_feature_flag_enabled, [], [remove_binding_node_down_transient_queue,
-                                         remove_binding_node_down_durable_queue]},
+      [{start_feature_flag_enabled, [], [
+                                         remove_binding_node_down_transient_queue
+                                         %% , remove_binding_node_down_durable_queue
+                                        ]},
        {start_feature_flag_disabled, [], [enable_feature_flag_during_definition_import]}
       ]},
      {unclustered_cluster_size_2, [],
