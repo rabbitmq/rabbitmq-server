@@ -220,7 +220,7 @@ init_per_group(Group, Config) ->
                                    Config2, maintenance_mode_status),
                             case IsMixed of
                                 true  -> ok;
-                                fasel ->
+                                false ->
                                     ok = rabbit_ct_broker_helpers:enable_feature_flag(
                                             Config2, virtual_host_metadata)
                             end,
