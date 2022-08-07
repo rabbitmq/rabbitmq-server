@@ -224,8 +224,12 @@ init_per_group(Group, Config) ->
                             timer:sleep(ClusterSize * 1000),
                             ok = rabbit_ct_broker_helpers:enable_feature_flag(
                                    Config2, maintenance_mode_status),
-                            ok = rabbit_ct_broker_helpers:enable_feature_flag(
-                                   Config2, virtual_host_metadata),
+                            case IsMixed of
+                                true  -> ok;
+                                false ->
+                                    ok = rabbit_ct_broker_helpers:enable_feature_flag(
+                                            Config2, virtual_host_metadata)
+                            end,
                             Config2;
                         Skip ->
                             end_per_group(Group, Config2),
@@ -709,6 +713,14 @@ vhost_with_quorum_queue_is_deleted(Config) ->
     ok.
 
 vhost_with_default_queue_type_declares_quorum_queue(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "vhost_with_default_queue_type_declares_quorum_queue isn't mixed version reliable"};
+        false ->
+            vhost_with_default_queue_type_declares_quorum_queue0(Config)
+    end.
+
+vhost_with_default_queue_type_declares_quorum_queue0(Config) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     VHost = atom_to_binary(?FUNCTION_NAME, utf8),
     QName = atom_to_binary(?FUNCTION_NAME, utf8),
