@@ -214,6 +214,17 @@ init_per_group(Group, Config) ->
                             %% more time after clustering before running the
                             %% tests.
                             timer:sleep(ClusterSize * 1000),
+<<<<<<< HEAD
+=======
+                            ok = rabbit_ct_broker_helpers:enable_feature_flag(
+                                   Config2, maintenance_mode_status),
+                            case IsMixed of
+                                true  -> ok;
+                                fasel ->
+                                    ok = rabbit_ct_broker_helpers:enable_feature_flag(
+                                            Config2, virtual_host_metadata)
+                            end,
+>>>>>>> a54e94a02a (Exclude a novel QQ test from mixed version testing)
                             Config2;
                         Skip ->
                             end_per_group(Group, Config2),
@@ -606,6 +617,72 @@ vhost_with_quorum_queue_is_deleted(Config) ->
     undefined = rpc:call(Node, ra_directory, where_is, [quorum_queues, RaName]),
     ok.
 
+<<<<<<< HEAD
+=======
+vhost_with_default_queue_type_declares_quorum_queue(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "vhost_with_default_queue_type_declares_quorum_queue isn't mixed version reliable"};
+        false ->
+            vhost_with_default_queue_type_declares_quorum_queue0(Config)
+    end.
+
+vhost_with_default_queue_type_declares_quorum_queue0(Config) ->
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    VHost = atom_to_binary(?FUNCTION_NAME, utf8),
+    QName = atom_to_binary(?FUNCTION_NAME, utf8),
+    User = ?config(rmq_username, Config),
+
+    AddVhostArgs = [VHost, #{default_queue_type => <<"quorum">>}, User],
+    ok = rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_vhost, add,
+                                      AddVhostArgs),
+    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node, VHost),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0}, declare(Ch, QName, [])),
+    assert_queue_type(Node, VHost, QName, rabbit_quorum_queue),
+    %% declaring again without a queue arg is ok
+    ?assertEqual({'queue.declare_ok', QName, 0, 0}, declare(Ch, QName, [])),
+    %% also using an explicit queue type should be ok
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    %% passive should work without x-queue-type
+    ?assertEqual({'queue.declare_ok', QName, 0, 0}, declare_passive(Ch, QName, [])),
+    %% passive with x-queue-type also should work
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare_passive(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% declaring an exclusive queue should declare a classic queue
+    QNameEx = iolist_to_binary([QName, <<"_exclusive">>]),
+    ?assertEqual({'queue.declare_ok', QNameEx, 0, 0},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = QNameEx,
+                                                        exclusive = true,
+                                                        durable = true,
+                                                        arguments = []})),
+    assert_queue_type(Node, VHost, QNameEx, rabbit_classic_queue),
+
+    %% transient declares should also fall back to classic queues
+    QNameTr = iolist_to_binary([QName, <<"_transient">>]),
+    ?assertEqual({'queue.declare_ok', QNameTr, 0, 0},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = QNameTr,
+                                                        exclusive = false,
+                                                        durable = false,
+                                                        arguments = []})),
+    assert_queue_type(Node, VHost, QNameTr, rabbit_classic_queue),
+
+    %% auto-delete declares should also fall back to classic queues
+    QNameAd = iolist_to_binary([QName, <<"_delete">>]),
+    ?assertEqual({'queue.declare_ok', QNameAd, 0, 0},
+                 amqp_channel:call(Ch, #'queue.declare'{queue = QNameAd,
+                                                        exclusive = false,
+                                                        auto_delete = true,
+                                                        durable = true,
+                                                        arguments = []})),
+    assert_queue_type(Node, VHost, QNameAd, rabbit_classic_queue),
+    amqp_connection:close(Conn),
+    ok.
+
+>>>>>>> a54e94a02a (Exclude a novel QQ test from mixed version testing)
 restart_all_types(Config) ->
     %% Test the node restart with both types of queues (quorum and classic) to
     %% ensure there are no regressions
