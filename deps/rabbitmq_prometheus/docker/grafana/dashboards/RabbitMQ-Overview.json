@@ -225,7 +225,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_published_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum(rate(rabbitmq_global_messages_received_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -628,7 +628,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_redelivered_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_channel_messages_delivered_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_channel_messages_delivered_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_channel_get_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_channel_get_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum(rate(rabbitmq_global_messages_redelivered_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_global_messages_delivered_consume_auto_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_global_messages_delivered_consume_manual_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_global_messages_delivered_get_auto_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_global_messages_delivered_get_manual_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -709,7 +709,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rabbitmq_channel_consumers * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum(rabbitmq_consumers * on(instance) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -2991,7 +2991,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_published_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_received_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3238,7 +3238,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_confirmed_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_confirmed_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3485,7 +3485,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_queue_messages_published_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_routed_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3732,7 +3732,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_unconfirmed[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_received_confirm_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} - \nrate(rabbitmq_global_messages_confirmed_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}\n) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3843,7 +3843,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_unroutable_dropped_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_unroutable_dropped_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -3954,7 +3954,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_unroutable_returned_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_unroutable_returned_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4218,7 +4218,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(\n  (rate(rabbitmq_channel_messages_delivered_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n  (rate(rabbitmq_channel_messages_delivered_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})\n) by(rabbitmq_node)",
+          "expr": "sum(\n  (rate(rabbitmq_global_messages_delivered_consume_auto_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n  (rate(rabbitmq_global_messages_delivered_consume_manual_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})\n) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4468,7 +4468,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_redelivered_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_redelivered_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4715,7 +4715,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_delivered_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_delivered_consume_manual_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -4962,7 +4962,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_delivered_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_delivered_consume_auto_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -5209,7 +5209,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_messages_acked_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_acknowledged_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -5320,7 +5320,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_get_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_delivered_get_auto_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -5431,7 +5431,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_get_empty_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_get_empty_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -5542,7 +5542,7 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
-          "expr": "sum(rate(rabbitmq_channel_get_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
+          "expr": "sum(rate(rabbitmq_global_messages_delivered_get_manual_ack_total[60s]) * on(instance) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
