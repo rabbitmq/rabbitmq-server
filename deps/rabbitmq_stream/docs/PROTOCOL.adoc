@@ -226,7 +226,7 @@ used to make the difference between a request (0) and a response (1). Example fo
 |0x001b
 |Yes
 
-|<<streaminfo>>
+|<<streamstats>>
 |Client
 |0x001c
 |Yes
@@ -375,7 +375,7 @@ Deliver => Key Version SubscriptionId CommittedOffset OsirisChunk
   Key => uint16 // 0x0008
   Version => uint16
   SubscriptionId => uint8
-  CommittedOffset => uint64
+  CommittedChunkId => uint64
   OsirisChunk => MagicVersion NumEntries NumRecords Epoch ChunkFirstOffset ChunkCrc DataLength Messages
   MagicVersion => int8
   ChunkType => int8 // 0: user, 1: tracking delta, 2: tracking snapshot
@@ -707,24 +707,24 @@ CommandVersionsExchangeResponse => Key Version CorrelationId ResponseCode [Comma
   MaxVersion => uint16
 ```
 
-=== StreamInfo
+=== StreamStats
 
 ```
-StreamInfoRequest => Key Version CorrelationId Stream
+StreamStatsRequest => Key Version CorrelationId Stream
   Key => uint16 // 0x001c
   Version => uint16
   CorrelationId => uint32
   Stream => string
 
-StreamInfoResponse => Key Version CorrelationId ResponseCode Info
+StreamStatsResponse => Key Version CorrelationId ResponseCode Stats
   Key => uint16 // 0x801c
   Version => uint16
   CorrelationId => uint32
   ResponseCode => uint16
-  Info => [PieceOfInfo]
-  PieceOfInfo => Key Value
+  Stats => [Statistic]
+  Statistic => Key Value
   Key => string
-  Value => string
+  Value => int64
 ```
 
 

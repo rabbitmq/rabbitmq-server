@@ -2646,7 +2646,7 @@ handle_frame_post_auth(Transport,
                                           user = User} =
                            Connection,
                        State,
-                       {request, CorrelationId, {stream_info, Stream}}) ->
+                       {request, CorrelationId, {stream_stats, Stream}}) ->
     QueueResource =
         #resource{name = Stream,
                   kind = queue,
@@ -2661,38 +2661,28 @@ handle_frame_post_auth(Transport,
                         rabbit_global_counters:increase_protocol_counter(stream,
                                                                          ?STREAM_NOT_AVAILABLE,
                                                                          1),
-                        {stream_info, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE, #{}};
+                        {stream_stats, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE,
+                         #{}};
                     {error, not_found} ->
                         rabbit_global_counters:increase_protocol_counter(stream,
                                                                          ?STREAM_DOES_NOT_EXIST,
                                                                          1),
-                        {stream_info, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST,
+                        {stream_stats, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST,
                          #{}};
                     {ok, MemberPid} ->
-                        OffsetInfo =
-                            case gen:call(MemberPid, '$gen_call',
-                                          get_reader_context)
-                            of
-                                {ok, #{offset_ref := undefined}} ->
-                                    #{};
-                                {ok, #{offset_ref := OffsetRef}} ->
-                                    #{<<"first_offset">> =>
-                                          rabbit_data_coercion:to_binary(
-                                              atomics:get(OffsetRef, 2)),
-                                      <<"committed_offset">> =>
-                                          rabbit_data_coercion:to_binary(
-                                              atomics:get(OffsetRef, 1))};
-                                _ ->
-                                    #{}
-                            end,
-
-                        {stream_info, ?RESPONSE_CODE_OK, OffsetInfo}
+                        StreamStats =
+                            maps:fold(fun(K, V, Acc) ->
+                                         Acc#{rabbit_data_coercion:to_binary(K)
+                                                  => V}
+                                      end,
+                                      #{}, osiris:get_stats(MemberPid)),
+                        {stream_stats, ?RESPONSE_CODE_OK, StreamStats}
                 end;
             error ->
                 rabbit_global_counters:increase_protocol_counter(stream,
                                                                  ?ACCESS_REFUSED,
                                                                  1),
-                {stream_info, ?RESPONSE_CODE_ACCESS_REFUSED, #{}}
+                {stream_stats, ?RESPONSE_CODE_ACCESS_REFUSED, #{}}
         end,
     Frame = rabbit_stream_core:frame({response, CorrelationId, Response}),
     send(Transport, S, Frame),
@@ -3243,7 +3233,7 @@ send_file_callback(?VERSION_2,
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
         Size) ->
        FrameSize = 2 + 2 + 1 + 8 + Size,
-       CommittedOffset =
+       CommittedChunkId =
            case osiris_log:committed_offset(Log) of
                undefined -> 0;
                R -> R
@@ -3254,7 +3244,7 @@ send_file_callback(?VERSION_2,
              ?COMMAND_DELIVER:15,
              ?VERSION_2:16,
              SubscriptionId:8/unsigned,
-             CommittedOffset:64>>,
+             CommittedChunkId:64>>,
        Transport:send(S, FrameBeginning),
        atomics:add(Counter, 1, Size),
        increase_messages_consumed(Counters, NumEntries),
