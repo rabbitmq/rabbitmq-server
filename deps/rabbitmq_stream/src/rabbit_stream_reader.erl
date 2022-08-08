@@ -2672,8 +2672,7 @@ handle_frame_post_auth(Transport,
                     {ok, MemberPid} ->
                         StreamStats =
                             maps:fold(fun(K, V, Acc) ->
-                                         Acc#{rabbit_data_coercion:to_binary(K)
-                                                  => V}
+                                         Acc#{atom_to_binary(K) => V}
                                       end,
                                       #{}, osiris:get_stats(MemberPid)),
                         {stream_stats, ?RESPONSE_CODE_OK, StreamStats}
