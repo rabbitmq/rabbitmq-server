@@ -45,8 +45,8 @@ groups() ->
       ]},
      {cluster_size_2, [],
       [{start_feature_flag_enabled, [], [
-                                         remove_binding_node_down_transient_queue
-                                         %% , remove_binding_node_down_durable_queue
+                                         remove_binding_node_down_transient_queue,
+                                         keep_binding_node_down_durable_queue
                                         ]},
        {start_feature_flag_disabled, [], [enable_feature_flag_during_definition_import]}
       ]},
@@ -285,7 +285,7 @@ remove_binding_node_down_transient_queue(Config) ->
     delete_queue(Ch1, Q),
     ok.
 
-remove_binding_node_down_durable_queue(Config) ->
+keep_binding_node_down_durable_queue(Config) ->
     [_Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {_Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     {_Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 1),
@@ -305,10 +305,11 @@ remove_binding_node_down_durable_queue(Config) ->
     assert_confirm(),
 
     rabbit_control_helper:command(stop_app, Server2),
-    %% We expect no route to durable classic queue when its host node is down.
-    assert_index_table_empty(Config),
+    %% When the durable classic queue's host node is down,
+    %% we expect that queue and its bindings still to exist
+    %% (see https://github.com/rabbitmq/rabbitmq-server/pull/4563).
+    assert_index_table_non_empty(Config),
     rabbit_control_helper:command(start_app, Server2),
-    %% We expect route to come back when durable queue's host node comes back.
     assert_index_table_non_empty(Config),
     delete_queue(Ch1, Q),
     ok.
