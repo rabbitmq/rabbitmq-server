@@ -108,7 +108,7 @@ roundtrip(_Config) ->
     test_roundtrip({request, 99,
                     {exchange_command_versions,
                      [{deliver, ?VERSION_1, ?VERSION_1}]}}),
-    test_roundtrip({request, 99, {stream_info, <<"stream_name">>}}),
+    test_roundtrip({request, 99, {stream_stats, <<"stream_name">>}}),
 
     %% RESPONSES
     [test_roundtrip({response, 99, {Tag, 53}})
@@ -143,7 +143,7 @@ roundtrip(_Config) ->
                     {exchange_command_versions, 1,
                      [{publish, ?VERSION_1, ?VERSION_1}]}}),
     test_roundtrip({response, 99,
-                    {stream_info, 1, #{<<"committed_offset">> => <<"42">>}}}),
+                    {stream_stats, 1, #{<<"committed_offset">> => 42}}}),
     ok.
 
 roundtrip_metadata(_Config) ->

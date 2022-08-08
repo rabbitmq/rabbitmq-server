@@ -440,7 +440,7 @@ test_server(Transport, Config) ->
     C12 = test_deliver_v2(Transport, S, SubscriptionId2, 0, Body, C11),
     C13 = test_deliver_v2(Transport, S, SubscriptionId2, 1, Body, C12),
 
-    C14 = test_stream_info(Transport, S, Stream, C13),
+    C14 = test_stream_stats(Transport, S, Stream, C13),
 
     C15 = test_delete_stream(Transport, S, Stream, C14),
     _C16 = test_close(Transport, S, C15),
@@ -622,15 +622,15 @@ test_exchange_command_versions(Transport, S, C0) ->
                  Cmd),
     C.
 
-test_stream_info(Transport, S, Stream, C0) ->
-    SICmd = {request, 1, {stream_info, Stream}},
+test_stream_stats(Transport, S, Stream, C0) ->
+    SICmd = {request, 1, {stream_stats, Stream}},
     SIFrame = rabbit_stream_core:frame(SICmd),
     ok = Transport:send(S, SIFrame),
     {Cmd, C} = receive_commands(Transport, S, C0),
     ?assertEqual({response, 1,
-                  {stream_info, ?RESPONSE_CODE_OK,
-                   #{<<"committed_offset">> => <<"1">>,
-                     <<"first_offset">> => <<"0">>}}},
+                  {stream_stats, ?RESPONSE_CODE_OK,
+                   #{<<"first_chunk_id">> => 0,
+                     <<"committed_chunk_id">> => 1}}},
                  Cmd),
     C.
 
