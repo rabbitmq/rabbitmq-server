@@ -70,7 +70,7 @@ if "!RABBITMQ_ALLOW_INPUT!"=="" (
 !RABBITMQ_SERVER_START_ARGS! ^
 -syslog logger [] ^
 -syslog syslog_error_logger false ^
--kernel prevent_overlapping_partitions false ^
+-kernel prevent_overlapping_partitions true ^
 !STAR!
 
 if ERRORLEVEL 1 (
