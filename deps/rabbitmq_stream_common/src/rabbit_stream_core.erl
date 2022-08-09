@@ -75,7 +75,7 @@
     {deliver, subscription_id(), Chunk :: binary()} |
     {deliver_v2,
      subscription_id(),
-     CommittedOffset :: osiris:offset(),
+     CommittedChunkId :: osiris:offset(),
      Chunk :: binary()} |
     {credit, subscription_id(), Credit :: non_neg_integer()} |
     {metadata_update, stream_name(), response_code()} |
@@ -108,7 +108,8 @@
      {consumer_update, subscription_id(), active()} |
      {exchange_command_versions,
       [{Command :: atom(), MinVersion :: command_version(),
-        MaxVersion :: command_version()}]}} |
+        MaxVersion :: command_version()}]} |
+     {stream_stats, Stream :: binary()}} |
     {response, correlation_id(),
      {declare_publisher |
       delete_publisher |
@@ -138,7 +139,8 @@
      {consumer_update, response_code(), none | offset_spec()} |
      {exchange_command_versions, response_code(),
       [{Command :: atom(), MinVersion :: command_version(),
-        MaxVersion :: command_version()}]}} |
+        MaxVersion :: command_version()}]} |
+     {stream_stats, response_code(), Stats :: #{binary() => integer()}}} |
     {unknown, binary()}.
 
 -spec init(term()) -> state().
@@ -243,12 +245,12 @@ frame({deliver, SubscriptionId, Chunk}) ->
                      ?VERSION_1:16,
                      SubscriptionId:8>>,
                    Chunk]);
-frame({deliver_v2, SubscriptionId, CommittedOffset, Chunk}) ->
+frame({deliver_v2, SubscriptionId, CommittedChunkId, Chunk}) ->
     wrap_in_frame([<<?REQUEST:1,
                      ?COMMAND_DELIVER:15,
                      ?VERSION_2:16,
                      SubscriptionId:8,
-                     CommittedOffset:64>>,
+                     CommittedChunkId:64>>,
                    Chunk]);
 frame({metadata_update, Stream, ResponseCode}) ->
     StreamSize = byte_size(Stream),
@@ -471,7 +473,18 @@ response_body({exchange_command_versions = Tag, Code,
                     end,
                     [], CommandVersions),
     {command_id(Tag),
-     [<<Code:16, (length(CommandVersions)):32>>, CommandVersionsBin]}.
+     [<<Code:16, (length(CommandVersions)):32>>, CommandVersionsBin]};
+response_body({stream_stats = Tag, Code, Stats}) ->
+    Init = <<Code:16, (maps:size(Stats)):32>>,
+    {command_id(Tag),
+     maps:fold(fun(Key, Value, Acc) ->
+                  KeySize = byte_size(Key),
+                  <<Acc/binary,
+                    KeySize:16,
+                    Key:KeySize/binary,
+                    Value:64/signed>>
+               end,
+               Init, Stats)}.
 
 request_body({declare_publisher = Tag,
               PublisherId,
@@ -576,7 +589,9 @@ request_body({exchange_command_versions = Tag, CommandVersions}) ->
                     end,
                     [], CommandVersions),
     CommandVersionsLength = length(CommandVersions),
-    {Tag, [<<CommandVersionsLength:32>>, CommandVersionsBin]}.
+    {Tag, [<<CommandVersionsLength:32>>, CommandVersionsBin]};
+request_body({stream_stats = Tag, Stream}) ->
+    {Tag, <<?STRING(Stream)>>}.
 
 append_data(Prev, Data) when is_binary(Prev) ->
     [Prev, Data];
@@ -622,9 +637,9 @@ parse_request(<<?REQUEST:1,
                 ?COMMAND_DELIVER:15,
                 ?VERSION_2:16,
                 SubscriptionId:8,
-                CommittedOffset:64,
+                CommittedChunkId:64,
                 Chunk/binary>>) ->
-    {deliver_v2, SubscriptionId, CommittedOffset, Chunk};
+    {deliver_v2, SubscriptionId, CommittedChunkId, Chunk};
 parse_request(<<?REQUEST:1,
                 ?COMMAND_CREDIT:15,
                 ?VERSION_1:16,
@@ -843,6 +858,12 @@ parse_request(<<?REQUEST:1,
                 CommandVersionsBin/binary>>) ->
     CommandVersions = parse_command_versions(CommandVersionsBin),
     request(CorrelationId, {exchange_command_versions, CommandVersions});
+parse_request(<<?REQUEST:1,
+                ?COMMAND_STREAM_STATS:15,
+                ?VERSION_1:16,
+                CorrelationId:32,
+                ?STRING(StreamSize, Stream)>>) ->
+    request(CorrelationId, {stream_stats, Stream});
 parse_request(Bin) ->
     {unknown, Bin}.
 
@@ -928,7 +949,11 @@ parse_response_body(?COMMAND_EXCHANGE_COMMAND_VERSIONS,
                     <<ResponseCode:16, _CommandVersionsCount:32,
                       CommandVersionsBin/binary>>) ->
     CommandVersions = parse_command_versions(CommandVersionsBin),
-    {exchange_command_versions, ResponseCode, CommandVersions}.
+    {exchange_command_versions, ResponseCode, CommandVersions};
+parse_response_body(?COMMAND_STREAM_STATS,
+                    <<ResponseCode:16, _Count:32, StatsBin/binary>>) ->
+    Info = parse_int_map(StatsBin, #{}),
+    {stream_stats, ResponseCode, Info}.
 
 offset_spec(OffsetType, OffsetValueBin) ->
     case OffsetType of
@@ -999,6 +1024,11 @@ parse_map(<<?STRING(KeySize, Key), ?STRING(ValSize, Value),
             Rem/binary>>,
           Acc) ->
     parse_map(Rem, Acc#{Key => Value}).
+
+parse_int_map(<<>>, Acc) ->
+    Acc;
+parse_int_map(<<?STRING(KeySize, Key), Value:64, Rem/binary>>, Acc) ->
+    parse_int_map(Rem, Acc#{Key => Value}).
 
 generate_map(Map) ->
     maps:fold(fun(K, V, Acc) -> [<<?STRING(K), ?STRING(V)>> | Acc] end,
@@ -1079,7 +1109,9 @@ command_id(partitions) ->
 command_id(consumer_update) ->
     ?COMMAND_CONSUMER_UPDATE;
 command_id(exchange_command_versions) ->
-    ?COMMAND_EXCHANGE_COMMAND_VERSIONS.
+    ?COMMAND_EXCHANGE_COMMAND_VERSIONS;
+command_id(stream_stats) ->
+    ?COMMAND_STREAM_STATS.
 
 parse_command_id(?COMMAND_DECLARE_PUBLISHER) ->
     declare_publisher;
@@ -1134,7 +1166,9 @@ parse_command_id(?COMMAND_PARTITIONS) ->
 parse_command_id(?COMMAND_CONSUMER_UPDATE) ->
     consumer_update;
 parse_command_id(?COMMAND_EXCHANGE_COMMAND_VERSIONS) ->
-    exchange_command_versions.
+    exchange_command_versions;
+parse_command_id(?COMMAND_STREAM_STATS) ->
+    stream_stats.
 
 element_index(Element, List) ->
     element_index(Element, List, 0).
