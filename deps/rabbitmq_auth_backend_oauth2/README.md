@@ -372,10 +372,10 @@ The supported actions are:
 - `configure`
 - `read`
 - `write`
-- `tag:administrator`
-- `tag:monitoring`
-- `tag:management`
-- `tag:policymaker`
+- `administrator`
+- `monitoring`
+- `management`
+- `policymaker`
 
 #### Rich-Permission to Scope translation
 
@@ -414,7 +414,7 @@ Given the example above:
     },
     { "type" : "rabbitmq",
       "locations": ["cluster:finance", "cluster:inventory" ],
-      "actions": ["tag:administrator" ]
+      "actions": ["administrator" ]
     }
   ]
 }
