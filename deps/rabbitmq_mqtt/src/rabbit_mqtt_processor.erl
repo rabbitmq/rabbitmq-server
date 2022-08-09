@@ -148,7 +148,7 @@ process_request(?CONNECT,
                                     {ok, Corr} ->
                                         RetainerPid = rabbit_mqtt_retainer_sup:child_for_vhost(VHost),
                                         link(Conn),
-                                    {ok, Ch} = amqp_connection:open_channel(Conn),
+                                        {ok, Ch} = amqp_connection:open_channel(Conn),
                                         link(Ch),
                                         amqp_channel:enable_delivery_flow_control(Ch),
                                         Prefetch = rabbit_mqtt_util:env(prefetch),
