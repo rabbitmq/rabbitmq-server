@@ -578,11 +578,10 @@ process_login(_UserBin, _PassBin, _ProtoVersion,
     connack_dup_auth;
 process_login(UserBin, PassBin, ProtoVersion,
               #proc_state{channels     = {undefined, undefined},
-                          socket       = Sock,
                           adapter_info = AdapterInfo,
                           ssl_login_name = SslLoginName,
                           peer_addr    = Addr}) ->
-    {ok, {_, _, _, ToPort}} = rabbit_net:socket_ends(Sock, inbound),
+    ToPort = AdapterInfo#amqp_adapter_info.port,
     {VHostPickedUsing, {VHost, UsernameBin}} = get_vhost(UserBin, SslLoginName, ToPort),
     rabbit_log_connection:debug(
         "MQTT vhost picked using ~s",

@@ -19,6 +19,7 @@ groups() ->
     [
       {non_parallel_tests, [], [
                                 block,
+                                block_connack_timeout,
                                 handle_invalid_frames,
                                 stats,
                                 quorum_session_false,
@@ -120,6 +121,38 @@ block(Config) ->
                                     <<"Blocked">>]),
 
     emqttc:disconnect(C).
+
+block_connack_timeout(Config) ->
+    P = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mqtt),
+
+    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.00000001]),
+    ok = rpc(Config, rabbit_alarm, set_alarm, [{{resource_limit, memory, node()}, []}]),
+
+    %% Let it block
+    timer:sleep(100),
+    %% Still can connect via TCP, but CONNECT frame not processed yet
+    {ok, C} = emqttc:start_link([{host, "localhost"},
+                                 {port, P},
+                                 {client_id, <<"simpleClient">>},
+                                 {proto_ver, 3},
+                                 {logger, info},
+                                 {connack_timeout, 1}]),
+    unlink(C),
+    MRef = monitor(process, C),
+    receive
+        {'DOWN', MRef, process, C, {shutdown, connack_timeout}} ->
+            ok
+    after 2000 ->
+            ct:fail("Missing connack_timeout in client")
+    end,
+
+    rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.4]),
+    rpc(Config, rabbit_alarm, clear_alarm, [{resource_limit, memory, node()}]),
+
+    %% Let alarms clear
+    timer:sleep(1000),
+    [] = rpc(Config, rabbit_mqtt_collector, list, []),
+    ok.
 
 handle_invalid_frames(Config) ->
     N = rpc(Config, ets, info, [connection_metrics, size]),
