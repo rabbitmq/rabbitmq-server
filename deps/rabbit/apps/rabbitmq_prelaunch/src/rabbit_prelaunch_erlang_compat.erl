@@ -6,8 +6,8 @@
 
 -export([check/1]).
 
--define(OTP_MINIMUM, "23.2").
--define(ERTS_MINIMUM, "11.1").
+-define(OTP_MINIMUM, "24.2").
+-define(ERTS_MINIMUM, "12.2").
 
 check(_Context) ->
     ?LOG_DEBUG(

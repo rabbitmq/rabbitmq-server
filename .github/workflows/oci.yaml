@@ -15,10 +15,10 @@ jobs:
   # For example, for Git commit SHA '111aaa' and branch name 'main' and maximum supported Erlang major version '24',
   # the following tags will be pushed to Dockerhub:
   #
-  # * 111aaa-otp-min (image OTP 23)
-  # * main-otp-min (image OTP 23)
-  # * 111aaa-otp-max (image OTP 24)
-  # * main-otp-max (image OTP 24)
+  # * 111aaa-otp-min (image OTP 24)
+  # * main-otp-min (image OTP 24)
+  # * 111aaa-otp-max (image OTP 25)
+  # * main-otp-max (image OTP 25)
 
   build-publish-dev:
     runs-on: ubuntu-latest
