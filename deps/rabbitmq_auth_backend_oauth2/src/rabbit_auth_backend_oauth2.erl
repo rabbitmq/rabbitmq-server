@@ -346,9 +346,9 @@ extract_scopes_from_keycloak_permissions(Acc, [_ | T]) ->
 -define(LOCATION_ATTRIBUTES, [?CLUSTER_LOCATION_ATTRIBUTE, ?VHOST_LOCATION_ATTRIBUTE,
   ?QUEUE_LOCATION_ATTRIBUTE, ?EXCHANGE_LOCATION_ATTRIBUTE, ?ROUTING_KEY_LOCATION_ATTRIBUTE]).
 
--define(ALLOWED_TAG_VALUES, [<<"tag:monitoring">>, <<"tag:administrator">>, <<"tag:management">>, <<"tag:policymaker">> ]).
--define(ALLOWED_ACTION_VALUES, [<<"read">>, <<"write">>, <<"configure">>, <<"tag:monitoring">>,
-  <<"tag:administrator">>, <<"tag:management">>, <<"tag:policymaker">> ]).
+-define(ALLOWED_TAG_VALUES, [<<"monitoring">>, <<"administrator">>, <<"management">>, <<"policymaker">> ]).
+-define(ALLOWED_ACTION_VALUES, [<<"read">>, <<"write">>, <<"configure">>, <<"monitoring">>,
+  <<"administrator">>, <<"management">>, <<"policymaker">> ]).
 
 
 put_location_attribute(Attribute, Map) ->
@@ -442,7 +442,7 @@ skip_unknown_actions(Actions) ->
 
 produce_list_of_user_tag_or_action_on_resources(ResourceServerId, ActionOrUserTag, Locations) ->
   case lists:member(ActionOrUserTag, ?ALLOWED_TAG_VALUES) of
-    true -> [<< ResourceServerId/binary, ".", ActionOrUserTag/binary >>];
+    true -> [<< ResourceServerId/binary, ".tag:", ActionOrUserTag/binary >>];
     _ -> build_scopes_for_action(ResourceServerId, ActionOrUserTag, Locations, [])
   end.
 

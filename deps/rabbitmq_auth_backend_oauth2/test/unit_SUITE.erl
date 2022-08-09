@@ -293,14 +293,23 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [<<"rabbitmq.read:a/*/*">>, <<"rabbitmq.read:b/*/*">> ]
   },
+  { "all possible supported user-tags ",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/vhost:a">>, <<"cluster:rabbitmq/vhost:b">>, <<"cluster:other">>  ],
+        <<"actions">> => [<<"management">>, <<"policymaker">>, <<"management">>, <<"monitoring">>]
+      }
+    ],
+    [<<"rabbitmq.tag:management">>, <<"rabbitmq.tag:policymaker">>, <<"rabbitmq.tag:management">>, <<"rabbitmq.tag:monitoring">>  ]
+  },
   { "should produce as many scopes as actions when they are user-tags only for the clusters that match <resource_server_id>",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq/vhost:a">>, <<"cluster:rabbitmq/vhost:b">>, <<"cluster:other">>  ],
-        <<"actions">> => [<<"tag:management">>, <<"tag:policymaker">>]
+        <<"actions">> => [<<"management">>, <<"policymaker">>]
       }
     ],
     [<<"rabbitmq.tag:management">>, <<"rabbitmq.tag:policymaker">> ]
   },
+
   { "should produce as many scopes as locations meant for <resource_server_id> multiplied by actions",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq/vhost:a">>, <<"cluster:rabbitmq/vhost:b">> ],
