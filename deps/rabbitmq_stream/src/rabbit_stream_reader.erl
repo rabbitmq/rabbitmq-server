@@ -1734,7 +1734,6 @@ handle_frame_post_auth(Transport,
                        State,
                        {request, CorrelationId,
                         {query_publisher_sequence, Reference, Stream}}) ->
-    % FrameSize = ?RESPONSE_FRAME_SIZE + 8,
     {ResponseCode, Sequence} =
         case rabbit_stream_utils:check_read_permitted(#resource{name = Stream,
                                                                 kind = queue,
@@ -2642,6 +2641,52 @@ handle_frame_post_auth(Transport,
         process_client_command_versions(Connection0, CommandVersions),
     {Connection1, State};
 handle_frame_post_auth(Transport,
+                       #stream_connection{socket = S,
+                                          virtual_host = VirtualHost,
+                                          user = User} =
+                           Connection,
+                       State,
+                       {request, CorrelationId, {stream_stats, Stream}}) ->
+    QueueResource =
+        #resource{name = Stream,
+                  kind = queue,
+                  virtual_host = VirtualHost},
+    Response =
+        case rabbit_stream_utils:check_read_permitted(QueueResource, User,
+                                                      #{})
+        of
+            ok ->
+                case rabbit_stream_manager:lookup_member(VirtualHost, Stream) of
+                    {error, not_available} ->
+                        rabbit_global_counters:increase_protocol_counter(stream,
+                                                                         ?STREAM_NOT_AVAILABLE,
+                                                                         1),
+                        {stream_stats, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE,
+                         #{}};
+                    {error, not_found} ->
+                        rabbit_global_counters:increase_protocol_counter(stream,
+                                                                         ?STREAM_DOES_NOT_EXIST,
+                                                                         1),
+                        {stream_stats, ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST,
+                         #{}};
+                    {ok, MemberPid} ->
+                        StreamStats =
+                            maps:fold(fun(K, V, Acc) ->
+                                         Acc#{atom_to_binary(K) => V}
+                                      end,
+                                      #{}, osiris:get_stats(MemberPid)),
+                        {stream_stats, ?RESPONSE_CODE_OK, StreamStats}
+                end;
+            error ->
+                rabbit_global_counters:increase_protocol_counter(stream,
+                                                                 ?ACCESS_REFUSED,
+                                                                 1),
+                {stream_stats, ?RESPONSE_CODE_ACCESS_REFUSED, #{}}
+        end,
+    Frame = rabbit_stream_core:frame({response, CorrelationId, Response}),
+    send(Transport, S, Frame),
+    {Connection, State};
+handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
                        State,
                        {request, CorrelationId,
@@ -3187,7 +3232,7 @@ send_file_callback(?VERSION_2,
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
         Size) ->
        FrameSize = 2 + 2 + 1 + 8 + Size,
-       CommittedOffset =
+       CommittedChunkId =
            case osiris_log:committed_offset(Log) of
                undefined -> 0;
                R -> R
@@ -3198,7 +3243,7 @@ send_file_callback(?VERSION_2,
              ?COMMAND_DELIVER:15,
              ?VERSION_2:16,
              SubscriptionId:8/unsigned,
-             CommittedOffset:64>>,
+             CommittedChunkId:64>>,
        Transport:send(S, FrameBeginning),
        atomics:add(Counter, 1, Size),
        increase_messages_consumed(Counters, NumEntries),

@@ -18,7 +18,10 @@ all() ->
 
 groups() ->
     [{non_parallel_tests, [],
-      [manage_super_stream, lookup_leader, partition_index]}].
+      [manage_super_stream,
+       lookup_leader,
+       lookup_member,
+       partition_index]}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -81,6 +84,17 @@ lookup_leader(Config) ->
     ?assert(is_pid(Pid)),
 
     ?assertEqual({error, not_found}, lookup_leader(Config, <<"foo">>)),
+
+    ?assertEqual({ok, deleted}, delete_stream(Config, Stream)).
+
+lookup_member(Config) ->
+    Stream = <<"stream_manager_lookup_member_stream">>,
+    ?assertMatch({ok, _}, create_stream(Config, Stream)),
+
+    {ok, Pid} = lookup_member(Config, Stream),
+    ?assert(is_pid(Pid)),
+
+    ?assertEqual({error, not_found}, lookup_member(Config, <<"foo">>)),
 
     ?assertEqual({ok, deleted}, delete_stream(Config, Stream)).
 
@@ -213,6 +227,13 @@ lookup_leader(Config, Name) ->
                                  0,
                                  rabbit_stream_manager,
                                  lookup_leader,
+                                 [<<"/">>, Name]).
+
+lookup_member(Config, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config,
+                                 0,
+                                 rabbit_stream_manager,
+                                 lookup_member,
                                  [<<"/">>, Name]).
 
 partitions(Config, Name) ->
