@@ -864,9 +864,9 @@ translate_delivery_state(received) -> #'v1_0.received'{}.
 translate_role(sender) -> false;
 translate_role(receiver) -> true.
 
-maybe_notify_link_credit(#link{link_credit = 0, role = sender},
+maybe_notify_link_credit(#link{link_credit = OldCredit, role = sender},
                          #link{link_credit = Credit} = Link)
-  when Credit > 0 ->
+  when Credit > 0, OldCredit =< 0 ->
     notify_link(Link, credited);
 maybe_notify_link_credit(_Old, _New) ->
     ok.

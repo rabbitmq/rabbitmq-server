@@ -27,7 +27,8 @@ groups() ->
                   roundtrip_classic_queue_with_drain,
                   roundtrip_quorum_queue_with_drain,
                   roundtrip_stream_queue_with_drain,
-                  message_headers_conversion
+                  message_headers_conversion,
+                  incoming_credit_accounting_with_confirm
                  ]},
      {metrics, [], [
                     auth_attempt_metrics
@@ -268,6 +269,69 @@ message_headers_conversion(Config) ->
     ok = amqp10_client:close_connection(Connection),
     ok.
 
+% These  tests represent the different scenarios where confirm is used in the 
+% amqp 1.0 plugin. 
+incoming_credit_accounting_with_confirm(Config) -> 
+    SettleModes = [unsettled, mixed],
+    EndpointDurabilities = [configuration, unsettled_state],
+    Permutations = [{A, B} || A <- SettleModes, B <- EndpointDurabilities],
+    lists:foreach(fun({EndpointSettleMode, EndpointDurability}) -> 
+        incoming_credit_accounting_with_confirm(Config, 5, on_publish, false, EndpointSettleMode, EndpointDurability),
+        incoming_credit_accounting_with_confirm(Config, 5, on_publish, true, EndpointSettleMode, EndpointDurability),
+        incoming_credit_accounting_with_confirm(Config, 5, on_confirm, false, EndpointSettleMode, EndpointDurability),
+        incoming_credit_accounting_with_confirm(Config, 5, on_confirm, true, EndpointSettleMode, EndpointDurability)
+    end, Permutations).
+
+incoming_credit_accounting_with_confirm(Config, IncomingCredit, AckOn, MsgSettled, EdpointSettleMode, EndpointDurability) ->
+    flush("Before test"),
+    ct:pal("Ack: ~p, MsgSettled: ~p, Endpoint: ~p, Durability: ~p ", 
+           [AckOn, MsgSettled, EdpointSettleMode, EndpointDurability]),
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqp1_0, set_grant_credit_on, [IncomingCredit]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_amqp1_0, grant_credit, AckOn]),
+    
+    QName  = atom_to_binary(?FUNCTION_NAME, utf8),
+    Address = <<"/amq/queue/", QName/binary>>,
+    
+    delete_queue(Config, QName),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    amqp_channel:call(Ch, #'queue.declare'{queue = QName,
+                                           durable = true,
+                                           arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
+    % create a configuration map
+    
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => atom_to_binary(?FUNCTION_NAME, utf8),
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    SenderLinkName = <<"test-sender">>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session,
+                                                    SenderLinkName,
+                                                    Address,
+                                                    EdpointSettleMode,
+                                                    EndpointDurability),
+
+    
+    wait_for_credit(Sender),
+    
+    
+    [send_message(Sender, MsgSettled, N) || N <- lists:seq(0,15)],
+    wait_for_accepts(16),
+
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Msgs} = drain_queue(Session, Address, 16),
+    
+    ?assertEqual(16, length(Msgs)),
+
+    ok = amqp10_client:close_connection(Connection),
+    delete_queue(Config, QName),
+    ok.
+
 amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) -> 
     {ok, Sender} = create_amqp10_sender(Session, Address),
 
@@ -430,3 +494,18 @@ receive_message(Receiver, N, Acc) ->
     after 5000  ->
             exit(receive_timed_out)
     end.
+
+send_message(Sender, MsgSettled, N) -> 
+    Tag = crypto:strong_rand_bytes(12),
+    OutMsg = amqp10_msg:new(Tag, erlang:integer_to_binary(N), MsgSettled),
+    ok = perform_send_message(Sender, OutMsg).
+
+perform_send_message(Sender, OutMsg) -> 
+    case amqp10_client:send_msg(Sender, OutMsg) of
+        ok ->
+            ok;
+        {error, insufficient_credit} ->
+            wait_for_credit(Sender),
+            perform_send_message(Sender, OutMsg)
+    end.
+    

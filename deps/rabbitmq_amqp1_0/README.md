@@ -51,6 +51,14 @@ Configuration example using [sysctl config format](https://next.rabbitmq.com/con
     amqp1_0.protocol_strict_mode = false
 
 
+Configuration of incoming links: 
+
+```
+amqp1_0.maximum_incoming_credit = 65536
+# Should be set at on_confirm for stability of RabbitMQ
+amqp1_0.grant_credit = on_publish | on_confirm (default on_publish for backwards compatibility)
+```
+
 Configuration for interoperability between AMQP 0.9.1 and AMQP 1.0. 
 
 ```

@@ -9,7 +9,15 @@
 -export([connection_info_local/1,
          emit_connection_info_local/3,
          emit_connection_info_all/4,
-         list/0]).
+         list/0,
+         boot/0,
+         set_grant_credit_on/1
+        ]).
+
+-rabbit_boot_step({?MODULE,
+    [{description, "Setup of AMQP 1.0 listener plugin"},
+    {mfa, {?MODULE, boot, []}}]}).
+
 
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
     Pids = [spawn_link(Node, rabbit_amqp1_0, emit_connection_info_local,
@@ -40,3 +48,13 @@ list() ->
         {rabbit_connection_sup, ConnPid, _, _} <- supervisor:which_children(RanchCPid),
         {reader, ReaderPid, _, _} <- supervisor:which_children(ConnPid)
     ].
+
+boot() -> 
+    set_grant_credit_on(application:get_env(rabbitmq_amqp1_0, grant_credit, on_confirm)),
+    ok.
+
+-spec set_grant_credit_on(on_publish | on_confirm) -> ok.
+set_grant_credit_on(On) ->
+    persistent_term:put({rabbit_amqp1_0, grant_credit}, On),
+    ok.
+

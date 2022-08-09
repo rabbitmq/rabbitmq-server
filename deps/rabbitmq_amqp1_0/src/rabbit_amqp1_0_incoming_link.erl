@@ -7,22 +7,23 @@
 
 -module(rabbit_amqp1_0_incoming_link).
 
--export([attach/3, transfer/4]).
+-export([attach/3, transfer/4, ack/2]).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_amqp1_0.hrl").
 
 -import(rabbit_amqp1_0_util, [protocol_error/3]).
 
-%% Just make these constant for the time being.
--define(INCOMING_CREDIT, 65536).
+-define(INCOMING_CREDIT, application:get_env(rabbitmq_amqp1_0, maximum_incoming_credit, 65536)).
+
 
 -record(incoming_link, {name, exchange, routing_key,
                         delivery_id = undefined,
                         delivery_count = 0,
                         send_settle_mode = undefined,
                         recv_settle_mode = undefined,
-                        credit_used = ?INCOMING_CREDIT div 2,
+                        credit_remaining = 0,
+                        grant_credit_on = on_publish,
                         msg_acc = [],
                         route_state}).
 
@@ -35,11 +36,14 @@ attach(#'v1_0.attach'{name = Name,
                       initial_delivery_count = {uint, InitTransfer}},
        BCh, DCh) ->
     %% TODO associate link name with target
+    InitialCreditRemaining = max_incoming_credit() div 2,
     case ensure_target(Target,
                        #incoming_link{
                          name        = Name,
                          route_state = rabbit_routing_util:init_state(),
-                         delivery_count = InitTransfer },
+                         delivery_count = InitTransfer,
+                         credit_remaining = InitialCreditRemaining
+                        },
                        DCh) of
         {ok, ServerTarget, IncomingLink} ->
             {_, _Outcomes} = rabbit_amqp1_0_link_util:outcomes(Source),
@@ -56,7 +60,7 @@ attach(#'v1_0.attach'{name = Name,
                         true
                 end,
             Flow = #'v1_0.flow'{ handle = Handle,
-                                 link_credit = {uint, ?INCOMING_CREDIT},
+                                 link_credit = {uint, max_incoming_credit()},
                                  drain = false,
                                  echo = false },
             Attach = #'v1_0.attach'{
@@ -127,7 +131,7 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
          #incoming_link{exchange         = X,
                         routing_key      = LinkRKey,
                         delivery_count   = Count,
-                        credit_used      = CreditUsed,
+                        credit_remaining = CreditRemaining,
                         msg_acc          = MsgAcc,
                         send_settle_mode = SSM,
                         recv_settle_mode = RSM} = Link, BCh) ->
@@ -140,38 +144,33 @@ transfer(#'v1_0.transfer'{delivery_id     = DeliveryId0,
                undefined -> MsgRKey;
                _         -> LinkRKey
            end,
+    MessageIsSettled = effective_send_settle_mode(Settled, SSM),
     rabbit_amqp1_0_channel:cast_flow(
       BCh, #'basic.publish'{exchange    = X,
                             routing_key = RKey}, Msg),
-    {SendFlow, CreditUsed1} = case CreditUsed - 1 of
-                                  C when C =< 0 ->
-                                      {true,  ?INCOMING_CREDIT div 2};
-                                  D ->
-                                      {false, D}
-                              end,
+    {SendFlow, CreditRemaining1} = adjust_credits(transfer, CreditRemaining - 1, MessageIsSettled),
     #incoming_link{delivery_id = DeliveryId} =
       set_delivery_id(DeliveryId0, Link),
     NewLink = Link#incoming_link{
                 delivery_id      = undefined,
                 send_settle_mode = undefined,
                 delivery_count   = rabbit_amqp1_0_util:serial_add(Count, 1),
-                credit_used      = CreditUsed1,
+                credit_remaining      = CreditRemaining1,
                 msg_acc          = []},
     Reply = case SendFlow of
                 true  -> ?DEBUG("sending flow for incoming ~tp", [NewLink]),
                          [incoming_flow(NewLink, Handle)];
                 false -> []
             end,
-    EffectiveSendSettleMode = effective_send_settle_mode(Settled, SSM),
+    
     EffectiveRecvSettleMode = effective_recv_settle_mode(RcvSettleMode, RSM),
-    case not EffectiveSendSettleMode andalso
+    case not MessageIsSettled andalso
          EffectiveRecvSettleMode =:= ?V_1_0_RECEIVER_SETTLE_MODE_SECOND of
         false -> ok;
         true  -> protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED,
                                 "rcv-settle-mode second not supported", [])
     end,
-    {message, Reply, NewLink, DeliveryId,
-     EffectiveSendSettleMode}.
+    {message, Reply, NewLink, DeliveryId, MessageIsSettled}.
 
 %% TODO default-outcome and outcomes, dynamic lifetimes
 
@@ -226,3 +225,47 @@ incoming_flow(#incoming_link{ delivery_count = Count }, Handle) ->
     #'v1_0.flow'{handle         = Handle,
                  delivery_count = {uint, Count},
                  link_credit    = {uint, ?INCOMING_CREDIT}}.
+
+max_incoming_credit() -> 
+    ?INCOMING_CREDIT.
+
+-spec adjust_credits(Method :: ack | transfer, 
+                     CreditRemaining :: integer(), 
+                     MsgSettled :: boolean()) -> 
+    {boolean(), integer()}.
+% there are credits remaining
+adjust_credits( _Method, CreditRemaining, _MsgSettled) when CreditRemaining > 0 -> 
+    {false, CreditRemaining};
+% if message was settled on transfer, we give more credits on transfer
+adjust_credits(transfer, CreditRemaining, true) when CreditRemaining =< 0 -> 
+    {true, max_incoming_credit() div 2};
+% we received an ack and have no credit
+adjust_credits(ack, CreditRemaining,_) when CreditRemaining =< 0 -> 
+    {true, max_incoming_credit() div 2};
+% message is not settled, depending on configuration we either grant or not
+adjust_credits(Method, CreditRemaining, false) when CreditRemaining =< 0 -> 
+    GrantCreditOn = persistent_term:get({rabbit_amqp1_0, grant_credit}, on_publish),
+    case GrantCreditOn of 
+        on_publish -> 
+            {true, max_incoming_credit() div 2};
+        on_confirm -> 
+            case Method of
+                ack -> 
+                    {true, max_incoming_credit() div 2};
+                transfer ->
+                    {false, CreditRemaining}
+            end
+    end.
+
+ack(Handle, #incoming_link{
+                 credit_remaining = CreditRemaining
+                 } = Link) ->
+    {SendFlow, CreditRemaining1} = adjust_credits(ack, CreditRemaining, true),
+    Link2 = Link#incoming_link{
+        credit_remaining = CreditRemaining1
+    },
+    Replies = case SendFlow of 
+        true -> [incoming_flow(Link2, Handle)];
+        false -> []
+    end,
+    {ok, Replies, Link2}.
