@@ -30,7 +30,6 @@ jobs:
       fail-fast: false
       matrix:
         erlang_major:
-        - "23"
         - "24"
     timeout-minutes: 120
     steps:
@@ -74,8 +73,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - erlang_version: "23"
-          elixir_version: 1.10.4
         - erlang_version: "24"
           elixir_version: 1.12.3
     timeout-minutes: 60
