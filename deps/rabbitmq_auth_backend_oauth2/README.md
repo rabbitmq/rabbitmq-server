@@ -317,7 +317,7 @@ all the other attributes and left only the relevant ones for this specification:
     },
     { "type" : "rabbitmq",
       "locations": ["cluster:finance", "cluster:inventory" ],
-      "actions": ["tag:administrator" ]
+      "actions": ["administrator" ]
     }
   ]
 }
@@ -332,7 +332,8 @@ the pattern `primary-*` that belongs to a cluster whose `resource_server_id` con
 The `cluster` attribute is a regular expression like the `vhost`. If we wanted to match exactly the `finance` cluster
 we would use instead `^finance$`.
 
-The second permission grants the `tag:administrator` user-tag to both clusters, `finance` and `inventory`.
+The second permission grants the `administrator` user-tag to both clusters, `finance` and `inventory`. The other
+supported user-tags as `management`, `policymaker` and `monitoring`.
 
 
 #### Type field
