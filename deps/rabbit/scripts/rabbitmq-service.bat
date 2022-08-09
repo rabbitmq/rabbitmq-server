@@ -64,10 +64,10 @@ REM We do this only for the Windows service because in this case, the node has
 REM to start with the distribution enabled on the command line. For all other
 REM cases, distribution is configured at runtime.
 if "!RABBITMQ_NODE_PORT!"=="" (
-    if not "!NODE_PORT!"=="" (
-        set RABBITMQ_NODE_PORT=!NODE_PORT!
-    ) else (
+    if "!NODE_PORT!"=="" (
         set RABBITMQ_NODE_PORT=5672
+    ) else (
+        set RABBITMQ_NODE_PORT=!NODE_PORT!
     )
 )
 
@@ -184,6 +184,7 @@ set ENV_OK=true
 CALL :check_not_empty "RABBITMQ_BOOT_MODULE" !RABBITMQ_BOOT_MODULE!
 CALL :check_not_empty "RABBITMQ_NAME_TYPE" !RABBITMQ_NAME_TYPE!
 CALL :check_not_empty "RABBITMQ_NODENAME" !RABBITMQ_NODENAME!
+CALL :check_not_empty "RABBITMQ_NODE_PORT" !RABBITMQ_NODE_PORT!
 
 if "!ENV_OK!"=="false" (
     EXIT /b 78
@@ -217,7 +218,8 @@ rem runtime.
 rem
 rem We may revisit this in the future so that no data is stored in a
 rem user-specific directory.
-"!ERLANG_SERVICE_MANAGER_PATH!\erlsrv" set !RABBITMQ_SERVICENAME! ^
+rem https://www.erlang.org/doc/man/erlsrv.html
+"!ERLANG_SERVICE_MANAGER_PATH!\erlsrv.exe" set !RABBITMQ_SERVICENAME! ^
 -onfail !RABBITMQ_SERVICE_RESTART! ^
 -machine "!ERLANG_SERVICE_MANAGER_PATH!\erl.exe" ^
 -env APPDATA="!APPDATA!" ^
@@ -226,6 +228,7 @@ rem user-specific directory.
 -env ERL_MAX_PORTS="!ERL_MAX_PORTS!" ^
 -env RABBITMQ_BASE="!RABBITMQ_BASE!" ^
 -env RABBITMQ_NODENAME="!RABBITMQ_NODENAME!" ^
+-env RABBITMQ_NODE_PORT="!RABBITMQ_NODE_PORT!" ^
 -workdir "!RABBITMQ_BASE!" ^
 -stopaction "rabbit:stop_and_halt()." ^
 !RABBITMQ_NAME_TYPE! !RABBITMQ_NODENAME! ^
