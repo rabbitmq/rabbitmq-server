@@ -83,6 +83,124 @@ if "!RABBITMQ_DIST_PORT!"=="" (
     )
 )
 
+rem rabbitmq/rabbitmq-server#5474
+rem These steps are necessary in case the user has defined an env variable
+rem in rabbitmq-env-conf.bat using the short version of the env variable name,
+rem i.e. DEFAULT_USER. Because we have to pass these vars to the service
+rem via the -env argument to erlsrv.exe we must assign to the prefixed variable
+rem here.
+rem
+rem This all is moot if the user has set system-wide env variables since those
+rem will take precedence
+
+if "!RABBITMQ_ADVANCED_CONFIG_FILE!"=="" (
+    set RABBITMQ_ADVANCED_CONFIG_FILE=!ADVANCED_CONFIG_FILE!
+)
+
+if "!RABBITMQ_CONFIG_FILE!"=="" (
+    set RABBITMQ_CONFIG_FILE=!CONFIG_FILE!
+)
+
+if "!RABBITMQ_CONFIG_FILES!"=="" (
+    set RABBITMQ_CONFIG_FILES=!CONFIG_FILES!
+)
+
+if "!RABBITMQ_DEFAULT_PASS!"=="" (
+    set RABBITMQ_DEFAULT_PASS=!DEFAULT_PASS!
+)
+
+if "!RABBITMQ_DEFAULT_USER!"=="" (
+    set RABBITMQ_DEFAULT_USER=!DEFAULT_USER!
+)
+
+if "!RABBITMQ_DEFAULT_VHOST!"=="" (
+    set RABBITMQ_DEFAULT_VHOST=!DEFAULT_VHOST!
+)
+
+if "!RABBITMQ_ENABLED_PLUGINS!"=="" (
+    set RABBITMQ_ENABLED_PLUGINS=!ENABLED_PLUGINS!
+)
+
+if "!RABBITMQ_ENABLED_PLUGINS_FILE!"=="" (
+    set RABBITMQ_ENABLED_PLUGINS_FILE=!ENABLED_PLUGINS_FILE!
+)
+
+if "!RABBITMQ_ERLANG_COOKIE!"=="" (
+    set RABBITMQ_ERLANG_COOKIE=!ERLANG_COOKIE!
+)
+
+if "!RABBITMQ_FEATURE_FLAGS!"=="" (
+    set RABBITMQ_FEATURE_FLAGS=!FEATURE_FLAGS!
+)
+
+if "!RABBITMQ_FEATURE_FLAGS_FILE!"=="" (
+    set RABBITMQ_FEATURE_FLAGS_FILE=!FEATURE_FLAGS_FILE!
+)
+
+if "!RABBITMQ_KEEP_PID_FILE_ON_EXIT!"=="" (
+    set RABBITMQ_KEEP_PID_FILE_ON_EXIT=!KEEP_PID_FILE_ON_EXIT!
+)
+
+if "!RABBITMQ_LOG!"=="" (
+    set RABBITMQ_LOG=!LOG!
+)
+
+if "!RABBITMQ_LOG_BASE!"=="" (
+    set RABBITMQ_LOG_BASE=!LOG_BASE!
+)
+
+if "!RABBITMQ_LOG_FF_REGISTRY!"=="" (
+    set RABBITMQ_LOG_FF_REGISTRY=!LOG_FF_REGISTRY!
+)
+
+if "!RABBITMQ_LOGS!"=="" (
+    set RABBITMQ_LOGS=!LOGS!
+)
+
+if "!RABBITMQ_MNESIA_BASE!"=="" (
+    set RABBITMQ_MNESIA_BASE=!MNESIA_BASE!
+)
+
+if "!RABBITMQ_MNESIA_DIR!"=="" (
+    set RABBITMQ_MNESIA_DIR=!MNESIA_DIR!
+)
+
+if "!RABBITMQ_NODE_IP_ADDRESS!"=="" (
+    set RABBITMQ_NODE_IP_ADDRESS=!NODE_IP_ADDRESS!
+)
+
+if "!RABBITMQ_NODE_PORT!"=="" (
+    set RABBITMQ_NODE_PORT=!NODE_PORT!
+)
+
+if "!RABBITMQ_NODENAME!"=="" (
+    set RABBITMQ_NODENAME=!NODENAME!
+)
+
+if "!RABBITMQ_PID_FILE!"=="" (
+    set RABBITMQ_PID_FILE=!PID_FILE!
+)
+
+if "!RABBITMQ_PLUGINS_DIR!"=="" (
+    set RABBITMQ_PLUGINS_DIR=!PLUGINS_DIR!
+)
+
+if "!RABBITMQ_PLUGINS_EXPAND_DIR!"=="" (
+    set RABBITMQ_PLUGINS_EXPAND_DIR=!PLUGINS_EXPAND_DIR!
+)
+
+if "!RABBITMQ_QUORUM_DIR!"=="" (
+    set RABBITMQ_QUORUM_DIR=!QUORUM_DIR!
+)
+
+if "!RABBITMQ_STREAM_DIR!"=="" (
+    set RABBITMQ_STREAM_DIR=!STREAM_DIR!
+)
+
+if "!RABBITMQ_UPGRADE_LOG!"=="" (
+    set RABBITMQ_UPGRADE_LOG=!UPGRADE_LOG!
+)
+
 set RABBITMQ_DIST_ARG=-kernel inet_dist_listen_min !RABBITMQ_DIST_PORT! -kernel inet_dist_listen_max !RABBITMQ_DIST_PORT!
 
 set STARVAR=
