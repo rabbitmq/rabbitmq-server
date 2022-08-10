@@ -26,13 +26,14 @@
     </developers>
 
     <properties>
-        <stream-client.version>[0.5.0-SNAPSHOT,1.0-SNAPSHOT)</stream-client.version>
-        <junit.jupiter.version>5.8.2</junit.jupiter.version>
-        <assertj.version>3.22.0</assertj.version>
+        <stream-client.version>[0.7.0-SNAPSHOT,)</stream-client.version>
+        <junit.jupiter.version>5.9.0</junit.jupiter.version>
+        <assertj.version>3.23.1</assertj.version>
         <logback.version>1.2.11</logback.version>
-        <maven.compiler.plugin.version>3.8.1</maven.compiler.plugin.version>
+        <maven.compiler.plugin.version>3.10.1</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
-        <spotless.version>2.2.0</spotless.version>
+        <spotless.version>2.24.0</spotless.version>
+        <google-java-format.version>1.15.0</google-java-format.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -103,7 +104,7 @@
                 <configuration>
                     <java>
                         <googleJavaFormat>
-                            <version>1.9</version>
+                            <version>${google-java-format.version}</version>
                             <style>GOOGLE</style>
                         </googleJavaFormat>
                     </java>
